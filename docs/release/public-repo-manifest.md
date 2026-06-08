@@ -20,6 +20,9 @@ skills/
   debugging-audit-for-eclipse-sumo/
 docs/
   index.html
+  assets/
+    traffic-lights-icon.svg
+    README.md
   common-sumo-signal-control-failures.md
   release/
     github-topics.txt

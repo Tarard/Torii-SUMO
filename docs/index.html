@@ -209,89 +209,58 @@
     }
 
     .visual {
-      background: var(--panel);
+      background:
+        linear-gradient(135deg, rgba(20, 102, 184, 0.08), rgba(29, 142, 87, 0.08)),
+        var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow);
-      padding: 18px;
+      padding: 24px;
     }
 
-    .intersection {
-      position: relative;
-      aspect-ratio: 1 / 1;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      background:
-        linear-gradient(90deg, transparent 0 40%, #dfe5ee 40% 60%, transparent 60%),
-        linear-gradient(0deg, transparent 0 40%, #dfe5ee 40% 60%, transparent 60%),
-        #f7f9fd;
-      overflow: hidden;
-      margin-bottom: 12px;
-    }
-
-    .intersection::before,
-    .intersection::after {
-      content: "";
-      position: absolute;
-      opacity: 0.95;
-    }
-
-    .intersection::before {
-      left: 41%;
-      right: 41%;
-      top: 50%;
-      height: 2px;
-      background: repeating-linear-gradient(90deg, #fff 0 18px, transparent 18px 34px);
-    }
-
-    .intersection::after {
-      top: 41%;
-      bottom: 41%;
-      left: 50%;
-      width: 2px;
-      background: repeating-linear-gradient(0deg, #fff 0 18px, transparent 18px 34px);
-    }
-
-    .chip {
-      position: absolute;
-      z-index: 1;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: #fff;
-      padding: 7px 10px;
-      font-size: 0.78rem;
-      font-weight: 780;
-      box-shadow: 0 7px 16px rgba(24, 32, 43, 0.09);
-    }
-
-    .chip.north { top: 12px; left: 50%; transform: translateX(-50%); }
-    .chip.east { right: 12px; top: 50%; transform: translateY(-50%); }
-    .chip.south { bottom: 12px; left: 50%; transform: translateX(-50%); }
-    .chip.west { left: 12px; top: 50%; transform: translateY(-50%); }
-
-    .gates {
+    .signal-card {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: 112px minmax(0, 1fr);
+      gap: 22px;
+      align-items: center;
+    }
+
+    .traffic-light-art {
+      width: 112px;
+      max-width: 100%;
+      height: auto;
+      display: block;
+      filter: drop-shadow(0 16px 24px rgba(24, 32, 43, 0.18));
+    }
+
+    .visual-kicker {
+      color: var(--blue-dark);
+      font-size: 0.9rem;
+      font-weight: 780;
+      margin-bottom: 10px;
+    }
+
+    .visual-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
       gap: 8px;
     }
 
-    .gate {
-      min-height: 74px;
+    .visual-list li {
+      margin: 0;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: var(--panel-soft);
-      padding: 10px;
+      background: rgba(255, 255, 255, 0.78);
+      padding: 10px 11px;
+      font-weight: 720;
     }
 
-    .gate strong {
-      display: block;
+    .asset-credit {
+      margin: 16px 0 0;
       color: var(--muted);
       font-size: 0.78rem;
-      margin-bottom: 4px;
-    }
-
-    .gate span {
-      font-weight: 780;
     }
 
     .grid {
@@ -413,6 +382,14 @@
       .visual {
         max-width: 440px;
       }
+
+      .signal-card {
+        grid-template-columns: 90px minmax(0, 1fr);
+      }
+
+      .traffic-light-art {
+        width: 90px;
+      }
     }
 
     @media (max-width: 420px) {
@@ -455,17 +432,22 @@
       </div>
 
       <aside class="visual" aria-label="Audit workflow visual">
-        <div class="intersection" aria-hidden="true">
-          <div class="chip north" data-i18n="chipTls">TLS</div>
-          <div class="chip east" data-i18n="chipTraci">TraCI</div>
-          <div class="chip south" data-i18n="chipRoutes">Routes</div>
-          <div class="chip west" data-i18n="chipOutputs">Outputs</div>
+        <div class="signal-card">
+          <img class="traffic-light-art" src="assets/traffic-lights-icon.svg" alt="" aria-hidden="true">
+          <div>
+            <div class="visual-kicker" data-i18n="visualKicker">Traffic signal evidence</div>
+            <ul class="visual-list">
+              <li data-i18n="visualOne">Configuration loaded</li>
+              <li data-i18n="visualTwo">Controller behavior logged</li>
+              <li data-i18n="visualThree">Claims bounded by outputs</li>
+            </ul>
+          </div>
         </div>
-        <div class="gates">
-          <div class="gate"><strong data-i18n="gate1">Gate 1</strong><span data-i18n="gateConfig">Config</span></div>
-          <div class="gate"><strong data-i18n="gate2">Gate 2</strong><span data-i18n="gateController">Controller</span></div>
-          <div class="gate"><strong data-i18n="gate3">Gate 3</strong><span data-i18n="gateClaim">Claim</span></div>
-        </div>
+        <p class="asset-credit">
+          <span data-i18n="assetCreditPrefix">Traffic light icon:</span>
+          <a href="https://commons.wikimedia.org/wiki/File:Traffic_lights_icon.svg">Wikimedia Commons</a>,
+          <span data-i18n="assetCreditLicense">public domain</span>.
+        </p>
       </aside>
     </section>
 
@@ -598,16 +580,12 @@
         repoButton: "GitHub Repository",
         readmeButton: "Open README",
         readmeHref: "https://github.com/Tarard/academic-audit-for-eclipse-sumo#readme",
-        chipTls: "TLS",
-        chipTraci: "TraCI",
-        chipRoutes: "Routes",
-        chipOutputs: "Outputs",
-        gate1: "Gate 1",
-        gateConfig: "Config",
-        gate2: "Gate 2",
-        gateController: "Controller",
-        gate3: "Gate 3",
-        gateClaim: "Claim",
+        visualKicker: "Traffic signal evidence",
+        visualOne: "Configuration loaded",
+        visualTwo: "Controller behavior logged",
+        visualThree: "Claims bounded by outputs",
+        assetCreditPrefix: "Traffic light icon:",
+        assetCreditLicense: "public domain",
         whatTitle: "What it is",
         whatText: "A Markdown-based Codex/Claude skill package that guides an agent through SUMO configuration, controller, output, and claim-boundary audits.",
         whoTitle: "Who it is for",
@@ -654,16 +632,12 @@
         repoButton: "GitHub 仓库",
         readmeButton: "打开说明文档",
         readmeHref: "https://github.com/Tarard/academic-audit-for-eclipse-sumo/blob/main/README.zh-CN.md",
-        chipTls: "TLS",
-        chipTraci: "TraCI",
-        chipRoutes: "路线",
-        chipOutputs: "输出",
-        gate1: "关口 1",
-        gateConfig: "配置",
-        gate2: "关口 2",
-        gateController: "控制器",
-        gate3: "关口 3",
-        gateClaim: "结论",
+        visualKicker: "交通信号证据",
+        visualOne: "配置已加载",
+        visualTwo: "控制行为有记录",
+        visualThree: "结论受输出约束",
+        assetCreditPrefix: "红绿灯图标：",
+        assetCreditLicense: "公共领域",
         whatTitle: "它是什么",
         whatText: "一个基于 Markdown 的 Codex/Claude 技能包，用来引导智能体审计 SUMO 配置、控制器、输出与结论边界。",
         whoTitle: "面向谁",
@@ -710,16 +684,12 @@
         repoButton: "GitHub-Repository",
         readmeButton: "Dokumentation öffnen",
         readmeHref: "https://github.com/Tarard/academic-audit-for-eclipse-sumo/blob/main/README.de.md",
-        chipTls: "TLS",
-        chipTraci: "TraCI",
-        chipRoutes: "Routen",
-        chipOutputs: "Ausgaben",
-        gate1: "Prüfstufe 1",
-        gateConfig: "Konfiguration",
-        gate2: "Prüfstufe 2",
-        gateController: "Steuerung",
-        gate3: "Prüfstufe 3",
-        gateClaim: "Aussage",
+        visualKicker: "Evidenz zur Signalsteuerung",
+        visualOne: "Konfiguration geladen",
+        visualTwo: "Steuerungsverhalten protokolliert",
+        visualThree: "Aussagen durch Ausgaben begrenzt",
+        assetCreditPrefix: "Ampelsymbol:",
+        assetCreditLicense: "gemeinfrei",
         whatTitle: "Was es ist",
         whatText: "Ein Markdown-basiertes Fähigkeitspaket für Codex/Claude, das einen Agenten durch Prüfungen von SUMO-Konfiguration, Steuerung, Ausgaben und Aussagegrenzen führt.",
         whoTitle: "Für wen",

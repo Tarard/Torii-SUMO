@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="50" height="170">
+  <path fill="black" d="m 0,0 50,0 0,120 -18,0 0,50 -14,0 0,-50 -18,0 z" />
+  <circle fill="#f00" cx="25" cy="22" r="15" />
+  <circle fill="#ff0" cx="25" cy="59" r="15" />
+  <circle fill="#0f0" cx="25" cy="96" r="15" />
+</svg>
