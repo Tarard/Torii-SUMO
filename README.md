@@ -89,6 +89,7 @@ Reference modules included in the package:
 - [`evaluation-metrics-and-completion.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - metric definitions and completion-aware reporting.
 - [`baseline-and-ablation-design.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md) - paired baseline, ablation, and sensitivity design.
 - [`experiment-validation-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md) - validation ladder for experiments and debugging fixes.
+- [`field-lesson-capture.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/field-lesson-capture.md) - privacy-safe capture of user-discovered fixes and reusable diagnostic paths.
 - [`claim-boundary-taxonomy.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - wording rules for evidence-bounded claims.
 - [`public-code-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md) - lessons distilled from public traffic-simulation code.
 - [`public-release-checklist.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md) - release, trademark, privacy, and exposure checks.
@@ -108,6 +109,7 @@ Reference modules included in the package:
 - `tripinfo`, `summary`, `edgeData`, TLS switch output, controller logs, warnings, teleports, and unfinished vehicles.
 - Completion-aware metric reporting when simulations stop before all vehicles leave the network.
 - Baselines, ablations, sensitivity runs, and claim wording.
+- Field lesson capture when a user solves a missed SUMO/TraCI issue and wants the reusable diagnostic path abstracted back into the skill.
 
 ## Examples
 
@@ -150,7 +152,7 @@ See `docs/common-sumo-signal-control-failures.md` for a longer checklist. It cov
 
 ## How the Skills Are Designed
 
-The design follows four principles:
+The design follows five principles:
 
 **Progressive disclosure.** `SKILL.md` stays compact and routes the agent to focused reference files only when needed.
 
@@ -159,6 +161,8 @@ The design follows four principles:
 **Hard gates before claims.** The audit separates what SUMO loaded, what the controller did, what outputs were written, what warnings occurred, and what claim the evidence can support.
 
 **Debugging as a closed loop.** The debugging skill uses observe -> classify -> probe -> compare -> update, so fixes are based on artifacts rather than trial-and-error parameter changes.
+
+**Self-evolution through field lessons.** When users solve a missed SUMO/TraCI issue by another path, the skill can reconstruct the evidence path, abstract the reusable rule, redact private details, and propose a skill update after user confirmation.
 
 ## Limitations
 

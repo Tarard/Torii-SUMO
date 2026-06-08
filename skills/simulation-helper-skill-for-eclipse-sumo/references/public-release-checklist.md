@@ -7,6 +7,7 @@ Use this before publishing the skill to GitHub.
 - No local machine paths.
 - No non-public notes.
 - No non-public datasets or corpora.
+- No raw field-lesson logs, private diagnostic transcripts, local paths, collaborator names, or unpublished project facts.
 - No private project acronyms or collaborator-specific method names.
 - No named-person provenance from unpublished collaboration notes.
 - No copied third-party code.
@@ -34,6 +35,7 @@ Use this before publishing the skill to GitHub.
 - `SKILL.md` frontmatter has `name` and `description`.
 - `agents/openai.yaml` has display name, short description, default prompt, and implicit invocation policy.
 - Every reference named in `SKILL.md` exists.
+- Self-evolution lessons are captured through `references/field-lesson-capture.md` and require user confirmation plus privacy/source checks before persistence.
 - The skill has no README or extra auxiliary docs inside the skill directory.
 - The main package name is `simulation-helper-skill-for-eclipse-sumo`.
 - The companion debugging package name is `debugging-helper-skill-for-eclipse-sumo`.
@@ -81,6 +83,8 @@ Run these after installation:
    - Expected: asks for exact command, SUMO logs, environment/version check, port/run-protocol evidence, and classifies as diagnostic until startup is proven.
 9. "My Eclipse SUMO experiment improved travel time after I changed three settings at once."
    - Expected: invokes the debugging loop, separates root cause from workaround, and rejects formal claims until one-variable evidence exists.
+10. "The skill missed this SUMO/TraCI failure, but I later solved it by changing the diagnostic path."
+   - Expected: creates a field lesson candidate, abstracts the reusable rule, redacts private details, and asks before persisting any skill update.
 
 ## Publication Gate
 

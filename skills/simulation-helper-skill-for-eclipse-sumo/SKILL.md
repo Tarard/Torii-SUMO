@@ -1,6 +1,6 @@
 ---
 name: simulation-helper-skill-for-eclipse-sumo
-description: Use when designing, running, reviewing, debugging, or writing claims from Eclipse SUMO/TraCI traffic signal control experiments, including fixed-time, actuated, max-pressure, NEMA, MPC-style controllers, TLS phases, netconvert, routes, demand, detectors, outputs, baselines, ablations, reproducibility, or academic evidence boundaries.
+description: Use when designing, running, reviewing, debugging, or writing claims from Eclipse SUMO/TraCI traffic signal control experiments, including fixed-time, actuated, max-pressure, NEMA, MPC-style controllers, TLS phases, netconvert, routes, demand, detectors, outputs, baselines, ablations, reproducibility, academic evidence boundaries, or reusable field lessons from user-discovered fixes.
 ---
 
 # Simulation Helper Skill for Eclipse SUMO
@@ -34,6 +34,12 @@ For new, vague, or partially specified experiment requests, read `references/exp
 
 If the user explicitly skips intake, state which fields are unknown and mark the run `diagnostic-only` until the missing fields are resolved.
 
+## Self-Evolution Gate
+
+When the user reports that this skill failed, missed a diagnostic path, or that they later solved a SUMO/TraCI issue by another route, treat it as a field-lesson candidate. Do not merely summarize the fix. Read `references/field-lesson-capture.md`, reconstruct the evidence path, abstract the reusable rule, remove private or project-specific details, and ask before writing any skill update.
+
+Only persist a lesson when the user explicitly asks or confirms. Save project-private lessons into the project-scoped skill copy; save public lessons into this repository only after privacy, source, and claim-boundary checks.
+
 ## Reference Routing
 
 - Source priority or conflicting sources: read `references/source-ladder.md`.
@@ -48,6 +54,7 @@ If the user explicitly skips intake, state which fields are unknown and mark the
 - Completion-aware evaluation and paper-style metric definitions: read `references/evaluation-metrics-and-completion.md`.
 - Lessons from public traffic-control codebases: read `references/public-code-lessons.md`.
 - Experiment debugging, sweeps, ablations, sensitivity, and structural diagnosis: read `references/experiment-validation-ladder.md`.
+- User-discovered workarounds, missed diagnostics, or post-agent fixes that should improve this skill: read `references/field-lesson-capture.md`.
 - Baseline and ablation design: read `references/baseline-and-ablation-design.md`.
 - Paper/report claim wording: read `references/claim-boundary-taxonomy.md`.
 - Preparing a public release: read `references/public-release-checklist.md`.

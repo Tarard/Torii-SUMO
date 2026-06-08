@@ -483,7 +483,7 @@
       </article>
       <article class="panel">
         <h2 data-i18n="designTitle">Design approach</h2>
-        <p class="muted" data-i18n="designText">The skills combine official SUMO documentation, SUMO community troubleshooting patterns, public traffic-simulation code lessons, and practical experiment-audit heuristics.</p>
+        <p class="muted" data-i18n="designText">The skills combine official SUMO documentation, SUMO community troubleshooting patterns, public traffic-simulation code lessons, practical experiment-audit heuristics, and privacy-safe field lesson capture.</p>
       </article>
     </section>
 
@@ -505,6 +505,7 @@
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md">evaluation-metrics-and-completion.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md">baseline-and-ablation-design.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md">experiment-validation-ladder.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/field-lesson-capture.md">field-lesson-capture.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md">claim-boundary-taxonomy.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md">public-code-lessons.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md">public-release-checklist.md</a></li>
@@ -531,6 +532,7 @@
           <li data-i18n="audit4">Completion-aware reporting for stopped, unfinished, teleported, or invalid runs.</li>
           <li data-i18n="audit5">Metric definitions for travel time, delay, stops, throughput, queue, emissions, and fairness.</li>
           <li data-i18n="audit6">Claim boundaries for baselines, ablations, sensitivity runs, and debugging fixes.</li>
+          <li data-i18n="audit7">Field lesson capture for user-discovered fixes that should become reusable skill guidance.</li>
         </ul>
       </article>
       <article class="panel">
@@ -598,7 +600,7 @@
         academicSkillText: "Use for planning, reviewing, comparing, and writing evidence-bounded claims from SUMO/TraCI signal-control experiments.",
         debugSkillText: "Use for closed-loop diagnosis of route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures.",
         designTitle: "Design approach",
-        designText: "The skills distill official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, and the author's practical experiment experience into an agent audit workflow.",
+        designText: "The skills distill official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, the author's practical experiment experience, and privacy-safe field lesson capture into an agent audit workflow.",
         referenceTitle: "Reference modules",
         referenceText: "The package is split into focused Markdown modules so the agent can load the right evidence rules only when needed.",
         academicRefsTitle: "Simulation helper references",
@@ -610,6 +612,7 @@
         audit4: "Completion-aware reporting for stopped, unfinished, teleported, or invalid runs.",
         audit5: "Metric definitions for travel time, delay, stops, throughput, queue, emissions, and fairness.",
         audit6: "Claim boundaries for baselines, ablations, sensitivity runs, and debugging fixes.",
+        audit7: "Field lesson capture for user-discovered fixes that should become reusable skill guidance.",
         examplesTitle: "Examples",
         examplesText: "The repository includes small prompt-ready audit examples for fixed-time, max-pressure, and data-informed signal-control workflows.",
         exampleOne: "01 fixed-time",
@@ -650,7 +653,7 @@
         academicSkillText: "用于规划、审阅、比较 SUMO/TraCI 信号控制实验，并撰写有证据边界的实验结论。",
         debugSkillText: "用于闭环诊断路线、TraCI、TLS、需求、检测器、输出、随机种子、完成状态和可复现性问题。",
         designTitle: "设计来源",
-        designText: "这些技能把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式，以及作者个人实验经验整理成智能体可执行的审计流程。",
+        designText: "这些技能把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式、作者个人实验经验，以及隐私安全的现场经验捕获流程整理成智能体可执行的审计流程。",
         referenceTitle: "参考模块",
         referenceText: "这个包被拆成聚焦的 Markdown 模块，智能体可以按需要加载对应的证据规则。",
         academicRefsTitle: "仿真助手参考模块",
@@ -662,6 +665,7 @@
         audit4: "针对已停止、未完成、车辆被传送或无效运行的完成度感知报告。",
         audit5: "旅行时间、延误、停车次数、吞吐量、排队、排放与公平性的指标定义。",
         audit6: "基准、消融、敏感性实验与调试修复的结论边界。",
+        audit7: "当用户后来发现有效修复路径时，将其抽象成可复用的 skill 指南。",
         examplesTitle: "示例",
         examplesText: "仓库包含可以直接放进提示词的固定配时、最大压力和数据辅助信号控制审计示例。",
         exampleOne: "01 固定配时",
@@ -702,7 +706,7 @@
         academicSkillText: "Für Planung, Prüfung, Vergleich und evidenzgebundene Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten.",
         debugSkillText: "Für die Diagnose von Routen-, TraCI-, TLS-, Nachfrage-, Detektor-, Ausgabe-, Zufallsseed-, Abschluss- und Reproduzierbarkeitsproblemen im geschlossenen Regelkreis.",
         designTitle: "Designansatz",
-        designText: "Die Fähigkeiten verdichten offizielle SUMO-Dokumentation, Fehlersuchmuster aus SUMO-Forum und Community, Muster aus öffentlichem Verkehrssimulationscode und praktische Experimenterfahrung des Autors zu einem ausführbaren Prüfablauf für Agenten.",
+        designText: "Die Fähigkeiten verdichten offizielle SUMO-Dokumentation, Fehlersuchmuster aus SUMO-Forum und Community, Muster aus öffentlichem Verkehrssimulationscode, praktische Experimenterfahrung des Autors und datenschutzsichere Field-Lesson-Erfassung zu einem ausführbaren Prüfablauf für Agenten.",
         referenceTitle: "Referenzmodule",
         referenceText: "Das Paket ist in fokussierte Markdown-Module aufgeteilt, damit der Agent die jeweils passenden Evidenzregeln nur bei Bedarf lädt.",
         academicRefsTitle: "Referenzmodule für Simulationshilfe",
@@ -714,6 +718,7 @@
         audit4: "Berichterstattung unter Berücksichtigung des Abschlussgrades für gestoppte, unvollendete, teleportierte oder ungültige Läufe.",
         audit5: "Metrikdefinitionen für Reisezeit, Verzögerung, Halte, Durchsatz, Warteschlangen, Emissionen und Fairness.",
         audit6: "Aussagegrenzen für Basislinien, Ablationen, Sensitivitätsläufe und Fehlerbehebungen.",
+        audit7: "Field-Lesson-Erfassung für nutzergefundene Fixes, die zu wiederverwendbaren Skill-Hinweisen werden sollen.",
         examplesTitle: "Beispiele",
         examplesText: "Das Repository enthält kleine, direkt als Eingabe nutzbare Prüfbeispiele für Festzeitsteuerung, Max-Pressure und dateninformierte Signalsteuerung.",
         exampleOne: "01 Festzeit",

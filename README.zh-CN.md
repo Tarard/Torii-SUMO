@@ -89,6 +89,7 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 - [`evaluation-metrics-and-completion.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - 指标定义与 completion-aware 报告。
 - [`baseline-and-ablation-design.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md) - paired baseline、ablation 与 sensitivity 设计。
 - [`experiment-validation-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md) - 实验与调试修复的验证阶梯。
+- [`field-lesson-capture.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/field-lesson-capture.md) - 以隐私安全方式记录用户后来发现的修复路径和可复用诊断经验。
 - [`claim-boundary-taxonomy.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - 有证据边界的结论写法。
 - [`public-code-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md) - 从公开交通仿真代码中整理的经验。
 - [`public-release-checklist.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md) - 发布、商标、隐私和曝光检查。
@@ -108,6 +109,7 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 - `tripinfo`、`summary`、`edgeData`、TLS switch output、controller logs、warnings、teleports 和 unfinished vehicles。
 - 当仿真在车辆全部离网前停止时，使用 completion-aware metric reporting。
 - Baseline、ablation、sensitivity runs 和 claim wording。
+- 当用户后来解决了 skill 没有覆盖的 SUMO/TraCI 问题时，捕获 field lesson，把可复用诊断路径抽象回 skill。
 
 ## 示例
 
@@ -150,7 +152,7 @@ examples/
 
 ## Skill 如何设计
 
-设计遵循四个原则：
+设计遵循五个原则：
 
 **Progressive disclosure。** `SKILL.md` 保持紧凑，只在需要时把 agent 引导到聚焦的 reference files。
 
@@ -159,6 +161,8 @@ examples/
 **结论前的 hard gates。** 审计会分开检查 SUMO 实际加载了什么、controller 实际做了什么、写出了哪些 outputs、出现了哪些 warnings，以及证据能支持什么 claim。
 
 **闭环调试。** debugging skill 使用 observe -> classify -> probe -> compare -> update，让修复基于 artifacts，而不是试错式修改参数。
+
+**通过 field lessons 自我进化。** 当用户通过另一条路径解决了 skill 漏掉的 SUMO/TraCI 问题时，skill 可以重建证据路径、抽象可复用规则、删去私人细节，并在用户确认后提出 skill 更新。
 
 ## 限制
 

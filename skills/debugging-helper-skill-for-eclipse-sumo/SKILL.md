@@ -42,6 +42,10 @@ Do not propose fixes until the fault class is supported by evidence. Do not mask
 - Symptom-to-evidence triage: read `references/symptom-to-evidence-map.md`.
 - Diagnostic gates and demotion rules: read `references/debugging-gates-and-claim-boundaries.md`.
 
+## Field Lesson Handoff
+
+When the user reports a manual workaround or diagnostic path that solved a failure this debugging skill missed, produce a field-lesson candidate and hand off to `simulation-helper-skill-for-eclipse-sumo` using its field-lesson capture workflow if available. Persist the lesson only after user confirmation and privacy/source checks.
+
 ## Fault Classes
 
 Classify every issue into one or more:

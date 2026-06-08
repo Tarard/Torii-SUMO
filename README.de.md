@@ -89,6 +89,7 @@ Enthaltene Referenzmodule:
 - [`evaluation-metrics-and-completion.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - Metrikdefinitionen und completion-aware reporting.
 - [`baseline-and-ablation-design.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md) - paired baseline-, ablation- und sensitivity-Design.
 - [`experiment-validation-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md) - Validierungsleiter fuer Experimente und Debugging-Fixes.
+- [`field-lesson-capture.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/field-lesson-capture.md) - datenschutzsichere Erfassung nutzergefundener Fixes und wiederverwendbarer Diagnosepfade.
 - [`claim-boundary-taxonomy.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - Formulierungsregeln fuer evidenzgebundene Aussagen.
 - [`public-code-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md) - Lektionen aus oeffentlichem Verkehrssimulationscode.
 - [`public-release-checklist.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md) - Release-, Marken-, Datenschutz- und Exposure-Pruefungen.
@@ -108,6 +109,7 @@ Enthaltene Referenzmodule:
 - `tripinfo`, `summary`, `edgeData`, TLS switch output, controller logs, warnings, teleports und unfinished vehicles.
 - Completion-aware Metriken, wenn Simulationen stoppen, bevor alle Fahrzeuge das Netz verlassen.
 - Baselines, Ablations, Sensitivity Runs und Formulierung von Aussagen.
+- Field-Lesson-Erfassung, wenn Nutzer ein vom Skill verfehltes SUMO/TraCI-Problem loesen und den wiederverwendbaren Diagnosepfad in den Skill zurueckfuehren wollen.
 
 ## Beispiele
 
@@ -150,7 +152,7 @@ Eine laengere Checkliste steht in `docs/common-sumo-signal-control-failures.md`.
 
 ## Wie die Skills entworfen sind
 
-Das Design folgt vier Prinzipien:
+Das Design folgt fuenf Prinzipien:
 
 **Progressive disclosure.** `SKILL.md` bleibt kompakt und verweist den Agent nur bei Bedarf auf fokussierte Referenzdateien.
 
@@ -159,6 +161,8 @@ Das Design folgt vier Prinzipien:
 **Hard gates vor Aussagen.** Das Audit trennt, was SUMO tatsaechlich geladen hat, was der Controller tatsaechlich getan hat, welche Outputs geschrieben wurden, welche Warnungen auftraten und welche Aussage die Evidenz tragen kann.
 
 **Debugging als geschlossener Regelkreis.** Der Debugging-Skill nutzt observe -> classify -> probe -> compare -> update, damit Korrekturen auf Artefakten beruhen und nicht auf Trial-and-Error.
+
+**Selbstentwicklung durch Field Lessons.** Wenn Nutzer ein vom Skill verfehltes SUMO/TraCI-Problem auf einem anderen Weg loesen, kann der Skill den Evidenzpfad rekonstruieren, die wiederverwendbare Regel abstrahieren, private Details entfernen und nach Nutzerbestaetigung eine Skill-Aktualisierung vorschlagen.
 
 ## Grenzen
 
