@@ -79,6 +79,8 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 **Simulation helper references**
 
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - 执行前的苏格拉底式提问与 Experiment Readiness Record。
+- [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - 面向 SUMO/TraCI controller、parser、runner 和 audit code 的 RED -> GREEN -> REFACTOR 工作流。
+- [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - 完成前证据、代码审阅与 artifact 隔离 gate。
 - [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - 信息来源优先级与证据层级。
 - [`sumo-official-semantics.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO network、route、TLS、detector 与 TraCI 语义。
 - [`sumo-official-operational-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - 来自 SUMO 官方文档的运行经验。
@@ -109,6 +111,8 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 - `tripinfo`、`summary`、`edgeData`、TLS switch output、controller logs、warnings、teleports 和 unfinished vehicles。
 - 当仿真在车辆全部离网前停止时，使用 completion-aware metric reporting。
 - Baseline、ablation、sensitivity runs 和 claim wording。
+- 面向 controller、metric parser、route/config generator、validator 和 batch runner 的测试驱动 SUMO/TraCI 代码修改。
+- 在声称实现、实验、比较或发布完成前，检查完成证据与代码审阅 gate。
 - 当用户后来解决了 skill 没有覆盖的 SUMO/TraCI 问题时，捕获 field lesson，把可复用诊断路径抽象回 skill。
 
 ## 示例
@@ -152,13 +156,17 @@ examples/
 
 ## Skill 如何设计
 
-设计遵循五个原则：
+设计遵循七个原则：
 
 **Progressive disclosure。** `SKILL.md` 保持紧凑，只在需要时把 agent 引导到聚焦的 reference files。
 
 **执行前的 Socratic intake。** 对于信息不足的实验，skill 会先针对 network、demand、controller、outputs、baselines、seeds 和 metrics 提问，并建立 Experiment Readiness Record。
 
+**实验代码前的 TDD。** 对于 controller、parser、runner、validator 和 audit script 修改，skill 使用 RED -> GREEN -> REFACTOR，让代码行为先由失败测试或可复现 probe 定义，再开始实现。
+
 **结论前的 hard gates。** 审计会分开检查 SUMO 实际加载了什么、controller 实际做了什么、写出了哪些 outputs、出现了哪些 warnings，以及证据能支持什么 claim。
+
+**完成前必须有证据。** 在声称代码、仿真运行、控制器比较、审计或公开发布完成前，skill 要求提供新的命令、artifacts、测试、审阅发现和 residual risk。
 
 **闭环调试。** debugging skill 使用 observe -> classify -> probe -> compare -> update，让修复基于 artifacts，而不是试错式修改参数。
 
@@ -179,6 +187,7 @@ examples/
 - Agent Skills convention：使用包含必需 `SKILL.md`、YAML frontmatter 和可选 resources 的自包含文件夹。
 - 公开 skill 仓库，例如 `anthropics/skills`：仓库级 README、skill catalog、examples 和明确免责声明。
 - `skill-creator` 和 `writing-skills` 中的 skill authoring 模式：精简 frontmatter、紧凑 `SKILL.md`、单层 references 和发布前验证。
+- Superpowers 风格的工程纪律，例如 `test-driven-development`、`verification-before-completion`、`requesting-code-review` 和 `receiving-code-review`：先看失败测试，再写最小实现，green 后再重构，完成前必须有证据，并且用验证来处理审阅反馈，而不是盲目同意。
 - 学术工作流 skill，例如 `academic-paper`、`academic-paper-reviewer` 和 `deep-research`：intake records、source hierarchy、evidence boundaries 和 claim calibration。
 - 调试与控制闭环 skill，例如 `systematic-debugging` 和 `control-theory`：明确 target、observed state、deviation、next probe、feedback 和 residual risk。
 

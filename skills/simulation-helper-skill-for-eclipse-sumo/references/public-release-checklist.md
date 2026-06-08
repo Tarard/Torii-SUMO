@@ -35,6 +35,8 @@ Use this before publishing the skill to GitHub.
 - `SKILL.md` frontmatter has `name` and `description`.
 - `agents/openai.yaml` has display name, short description, default prompt, and implicit invocation policy.
 - Every reference named in `SKILL.md` exists.
+- SUMO/TraCI code-change work is routed through `references/tdd-for-sumo-traci-code.md`.
+- Completion, release, and code-review claims are routed through `references/verification-and-review-gates.md`.
 - Self-evolution lessons are captured through `references/field-lesson-capture.md` and require user confirmation plus privacy/source checks before persistence.
 - The skill has no README or extra auxiliary docs inside the skill directory.
 - The main package name is `simulation-helper-skill-for-eclipse-sumo`.
@@ -85,6 +87,10 @@ Run these after installation:
    - Expected: invokes the debugging loop, separates root cause from workaround, and rejects formal claims until one-variable evidence exists.
 10. "The skill missed this SUMO/TraCI failure, but I later solved it by changing the diagnostic path."
    - Expected: creates a field lesson candidate, abstracts the reusable rule, redacts private details, and asks before persisting any skill update.
+11. "Quickly implement this TraCI metric parser; no need to write tests."
+   - Expected: invokes the TDD code gate, asks for approval before skipping TDD, or writes and runs a failing parser test before implementation.
+12. "The SUMO controller comparison is done; just say it is complete."
+   - Expected: refuses a completion claim without fresh verification evidence, required artifacts, and residual-risk statement.
 
 ## Publication Gate
 

@@ -79,6 +79,8 @@ Enthaltene Referenzmodule:
 **Simulation helper references**
 
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - sokratische Vorabfragen und Experiment Readiness Record.
+- [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - RED -> GREEN -> REFACTOR-Workflow fuer SUMO/TraCI-Controller-, Parser-, Runner- und Audit-Code.
+- [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - Evidenz-vor-Abschluss-, Code-Review- und Artefakt-Isolations-Gates.
 - [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - Quellenprioritaet und Evidenzhierarchie.
 - [`sumo-official-semantics.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO network-, route-, TLS-, detector- und TraCI-Semantik.
 - [`sumo-official-operational-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - operative Hinweise aus offizieller SUMO-Dokumentation.
@@ -109,6 +111,8 @@ Enthaltene Referenzmodule:
 - `tripinfo`, `summary`, `edgeData`, TLS switch output, controller logs, warnings, teleports und unfinished vehicles.
 - Completion-aware Metriken, wenn Simulationen stoppen, bevor alle Fahrzeuge das Netz verlassen.
 - Baselines, Ablations, Sensitivity Runs und Formulierung von Aussagen.
+- Testgetriebene SUMO/TraCI-Codeaenderungen fuer Controller, Metrikparser, Routen-/Konfigurationsgeneratoren, Validatoren und Batch Runner.
+- Abschlussnachweise und Code-Review-Gates vor Aussagen ueber Implementierung, Experiment, Vergleich oder Release.
 - Field-Lesson-Erfassung, wenn Nutzer ein vom Skill verfehltes SUMO/TraCI-Problem loesen und den wiederverwendbaren Diagnosepfad in den Skill zurueckfuehren wollen.
 
 ## Beispiele
@@ -152,13 +156,17 @@ Eine laengere Checkliste steht in `docs/common-sumo-signal-control-failures.md`.
 
 ## Wie die Skills entworfen sind
 
-Das Design folgt fuenf Prinzipien:
+Das Design folgt sieben Prinzipien:
 
 **Progressive disclosure.** `SKILL.md` bleibt kompakt und verweist den Agent nur bei Bedarf auf fokussierte Referenzdateien.
 
 **Sokratische Aufnahme vor der Ausfuehrung.** Bei unterspezifizierten Experimenten fragt der Skill gezielt nach network, demand, controller, outputs, baselines, seeds und metrics und erstellt einen Experiment Readiness Record.
 
+**TDD vor Experimentcode.** Fuer Aenderungen an Controller, Parser, Runner, Validatoren und Audit-Skripten nutzt der Skill RED -> GREEN -> REFACTOR, damit Codeverhalten vor der Implementierung durch einen fehlgeschlagenen Test oder reproduzierbaren Probe beschrieben wird.
+
 **Hard gates vor Aussagen.** Das Audit trennt, was SUMO tatsaechlich geladen hat, was der Controller tatsaechlich getan hat, welche Outputs geschrieben wurden, welche Warnungen auftraten und welche Aussage die Evidenz tragen kann.
+
+**Evidenz vor Abschluss.** Bevor Code, Laeufe, Vergleiche, Audits oder Releases als abgeschlossen bezeichnet werden, verlangt der Skill aktuelle Befehle, Artefakte, Tests, Review-Befunde und Residualrisiken.
 
 **Debugging als geschlossener Regelkreis.** Der Debugging-Skill nutzt observe -> classify -> probe -> compare -> update, damit Korrekturen auf Artefakten beruhen und nicht auf Trial-and-Error.
 
@@ -179,6 +187,7 @@ Dieses Repository uebernimmt Muster aus dem weiteren Agent-Skill-Oekosystem:
 - Agent Skills convention: selbststaendige Ordner mit einer erforderlichen `SKILL.md`, YAML-Frontmatter und optionalen Ressourcen.
 - Oeffentliche Skill-Repositories wie `anthropics/skills`: README auf Repository-Ebene, Skill-Katalog, Beispiele und klare Disclaimer.
 - Skill-Authoring-Muster aus `skill-creator` und `writing-skills`: schlankes Frontmatter, kompakte `SKILL.md`, einstufige Referenzen und Validierung vor Release.
+- Superpowers-artige Engineering-Disziplin wie `test-driven-development`, `verification-before-completion`, `requesting-code-review` und `receiving-code-review`: zuerst fehlgeschlagener Test, dann minimale Implementierung, Refaktorierung erst nach Green, Evidenz vor Abschluss und Review-Feedback durch Verifikation statt blinde Zustimmung.
 - Akademische Workflow-Skills wie `academic-paper`, `academic-paper-reviewer` und `deep-research`: intake records, source hierarchy, evidence boundaries und claim calibration.
 - Debugging- und Control-Loop-Skills wie `systematic-debugging` und `control-theory`: explizite target, observed state, deviation, next probe, feedback und residual risk.
 

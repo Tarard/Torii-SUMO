@@ -1,6 +1,6 @@
 ---
 name: simulation-helper-skill-for-eclipse-sumo
-description: Use when designing, running, reviewing, debugging, or writing claims from Eclipse SUMO/TraCI traffic signal control experiments, including fixed-time, actuated, max-pressure, NEMA, MPC-style controllers, TLS phases, netconvert, routes, demand, detectors, outputs, baselines, ablations, reproducibility, academic evidence boundaries, or reusable field lessons from user-discovered fixes.
+description: Use when designing, running, reviewing, debugging, implementing, testing, or writing claims from Eclipse SUMO/TraCI traffic signal control experiments, including fixed-time, actuated, max-pressure, NEMA, MPC-style controllers, TLS phases, netconvert, routes, demand, detectors, outputs, baselines, ablations, reproducibility, academic evidence boundaries, test-driven code changes, or reusable field lessons from user-discovered fixes.
 ---
 
 # Simulation Helper Skill for Eclipse SUMO
@@ -34,6 +34,16 @@ For new, vague, or partially specified experiment requests, read `references/exp
 
 If the user explicitly skips intake, state which fields are unknown and mark the run `diagnostic-only` until the missing fields are resolved.
 
+## Code Implementation Gate
+
+When asked to implement or modify TraCI controllers, metric parsers, route/config generators, batch runners, validators, or audit scripts, read `references/tdd-for-sumo-traci-code.md` before editing code. Require a RED -> GREEN -> REFACTOR path unless the user explicitly approves a non-TDD prototype or docs-only change.
+
+If code was already written before tests, do not call retrofit tests TDD. Either restart from a failing test when feasible, or label the work as `test-after` and state the residual risk.
+
+## Completion and Review Gate
+
+Before saying code, a SUMO run, an audit, a comparison, or a release is complete, read `references/verification-and-review-gates.md`. Completion claims require fresh evidence: commands, outputs, tests, warnings, artifact paths, and residual risks. For controller, parser, runner, validator, or metric code that can affect claims, include a code-review pass focused on bugs, missing tests, reproducibility risks, and evidence boundaries.
+
 ## Self-Evolution Gate
 
 When the user reports that this skill failed, missed a diagnostic path, or that they later solved a SUMO/TraCI issue by another route, treat it as a field-lesson candidate. Do not merely summarize the fix. Read `references/field-lesson-capture.md`, reconstruct the evidence path, abstract the reusable rule, remove private or project-specific details, and ask before writing any skill update.
@@ -44,6 +54,8 @@ Only persist a lesson when the user explicitly asks or confirms. Save project-pr
 
 - Source priority or conflicting sources: read `references/source-ladder.md`.
 - New experiment design or unclear setup: read `references/experiment-intake-interview.md`.
+- SUMO/TraCI controller, parser, runner, validator, or experiment-utility code changes: read `references/tdd-for-sumo-traci-code.md`.
+- Completion claims, code review, release checks, or evidence-before-completion decisions: read `references/verification-and-review-gates.md`.
 - Eclipse SUMO network, routes, TLS, detectors, netconvert, signal states, or GUI/headless semantics: read `references/sumo-official-semantics.md`.
 - Eclipse SUMO root-cause debugging or unexpected behavior: use `debugging-helper-skill-for-eclipse-sumo` if available; otherwise read `references/sumo-official-operational-lessons.md` and `references/sumo-community-faq-lessons.md`.
 - Eclipse SUMO operational pitfalls from official docs: read `references/sumo-official-operational-lessons.md`.

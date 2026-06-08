@@ -79,6 +79,8 @@ Reference modules included in the package:
 **Simulation helper references**
 
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - Socratic pre-run questions and Experiment Readiness Record.
+- [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - RED -> GREEN -> REFACTOR workflow for SUMO/TraCI controller, parser, runner, and audit code.
+- [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - evidence-before-completion, code-review, and artifact-isolation gates.
 - [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - source priority and evidence hierarchy.
 - [`sumo-official-semantics.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO network, route, TLS, detector, and TraCI semantics.
 - [`sumo-official-operational-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - operational lessons from official SUMO documentation.
@@ -109,6 +111,8 @@ Reference modules included in the package:
 - `tripinfo`, `summary`, `edgeData`, TLS switch output, controller logs, warnings, teleports, and unfinished vehicles.
 - Completion-aware metric reporting when simulations stop before all vehicles leave the network.
 - Baselines, ablations, sensitivity runs, and claim wording.
+- Test-driven SUMO/TraCI code changes for controllers, metric parsers, route/config generators, validators, and batch runners.
+- Completion evidence and code-review gates before implementation, experiment, comparison, or release claims.
 - Field lesson capture when a user solves a missed SUMO/TraCI issue and wants the reusable diagnostic path abstracted back into the skill.
 
 ## Examples
@@ -152,13 +156,17 @@ See `docs/common-sumo-signal-control-failures.md` for a longer checklist. It cov
 
 ## How the Skills Are Designed
 
-The design follows five principles:
+The design follows seven principles:
 
 **Progressive disclosure.** `SKILL.md` stays compact and routes the agent to focused reference files only when needed.
 
 **Socratic intake before execution.** For underspecified experiments, the skill asks targeted questions and builds an Experiment Readiness Record before code, SUMO runs, or claims.
 
+**TDD before experiment code.** For controller, parser, runner, validator, and audit-script changes, the skill uses RED -> GREEN -> REFACTOR so code behavior is specified by a failing test or reproducible probe before implementation.
+
 **Hard gates before claims.** The audit separates what SUMO loaded, what the controller did, what outputs were written, what warnings occurred, and what claim the evidence can support.
+
+**Evidence before completion.** The skill requires fresh commands, artifacts, tests, review findings, and residual-risk statements before declaring code, runs, comparisons, audits, or releases complete.
 
 **Debugging as a closed loop.** The debugging skill uses observe -> classify -> probe -> compare -> update, so fixes are based on artifacts rather than trial-and-error parameter changes.
 
@@ -179,6 +187,7 @@ This repository borrows patterns from the broader agent-skill ecosystem:
 - Agent Skills convention: self-contained folders with a required `SKILL.md`, YAML frontmatter, and optional resources.
 - Public skill repositories such as `anthropics/skills`: repository-level README, skill catalog, examples, and clear disclaimers.
 - Skill-authoring patterns from `skill-creator` and `writing-skills`: lean frontmatter, compact `SKILL.md`, one-level references, and validation before release.
+- Superpowers-style engineering discipline such as `test-driven-development`, `verification-before-completion`, `requesting-code-review`, and `receiving-code-review`: failing test first, minimal implementation, refactor only after green, evidence before completion, and review feedback handled by verification rather than blind agreement.
 - Academic workflow skills such as `academic-paper`, `academic-paper-reviewer`, and `deep-research`: intake records, source hierarchy, evidence boundaries, and claim calibration.
 - Debugging and control-loop skills such as `systematic-debugging` and `control-theory`: explicit target, observed state, deviation, next probe, feedback, and residual risk.
 
