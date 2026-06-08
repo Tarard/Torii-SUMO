@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A Codex/Claude skill and checklist for auditing SUMO/TraCI traffic signal control experiments.">
+  <meta name="description" content="A Codex/Claude simulation-helper skill for auditing SUMO/TraCI signal-control projects before results are reported: project state, missing assumptions, output gates, metrics, reproducibility, and claim boundaries.">
   <title>Simulation Helper Skill for Eclipse SUMO</title>
   <style>
     :root {
@@ -32,6 +32,7 @@
       color: var(--ink);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.55;
+      overflow-x: hidden;
     }
 
     a {
@@ -43,10 +44,24 @@
       text-decoration: underline;
     }
 
+    p,
+    li,
+    h1,
+    h2,
+    h3,
+    code,
+    .brand span,
+    .button,
+    .hero-points span {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
     .shell {
-      width: min(1120px, calc(100% - 36px));
+      width: min(1120px, calc(100vw - 36px));
       margin: 0 auto;
       padding: 24px 0 56px;
+      max-width: 100vw;
     }
 
     .topbar {
@@ -126,6 +141,14 @@
       margin-bottom: 28px;
     }
 
+    .hero > *,
+    .grid > *,
+    .two-col > *,
+    .panel,
+    .visual {
+      min-width: 0;
+    }
+
     .eyebrow {
       display: inline-flex;
       align-items: center;
@@ -154,6 +177,7 @@
       letter-spacing: 0;
       margin: 0 0 18px;
       max-width: 820px;
+      overflow-wrap: anywhere;
     }
 
     .subtitle {
@@ -174,7 +198,30 @@
       overflow-x: auto;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 0.92rem;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
+      white-space: normal;
+      max-width: 100%;
+    }
+
+    .hero-points {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .hero-points span,
+    .signal-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      padding: 6px 10px;
+      color: var(--ink);
+      font-size: 0.88rem;
+      font-weight: 720;
     }
 
     .actions {
@@ -255,6 +302,7 @@
       background: rgba(255, 255, 255, 0.78);
       padding: 10px 11px;
       font-weight: 720;
+      overflow-wrap: anywhere;
     }
 
     .asset-credit {
@@ -294,6 +342,76 @@
 
     .muted {
       color: var(--muted);
+    }
+
+    .panel.lead {
+      background:
+        linear-gradient(90deg, rgba(207, 62, 53, 0.09), rgba(201, 138, 5, 0.08), rgba(29, 142, 87, 0.08)),
+        var(--panel);
+    }
+
+    .kicker {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--blue-dark);
+      font-size: 0.82rem;
+      font-weight: 780;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .pain-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 0;
+      margin: 16px 0 0;
+      list-style: none;
+    }
+
+    .pain-grid li {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--red);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.74);
+      padding: 11px 12px;
+      font-weight: 700;
+    }
+
+    .route-list,
+    .prompt-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .route-step {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 12px;
+    }
+
+    .route-step strong {
+      color: var(--blue-dark);
+    }
+
+    .prompt-list code {
+      display: block;
+      border: 1px solid #263043;
+      border-radius: 8px;
+      padding: 12px;
+      background: #151a24;
+      color: #eef5ff;
+      overflow-x: auto;
+      overflow-wrap: anywhere;
+      white-space: normal;
+      max-width: 100%;
     }
 
     .scope {
@@ -359,14 +477,21 @@
 
     @media (max-width: 840px) {
       .shell {
-        width: min(100% - 28px, 1120px);
+        width: auto;
+        margin-left: 14px;
+        margin-right: 14px;
         padding-top: 18px;
       }
 
       .topbar,
       .hero,
       .grid,
+      .pain-grid,
       .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .route-step {
         grid-template-columns: 1fr;
       }
 
@@ -397,8 +522,17 @@
         min-width: 74px;
       }
 
+      h1 {
+        font-size: 2rem;
+        line-height: 1.06;
+      }
+
       .prompt {
         font-size: 0.82rem;
+      }
+
+      .signal-card {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -422,9 +556,16 @@
     <section class="hero">
       <div>
         <div class="eyebrow" data-i18n="eyebrow">Codex/Claude Skill + Checklist</div>
-        <h1 data-i18n="heroTitle">Audit SUMO signal-control experiments before reporting results.</h1>
-        <p class="subtitle" data-i18n="heroSubtitle">A reusable agent skill and checklist for reviewing reproducibility risks in SUMO/TraCI traffic signal control experiments.</p>
-        <code class="prompt" data-i18n="promptText">Use $simulation-helper-skill-for-eclipse-sumo to audit this SUMO/TraCI traffic signal control experiment.</code>
+        <h1 data-i18n="heroTitle">Stop reporting SUMO runs that are not yet valid experiments.</h1>
+        <p class="subtitle" data-i18n="heroSubtitle">A Codex/Claude skill that screens a SUMO/TraCI signal-control project, asks for missing experiment details, routes the right audit path, and bounds what can be claimed from the outputs.</p>
+        <code class="prompt" data-i18n="promptText">Use $simulation-helper-skill-for-eclipse-sumo on this SUMO project. Start with the project control screen, then tell me the next safe step.</code>
+        <div class="hero-points" aria-label="Core mechanisms">
+          <span data-i18n="heroPointOne">Project Control Screen</span>
+          <span data-i18n="heroPointTwo">Socratic Intake</span>
+          <span data-i18n="heroPointThree">SUMO Experiment Plan</span>
+          <span data-i18n="heroPointFour">Output Hard Gates</span>
+          <span data-i18n="heroPointFive">Claim Boundary</span>
+        </div>
         <div class="actions">
           <a class="button" href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO" data-i18n="repoButton">GitHub Repository</a>
           <a class="button secondary" href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO#readme" data-i18n="readmeButton" data-i18n-href="readmeHref">Open README</a>
@@ -435,11 +576,11 @@
         <div class="signal-card">
           <img class="traffic-light-art" src="assets/traffic-lights-icon.svg" alt="" aria-hidden="true">
           <div>
-            <div class="visual-kicker" data-i18n="visualKicker">Traffic signal evidence</div>
+            <div class="visual-kicker" data-i18n="visualKicker">Audit route</div>
             <ul class="visual-list">
-              <li data-i18n="visualOne">Configuration loaded</li>
-              <li data-i18n="visualTwo">Controller behavior logged</li>
-              <li data-i18n="visualThree">Claims bounded by outputs</li>
+              <li data-i18n="visualOne">1. Find the current project state</li>
+              <li data-i18n="visualTwo">2. Force missing assumptions into the plan</li>
+              <li data-i18n="visualThree">3. Allow only evidence-bounded claims</li>
             </ul>
           </div>
         </div>
@@ -453,23 +594,65 @@
 
     <section class="grid" aria-label="Project summary">
       <article class="panel">
-        <h2 data-i18n="whatTitle">What it is</h2>
-        <p class="muted" data-i18n="whatText">A Markdown-based Codex/Claude skill package that guides an agent through SUMO configuration, controller, output, and claim-boundary audits.</p>
+        <h2 data-i18n="whatTitle">The painful part</h2>
+        <p class="muted" data-i18n="whatText">SUMO can finish a run while the experiment is still not comparable, reproducible, or safe to describe as a controller result.</p>
       </article>
       <article class="panel">
-        <h2 data-i18n="whoTitle">Who it is for</h2>
-        <p class="muted" data-i18n="whoText">Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style traffic signal control.</p>
+        <h2 data-i18n="whoTitle">What this skill changes</h2>
+        <p class="muted" data-i18n="whoText">It makes the agent audit the experiment workflow before it writes code, trusts metrics, or upgrades a result into a paper-style claim.</p>
       </article>
       <article class="panel">
-        <h2 data-i18n="preventsTitle">What it prevents</h2>
-        <p class="muted" data-i18n="preventsText">Broken routes, unsafe TLS phases, unpaired comparisons, overwritten outputs, invalid metrics, and unreproducible batch runs.</p>
+        <h2 data-i18n="preventsTitle">Who should use it</h2>
+        <p class="muted" data-i18n="preventsText">Researchers building fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style signal-control experiments in Eclipse SUMO.</p>
       </article>
+    </section>
+
+    <section class="panel lead">
+      <span class="kicker" data-i18n="painKicker">Built for real SUMO failure modes</span>
+      <h2 data-i18n="painTitle">It catches the mistakes that usually appear after the paper draft is already written.</h2>
+      <p class="muted" data-i18n="painText">The skill is written around concrete failure patterns from SUMO documentation, community troubleshooting, public traffic-simulation code, and practical experiment experience.</p>
+      <ul class="pain-grid">
+        <li data-i18n="painOne">Routes or demand differ across baselines.</li>
+        <li data-i18n="painTwo">TLS phase indexes do not match the intended movements.</li>
+        <li data-i18n="painThree">Tripinfo, summary, or edgeData outputs are missing or overwritten.</li>
+        <li data-i18n="painFour">A run stops early, teleports vehicles, or leaves unfinished demand.</li>
+        <li data-i18n="painFive">Controller comparisons are not paired by seed, horizon, demand, and outputs.</li>
+        <li data-i18n="painSix">The result is stronger than the evidence actually supports.</li>
+      </ul>
     </section>
 
     <section class="panel scope">
       <h2 data-i18n="scopeTitle">Current scope</h2>
       <p class="muted" data-i18n="scopeText">The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.</p>
       <p class="muted" data-i18n="futureText">Future skills may add audit support for routing and demand, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation workflows, calibration, safety analysis, and simulation-mode comparisons.</p>
+    </section>
+
+    <section class="panel">
+      <span class="kicker" data-i18n="mechanismKicker">The core idea</span>
+      <h2 data-i18n="mechanismTitle">It routes the work before it audits the work.</h2>
+      <p class="muted" data-i18n="mechanismText">The agent should not use the same checklist for a new experiment, a failing run, a controller code change, and a claim-review request. This skill starts by identifying the situation, then loads only the subskill and reference modules needed for that path.</p>
+      <div class="route-list">
+        <div class="route-step">
+          <strong data-i18n="routeOneTitle">Ongoing project</strong>
+          <span data-i18n="routeOneText">Project Control Screen -> target, state, deviation, next-step plan.</span>
+        </div>
+        <div class="route-step">
+          <strong data-i18n="routeTwoTitle">New experiment</strong>
+          <span data-i18n="routeTwoText">Socratic Intake -> Experiment Readiness Record -> SUMO Experiment Plan.</span>
+        </div>
+        <div class="route-step">
+          <strong data-i18n="routeThreeTitle">Code change</strong>
+          <span data-i18n="routeThreeText">TDD gate -> RED/GREEN/REFACTOR record -> verification review.</span>
+        </div>
+        <div class="route-step">
+          <strong data-i18n="routeFourTitle">Failed or suspicious run</strong>
+          <span data-i18n="routeFourText">Debugging helper -> symptom evidence -> fix, rerun, or claim demotion.</span>
+        </div>
+        <div class="route-step">
+          <strong data-i18n="routeFiveTitle">Results and claims</strong>
+          <span data-i18n="routeFiveText">Output gates -> metric definitions -> baseline pairing -> claim boundary.</span>
+        </div>
+      </div>
     </section>
 
     <section class="grid" aria-label="Skills">
@@ -497,6 +680,19 @@
         <li data-i18n="scenarioFour">Failed run: debugging helper -> closed-loop diagnosis -> fix or demotion.</li>
         <li data-i18n="scenarioFive">Results or claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.</li>
       </ul>
+    </section>
+
+    <section class="panel">
+      <span class="kicker" data-i18n="promptKicker">Try it immediately</span>
+      <h2 data-i18n="promptTitle">Copy-ready prompts for real projects</h2>
+      <p class="muted" data-i18n="promptIntro">These prompts are intentionally concrete. They tell the agent which audit path to start with and what evidence to produce.</p>
+      <div class="prompt-list">
+        <code data-i18n="tryPromptOne">Use $simulation-helper-skill-for-eclipse-sumo on this repo. Start with the project control screen and give me the next safe step.</code>
+        <code data-i18n="tryPromptTwo">Audit this TraCI signal controller before I compare it with the fixed-time baseline.</code>
+        <code data-i18n="tryPromptThree">This SUMO run finishes, but tripinfo and summary disagree. Use the debugging helper and tell me whether the run is valid.</code>
+        <code data-i18n="tryPromptFour">Controller A has lower travel time, but some vehicles are unfinished. What can I claim and what must be demoted?</code>
+        <code data-i18n="tryPromptFive">The skill missed a failure mode that I later fixed. Turn my solution path into a privacy-safe field lesson candidate.</code>
+      </div>
     </section>
 
     <section class="panel">
@@ -596,27 +792,54 @@
         pageTitle: "Simulation Helper Skill for Eclipse SUMO",
         brandName: "Simulation Helper Skill for Eclipse SUMO",
         eyebrow: "Codex/Claude Skill + Checklist",
-        heroTitle: "Audit SUMO signal-control experiments before reporting results.",
-        heroSubtitle: "A reusable agent skill and checklist for reviewing reproducibility risks in SUMO/TraCI traffic signal control experiments.",
-        promptText: "Use $simulation-helper-skill-for-eclipse-sumo to audit this SUMO/TraCI traffic signal control experiment.",
+        heroTitle: "Stop reporting SUMO runs that are not yet valid experiments.",
+        heroSubtitle: "A Codex/Claude skill that screens a SUMO/TraCI signal-control project, asks for missing experiment details, routes the right audit path, and bounds what can be claimed from the outputs.",
+        promptText: "Use $simulation-helper-skill-for-eclipse-sumo on this SUMO project. Start with the project control screen, then tell me the next safe step.",
+        heroPointOne: "Project Control Screen",
+        heroPointTwo: "Socratic Intake",
+        heroPointThree: "SUMO Experiment Plan",
+        heroPointFour: "Output Hard Gates",
+        heroPointFive: "Claim Boundary",
         repoButton: "GitHub Repository",
         readmeButton: "Open README",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO#readme",
-        visualKicker: "Traffic signal evidence",
-        visualOne: "Configuration loaded",
-        visualTwo: "Controller behavior logged",
-        visualThree: "Claims bounded by outputs",
+        visualKicker: "Audit route",
+        visualOne: "1. Find the current project state",
+        visualTwo: "2. Force missing assumptions into the plan",
+        visualThree: "3. Allow only evidence-bounded claims",
         assetCreditPrefix: "Traffic light icon:",
         assetCreditLicense: "public domain",
-        whatTitle: "What it is",
-        whatText: "A Markdown-based Codex/Claude skill package that guides an agent through SUMO configuration, controller, output, and claim-boundary audits.",
-        whoTitle: "Who it is for",
-        whoText: "Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style traffic signal control.",
-        preventsTitle: "What it prevents",
-        preventsText: "Broken routes, unsafe TLS phases, unpaired comparisons, overwritten outputs, invalid metrics, and unreproducible batch runs.",
+        whatTitle: "The painful part",
+        whatText: "SUMO can finish a run while the experiment is still not comparable, reproducible, or safe to describe as a controller result.",
+        whoTitle: "What this skill changes",
+        whoText: "It makes the agent audit the experiment workflow before it writes code, trusts metrics, or upgrades a result into a paper-style claim.",
+        preventsTitle: "Who should use it",
+        preventsText: "Researchers building fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style signal-control experiments in Eclipse SUMO.",
+        painKicker: "Built for real SUMO failure modes",
+        painTitle: "It catches the mistakes that usually appear after the paper draft is already written.",
+        painText: "The skill is written around concrete failure patterns from SUMO documentation, community troubleshooting, public traffic-simulation code, and practical experiment experience.",
+        painOne: "Routes or demand differ across baselines.",
+        painTwo: "TLS phase indexes do not match the intended movements.",
+        painThree: "Tripinfo, summary, or edgeData outputs are missing or overwritten.",
+        painFour: "A run stops early, teleports vehicles, or leaves unfinished demand.",
+        painFive: "Controller comparisons are not paired by seed, horizon, demand, and outputs.",
+        painSix: "The result is stronger than the evidence actually supports.",
         scopeTitle: "Current scope",
         scopeText: "The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.",
         futureText: "Future skills may add audit support for routing and demand, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation workflows, calibration, safety analysis, and simulation-mode comparisons.",
+        mechanismKicker: "The core idea",
+        mechanismTitle: "It routes the work before it audits the work.",
+        mechanismText: "The agent should not use the same checklist for a new experiment, a failing run, a controller code change, and a claim-review request. This skill starts by identifying the situation, then loads only the subskill and reference modules needed for that path.",
+        routeOneTitle: "Ongoing project",
+        routeOneText: "Project Control Screen -> target, state, deviation, next-step plan.",
+        routeTwoTitle: "New experiment",
+        routeTwoText: "Socratic Intake -> Experiment Readiness Record -> SUMO Experiment Plan.",
+        routeThreeTitle: "Code change",
+        routeThreeText: "TDD gate -> RED/GREEN/REFACTOR record -> verification review.",
+        routeFourTitle: "Failed or suspicious run",
+        routeFourText: "Debugging helper -> symptom evidence -> fix, rerun, or claim demotion.",
+        routeFiveTitle: "Results and claims",
+        routeFiveText: "Output gates -> metric definitions -> baseline pairing -> claim boundary.",
         academicSkillText: "Use for planning, reviewing, comparing, and writing evidence-bounded claims from SUMO/TraCI signal-control experiments.",
         debugSkillText: "Use for closed-loop diagnosis of route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures.",
         designTitle: "Design approach",
@@ -628,6 +851,14 @@
         scenarioThree: "Code change: TDD gate -> implementation -> verification and review gates.",
         scenarioFour: "Failed run: debugging helper -> closed-loop diagnosis -> fix or demotion.",
         scenarioFive: "Results or claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.",
+        promptKicker: "Try it immediately",
+        promptTitle: "Copy-ready prompts for real projects",
+        promptIntro: "These prompts are intentionally concrete. They tell the agent which audit path to start with and what evidence to produce.",
+        tryPromptOne: "Use $simulation-helper-skill-for-eclipse-sumo on this repo. Start with the project control screen and give me the next safe step.",
+        tryPromptTwo: "Audit this TraCI signal controller before I compare it with the fixed-time baseline.",
+        tryPromptThree: "This SUMO run finishes, but tripinfo and summary disagree. Use the debugging helper and tell me whether the run is valid.",
+        tryPromptFour: "Controller A has lower travel time, but some vehicles are unfinished. What can I claim and what must be demoted?",
+        tryPromptFive: "The skill missed a failure mode that I later fixed. Turn my solution path into a privacy-safe field lesson candidate.",
         referenceTitle: "Reference modules",
         referenceText: "The package is split into focused Markdown modules so the agent can load the right evidence rules only when needed.",
         academicRefsTitle: "Simulation helper references",
@@ -659,38 +890,73 @@
         pageTitle: "Eclipse SUMO 仿真助手技能",
         brandName: "Eclipse SUMO 仿真助手技能",
         eyebrow: "Codex/Claude 技能 + 检查清单",
-        heroTitle: "在报告结果前审计 SUMO 信号控制实验。",
-        heroSubtitle: "一个可复用的智能体技能与检查清单，用于审查 SUMO/TraCI 交通信号控制实验中的可复现性风险。",
-        promptText: "请使用 $simulation-helper-skill-for-eclipse-sumo 在报告结果前审计这个 SUMO/TraCI 交通信号控制实验。",
+        heroTitle: "跑完不等于有效。",
+        heroSubtitle: "这是一个面向 Codex/Claude 的技能：先筛查 SUMO/TraCI 信号控制项目，追问缺失的实验细节，再限定输出结果能够支撑的结论。",
+        promptText: "请对这个 SUMO 项目使用 $simulation-helper-skill-for-eclipse-sumo。先做项目控制屏，再告诉我下一步最稳妥的动作。",
+        heroPointOne: "项目控制屏",
+        heroPointTwo: "苏格拉底式追问",
+        heroPointThree: "SUMO 实验计划",
+        heroPointFour: "输出硬门槛",
+        heroPointFive: "结论边界",
         repoButton: "GitHub 仓库",
         readmeButton: "打开说明文档",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.zh-CN.md",
-        visualKicker: "交通信号证据",
-        visualOne: "配置已加载",
-        visualTwo: "控制行为有记录",
-        visualThree: "结论受输出约束",
+        visualKicker: "审计路径",
+        visualOne: "1. 先找出项目当前状态",
+        visualTwo: "2. 把隐藏假设压进实验计划",
+        visualThree: "3. 只允许有证据边界的结论",
         assetCreditPrefix: "红绿灯图标：",
         assetCreditLicense: "公共领域",
-        whatTitle: "它是什么",
-        whatText: "一个基于 Markdown 的 Codex/Claude 技能包，用来引导智能体审计 SUMO 配置、控制器、输出与结论边界。",
-        whoTitle: "面向谁",
-        whoText: "面向使用 Eclipse SUMO 研究固定配时、感应控制、最大压力、NEMA、数据辅助或 MPC 风格交通信号控制的研究者。",
-        preventsTitle: "它避免什么",
-        preventsText: "破损路线、不安全 TLS 相位、未配对比较、被覆盖输出、无效指标报告，以及不可复现实验批次。",
+        whatTitle: "真正麻烦的地方",
+        whatText: "SUMO 仿真可以正常跑完，但实验仍然可能不可比较、不可复现，也不能安全地描述为某个控制器的有效结果。",
+        whoTitle: "这个技能改变什么",
+        whoText: "它要求智能体先审计实验工作流，再写代码、相信指标，或把一次运行结果升级成论文式结论。",
+        preventsTitle: "谁应该使用它",
+        preventsText: "适合用 Eclipse SUMO 构建固定配时、感应控制、最大压力、NEMA、数据辅助或 MPC 风格信号控制实验的研究者。",
+        painKicker: "围绕真实 SUMO 失败模式设计",
+        painTitle: "它专门抓那些通常到论文初稿写完后才暴露的问题。",
+        painText: "这个技能围绕 SUMO 官方文档、社区排错经验、公开交通仿真代码和实际实验经验中反复出现的失败模式编写。",
+        painOne: "不同基准方法使用了不同路线或需求。",
+        painTwo: "TLS 相位索引没有对应预期放行方向。",
+        painThree: "tripinfo、summary 或 edgeData 输出缺失或被覆盖。",
+        painFour: "运行提前停止、车辆被传送，或仍有未完成需求。",
+        painFive: "控制器比较没有按随机种子、时段、需求和输出配对。",
+        painSix: "论文式结论强于已有证据实际能支撑的范围。",
         scopeTitle: "当前范围",
         scopeText: "当前版本聚焦 SUMO/TraCI 交通信号控制实验。它还不是覆盖所有 Eclipse SUMO 用途的通用审计技能。",
         futureText: "未来可以继续增加面向路线与需求、排放与能耗、公共交通、行人与多模式场景、自动驾驶/网联自动驾驶与联合仿真、校准、安全分析和仿真模式比较的审计技能。",
+        mechanismKicker: "核心思路",
+        mechanismTitle: "先判断工作场景，再开始审计。",
+        mechanismText: "新实验、失败运行、控制器代码修改和结果结论审查，不应该使用同一张检查清单。这个技能会先识别用户所处场景，再只加载该路径需要的子技能和参考模块。",
+        routeOneTitle: "进行中的项目",
+        routeOneText: "项目控制屏 -> 目标、状态、偏差、下一步计划。",
+        routeTwoTitle: "新实验",
+        routeTwoText: "苏格拉底式追问 -> 实验准备记录 -> SUMO 实验计划。",
+        routeThreeTitle: "代码修改",
+        routeThreeText: "TDD 门槛 -> 红灯/绿灯/重构记录 -> 验证审阅。",
+        routeFourTitle: "失败或可疑运行",
+        routeFourText: "调试助手 -> 症状证据 -> 修复、重跑或降低结论等级。",
+        routeFiveTitle: "结果与结论",
+        routeFiveText: "输出门槛 -> 指标定义 -> 基准配对 -> 结论边界。",
         academicSkillText: "用于规划、审阅、比较 SUMO/TraCI 信号控制实验，并撰写有证据边界的实验结论。",
         debugSkillText: "用于闭环诊断路线、TraCI、TLS、需求、检测器、输出、随机种子、完成状态和可复现性问题。",
         designTitle: "设计来源",
-        designText: "这些技能把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式、作者个人实验经验、Socratic intake、已确认的实验计划、面向 SUMO/TraCI 代码修改的 TDD、完成前证据审阅 gate，以及隐私安全的现场经验捕获流程整理成智能体可执行的审计流程。",
+        designText: "这些技能把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式、作者个人实验经验、苏格拉底式追问、已确认的实验计划、面向 SUMO/TraCI 代码修改的测试驱动开发（TDD）、完成前证据审阅门槛，以及隐私安全的现场经验捕获流程整理成智能体可执行的审计流程。",
         scenarioTitle: "使用场景",
-        scenarioText: "先根据用户所处场景判断路径，再只加载该路径需要的 reference。",
-        scenarioOne: "进行中项目：workflow router -> project control screen -> next-step plan。",
-        scenarioTwo: "新实验：Socratic intake -> Experiment Readiness Record -> SUMO Experiment Plan。",
-        scenarioThree: "代码修改：TDD gate -> implementation -> verification and review gates。",
-        scenarioFour: "运行失败：debugging helper -> closed-loop diagnosis -> fix or demotion。",
-        scenarioFive: "结果或结论：output hard gates -> metrics/completion -> baseline design -> claim boundary。",
+        scenarioText: "先根据用户所处场景判断路径，再只加载该路径需要的参考模块。",
+        scenarioOne: "进行中项目：工作流路由器 -> 项目控制屏 -> 下一步计划。",
+        scenarioTwo: "新实验：苏格拉底式追问 -> 实验准备记录 -> SUMO 实验计划。",
+        scenarioThree: "代码修改：TDD 门槛 -> 实现 -> 验证与审阅门槛。",
+        scenarioFour: "运行失败：调试助手 -> 闭环诊断 -> 修复或降低结论等级。",
+        scenarioFive: "结果或结论：输出硬门槛 -> 指标与完成度 -> 基准设计 -> 结论边界。",
+        promptKicker: "马上试用",
+        promptTitle: "可以直接复制到真实项目里的提示词",
+        promptIntro: "这些提示词刻意写得很具体：它们会告诉智能体从哪条审计路径开始，以及需要产出什么证据。",
+        tryPromptOne: "请对这个仓库使用 $simulation-helper-skill-for-eclipse-sumo。先做项目控制屏，再给我下一步最稳妥的动作。",
+        tryPromptTwo: "在我把这个 TraCI 信号控制器和固定配时基准比较之前，请先审计这个控制器。",
+        tryPromptThree: "这个 SUMO 运行能结束，但 tripinfo 和 summary 不一致。请使用调试助手判断这次运行是否有效。",
+        tryPromptFour: "控制器 A 的旅行时间更低，但仍有未完成车辆。我能声称什么？哪些结论必须降级？",
+        tryPromptFive: "这个技能漏掉了一个失败模式，后来我自己找到了解法。请把我的解决路径整理成隐私安全的现场经验候选条目。",
         referenceTitle: "参考模块",
         referenceText: "这个包被拆成聚焦的 Markdown 模块，智能体可以按需要加载对应的证据规则。",
         academicRefsTitle: "仿真助手参考模块",
@@ -702,10 +968,10 @@
         audit4: "针对已停止、未完成、车辆被传送或无效运行的完成度感知报告。",
         audit5: "旅行时间、延误、停车次数、吞吐量、排队、排放与公平性的指标定义。",
         audit6: "基准、消融、敏感性实验与调试修复的结论边界。",
-        audit7: "当用户后来发现有效修复路径时，将其抽象成可复用的 skill 指南。",
-        audit8: "在声称实现完成前，记录 SUMO/TraCI 代码修改的 TDD 证据。",
+        audit7: "当用户后来发现有效修复路径时，将其抽象成可复用的技能指南。",
+        audit8: "在声称实现完成前，记录 SUMO/TraCI 代码修改的测试驱动开发（TDD）证据。",
         audit9: "在声称完成前，提供新的验证证据和审阅发现。",
-        audit10: "在 intake 之后、执行之前确认 SUMO Experiment Plan。",
+        audit10: "在追问之后、执行之前确认 SUMO 实验计划。",
         examplesTitle: "示例",
         examplesText: "仓库包含可以直接放进提示词的固定配时、最大压力和数据辅助信号控制审计示例。",
         exampleOne: "01 固定配时",
@@ -722,38 +988,73 @@
         pageTitle: "Simulationshelfer-Skill für Eclipse SUMO",
         brandName: "Simulationshelfer-Skill für Eclipse SUMO",
         eyebrow: "Codex/Claude Agenten-Fähigkeit + Prüfliste",
-        heroTitle: "SUMO-Signalsteuerungs-Experimente vor der Ergebnisberichterstattung prüfen.",
-        heroSubtitle: "Eine wiederverwendbare Agenten-Fähigkeit und Prüfliste zur Prüfung von Reproduzierbarkeitsrisiken in SUMO/TraCI-Experimenten zur Verkehrssignalsteuerung.",
-        promptText: "Nutze $simulation-helper-skill-for-eclipse-sumo, um dieses SUMO/TraCI-Experiment zur Verkehrssignalsteuerung vor der Ergebnisberichterstattung zu prüfen.",
+        heroTitle: "Berichte keine SUMO-Läufe, die noch keine belastbaren Experimente sind.",
+        heroSubtitle: "Ein Codex/Claude-Skill, der ein SUMO/TraCI-Projekt zur Ampelsteuerung prüft, fehlende Versuchsdaten abfragt, den passenden Prüfpfad wählt und begrenzt, welche Aussagen die Ausgaben tragen.",
+        promptText: "Nutze $simulation-helper-skill-for-eclipse-sumo für dieses SUMO-Projekt. Beginne mit der Projekt-Kontrollansicht und nenne mir den nächsten belastbaren Schritt.",
+        heroPointOne: "Projekt-Kontrollansicht",
+        heroPointTwo: "Sokratische Vorabklärung",
+        heroPointThree: "SUMO-Versuchsplan",
+        heroPointFour: "Ausgabe-Hartprüfungen",
+        heroPointFive: "Aussagegrenze",
         repoButton: "GitHub-Repository",
         readmeButton: "Dokumentation öffnen",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.de.md",
-        visualKicker: "Evidenz zur Signalsteuerung",
-        visualOne: "Konfiguration geladen",
-        visualTwo: "Steuerungsverhalten protokolliert",
-        visualThree: "Aussagen durch Ausgaben begrenzt",
+        visualKicker: "Prüfpfad",
+        visualOne: "1. Aktuellen Projektzustand erfassen",
+        visualTwo: "2. Verdeckte Annahmen in den Versuchsplan zwingen",
+        visualThree: "3. Nur evidenzgebundene Aussagen zulassen",
         assetCreditPrefix: "Ampelsymbol:",
         assetCreditLicense: "gemeinfrei",
-        whatTitle: "Was es ist",
-        whatText: "Ein Markdown-basiertes Fähigkeitspaket für Codex/Claude, das einen Agenten durch Prüfungen von SUMO-Konfiguration, Steuerung, Ausgaben und Aussagegrenzen führt.",
-        whoTitle: "Für wen",
-        whoText: "Forschende, die Eclipse SUMO für Festzeitsteuerung, verkehrsabhängige Steuerung, Max-Pressure, NEMA, dateninformierte oder MPC-artige Verkehrssignalsteuerung nutzen.",
-        preventsTitle: "Was es verhindert",
-        preventsText: "Fehlerhafte Routen, unsichere TLS-Phasen, ungepaarte Vergleiche, überschriebene Ausgaben, ungültige Metriken und nicht reproduzierbare Serienläufe.",
+        whatTitle: "Der schmerzhafte Punkt",
+        whatText: "Ein SUMO-Lauf kann vollständig enden, obwohl das Experiment noch nicht vergleichbar, reproduzierbar oder als Steuerungsergebnis belastbar ist.",
+        whoTitle: "Was dieser Skill ändert",
+        whoText: "Er zwingt den Agenten, den Versuchsablauf zu prüfen, bevor er Code schreibt, Metriken vertraut oder ein Ergebnis in eine wissenschaftliche Aussage verwandelt.",
+        preventsTitle: "Wer ihn nutzen sollte",
+        preventsText: "Forschende, die in Eclipse SUMO Festzeit-, verkehrsabhängige, Max-Pressure-, NEMA-, dateninformierte oder MPC-artige Ampelsteuerungsexperimente bauen.",
+        painKicker: "Für echte SUMO-Fehlermuster gebaut",
+        painTitle: "Er fängt Fehler ab, die sonst oft erst nach dem ersten Manuskript sichtbar werden.",
+        painText: "Der Skill orientiert sich an konkreten Fehlermustern aus der SUMO-Dokumentation, Community-Fehlersuche, öffentlichem Verkehrssimulationscode und praktischer Versuchserfahrung.",
+        painOne: "Routen oder Nachfrage unterscheiden sich zwischen Basislinien.",
+        painTwo: "TLS-Phasenindizes passen nicht zu den beabsichtigten Fahrbeziehungen.",
+        painThree: "tripinfo-, summary- oder edgeData-Ausgaben fehlen oder werden überschrieben.",
+        painFour: "Ein Lauf stoppt zu früh, teleportiert Fahrzeuge oder lässt Nachfrage unvollendet.",
+        painFive: "Steuerungsvergleiche sind nicht nach Seed, Horizont, Nachfrage und Ausgaben gepaart.",
+        painSix: "Die Aussage ist stärker als die vorhandene Evidenz erlaubt.",
         scopeTitle: "Aktueller Umfang",
         scopeText: "Diese Version konzentriert sich auf SUMO/TraCI-Experimente zur Verkehrssignalsteuerung. Sie ist noch kein allgemeines Prüfwerkzeug für alle Eclipse SUMO-Anwendungsfälle.",
         futureText: "Künftige Fähigkeiten können Prüfungen für Routenwahl und Nachfrage, Emissionen und Energie, öffentlichen Verkehr, Fußgänger- und intermodale Szenarien, automatisierte und vernetzte Fahrzeuge mit Co-Simulation, Kalibrierung, Sicherheitsanalyse und Vergleiche von Simulationsmodi ergänzen.",
+        mechanismKicker: "Kernidee",
+        mechanismTitle: "Er wählt zuerst den Arbeitskontext und prüft erst dann.",
+        mechanismText: "Ein neues Experiment, ein fehlgeschlagener Lauf, eine Änderung am Steuerungscode und eine Aussagenprüfung brauchen nicht dieselbe Prüfliste. Dieser Skill erkennt zuerst die Situation und lädt danach nur die passenden Subskills und Referenzmodule.",
+        routeOneTitle: "Laufendes Projekt",
+        routeOneText: "Projekt-Kontrollansicht -> Ziel, Zustand, Abweichung, nächster Schritt.",
+        routeTwoTitle: "Neues Experiment",
+        routeTwoText: "Sokratische Vorabklärung -> Versuchsbereitschaftsnotiz -> SUMO-Versuchsplan.",
+        routeThreeTitle: "Codeänderung",
+        routeThreeText: "TDD-Prüfung -> Rot/Grün/Refaktor-Protokoll -> Verifikationsreview.",
+        routeFourTitle: "Fehlgeschlagener oder fragwürdiger Lauf",
+        routeFourText: "Debugging-Helfer -> Symptombelege -> Fix, erneuter Lauf oder Aussageabstufung.",
+        routeFiveTitle: "Ergebnisse und Aussagen",
+        routeFiveText: "Ausgabeprüfungen -> Metrikdefinitionen -> Basislinienpaarung -> Aussagegrenze.",
         academicSkillText: "Für Planung, Prüfung, Vergleich und evidenzgebundene Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten.",
         debugSkillText: "Für die Diagnose von Routen-, TraCI-, TLS-, Nachfrage-, Detektor-, Ausgabe-, Zufallsseed-, Abschluss- und Reproduzierbarkeitsproblemen im geschlossenen Regelkreis.",
         designTitle: "Designansatz",
-        designText: "Die Fähigkeiten verdichten offizielle SUMO-Dokumentation, Fehlersuchmuster aus SUMO-Forum und Community, Muster aus öffentlichem Verkehrssimulationscode, praktische Experimenterfahrung des Autors, sokratischen Intake, bestätigte Experimentplanung, TDD für SUMO/TraCI-Codeänderungen, Review-Gates mit Evidenz vor Abschluss und datenschutzsichere Field-Lesson-Erfassung zu einem ausführbaren Prüfablauf für Agenten.",
+        designText: "Die Fähigkeiten verdichten offizielle SUMO-Dokumentation, Fehlersuchmuster aus SUMO-Forum und Community, Muster aus öffentlichem Verkehrssimulationscode, praktische Versuchserfahrung des Autors, sokratische Vorabklärung, bestätigte Versuchsplanung, testgetriebene Entwicklung (TDD) für SUMO/TraCI-Codeänderungen, Prüfungen mit Evidenz vor Abschluss und datenschutzsichere Erfassung von Praxislektionen zu einem ausführbaren Prüfablauf für Agenten.",
         scenarioTitle: "Nutzungsszenarien",
         scenarioText: "Ausgangspunkt ist die Situation des Nutzers; danach werden nur die passenden Referenzen geladen.",
-        scenarioOne: "Laufendes Projekt: workflow router -> project control screen -> next-step plan.",
-        scenarioTwo: "Neues Experiment: sokratischer Intake -> Experiment Readiness Record -> SUMO Experiment Plan.",
-        scenarioThree: "Codeaenderung: TDD gate -> implementation -> verification and review gates.",
-        scenarioFour: "Fehlgeschlagener Lauf: debugging helper -> closed-loop diagnosis -> fix or demotion.",
-        scenarioFive: "Ergebnisse oder Claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.",
+        scenarioOne: "Laufendes Projekt: Arbeitsablauf-Router -> Projekt-Kontrollansicht -> Plan für den nächsten Schritt.",
+        scenarioTwo: "Neues Experiment: sokratische Vorabklärung -> Versuchsbereitschaftsnotiz -> SUMO-Versuchsplan.",
+        scenarioThree: "Codeänderung: TDD-Prüfung -> Umsetzung -> Verifikations- und Review-Prüfungen.",
+        scenarioFour: "Fehlgeschlagener Lauf: Debugging-Helfer -> geschlossene Diagnose -> Fix oder Aussageabstufung.",
+        scenarioFive: "Ergebnisse oder Aussagen: Ausgabe-Hartprüfungen -> Metriken und Abschlussgrad -> Basisliniendesign -> Aussagegrenze.",
+        promptKicker: "Sofort ausprobieren",
+        promptTitle: "Direkt kopierbare Prompts für echte Projekte",
+        promptIntro: "Diese Prompts sind absichtlich konkret. Sie sagen dem Agenten, mit welchem Prüfpfad er beginnen und welche Evidenz er liefern soll.",
+        tryPromptOne: "Nutze $simulation-helper-skill-for-eclipse-sumo für dieses Repository. Beginne mit der Projekt-Kontrollansicht und gib mir den nächsten belastbaren Schritt.",
+        tryPromptTwo: "Prüfe diesen TraCI-Signalcontroller, bevor ich ihn mit der Festzeit-Basislinie vergleiche.",
+        tryPromptThree: "Dieser SUMO-Lauf endet, aber tripinfo und summary widersprechen sich. Nutze den Debugging-Helfer und sage mir, ob der Lauf gültig ist.",
+        tryPromptFour: "Controller A hat eine geringere Reisezeit, aber einige Fahrzeuge sind unvollendet. Was darf ich behaupten und was muss abgestuft werden?",
+        tryPromptFive: "Der Skill hat ein Fehlermuster übersehen, das ich später gelöst habe. Verwandle meinen Lösungsweg in einen datenschutzsicheren Field-Lesson-Kandidaten.",
         referenceTitle: "Referenzmodule",
         referenceText: "Das Paket ist in fokussierte Markdown-Module aufgeteilt, damit der Agent die jeweils passenden Evidenzregeln nur bei Bedarf lädt.",
         academicRefsTitle: "Referenzmodule für Simulationshilfe",
@@ -765,10 +1066,10 @@
         audit4: "Berichterstattung unter Berücksichtigung des Abschlussgrades für gestoppte, unvollendete, teleportierte oder ungültige Läufe.",
         audit5: "Metrikdefinitionen für Reisezeit, Verzögerung, Halte, Durchsatz, Warteschlangen, Emissionen und Fairness.",
         audit6: "Aussagegrenzen für Basislinien, Ablationen, Sensitivitätsläufe und Fehlerbehebungen.",
-        audit7: "Field-Lesson-Erfassung für nutzergefundene Fixes, die zu wiederverwendbaren Skill-Hinweisen werden sollen.",
-        audit8: "TDD-Nachweise für SUMO/TraCI-Codeänderungen vor Implementierungsaussagen.",
+        audit7: "Erfassung von Praxislektionen für nutzergefundene Fixes, die zu wiederverwendbaren Skill-Hinweisen werden sollen.",
+        audit8: "Nachweise testgetriebener Entwicklung (TDD) für SUMO/TraCI-Codeänderungen vor Implementierungsaussagen.",
         audit9: "Aktuelle Verifikationsnachweise und Review-Befunde vor Abschlussaussagen.",
-        audit10: "Bestätigter SUMO Experiment Plan nach Intake und vor der Ausführung.",
+        audit10: "Bestätigter SUMO-Versuchsplan nach der Vorabklärung und vor der Ausführung.",
         examplesTitle: "Beispiele",
         examplesText: "Das Repository enthält kleine, direkt als Eingabe nutzbare Prüfbeispiele für Festzeitsteuerung, Max-Pressure und dateninformierte Signalsteuerung.",
         exampleOne: "01 Festzeit",
