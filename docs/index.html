@@ -488,12 +488,26 @@
     </section>
 
     <section class="panel">
+      <h2 data-i18n="scenarioTitle">Use scenarios</h2>
+      <p class="muted" data-i18n="scenarioText">Start from the user's situation, then load only the references needed for that path.</p>
+      <ul>
+        <li data-i18n="scenarioOne">Ongoing project: workflow router -> project control screen -> next-step plan.</li>
+        <li data-i18n="scenarioTwo">New experiment: Socratic intake -> Experiment Readiness Record -> SUMO Experiment Plan.</li>
+        <li data-i18n="scenarioThree">Code change: TDD gate -> implementation -> verification and review gates.</li>
+        <li data-i18n="scenarioFour">Failed run: debugging helper -> closed-loop diagnosis -> fix or demotion.</li>
+        <li data-i18n="scenarioFive">Results or claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
       <h2 data-i18n="referenceTitle">Reference modules</h2>
       <p class="muted" data-i18n="referenceText">The package is split into focused Markdown modules so the agent can load the right evidence rules only when needed.</p>
       <div class="two-col">
         <div>
           <h3 data-i18n="academicRefsTitle">Simulation helper references</h3>
           <ul>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md">workflow-router.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md">project-control-screen.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md">experiment-intake-interview.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md">experiment-planning-after-intake.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md">tdd-for-sumo-traci-code.md</a></li>
@@ -607,6 +621,13 @@
         debugSkillText: "Use for closed-loop diagnosis of route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures.",
         designTitle: "Design approach",
         designText: "The skills distill official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, the author's practical experiment experience, Socratic intake, confirmed experiment planning, TDD for SUMO/TraCI code changes, evidence-before-completion review gates, and privacy-safe field lesson capture into an agent audit workflow.",
+        scenarioTitle: "Use scenarios",
+        scenarioText: "Start from the user's situation, then load only the references needed for that path.",
+        scenarioOne: "Ongoing project: workflow router -> project control screen -> next-step plan.",
+        scenarioTwo: "New experiment: Socratic intake -> Experiment Readiness Record -> SUMO Experiment Plan.",
+        scenarioThree: "Code change: TDD gate -> implementation -> verification and review gates.",
+        scenarioFour: "Failed run: debugging helper -> closed-loop diagnosis -> fix or demotion.",
+        scenarioFive: "Results or claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.",
         referenceTitle: "Reference modules",
         referenceText: "The package is split into focused Markdown modules so the agent can load the right evidence rules only when needed.",
         academicRefsTitle: "Simulation helper references",
@@ -663,6 +684,13 @@
         debugSkillText: "用于闭环诊断路线、TraCI、TLS、需求、检测器、输出、随机种子、完成状态和可复现性问题。",
         designTitle: "设计来源",
         designText: "这些技能把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式、作者个人实验经验、Socratic intake、已确认的实验计划、面向 SUMO/TraCI 代码修改的 TDD、完成前证据审阅 gate，以及隐私安全的现场经验捕获流程整理成智能体可执行的审计流程。",
+        scenarioTitle: "使用场景",
+        scenarioText: "先根据用户所处场景判断路径，再只加载该路径需要的 reference。",
+        scenarioOne: "进行中项目：workflow router -> project control screen -> next-step plan。",
+        scenarioTwo: "新实验：Socratic intake -> Experiment Readiness Record -> SUMO Experiment Plan。",
+        scenarioThree: "代码修改：TDD gate -> implementation -> verification and review gates。",
+        scenarioFour: "运行失败：debugging helper -> closed-loop diagnosis -> fix or demotion。",
+        scenarioFive: "结果或结论：output hard gates -> metrics/completion -> baseline design -> claim boundary。",
         referenceTitle: "参考模块",
         referenceText: "这个包被拆成聚焦的 Markdown 模块，智能体可以按需要加载对应的证据规则。",
         academicRefsTitle: "仿真助手参考模块",
@@ -719,6 +747,13 @@
         debugSkillText: "Für die Diagnose von Routen-, TraCI-, TLS-, Nachfrage-, Detektor-, Ausgabe-, Zufallsseed-, Abschluss- und Reproduzierbarkeitsproblemen im geschlossenen Regelkreis.",
         designTitle: "Designansatz",
         designText: "Die Fähigkeiten verdichten offizielle SUMO-Dokumentation, Fehlersuchmuster aus SUMO-Forum und Community, Muster aus öffentlichem Verkehrssimulationscode, praktische Experimenterfahrung des Autors, sokratischen Intake, bestätigte Experimentplanung, TDD für SUMO/TraCI-Codeänderungen, Review-Gates mit Evidenz vor Abschluss und datenschutzsichere Field-Lesson-Erfassung zu einem ausführbaren Prüfablauf für Agenten.",
+        scenarioTitle: "Nutzungsszenarien",
+        scenarioText: "Ausgangspunkt ist die Situation des Nutzers; danach werden nur die passenden Referenzen geladen.",
+        scenarioOne: "Laufendes Projekt: workflow router -> project control screen -> next-step plan.",
+        scenarioTwo: "Neues Experiment: sokratischer Intake -> Experiment Readiness Record -> SUMO Experiment Plan.",
+        scenarioThree: "Codeaenderung: TDD gate -> implementation -> verification and review gates.",
+        scenarioFour: "Fehlgeschlagener Lauf: debugging helper -> closed-loop diagnosis -> fix or demotion.",
+        scenarioFive: "Ergebnisse oder Claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.",
         referenceTitle: "Referenzmodule",
         referenceText: "Das Paket ist in fokussierte Markdown-Module aufgeteilt, damit der Agent die jeweils passenden Evidenzregeln nur bei Bedarf lädt.",
         academicRefsTitle: "Referenzmodule für Simulationshilfe",

@@ -35,6 +35,7 @@ Use this before publishing the skill to GitHub.
 - `SKILL.md` frontmatter has `name` and `description`.
 - `agents/openai.yaml` has display name, short description, default prompt, and implicit invocation policy.
 - Every reference named in `SKILL.md` exists.
+- Mixed or ongoing-project requests are routed through `references/workflow-router.md` and `references/project-control-screen.md`.
 - Confirmed intake is routed through `references/experiment-planning-after-intake.md` before implementation, simulation, comparison, or claims.
 - SUMO/TraCI code-change work is routed through `references/tdd-for-sumo-traci-code.md`.
 - Completion, release, and code-review claims are routed through `references/verification-and-review-gates.md`.
@@ -50,6 +51,7 @@ Use this before publishing the skill to GitHub.
 - README links to the GitHub Pages language-switch page at `https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/`.
 - `docs/index.html` exists as a no-build GitHub Pages landing page with in-place English, Chinese, and German language switching.
 - README states what it is, who it is for, and what failures it prevents.
+- README includes a scenario-based usage table that maps user situations to skills/references and expected outputs.
 - README Skill Catalog lists the packaged reference Markdown modules with clickable relative links.
 - README includes the repository slug `Simulation-Helper-Skill-for-Eclipse-SUMO`.
 - README quick start uses concrete repository-scoped install paths for Codex (`.agents/skills/`) and Claude Code (`.claude/skills/`).
@@ -94,6 +96,8 @@ Run these after installation:
    - Expected: refuses a completion claim without fresh verification evidence, required artifacts, and residual-risk statement.
 13. "I confirm the Experiment Readiness Record. Start running SUMO now."
    - Expected: produces a SUMO Experiment Plan and asks for confirmation before code, SUMO file edits, simulation runs, comparisons, or claims.
+14. "Here is my existing SUMO repo. Tell me what to do next."
+   - Expected: invokes the workflow router and project control screen, estimates target/current state/deviation from artifacts, and produces a Next Step Plan or switches to Socratic intake if state cannot be inferred.
 
 ## Publication Gate
 

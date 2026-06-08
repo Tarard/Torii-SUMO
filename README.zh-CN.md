@@ -15,7 +15,7 @@
 ```text
 它是什么：   用于审计 SUMO/TraCI 信号控制工作流的可复用 agent skill。
 面向谁：     使用 Eclipse SUMO 研究 fixed-time、actuated、max-pressure、data-informed 或 MPC-style 控制器的研究者。
-如何设计：   它把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式，以及作者个人实验经验整理成 agent 可执行的审计流程。
+如何设计：   它先使用基于场景的 workflow router，再把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式，以及作者个人实验经验整理成聚焦的审计路径。
 能发现什么： 破损路线文件、不安全 TLS 相位、未配对 baseline、被覆盖输出、无效指标报告、不可复现实验批次。
 ```
 
@@ -67,10 +67,10 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 
 ## Skill 列表
 
-| Skill | 用途 | 主要输出 |
-|---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | 规划、审阅、比较或撰写 SUMO/TraCI 信号控制实验结论。 | Experiment Readiness Record、SUMO Experiment Plan、hard-gate audit、evidence class、claim boundary。 |
-| `debugging-helper-skill-for-eclipse-sumo` | 调试 route、TraCI、TLS、demand、detector、output、seed、completion 和 reproducibility 问题。 | Fault class、next diagnostic probe、evidence、fix or demotion rule。 |
+| Skill | 使用场景 | 用途 | 主要输出 |
+|---|---|---|---|
+| `simulation-helper-skill-for-eclipse-sumo` | 新实验设计、进行中项目筛查、代码修改、结果审计、结论审阅、发布检查。 | 规划、审阅、比较或撰写 SUMO/TraCI 信号控制实验结论。 | Project Control Screen、Experiment Readiness Record、SUMO Experiment Plan、hard-gate audit、evidence class、claim boundary。 |
+| `debugging-helper-skill-for-eclipse-sumo` | 运行失败、无效路线、TraCI 协议问题、缺失输出、seed/completion/reproducibility 问题。 | 调试 route、TraCI、TLS、demand、detector、output、seed、completion 和 reproducibility 问题。 | Fault class、next diagnostic probe、evidence、fix or demotion rule。 |
 
 两个 skill 都是普通的 `SKILL.md` 包，包含 YAML frontmatter 和 Markdown references。`agents/openai.yaml` 提供可选的 Codex UI metadata；核心指令仍然可以被读取 `SKILL.md` 的 Claude-style skill loader 使用。
 
@@ -78,6 +78,8 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 
 **Simulation helper references**
 
+- [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - 顶层场景路由器，用于决定先加载哪个 reference。
+- [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - 进行中项目的目标、状态、偏差和下一步筛查。
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - 执行前的苏格拉底式提问与 Experiment Readiness Record。
 - [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - intake 确认后的 SUMO Experiment Plan，用于在写代码、跑仿真或写结论前再次确认计划。
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - 面向 SUMO/TraCI controller、parser、runner 和 audit code 的 RED -> GREEN -> REFACTOR 工作流。
@@ -102,6 +104,18 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 - [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - observe、classify、probe、compare、update 闭环调试。
 - [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - 将常见症状映射到所需证据。
 - [`debugging-gates-and-claim-boundaries.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - 失败或部分修复实验的结论降级规则。
+
+## 实际使用场景
+
+| 场景 | 示例提示词 | 调用路径 | 预期输出 |
+|---|---|---|---|
+| 进行中项目，不知道下一步 | “用这个 skill 看一下我当前的 SUMO 项目，告诉我下一步做什么。” | `simulation-helper` -> `workflow-router.md` -> `project-control-screen.md` -> 按偏差进入对应 gate | Project Control Screen 和 Next Step Plan。 |
+| 新实验设计 | “帮我设计一个 SUMO/TraCI 信号控制实验。” | `simulation-helper` -> `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record，然后是确认后的 SUMO Experiment Plan。 |
+| controller 或 parser 代码修改 | “实现这个 TraCI metric parser/controller 修改。” | `simulation-helper` -> `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | RED/GREEN/REFACTOR 记录和验证证据。 |
+| SUMO 运行失败或行为异常 | “route 能加载但 tripinfo 为空 / TraCI 连接关闭。” | `debugging-helper` -> `closed-loop-debugging.md` -> `symptom-to-evidence-map.md` | Fault class、next probe、evidence、fix or demotion。 |
+| 准备报告结果 | “我能根据这些 outputs 声称 controller A 更好吗？” | `simulation-helper` -> `sumo-output-hard-gates.md` -> `evaluation-metrics-and-completion.md` -> `baseline-and-ablation-design.md` -> `claim-boundary-taxonomy.md` | Evidence class 和允许/禁止的结论写法。 |
+| 用户后来发现 skill 漏掉的解决路径 | “这个 skill 没解决，但我后来换了一条路径解决了。” | `simulation-helper` -> `field-lesson-capture.md` | Field Lesson Candidate 和隐私安全的 patch proposal。 |
+| 公开发布检查 | “发布前检查一下 GitHub 仓库。” | `simulation-helper` -> `public-release-checklist.md` -> `verification-and-review-gates.md` | Release checklist、缺失项和 residual risk。 |
 
 ## 它审计什么
 

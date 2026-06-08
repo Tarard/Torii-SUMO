@@ -15,7 +15,7 @@ Reusable Codex/Claude skills and checklists for auditing SUMO/TraCI traffic sign
 ```text
 What it is:     A reusable agent skill for auditing SUMO/TraCI signal-control workflows.
 Who it is for:  Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, data-informed, or MPC-style controllers.
-How it works:   It distills official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, and the author's practical experiment experience into an agent audit workflow.
+How it works:   It uses a scenario-based workflow router, then distills official SUMO documentation, community troubleshooting, public traffic-simulation code patterns, and practical experiment experience into focused audit paths.
 What it catches: Broken routes, unsafe TLS phases, unpaired baselines, overwritten outputs, invalid metrics, and unreproducible batches.
 ```
 
@@ -67,10 +67,10 @@ This version covers fixed-time, actuated, max-pressure, NEMA, data-informed, and
 
 ## Skill Catalog
 
-| Skill | Use it for | Main outputs |
-|---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | Planning, reviewing, comparing, or writing claims from SUMO/TraCI signal-control experiments. | Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
-| `debugging-helper-skill-for-eclipse-sumo` | Debugging route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
+| Skill | Use scenario | Use it for | Main outputs |
+|---|---|---|---|
+| `simulation-helper-skill-for-eclipse-sumo` | New experiment, ongoing project screen, code change, result audit, claim review, release check. | Planning, reviewing, comparing, or writing claims from SUMO/TraCI signal-control experiments. | Project Control Screen, Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
+| `debugging-helper-skill-for-eclipse-sumo` | Runtime failure, invalid route, TraCI protocol issue, missing output, seed/completion/reproducibility failure. | Debugging route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
 
 Both skills are plain `SKILL.md` packages with YAML frontmatter and Markdown references. The `agents/openai.yaml` files provide optional Codex UI metadata; the core skill instructions remain readable by Claude-style skill loaders that use `SKILL.md`.
 
@@ -78,6 +78,8 @@ Reference modules included in the package:
 
 **Simulation helper references**
 
+- [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - top-level scenario router for deciding which reference to load first.
+- [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - ongoing-project target, state, deviation, and next-step screen.
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - Socratic pre-run questions and Experiment Readiness Record.
 - [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - confirmed post-intake SUMO Experiment Plan before code, simulation, or claims.
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - RED -> GREEN -> REFACTOR workflow for SUMO/TraCI controller, parser, runner, and audit code.
@@ -102,6 +104,18 @@ Reference modules included in the package:
 - [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - observe, classify, probe, compare, update.
 - [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - maps common symptoms to required evidence.
 - [`debugging-gates-and-claim-boundaries.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - demotion rules for failed or partially fixed runs.
+
+## How to Use in Practice
+
+| Scenario | Example prompt | Skill/reference path | Expected output |
+|---|---|---|---|
+| Ongoing project, unclear next step | "Use this skill on my current SUMO project and tell me what to do next." | `simulation-helper` -> `workflow-router.md` -> `project-control-screen.md` -> narrow gate as needed | Project Control Screen and Next Step Plan. |
+| New experiment design | "Help me design a SUMO/TraCI signal-control experiment." | `simulation-helper` -> `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record, then confirmed SUMO Experiment Plan. |
+| Controller or parser code change | "Implement this TraCI metric parser/controller change." | `simulation-helper` -> `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | RED/GREEN/REFACTOR record and verification evidence. |
+| SUMO run failed or behaves oddly | "My route loads but tripinfo is empty / TraCI connection closes." | `debugging-helper` -> `closed-loop-debugging.md` -> `symptom-to-evidence-map.md` | Fault class, next probe, evidence, fix or demotion. |
+| Results ready for reporting | "Can I claim controller A is better from these outputs?" | `simulation-helper` -> `sumo-output-hard-gates.md` -> `evaluation-metrics-and-completion.md` -> `baseline-and-ablation-design.md` -> `claim-boundary-taxonomy.md` | Evidence class and allowed/prohibited claim wording. |
+| User found a missed fix | "The skill missed this; I later solved it another way." | `simulation-helper` -> `field-lesson-capture.md` | Field Lesson Candidate and privacy-safe patch proposal. |
+| Public release work | "Check the GitHub repo before release." | `simulation-helper` -> `public-release-checklist.md` -> `verification-and-review-gates.md` | Release checklist, missing items, residual risk. |
 
 ## What It Audits
 

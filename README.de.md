@@ -15,7 +15,7 @@ Wiederverwendbare Codex/Claude Skills und Checklisten zur Pruefung von SUMO/TraC
 ```text
 Was es ist:       Ein wiederverwendbarer Agent Skill zur Pruefung von SUMO/TraCI-Signalsteuerungs-Workflows.
 Fuer wen:         Forschende, die Eclipse SUMO fuer fixed-time, actuated, max-pressure, data-informed oder MPC-style Controller nutzen.
-Wie es arbeitet:  Es verdichtet offizielle SUMO-Dokumentation, SUMO-Forum- und Community-Troubleshooting, Muster aus oeffentlichem Verkehrssimulationscode und praktische Experimenterfahrung des Autors zu einem Agent-Audit-Workflow.
+Wie es arbeitet:  Es nutzt einen szenariobasierten Workflow-Router und verdichtet offizielle SUMO-Dokumentation, Community-Troubleshooting, Muster aus oeffentlichem Verkehrssimulationscode und praktische Experimenterfahrung zu fokussierten Audit-Pfaden.
 Was es findet:    Fehlerhafte Routen, unsichere TLS-Phasen, ungepaarte Baselines, ueberschriebene Outputs, ungueltige Metriken und nicht reproduzierbare Batch-Experimente.
 ```
 
@@ -67,10 +67,10 @@ Diese Version deckt fixed-time, actuated, max-pressure, NEMA, data-informed und 
 
 ## Skill-Katalog
 
-| Skill | Einsatzbereich | Hauptausgaben |
-|---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | Planung, Review, Vergleich oder Formulierung von Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten. | Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
-| `debugging-helper-skill-for-eclipse-sumo` | Debugging von route-, TraCI-, TLS-, demand-, detector-, output-, seed-, completion- und reproducibility-Problemen. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
+| Skill | Nutzungsszenario | Einsatzbereich | Hauptausgaben |
+|---|---|---|---|
+| `simulation-helper-skill-for-eclipse-sumo` | Neues Experiment, laufendes Projekt-Screening, Codeaenderung, Ergebnispruefung, Claim-Review, Release-Check. | Planung, Review, Vergleich oder Formulierung von Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten. | Project Control Screen, Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
+| `debugging-helper-skill-for-eclipse-sumo` | Laufzeitfehler, ungueltige Route, TraCI-Protokollproblem, fehlende Ausgaben, seed/completion/reproducibility-Fehler. | Debugging von route-, TraCI-, TLS-, demand-, detector-, output-, seed-, completion- und reproducibility-Problemen. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
 
 Beide Skills sind einfache `SKILL.md`-Pakete mit YAML-Frontmatter und Markdown-Referenzen. Die Dateien `agents/openai.yaml` liefern optionale Codex-UI-Metadaten; die Kernanweisungen bleiben fuer Claude-style Skill Loader lesbar, die `SKILL.md` verwenden.
 
@@ -78,6 +78,8 @@ Enthaltene Referenzmodule:
 
 **Simulation helper references**
 
+- [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - oberster Szenario-Router zur Entscheidung, welche Referenz zuerst geladen wird.
+- [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - Ziel-, Zustands-, Abweichungs- und Next-Step-Screen fuer laufende Projekte.
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - sokratische Vorabfragen und Experiment Readiness Record.
 - [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - bestaetigter SUMO Experiment Plan nach dem Intake, vor Code, Simulation oder Aussagen.
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - RED -> GREEN -> REFACTOR-Workflow fuer SUMO/TraCI-Controller-, Parser-, Runner- und Audit-Code.
@@ -102,6 +104,18 @@ Enthaltene Referenzmodule:
 - [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - observe, classify, probe, compare, update.
 - [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - ordnet haeufige Symptome den notwendigen Evidenzen zu.
 - [`debugging-gates-and-claim-boundaries.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - Abstufungsregeln fuer fehlgeschlagene oder teilweise korrigierte Laeufe.
+
+## Praktische Nutzungsszenarien
+
+| Szenario | Beispiel-Prompt | Skill-/Referenzpfad | Erwartete Ausgabe |
+|---|---|---|---|
+| Laufendes Projekt, unklarer naechster Schritt | "Nutze diesen Skill fuer mein aktuelles SUMO-Projekt und sag mir, was als Naechstes zu tun ist." | `simulation-helper` -> `workflow-router.md` -> `project-control-screen.md` -> passendes Gate nach Abweichung | Project Control Screen und Next Step Plan. |
+| Neues Experiment entwerfen | "Hilf mir, ein SUMO/TraCI-Signalsteuerungs-Experiment zu entwerfen." | `simulation-helper` -> `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record, danach bestaetigter SUMO Experiment Plan. |
+| Controller- oder Parser-Codeaenderung | "Implementiere diese TraCI metric parser/controller-Aenderung." | `simulation-helper` -> `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | RED/GREEN/REFACTOR-Protokoll und Verifikationsnachweise. |
+| SUMO-Lauf scheitert oder verhaelt sich unerwartet | "Die Route laedt, aber tripinfo ist leer / TraCI-Verbindung schliesst." | `debugging-helper` -> `closed-loop-debugging.md` -> `symptom-to-evidence-map.md` | Fault class, next probe, evidence, fix or demotion. |
+| Ergebnisse sollen berichtet werden | "Darf ich aus diesen Outputs ableiten, dass Controller A besser ist?" | `simulation-helper` -> `sumo-output-hard-gates.md` -> `evaluation-metrics-and-completion.md` -> `baseline-and-ablation-design.md` -> `claim-boundary-taxonomy.md` | Evidence class und erlaubte/verbotene Claim-Formulierung. |
+| Nutzer findet spaeter einen fehlenden Fix | "Der Skill hat das verfehlt; ich habe es spaeter anders geloest." | `simulation-helper` -> `field-lesson-capture.md` | Field Lesson Candidate und datenschutzsicherer Patch-Vorschlag. |
+| Oeffentliche Release-Pruefung | "Pruefe das GitHub-Repository vor dem Release." | `simulation-helper` -> `public-release-checklist.md` -> `verification-and-review-gates.md` | Release-Checkliste, fehlende Punkte und Residualrisiko. |
 
 ## Was geprueft wird
 

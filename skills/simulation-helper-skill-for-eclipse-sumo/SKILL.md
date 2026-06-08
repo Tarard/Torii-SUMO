@@ -12,7 +12,7 @@ Use this skill to keep Eclipse SUMO/TraCI traffic signal control experiments aca
 ## Control Loop
 
 ```text
-claim target -> experiment intake -> experiment plan -> source check -> construction audit -> run hard gates -> evidence classification -> claim boundary
+request -> workflow router -> project screen or intake -> experiment plan or next-step plan -> execution gates -> evidence classification -> claim boundary
 ```
 
 ## Source Ladder
@@ -27,6 +27,12 @@ Use sources in this order:
 6. Agent memory or prior notes.
 
 If sources conflict, verify against the installed Eclipse SUMO version and official documentation before answering.
+
+## Workflow Router
+
+For mixed, vague, ongoing-project, or multi-stage requests, read `references/workflow-router.md` first. Classify the scenario before loading other references. Do not load every reference by default.
+
+For existing repositories, partial experiments, codebases, logs, output folders, or "what should I do next?" requests, start with `references/project-control-screen.md`. Produce a `Project Control Screen`; if a target/current-state/deviation cannot be inferred, switch to the Socratic intake.
 
 ## First Gate: Experiment Intake
 
@@ -58,24 +64,40 @@ Only persist a lesson when the user explicitly asks or confirms. Save project-pr
 
 ## Reference Routing
 
-- Source priority or conflicting sources: read `references/source-ladder.md`.
+### Entry Gates
+
+- Mixed, vague, ongoing-project, or multi-stage requests: read `references/workflow-router.md`.
+- Existing project, repo, logs, outputs, codebase, or "next step" request: read `references/project-control-screen.md`.
 - New experiment design or unclear setup: read `references/experiment-intake-interview.md`.
 - Confirmed intake that needs an executable experiment plan before code or simulation: read `references/experiment-planning-after-intake.md`.
+
+### Execution Gates
+
 - SUMO/TraCI controller, parser, runner, validator, or experiment-utility code changes: read `references/tdd-for-sumo-traci-code.md`.
 - Completion claims, code review, release checks, or evidence-before-completion decisions: read `references/verification-and-review-gates.md`.
-- Eclipse SUMO network, routes, TLS, detectors, netconvert, signal states, or GUI/headless semantics: read `references/sumo-official-semantics.md`.
 - Eclipse SUMO root-cause debugging or unexpected behavior: use `debugging-helper-skill-for-eclipse-sumo` if available; otherwise read `references/sumo-official-operational-lessons.md` and `references/sumo-community-faq-lessons.md`.
-- Eclipse SUMO operational pitfalls from official docs: read `references/sumo-official-operational-lessons.md`.
-- Eclipse SUMO mailing-list/forum/GitHub issue failure patterns: read `references/sumo-community-faq-lessons.md`.
+
+### SUMO Semantics and Sources
+
+- Source priority or conflicting sources: read `references/source-ladder.md`.
+- Eclipse SUMO network, routes, TLS, detectors, netconvert, signal states, or GUI/headless semantics: read `references/sumo-official-semantics.md`.
 - NEMA ring/barrier, splits, offset, force-off, recall, detector, or `ignore-errors` claims: read `references/sumo-nema-controller-audit.md`.
 - TraCI controller identity or API boundaries: read `references/sumo-traci-controller-boundaries.md`.
+- Eclipse SUMO operational pitfalls from official docs: read `references/sumo-official-operational-lessons.md`.
+- Eclipse SUMO mailing-list/forum/GitHub issue failure patterns: read `references/sumo-community-faq-lessons.md`.
+- Lessons from public traffic-control codebases: read `references/public-code-lessons.md`.
+
+### Evidence and Claim Gates
+
 - Runtime outputs, logs, XML artifacts, and hard gates: read `references/sumo-output-hard-gates.md`.
 - Completion-aware evaluation and paper-style metric definitions: read `references/evaluation-metrics-and-completion.md`.
-- Lessons from public traffic-control codebases: read `references/public-code-lessons.md`.
-- Experiment debugging, sweeps, ablations, sensitivity, and structural diagnosis: read `references/experiment-validation-ladder.md`.
-- User-discovered workarounds, missed diagnostics, or post-agent fixes that should improve this skill: read `references/field-lesson-capture.md`.
 - Baseline and ablation design: read `references/baseline-and-ablation-design.md`.
+- Experiment debugging, sweeps, ablations, sensitivity, and structural diagnosis: read `references/experiment-validation-ladder.md`.
 - Paper/report claim wording: read `references/claim-boundary-taxonomy.md`.
+
+### Maintenance Gates
+
+- User-discovered workarounds, missed diagnostics, or post-agent fixes that should improve this skill: read `references/field-lesson-capture.md`.
 - Preparing a public release: read `references/public-release-checklist.md`.
 
 ## Non-Negotiable Separations
