@@ -41,6 +41,7 @@ Use this before publishing the skill to GitHub.
 ## Exposure Hygiene
 
 - README first screen reads like a tool, not a personal note.
+- README has language-switch badges linking between `README.md`, `README.zh-CN.md`, and `README.de.md`.
 - README states what it is, who it is for, and what failures it prevents.
 - README includes the repository slug `academic-audit-for-eclipse-sumo`.
 - README quick start uses concrete repository-scoped install paths for Codex (`.agents/skills/`) and Claude Code (`.claude/skills/`).

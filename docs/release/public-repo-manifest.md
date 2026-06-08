@@ -12,6 +12,8 @@ Do not publish the entire local worktree if it contains unrelated project code, 
 
 ```text
 README.md
+README.zh-CN.md
+README.de.md
 LICENSE-DOCS
 skills/
   academic-audit-for-eclipse-sumo/

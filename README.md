@@ -1,3 +1,9 @@
+<p align="right">
+  <a href="README.md"><img src="https://img.shields.io/badge/lang-English-blue" alt="English"></a>
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red" alt="中文"></a>
+  <a href="README.de.md"><img src="https://img.shields.io/badge/lang-Deutsch-green" alt="Deutsch"></a>
+</p>
+
 # Academic Audit for Eclipse SUMO
 
 **Agent Skill for Traffic Signal Control Experiments**
@@ -49,6 +55,12 @@ The skill should ask for missing experiment details first. It should not endorse
 Current version: instruction-only skill and checklist package.
 
 This repository currently contains Markdown-based agent skills, audit checklists, examples, and release materials. It does not yet provide executable SUMO validators or Python audit scripts.
+
+## Current Scope
+
+The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.
+
+This version covers fixed-time, actuated, max-pressure, NEMA, data-informed, and MPC-style signal control workflows. Future skills may add audit support for other SUMO domains, such as demand and routing, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation workflows, calibration, safety analysis, and mesoscopic or microscopic simulation-mode comparisons.
 
 ## Skill Catalog
 
@@ -144,6 +156,8 @@ No external skill is required at runtime. These influences shaped the structure;
 
 ```text
 README.md
+README.zh-CN.md
+README.de.md
 LICENSE-DOCS
 skills/
   academic-audit-for-eclipse-sumo/
