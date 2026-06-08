@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A Codex/Claude skill and checklist for auditing SUMO/TraCI traffic signal control experiments.">
+  <title>Academic Audit for Eclipse SUMO</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f9fbff;
+      --ink: #18202b;
+      --muted: #596573;
+      --line: #d8dee8;
+      --blue: #1466b8;
+      --blue-dark: #0d477f;
+      --green: #1d8e57;
+      --amber: #c98a05;
+      --red: #cf3e35;
+      --shadow: 0 18px 46px rgba(24, 32, 43, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .shell {
+      width: min(1120px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 24px 0 56px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 34px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 760;
+    }
+
+    .mark {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 8px 22px rgba(24, 32, 43, 0.08);
+      flex: 0 0 auto;
+    }
+
+    .signal {
+      display: grid;
+      grid-template-columns: repeat(3, 8px);
+      gap: 4px;
+    }
+
+    .signal span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .red { background: var(--red); }
+    .amber { background: var(--amber); }
+    .green { background: var(--green); }
+
+    .lang-switch {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .lang-switch button {
+      min-width: 86px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    .lang-switch button[aria-pressed="true"] {
+      background: var(--blue);
+      color: #fff;
+      border-color: var(--blue);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(310px, 0.75fr);
+      gap: 30px;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--blue-dark);
+      background: #e9f2ff;
+      border: 1px solid #cfe3ff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-weight: 760;
+      font-size: 0.9rem;
+      margin-bottom: 18px;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    h1 {
+      font-size: clamp(2.15rem, 5.2vw, 4.85rem);
+      line-height: 0.98;
+      letter-spacing: 0;
+      margin: 0 0 18px;
+      max-width: 820px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.09rem;
+      max-width: 700px;
+      margin: 0 0 22px;
+    }
+
+    .prompt {
+      display: block;
+      width: min(100%, 760px);
+      border: 1px solid #263043;
+      border-radius: 8px;
+      padding: 13px 14px;
+      background: #151a24;
+      color: #eef5ff;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92rem;
+      white-space: nowrap;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      border-radius: 8px;
+      padding: 10px 15px;
+      border: 1px solid var(--blue);
+      background: var(--blue);
+      color: #fff;
+      font-weight: 720;
+    }
+
+    .button.secondary {
+      background: var(--panel);
+      color: var(--blue-dark);
+      border-color: var(--line);
+    }
+
+    .button:hover {
+      text-decoration: none;
+      filter: brightness(0.96);
+    }
+
+    .visual {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .intersection {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(90deg, transparent 0 40%, #dfe5ee 40% 60%, transparent 60%),
+        linear-gradient(0deg, transparent 0 40%, #dfe5ee 40% 60%, transparent 60%),
+        #f7f9fd;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .intersection::before,
+    .intersection::after {
+      content: "";
+      position: absolute;
+      opacity: 0.95;
+    }
+
+    .intersection::before {
+      left: 41%;
+      right: 41%;
+      top: 50%;
+      height: 2px;
+      background: repeating-linear-gradient(90deg, #fff 0 18px, transparent 18px 34px);
+    }
+
+    .intersection::after {
+      top: 41%;
+      bottom: 41%;
+      left: 50%;
+      width: 2px;
+      background: repeating-linear-gradient(0deg, #fff 0 18px, transparent 18px 34px);
+    }
+
+    .chip {
+      position: absolute;
+      z-index: 1;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 7px 10px;
+      font-size: 0.78rem;
+      font-weight: 780;
+      box-shadow: 0 7px 16px rgba(24, 32, 43, 0.09);
+    }
+
+    .chip.north { top: 12px; left: 50%; transform: translateX(-50%); }
+    .chip.east { right: 12px; top: 50%; transform: translateY(-50%); }
+    .chip.south { bottom: 12px; left: 50%; transform: translateX(-50%); }
+    .chip.west { left: 12px; top: 50%; transform: translateY(-50%); }
+
+    .gates {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .gate {
+      min-height: 74px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 10px;
+    }
+
+    .gate strong {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+    }
+
+    .gate span {
+      font-weight: 780;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin: 28px 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 8px 22px rgba(24, 32, 43, 0.06);
+    }
+
+    .panel h2,
+    .panel h3 {
+      margin: 0 0 10px;
+      letter-spacing: 0;
+    }
+
+    .panel h2 {
+      font-size: 1.32rem;
+    }
+
+    .panel h3 {
+      font-size: 1.03rem;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .scope {
+      border-left: 4px solid var(--blue);
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    ul {
+      padding-left: 1.2rem;
+      margin: 10px 0 0;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    pre {
+      margin: 10px 0 0;
+      border: 1px solid #263043;
+      border-radius: 8px;
+      padding: 13px;
+      background: #151a24;
+      color: #eef5ff;
+      overflow-x: auto;
+    }
+
+    .link-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .link-list a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      font-weight: 700;
+    }
+
+    .footer {
+      margin-top: 28px;
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 840px) {
+      .shell {
+        width: min(100% - 28px, 1120px);
+        padding-top: 18px;
+      }
+
+      .topbar,
+      .hero,
+      .grid,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .lang-switch {
+        justify-content: flex-start;
+      }
+
+      .visual {
+        max-width: 440px;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .lang-switch button {
+        min-width: 74px;
+      }
+
+      .prompt {
+        font-size: 0.82rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand" aria-label="Academic Audit for Eclipse SUMO">
+        <div class="mark" aria-hidden="true">
+          <div class="signal"><span class="red"></span><span class="amber"></span><span class="green"></span></div>
+        </div>
+        <span>Academic Audit for Eclipse SUMO</span>
+      </div>
+      <nav class="lang-switch" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">English</button>
+        <button type="button" data-lang="zh" aria-pressed="false">中文</button>
+        <button type="button" data-lang="de" aria-pressed="false">Deutsch</button>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="eyebrow" data-i18n="eyebrow">Codex/Claude Skill + Checklist</div>
+        <h1 data-i18n="heroTitle">Audit SUMO signal-control experiments before reporting results.</h1>
+        <p class="subtitle" data-i18n="heroSubtitle">A reusable agent skill and checklist for reviewing reproducibility risks in SUMO/TraCI traffic signal control experiments.</p>
+        <code class="prompt">Use $academic-audit-for-eclipse-sumo to audit this SUMO/TraCI traffic signal control experiment.</code>
+        <div class="actions">
+          <a class="button" href="https://github.com/Tarard/academic-audit-for-eclipse-sumo" data-i18n="repoButton">GitHub Repository</a>
+          <a class="button secondary" href="../README.md" data-i18n="readmeButton">Open README</a>
+        </div>
+      </div>
+
+      <aside class="visual" aria-label="Audit workflow visual">
+        <div class="intersection" aria-hidden="true">
+          <div class="chip north">TLS</div>
+          <div class="chip east">TraCI</div>
+          <div class="chip south">Routes</div>
+          <div class="chip west">Outputs</div>
+        </div>
+        <div class="gates">
+          <div class="gate"><strong data-i18n="gate1">Gate 1</strong><span data-i18n="gateConfig">Config</span></div>
+          <div class="gate"><strong data-i18n="gate2">Gate 2</strong><span data-i18n="gateController">Controller</span></div>
+          <div class="gate"><strong data-i18n="gate3">Gate 3</strong><span data-i18n="gateClaim">Claim</span></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="grid" aria-label="Project summary">
+      <article class="panel">
+        <h2 data-i18n="whatTitle">What it is</h2>
+        <p class="muted" data-i18n="whatText">A Markdown-based Codex/Claude skill package that guides an agent through SUMO configuration, controller, output, and claim-boundary audits.</p>
+      </article>
+      <article class="panel">
+        <h2 data-i18n="whoTitle">Who it is for</h2>
+        <p class="muted" data-i18n="whoText">Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style traffic signal control.</p>
+      </article>
+      <article class="panel">
+        <h2 data-i18n="preventsTitle">What it prevents</h2>
+        <p class="muted" data-i18n="preventsText">Broken routes, unsafe TLS phases, unpaired comparisons, overwritten outputs, invalid metrics, and unreproducible batch runs.</p>
+      </article>
+    </section>
+
+    <section class="panel scope">
+      <h2 data-i18n="scopeTitle">Current scope</h2>
+      <p class="muted" data-i18n="scopeText">The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.</p>
+      <p class="muted" data-i18n="futureText">Future skills may add audit support for routing and demand, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation workflows, calibration, safety analysis, and simulation-mode comparisons.</p>
+    </section>
+
+    <section class="grid" aria-label="Skills">
+      <article class="panel">
+        <h2>academic-audit-for-eclipse-sumo</h2>
+        <p class="muted" data-i18n="academicSkillText">Use for planning, reviewing, comparing, and writing evidence-bounded claims from SUMO/TraCI signal-control experiments.</p>
+      </article>
+      <article class="panel">
+        <h2>debugging-audit-for-eclipse-sumo</h2>
+        <p class="muted" data-i18n="debugSkillText">Use for closed-loop diagnosis of route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures.</p>
+      </article>
+      <article class="panel">
+        <h2 data-i18n="designTitle">Design approach</h2>
+        <p class="muted" data-i18n="designText">The skills combine official SUMO documentation, SUMO community troubleshooting patterns, public traffic-simulation code lessons, and practical experiment-audit heuristics.</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="referenceTitle">Reference modules</h2>
+      <p class="muted" data-i18n="referenceText">The package is split into focused Markdown modules so the agent can load the right evidence rules only when needed.</p>
+      <div class="two-col">
+        <div>
+          <h3 data-i18n="academicRefsTitle">Academic audit references</h3>
+          <ul>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/experiment-intake-interview.md">experiment-intake-interview.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/source-ladder.md">source-ladder.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/sumo-official-semantics.md">sumo-official-semantics.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/sumo-official-operational-lessons.md">sumo-official-operational-lessons.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/sumo-community-faq-lessons.md">sumo-community-faq-lessons.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/sumo-nema-controller-audit.md">sumo-nema-controller-audit.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/sumo-traci-controller-boundaries.md">sumo-traci-controller-boundaries.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/sumo-output-hard-gates.md">sumo-output-hard-gates.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/evaluation-metrics-and-completion.md">evaluation-metrics-and-completion.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/baseline-and-ablation-design.md">baseline-and-ablation-design.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/experiment-validation-ladder.md">experiment-validation-ladder.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/claim-boundary-taxonomy.md">claim-boundary-taxonomy.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/public-code-lessons.md">public-code-lessons.md</a></li>
+            <li><a href="../skills/academic-audit-for-eclipse-sumo/references/public-release-checklist.md">public-release-checklist.md</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 data-i18n="debugRefsTitle">Debugging audit references</h3>
+          <ul>
+            <li><a href="../skills/debugging-audit-for-eclipse-sumo/references/closed-loop-debugging.md">closed-loop-debugging.md</a></li>
+            <li><a href="../skills/debugging-audit-for-eclipse-sumo/references/symptom-to-evidence-map.md">symptom-to-evidence-map.md</a></li>
+            <li><a href="../skills/debugging-audit-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md">debugging-gates-and-claim-boundaries.md</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <article class="panel">
+        <h2 data-i18n="auditTitle">Audit checks</h2>
+        <ul>
+          <li data-i18n="audit1">Network, route, config, detector, and additional-file consistency.</li>
+          <li data-i18n="audit2">TLS phase, movement-green, yellow, all-red, and NEMA evidence checks.</li>
+          <li data-i18n="audit3">Paired controller comparisons across seeds, demand, horizons, and outputs.</li>
+          <li data-i18n="audit4">Completion-aware reporting for stopped, unfinished, teleported, or invalid runs.</li>
+          <li data-i18n="audit5">Metric definitions for travel time, delay, stops, throughput, queue, emissions, and fairness.</li>
+          <li data-i18n="audit6">Claim boundaries for baselines, ablations, sensitivity runs, and debugging fixes.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h2 data-i18n="examplesTitle">Examples</h2>
+        <p class="muted" data-i18n="examplesText">The repository includes small prompt-ready audit examples for fixed-time, max-pressure, and data-informed signal-control workflows.</p>
+        <div class="link-list">
+          <a href="../examples/01_fixed_time_audit/task.md">01 fixed-time</a>
+          <a href="../examples/02_max_pressure_audit/task.md">02 max-pressure</a>
+          <a href="../examples/03_data_informed_signal_control_audit/task.md">03 data-informed</a>
+        </div>
+      </article>
+    </section>
+
+    <section class="two-col">
+      <article class="panel">
+        <h2 data-i18n="installTitle">Install</h2>
+        <p class="muted" data-i18n="installText">Copy the skill folders into a repository-scoped skill directory for Codex or Claude Code.</p>
+        <pre><code>.agents/skills/
+  academic-audit-for-eclipse-sumo/
+  debugging-audit-for-eclipse-sumo/
+
+.claude/skills/
+  academic-audit-for-eclipse-sumo/
+  debugging-audit-for-eclipse-sumo/</code></pre>
+      </article>
+      <article class="panel">
+        <h2 data-i18n="limitsTitle">Limitations</h2>
+        <p class="muted" data-i18n="limitsText">This repository provides agent instructions, checklists, and audit procedures. It does not certify that a SUMO experiment is correct, publishable, or officially validated.</p>
+        <p class="muted" data-i18n="trademarkText">Eclipse SUMO is a trademark of the Eclipse Foundation. This project is independent and is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, or DLR.</p>
+      </article>
+    </section>
+
+    <footer class="footer">
+      <span data-i18n="footer">Use the audit as review support, not as a replacement for SUMO documentation, controller-specific validation, or independent reproduction.</span>
+    </footer>
+  </main>
+
+  <script>
+    const translations = {
+      en: {
+        pageTitle: "Academic Audit for Eclipse SUMO",
+        eyebrow: "Codex/Claude Skill + Checklist",
+        heroTitle: "Audit SUMO signal-control experiments before reporting results.",
+        heroSubtitle: "A reusable agent skill and checklist for reviewing reproducibility risks in SUMO/TraCI traffic signal control experiments.",
+        repoButton: "GitHub Repository",
+        readmeButton: "Open README",
+        gate1: "Gate 1",
+        gateConfig: "Config",
+        gate2: "Gate 2",
+        gateController: "Controller",
+        gate3: "Gate 3",
+        gateClaim: "Claim",
+        whatTitle: "What it is",
+        whatText: "A Markdown-based Codex/Claude skill package that guides an agent through SUMO configuration, controller, output, and claim-boundary audits.",
+        whoTitle: "Who it is for",
+        whoText: "Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style traffic signal control.",
+        preventsTitle: "What it prevents",
+        preventsText: "Broken routes, unsafe TLS phases, unpaired comparisons, overwritten outputs, invalid metrics, and unreproducible batch runs.",
+        scopeTitle: "Current scope",
+        scopeText: "The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.",
+        futureText: "Future skills may add audit support for routing and demand, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation workflows, calibration, safety analysis, and simulation-mode comparisons.",
+        academicSkillText: "Use for planning, reviewing, comparing, and writing evidence-bounded claims from SUMO/TraCI signal-control experiments.",
+        debugSkillText: "Use for closed-loop diagnosis of route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures.",
+        designTitle: "Design approach",
+        designText: "The skills distill official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, and the author's practical experiment experience into an agent audit workflow.",
+        referenceTitle: "Reference modules",
+        referenceText: "The package is split into focused Markdown modules so the agent can load the right evidence rules only when needed.",
+        academicRefsTitle: "Academic audit references",
+        debugRefsTitle: "Debugging audit references",
+        auditTitle: "Audit checks",
+        audit1: "Network, route, config, detector, and additional-file consistency.",
+        audit2: "TLS phase, movement-green, yellow, all-red, and NEMA evidence checks.",
+        audit3: "Paired controller comparisons across seeds, demand, horizons, and outputs.",
+        audit4: "Completion-aware reporting for stopped, unfinished, teleported, or invalid runs.",
+        audit5: "Metric definitions for travel time, delay, stops, throughput, queue, emissions, and fairness.",
+        audit6: "Claim boundaries for baselines, ablations, sensitivity runs, and debugging fixes.",
+        examplesTitle: "Examples",
+        examplesText: "The repository includes small prompt-ready audit examples for fixed-time, max-pressure, and data-informed signal-control workflows.",
+        installTitle: "Install",
+        installText: "Copy the skill folders into a repository-scoped skill directory for Codex or Claude Code.",
+        limitsTitle: "Limitations",
+        limitsText: "This repository provides agent instructions, checklists, and audit procedures. It does not certify that a SUMO experiment is correct, publishable, or officially validated.",
+        trademarkText: "Eclipse SUMO is a trademark of the Eclipse Foundation. This project is independent and is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, or DLR.",
+        footer: "Use the audit as review support, not as a replacement for SUMO documentation, controller-specific validation, or independent reproduction."
+      },
+      zh: {
+        pageTitle: "Academic Audit for Eclipse SUMO",
+        eyebrow: "Codex/Claude Skill + 检查清单",
+        heroTitle: "在报告结果前审计 SUMO 信号控制实验。",
+        heroSubtitle: "一个可复用的 agent skill 与检查清单，用于审查 SUMO/TraCI 交通信号控制实验中的可复现性风险。",
+        repoButton: "GitHub 仓库",
+        readmeButton: "打开 README",
+        gate1: "关口 1",
+        gateConfig: "配置",
+        gate2: "关口 2",
+        gateController: "控制器",
+        gate3: "关口 3",
+        gateClaim: "结论",
+        whatTitle: "它是什么",
+        whatText: "一个基于 Markdown 的 Codex/Claude skill 包，用来引导 agent 审计 SUMO 配置、控制器、输出与结论边界。",
+        whoTitle: "面向谁",
+        whoText: "面向使用 Eclipse SUMO 研究 fixed-time、actuated、max-pressure、NEMA、data-informed 或 MPC-style 交通信号控制的研究者。",
+        preventsTitle: "它避免什么",
+        preventsText: "破损路线、不安全 TLS 相位、未配对比较、被覆盖输出、无效指标报告，以及不可复现实验批次。",
+        scopeTitle: "当前范围",
+        scopeText: "当前版本聚焦 SUMO/TraCI 交通信号控制实验。它还不是覆盖所有 Eclipse SUMO 用途的通用审计 skill。",
+        futureText: "未来可以继续增加面向 routing and demand、emissions and energy、public transport、pedestrian and intermodal scenarios、AV/CAV and co-simulation、calibration、safety analysis 和 simulation-mode comparisons 的审计 skill。",
+        academicSkillText: "用于规划、审阅、比较 SUMO/TraCI 信号控制实验，并撰写有证据边界的实验结论。",
+        debugSkillText: "用于闭环诊断 route、TraCI、TLS、demand、detector、output、seed、completion 和 reproducibility 问题。",
+        designTitle: "设计来源",
+        designText: "这些 skill 把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式，以及作者个人实验经验整理成 agent 可执行的审计流程。",
+        referenceTitle: "Reference 模块",
+        referenceText: "这个包被拆成聚焦的 Markdown 模块，agent 可以按需要加载对应的证据规则。",
+        academicRefsTitle: "Academic audit references",
+        debugRefsTitle: "Debugging audit references",
+        auditTitle: "审计检查项",
+        audit1: "network、route、config、detector 与 additional file 的一致性。",
+        audit2: "TLS phase、movement-green、yellow、all-red 与 NEMA 证据检查。",
+        audit3: "跨 seeds、demand、horizons 与 outputs 的配对控制器比较。",
+        audit4: "针对 stopped、unfinished、teleported 或 invalid runs 的 completion-aware 报告。",
+        audit5: "travel time、delay、stops、throughput、queue、emissions 与 fairness 的指标定义。",
+        audit6: "baseline、ablation、sensitivity runs 与 debugging fixes 的结论边界。",
+        examplesTitle: "示例",
+        examplesText: "仓库包含可以直接放进 prompt 的 fixed-time、max-pressure 和 data-informed 信号控制审计示例。",
+        installTitle: "安装",
+        installText: "把 skill 文件夹复制到 Codex 或 Claude Code 的仓库级 skill 目录。",
+        limitsTitle: "限制",
+        limitsText: "本仓库提供 agent 指令、检查清单和审计流程。它不认证 SUMO 实验一定正确、可发表或已经被官方验证。",
+        trademarkText: "Eclipse SUMO 是 Eclipse Foundation 的商标。本项目是独立资源，不隶属于 Eclipse Foundation、Eclipse SUMO project 或 DLR，也未得到其认可、赞助或维护。",
+        footer: "请把审计输出当作 review support，而不是 SUMO 文档、控制器专门验证或独立复现实验的替代品。"
+      },
+      de: {
+        pageTitle: "Academic Audit for Eclipse SUMO",
+        eyebrow: "Codex/Claude Skill + Checkliste",
+        heroTitle: "SUMO-Signalsteuerungs-Experimente vor dem Berichten pruefen.",
+        heroSubtitle: "Ein wiederverwendbarer Agent Skill und eine Checkliste zur Pruefung von Reproduzierbarkeitsrisiken in SUMO/TraCI-Experimenten zur Verkehrssignalsteuerung.",
+        repoButton: "GitHub Repository",
+        readmeButton: "README oeffnen",
+        gate1: "Tor 1",
+        gateConfig: "Konfiguration",
+        gate2: "Tor 2",
+        gateController: "Controller",
+        gate3: "Tor 3",
+        gateClaim: "Aussage",
+        whatTitle: "Was es ist",
+        whatText: "Ein Markdown-basiertes Codex/Claude Skill-Paket, das einen Agenten durch Audits von SUMO-Konfiguration, Controller, Output und Aussagegrenzen fuehrt.",
+        whoTitle: "Fuer wen",
+        whoText: "Forschende, die Eclipse SUMO fuer fixed-time, actuated, max-pressure, NEMA, data-informed oder MPC-style Verkehrssignalsteuerung nutzen.",
+        preventsTitle: "Was es verhindert",
+        preventsText: "Fehlerhafte Routen, unsichere TLS-Phasen, ungepaarte Vergleiche, ueberschriebene Outputs, ungueltige Metriken und nicht reproduzierbare Batch-Laeufe.",
+        scopeTitle: "Aktueller Umfang",
+        scopeText: "Diese Version konzentriert sich auf SUMO/TraCI-Experimente zur Verkehrssignalsteuerung. Sie ist noch kein allgemeiner Audit-Skill fuer alle Eclipse SUMO-Anwendungsfaelle.",
+        futureText: "Kuenftige Skills koennen Audits fuer routing and demand, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation, calibration, safety analysis und simulation-mode comparisons ergaenzen.",
+        academicSkillText: "Fuer Planung, Review, Vergleich und evidenzgebundene Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten.",
+        debugSkillText: "Fuer geschlossene Diagnose von route-, TraCI-, TLS-, demand-, detector-, output-, seed-, completion- und reproducibility-Problemen.",
+        designTitle: "Designansatz",
+        designText: "Die Skills verdichten offizielle SUMO-Dokumentation, SUMO-Forum- und Community-Troubleshooting, Muster aus oeffentlichem Verkehrssimulationscode und praktische Experimenterfahrung des Autors zu einem Agent-Audit-Workflow.",
+        referenceTitle: "Referenzmodule",
+        referenceText: "Das Paket ist in fokussierte Markdown-Module aufgeteilt, damit der Agent nur die jeweils passenden Evidenzregeln laden muss.",
+        academicRefsTitle: "Academic audit references",
+        debugRefsTitle: "Debugging audit references",
+        auditTitle: "Audit-Pruefungen",
+        audit1: "Konsistenz von network, route, config, detector und additional files.",
+        audit2: "Pruefungen fuer TLS phase, movement-green, yellow, all-red und NEMA-Evidenz.",
+        audit3: "Gepaarte Controller-Vergleiche ueber seeds, demand, horizons und outputs.",
+        audit4: "Completion-aware Reporting fuer stopped, unfinished, teleported oder invalid runs.",
+        audit5: "Metrikdefinitionen fuer travel time, delay, stops, throughput, queue, emissions und fairness.",
+        audit6: "Aussagegrenzen fuer baselines, ablations, sensitivity runs und debugging fixes.",
+        examplesTitle: "Beispiele",
+        examplesText: "Das Repository enthaelt kleine prompt-fertige Audit-Beispiele fuer fixed-time, max-pressure und data-informed Signalsteuerungs-Workflows.",
+        installTitle: "Installation",
+        installText: "Kopieren Sie die Skill-Ordner in ein repository-spezifisches Skill-Verzeichnis fuer Codex oder Claude Code.",
+        limitsTitle: "Grenzen",
+        limitsText: "Dieses Repository bietet Agent-Anweisungen, Checklisten und Audit-Prozeduren. Es zertifiziert nicht, dass ein SUMO-Experiment korrekt, publizierbar oder offiziell validiert ist.",
+        trademarkText: "Eclipse SUMO ist eine Marke der Eclipse Foundation. Dieses Projekt ist unabhaengig und ist nicht mit der Eclipse Foundation, dem Eclipse SUMO project oder DLR verbunden, von ihnen empfohlen, gesponsert oder gepflegt.",
+        footer: "Nutzen Sie den Audit als Review-Unterstuetzung, nicht als Ersatz fuer SUMO-Dokumentation, controller-spezifische Validierung oder unabhaengige Reproduktion."
+      }
+    };
+
+    const buttons = Array.from(document.querySelectorAll("[data-lang]"));
+    const translated = Array.from(document.querySelectorAll("[data-i18n]"));
+    const supported = new Set(Object.keys(translations));
+
+    function normalizeLanguage(value) {
+      const base = String(value || "").toLowerCase().slice(0, 2);
+      return supported.has(base) ? base : "en";
+    }
+
+    function selectLanguage(value) {
+      const lang = normalizeLanguage(value);
+      const copy = translations[lang];
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : lang;
+      document.title = copy.pageTitle;
+      translated.forEach((node) => {
+        const key = node.dataset.i18n;
+        if (copy[key]) {
+          node.textContent = copy[key];
+        }
+      });
+      buttons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.lang === lang));
+      });
+      localStorage.setItem("audit-page-language", lang);
+      window.history.replaceState({}, "", `#${lang}`);
+    }
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => selectLanguage(button.dataset.lang));
+    });
+
+    selectLanguage(window.location.hash.slice(1) || localStorage.getItem("audit-page-language") || navigator.language);
+  </script>
+</body>
+</html>

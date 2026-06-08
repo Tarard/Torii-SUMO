@@ -19,6 +19,7 @@ skills/
   academic-audit-for-eclipse-sumo/
   debugging-audit-for-eclipse-sumo/
 docs/
+  index.html
   common-sumo-signal-control-failures.md
   release/
     github-topics.txt

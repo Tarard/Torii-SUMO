@@ -42,7 +42,10 @@ Use this before publishing the skill to GitHub.
 
 - README first screen reads like a tool, not a personal note.
 - README has language-switch badges linking between `README.md`, `README.zh-CN.md`, and `README.de.md`.
+- README links to the GitHub Pages language-switch page at `https://tarard.github.io/academic-audit-for-eclipse-sumo/`.
+- `docs/index.html` exists as a no-build GitHub Pages landing page with in-place English, Chinese, and German language switching.
 - README states what it is, who it is for, and what failures it prevents.
+- README Skill Catalog lists the packaged reference Markdown modules with clickable relative links.
 - README includes the repository slug `academic-audit-for-eclipse-sumo`.
 - README quick start uses concrete repository-scoped install paths for Codex (`.agents/skills/`) and Claude Code (`.claude/skills/`).
 - README includes `## Project Status`, clarifying that the current release is instruction-only and does not include executable SUMO validators or Python audit scripts.

@@ -6,6 +6,8 @@
 
 # Academic Audit for Eclipse SUMO
 
+Website: [tarard.github.io/academic-audit-for-eclipse-sumo](https://tarard.github.io/academic-audit-for-eclipse-sumo/)
+
 **Agent Skill for Traffic Signal Control Experiments**
 
 Reusable Codex/Claude skills and checklists for auditing SUMO/TraCI traffic signal control experiments before results are reported.
@@ -13,6 +15,7 @@ Reusable Codex/Claude skills and checklists for auditing SUMO/TraCI traffic sign
 ```text
 What it is:     A reusable agent skill for auditing SUMO/TraCI signal-control workflows.
 Who it is for:  Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, data-informed, or MPC-style controllers.
+How it works:   It distills official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, and the author's practical experiment experience into an agent audit workflow.
 What it catches: Broken routes, unsafe TLS phases, unpaired baselines, overwritten outputs, invalid metrics, and unreproducible batches.
 ```
 
@@ -70,6 +73,31 @@ This version covers fixed-time, actuated, max-pressure, NEMA, data-informed, and
 | `debugging-audit-for-eclipse-sumo` | Debugging route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
 
 Both skills are plain `SKILL.md` packages with YAML frontmatter and Markdown references. The `agents/openai.yaml` files provide optional Codex UI metadata; the core skill instructions remain readable by Claude-style skill loaders that use `SKILL.md`.
+
+Reference modules included in the package:
+
+**Academic audit references**
+
+- [`experiment-intake-interview.md`](skills/academic-audit-for-eclipse-sumo/references/experiment-intake-interview.md) - Socratic pre-run questions and Experiment Readiness Record.
+- [`source-ladder.md`](skills/academic-audit-for-eclipse-sumo/references/source-ladder.md) - source priority and evidence hierarchy.
+- [`sumo-official-semantics.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO network, route, TLS, detector, and TraCI semantics.
+- [`sumo-official-operational-lessons.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - operational lessons from official SUMO documentation.
+- [`sumo-community-faq-lessons.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-community-faq-lessons.md) - common forum, FAQ, and community troubleshooting lessons.
+- [`sumo-nema-controller-audit.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-nema-controller-audit.md) - NEMA ring, barrier, split, recall, detector, and claim checks.
+- [`sumo-traci-controller-boundaries.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-traci-controller-boundaries.md) - TraCI controller identity and API-boundary checks.
+- [`sumo-output-hard-gates.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-output-hard-gates.md) - output, warning, teleport, and artifact hard gates.
+- [`evaluation-metrics-and-completion.md`](skills/academic-audit-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - metric definitions and completion-aware reporting.
+- [`baseline-and-ablation-design.md`](skills/academic-audit-for-eclipse-sumo/references/baseline-and-ablation-design.md) - paired baseline, ablation, and sensitivity design.
+- [`experiment-validation-ladder.md`](skills/academic-audit-for-eclipse-sumo/references/experiment-validation-ladder.md) - validation ladder for experiments and debugging fixes.
+- [`claim-boundary-taxonomy.md`](skills/academic-audit-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - wording rules for evidence-bounded claims.
+- [`public-code-lessons.md`](skills/academic-audit-for-eclipse-sumo/references/public-code-lessons.md) - lessons distilled from public traffic-simulation code.
+- [`public-release-checklist.md`](skills/academic-audit-for-eclipse-sumo/references/public-release-checklist.md) - release, trademark, privacy, and exposure checks.
+
+**Debugging audit references**
+
+- [`closed-loop-debugging.md`](skills/debugging-audit-for-eclipse-sumo/references/closed-loop-debugging.md) - observe, classify, probe, compare, update.
+- [`symptom-to-evidence-map.md`](skills/debugging-audit-for-eclipse-sumo/references/symptom-to-evidence-map.md) - maps common symptoms to required evidence.
+- [`debugging-gates-and-claim-boundaries.md`](skills/debugging-audit-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - demotion rules for failed or partially fixed runs.
 
 ## What It Audits
 
