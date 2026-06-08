@@ -1,6 +1,6 @@
 # Source Ladder
 
-Use this source order for academic audits of experiments using Eclipse SUMO:
+Use this source order for simulation helper audits of experiments using Eclipse SUMO:
 
 1. **Installed SUMO and local artifacts**: `sumo --version`, `sumo --help`, command lines, logs, generated XML/CSV/JSON, network files, route files, additional files, and controller code.
 2. **Official Eclipse SUMO documentation and source/tests**: prefer official pages and the Eclipse SUMO repository for semantics.

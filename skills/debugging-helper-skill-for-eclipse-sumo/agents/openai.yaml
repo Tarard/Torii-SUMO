@@ -1,0 +1,6 @@
+interface:
+  display_name: "Debugging Helper Skill for Eclipse SUMO"
+  short_description: "Debug Eclipse SUMO failures with evidence gates."
+  default_prompt: "Use $debugging-helper-skill-for-eclipse-sumo to debug this Eclipse SUMO issue as a closed-loop root-cause investigation."
+policy:
+  allow_implicit_invocation: true

@@ -14,7 +14,7 @@ Do not copy user code from forums. Do not quote private-looking details from sup
 
 ## Recurring Symptoms and Audit Actions
 
-| Symptom | Likely first checks | Academic audit response |
+| Symptom | Likely first checks | Simulation helper response |
 |---|---|---|
 | `FatalTraCIError: Could not connect` | Print the exact SUMO command; run it in a normal shell; check binary path, `SUMO_HOME`, Python environment, port availability, firewall, and whether SUMO started with `--remote-port` when connecting externally. | Do not debug controller logic until SUMO startup and TraCI server creation are proven. |
 | `connection closed by SUMO` after a few steps or many episodes | Inspect SUMO `--log` / `--error-log`; check whether SUMO quit due to input error, route error, GUI close, stale connection, missing `traci.close()`, or repeated-run resource handling. | Treat as a run-protocol or construction failure until logs identify the cause. |

@@ -1,6 +1,6 @@
 # Task: Data-Informed Signal-Control Audit
 
-Use `$academic-audit-for-eclipse-sumo` to audit this data-informed or MPC-style SUMO/TraCI signal-control experiment before reporting improvements.
+Use `$simulation-helper-skill-for-eclipse-sumo` to audit this data-informed or MPC-style SUMO/TraCI signal-control experiment before reporting improvements.
 
 ## Claimed Result
 

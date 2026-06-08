@@ -1,9 +1,9 @@
 ---
-name: debugging-audit-for-eclipse-sumo
+name: debugging-helper-skill-for-eclipse-sumo
 description: Use when debugging Eclipse SUMO, TraCI, netconvert, duarouter, route, demand, detector, traffic-light, output, teleport, insertion, seed, performance, or reproducibility failures in traffic-simulation workflows.
 ---
 
-# Debugging Audit for Eclipse SUMO
+# Debugging Helper Skill for Eclipse SUMO
 
 ## Overview
 

@@ -1,9 +1,9 @@
 ---
-name: academic-audit-for-eclipse-sumo
+name: simulation-helper-skill-for-eclipse-sumo
 description: Use when designing, running, reviewing, debugging, or writing claims from Eclipse SUMO/TraCI traffic signal control experiments, including fixed-time, actuated, max-pressure, NEMA, MPC-style controllers, TLS phases, netconvert, routes, demand, detectors, outputs, baselines, ablations, reproducibility, or academic evidence boundaries.
 ---
 
-# Academic Audit for Eclipse SUMO
+# Simulation Helper Skill for Eclipse SUMO
 
 ## Overview
 
@@ -39,7 +39,7 @@ If the user explicitly skips intake, state which fields are unknown and mark the
 - Source priority or conflicting sources: read `references/source-ladder.md`.
 - New experiment design or unclear setup: read `references/experiment-intake-interview.md`.
 - Eclipse SUMO network, routes, TLS, detectors, netconvert, signal states, or GUI/headless semantics: read `references/sumo-official-semantics.md`.
-- Eclipse SUMO root-cause debugging or unexpected behavior: use `debugging-audit-for-eclipse-sumo` if available; otherwise read `references/sumo-official-operational-lessons.md` and `references/sumo-community-faq-lessons.md`.
+- Eclipse SUMO root-cause debugging or unexpected behavior: use `debugging-helper-skill-for-eclipse-sumo` if available; otherwise read `references/sumo-official-operational-lessons.md` and `references/sumo-community-faq-lessons.md`.
 - Eclipse SUMO operational pitfalls from official docs: read `references/sumo-official-operational-lessons.md`.
 - Eclipse SUMO mailing-list/forum/GitHub issue failure patterns: read `references/sumo-community-faq-lessons.md`.
 - NEMA ring/barrier, splits, offset, force-off, recall, detector, or `ignore-errors` claims: read `references/sumo-nema-controller-audit.md`.

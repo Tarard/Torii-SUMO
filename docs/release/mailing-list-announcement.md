@@ -3,7 +3,7 @@
 Subject:
 
 ```text
-[Tool] Academic audit skill/checklist for SUMO/TraCI signal-control experiments
+[Tool] Simulation helper skill/checklist for SUMO/TraCI signal-control experiments
 ```
 
 Body:
@@ -11,7 +11,7 @@ Body:
 ```text
 Hello SUMO community,
 
-I am sharing a lightweight academic audit skill/checklist for researchers using Eclipse SUMO and TraCI for traffic signal control experiments.
+I am sharing a lightweight simulation helper skill/checklist for researchers using Eclipse SUMO and TraCI for traffic signal control experiments.
 
 It focuses on:
 

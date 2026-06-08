@@ -3,7 +3,7 @@
 Use this manifest to create a clean GitHub repository named:
 
 ```text
-academic-audit-for-eclipse-sumo
+Simulation-Helper-Skill-for-Eclipse-SUMO
 ```
 
 Do not publish the entire local worktree if it contains unrelated project code, private plans, local PDFs, generated outputs, or unpublished research notes.
@@ -16,8 +16,8 @@ README.zh-CN.md
 README.de.md
 LICENSE-DOCS
 skills/
-  academic-audit-for-eclipse-sumo/
-  debugging-audit-for-eclipse-sumo/
+  simulation-helper-skill-for-eclipse-sumo/
+  debugging-helper-skill-for-eclipse-sumo/
 docs/
   index.html
   assets/

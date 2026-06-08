@@ -4,9 +4,9 @@
   <a href="README.de.md"><img src="https://img.shields.io/badge/lang-Deutsch-green" alt="Deutsch"></a>
 </p>
 
-# Academic Audit for Eclipse SUMO
+# Simulation Helper Skill for Eclipse SUMO
 
-网站：[tarard.github.io/academic-audit-for-eclipse-sumo](https://tarard.github.io/academic-audit-for-eclipse-sumo/)
+网站：[tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO](https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/)
 
 **面向交通信号控制实验的 Agent Skill**
 
@@ -27,28 +27,28 @@
 
 ```text
 .agents/skills/
-  academic-audit-for-eclipse-sumo/
-  debugging-audit-for-eclipse-sumo/
+  simulation-helper-skill-for-eclipse-sumo/
+  debugging-helper-skill-for-eclipse-sumo/
 ```
 
 对于 Claude Code，把同样的文件夹复制到：
 
 ```text
 .claude/skills/
-  academic-audit-for-eclipse-sumo/
-  debugging-audit-for-eclipse-sumo/
+  simulation-helper-skill-for-eclipse-sumo/
+  debugging-helper-skill-for-eclipse-sumo/
 ```
 
 然后在 agent 中调用：
 
 ```text
-Use $academic-audit-for-eclipse-sumo to audit this SUMO/TraCI traffic signal control experiment before I report results.
+Use $simulation-helper-skill-for-eclipse-sumo to audit this SUMO/TraCI traffic signal control experiment before I report results.
 ```
 
 如果是在调试失败实验：
 
 ```text
-Use $debugging-audit-for-eclipse-sumo to diagnose why this SUMO/TraCI run is invalid or unreproducible.
+Use $debugging-helper-skill-for-eclipse-sumo to diagnose why this SUMO/TraCI run is invalid or unreproducible.
 ```
 
 skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果可以被认可。
@@ -69,35 +69,35 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 
 | Skill | 用途 | 主要输出 |
 |---|---|---|
-| `academic-audit-for-eclipse-sumo` | 规划、审阅、比较或撰写 SUMO/TraCI 信号控制实验结论。 | Experiment Readiness Record、hard-gate audit、evidence class、claim boundary。 |
-| `debugging-audit-for-eclipse-sumo` | 调试 route、TraCI、TLS、demand、detector、output、seed、completion 和 reproducibility 问题。 | Fault class、next diagnostic probe、evidence、fix or demotion rule。 |
+| `simulation-helper-skill-for-eclipse-sumo` | 规划、审阅、比较或撰写 SUMO/TraCI 信号控制实验结论。 | Experiment Readiness Record、hard-gate audit、evidence class、claim boundary。 |
+| `debugging-helper-skill-for-eclipse-sumo` | 调试 route、TraCI、TLS、demand、detector、output、seed、completion 和 reproducibility 问题。 | Fault class、next diagnostic probe、evidence、fix or demotion rule。 |
 
 两个 skill 都是普通的 `SKILL.md` 包，包含 YAML frontmatter 和 Markdown references。`agents/openai.yaml` 提供可选的 Codex UI metadata；核心指令仍然可以被读取 `SKILL.md` 的 Claude-style skill loader 使用。
 
 包内包含的 reference 模块：
 
-**Academic audit references**
+**Simulation helper references**
 
-- [`experiment-intake-interview.md`](skills/academic-audit-for-eclipse-sumo/references/experiment-intake-interview.md) - 执行前的苏格拉底式提问与 Experiment Readiness Record。
-- [`source-ladder.md`](skills/academic-audit-for-eclipse-sumo/references/source-ladder.md) - 信息来源优先级与证据层级。
-- [`sumo-official-semantics.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO network、route、TLS、detector 与 TraCI 语义。
-- [`sumo-official-operational-lessons.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - 来自 SUMO 官方文档的运行经验。
-- [`sumo-community-faq-lessons.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-community-faq-lessons.md) - 论坛、FAQ 与社区常见排错经验。
-- [`sumo-nema-controller-audit.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-nema-controller-audit.md) - NEMA ring、barrier、split、recall、detector 与 claim 检查。
-- [`sumo-traci-controller-boundaries.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-traci-controller-boundaries.md) - TraCI 控制器身份与 API 边界检查。
-- [`sumo-output-hard-gates.md`](skills/academic-audit-for-eclipse-sumo/references/sumo-output-hard-gates.md) - output、warning、teleport 与 artifact hard gates。
-- [`evaluation-metrics-and-completion.md`](skills/academic-audit-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - 指标定义与 completion-aware 报告。
-- [`baseline-and-ablation-design.md`](skills/academic-audit-for-eclipse-sumo/references/baseline-and-ablation-design.md) - paired baseline、ablation 与 sensitivity 设计。
-- [`experiment-validation-ladder.md`](skills/academic-audit-for-eclipse-sumo/references/experiment-validation-ladder.md) - 实验与调试修复的验证阶梯。
-- [`claim-boundary-taxonomy.md`](skills/academic-audit-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - 有证据边界的结论写法。
-- [`public-code-lessons.md`](skills/academic-audit-for-eclipse-sumo/references/public-code-lessons.md) - 从公开交通仿真代码中整理的经验。
-- [`public-release-checklist.md`](skills/academic-audit-for-eclipse-sumo/references/public-release-checklist.md) - 发布、商标、隐私和曝光检查。
+- [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - 执行前的苏格拉底式提问与 Experiment Readiness Record。
+- [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - 信息来源优先级与证据层级。
+- [`sumo-official-semantics.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO network、route、TLS、detector 与 TraCI 语义。
+- [`sumo-official-operational-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - 来自 SUMO 官方文档的运行经验。
+- [`sumo-community-faq-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-community-faq-lessons.md) - 论坛、FAQ 与社区常见排错经验。
+- [`sumo-nema-controller-audit.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-nema-controller-audit.md) - NEMA ring、barrier、split、recall、detector 与 claim 检查。
+- [`sumo-traci-controller-boundaries.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-traci-controller-boundaries.md) - TraCI 控制器身份与 API 边界检查。
+- [`sumo-output-hard-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-output-hard-gates.md) - output、warning、teleport 与 artifact hard gates。
+- [`evaluation-metrics-and-completion.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - 指标定义与 completion-aware 报告。
+- [`baseline-and-ablation-design.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md) - paired baseline、ablation 与 sensitivity 设计。
+- [`experiment-validation-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md) - 实验与调试修复的验证阶梯。
+- [`claim-boundary-taxonomy.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - 有证据边界的结论写法。
+- [`public-code-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md) - 从公开交通仿真代码中整理的经验。
+- [`public-release-checklist.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md) - 发布、商标、隐私和曝光检查。
 
 **Debugging audit references**
 
-- [`closed-loop-debugging.md`](skills/debugging-audit-for-eclipse-sumo/references/closed-loop-debugging.md) - observe、classify、probe、compare、update 闭环调试。
-- [`symptom-to-evidence-map.md`](skills/debugging-audit-for-eclipse-sumo/references/symptom-to-evidence-map.md) - 将常见症状映射到所需证据。
-- [`debugging-gates-and-claim-boundaries.md`](skills/debugging-audit-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - 失败或部分修复实验的结论降级规则。
+- [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - observe、classify、probe、compare、update 闭环调试。
+- [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - 将常见症状映射到所需证据。
+- [`debugging-gates-and-claim-boundaries.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - 失败或部分修复实验的结论降级规则。
 
 ## 它审计什么
 
@@ -188,8 +188,8 @@ README.zh-CN.md
 README.de.md
 LICENSE-DOCS
 skills/
-  academic-audit-for-eclipse-sumo/
-  debugging-audit-for-eclipse-sumo/
+  simulation-helper-skill-for-eclipse-sumo/
+  debugging-helper-skill-for-eclipse-sumo/
 docs/
   common-sumo-signal-control-failures.md
   release/

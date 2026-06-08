@@ -1,6 +1,6 @@
 # Task: Max-Pressure Controller Audit
 
-Use `$academic-audit-for-eclipse-sumo` to audit this max-pressure SUMO/TraCI signal-control experiment before writing a performance claim.
+Use `$simulation-helper-skill-for-eclipse-sumo` to audit this max-pressure SUMO/TraCI signal-control experiment before writing a performance claim.
 
 ## Claimed Result
 

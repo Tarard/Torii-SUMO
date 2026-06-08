@@ -21,8 +21,8 @@ Use this before publishing the skill to GitHub.
 
 ## Trademark Hygiene
 
-- The public display title is `Academic Audit for Eclipse SUMO`.
-- The repository slug is `academic-audit-for-eclipse-sumo`.
+- The public display title is `Simulation Helper Skill for Eclipse SUMO`.
+- The repository slug is `Simulation-Helper-Skill-for-Eclipse-SUMO`.
 - Skill slugs use the `<product name>-for-eclipse-sumo` pattern, not `sumo-*` or `eclipse-sumo-*`.
 - README includes a trademark notice stating that the project is independent and not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, or DLR.
 - README does not use official, certified, endorsed, sponsored, maintained, or similar wording for this project except inside a negative non-affiliation disclaimer.
@@ -35,18 +35,18 @@ Use this before publishing the skill to GitHub.
 - `agents/openai.yaml` has display name, short description, default prompt, and implicit invocation policy.
 - Every reference named in `SKILL.md` exists.
 - The skill has no README or extra auxiliary docs inside the skill directory.
-- The main package name is `academic-audit-for-eclipse-sumo`.
-- The companion debugging package name is `debugging-audit-for-eclipse-sumo`.
+- The main package name is `simulation-helper-skill-for-eclipse-sumo`.
+- The companion debugging package name is `debugging-helper-skill-for-eclipse-sumo`.
 
 ## Exposure Hygiene
 
 - README first screen reads like a tool, not a personal note.
 - README has language-switch badges linking between `README.md`, `README.zh-CN.md`, and `README.de.md`.
-- README links to the GitHub Pages language-switch page at `https://tarard.github.io/academic-audit-for-eclipse-sumo/`.
+- README links to the GitHub Pages language-switch page at `https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/`.
 - `docs/index.html` exists as a no-build GitHub Pages landing page with in-place English, Chinese, and German language switching.
 - README states what it is, who it is for, and what failures it prevents.
 - README Skill Catalog lists the packaged reference Markdown modules with clickable relative links.
-- README includes the repository slug `academic-audit-for-eclipse-sumo`.
+- README includes the repository slug `Simulation-Helper-Skill-for-Eclipse-SUMO`.
 - README quick start uses concrete repository-scoped install paths for Codex (`.agents/skills/`) and Claude Code (`.claude/skills/`).
 - README includes `## Project Status`, clarifying that the current release is instruction-only and does not include executable SUMO validators or Python audit scripts.
 - README includes `## Limitations`, clarifying that the audit does not certify experiment correctness.
