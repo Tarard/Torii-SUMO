@@ -21,7 +21,7 @@ Ask one focused question at a time. Prefer concrete choices, but allow free-form
 
 ## Experiment Readiness Record
 
-Produce this record and ask the user to confirm it before implementation or execution.
+Produce this record and ask the user to confirm it before planning, implementation, or execution.
 
 ```markdown
 ## Experiment Readiness Record
@@ -42,12 +42,14 @@ Produce this record and ask the user to confirm it before implementation or exec
 | Claim boundary | `{allowed wording if gates pass}` | `{prohibited wording until more evidence exists}` |
 
 Decision: ready / needs design revision / diagnostic-only / blocked
-Next allowed action: `{specific next action allowed by the decision}`
+Next allowed action: `{normally: produce SUMO Experiment Plan using references/experiment-planning-after-intake.md}`
 ```
 
 ## Confirmation Gate
 
-The user must confirm the record before the agent writes experiment code, edits SUMO files, runs SUMO, or drafts result claims.
+The user must confirm the record before the agent produces the execution plan, writes experiment code, edits SUMO files, runs SUMO, or drafts result claims.
+
+After confirmation, read `experiment-planning-after-intake.md` and produce a `SUMO Experiment Plan`. The plan must be confirmed before implementation or simulation.
 
 If the user explicitly skips intake:
 

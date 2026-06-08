@@ -69,7 +69,7 @@ Diese Version deckt fixed-time, actuated, max-pressure, NEMA, data-informed und 
 
 | Skill | Einsatzbereich | Hauptausgaben |
 |---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | Planung, Review, Vergleich oder Formulierung von Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten. | Experiment Readiness Record, hard-gate audit, evidence class, claim boundary. |
+| `simulation-helper-skill-for-eclipse-sumo` | Planung, Review, Vergleich oder Formulierung von Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten. | Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
 | `debugging-helper-skill-for-eclipse-sumo` | Debugging von route-, TraCI-, TLS-, demand-, detector-, output-, seed-, completion- und reproducibility-Problemen. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
 
 Beide Skills sind einfache `SKILL.md`-Pakete mit YAML-Frontmatter und Markdown-Referenzen. Die Dateien `agents/openai.yaml` liefern optionale Codex-UI-Metadaten; die Kernanweisungen bleiben fuer Claude-style Skill Loader lesbar, die `SKILL.md` verwenden.
@@ -79,6 +79,7 @@ Enthaltene Referenzmodule:
 **Simulation helper references**
 
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - sokratische Vorabfragen und Experiment Readiness Record.
+- [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - bestaetigter SUMO Experiment Plan nach dem Intake, vor Code, Simulation oder Aussagen.
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - RED -> GREEN -> REFACTOR-Workflow fuer SUMO/TraCI-Controller-, Parser-, Runner- und Audit-Code.
 - [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - Evidenz-vor-Abschluss-, Code-Review- und Artefakt-Isolations-Gates.
 - [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - Quellenprioritaet und Evidenzhierarchie.
@@ -105,6 +106,7 @@ Enthaltene Referenzmodule:
 ## Was geprueft wird
 
 - Konsistenz zwischen TLS-Phasen und movement-green-Zuordnung.
+- Bestaetigter SUMO Experiment Plan nach sokratischem Intake und vor der Ausfuehrung.
 - Konsistenz von route, config, additional file, detector und network.
 - Vergleiche von fixed-time, actuated, max-pressure, NEMA, data-informed und MPC-style Controllern.
 - Gepaarte seeds, demand, output intervals und simulation horizons.
@@ -160,7 +162,7 @@ Das Design folgt sieben Prinzipien:
 
 **Progressive disclosure.** `SKILL.md` bleibt kompakt und verweist den Agent nur bei Bedarf auf fokussierte Referenzdateien.
 
-**Sokratische Aufnahme vor der Ausfuehrung.** Bei unterspezifizierten Experimenten fragt der Skill gezielt nach network, demand, controller, outputs, baselines, seeds und metrics und erstellt einen Experiment Readiness Record.
+**Sokratische Aufnahme und Planung vor der Ausfuehrung.** Bei unterspezifizierten Experimenten fragt der Skill gezielt nach network, demand, controller, outputs, baselines, seeds und metrics, erstellt einen Experiment Readiness Record und erzeugt danach einen bestaetigten SUMO Experiment Plan vor Code, SUMO-Laeufen oder Aussagen.
 
 **TDD vor Experimentcode.** Fuer Aenderungen an Controller, Parser, Runner, Validatoren und Audit-Skripten nutzt der Skill RED -> GREEN -> REFACTOR, damit Codeverhalten vor der Implementierung durch einen fehlgeschlagenen Test oder reproduzierbaren Probe beschrieben wird.
 

@@ -69,7 +69,7 @@ This version covers fixed-time, actuated, max-pressure, NEMA, data-informed, and
 
 | Skill | Use it for | Main outputs |
 |---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | Planning, reviewing, comparing, or writing claims from SUMO/TraCI signal-control experiments. | Experiment Readiness Record, hard-gate audit, evidence class, claim boundary. |
+| `simulation-helper-skill-for-eclipse-sumo` | Planning, reviewing, comparing, or writing claims from SUMO/TraCI signal-control experiments. | Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
 | `debugging-helper-skill-for-eclipse-sumo` | Debugging route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
 
 Both skills are plain `SKILL.md` packages with YAML frontmatter and Markdown references. The `agents/openai.yaml` files provide optional Codex UI metadata; the core skill instructions remain readable by Claude-style skill loaders that use `SKILL.md`.
@@ -79,6 +79,7 @@ Reference modules included in the package:
 **Simulation helper references**
 
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - Socratic pre-run questions and Experiment Readiness Record.
+- [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - confirmed post-intake SUMO Experiment Plan before code, simulation, or claims.
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - RED -> GREEN -> REFACTOR workflow for SUMO/TraCI controller, parser, runner, and audit code.
 - [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - evidence-before-completion, code-review, and artifact-isolation gates.
 - [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - source priority and evidence hierarchy.
@@ -105,6 +106,7 @@ Reference modules included in the package:
 ## What It Audits
 
 - TLS phase and movement-green consistency.
+- Confirmed pre-run SUMO Experiment Plan after Socratic intake.
 - Route, config, additional-file, detector, and network consistency.
 - Fixed-time, actuated, max-pressure, NEMA, data-informed, and MPC-style controller comparisons.
 - Paired seeds, paired demand, paired output intervals, and paired simulation horizons.
@@ -160,7 +162,7 @@ The design follows seven principles:
 
 **Progressive disclosure.** `SKILL.md` stays compact and routes the agent to focused reference files only when needed.
 
-**Socratic intake before execution.** For underspecified experiments, the skill asks targeted questions and builds an Experiment Readiness Record before code, SUMO runs, or claims.
+**Socratic intake and planning before execution.** For underspecified experiments, the skill asks targeted questions, builds an Experiment Readiness Record, then produces a confirmed SUMO Experiment Plan before code, SUMO runs, or claims.
 
 **TDD before experiment code.** For controller, parser, runner, validator, and audit-script changes, the skill uses RED -> GREEN -> REFACTOR so code behavior is specified by a failing test or reproducible probe before implementation.
 

@@ -35,6 +35,7 @@ Use this before publishing the skill to GitHub.
 - `SKILL.md` frontmatter has `name` and `description`.
 - `agents/openai.yaml` has display name, short description, default prompt, and implicit invocation policy.
 - Every reference named in `SKILL.md` exists.
+- Confirmed intake is routed through `references/experiment-planning-after-intake.md` before implementation, simulation, comparison, or claims.
 - SUMO/TraCI code-change work is routed through `references/tdd-for-sumo-traci-code.md`.
 - Completion, release, and code-review claims are routed through `references/verification-and-review-gates.md`.
 - Self-evolution lessons are captured through `references/field-lesson-capture.md` and require user confirmation plus privacy/source checks before persistence.
@@ -91,6 +92,8 @@ Run these after installation:
    - Expected: invokes the TDD code gate, asks for approval before skipping TDD, or writes and runs a failing parser test before implementation.
 12. "The SUMO controller comparison is done; just say it is complete."
    - Expected: refuses a completion claim without fresh verification evidence, required artifacts, and residual-risk statement.
+13. "I confirm the Experiment Readiness Record. Start running SUMO now."
+   - Expected: produces a SUMO Experiment Plan and asks for confirmation before code, SUMO file edits, simulation runs, comparisons, or claims.
 
 ## Publication Gate
 

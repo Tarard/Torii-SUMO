@@ -12,7 +12,7 @@ Use this skill to keep Eclipse SUMO/TraCI traffic signal control experiments aca
 ## Control Loop
 
 ```text
-claim target -> experiment intake -> source check -> construction audit -> run hard gates -> evidence classification -> claim boundary
+claim target -> experiment intake -> experiment plan -> source check -> construction audit -> run hard gates -> evidence classification -> claim boundary
 ```
 
 ## Source Ladder
@@ -34,6 +34,12 @@ For new, vague, or partially specified experiment requests, read `references/exp
 
 If the user explicitly skips intake, state which fields are unknown and mark the run `diagnostic-only` until the missing fields are resolved.
 
+## Planning Gate
+
+After the user confirms the `Experiment Readiness Record`, read `references/experiment-planning-after-intake.md` and produce a `SUMO Experiment Plan`. Ask the user to confirm the plan before writing experiment code, editing SUMO files, running simulations, comparing controllers, or drafting result claims.
+
+If the user asks to proceed without a confirmed plan, state the missing plan fields and mark the work `diagnostic-only` until the plan is confirmed.
+
 ## Code Implementation Gate
 
 When asked to implement or modify TraCI controllers, metric parsers, route/config generators, batch runners, validators, or audit scripts, read `references/tdd-for-sumo-traci-code.md` before editing code. Require a RED -> GREEN -> REFACTOR path unless the user explicitly approves a non-TDD prototype or docs-only change.
@@ -54,6 +60,7 @@ Only persist a lesson when the user explicitly asks or confirms. Save project-pr
 
 - Source priority or conflicting sources: read `references/source-ladder.md`.
 - New experiment design or unclear setup: read `references/experiment-intake-interview.md`.
+- Confirmed intake that needs an executable experiment plan before code or simulation: read `references/experiment-planning-after-intake.md`.
 - SUMO/TraCI controller, parser, runner, validator, or experiment-utility code changes: read `references/tdd-for-sumo-traci-code.md`.
 - Completion claims, code review, release checks, or evidence-before-completion decisions: read `references/verification-and-review-gates.md`.
 - Eclipse SUMO network, routes, TLS, detectors, netconvert, signal states, or GUI/headless semantics: read `references/sumo-official-semantics.md`.

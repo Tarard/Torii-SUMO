@@ -69,7 +69,7 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 
 | Skill | 用途 | 主要输出 |
 |---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | 规划、审阅、比较或撰写 SUMO/TraCI 信号控制实验结论。 | Experiment Readiness Record、hard-gate audit、evidence class、claim boundary。 |
+| `simulation-helper-skill-for-eclipse-sumo` | 规划、审阅、比较或撰写 SUMO/TraCI 信号控制实验结论。 | Experiment Readiness Record、SUMO Experiment Plan、hard-gate audit、evidence class、claim boundary。 |
 | `debugging-helper-skill-for-eclipse-sumo` | 调试 route、TraCI、TLS、demand、detector、output、seed、completion 和 reproducibility 问题。 | Fault class、next diagnostic probe、evidence、fix or demotion rule。 |
 
 两个 skill 都是普通的 `SKILL.md` 包，包含 YAML frontmatter 和 Markdown references。`agents/openai.yaml` 提供可选的 Codex UI metadata；核心指令仍然可以被读取 `SKILL.md` 的 Claude-style skill loader 使用。
@@ -79,6 +79,7 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 **Simulation helper references**
 
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - 执行前的苏格拉底式提问与 Experiment Readiness Record。
+- [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - intake 确认后的 SUMO Experiment Plan，用于在写代码、跑仿真或写结论前再次确认计划。
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - 面向 SUMO/TraCI controller、parser、runner 和 audit code 的 RED -> GREEN -> REFACTOR 工作流。
 - [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - 完成前证据、代码审阅与 artifact 隔离 gate。
 - [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - 信息来源优先级与证据层级。
@@ -105,6 +106,7 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 ## 它审计什么
 
 - TLS 相位与 movement-green 一致性。
+- Socratic intake 之后、执行之前已确认的 SUMO Experiment Plan。
 - route、config、additional file、detector 和 network 一致性。
 - fixed-time、actuated、max-pressure、NEMA、data-informed 和 MPC-style 控制器比较。
 - 配对 seeds、配对 demand、配对 output interval 和配对 simulation horizon。
@@ -160,7 +162,7 @@ examples/
 
 **Progressive disclosure。** `SKILL.md` 保持紧凑，只在需要时把 agent 引导到聚焦的 reference files。
 
-**执行前的 Socratic intake。** 对于信息不足的实验，skill 会先针对 network、demand、controller、outputs、baselines、seeds 和 metrics 提问，并建立 Experiment Readiness Record。
+**执行前的 Socratic intake 和实验计划。** 对于信息不足的实验，skill 会先针对 network、demand、controller、outputs、baselines、seeds 和 metrics 提问，建立 Experiment Readiness Record，然后在写代码、跑 SUMO 或写结论前生成并确认 SUMO Experiment Plan。
 
 **实验代码前的 TDD。** 对于 controller、parser、runner、validator 和 audit script 修改，skill 使用 RED -> GREEN -> REFACTOR，让代码行为先由失败测试或可复现 probe 定义，再开始实现。
 
