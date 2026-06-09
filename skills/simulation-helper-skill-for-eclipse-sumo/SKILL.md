@@ -1,129 +1,69 @@
 ---
 name: simulation-helper-skill-for-eclipse-sumo
-description: Use when designing, running, reviewing, debugging, implementing, testing, or writing claims from Eclipse SUMO/TraCI traffic signal control experiments, including fixed-time, actuated, max-pressure, NEMA, MPC-style controllers, TLS phases, netconvert, routes, demand, detectors, outputs, baselines, ablations, reproducibility, academic evidence boundaries, test-driven code changes, or reusable field lessons from user-discovered fixes.
+description: Use when planning, coding, debugging, auditing, comparing, or writing claims for Eclipse SUMO/TraCI traffic-signal experiments, including TLS/NEMA, controllers, routes, demand, detectors, outputs, baselines, metrics, reproducibility, TDD changes, and reusable field lessons from user-discovered fixes.
 ---
 
 # Simulation Helper Skill for Eclipse SUMO
 
-## Overview
+## Purpose
 
-Use this skill to keep Eclipse SUMO/TraCI traffic signal control experiments academically defensible. Separate experiment design, simulator construction, controller identity, TLS semantics, runtime outputs, baseline fairness, sensitivity evidence, and paper/report claims.
+Use this skill as a router and evidence gate for Eclipse SUMO/TraCI traffic-signal experiments. Do not treat it as a full tutorial. First identify the user's scenario, then load only the reference files needed for that path.
 
-## Control Loop
+Default loop:
 
 ```text
-request -> workflow router -> project screen or intake -> experiment plan or next-step plan -> execution gates -> evidence classification -> claim boundary
+request -> classify scenario -> load minimal references -> ask or act -> verify evidence -> bound the claim
 ```
 
-## Source Ladder
+## Start Here
 
-Use sources in this order:
+| Scenario | Load | Expected output |
+|---|---|---|
+| Ongoing project, unclear progress, repo/logs/outputs provided, or "what next?" | `references/workflow-router.md`, then `references/project-control-screen.md` | `Project Control Screen` and next-step plan |
+| New or vague experiment | `references/experiment-intake-interview.md`; after confirmation, `references/experiment-planning-after-intake.md` | `Experiment Readiness Record`, then `SUMO Experiment Plan` |
+| SUMO/TraCI failure or suspicious behavior | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
+| Controller, parser, runner, validator, or audit-code change | `references/tdd-for-sumo-traci-code.md`, then `references/verification-and-review-gates.md` | RED/GREEN/REFACTOR or explicit `test-after` record |
+| Results, metrics, baseline comparison, or paper/report claim | `references/sumo-output-hard-gates.md`, `references/evaluation-metrics-and-completion.md`, `references/baseline-and-ablation-design.md`, `references/claim-boundary-taxonomy.md` | evidence class and allowed/prohibited claim wording |
+| User found a fix this skill missed | `references/field-lesson-capture.md` | privacy-safe field lesson candidate; ask before persisting |
+| Public release or repository exposure check | `references/public-release-checklist.md`, then `references/verification-and-review-gates.md` | release checklist and residual risk |
 
-1. Installed Eclipse SUMO binary, command output, logs, and generated artifacts.
-2. Official Eclipse SUMO documentation and official Eclipse SUMO source/tests.
-3. Eclipse SUMO FAQ, issue tracker, mailing-list/forum discussions, and reproducible bug reports.
-4. Public traffic-control codebases and benchmarks.
-5. Academic papers and project reports.
-6. Agent memory or prior notes.
+If a target/current-state/deviation cannot be inferred, switch to the intake path before running experiments or endorsing claims.
 
-If sources conflict, verify against the installed Eclipse SUMO version and official documentation before answering.
+## Core Rules
 
-## Workflow Router
+- Load the minimum reference set for the scenario; do not bulk-load every file.
+- Confirm missing experiment assumptions before formal execution or comparison.
+- Separate what SUMO loaded, what the controller did, what outputs were written, what warnings/failures occurred, and what claim is supportable.
+- Compare controllers only with paired route, demand, seed, horizon, outputs, and completion criteria.
+- Do not use GUI inspection, clean execution, or arrived-only metrics as sufficient evidence.
+- If completion differs across methods, report completion/unfinished/teleport status before travel-time, waiting-time, or delay averages.
+- Use these claim labels: `formal-evidence`, `diagnostic-demo`, `stress-diagnostic`, `construction-invalid`, `claim-overreach`, `blocked`.
 
-For mixed, vague, ongoing-project, or multi-stage requests, read `references/workflow-router.md` first. Classify the scenario before loading other references. Do not load every reference by default.
+## Reference Map
 
-For existing repositories, partial experiments, codebases, logs, output folders, or "what should I do next?" requests, start with `references/project-control-screen.md`. Produce a `Project Control Screen`; if a target/current-state/deviation cannot be inferred, switch to the Socratic intake.
+Load these only when the scenario requires them:
 
-## First Gate: Experiment Intake
+- Source conflicts or citation priority: `references/source-ladder.md`.
+- SUMO network, route, TLS, detector, netconvert, GUI/headless, or TraCI semantics: `references/sumo-official-semantics.md`.
+- Official operational pitfalls: `references/sumo-official-operational-lessons.md`.
+- Forum, FAQ, mailing-list, or issue-tracker failure patterns: `references/sumo-community-faq-lessons.md`.
+- Public traffic-simulation code lessons: `references/public-code-lessons.md`.
+- NEMA ring/barrier/split/offset/recall/detector claims: `references/sumo-nema-controller-audit.md`.
+- TraCI controller identity and API-boundary checks: `references/sumo-traci-controller-boundaries.md`.
+- Sweeps, sensitivity, ablations, structural debugging, or validation ladder: `references/experiment-validation-ladder.md`.
 
-For new, vague, or partially specified experiment requests, read `references/experiment-intake-interview.md` first. Produce an `Experiment Readiness Record` and ask the user to confirm it before writing code, editing Eclipse SUMO files, running Eclipse SUMO, or drafting result claims.
+## Output Shape
 
-If the user explicitly skips intake, state which fields are unknown and mark the run `diagnostic-only` until the missing fields are resolved.
+For most tasks, end with:
 
-## Planning Gate
+```text
+scenario:
+loaded_references:
+missing_assumptions:
+evidence:
+claim_status:
+next_step:
+residual_risk:
+```
 
-After the user confirms the `Experiment Readiness Record`, read `references/experiment-planning-after-intake.md` and produce a `SUMO Experiment Plan`. Ask the user to confirm the plan before writing experiment code, editing SUMO files, running simulations, comparing controllers, or drafting result claims.
-
-If the user asks to proceed without a confirmed plan, state the missing plan fields and mark the work `diagnostic-only` until the plan is confirmed.
-
-## Code Implementation Gate
-
-When asked to implement or modify TraCI controllers, metric parsers, route/config generators, batch runners, validators, or audit scripts, read `references/tdd-for-sumo-traci-code.md` before editing code. Require a RED -> GREEN -> REFACTOR path unless the user explicitly approves a non-TDD prototype or docs-only change.
-
-If code was already written before tests, do not call retrofit tests TDD. Either restart from a failing test when feasible, or label the work as `test-after` and state the residual risk.
-
-## Completion and Review Gate
-
-Before saying code, a SUMO run, an audit, a comparison, or a release is complete, read `references/verification-and-review-gates.md`. Completion claims require fresh evidence: commands, outputs, tests, warnings, artifact paths, and residual risks. For controller, parser, runner, validator, or metric code that can affect claims, include a code-review pass focused on bugs, missing tests, reproducibility risks, and evidence boundaries.
-
-## Self-Evolution Gate
-
-When the user reports that this skill failed, missed a diagnostic path, or that they later solved a SUMO/TraCI issue by another route, treat it as a field-lesson candidate. Do not merely summarize the fix. Read `references/field-lesson-capture.md`, reconstruct the evidence path, abstract the reusable rule, remove private or project-specific details, and ask before writing any skill update.
-
-Only persist a lesson when the user explicitly asks or confirms. Save project-private lessons into the project-scoped skill copy; save public lessons into this repository only after privacy, source, and claim-boundary checks.
-
-## Reference Routing
-
-### Entry Gates
-
-- Mixed, vague, ongoing-project, or multi-stage requests: read `references/workflow-router.md`.
-- Existing project, repo, logs, outputs, codebase, or "next step" request: read `references/project-control-screen.md`.
-- New experiment design or unclear setup: read `references/experiment-intake-interview.md`.
-- Confirmed intake that needs an executable experiment plan before code or simulation: read `references/experiment-planning-after-intake.md`.
-
-### Execution Gates
-
-- SUMO/TraCI controller, parser, runner, validator, or experiment-utility code changes: read `references/tdd-for-sumo-traci-code.md`.
-- Completion claims, code review, release checks, or evidence-before-completion decisions: read `references/verification-and-review-gates.md`.
-- Eclipse SUMO root-cause debugging or unexpected behavior: use `debugging-helper-skill-for-eclipse-sumo` if available; otherwise read `references/sumo-official-operational-lessons.md` and `references/sumo-community-faq-lessons.md`.
-
-### SUMO Semantics and Sources
-
-- Source priority or conflicting sources: read `references/source-ladder.md`.
-- Eclipse SUMO network, routes, TLS, detectors, netconvert, signal states, or GUI/headless semantics: read `references/sumo-official-semantics.md`.
-- NEMA ring/barrier, splits, offset, force-off, recall, detector, or `ignore-errors` claims: read `references/sumo-nema-controller-audit.md`.
-- TraCI controller identity or API boundaries: read `references/sumo-traci-controller-boundaries.md`.
-- Eclipse SUMO operational pitfalls from official docs: read `references/sumo-official-operational-lessons.md`.
-- Eclipse SUMO mailing-list/forum/GitHub issue failure patterns: read `references/sumo-community-faq-lessons.md`.
-- Lessons from public traffic-control codebases: read `references/public-code-lessons.md`.
-
-### Evidence and Claim Gates
-
-- Runtime outputs, logs, XML artifacts, and hard gates: read `references/sumo-output-hard-gates.md`.
-- Completion-aware evaluation and paper-style metric definitions: read `references/evaluation-metrics-and-completion.md`.
-- Baseline and ablation design: read `references/baseline-and-ablation-design.md`.
-- Experiment debugging, sweeps, ablations, sensitivity, and structural diagnosis: read `references/experiment-validation-ladder.md`.
-- Paper/report claim wording: read `references/claim-boundary-taxonomy.md`.
-
-### Maintenance Gates
-
-- User-discovered workarounds, missed diagnostics, or post-agent fixes that should improve this skill: read `references/field-lesson-capture.md`.
-- Preparing a public release: read `references/public-release-checklist.md`.
-
-## Non-Negotiable Separations
-
-Always separate:
-
-- what Eclipse SUMO loaded;
-- what the controller actually did;
-- what outputs were written;
-- what warnings, errors, collisions, teleports, discarded vehicles, route failures, and unfinished vehicles occurred;
-- what academic claim the run can support.
-
-## Evidence Classes
-
-- `formal-evidence`: hard gates pass and experiment semantics match the claim.
-- `diagnostic-demo`: useful integration or debugging evidence, but not a formal traffic-control result.
-- `stress-diagnostic`: intentionally extreme or boundary-probing run.
-- `construction-invalid`: network, route, TLS, controller, or output construction is invalid.
-- `claim-overreach`: run may be valid, but the claim exceeds the evidence.
-
-## Common Red Lines
-
-- Do not call a TraCI phase sequence a NEMA ring/barrier controller unless a loaded Eclipse SUMO NEMA program and timing evidence support that claim.
-- Do not treat a GUI run as validation without a matching headless audited run.
-- Do not treat TraCI, routing, insertion, teleport, or seed behavior as background details; they are experimental conditions.
-- Do not accept `ignore-errors=true` in formal NEMA evidence.
-- Do not claim controller superiority from a single scenario, one seed, weak baselines, missing ablations, or missing runtime audits.
-- Do not equate clean Eclipse SUMO execution with academic evidence. Clean execution is only one hard gate.
-- Do not compare average travel time, waiting time, or delay from arrived-only `tripinfo.xml` when models have different completion rates.
+When editing the skill itself, keep this `SKILL.md` lean and move detailed rules into `references/`.

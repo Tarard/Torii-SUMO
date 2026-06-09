@@ -1,73 +1,46 @@
 ---
 name: debugging-helper-skill-for-eclipse-sumo
-description: Use when debugging Eclipse SUMO, TraCI, netconvert, duarouter, route, demand, detector, traffic-light, output, teleport, insertion, seed, performance, or reproducibility failures in traffic-simulation workflows.
+description: Use when diagnosing Eclipse SUMO, TraCI, netconvert, duarouter, route, demand, detector, traffic-light, output, teleport, insertion, seed, performance, or reproducibility failures in traffic-simulation workflows.
 ---
 
 # Debugging Helper Skill for Eclipse SUMO
 
-## Overview
+## Purpose
 
-Use this skill to debug experiments using Eclipse SUMO as a closed-loop control problem. The goal is not to make a run continue at any cost; the goal is to identify the root cause, verify it with evidence, and decide whether the experiment can be repaired, rerun, or must be demoted.
+Use this skill to debug Eclipse SUMO/TraCI failures as a closed-loop investigation. The goal is root-cause evidence, not keeping a run alive at any cost.
 
-## Closed Loop
-
-```text
-failure target -> observe artifacts -> classify deviation -> choose one diagnostic probe -> run probe -> compare feedback -> update fault model -> fix or demote
-```
-
-## First Response
-
-When the failure is not already diagnosed, start with this compact record:
+Loop:
 
 ```text
-debug_target:
-observed_state:
-known_artifacts:
-deviation:
-constraints:
-first_probe:
-expected_feedback:
-stop_condition:
+failure -> observe artifacts -> classify deviation -> choose one probe -> run probe -> compare feedback -> fix, rerun, or demote
 ```
 
-Ask for only the missing artifact needed for the next probe. Prefer exact command lines, Eclipse SUMO logs, output files, and minimal examples over screenshots or descriptions.
+## Start Here
 
-## Root-Cause Rule
+When the cause is not already proven, read only the needed references:
 
-Do not propose fixes until the fault class is supported by evidence. Do not mask symptoms with `--ignore-route-errors`, `--ignore-errors`, larger retry counts, `--time-to-teleport -1`, GUI-only inspection, or changed demand unless the run is explicitly marked diagnostic.
+- Unknown or multi-cause failure: `references/closed-loop-debugging.md`.
+- Known symptom needing evidence mapping: `references/symptom-to-evidence-map.md`.
+- Failed or partially fixed run that may affect claims: `references/debugging-gates-and-claim-boundaries.md`.
 
-## Reference Routing
+Ask for one missing artifact at a time. Prefer exact commands, SUMO logs, output files, configs, and minimal reproductions over screenshots or descriptions.
 
-- Closed-loop SUMO debugging workflow: read `references/closed-loop-debugging.md`.
-- Symptom-to-evidence triage: read `references/symptom-to-evidence-map.md`.
-- Diagnostic gates and demotion rules: read `references/debugging-gates-and-claim-boundaries.md`.
+## Rules
 
-## Field Lesson Handoff
-
-When the user reports a manual workaround or diagnostic path that solved a failure this debugging skill missed, produce a field-lesson candidate and hand off to `simulation-helper-skill-for-eclipse-sumo` using its field-lesson capture workflow if available. Persist the lesson only after user confirmation and privacy/source checks.
-
-## Fault Classes
-
-Classify every issue into one or more:
-
-- `environment-fault`: SUMO binary, `SUMO_HOME`, Python `traci`, port, working directory, container, OS, or version mismatch.
-- `input-construction-fault`: invalid XML, missing files, bad paths, bad network, route infeasibility, wrong vehicle class, missing stops/stations/detectors.
-- `demand-realization-fault`: planned demand differs from loaded, inserted, arrived, or completed demand.
-- `traci-protocol-fault`: connection, `--remote-port`, `--num-clients`, `setOrder`, `simulationStep`, `traci.close`, stale labels, repeated-run lifecycle.
-- `controller-logic-fault`: command issued to wrong domain/object, command overridden, wrong timing, invalid phase/program/state, missing controller log.
-- `output-observability-fault`: output disabled, overwritten, parsed before close, missing unfinished vehicles, wrong metric scope.
-- `stochasticity-fault`: seed, random trips, stochastic car-following, random departures, RL training, or thread/run nondeterminism.
-- `simulator-limitation-or-bug`: behavior is reproducible after construction and protocol are proven; check official docs, issues, and minimal reproduction.
+- Do not propose fixes before the fault class is evidence-backed.
+- Do not hide faults with `--ignore-route-errors`, `--ignore-errors`, larger retries, `--time-to-teleport -1`, GUI-only inspection, or changed demand unless the run is marked diagnostic.
+- Classify with these labels: `environment-fault`, `input-construction-fault`, `demand-realization-fault`, `traci-protocol-fault`, `controller-logic-fault`, `output-observability-fault`, `stochasticity-fault`, `simulator-limitation-or-bug`.
+- If a user-discovered workaround should improve the public skill, hand off to `simulation-helper-skill-for-eclipse-sumo` and its field-lesson workflow after privacy/source checks.
 
 ## Debug Outcome
 
-End every debugging pass with:
+End every pass with:
 
 ```text
 root_cause:
 evidence:
 fix_or_next_probe:
-claim_status: formal-evidence / diagnostic-demo / construction-invalid / claim-overreach / blocked
+claim_status:
 residual_risk:
 ```
 
