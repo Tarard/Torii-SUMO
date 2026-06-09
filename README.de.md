@@ -15,7 +15,8 @@ Wiederverwendbare Codex/Claude Skills und Checklisten zur Pruefung von SUMO/TraC
 ```text
 Was es ist:       Ein wiederverwendbarer Agent Skill zur Pruefung von SUMO/TraCI-Signalsteuerungs-Workflows.
 Fuer wen:         Forschende, die Eclipse SUMO fuer fixed-time, actuated, max-pressure, data-informed oder MPC-style Controller nutzen.
-Wie es arbeitet:  Es nutzt einen szenariobasierten Workflow-Router und verdichtet offizielle SUMO-Dokumentation, Community-Troubleshooting, Muster aus oeffentlichem Verkehrssimulationscode und praktische Experimenterfahrung zu fokussierten Audit-Pfaden.
+Wie es arbeitet:  Eine kompakte SKILL.md dient als Szenario-Router und laedt fokussierte Referenzmodule nur bei Bedarf.
+Quellen:          Es verdichtet offizielle SUMO-Dokumentation, Community-Troubleshooting, Muster aus oeffentlichem Verkehrssimulationscode und praktische Experimenterfahrung zu fokussierten Audit-Pfaden.
 Was es findet:    Fehlerhafte Routen, unsichere TLS-Phasen, ungepaarte Baselines, ueberschriebene Outputs, ungueltige Metriken und nicht reproduzierbare Batch-Experimente.
 ```
 
@@ -59,6 +60,8 @@ Aktuelle Version: reines Instruktions- und Checklistenpaket.
 
 Dieses Repository enthaelt derzeit Markdown-basierte Agent Skills, Audit-Checklisten, Beispiele und Release-Materialien. Es enthaelt noch keine ausfuehrbaren SUMO-Validatoren oder Python-Audit-Skripte.
 
+Die beiden `SKILL.md`-Dateien sind bewusst schlanke Router. Detaillierte Pruefregeln liegen in `references/` und werden vom Agent nur fuer das aktuelle Szenario geladen.
+
 ## Aktueller Umfang
 
 Die aktuelle Version konzentriert sich auf SUMO/TraCI-Experimente zur Verkehrssignalsteuerung. Sie ist noch kein allgemeiner Audit-Skill fuer alle Eclipse SUMO-Anwendungsfaelle.
@@ -72,7 +75,7 @@ Diese Version deckt fixed-time, actuated, max-pressure, NEMA, data-informed und 
 | `simulation-helper-skill-for-eclipse-sumo` | Neues Experiment, laufendes Projekt-Screening, Codeaenderung, Ergebnispruefung, Claim-Review, Release-Check. | Planung, Review, Vergleich oder Formulierung von Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten. | Project Control Screen, Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
 | `debugging-helper-skill-for-eclipse-sumo` | Laufzeitfehler, ungueltige Route, TraCI-Protokollproblem, fehlende Ausgaben, seed/completion/reproducibility-Fehler. | Debugging von route-, TraCI-, TLS-, demand-, detector-, output-, seed-, completion- und reproducibility-Problemen. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
 
-Beide Skills sind einfache `SKILL.md`-Pakete mit YAML-Frontmatter und Markdown-Referenzen. Die Dateien `agents/openai.yaml` liefern optionale Codex-UI-Metadaten; die Kernanweisungen bleiben fuer Claude-style Skill Loader lesbar, die `SKILL.md` verwenden.
+Beide Skills sind einfache `SKILL.md`-Pakete mit YAML-Frontmatter und Markdown-Referenzen. Die `SKILL.md`-Dateien bleiben kompakt, damit Codex/Claude zuerst das Szenario einordnet und danach nur die relevanten Referenzdateien laedt. Die Dateien `agents/openai.yaml` liefern optionale Codex-UI-Metadaten; die Kernanweisungen bleiben fuer Claude-style Skill Loader lesbar, die `SKILL.md` verwenden.
 
 Enthaltene Referenzmodule:
 

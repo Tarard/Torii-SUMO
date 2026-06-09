@@ -15,7 +15,8 @@
 ```text
 它是什么：   用于审计 SUMO/TraCI 信号控制工作流的可复用 agent skill。
 面向谁：     使用 Eclipse SUMO 研究 fixed-time、actuated、max-pressure、data-informed 或 MPC-style 控制器的研究者。
-如何设计：   它先使用基于场景的 workflow router，再把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式，以及作者个人实验经验整理成聚焦的审计路径。
+如何工作：   精简的 SKILL.md 先作为场景路由器，只在需要时加载对应的 reference 模块。
+信息来源：   它把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式，以及作者个人实验经验整理成聚焦的审计路径。
 能发现什么： 破损路线文件、不安全 TLS 相位、未配对 baseline、被覆盖输出、无效指标报告、不可复现实验批次。
 ```
 
@@ -59,6 +60,8 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 
 本仓库目前包含 Markdown 形式的 agent skills、审计清单、示例和发布材料。它还不包含可执行的 SUMO validator 或 Python 审计脚本。
 
+两个 `SKILL.md` 文件被刻意设计成轻量路由器。详细审计规则保存在 `references/` 中，由 agent 根据当前场景按需加载。
+
 ## 当前范围
 
 当前版本聚焦于 SUMO/TraCI 交通信号控制实验。它还不是覆盖所有 Eclipse SUMO 用途的通用审计 skill。
@@ -72,7 +75,7 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃并不等于结果
 | `simulation-helper-skill-for-eclipse-sumo` | 新实验设计、进行中项目筛查、代码修改、结果审计、结论审阅、发布检查。 | 规划、审阅、比较或撰写 SUMO/TraCI 信号控制实验结论。 | Project Control Screen、Experiment Readiness Record、SUMO Experiment Plan、hard-gate audit、evidence class、claim boundary。 |
 | `debugging-helper-skill-for-eclipse-sumo` | 运行失败、无效路线、TraCI 协议问题、缺失输出、seed/completion/reproducibility 问题。 | 调试 route、TraCI、TLS、demand、detector、output、seed、completion 和 reproducibility 问题。 | Fault class、next diagnostic probe、evidence、fix or demotion rule。 |
 
-两个 skill 都是普通的 `SKILL.md` 包，包含 YAML frontmatter 和 Markdown references。`agents/openai.yaml` 提供可选的 Codex UI metadata；核心指令仍然可以被读取 `SKILL.md` 的 Claude-style skill loader 使用。
+两个 skill 都是普通的 `SKILL.md` 包，包含 YAML frontmatter 和 Markdown references。`SKILL.md` 保持紧凑，让 Codex/Claude 先判断用户所处场景，再只加载相关 reference 文件。`agents/openai.yaml` 提供可选的 Codex UI metadata；核心指令仍然可以被读取 `SKILL.md` 的 Claude-style skill loader 使用。
 
 包内包含的 reference 模块：
 

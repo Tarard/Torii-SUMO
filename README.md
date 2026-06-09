@@ -15,7 +15,8 @@ Reusable Codex/Claude skills and checklists for auditing SUMO/TraCI traffic sign
 ```text
 What it is:     A reusable agent skill for auditing SUMO/TraCI signal-control workflows.
 Who it is for:  Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, data-informed, or MPC-style controllers.
-How it works:   It uses a scenario-based workflow router, then distills official SUMO documentation, community troubleshooting, public traffic-simulation code patterns, and practical experiment experience into focused audit paths.
+How it works:   A compact SKILL.md acts as a scenario router and loads focused reference modules only when needed.
+Sources:        It distills official SUMO documentation, SUMO community troubleshooting, public traffic-simulation code patterns, and practical experiment experience into focused audit paths.
 What it catches: Broken routes, unsafe TLS phases, unpaired baselines, overwritten outputs, invalid metrics, and unreproducible batches.
 ```
 
@@ -59,6 +60,8 @@ Current version: instruction-only skill and checklist package.
 
 This repository currently contains Markdown-based agent skills, audit checklists, examples, and release materials. It does not yet provide executable SUMO validators or Python audit scripts.
 
+The two `SKILL.md` files are intentionally lean routers. Detailed audit rules live in `references/` and are loaded by the agent only for the current scenario.
+
 ## Current Scope
 
 The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.
@@ -72,7 +75,7 @@ This version covers fixed-time, actuated, max-pressure, NEMA, data-informed, and
 | `simulation-helper-skill-for-eclipse-sumo` | New experiment, ongoing project screen, code change, result audit, claim review, release check. | Planning, reviewing, comparing, or writing claims from SUMO/TraCI signal-control experiments. | Project Control Screen, Experiment Readiness Record, SUMO Experiment Plan, hard-gate audit, evidence class, claim boundary. |
 | `debugging-helper-skill-for-eclipse-sumo` | Runtime failure, invalid route, TraCI protocol issue, missing output, seed/completion/reproducibility failure. | Debugging route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures. | Fault class, next diagnostic probe, evidence, fix or demotion rule. |
 
-Both skills are plain `SKILL.md` packages with YAML frontmatter and Markdown references. The `agents/openai.yaml` files provide optional Codex UI metadata; the core skill instructions remain readable by Claude-style skill loaders that use `SKILL.md`.
+Both skills are plain `SKILL.md` packages with YAML frontmatter and Markdown references. The `SKILL.md` files stay compact so Codex/Claude can first classify the user's scenario, then load only the relevant reference files. The `agents/openai.yaml` files provide optional Codex UI metadata; the core skill instructions remain readable by Claude-style skill loaders that use `SKILL.md`.
 
 Reference modules included in the package:
 
