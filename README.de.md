@@ -6,7 +6,7 @@
 
 <div align="center">
 
-**Ein schlankes Codex/Claude-Skill-Paket zur Prüfung von SUMO/TraCI-Verkehrssignal-Experimenten, bevor Ergebnisse zu Aussagen werden.**
+**Ein schlankes Codex/Claude Code-Skill-Paket zur Prüfung von SUMO/TraCI-Verkehrssignal-Experimenten, bevor Ergebnisse zu Aussagen werden.**
 
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
 <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
