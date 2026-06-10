@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-%E4%BF%A1%E5%8F%B7%E6%8E%A7%E5%88%B6-blue" alt="SUMO/TraCI 信号控制">
 <img src="https://img.shields.io/badge/%E5%8A%A9%E6%89%8B-Codex%2FClaude-6f42c1" alt="Codex 和 Claude">
 <img src="https://img.shields.io/badge/%E6%8A%80%E8%83%BD%E6%96%87%E4%BB%B6-2-1d8e57" alt="两个技能文件">
-<img src="https://img.shields.io/badge/%E5%8F%82%E8%80%83%E6%A8%A1%E5%9D%97-23-c98a05" alt="二十三个参考模块">
+<img src="https://img.shields.io/badge/%E5%8F%82%E8%80%83%E6%A8%A1%E5%9D%97-24-c98a05" alt="二十四个参考模块">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>项目网站</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>示例</strong></a> |
@@ -47,7 +47,7 @@ SUMO 能顺利跑完，并不代表实验结果已经可以作为有效证据。
 ## 🧠 它做什么
 
 ```text
-它是什么：     面向完整 SUMO/TraCI 信号控制实验工作流的可复用 Codex/Claude 技能包。
+它是什么：     面向 Codex 和 Claude 的可复用 SUMO 技能，聚焦完整 SUMO/TraCI 信号控制实验工作流。
 面向谁：       使用 Eclipse SUMO 研究定时控制、感应控制、最大压力控制、NEMA、数据辅助控制或 MPC 类控制器的研究者。
 如何工作：     精简的 SKILL.md 先作为场景路由器，只在需要时加载对应参考模块。
 信息来源：     SUMO 官方文档、SUMO 常见问题和论坛经验、公开交通仿真代码模式，以及作者自己的实验实践。
@@ -101,6 +101,7 @@ SUMO 能顺利跑完，并不代表实验结果已经可以作为有效证据。
 
 | 场景 | 加载内容 | 预期输出 |
 |---|---|---|
+| 新机器、新克隆、缺少 SUMO 运行证据或环境可疑 | `environment-preflight-and-smoke-test.md` | 环境前置检查记录和冒烟测试通过/失败路径 |
 | 进行中项目、进度不清、或不知道下一步 | `workflow-router.md` -> `project-control-screen.md` | 项目控制筛查记录和下一步计划 |
 | 新实验或模糊实验想法 | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | 实验就绪记录，然后生成 SUMO 实验计划 |
 | 失败或可疑运行 | `debugging-helper-skill-for-eclipse-sumo` | 根因、下一步检查、修复/重跑/降级 |
@@ -126,6 +127,7 @@ skills/
 │  └─ references/                                # 深层工作流文档
 │     ├─ workflow-router.md                      # 按用户场景选择路径
 │     ├─ project-control-screen.md               # 目标、状态、偏差、下一步
+│     ├─ environment-preflight-and-smoke-test.md # SUMO/Python 工具链证据
 │     ├─ experiment-intake-interview.md          # 实验前苏格拉底式追问
 │     ├─ experiment-planning-after-intake.md     # SUMO 实验计划
 │     ├─ tdd-for-sumo-traci-code.md              # 代码修改的红灯/绿灯/重构
@@ -154,6 +156,7 @@ skills/
 
 - [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - 顶层场景路由器。
 - [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - 面向进行中项目的目标、状态、偏差和下一步筛查。
+- [`environment-preflight-and-smoke-test.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/environment-preflight-and-smoke-test.md) - SUMO/Python 环境证据和最小冒烟测试门槛。
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - 实验前苏格拉底式追问和实验就绪记录。
 - [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - 在代码、仿真或结论之前确认 SUMO 实验计划。
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - SUMO/TraCI 代码修改的红灯 -> 绿灯 -> 重构流程。

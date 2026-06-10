@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-Signalsteuerung-blue" alt="SUMO/TraCI-Signalsteuerung">
 <img src="https://img.shields.io/badge/Assistent-Codex%2FClaude-6f42c1" alt="Codex und Claude">
 <img src="https://img.shields.io/badge/F%C3%A4higkeitsdateien-2-1d8e57" alt="Zwei Fähigkeitsdateien">
-<img src="https://img.shields.io/badge/Referenzmodule-23-c98a05" alt="Dreiundzwanzig Referenzmodule">
+<img src="https://img.shields.io/badge/Referenzmodule-24-c98a05" alt="Vierundzwanzig Referenzmodule">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Webseite</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>Beispiele</strong></a> |
@@ -47,7 +47,7 @@ Diese Fähigkeit zielt auf Fehler, die oft erst spät sichtbar werden:
 ## 🧠 Was es macht
 
 ```text
-Was es ist:       Ein wiederverwendbares Fähigkeitspaket für Codex/Claude für den vollständigen SUMO/TraCI-Signalsteuerungsversuchsablauf.
+Was es ist:       Eine wiederverwendbare SUMO-Fähigkeit für Codex und Claude, fokussiert auf den vollständigen SUMO/TraCI-Signalsteuerungsversuchsablauf.
 Für wen:          Forschende, die Eclipse SUMO für Festzeitsteuerung, verkehrsabhängige Steuerung, Maximaldrucksteuerung, NEMA, datengestützte Steuerung oder MPC-nahe Steuerungen nutzen.
 Wie es arbeitet:  Eine kompakte SKILL.md dient als Szenario-Router und lädt fokussierte Referenzmodule nur bei Bedarf.
 Woher es kommt:   Offizielle SUMO-Dokumentation, SUMO-Häufige-Fragen und Forumserfahrungen, Muster aus öffentlichem Verkehrssimulationsquelltext und eigene Experimentpraxis des Autors.
@@ -101,6 +101,7 @@ Beide `SKILL.md`-Dateien bleiben bewusst schlank. Der Assistent klassifiziert zu
 
 | Szenario | Laden | Erwartete Ausgabe |
 |---|---|---|
+| Neue Maschine, frischer Klon, fehlender SUMO-Nachweis oder unsichere Umgebung | `environment-preflight-and-smoke-test.md` | Umgebungsvorprüfung und Bestehen/Fehlschlag des Rauchtests |
 | Laufendes Projekt, unklarer Fortschritt oder unklarer nächster Schritt | `workflow-router.md` -> `project-control-screen.md` | Projekt-Kontrollprüfung und Plan für den nächsten Schritt |
 | Neues oder vages Experiment | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experimentbereitschaftsprotokoll, danach SUMO-Experimentplan |
 | Fehlgeschlagener oder verdächtiger Lauf | `debugging-helper-skill-for-eclipse-sumo` | Ursache, nächste Prüfung, Reparatur/Wiederholung/Abstufung |
@@ -126,6 +127,7 @@ skills/
 │  └─ references/                                # Vertiefende Ablaufdokumentation
 │     ├─ workflow-router.md                      # Pfad nach Nutzerszenario wählen
 │     ├─ project-control-screen.md               # Ziel, Zustand, Abweichung, nächster Schritt
+│     ├─ environment-preflight-and-smoke-test.md # Nachweis der SUMO/Python-Werkzeugkette
 │     ├─ experiment-intake-interview.md          # Sokratische Vorabklärung
 │     ├─ experiment-planning-after-intake.md     # SUMO-Versuchsplan
 │     ├─ tdd-for-sumo-traci-code.md              # Rot/Grün/Überarbeitung für Quelltext
@@ -154,6 +156,7 @@ skills/
 
 - [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - oberster Szenario-Router.
 - [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - Ziel, Zustand, Abweichung und nächster Schritt für laufende Projekte.
+- [`environment-preflight-and-smoke-test.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/environment-preflight-and-smoke-test.md) - Nachweis der SUMO/Python-Umgebung und minimale Rauchtest-Grenze.
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - sokratische Vorabfragen und Experimentbereitschaftsprotokoll.
 - [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - bestätigter SUMO-Experimentplan vor Quelltext, Simulation oder Aussagen.
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - Rot -> Grün -> Überarbeitung für SUMO/TraCI-Quelltextänderungen.

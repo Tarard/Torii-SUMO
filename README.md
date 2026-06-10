@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
 <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
 <img src="https://img.shields.io/badge/Skill%20Files-2-1d8e57" alt="Two skills">
-<img src="https://img.shields.io/badge/Reference%20Modules-23-c98a05" alt="23 reference modules">
+<img src="https://img.shields.io/badge/Reference%20Modules-24-c98a05" alt="24 reference modules">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Website</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>Examples</strong></a> |
@@ -47,7 +47,7 @@ This skill is built for the mistakes that often appear late:
 ## 🧠 What It Does
 
 ```text
-What it is:      A reusable Codex/Claude skill package for the full SUMO/TraCI signal-control experiment workflow.
+What it is:      A reusable SUMO skill for Codex and Claude, focused on the full SUMO/TraCI signal-control experiment workflow.
 Who it is for:   Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style controllers.
 How it works:    A compact SKILL.md acts as a scenario router and loads focused reference modules only when needed.
 Where it comes from:
@@ -102,6 +102,7 @@ Both skills keep `SKILL.md` deliberately lean. The agent first classifies the sc
 
 | Scenario | Load | Expected Output |
 |---|---|---|
+| New machine, fresh clone, missing SUMO proof, or setup doubt | `environment-preflight-and-smoke-test.md` | Environment Preflight record and smoke-test pass/fail route |
 | Ongoing project, unclear progress, or "what next?" | `workflow-router.md` -> `project-control-screen.md` | Project Control Screen and next-step plan |
 | New or vague experiment | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record, then SUMO Experiment Plan |
 | Failed or suspicious run | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
@@ -127,6 +128,7 @@ skills/
 │  └─ references/                                # Deep workflow documentation
 │     ├─ workflow-router.md                      # Route by user scenario
 │     ├─ project-control-screen.md               # Target, state, deviation, next step
+│     ├─ environment-preflight-and-smoke-test.md # SUMO/Python toolchain proof
 │     ├─ experiment-intake-interview.md          # Socratic pre-run intake
 │     ├─ experiment-planning-after-intake.md     # SUMO experiment plan
 │     ├─ tdd-for-sumo-traci-code.md              # RED/GREEN/REFACTOR for code changes
@@ -155,6 +157,7 @@ skills/
 
 - [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - top-level scenario router.
 - [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - target, state, deviation, and next-step screen for ongoing projects.
+- [`environment-preflight-and-smoke-test.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/environment-preflight-and-smoke-test.md) - SUMO/Python environment proof and minimal smoke-test gate.
 - [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - Socratic pre-run questions and Experiment Readiness Record.
 - [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - confirmed SUMO Experiment Plan before code, simulation, or claims.
 - [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - RED -> GREEN -> REFACTOR workflow for SUMO/TraCI code changes.

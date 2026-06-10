@@ -14,6 +14,7 @@ user request -> classify scenario -> load the minimum needed references -> produ
 
 | Scenario | User situation | First reference or skill | Then route to | Main output |
 |---|---|---|---|---|
+| Environment preflight | SUMO install, `SUMO_HOME`, Python tools, or runnable smoke proof is missing or stale. | `environment-preflight-and-smoke-test.md` | debugging helper if it fails; otherwise project screen, intake, TDD, or metrics | Environment Preflight record |
 | Ongoing project screen | User has an existing repo, partial experiment, code, logs, outputs, or unclear progress. | `project-control-screen.md` | intake if no stable target/deviation; otherwise debugging, TDD, verification, metrics, or claim references | Project Control Screen and Next Step Plan |
 | New or unclear experiment | User wants to design/run a SUMO experiment but details are incomplete. | `experiment-intake-interview.md` | `experiment-planning-after-intake.md` after readiness confirmation | Experiment Readiness Record, then SUMO Experiment Plan |
 | Confirmed intake | User confirms the readiness record and wants to proceed. | `experiment-planning-after-intake.md` | TDD, SUMO semantics, hard gates, metrics, baselines | Confirmed SUMO Experiment Plan |
@@ -32,9 +33,12 @@ For an existing project, start with `project-control-screen.md` unless the user 
 - a stable target;
 - observable current state;
 - a concrete deviation;
+- a proven SUMO/Python environment or a reason to stay diagnostic-only;
 - enough artifacts to choose the next bounded action.
 
 If any of these are missing, do not guess. Switch to `experiment-intake-interview.md` or ask for the single missing artifact needed to estimate state.
+
+If the missing artifact is environment proof, route to `environment-preflight-and-smoke-test.md` before controller debugging, formal runs, metric comparison, or claim review.
 
 ## Minimal Loading Rule
 
@@ -42,7 +46,8 @@ Load references in this order:
 
 1. The scenario entry reference.
 2. One semantic or evidence reference needed by the current deviation.
-3. One execution gate if code, run, completion, or release is involved.
+3. `environment-preflight-and-smoke-test.md` if the local toolchain has not been proven.
+4. One execution gate if code, run, completion, or release is involved.
 
 Avoid loading multiple broad references unless the task spans multiple gates.
 

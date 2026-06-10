@@ -19,6 +19,7 @@ request -> classify scenario -> load minimal references -> ask or act -> verify 
 
 | Scenario | Load | Expected output |
 |---|---|---|
+| SUMO environment, executable toolchain, or runnable smoke proof is missing | `references/environment-preflight-and-smoke-test.md` | `Environment Preflight` record and pass/fail route |
 | Ongoing project, unclear progress, repo/logs/outputs provided, or "what next?" | `references/workflow-router.md`, then `references/project-control-screen.md` | `Project Control Screen` and next-step plan |
 | New or vague experiment | `references/experiment-intake-interview.md`; after confirmation, `references/experiment-planning-after-intake.md` | `Experiment Readiness Record`, then `SUMO Experiment Plan` |
 | SUMO/TraCI failure or suspicious behavior | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
@@ -33,6 +34,7 @@ If a target/current-state/deviation cannot be inferred, switch to the intake pat
 
 - Load the minimum reference set for the scenario; do not bulk-load every file.
 - Confirm missing experiment assumptions before formal execution or comparison.
+- Prove the SUMO environment before formal experiment work when `sumo`, `duarouter`, `SUMO_HOME`, Python, `traci`, or output generation has not been verified.
 - Separate what SUMO loaded, what the controller did, what outputs were written, what warnings/failures occurred, and what claim is supportable.
 - Compare controllers only with paired route, demand, seed, horizon, outputs, and completion criteria.
 - Do not use GUI inspection, clean execution, or arrived-only metrics as sufficient evidence.
@@ -45,6 +47,7 @@ If a target/current-state/deviation cannot be inferred, switch to the intake pat
 Load these only when the scenario requires them:
 
 - Source conflicts or citation priority: `references/source-ladder.md`.
+- SUMO executable environment, `SUMO_HOME`, Python tooling, or smoke-test proof: `references/environment-preflight-and-smoke-test.md`.
 - SUMO network, route, TLS, detector, netconvert, GUI/headless, or TraCI semantics: `references/sumo-official-semantics.md`.
 - Official operational pitfalls: `references/sumo-official-operational-lessons.md`.
 - Forum, FAQ, mailing-list, or issue-tracker failure patterns: `references/sumo-community-faq-lessons.md`.
