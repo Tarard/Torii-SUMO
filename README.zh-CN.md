@@ -6,7 +6,7 @@
 
 <div align="center">
 
-**一个面向 Codex/Claude 的轻量 skill 包，用于在结果变成结论之前审计 SUMO/TraCI 交通信号控制实验。**
+**一个面向 Codex/Claude Code 的轻量 skill 包，用于在结果变成结论之前审计 SUMO/TraCI 交通信号控制实验。**
 
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
 <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
