@@ -2,7 +2,7 @@
   <img src="docs/assets/banner.png" alt="Simulation Helper Skill for Eclipse SUMO banner">
 </p>
 
-# 🚦 Simulation Helper Skill for Eclipse SUMO
+# <img src="docs/assets/app-logo.png" width="42" alt="App logo"> Simulation Helper Skill for Eclipse SUMO
 
 <div align="center">
 
