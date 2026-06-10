@@ -6,7 +6,7 @@
 
 <div align="center">
 
-**A lean Codex/Claude skill package for auditing SUMO/TraCI traffic-signal control experiments before results become claims.**
+**A lean Codex/Claude Code skill package for auditing SUMO/TraCI traffic-signal control experiments before results become claims.**
 
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
 <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
