@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A Codex/Claude simulation-helper skill for auditing SUMO/TraCI signal-control projects before results are reported: project state, missing assumptions, output gates, metrics, reproducibility, and claim boundaries.">
+  <meta name="description" content="A Codex/Claude simulation-helper skill for the full SUMO/TraCI experiment workflow: asking, planning, building, debugging, verifying, and reporting.">
   <title>Simulation Helper Skill for Eclipse SUMO</title>
   <link rel="icon" href="assets/app-logo.png">
   <link rel="apple-touch-icon" href="assets/app-logo.png">
@@ -547,16 +547,17 @@
 
     <section class="hero">
       <div>
-        <div class="eyebrow" data-i18n="eyebrow">Codex/Claude Skill + Checklist</div>
-        <h1 data-i18n="heroTitle">Stop reporting SUMO runs that are not yet valid experiments.</h1>
-        <p class="subtitle" data-i18n="heroSubtitle">A Codex/Claude skill that screens a SUMO/TraCI signal-control project, asks for missing experiment details, routes the right audit path, and bounds what can be claimed from the outputs.</p>
+        <div class="eyebrow" data-i18n="eyebrow">Codex/Claude Experiment Workflow</div>
+        <h1 data-i18n="heroTitle">Ask. Plan. Build. Debug. Verify. Report.</h1>
+        <p class="subtitle" data-i18n="heroSubtitle">The full SUMO/TraCI experiment workflow, guided by Codex and Claude.</p>
         <code class="prompt" data-i18n="promptText">Use $simulation-helper-skill-for-eclipse-sumo on this SUMO project. Start with the project control screen, then tell me the next safe step.</code>
         <div class="hero-points" aria-label="Core mechanisms">
-          <span data-i18n="heroPointOne">Project Control Screen</span>
-          <span data-i18n="heroPointTwo">Socratic Intake</span>
-          <span data-i18n="heroPointThree">SUMO Experiment Plan</span>
-          <span data-i18n="heroPointFour">Output Hard Gates</span>
-          <span data-i18n="heroPointFive">Claim Boundary</span>
+          <span data-i18n="heroPointOne">Ask</span>
+          <span data-i18n="heroPointTwo">Plan</span>
+          <span data-i18n="heroPointThree">Build</span>
+          <span data-i18n="heroPointFour">Debug</span>
+          <span data-i18n="heroPointFive">Verify</span>
+          <span data-i18n="heroPointSix">Report</span>
         </div>
         <div class="actions">
           <a class="button" href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO" data-i18n="repoButton">GitHub Repository</a>
@@ -778,15 +779,16 @@
       en: {
         pageTitle: "Simulation Helper Skill for Eclipse SUMO",
         brandName: "Simulation Helper Skill for Eclipse SUMO",
-        eyebrow: "Codex/Claude Skill + Checklist",
-        heroTitle: "Stop reporting SUMO runs that are not yet valid experiments.",
-        heroSubtitle: "A Codex/Claude skill that screens a SUMO/TraCI signal-control project, asks for missing experiment details, routes the right audit path, and bounds what can be claimed from the outputs.",
+        eyebrow: "Codex/Claude Experiment Workflow",
+        heroTitle: "Ask. Plan. Build. Debug. Verify. Report.",
+        heroSubtitle: "The full SUMO/TraCI experiment workflow, guided by Codex and Claude.",
         promptText: "Use $simulation-helper-skill-for-eclipse-sumo on this SUMO project. Start with the project control screen, then tell me the next safe step.",
-        heroPointOne: "Project Control Screen",
-        heroPointTwo: "Socratic Intake",
-        heroPointThree: "SUMO Experiment Plan",
-        heroPointFour: "Output Hard Gates",
-        heroPointFive: "Claim Boundary",
+        heroPointOne: "Ask",
+        heroPointTwo: "Plan",
+        heroPointThree: "Build",
+        heroPointFour: "Debug",
+        heroPointFive: "Verify",
+        heroPointSix: "Report",
         repoButton: "GitHub Repository",
         readmeButton: "Open README",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO#readme",
@@ -876,15 +878,16 @@
       zh: {
         pageTitle: "Eclipse SUMO 仿真助手技能",
         brandName: "Eclipse SUMO 仿真助手技能",
-        eyebrow: "Codex/Claude 技能 + 检查清单",
-        heroTitle: "跑完不等于有效。",
-        heroSubtitle: "这是一个面向 Codex/Claude 的技能：先筛查 SUMO/TraCI 信号控制项目，追问缺失的实验细节，再限定输出结果能够支撑的结论。",
+        eyebrow: "Codex/Claude 实验工作流",
+        heroTitle: "思辨。计划。构造。纠错。检验。报告。",
+        heroSubtitle: "由 Codex 和 Claude 引导的完整 SUMO/TraCI 实验工作流。",
         promptText: "请对这个 SUMO 项目使用 $simulation-helper-skill-for-eclipse-sumo。先做项目控制屏，再告诉我下一步最稳妥的动作。",
-        heroPointOne: "项目控制屏",
-        heroPointTwo: "苏格拉底式追问",
-        heroPointThree: "SUMO 实验计划",
-        heroPointFour: "输出硬门槛",
-        heroPointFive: "结论边界",
+        heroPointOne: "思辨",
+        heroPointTwo: "计划",
+        heroPointThree: "构造",
+        heroPointFour: "纠错",
+        heroPointFive: "检验",
+        heroPointSix: "报告",
         repoButton: "GitHub 仓库",
         readmeButton: "打开说明文档",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.zh-CN.md",
@@ -974,15 +977,16 @@
       de: {
         pageTitle: "Simulationshelfer-Skill für Eclipse SUMO",
         brandName: "Simulationshelfer-Skill für Eclipse SUMO",
-        eyebrow: "Codex/Claude Agenten-Fähigkeit + Prüfliste",
-        heroTitle: "Berichte keine SUMO-Läufe, die noch keine belastbaren Experimente sind.",
-        heroSubtitle: "Ein Codex/Claude-Skill, der ein SUMO/TraCI-Projekt zur Ampelsteuerung prüft, fehlende Versuchsdaten abfragt, den passenden Prüfpfad wählt und begrenzt, welche Aussagen die Ausgaben tragen.",
+        eyebrow: "Codex/Claude-Experimentablauf",
+        heroTitle: "Hinterfragen. Planen. Aufbauen. Korrigieren. Prüfen. Berichten.",
+        heroSubtitle: "Der vollständige SUMO/TraCI-Experimentablauf, geführt von Codex und Claude.",
         promptText: "Nutze $simulation-helper-skill-for-eclipse-sumo für dieses SUMO-Projekt. Beginne mit der Projekt-Kontrollansicht und nenne mir den nächsten belastbaren Schritt.",
-        heroPointOne: "Projekt-Kontrollansicht",
-        heroPointTwo: "Sokratische Vorabklärung",
-        heroPointThree: "SUMO-Versuchsplan",
-        heroPointFour: "Ausgabe-Hartprüfungen",
-        heroPointFive: "Aussagegrenze",
+        heroPointOne: "Hinterfragen",
+        heroPointTwo: "Planen",
+        heroPointThree: "Aufbauen",
+        heroPointFour: "Korrigieren",
+        heroPointFive: "Prüfen",
+        heroPointSix: "Berichten",
         repoButton: "GitHub-Repository",
         readmeButton: "Dokumentation öffnen",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.de.md",

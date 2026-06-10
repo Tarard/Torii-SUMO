@@ -6,7 +6,9 @@
 
 <div align="center">
 
-**A lean Codex/Claude Code skill package for auditing SUMO/TraCI traffic-signal control experiments before results become claims.**
+**Ask. Plan. Build. Debug. Verify. Report.**
+
+**The full SUMO/TraCI experiment workflow, guided by Codex and Claude.**
 
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
 <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
@@ -45,7 +47,7 @@ This skill is built for the mistakes that often appear late:
 ## 🧠 What It Does
 
 ```text
-What it is:      A reusable Codex/Claude skill package for auditing SUMO/TraCI signal-control workflows.
+What it is:      A reusable Codex/Claude skill package for the full SUMO/TraCI signal-control experiment workflow.
 Who it is for:   Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style controllers.
 How it works:    A compact SKILL.md acts as a scenario router and loads focused reference modules only when needed.
 Where it comes from:
@@ -53,7 +55,7 @@ Where it comes from:
 What it catches: Broken routes, unsafe TLS phases, unpaired baselines, overwritten outputs, invalid metrics, and unreproducible batches.
 ```
 
-The package is intentionally not a Python validator yet. It is a **review protocol and agent skill**: copy it into Codex or Claude, point it at a SUMO experiment repository, and use the audit output to decide what can be claimed.
+The package is intentionally not a Python validator yet. It is a **workflow protocol and agent skill**: copy it into Codex or Claude, point it at a SUMO experiment repository, and use the structured checks to plan, debug, verify, and report with clear evidence boundaries.
 
 ## ⚡ Quick Start
 
