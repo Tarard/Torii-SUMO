@@ -70,7 +70,7 @@ For completion-aware evaluation, the final summary step must identify:
 - discarded vehicles;
 - teleports and collisions.
 
-If the experiment is not intentionally fixed-horizon, formal performance evidence should normally run until no evaluated vehicles remain running or waiting.
+If the experiment is not intentionally fixed-horizon, formal performance evidence should normally run until no evaluated vehicles remain running or waiting. For a completion-full claim, require a planned denominator and `inserted == arrived == planned_demand`, final running/waiting counts of `0/0`, and zero unfinished `tripinfo` records.
 
 ## TripInfo Output
 
@@ -89,6 +89,28 @@ For metric definitions and denominators, read `evaluation-metrics-and-completion
 
 For fixed end-time comparisons with unfinished vehicles, also read `sumo-official-operational-lessons.md` and prefer `--statistic-output`, `--duration-log.statistics`, and `--tripinfo-output.write-unfinished`.
 
+## Controller-Signal Use Evidence
+
+When a runner observes forecasts, telemetry, detector values, or oracle schedules for multiple controllers, keep "available to the experiment" separate from "used by this controller."
+
+Audit:
+
+- controller/solver events should explicitly mark whether a signal was consumed, e.g. `forecast_used_by_controller=true`;
+- aggregate tables should count signal-use evidence only for rows where the event marks controller use;
+- rows that merely share the same runner or observation loop should not inherit telemetry, forecast, detector, or oracle-use claims;
+- if the signal affects a reported model mechanism, include event counts and max/min observed values beside performance metrics.
+
+## Fixed-Schedule Demand Evidence
+
+When a paper/model claims fixed AMOD arrivals, do not infer it from deterministic demand generation alone. Require a machine-readable schedule audit in metadata or hard-gate output:
+
+- schedule policy, such as `per_route_fixed_interval`;
+- AMOD vehicle count and per-stream counts;
+- per-stream departure intervals and interval variants/tolerance;
+- boolean validity and explicit reasons when invalid.
+
+Demote fixed-schedule AMOD claims when intervals are merely spread or approximately distributed without a fixed-interval audit.
+
 ## Formal Rejection or Demotion Signals
 
 Demote or reject formal evidence when any remain unresolved:
@@ -100,11 +122,16 @@ Demote or reject formal evidence when any remain unresolved:
 - no-detector warnings for claimed detector-controlled behavior;
 - collisions, teleports, discarded vehicles, or unexplained vaporization;
 - low insertion or arrival ratio relative to the claim;
+- missing planned demand denominator for a formal comparison;
 - demand not realized;
+- nonzero final running/waiting backlog in a natural-completion run;
 - unfinished vehicles ignored;
+- unfinished `tripinfo` records in a completion-full claim;
+- fixed AMOD arrival claims without a passing schedule audit;
 - arrived-only averages used despite unequal completion rates;
 - fixed-horizon truncation reported without completion rate and backlog;
 - route errors, insertion backlog, teleports, or random seeds treated as background details;
 - output files parsed before SUMO/TraCI shutdown completes;
+- observed signals reported as controller-used without controller/solver event evidence;
 - runtime exceeds the control interval for real-time claims;
 - GUI-only evidence.

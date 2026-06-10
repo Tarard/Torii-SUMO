@@ -13,6 +13,8 @@ Natural completion means:
 - no vehicles remain waiting for insertion;
 - no unresolved teleports, collisions, vaporized vehicles, or discarded vehicles explain the outcome.
 
+For formal evidence, fail closed on completion. Missing planned demand is not formal evidence. A completion-full hard gate should require `inserted == arrived == planned_demand`, final `summary.xml` running/waiting counts of `0/0`, and zero unfinished `tripinfo` records when `--tripinfo-output.write-unfinished` is enabled.
+
 If a run stops at a fixed horizon, by timeout, by manual stop, or by controller failure, do not treat arrived-only trip averages as full-model performance. Compare completion and backlog first, then report censored traffic metrics separately.
 
 ## Completion Metrics
@@ -26,7 +28,7 @@ Always compute these before comparing travel-time metrics:
 | Arrived vehicles | Vehicles that reached destination | higher is better | From `summary.xml` final `arrived` or completed `tripinfo` records. |
 | Completion rate | `arrived / planned_demand` | higher is better | Use the same denominator for every model in a comparison. |
 | Insertion rate | `inserted / planned_demand` | higher is better | Separates demand admission failure from downstream congestion. |
-| Unfinished vehicles | vehicles still running or waiting at stop time | lower is better | Report running and insertion backlog separately. |
+| Unfinished vehicles | vehicles still running, waiting, or written as unfinished `tripinfo` records at stop time | lower is better | Report running, insertion backlog, and unfinished tripinfo separately. |
 | Teleport/discard/vaporize count | vehicles removed abnormally | lower is better | These are not successful completions unless the claim explicitly treats removal as failure. |
 
 When completion rates differ, rank models by completion feasibility before ranking them by average trip metrics. A model with lower average travel time but many unfinished vehicles may only look good because hard trips were excluded.

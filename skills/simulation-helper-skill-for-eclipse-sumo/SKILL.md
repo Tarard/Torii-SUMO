@@ -38,6 +38,7 @@ If a target/current-state/deviation cannot be inferred, switch to the intake pat
 - Do not use GUI inspection, clean execution, or arrived-only metrics as sufficient evidence.
 - If completion differs across methods, report completion/unfinished/teleport status before travel-time, waiting-time, or delay averages.
 - Use these claim labels: `formal-evidence`, `diagnostic-demo`, `stress-diagnostic`, `construction-invalid`, `claim-overreach`, `blocked`.
+- At the end of each SUMO experiment or experiment-code pass, check whether the run produced a reusable SUMO/TraCI lesson. If yes, update the relevant skill reference instead of leaving the lesson only in the chat.
 
 ## Reference Map
 
