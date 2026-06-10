@@ -1,9 +1,13 @@
 # Page Assets
 
-## `traffic-lights-icon.svg`
+## `banner.png`
 
-Source: Wikimedia Commons, [`Traffic lights icon.svg`](https://commons.wikimedia.org/wiki/File:Traffic_lights_icon.svg)
+Source: project-provided visual asset for the README header.
 
-License/status: public domain. Wikimedia Commons describes the file as simple geometry that is ineligible for copyright.
+Local filename: `banner.png`
 
-Local filename: `traffic-lights-icon.svg`
+## `app-logo.png`
+
+Source: project-provided visual asset for the GitHub Pages app/logo presentation.
+
+Local filename: `app-logo.png`

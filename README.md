@@ -1,35 +1,26 @@
-<p align="right">
-  <a href="README.md"><img src="https://img.shields.io/badge/lang-English-blue" alt="English"></a>
-  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red" alt="Chinese"></a>
-  <a href="README.de.md"><img src="https://img.shields.io/badge/lang-Deutsch-green" alt="Deutsch"></a>
-</p>
-
 <p align="center">
-  <img src="docs/assets/traffic-lights-icon.svg" width="96" alt="Traffic light icon">
+  <img src="docs/assets/banner.png" alt="Simulation Helper Skill for Eclipse SUMO banner">
 </p>
 
-<h1 align="center">🚦 Simulation Helper Skill for Eclipse SUMO</h1>
+# 🚦 Simulation Helper Skill for Eclipse SUMO
 
-<p align="center">
-  A lean Codex/Claude skill package for auditing SUMO/TraCI traffic-signal control experiments before results become claims.
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>🌐 Website</strong></a>
-  ·
-  <a href="examples/01_fixed_time_audit/task.md"><strong>🧪 Examples</strong></a>
-  ·
-  <a href="docs/common-sumo-signal-control-failures.md"><strong>🚨 Failure Checklist</strong></a>
-  ·
-  <a href="LICENSE-DOCS"><strong>📄 CC BY 4.0</strong></a>
-</p>
+**A lean Codex/Claude skill package for auditing SUMO/TraCI traffic-signal control experiments before results become claims.**
 
-<p align="center">
-  <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
-  <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
-  <img src="https://img.shields.io/badge/Skill%20Files-2-1d8e57" alt="Two skills">
-  <img src="https://img.shields.io/badge/Reference%20Modules-23-c98a05" alt="23 reference modules">
-</p>
+<img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
+<img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
+<img src="https://img.shields.io/badge/Skill%20Files-2-1d8e57" alt="Two skills">
+<img src="https://img.shields.io/badge/Reference%20Modules-23-c98a05" alt="23 reference modules">
+
+<a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Website</strong></a> |
+<a href="examples/01_fixed_time_audit/task.md"><strong>Examples</strong></a> |
+<a href="docs/common-sumo-signal-control-failures.md"><strong>Failure Checklist</strong></a> |
+<a href="LICENSE-DOCS"><strong>CC BY 4.0</strong></a>
+
+[English](README.md) | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
+
+</div>
 
 > [!IMPORTANT]
 > Current scope: this release focuses on **SUMO/TraCI traffic-signal control experiments**. It is not yet a general-purpose audit package for every Eclipse SUMO use case.
@@ -43,13 +34,13 @@ SUMO can run without crashing while the experiment is still not valid evidence.
 
 This skill is built for the mistakes that often appear late:
 
-- 🚧 routes or demand silently differ across baselines
-- 🚦 TLS phase indexes do not match intended movements
-- 🧾 `tripinfo`, `summary`, or `edgeData` outputs are missing or overwritten
-- 🧪 controller comparisons are not paired by seed, horizon, demand, and outputs
-- ⏳ simulations stop before demand completes
-- 📉 arrived-only metrics hide unfinished vehicles
-- 📝 result claims become stronger than the evidence supports
+- routes or demand silently differ across baselines
+- TLS phase indexes do not match intended movements
+- `tripinfo`, `summary`, or `edgeData` outputs are missing or overwritten
+- controller comparisons are not paired by seed, horizon, demand, and outputs
+- simulations stop before demand completes
+- arrived-only metrics hide unfinished vehicles
+- result claims become stronger than the evidence supports
 
 ## 🧠 What It Does
 
@@ -109,18 +100,18 @@ Both skills keep `SKILL.md` deliberately lean. The agent first classifies the sc
 
 | Scenario | Load | Expected Output |
 |---|---|---|
-| 🧭 Ongoing project, unclear progress, or "what next?" | `workflow-router.md` -> `project-control-screen.md` | Project Control Screen and next-step plan |
-| 🧪 New or vague experiment | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record, then SUMO Experiment Plan |
-| 🧯 Failed or suspicious run | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
-| 🧑‍💻 Controller, parser, runner, validator, or audit-code change | `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | RED/GREEN/REFACTOR or explicit `test-after` record |
-| 📊 Results, metrics, baseline comparison, or paper/report claim | output, metric, baseline, and claim-boundary references | evidence class and allowed/prohibited claim wording |
-| 🧬 User found a fix the skill missed | `field-lesson-capture.md` | privacy-safe field lesson candidate |
-| 🚀 Public release check | `public-release-checklist.md` -> `verification-and-review-gates.md` | release checklist and residual risk |
+| Ongoing project, unclear progress, or "what next?" | `workflow-router.md` -> `project-control-screen.md` | Project Control Screen and next-step plan |
+| New or vague experiment | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record, then SUMO Experiment Plan |
+| Failed or suspicious run | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
+| Controller, parser, runner, validator, or audit-code change | `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | RED/GREEN/REFACTOR or explicit `test-after` record |
+| Results, metrics, baseline comparison, or paper/report claim | output, metric, baseline, and claim-boundary references | evidence class and allowed/prohibited claim wording |
+| User found a fix the skill missed | `field-lesson-capture.md` | privacy-safe field lesson candidate |
+| Public release check | `public-release-checklist.md` -> `verification-and-review-gates.md` | release checklist and residual risk |
 
 ## 📦 Reference Modules
 
 <details>
-<summary><strong>🧠 Simulation helper references</strong></summary>
+<summary><strong> Simulation helper references</strong></summary>
 
 - [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - top-level scenario router.
 - [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - target, state, deviation, and next-step screen for ongoing projects.
@@ -146,7 +137,7 @@ Both skills keep `SKILL.md` deliberately lean. The agent first classifies the sc
 </details>
 
 <details>
-<summary><strong>🧯 Debugging references</strong></summary>
+<summary><strong> Debugging references</strong></summary>
 
 - [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - observe, classify, probe, compare, update.
 - [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - maps common symptoms to required evidence.
@@ -185,26 +176,26 @@ Use $simulation-helper-skill-for-eclipse-sumo on examples/02_max_pressure_audit/
 
 ## ✅ What It Audits
 
-- 🛣️ network, routes, configs, detectors, and additional files
-- 🚦 TLS phase, movement-green, yellow, all-red, and NEMA evidence
-- 🔁 paired seeds, demand, outputs, simulation horizons, and baselines
-- 📦 `tripinfo`, `summary`, `edgeData`, TLS switch output, controller logs, warnings, teleports, and unfinished vehicles
-- 📊 travel time, delay, stops, throughput, queue, emissions, fairness, and completion-aware reporting
-- 🧪 fixed-time, actuated, max-pressure, NEMA, data-informed, and MPC-style controller comparisons
-- 🧑‍💻 TDD records for SUMO/TraCI controller, metric parser, runner, validator, and audit-code changes
-- 🧬 field lessons from user-discovered fixes that should become reusable guidance
+- network, routes, configs, detectors, and additional files
+- TLS phase, movement-green, yellow, all-red, and NEMA evidence
+- paired seeds, demand, outputs, simulation horizons, and baselines
+- `tripinfo`, `summary`, `edgeData`, TLS switch output, controller logs, warnings, teleports, and unfinished vehicles
+- travel time, delay, stops, throughput, queue, emissions, fairness, and completion-aware reporting
+- fixed-time, actuated, max-pressure, NEMA, data-informed, and MPC-style controller comparisons
+- TDD records for SUMO/TraCI controller, metric parser, runner, validator, and audit-code changes
+- field lessons from user-discovered fixes that should become reusable guidance
 
 See [`docs/common-sumo-signal-control-failures.md`](docs/common-sumo-signal-control-failures.md) for a longer failure checklist.
 
 ## 🛠️ Design Principles
 
-- 🧭 **Progressive disclosure:** `SKILL.md` stays compact and routes the agent to focused references only when needed.
-- ❓ **Socratic intake:** unclear experiments become an Experiment Readiness Record before execution.
-- 🧪 **TDD before experiment code:** behavior-changing code starts from a failing test or reproducible probe when feasible.
-- 🚧 **Hard gates before claims:** outputs, warnings, completion, and baseline pairing must support the claim.
-- 🔍 **Evidence before completion:** no completion claim without fresh commands, artifacts, tests, and residual risk.
-- 🧯 **Debugging as a closed loop:** observe -> classify -> probe -> compare -> update.
-- 🧬 **Self-evolution:** missed real-world fixes can become privacy-safe field lesson candidates.
+- **Progressive disclosure:** `SKILL.md` stays compact and routes the agent to focused references only when needed.
+- **Socratic intake:** unclear experiments become an Experiment Readiness Record before execution.
+- **TDD before experiment code:** behavior-changing code starts from a failing test or reproducible probe when feasible.
+- **Hard gates before claims:** outputs, warnings, completion, and baseline pairing must support the claim.
+- **Evidence before completion:** no completion claim without fresh commands, artifacts, tests, and residual risk.
+- **Debugging as a closed loop:** observe -> classify -> probe -> compare -> update.
+- **Self-evolution:** missed real-world fixes can become privacy-safe field lesson candidates.
 
 ## 🧭 Project Status
 
@@ -214,10 +205,10 @@ This repository contains Markdown-based agent skills, audit checklists, examples
 
 ### Roadmap
 
-- 🚦 keep improving signal-control audit coverage
-- 🧪 add more bad-case/fixed-case examples
-- 🧰 add optional Python validators when patterns stabilize
-- 🌍 later expand to other SUMO domains such as routing and demand, emissions and energy, public transport, pedestrian/intermodal scenarios, AV/CAV and co-simulation, calibration, safety analysis, and simulation-mode comparison
+- keep improving signal-control audit coverage
+- add more bad-case/fixed-case examples
+- add optional Python validators when patterns stabilize
+- later expand to other SUMO domains such as routing and demand, emissions and energy, public transport, pedestrian/intermodal scenarios, AV/CAV and co-simulation, calibration, safety analysis, and simulation-mode comparison
 
 ## ❓ FAQ
 

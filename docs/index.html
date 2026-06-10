@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="A Codex/Claude simulation-helper skill for auditing SUMO/TraCI signal-control projects before results are reported: project state, missing assumptions, output gates, metrics, reproducibility, and claim boundaries.">
   <title>Simulation Helper Skill for Eclipse SUMO</title>
+  <link rel="icon" href="assets/app-logo.png">
+  <link rel="apple-touch-icon" href="assets/app-logo.png">
   <style>
     :root {
       color-scheme: light;
@@ -83,30 +85,19 @@
       width: 40px;
       height: 40px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 10px;
       background: var(--panel);
-      display: grid;
-      place-items: center;
       box-shadow: 0 8px 22px rgba(24, 32, 43, 0.08);
       flex: 0 0 auto;
+      overflow: hidden;
     }
 
-    .signal {
-      display: grid;
-      grid-template-columns: repeat(3, 8px);
-      gap: 4px;
-    }
-
-    .signal span {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+    .mark img {
+      width: 100%;
+      height: 100%;
       display: block;
+      object-fit: cover;
     }
-
-    .red { background: var(--red); }
-    .amber { background: var(--amber); }
-    .green { background: var(--green); }
 
     .lang-switch {
       display: flex;
@@ -272,8 +263,9 @@
       align-items: center;
     }
 
-    .traffic-light-art {
+    .app-logo-art {
       width: 112px;
+      border-radius: 24px;
       max-width: 100%;
       height: auto;
       display: block;
@@ -512,7 +504,7 @@
         grid-template-columns: 90px minmax(0, 1fr);
       }
 
-      .traffic-light-art {
+      .app-logo-art {
         width: 90px;
       }
     }
@@ -542,7 +534,7 @@
     <header class="topbar">
       <div class="brand" aria-label="Simulation Helper Skill for Eclipse SUMO">
         <div class="mark" aria-hidden="true">
-          <div class="signal"><span class="red"></span><span class="amber"></span><span class="green"></span></div>
+          <img src="assets/app-logo.png" alt="">
         </div>
         <span data-i18n="brandName">Simulation Helper Skill for Eclipse SUMO</span>
       </div>
@@ -574,7 +566,7 @@
 
       <aside class="visual" aria-label="Audit workflow visual">
         <div class="signal-card">
-          <img class="traffic-light-art" src="assets/traffic-lights-icon.svg" alt="" aria-hidden="true">
+          <img class="app-logo-art" src="assets/app-logo.png" alt="" aria-hidden="true">
           <div>
             <div class="visual-kicker" data-i18n="visualKicker">Audit route</div>
             <ul class="visual-list">
@@ -584,11 +576,6 @@
             </ul>
           </div>
         </div>
-        <p class="asset-credit">
-          <span data-i18n="assetCreditPrefix">Traffic light icon:</span>
-          <a href="https://commons.wikimedia.org/wiki/File:Traffic_lights_icon.svg">Wikimedia Commons</a>,
-          <span data-i18n="assetCreditLicense">public domain</span>.
-        </p>
       </aside>
     </section>
 

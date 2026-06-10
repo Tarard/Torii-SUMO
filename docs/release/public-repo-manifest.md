@@ -21,7 +21,8 @@ skills/
 docs/
   index.html
   assets/
-    traffic-lights-icon.svg
+    app-logo.png
+    banner.png
     README.md
   common-sumo-signal-control-failures.md
   release/

@@ -1,35 +1,26 @@
-<p align="right">
-  <a href="README.md"><img src="https://img.shields.io/badge/lang-English-blue" alt="English"></a>
-  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red" alt="中文"></a>
-  <a href="README.de.md"><img src="https://img.shields.io/badge/lang-Deutsch-green" alt="Deutsch"></a>
-</p>
-
 <p align="center">
-  <img src="docs/assets/traffic-lights-icon.svg" width="96" alt="交通信号灯图标">
+  <img src="docs/assets/banner.png" alt="Simulation Helper Skill for Eclipse SUMO banner">
 </p>
 
-<h1 align="center">🚦 Simulation Helper Skill for Eclipse SUMO</h1>
+# 🚦 Simulation Helper Skill for Eclipse SUMO
 
-<p align="center">
-  一个面向 Codex/Claude 的轻量 skill 包，用于在结果变成结论之前审计 SUMO/TraCI 交通信号控制实验。
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>🌐 项目网站</strong></a>
-  ·
-  <a href="examples/01_fixed_time_audit/task.md"><strong>🧪 示例</strong></a>
-  ·
-  <a href="docs/common-sumo-signal-control-failures.md"><strong>🚨 常见失败清单</strong></a>
-  ·
-  <a href="LICENSE-DOCS"><strong>📄 CC BY 4.0</strong></a>
-</p>
+**一个面向 Codex/Claude 的轻量 skill 包，用于在结果变成结论之前审计 SUMO/TraCI 交通信号控制实验。**
 
-<p align="center">
-  <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
-  <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
-  <img src="https://img.shields.io/badge/Skill%20Files-2-1d8e57" alt="Two skills">
-  <img src="https://img.shields.io/badge/Reference%20Modules-23-c98a05" alt="23 reference modules">
-</p>
+<img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
+<img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
+<img src="https://img.shields.io/badge/Skill%20Files-2-1d8e57" alt="Two skills">
+<img src="https://img.shields.io/badge/Reference%20Modules-23-c98a05" alt="23 reference modules">
+
+<a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>项目网站</strong></a> |
+<a href="examples/01_fixed_time_audit/task.md"><strong>示例</strong></a> |
+<a href="docs/common-sumo-signal-control-failures.md"><strong>常见失败清单</strong></a> |
+<a href="LICENSE-DOCS"><strong>CC BY 4.0</strong></a>
+
+[English](README.md) | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
+
+</div>
 
 > [!IMPORTANT]
 > 当前版本聚焦于 **SUMO/TraCI 交通信号控制实验**。它还不是覆盖所有 Eclipse SUMO 用途的通用审计包。
@@ -43,13 +34,13 @@ SUMO 能顺利跑完，并不代表实验结果已经可以作为有效证据。
 
 这个 skill 针对的是那些经常到最后才暴露的问题：
 
-- 🚧 route 或 demand 在 baseline 之间悄悄改变
-- 🚦 TLS 相位索引和预期 movement 不一致
-- 🧾 `tripinfo`、`summary` 或 `edgeData` 缺失或被覆盖
-- 🧪 controller 对比没有按 seed、horizon、demand 和 output 配对
-- ⏳ simulation 在 demand 完成前就停止
-- 📉 只统计 arrived vehicles，掩盖未完成车辆
-- 📝 论文或报告中的 claim 超过了结果证据能支持的范围
+- route 或 demand 在 baseline 之间悄悄改变
+- TLS 相位索引和预期 movement 不一致
+- `tripinfo`、`summary` 或 `edgeData` 缺失或被覆盖
+- controller 对比没有按 seed、horizon、demand 和 output 配对
+- simulation 在 demand 完成前就停止
+- 只统计 arrived vehicles，掩盖未完成车辆
+- 论文或报告中的 claim 超过了结果证据能支持的范围
 
 ## 🧠 它做什么
 
@@ -108,18 +99,18 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃，不等于结果
 
 | 场景 | 加载内容 | 预期输出 |
 |---|---|---|
-| 🧭 进行中项目、进度不清、或不知道下一步 | `workflow-router.md` -> `project-control-screen.md` | Project Control Screen 和 next-step plan |
-| 🧪 新实验或模糊实验想法 | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record，然后生成 SUMO Experiment Plan |
-| 🧯 失败或可疑运行 | `debugging-helper-skill-for-eclipse-sumo` | root cause、next probe、fix/rerun/demotion |
-| 🧑‍💻 controller、parser、runner、validator 或 audit-code 修改 | `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | RED/GREEN/REFACTOR 或明确的 `test-after` 记录 |
-| 📊 结果、metric、baseline comparison 或论文/report claim | output、metric、baseline 和 claim-boundary references | evidence class 和允许/禁止的 claim wording |
-| 🧬 用户发现了 skill 没覆盖的新解决路径 | `field-lesson-capture.md` | 脱敏后的 field lesson candidate |
-| 🚀 公开发布前检查 | `public-release-checklist.md` -> `verification-and-review-gates.md` | release checklist 和 residual risk |
+| 进行中项目、进度不清、或不知道下一步 | `workflow-router.md` -> `project-control-screen.md` | Project Control Screen 和 next-step plan |
+| 新实验或模糊实验想法 | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experiment Readiness Record，然后生成 SUMO Experiment Plan |
+| 失败或可疑运行 | `debugging-helper-skill-for-eclipse-sumo` | root cause、next probe、fix/rerun/demotion |
+| controller、parser、runner、validator 或 audit-code 修改 | `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | RED/GREEN/REFACTOR 或明确的 `test-after` 记录 |
+| 结果、metric、baseline comparison 或论文/report claim | output、metric、baseline 和 claim-boundary references | evidence class 和允许/禁止的 claim wording |
+| 用户发现了 skill 没覆盖的新解决路径 | `field-lesson-capture.md` | 脱敏后的 field lesson candidate |
+| 公开发布前检查 | `public-release-checklist.md` -> `verification-and-review-gates.md` | release checklist 和 residual risk |
 
 ## 📦 Reference 模块
 
 <details>
-<summary><strong>🧠 Simulation helper references</strong></summary>
+<summary><strong> Simulation helper references</strong></summary>
 
 - [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - 顶层 scenario router。
 - [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - 面向进行中项目的 target、state、deviation 和 next-step screen。
@@ -145,7 +136,7 @@ skill 应当先询问缺失的实验细节。SUMO 没有崩溃，不等于结果
 </details>
 
 <details>
-<summary><strong>🧯 Debugging references</strong></summary>
+<summary><strong> Debugging references</strong></summary>
 
 - [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - observe、classify、probe、compare、update。
 - [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - 把常见 symptom 映射到 required evidence。
@@ -184,26 +175,26 @@ Use $simulation-helper-skill-for-eclipse-sumo on examples/02_max_pressure_audit/
 
 ## ✅ 它审计什么
 
-- 🛣️ network、route、config、detector 和 additional file
-- 🚦 TLS phase、movement-green、yellow、all-red 和 NEMA evidence
-- 🔁 paired seeds、demand、outputs、simulation horizons 和 baselines
-- 📦 `tripinfo`、`summary`、`edgeData`、TLS switch output、controller logs、warnings、teleports 和 unfinished vehicles
-- 📊 travel time、delay、stops、throughput、queue、emissions、fairness 和 completion-aware reporting
-- 🧪 fixed-time、actuated、max-pressure、NEMA、data-informed 和 MPC-style controller comparisons
-- 🧑‍💻 SUMO/TraCI controller、metric parser、runner、validator 和 audit-code 修改的 TDD records
-- 🧬 用户发现的新 fix，可以沉淀成可复用 guidance
+- network、route、config、detector 和 additional file
+- TLS phase、movement-green、yellow、all-red 和 NEMA evidence
+- paired seeds、demand、outputs、simulation horizons 和 baselines
+- `tripinfo`、`summary`、`edgeData`、TLS switch output、controller logs、warnings、teleports 和 unfinished vehicles
+- travel time、delay、stops、throughput、queue、emissions、fairness 和 completion-aware reporting
+- fixed-time、actuated、max-pressure、NEMA、data-informed 和 MPC-style controller comparisons
+- SUMO/TraCI controller、metric parser、runner、validator 和 audit-code 修改的 TDD records
+- 用户发现的新 fix，可以沉淀成可复用 guidance
 
 更完整的失败案例见 [`docs/common-sumo-signal-control-failures.md`](docs/common-sumo-signal-control-failures.md)。
 
 ## 🛠️ 设计原则
 
-- 🧭 **Progressive disclosure：** `SKILL.md` 保持紧凑，只在需要时路由到 focused references。
-- ❓ **Socratic intake：** 模糊实验先变成 Experiment Readiness Record，再开始执行。
-- 🧪 **TDD before experiment code：** 会改变行为的代码应尽量从 failing test 或 reproducible probe 开始。
-- 🚧 **Hard gates before claims：** output、warning、completion 和 baseline pairing 必须支撑 claim。
-- 🔍 **Evidence before completion：** 没有新的 command、artifact、test 和 residual risk 记录，就不能声称完成。
-- 🧯 **Debugging as a closed loop：** observe -> classify -> probe -> compare -> update。
-- 🧬 **Self-evolution：** skill 没覆盖的真实 fix 可以变成脱敏后的 field lesson candidate。
+- **Progressive disclosure：** `SKILL.md` 保持紧凑，只在需要时路由到 focused references。
+- **Socratic intake：** 模糊实验先变成 Experiment Readiness Record，再开始执行。
+- **TDD before experiment code：** 会改变行为的代码应尽量从 failing test 或 reproducible probe 开始。
+- **Hard gates before claims：** output、warning、completion 和 baseline pairing 必须支撑 claim。
+- **Evidence before completion：** 没有新的 command、artifact、test 和 residual risk 记录，就不能声称完成。
+- **Debugging as a closed loop：** observe -> classify -> probe -> compare -> update。
+- **Self-evolution：** skill 没覆盖的真实 fix 可以变成脱敏后的 field lesson candidate。
 
 ## 🧭 项目状态
 
@@ -213,10 +204,10 @@ Use $simulation-helper-skill-for-eclipse-sumo on examples/02_max_pressure_audit/
 
 ### Roadmap
 
-- 🚦 持续增强 signal-control audit coverage
-- 🧪 添加更多 bad-case/fixed-case examples
-- 🧰 当模式稳定后，添加可选 Python validators
-- 🌍 未来扩展到其他 SUMO 方向，例如 routing and demand、emissions and energy、public transport、pedestrian/intermodal scenarios、AV/CAV and co-simulation、calibration、safety analysis 和 simulation-mode comparison
+- 持续增强 signal-control audit coverage
+- 添加更多 bad-case/fixed-case examples
+- 当模式稳定后，添加可选 Python validators
+- 未来扩展到其他 SUMO 方向，例如 routing and demand、emissions and energy、public transport、pedestrian/intermodal scenarios、AV/CAV and co-simulation、calibration、safety analysis 和 simulation-mode comparison
 
 ## ❓ FAQ
 
