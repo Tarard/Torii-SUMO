@@ -32,6 +32,7 @@ Use this before writing paper, report, or benchmark claims.
 - "validated in SUMO" when only GUI visual inspection occurred;
 - "generalizes" without scenario diversity or external validation.
 - "faster" or "lower delay" from arrived-only vehicles when completion rates differ.
+- "uses telemetry/forecast/detectors" when the runner observed the signal but controller/solver events do not show the controller consumed it.
 
 ## Claim Rewrite Pattern
 
