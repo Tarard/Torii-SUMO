@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this skill package to audit SUMO/TraCI experiments, please cite it using the metadata below."
+type: software
+title: "Simulation Helper Skill for Eclipse SUMO"
+authors:
+  - name: "Tarard"
+version: "v0.1.1"
+date-released: "2026-06-10"
+license: "CC-BY-4.0"
+repository-code: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO"
+url: "https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"
+abstract: "A reusable Codex/Claude skill package and checklist for auditing SUMO/TraCI traffic-signal control experiments before results are reported."
+keywords:
+  - "Eclipse SUMO"
+  - "TraCI"
+  - "traffic simulation"
+  - "traffic signal control"
+  - "transportation"
+  - "reproducibility"
+  - "agent skills"

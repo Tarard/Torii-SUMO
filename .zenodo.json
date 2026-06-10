@@ -1,0 +1,32 @@
+{
+  "title": "Simulation Helper Skill for Eclipse SUMO",
+  "upload_type": "software",
+  "description": "A reusable Codex/Claude skill package and checklist for auditing SUMO/TraCI traffic-signal control experiments before results are reported. The package focuses on experiment planning, route and configuration consistency, TLS/NEMA checks, TraCI controller boundaries, paired controller comparison, output auditing, completion-aware metrics, reproducibility risks, debugging paths, and evidence-bounded claim wording.",
+  "creators": [
+    {
+      "name": "Tarard"
+    }
+  ],
+  "access_right": "open",
+  "license": "cc-by-4.0",
+  "keywords": [
+    "Eclipse SUMO",
+    "TraCI",
+    "traffic simulation",
+    "traffic signal control",
+    "transportation",
+    "intelligent transportation systems",
+    "reproducibility",
+    "agent skills",
+    "Codex",
+    "Claude"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO",
+      "relation": "isSupplementTo",
+      "scheme": "url",
+      "resource_type": "software"
+    }
+  ]
+}

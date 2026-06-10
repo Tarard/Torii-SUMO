@@ -15,6 +15,11 @@ README.md
 README.zh-CN.md
 README.de.md
 LICENSE-DOCS
+CITATION.cff
+.zenodo.json
+.github/
+  workflows/
+    create-release.yml
 skills/
   simulation-helper-skill-for-eclipse-sumo/
   debugging-helper-skill-for-eclipse-sumo/
