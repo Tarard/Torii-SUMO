@@ -309,3 +309,7 @@ These links provide context. They do not imply endorsement of this repository.
 ## ⭐ Support
 
 If this checklist helps you avoid a broken SUMO/TraCI experiment, star the repository and adapt the examples for your own research workflow.
+
+## 🔖 Archive
+
+Versioned releases are archived on Zenodo: https://doi.org/10.5281/zenodo.20627976

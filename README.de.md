@@ -308,3 +308,7 @@ Diese Links liefern Kontext. Sie bedeuten keine Unterstützung dieses Projektarc
 ## ⭐ Unterstützung
 
 Wenn diese Prüfliste hilft, ein fehlerhaftes SUMO/TraCI-Experiment zu vermeiden, geben Sie dem Projektarchiv einen Stern und passen Sie die Beispiele an den eigenen Forschungsablauf an.
+
+## 🔖 Archiv
+
+Versionierte Veröffentlichungen sind auf Zenodo archiviert: https://doi.org/10.5281/zenodo.20627976
