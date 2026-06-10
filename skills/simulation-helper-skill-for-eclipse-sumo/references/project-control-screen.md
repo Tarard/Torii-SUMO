@@ -12,6 +12,7 @@ Inspect only the minimum available artifacts needed to estimate state:
 - README, experiment notes, config files, and scripts;
 - SUMO `.sumocfg`, `.net.xml`, route files, additional files, detector files, TLS programs;
 - TraCI controller code, parser code, batch runners, output directory rules;
+- environment records: `sumo --version`, `netgenerate --version`, `duarouter --version`, Python version, `traci.__file__`, `sumolib.__file__`, `SUMO_HOME`, and recent smoke-test artifacts;
 - logs, warnings, `summary.xml`, `tripinfo.xml`, `edgeData`, TLS switch outputs, controller logs;
 - recent git diff or changed files if code was modified.
 
@@ -28,6 +29,7 @@ current_state:
 observed_artifacts:
 known_facts:
 assumptions:
+environment_preflight: pass / fail / stale / missing / not_needed
 deviation:
 likely_problem:
 missing_observations:
@@ -47,6 +49,8 @@ If `target`, `current_state`, and `deviation` are all clear:
 3. Produce a `Next Step Plan`.
 
 If the deviation is a runtime failure, route to `debugging-helper-skill-for-eclipse-sumo`.
+
+If the environment preflight is missing, stale, or failed, route to `environment-preflight-and-smoke-test.md` before controller logic, formal execution, metrics, or claim review.
 
 If the deviation is missing experiment design detail, route to `experiment-intake-interview.md`.
 
@@ -90,6 +94,7 @@ Then use `experiment-intake-interview.md` and ask one focused question at a time
 ## Anti-Patterns
 
 - Do not assume the user's intended claim from a filename or plot title.
+- Do not debug controller logic before proving SUMO startup, Python tooling, and output creation when environment evidence is missing.
 - Do not treat a runnable SUMO config as evidence that the experiment is ready.
 - Do not diagnose controller superiority before verifying outputs, completion, pairing, and metric definitions.
 - Do not skip directly to code edits when project state is unknown.

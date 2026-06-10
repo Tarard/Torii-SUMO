@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/sitemap.xml

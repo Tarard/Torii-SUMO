@@ -5,19 +5,21 @@ Use this to move from idea to defensible evidence.
 ## Ladder
 
 1. **Intake**: produce and confirm the Experiment Readiness Record.
-2. **Construction sanity**: verify network, routes, TLS, detectors, controller identity, and output configuration.
-3. **Single-case smoke**: run one headless case and check logs, outputs, and basic controller action.
-4. **Sweep**: vary one meaningful axis at a time after construction sanity passes.
-5. **Ablation**: remove or simplify model/controller components to identify mechanism.
-6. **Sensitivity**: vary demand, seeds, observability, noise, detectors, route uncertainty, control interval, and horizon where relevant.
-7. **Runtime feasibility**: compare mean, p95, and max controller compute time against the control interval.
-8. **Claim decision**: classify evidence and write only supported claims.
+2. **Environment preflight**: prove SUMO binaries, `SUMO_HOME`, Python tools, `traci`/`sumolib`, and a minimal headless smoke chain when no recent environment record exists.
+3. **Construction sanity**: verify network, routes, TLS, detectors, controller identity, and output configuration.
+4. **Single-case smoke**: run one target headless case and check logs, outputs, and basic controller action.
+5. **Sweep**: vary one meaningful axis at a time after construction sanity passes.
+6. **Ablation**: remove or simplify model/controller components to identify mechanism.
+7. **Sensitivity**: vary demand, seeds, observability, noise, detectors, route uncertainty, control interval, and horizon where relevant.
+8. **Runtime feasibility**: compare mean, p95, and max controller compute time against the control interval.
+9. **Claim decision**: classify evidence and write only supported claims.
 
 ## Debugging Discipline
 
 Do not start with parameter tuning. First check:
 
 - code vs model consistency;
+- executable environment and smoke-test proof when the machine, container, or branch is new;
 - simulator construction validity;
 - controller identity;
 - output completeness;
