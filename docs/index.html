@@ -253,54 +253,23 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow);
-      padding: 24px;
+      padding: 34px;
     }
 
     .signal-card {
-      display: grid;
-      grid-template-columns: 112px minmax(0, 1fr);
-      gap: 22px;
+      display: flex;
       align-items: center;
+      justify-content: center;
+      min-height: 280px;
     }
 
     .app-logo-art {
-      width: 112px;
-      border-radius: 24px;
+      width: min(260px, 100%);
+      border-radius: 54px;
       max-width: 100%;
       height: auto;
       display: block;
-      filter: drop-shadow(0 16px 24px rgba(24, 32, 43, 0.18));
-    }
-
-    .visual-kicker {
-      color: var(--blue-dark);
-      font-size: 0.9rem;
-      font-weight: 780;
-      margin-bottom: 10px;
-    }
-
-    .visual-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: grid;
-      gap: 8px;
-    }
-
-    .visual-list li {
-      margin: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.78);
-      padding: 10px 11px;
-      font-weight: 720;
-      overflow-wrap: anywhere;
-    }
-
-    .asset-credit {
-      margin: 16px 0 0;
-      color: var(--muted);
-      font-size: 0.78rem;
+      filter: drop-shadow(0 22px 34px rgba(24, 32, 43, 0.20));
     }
 
     .grid {
@@ -501,11 +470,11 @@
       }
 
       .signal-card {
-        grid-template-columns: 90px minmax(0, 1fr);
+        min-height: 220px;
       }
 
       .app-logo-art {
-        width: 90px;
+        width: min(220px, 100%);
       }
     }
 
@@ -524,7 +493,7 @@
       }
 
       .signal-card {
-        grid-template-columns: 1fr;
+        min-height: 190px;
       }
     }
   </style>
@@ -565,17 +534,9 @@
         </div>
       </div>
 
-      <aside class="visual" aria-label="Audit workflow visual">
+      <aside class="visual" aria-label="Project logo">
         <div class="signal-card">
           <img class="app-logo-art" src="assets/app-logo.png" alt="" aria-hidden="true">
-          <div>
-            <div class="visual-kicker" data-i18n="visualKicker">Audit route</div>
-            <ul class="visual-list">
-              <li data-i18n="visualOne">1. Find the current project state</li>
-              <li data-i18n="visualTwo">2. Force missing assumptions into the plan</li>
-              <li data-i18n="visualThree">3. Allow only evidence-bounded claims</li>
-            </ul>
-          </div>
         </div>
       </aside>
     </section>
@@ -673,7 +634,7 @@
     <section class="panel">
       <span class="kicker" data-i18n="promptKicker">Try it immediately</span>
       <h2 data-i18n="promptTitle">Copy-ready prompts for real projects</h2>
-      <p class="muted" data-i18n="promptIntro">These prompts are intentionally concrete. They tell the agent which audit path to start with and what evidence to produce.</p>
+      <p class="muted" data-i18n="promptIntro">These prompts are intentionally concrete. They tell the agent which workflow step to start with and what evidence to produce.</p>
       <div class="prompt-list">
         <code data-i18n="tryPromptOne">Use $simulation-helper-skill-for-eclipse-sumo on this repo. Start with the project control screen and give me the next safe step.</code>
         <code data-i18n="tryPromptTwo">Audit this TraCI signal controller before I compare it with the fixed-time baseline.</code>
@@ -792,12 +753,6 @@
         repoButton: "GitHub Repository",
         readmeButton: "Open README",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO#readme",
-        visualKicker: "Audit route",
-        visualOne: "1. Find the current project state",
-        visualTwo: "2. Force missing assumptions into the plan",
-        visualThree: "3. Allow only evidence-bounded claims",
-        assetCreditPrefix: "Traffic light icon:",
-        assetCreditLicense: "public domain",
         whatTitle: "The painful part",
         whatText: "SUMO can finish a run while the experiment is still not comparable, reproducible, or safe to describe as a controller result.",
         whoTitle: "What this skill changes",
@@ -842,7 +797,7 @@
         scenarioFive: "Results or claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.",
         promptKicker: "Try it immediately",
         promptTitle: "Copy-ready prompts for real projects",
-        promptIntro: "These prompts are intentionally concrete. They tell the agent which audit path to start with and what evidence to produce.",
+        promptIntro: "These prompts are intentionally concrete. They tell the agent which workflow step to start with and what evidence to produce.",
         tryPromptOne: "Use $simulation-helper-skill-for-eclipse-sumo on this repo. Start with the project control screen and give me the next safe step.",
         tryPromptTwo: "Audit this TraCI signal controller before I compare it with the fixed-time baseline.",
         tryPromptThree: "This SUMO run finishes, but tripinfo and summary disagree. Use the debugging helper and tell me whether the run is valid.",
@@ -891,12 +846,6 @@
         repoButton: "GitHub 仓库",
         readmeButton: "打开说明文档",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.zh-CN.md",
-        visualKicker: "审计路径",
-        visualOne: "1. 先找出项目当前状态",
-        visualTwo: "2. 把隐藏假设压进实验计划",
-        visualThree: "3. 只允许有证据边界的结论",
-        assetCreditPrefix: "红绿灯图标：",
-        assetCreditLicense: "公共领域",
         whatTitle: "真正麻烦的地方",
         whatText: "SUMO 仿真可以正常跑完，但实验仍然可能不可比较、不可复现，也不能安全地描述为某个控制器的有效结果。",
         whoTitle: "这个技能改变什么",
@@ -941,7 +890,7 @@
         scenarioFive: "结果或结论：输出硬门槛 -> 指标与完成度 -> 基准设计 -> 结论边界。",
         promptKicker: "马上试用",
         promptTitle: "可以直接复制到真实项目里的提示词",
-        promptIntro: "这些提示词刻意写得很具体：它们会告诉智能体从哪条审计路径开始，以及需要产出什么证据。",
+        promptIntro: "这些提示词刻意写得很具体：它们会告诉智能体从哪个工作流步骤开始，以及需要产出什么证据。",
         tryPromptOne: "请对这个仓库使用 $simulation-helper-skill-for-eclipse-sumo。先做项目控制屏，再给我下一步最稳妥的动作。",
         tryPromptTwo: "在我把这个 TraCI 信号控制器和固定配时基准比较之前，请先审计这个控制器。",
         tryPromptThree: "这个 SUMO 运行能结束，但 tripinfo 和 summary 不一致。请使用调试助手判断这次运行是否有效。",
@@ -990,12 +939,6 @@
         repoButton: "GitHub-Repository",
         readmeButton: "Dokumentation öffnen",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.de.md",
-        visualKicker: "Prüfpfad",
-        visualOne: "1. Aktuellen Projektzustand erfassen",
-        visualTwo: "2. Verdeckte Annahmen in den Versuchsplan zwingen",
-        visualThree: "3. Nur evidenzgebundene Aussagen zulassen",
-        assetCreditPrefix: "Ampelsymbol:",
-        assetCreditLicense: "gemeinfrei",
         whatTitle: "Der schmerzhafte Punkt",
         whatText: "Ein SUMO-Lauf kann vollständig enden, obwohl das Experiment noch nicht vergleichbar, reproduzierbar oder als Steuerungsergebnis belastbar ist.",
         whoTitle: "Was dieser Skill ändert",
@@ -1040,7 +983,7 @@
         scenarioFive: "Ergebnisse oder Aussagen: Ausgabe-Hartprüfungen -> Metriken und Abschlussgrad -> Basisliniendesign -> Aussagegrenze.",
         promptKicker: "Sofort ausprobieren",
         promptTitle: "Direkt kopierbare Prompts für echte Projekte",
-        promptIntro: "Diese Prompts sind absichtlich konkret. Sie sagen dem Agenten, mit welchem Prüfpfad er beginnen und welche Evidenz er liefern soll.",
+        promptIntro: "Diese Prompts sind absichtlich konkret. Sie sagen dem Agenten, mit welchem Arbeitsablaufschritt er beginnen und welche Evidenz er liefern soll.",
         tryPromptOne: "Nutze $simulation-helper-skill-for-eclipse-sumo für dieses Repository. Beginne mit der Projekt-Kontrollansicht und gib mir den nächsten belastbaren Schritt.",
         tryPromptTwo: "Prüfe diesen TraCI-Signalcontroller, bevor ich ihn mit der Festzeit-Basislinie vergleiche.",
         tryPromptThree: "Dieser SUMO-Lauf endet, aber tripinfo und summary widersprechen sich. Nutze den Debugging-Helfer und sage mir, ob der Lauf gültig ist.",
