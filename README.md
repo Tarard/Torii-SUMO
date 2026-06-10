@@ -110,7 +110,45 @@ Both skills keep `SKILL.md` deliberately lean. The agent first classifies the sc
 | User found a fix the skill missed | `field-lesson-capture.md` | privacy-safe field lesson candidate |
 | Public release check | `public-release-checklist.md` -> `verification-and-review-gates.md` | release checklist and residual risk |
 
-## 📦 Reference Modules
+## 🔗 Skill Structure
+
+The package uses a compact entry-point plus deep-reference format. `SKILL.md` stays lean enough for Codex and Claude to load quickly; focused reference files hold the detailed SUMO/TraCI experiment workflow.
+
+```text
+skills/
+├─ simulation-helper-skill-for-eclipse-sumo/      # Main workflow skill
+│  ├─ SKILL.md                                    # Scenario router and activation rules
+│  │  ├─ when to use the skill
+│  │  ├─ Ask -> Plan -> Build -> Debug -> Verify -> Report
+│  │  ├─ required outputs and claim boundaries
+│  │  └─ links to focused references
+│  ├─ agents/
+│  │  └─ openai.yaml                             # Codex/OpenAI metadata
+│  └─ references/                                # Deep workflow documentation
+│     ├─ workflow-router.md                      # Route by user scenario
+│     ├─ project-control-screen.md               # Target, state, deviation, next step
+│     ├─ experiment-intake-interview.md          # Socratic pre-run intake
+│     ├─ experiment-planning-after-intake.md     # SUMO experiment plan
+│     ├─ tdd-for-sumo-traci-code.md              # RED/GREEN/REFACTOR for code changes
+│     ├─ verification-and-review-gates.md        # Evidence-before-completion gates
+│     ├─ sumo-official-*.md                      # Official SUMO semantics and lessons
+│     ├─ sumo-community-faq-lessons.md           # Forum and FAQ lessons
+│     ├─ public-code-lessons.md                  # Lessons from public traffic code
+│     └─ *metrics*, *baseline*, *claim-boundary* # Reporting and evidence boundaries
+│
+├─ debugging-helper-skill-for-eclipse-sumo/       # Focused debug subskill
+│  ├─ SKILL.md                                    # Debug activation and workflow
+│  ├─ agents/openai.yaml                          # Codex/OpenAI metadata
+│  └─ references/
+│     ├─ closed-loop-debugging.md                 # Observe, classify, probe, update
+│     ├─ symptom-to-evidence-map.md              # Symptom -> required evidence
+│     └─ debugging-gates-and-claim-boundaries.md # Fix, rerun, or demote
+│
+└─ examples/                                      # Prompt-ready audit scenarios
+   ├─ 01_fixed_time_audit/
+   ├─ 02_max_pressure_audit/
+   └─ 03_data_informed_signal_control_audit/
+```
 
 <details>
 <summary><strong> Simulation helper references</strong></summary>

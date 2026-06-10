@@ -109,7 +109,45 @@ Beide `SKILL.md`-Dateien bleiben bewusst schlank. Der Assistent klassifiziert zu
 | Nutzer findet eine Lösung, die die Fähigkeit verfehlt hat | `field-lesson-capture.md` | Datenschutzfreundlicher Kandidat für eine Felderfahrung |
 | Prüfung vor öffentlicher Veröffentlichung | `public-release-checklist.md` -> `verification-and-review-gates.md` | Veröffentlichungsliste und Restrisiko |
 
-## 📦 Referenzmodule
+## 🔗 Fähigkeitsstruktur
+
+Das Paket nutzt eine Struktur aus kompaktem Einstiegspunkt und vertiefenden Referenzen. `SKILL.md` bleibt kurz genug, damit Codex und Claude es schnell laden können; fokussierte Referenzdateien tragen den detaillierten SUMO/TraCI-Versuchsablauf.
+
+```text
+skills/
+├─ simulation-helper-skill-for-eclipse-sumo/      # Hauptfähigkeit für den Ablauf
+│  ├─ SKILL.md                                    # Szenario-Router und Aktivierungsregeln
+│  │  ├─ wann diese Fähigkeit genutzt wird
+│  │  ├─ Hinterfragen -> Planen -> Aufbauen -> Korrigieren -> Prüfen -> Berichten
+│  │  ├─ erforderliche Ausgaben und Aussagegrenzen
+│  │  └─ Links zu fokussierten Referenzen
+│  ├─ agents/
+│  │  └─ openai.yaml                             # Codex/OpenAI-Metadaten
+│  └─ references/                                # Vertiefende Ablaufdokumentation
+│     ├─ workflow-router.md                      # Pfad nach Nutzerszenario wählen
+│     ├─ project-control-screen.md               # Ziel, Zustand, Abweichung, nächster Schritt
+│     ├─ experiment-intake-interview.md          # Sokratische Vorabklärung
+│     ├─ experiment-planning-after-intake.md     # SUMO-Versuchsplan
+│     ├─ tdd-for-sumo-traci-code.md              # Rot/Grün/Überarbeitung für Quelltext
+│     ├─ verification-and-review-gates.md        # Evidenz vor Abschlussbehauptung
+│     ├─ sumo-official-*.md                      # Offizielle SUMO-Semantik und Lehren
+│     ├─ sumo-community-faq-lessons.md           # Forum- und Häufige-Fragen-Lehren
+│     ├─ public-code-lessons.md                  # Lehren aus öffentlichem Verkehrscode
+│     └─ *metrics*, *baseline*, *claim-boundary* # Bericht und Evidenzgrenzen
+│
+├─ debugging-helper-skill-for-eclipse-sumo/       # Fokussierte Fehlersuchfähigkeit
+│  ├─ SKILL.md                                    # Aktivierung und Ablauf der Fehlersuche
+│  ├─ agents/openai.yaml                          # Codex/OpenAI-Metadaten
+│  └─ references/
+│     ├─ closed-loop-debugging.md                 # Beobachten, klassifizieren, prüfen, aktualisieren
+│     ├─ symptom-to-evidence-map.md              # Symptom -> nötige Evidenz
+│     └─ debugging-gates-and-claim-boundaries.md # Reparieren, wiederholen oder abstufen
+│
+└─ examples/                                      # Direkt nutzbare Prüfszenarien
+   ├─ 01_fixed_time_audit/
+   ├─ 02_max_pressure_audit/
+   └─ 03_data_informed_signal_control_audit/
+```
 
 <details>
 <summary><strong>Referenzmodule für die Simulationshilfe</strong></summary>

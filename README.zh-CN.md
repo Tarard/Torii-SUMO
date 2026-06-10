@@ -109,7 +109,45 @@ SUMO 能顺利跑完，并不代表实验结果已经可以作为有效证据。
 | 用户发现了技能没覆盖的新解决路径 | `field-lesson-capture.md` | 脱敏后的现场经验候选条目 |
 | 公开发布前检查 | `public-release-checklist.md` -> `verification-and-review-gates.md` | 发布清单和剩余风险 |
 
-## 📦 参考模块
+## 🔗 技能结构
+
+这个包采用“精简入口 + 深层参考”的结构。`SKILL.md` 保持足够短，方便 Codex 和 Claude 快速加载；聚焦的参考文件负责承载详细的 SUMO/TraCI 实验工作流。
+
+```text
+skills/
+├─ simulation-helper-skill-for-eclipse-sumo/      # 主工作流技能
+│  ├─ SKILL.md                                    # 场景路由和启用规则
+│  │  ├─ 什么时候使用这个技能
+│  │  ├─ 思辨 -> 计划 -> 构造 -> 纠错 -> 检验 -> 报告
+│  │  ├─ 必要输出和结论边界
+│  │  └─ 指向聚焦参考模块的链接
+│  ├─ agents/
+│  │  └─ openai.yaml                             # Codex/OpenAI 元数据
+│  └─ references/                                # 深层工作流文档
+│     ├─ workflow-router.md                      # 按用户场景选择路径
+│     ├─ project-control-screen.md               # 目标、状态、偏差、下一步
+│     ├─ experiment-intake-interview.md          # 实验前苏格拉底式追问
+│     ├─ experiment-planning-after-intake.md     # SUMO 实验计划
+│     ├─ tdd-for-sumo-traci-code.md              # 代码修改的红灯/绿灯/重构
+│     ├─ verification-and-review-gates.md        # 先有证据再声称完成
+│     ├─ sumo-official-*.md                      # SUMO 官方语义和经验
+│     ├─ sumo-community-faq-lessons.md           # 论坛和常见问题经验
+│     ├─ public-code-lessons.md                  # 公开交通代码经验
+│     └─ *metrics*, *baseline*, *claim-boundary* # 报告和证据边界
+│
+├─ debugging-helper-skill-for-eclipse-sumo/       # 聚焦调试子技能
+│  ├─ SKILL.md                                    # 调试启用规则和工作流
+│  ├─ agents/openai.yaml                          # Codex/OpenAI 元数据
+│  └─ references/
+│     ├─ closed-loop-debugging.md                 # 观察、分类、检查、更新
+│     ├─ symptom-to-evidence-map.md              # 症状 -> 所需证据
+│     └─ debugging-gates-and-claim-boundaries.md # 修复、重跑或降级
+│
+└─ examples/                                      # 可直接作为提示使用的审计场景
+   ├─ 01_fixed_time_audit/
+   ├─ 02_max_pressure_audit/
+   └─ 03_data_informed_signal_control_audit/
+```
 
 <details>
 <summary><strong>仿真助手参考模块</strong></summary>
