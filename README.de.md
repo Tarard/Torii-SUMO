@@ -6,7 +6,9 @@
 
 <div align="center">
 
-**Ein schlankes Fähigkeitspaket für Codex/Claude Code zur Prüfung von SUMO/TraCI-Verkehrssignal-Experimenten, bevor Ergebnisse zu Aussagen werden.**
+**Hinterfragen. Planen. Aufbauen. Korrigieren. Prüfen. Berichten.**
+
+**Der vollständige SUMO/TraCI-Experimentablauf, geführt von Codex und Claude.**
 
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-Signalsteuerung-blue" alt="SUMO/TraCI-Signalsteuerung">
 <img src="https://img.shields.io/badge/Assistent-Codex%2FClaude-6f42c1" alt="Codex und Claude">
@@ -45,14 +47,14 @@ Diese Fähigkeit zielt auf Fehler, die oft erst spät sichtbar werden:
 ## 🧠 Was es macht
 
 ```text
-Was es ist:       Ein wiederverwendbares Fähigkeitspaket für Codex/Claude zur Prüfung von SUMO/TraCI-Signalsteuerungsabläufen.
+Was es ist:       Ein wiederverwendbares Fähigkeitspaket für Codex/Claude für den vollständigen SUMO/TraCI-Signalsteuerungsversuchsablauf.
 Für wen:          Forschende, die Eclipse SUMO für Festzeitsteuerung, verkehrsabhängige Steuerung, Maximaldrucksteuerung, NEMA, datengestützte Steuerung oder MPC-nahe Steuerungen nutzen.
 Wie es arbeitet:  Eine kompakte SKILL.md dient als Szenario-Router und lädt fokussierte Referenzmodule nur bei Bedarf.
 Woher es kommt:   Offizielle SUMO-Dokumentation, SUMO-Häufige-Fragen und Forumserfahrungen, Muster aus öffentlichem Verkehrssimulationsquelltext und eigene Experimentpraxis des Autors.
 Was es findet:    Fehlerhafte Routen, unsichere TLS-Phasen, ungepaarte Vergleichsverfahren, überschriebene Ausgaben, ungültige Metriken und nicht reproduzierbare Versuchsreihen.
 ```
 
-Das Paket ist bewusst noch kein Python-Prüfer. Es ist ein **Prüfprotokoll und eine Assistentenfähigkeit**: Kopieren Sie es in Codex oder Claude, richten Sie es auf ein SUMO-Experimentverzeichnis und nutzen Sie die Prüfausgabe, um belastbare Aussagen von zu starken Aussagen zu trennen.
+Das Paket ist bewusst noch kein Python-Prüfer. Es ist ein **Ablaufprotokoll und eine Assistentenfähigkeit**: Kopieren Sie es in Codex oder Claude, richten Sie es auf ein SUMO-Experimentverzeichnis und nutzen Sie die strukturierten Prüfungen, um Planung, Korrektur, Verifikation und Bericht mit klaren Evidenzgrenzen zu verbinden.
 
 ## ⚡ Schnellstart
 

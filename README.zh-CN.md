@@ -6,7 +6,9 @@
 
 <div align="center">
 
-**一个面向 Codex/Claude Code 的轻量技能包，用于在结果变成结论之前审计 SUMO/TraCI 交通信号控制实验。**
+**思辨。计划。构造。纠错。检验。报告。**
+
+**由 Codex 和 Claude 引导的完整 SUMO/TraCI 实验工作流。**
 
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-%E4%BF%A1%E5%8F%B7%E6%8E%A7%E5%88%B6-blue" alt="SUMO/TraCI 信号控制">
 <img src="https://img.shields.io/badge/%E5%8A%A9%E6%89%8B-Codex%2FClaude-6f42c1" alt="Codex 和 Claude">
@@ -45,14 +47,14 @@ SUMO 能顺利跑完，并不代表实验结果已经可以作为有效证据。
 ## 🧠 它做什么
 
 ```text
-它是什么：     面向 SUMO/TraCI 信号控制工作流的可复用 Codex/Claude 技能包。
+它是什么：     面向完整 SUMO/TraCI 信号控制实验工作流的可复用 Codex/Claude 技能包。
 面向谁：       使用 Eclipse SUMO 研究定时控制、感应控制、最大压力控制、NEMA、数据辅助控制或 MPC 类控制器的研究者。
 如何工作：     精简的 SKILL.md 先作为场景路由器，只在需要时加载对应参考模块。
 信息来源：     SUMO 官方文档、SUMO 常见问题和论坛经验、公开交通仿真代码模式，以及作者自己的实验实践。
 能发现什么：   破损路线、不安全 TLS 相位、未配对对照方法、被覆盖输出、无效指标、不可复现实验批次。
 ```
 
-这个仓库目前不是 Python 验证器。它是一个 **审阅协议和助手技能**：把它复制到 Codex 或 Claude，让助手检查 SUMO 实验仓库，再用审计输出判断哪些结论可以被支持。
+这个仓库目前不是 Python 验证器。它是一个 **工作流协议和助手技能**：把它复制到 Codex 或 Claude，让助手围绕 SUMO 实验仓库进行结构化检查，并用这些记录来计划、纠错、检验和报告有证据边界的结论。
 
 ## ⚡ 快速开始
 
