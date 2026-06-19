@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-%E4%BF%A1%E5%8F%B7%E6%8E%A7%E5%88%B6-blue" alt="SUMO/TraCI 信号控制">
 <img src="https://img.shields.io/badge/%E5%8A%A9%E6%89%8B-Codex%2FClaude-6f42c1" alt="Codex 和 Claude">
 <img src="https://img.shields.io/badge/%E6%8A%80%E8%83%BD%E6%96%87%E4%BB%B6-2-1d8e57" alt="两个技能文件">
-<img src="https://img.shields.io/badge/%E5%8F%82%E8%80%83%E6%A8%A1%E5%9D%97-24-c98a05" alt="二十四个参考模块">
+<img src="https://img.shields.io/badge/%E5%8F%82%E8%80%83%E6%A8%A1%E5%9D%97-12-c98a05" alt="十二个参考模块">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>项目网站</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>示例</strong></a> |
@@ -101,14 +101,18 @@ SUMO 能顺利跑完，并不代表实验结果已经可以作为有效证据。
 
 | 场景 | 加载内容 | 预期输出 |
 |---|---|---|
-| 新机器、新克隆、缺少 SUMO 运行证据或环境可疑 | `environment-preflight-and-smoke-test.md` | 环境前置检查记录和冒烟测试通过/失败路径 |
-| 进行中项目、进度不清、或不知道下一步 | `workflow-router.md` -> `project-control-screen.md` | 项目控制筛查记录和下一步计划 |
-| 新实验或模糊实验想法 | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | 实验就绪记录，然后生成 SUMO 实验计划 |
+| 新机器、新克隆、缺少 SUMO 运行证据或环境可疑 | `preflight-sumo-environment.md` | 环境前置检查记录和冒烟测试通过/失败路径 |
+| OSM/导入路网清理、路网细致程度选择、Google Maps/外部地图信号核查、检测器映射或实测数据对齐 | `model-osm-detectors.md` | 建模计划、道路等级阶梯、TLS 审计、检测器对齐门槛和可视化边界 |
+| 进行中项目、进度不清、或不知道下一步 | `route-project-workflow.md` | 项目控制筛查记录和下一步计划 |
+| 新实验或模糊实验想法 | `plan-experiment.md` | 实验就绪记录，然后生成 SUMO 实验计划 |
 | 失败或可疑运行 | `debugging-helper-skill-for-eclipse-sumo` | 根因、下一步检查、修复/重跑/降级 |
-| 控制器、解析器、运行器、验证器或审计代码修改 | `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | 红灯/绿灯/重构记录，或明确的 `test-after` 记录 |
-| 结果、指标、对照方法比较或论文/报告结论 | 输出、指标、对照方法和结论边界参考模块 | 证据等级，以及允许/禁止的结论表述 |
-| 用户发现了技能没覆盖的新解决路径 | `field-lesson-capture.md` | 脱敏后的现场经验候选条目 |
-| 公开发布前检查 | `public-release-checklist.md` -> `verification-and-review-gates.md` | 发布清单和剩余风险 |
+| 控制器、解析器、运行器、验证器或审计代码修改 | `develop-and-verify-code.md` | 红灯/绿灯/重构记录，或明确的 `test-after` 记录 |
+| 控制器/TLS/NEMA/TraCI 边界问题 | `audit-sumo-controllers.md` | 控制器身份、API 边界和缺失证据 |
+| 固定范围走廊扰动或控制器信息对比 | `compare-corridor-perturbations.md` | 配对扰动逻辑、负向对照和结论边界 |
+| SUMO 语义、官方/论坛经验或公开代码模式 | `learn-sumo-knowledge.md` | 有来源边界的经验和所需证据 |
+| 结果、指标、对照方法比较或论文/报告结论 | `evaluate-and-report-results.md` | 证据等级，以及允许/禁止的结论表述 |
+| 用户发现了技能没覆盖的新解决路径 | `capture-field-lesson.md` | 脱敏后的现场经验候选条目 |
+| 公开发布前检查 | `release-project.md` | 发布清单和剩余风险 |
 
 ## 🔗 技能结构
 
@@ -125,25 +129,23 @@ skills/
 │  ├─ agents/
 │  │  └─ openai.yaml                             # Codex/OpenAI 元数据
 │  └─ references/                                # 深层工作流文档
-│     ├─ workflow-router.md                      # 按用户场景选择路径
-│     ├─ project-control-screen.md               # 目标、状态、偏差、下一步
-│     ├─ environment-preflight-and-smoke-test.md # SUMO/Python 工具链证据
-│     ├─ experiment-intake-interview.md          # 实验前苏格拉底式追问
-│     ├─ experiment-planning-after-intake.md     # SUMO 实验计划
-│     ├─ tdd-for-sumo-traci-code.md              # 代码修改的红灯/绿灯/重构
-│     ├─ verification-and-review-gates.md        # 先有证据再声称完成
-│     ├─ sumo-official-*.md                      # SUMO 官方语义和经验
-│     ├─ sumo-community-faq-lessons.md           # 论坛和常见问题经验
-│     ├─ public-code-lessons.md                  # 公开交通代码经验
-│     └─ *metrics*, *baseline*, *claim-boundary* # 报告和证据边界
+│     ├─ route-project-workflow.md               # 按场景路由并筛查项目状态
+│     ├─ preflight-sumo-environment.md           # SUMO/Python 工具链证据
+│     ├─ plan-experiment.md                      # 苏格拉底式追问和 SUMO 实验计划
+│     ├─ develop-and-verify-code.md              # 红灯/绿灯/重构和完成证据
+│     ├─ model-osm-detectors.md                  # OSM/导入路网、信号核查和检测器对齐
+│     ├─ learn-sumo-knowledge.md                 # 官方、论坛和公开代码经验
+│     ├─ audit-sumo-controllers.md               # NEMA/TLS/TraCI 控制器边界
+│     ├─ compare-corridor-perturbations.md       # 固定范围扰动对比
+│     ├─ evaluate-and-report-results.md          # 输出、指标、对照和结论
+│     ├─ capture-field-lesson.md                 # 自我进化的现场经验捕获
+│     └─ release-project.md                      # 发布、商标、隐私和传播
 │
 ├─ debugging-helper-skill-for-eclipse-sumo/       # 聚焦调试子技能
 │  ├─ SKILL.md                                    # 调试启用规则和工作流
 │  ├─ agents/openai.yaml                          # Codex/OpenAI 元数据
 │  └─ references/
-│     ├─ closed-loop-debugging.md                 # 观察、分类、检查、更新
-│     ├─ symptom-to-evidence-map.md              # 症状 -> 所需证据
-│     └─ debugging-gates-and-claim-boundaries.md # 修复、重跑或降级
+│     └─ debug-sumo-traci.md                      # 观察、分类、检查、降级
 │
 └─ examples/                                      # 可直接作为提示使用的审计场景
    ├─ 01_fixed_time_audit/
@@ -154,36 +156,24 @@ skills/
 <details>
 <summary><strong>仿真助手参考模块</strong></summary>
 
-- [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - 顶层场景路由器。
-- [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - 面向进行中项目的目标、状态、偏差和下一步筛查。
-- [`environment-preflight-and-smoke-test.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/environment-preflight-and-smoke-test.md) - SUMO/Python 环境证据和最小冒烟测试门槛。
-- [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - 实验前苏格拉底式追问和实验就绪记录。
-- [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - 在代码、仿真或结论之前确认 SUMO 实验计划。
-- [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - SUMO/TraCI 代码修改的红灯 -> 绿灯 -> 重构流程。
-- [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - 先有证据再声称完成，以及审阅门槛。
-- [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - 来源优先级和证据层级。
-- [`sumo-official-semantics.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO 路网、路线、TLS、检测器和 TraCI 语义。
-- [`sumo-official-operational-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - 来自 SUMO 官方文档的操作经验。
-- [`sumo-community-faq-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-community-faq-lessons.md) - 论坛、常见问题和社区排错经验。
-- [`sumo-nema-controller-audit.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-nema-controller-audit.md) - NEMA 环、屏障、绿信比、召回、检测器和结论检查。
-- [`sumo-traci-controller-boundaries.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-traci-controller-boundaries.md) - TraCI 控制器身份和 API 边界检查。
-- [`sumo-output-hard-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-output-hard-gates.md) - 输出、警告、车辆传送和产物门槛。
-- [`evaluation-metrics-and-completion.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - 指标定义和完成度感知报告。
-- [`baseline-and-ablation-design.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md) - 配对对照、消融和敏感性设计。
-- [`experiment-validation-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md) - 实验和调试修复的验证阶梯。
-- [`field-lesson-capture.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/field-lesson-capture.md) - 对用户实际发现的修复方法做脱敏、抽象和复用。
-- [`claim-boundary-taxonomy.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - 有证据边界的结论表述。
-- [`public-code-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md) - 从公开交通仿真代码中提炼的经验。
-- [`public-release-checklist.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md) - 发布、商标、隐私和传播检查。
+- [`route-project-workflow.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md) - 场景路由和项目状态筛查。
+- [`preflight-sumo-environment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md) - SUMO/Python 环境证据和最小冒烟测试门槛。
+- [`plan-experiment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/plan-experiment.md) - 苏格拉底式追问、实验就绪记录和确认后的 SUMO 实验计划。
+- [`develop-and-verify-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/develop-and-verify-code.md) - SUMO/TraCI 代码修改的红灯 -> 绿灯 -> 重构流程和完成证据。
+- [`model-osm-detectors.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/model-osm-detectors.md) - OSM/导入路网建模、路网细致程度选择、Google Maps/外部信号核查、冗余 TLS 清理、检测器映射和实测数据对齐。
+- [`learn-sumo-knowledge.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/learn-sumo-knowledge.md) - 来源层级、官方语义、论坛经验和公开代码模式。
+- [`audit-sumo-controllers.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/audit-sumo-controllers.md) - NEMA/TLS/TraCI 控制器身份和 API 边界检查。
+- [`compare-corridor-perturbations.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/compare-corridor-perturbations.md) - 固定范围扰动对比、信息对照和结论边界。
+- [`evaluate-and-report-results.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluate-and-report-results.md) - 输出、指标、完成度、对照方法、验证阶梯和结论表述。
+- [`capture-field-lesson.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/capture-field-lesson.md) - 对用户实际发现的修复方法做脱敏、抽象和复用。
+- [`release-project.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md) - 发布、商标、隐私和传播检查。
 
 </details>
 
 <details>
 <summary><strong>调试参考模块</strong></summary>
 
-- [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - 观察、分类、检查、比较、更新。
-- [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - 把常见症状映射到所需证据。
-- [`debugging-gates-and-claim-boundaries.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - 对失败或部分修复的运行给出降级规则。
+- [`debug-sumo-traci.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debug-sumo-traci.md) - 闭环诊断、症状检查和结论降级规则。
 
 </details>
 
