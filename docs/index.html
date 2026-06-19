@@ -584,15 +584,15 @@
       <div class="route-list">
         <div class="route-step">
           <strong data-i18n="routeOneTitle">Ongoing project</strong>
-          <span data-i18n="routeOneText">Project Control Screen -> target, state, deviation, next-step plan.</span>
+          <span data-i18n="routeOneText">Workflow screen -> target, state, deviation, next-step plan.</span>
         </div>
         <div class="route-step">
           <strong data-i18n="routeTwoTitle">New experiment</strong>
-          <span data-i18n="routeTwoText">Socratic Intake -> Experiment Readiness Record -> SUMO Experiment Plan.</span>
+          <span data-i18n="routeTwoText">Experiment intake -> readiness record -> SUMO Experiment Plan.</span>
         </div>
         <div class="route-step">
           <strong data-i18n="routeThreeTitle">Code change</strong>
-          <span data-i18n="routeThreeText">TDD gate -> RED/GREEN/REFACTOR record -> verification review.</span>
+          <span data-i18n="routeThreeText">Develop and verify -> RED/GREEN/REFACTOR record -> completion evidence.</span>
         </div>
         <div class="route-step">
           <strong data-i18n="routeFourTitle">Failed or suspicious run</strong>
@@ -600,7 +600,7 @@
         </div>
         <div class="route-step">
           <strong data-i18n="routeFiveTitle">Results and claims</strong>
-          <span data-i18n="routeFiveText">Output gates -> metric definitions -> baseline pairing -> claim boundary.</span>
+          <span data-i18n="routeFiveText">Evaluate and report -> outputs, metrics, baselines, validation, claim boundary.</span>
         </div>
       </div>
     </section>
@@ -624,11 +624,11 @@
       <h2 data-i18n="scenarioTitle">Use scenarios</h2>
       <p class="muted" data-i18n="scenarioText">Start from the user's situation, then load only the references needed for that path.</p>
       <ul>
-        <li data-i18n="scenarioOne">Ongoing project: workflow router -> project control screen -> next-step plan.</li>
-        <li data-i18n="scenarioTwo">New experiment: Socratic intake -> Experiment Readiness Record -> SUMO Experiment Plan.</li>
-        <li data-i18n="scenarioThree">Code change: TDD gate -> implementation -> verification and review gates.</li>
+        <li data-i18n="scenarioOne">Ongoing project: route-project-workflow -> next-step plan.</li>
+        <li data-i18n="scenarioTwo">New experiment: plan-experiment -> readiness record -> SUMO Experiment Plan.</li>
+        <li data-i18n="scenarioThree">Code change: develop-and-verify-code -> implementation -> completion evidence.</li>
         <li data-i18n="scenarioFour">Failed run: debugging helper -> closed-loop diagnosis -> fix or demotion.</li>
-        <li data-i18n="scenarioFive">Results or claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.</li>
+        <li data-i18n="scenarioFive">Results or claims: evaluate-and-report-results -> evidence class -> claim boundary.</li>
       </ul>
     </section>
 
@@ -652,35 +652,23 @@
         <div>
           <h3 data-i18n="academicRefsTitle">Simulation helper references</h3>
           <ul>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md">workflow-router.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md">project-control-screen.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/environment-preflight-and-smoke-test.md">environment-preflight-and-smoke-test.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md">experiment-intake-interview.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md">experiment-planning-after-intake.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md">tdd-for-sumo-traci-code.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md">verification-and-review-gates.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md">source-ladder.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-semantics.md">sumo-official-semantics.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-operational-lessons.md">sumo-official-operational-lessons.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-community-faq-lessons.md">sumo-community-faq-lessons.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-nema-controller-audit.md">sumo-nema-controller-audit.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-traci-controller-boundaries.md">sumo-traci-controller-boundaries.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-output-hard-gates.md">sumo-output-hard-gates.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md">evaluation-metrics-and-completion.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md">baseline-and-ablation-design.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md">experiment-validation-ladder.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/field-lesson-capture.md">field-lesson-capture.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md">claim-boundary-taxonomy.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md">public-code-lessons.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md">public-release-checklist.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md">route-project-workflow.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md">preflight-sumo-environment.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/plan-experiment.md">plan-experiment.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/develop-and-verify-code.md">develop-and-verify-code.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/model-osm-detectors.md">model-osm-detectors.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/learn-sumo-knowledge.md">learn-sumo-knowledge.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/audit-sumo-controllers.md">audit-sumo-controllers.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/compare-corridor-perturbations.md">compare-corridor-perturbations.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/evaluate-and-report-results.md">evaluate-and-report-results.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/capture-field-lesson.md">capture-field-lesson.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md">release-project.md</a></li>
           </ul>
         </div>
         <div>
           <h3 data-i18n="debugRefsTitle">Debugging audit references</h3>
           <ul>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md">closed-loop-debugging.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md">symptom-to-evidence-map.md</a></li>
-            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/debugging-helper-skill-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md">debugging-gates-and-claim-boundaries.md</a></li>
+            <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/debugging-helper-skill-for-eclipse-sumo/references/debug-sumo-traci.md">debug-sumo-traci.md</a></li>
           </ul>
         </div>
       </div>
@@ -777,26 +765,26 @@
         mechanismTitle: "It routes the work before it audits the work.",
         mechanismText: "The SKILL.md files are deliberately compact. They first classify the situation, then load only the subskill and reference modules needed for that path, so a new experiment, a failing run, a controller code change, and a claim review do not share one oversized checklist.",
         routeOneTitle: "Ongoing project",
-        routeOneText: "Project Control Screen -> target, state, deviation, next-step plan.",
+        routeOneText: "Workflow screen -> target, state, deviation, next-step plan.",
         routeTwoTitle: "New experiment",
-        routeTwoText: "Socratic Intake -> Experiment Readiness Record -> SUMO Experiment Plan.",
+        routeTwoText: "Experiment intake -> readiness record -> SUMO Experiment Plan.",
         routeThreeTitle: "Code change",
-        routeThreeText: "TDD gate -> RED/GREEN/REFACTOR record -> verification review.",
+        routeThreeText: "Develop and verify -> RED/GREEN/REFACTOR record -> completion evidence.",
         routeFourTitle: "Failed or suspicious run",
         routeFourText: "Debugging helper -> symptom evidence -> fix, rerun, or claim demotion.",
         routeFiveTitle: "Results and claims",
-        routeFiveText: "Output gates -> metric definitions -> baseline pairing -> claim boundary.",
+        routeFiveText: "Evaluate and report -> outputs, metrics, baselines, validation, claim boundary.",
         academicSkillText: "Use for planning, reviewing, comparing, and writing evidence-bounded claims from SUMO/TraCI signal-control experiments.",
         debugSkillText: "Use for closed-loop diagnosis of route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures.",
         designTitle: "Design approach",
         designText: "The skills distill official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, the author's practical experiment experience, Socratic intake, confirmed experiment planning, TDD for SUMO/TraCI code changes, evidence-before-completion review gates, and privacy-safe field lesson capture into an agent audit workflow.",
         scenarioTitle: "Use scenarios",
         scenarioText: "Start from the user's situation, then load only the references needed for that path.",
-        scenarioOne: "Ongoing project: workflow router -> project control screen -> next-step plan.",
-        scenarioTwo: "New experiment: Socratic intake -> Experiment Readiness Record -> SUMO Experiment Plan.",
-        scenarioThree: "Code change: TDD gate -> implementation -> verification and review gates.",
+        scenarioOne: "Ongoing project: route-project-workflow -> next-step plan.",
+        scenarioTwo: "New experiment: plan-experiment -> readiness record -> SUMO Experiment Plan.",
+        scenarioThree: "Code change: develop-and-verify-code -> implementation -> completion evidence.",
         scenarioFour: "Failed run: debugging helper -> closed-loop diagnosis -> fix or demotion.",
-        scenarioFive: "Results or claims: output hard gates -> metrics/completion -> baseline design -> claim boundary.",
+        scenarioFive: "Results or claims: evaluate-and-report-results -> evidence class -> claim boundary.",
         promptKicker: "Try it immediately",
         promptTitle: "Copy-ready prompts for real projects",
         promptIntro: "These prompts are intentionally concrete. They tell the agent which workflow step to start with and what evidence to produce.",
@@ -870,26 +858,26 @@
         mechanismTitle: "先判断工作场景，再开始审计。",
         mechanismText: "SKILL.md 被刻意保持为轻量入口。它先判断用户所处场景，再只加载该路径需要的子技能和参考模块，所以新实验、失败运行、控制器代码修改和结论审查不会共用一张过大的检查清单。",
         routeOneTitle: "进行中的项目",
-        routeOneText: "项目控制屏 -> 目标、状态、偏差、下一步计划。",
+        routeOneText: "工作流筛查 -> 目标、状态、偏差、下一步计划。",
         routeTwoTitle: "新实验",
-        routeTwoText: "苏格拉底式追问 -> 实验准备记录 -> SUMO 实验计划。",
+        routeTwoText: "实验追问 -> 实验准备记录 -> SUMO 实验计划。",
         routeThreeTitle: "代码修改",
-        routeThreeText: "TDD 门槛 -> 红灯/绿灯/重构记录 -> 验证审阅。",
+        routeThreeText: "开发与验证 -> 红灯/绿灯/重构记录 -> 完成证据。",
         routeFourTitle: "失败或可疑运行",
         routeFourText: "调试助手 -> 症状证据 -> 修复、重跑或降低结论等级。",
         routeFiveTitle: "结果与结论",
-        routeFiveText: "输出门槛 -> 指标定义 -> 基准配对 -> 结论边界。",
+        routeFiveText: "评估与报告 -> 输出门槛、指标、基准、验证和结论边界。",
         academicSkillText: "用于规划、审阅、比较 SUMO/TraCI 信号控制实验，并撰写有证据边界的实验结论。",
         debugSkillText: "用于闭环诊断路线、TraCI、TLS、需求、检测器、输出、随机种子、完成状态和可复现性问题。",
         designTitle: "设计来源",
         designText: "这些技能把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式、作者个人实验经验、苏格拉底式追问、已确认的实验计划、面向 SUMO/TraCI 代码修改的测试驱动开发（TDD）、完成前证据审阅门槛，以及隐私安全的现场经验捕获流程整理成智能体可执行的审计流程。",
         scenarioTitle: "使用场景",
         scenarioText: "先根据用户所处场景判断路径，再只加载该路径需要的参考模块。",
-        scenarioOne: "进行中项目：工作流路由器 -> 项目控制屏 -> 下一步计划。",
-        scenarioTwo: "新实验：苏格拉底式追问 -> 实验准备记录 -> SUMO 实验计划。",
-        scenarioThree: "代码修改：TDD 门槛 -> 实现 -> 验证与审阅门槛。",
+        scenarioOne: "进行中项目：route-project-workflow -> 下一步计划。",
+        scenarioTwo: "新实验：plan-experiment -> 实验准备记录 -> SUMO 实验计划。",
+        scenarioThree: "代码修改：develop-and-verify-code -> 实现 -> 完成证据。",
         scenarioFour: "运行失败：调试助手 -> 闭环诊断 -> 修复或降低结论等级。",
-        scenarioFive: "结果或结论：输出硬门槛 -> 指标与完成度 -> 基准设计 -> 结论边界。",
+        scenarioFive: "结果或结论：evaluate-and-report-results -> 证据等级 -> 结论边界。",
         promptKicker: "马上试用",
         promptTitle: "可以直接复制到真实项目里的提示词",
         promptIntro: "这些提示词刻意写得很具体：它们会告诉智能体从哪个工作流步骤开始，以及需要产出什么证据。",
@@ -963,26 +951,26 @@
         mechanismTitle: "Er wählt zuerst den Arbeitskontext und prüft erst dann.",
         mechanismText: "Die SKILL.md-Dateien sind bewusst kompakt. Sie ordnen zuerst die Situation ein und laden danach nur die passenden Subskills und Referenzmodule, damit ein neues Experiment, ein fehlgeschlagener Lauf, eine Codeänderung und eine Aussagenprüfung nicht dieselbe übergroße Prüfliste verwenden.",
         routeOneTitle: "Laufendes Projekt",
-        routeOneText: "Projekt-Kontrollansicht -> Ziel, Zustand, Abweichung, nächster Schritt.",
+        routeOneText: "Ablaufprüfung -> Ziel, Zustand, Abweichung, nächster Schritt.",
         routeTwoTitle: "Neues Experiment",
-        routeTwoText: "Sokratische Vorabklärung -> Versuchsbereitschaftsnotiz -> SUMO-Versuchsplan.",
+        routeTwoText: "Versuchsabfrage -> Bereitschaftsnotiz -> SUMO-Versuchsplan.",
         routeThreeTitle: "Codeänderung",
-        routeThreeText: "TDD-Prüfung -> Rot/Grün/Refaktor-Protokoll -> Verifikationsreview.",
+        routeThreeText: "Entwickeln und prüfen -> Rot/Grün/Überarbeitung -> Abschlussevidenz.",
         routeFourTitle: "Fehlgeschlagener oder fragwürdiger Lauf",
         routeFourText: "Debugging-Helfer -> Symptombelege -> Fix, erneuter Lauf oder Aussageabstufung.",
         routeFiveTitle: "Ergebnisse und Aussagen",
-        routeFiveText: "Ausgabeprüfungen -> Metrikdefinitionen -> Basislinienpaarung -> Aussagegrenze.",
+        routeFiveText: "Auswerten und berichten -> Ausgaben, Metriken, Basislinien, Validierung und Aussagegrenze.",
         academicSkillText: "Für Planung, Prüfung, Vergleich und evidenzgebundene Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten.",
         debugSkillText: "Für die Diagnose von Routen-, TraCI-, TLS-, Nachfrage-, Detektor-, Ausgabe-, Zufallsseed-, Abschluss- und Reproduzierbarkeitsproblemen im geschlossenen Regelkreis.",
         designTitle: "Designansatz",
         designText: "Die Fähigkeiten verdichten offizielle SUMO-Dokumentation, Fehlersuchmuster aus SUMO-Forum und Community, Muster aus öffentlichem Verkehrssimulationscode, praktische Versuchserfahrung des Autors, sokratische Vorabklärung, bestätigte Versuchsplanung, testgetriebene Entwicklung (TDD) für SUMO/TraCI-Codeänderungen, Prüfungen mit Evidenz vor Abschluss und datenschutzsichere Erfassung von Praxislektionen zu einem ausführbaren Prüfablauf für Agenten.",
         scenarioTitle: "Nutzungsszenarien",
         scenarioText: "Ausgangspunkt ist die Situation des Nutzers; danach werden nur die passenden Referenzen geladen.",
-        scenarioOne: "Laufendes Projekt: Arbeitsablauf-Router -> Projekt-Kontrollansicht -> Plan für den nächsten Schritt.",
-        scenarioTwo: "Neues Experiment: sokratische Vorabklärung -> Versuchsbereitschaftsnotiz -> SUMO-Versuchsplan.",
-        scenarioThree: "Codeänderung: TDD-Prüfung -> Umsetzung -> Verifikations- und Review-Prüfungen.",
+        scenarioOne: "Laufendes Projekt: route-project-workflow -> Plan für den nächsten Schritt.",
+        scenarioTwo: "Neues Experiment: plan-experiment -> Bereitschaftsnotiz -> SUMO-Versuchsplan.",
+        scenarioThree: "Codeänderung: develop-and-verify-code -> Umsetzung -> Abschlussevidenz.",
         scenarioFour: "Fehlgeschlagener Lauf: Debugging-Helfer -> geschlossene Diagnose -> Fix oder Aussageabstufung.",
-        scenarioFive: "Ergebnisse oder Aussagen: Ausgabe-Hartprüfungen -> Metriken und Abschlussgrad -> Basisliniendesign -> Aussagegrenze.",
+        scenarioFive: "Ergebnisse oder Aussagen: evaluate-and-report-results -> Evidenzklasse -> Aussagegrenze.",
         promptKicker: "Sofort ausprobieren",
         promptTitle: "Direkt kopierbare Prompts für echte Projekte",
         promptIntro: "Diese Prompts sind absichtlich konkret. Sie sagen dem Agenten, mit welchem Arbeitsablaufschritt er beginnen und welche Evidenz er liefern soll.",

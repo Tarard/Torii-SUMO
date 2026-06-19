@@ -19,9 +19,7 @@ failure -> observe artifacts -> classify deviation -> choose one probe -> run pr
 
 When the cause is not already proven, read only the needed references:
 
-- Unknown or multi-cause failure: `references/closed-loop-debugging.md`.
-- Known symptom needing evidence mapping: `references/symptom-to-evidence-map.md`.
-- Failed or partially fixed run that may affect claims: `references/debugging-gates-and-claim-boundaries.md`.
+- SUMO/TraCI failure diagnosis, symptom mapping, and claim demotion: `references/debug-sumo-traci.md`.
 
 Ask for one missing artifact at a time. Prefer exact commands, SUMO logs, output files, configs, and minimal reproductions over screenshots or descriptions.
 

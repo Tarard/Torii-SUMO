@@ -1,4 +1,4 @@
-# Public Release Checklist
+﻿# Public Release Checklist
 
 Use this before publishing the skill to GitHub.
 
@@ -35,11 +35,11 @@ Use this before publishing the skill to GitHub.
 - `SKILL.md` frontmatter has `name` and `description`.
 - `agents/openai.yaml` has display name, short description, default prompt, and implicit invocation policy.
 - Every reference named in `SKILL.md` exists.
-- Mixed or ongoing-project requests are routed through `references/workflow-router.md` and `references/project-control-screen.md`.
-- Confirmed intake is routed through `references/experiment-planning-after-intake.md` before implementation, simulation, comparison, or claims.
-- SUMO/TraCI code-change work is routed through `references/tdd-for-sumo-traci-code.md`.
-- Completion, release, and code-review claims are routed through `references/verification-and-review-gates.md`.
-- Self-evolution lessons are captured through `references/field-lesson-capture.md` and require user confirmation plus privacy/source checks before persistence.
+- Mixed or ongoing-project requests are routed through `references/route-project-workflow.md`.
+- Confirmed intake is routed through `references/plan-experiment.md` before implementation, simulation, comparison, or claims.
+- SUMO/TraCI code-change and completion work is routed through `references/develop-and-verify-code.md`.
+- Result, metric, baseline, and claim review work is routed through `references/evaluate-and-report-results.md`.
+- Self-evolution lessons are captured through `references/capture-field-lesson.md` and require user confirmation plus privacy/source checks before persistence.
 - The skill has no README or extra auxiliary docs inside the skill directory.
 - The main package name is `simulation-helper-skill-for-eclipse-sumo`.
 - The companion debugging package name is `debugging-helper-skill-for-eclipse-sumo`.

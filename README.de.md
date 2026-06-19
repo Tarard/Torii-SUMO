@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-Signalsteuerung-blue" alt="SUMO/TraCI-Signalsteuerung">
 <img src="https://img.shields.io/badge/Assistent-Codex%2FClaude-6f42c1" alt="Codex und Claude">
 <img src="https://img.shields.io/badge/F%C3%A4higkeitsdateien-2-1d8e57" alt="Zwei Fähigkeitsdateien">
-<img src="https://img.shields.io/badge/Referenzmodule-24-c98a05" alt="Vierundzwanzig Referenzmodule">
+<img src="https://img.shields.io/badge/Referenzmodule-12-c98a05" alt="Zwoelf Referenzmodule">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Webseite</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>Beispiele</strong></a> |
@@ -101,14 +101,18 @@ Beide `SKILL.md`-Dateien bleiben bewusst schlank. Der Assistent klassifiziert zu
 
 | Szenario | Laden | Erwartete Ausgabe |
 |---|---|---|
-| Neue Maschine, frischer Klon, fehlender SUMO-Nachweis oder unsichere Umgebung | `environment-preflight-and-smoke-test.md` | Umgebungsvorprüfung und Bestehen/Fehlschlag des Rauchtests |
-| Laufendes Projekt, unklarer Fortschritt oder unklarer nächster Schritt | `workflow-router.md` -> `project-control-screen.md` | Projekt-Kontrollprüfung und Plan für den nächsten Schritt |
-| Neues oder vages Experiment | `experiment-intake-interview.md` -> `experiment-planning-after-intake.md` | Experimentbereitschaftsprotokoll, danach SUMO-Experimentplan |
+| Neue Maschine, frischer Klon, fehlender SUMO-Nachweis oder unsichere Umgebung | `preflight-sumo-environment.md` | Umgebungsvorprüfung und Bestehen/Fehlschlag des Rauchtests |
+| OSM-/importierte Netze, Wahl der Netztiefe, Google-Maps/externe Signalprüfung, Detektorabbildung oder Felddatenabgleich | `model-osm-detectors.md` | Modellierungsplan, Straßenklassenleiter, TLS-Prüfung, Detektorabgleich und Visualisierungsgrenze |
+| Laufendes Projekt, unklarer Fortschritt oder unklarer nächster Schritt | `route-project-workflow.md` | Projekt-Kontrollprüfung und Plan für den nächsten Schritt |
+| Neues oder vages Experiment | `plan-experiment.md` | Experimentbereitschaftsprotokoll, danach SUMO-Experimentplan |
 | Fehlgeschlagener oder verdächtiger Lauf | `debugging-helper-skill-for-eclipse-sumo` | Ursache, nächste Prüfung, Reparatur/Wiederholung/Abstufung |
-| Änderung an Steuerung, Auswerter, Laufskript, Prüfer oder Prüfquelltext | `tdd-for-sumo-traci-code.md` -> `verification-and-review-gates.md` | Rot/Grün/Überarbeitung oder expliziter `test-after`-Eintrag |
-| Ergebnisse, Metriken, Vergleichsverfahren oder Aufsatz-/Berichtsaussage | Referenzen zu Ausgaben, Metriken, Vergleichsverfahren und Aussagengrenzen | Evidenzklasse und erlaubte/verbotene Formulierungen |
-| Nutzer findet eine Lösung, die die Fähigkeit verfehlt hat | `field-lesson-capture.md` | Datenschutzfreundlicher Kandidat für eine Felderfahrung |
-| Prüfung vor öffentlicher Veröffentlichung | `public-release-checklist.md` -> `verification-and-review-gates.md` | Veröffentlichungsliste und Restrisiko |
+| Änderung an Steuerung, Auswerter, Laufskript, Prüfer oder Prüfquelltext | `develop-and-verify-code.md` | Rot/Grün/Überarbeitung oder expliziter `test-after`-Eintrag |
+| Steuerungs-, TLS-, NEMA- oder TraCI-Grenzfrage | `audit-sumo-controllers.md` | Steuerungsidentität, API-Grenze und fehlende Evidenz |
+| Fest begrenzte Korridorstörung oder Vergleich von Steuerungsinformation | `compare-corridor-perturbations.md` | gepaarte Störungslogik, negative Kontrollen und Aussagegrenze |
+| SUMO-Semantik, offizielle/Forum-Lehren oder Muster aus öffentlichem Code | `learn-sumo-knowledge.md` | quellengebundene Lehre und nötige Evidenz |
+| Ergebnisse, Metriken, Vergleichsverfahren oder Aufsatz-/Berichtsaussage | `evaluate-and-report-results.md` | Evidenzklasse und erlaubte/verbotene Formulierungen |
+| Nutzer findet eine Lösung, die die Fähigkeit verfehlt hat | `capture-field-lesson.md` | Datenschutzfreundlicher Kandidat für eine Felderfahrung |
+| Prüfung vor öffentlicher Veröffentlichung | `release-project.md` | Veröffentlichungsliste und Restrisiko |
 
 ## 🔗 Fähigkeitsstruktur
 
@@ -125,25 +129,23 @@ skills/
 │  ├─ agents/
 │  │  └─ openai.yaml                             # Codex/OpenAI-Metadaten
 │  └─ references/                                # Vertiefende Ablaufdokumentation
-│     ├─ workflow-router.md                      # Pfad nach Nutzerszenario wählen
-│     ├─ project-control-screen.md               # Ziel, Zustand, Abweichung, nächster Schritt
-│     ├─ environment-preflight-and-smoke-test.md # Nachweis der SUMO/Python-Werkzeugkette
-│     ├─ experiment-intake-interview.md          # Sokratische Vorabklärung
-│     ├─ experiment-planning-after-intake.md     # SUMO-Versuchsplan
-│     ├─ tdd-for-sumo-traci-code.md              # Rot/Grün/Überarbeitung für Quelltext
-│     ├─ verification-and-review-gates.md        # Evidenz vor Abschlussbehauptung
-│     ├─ sumo-official-*.md                      # Offizielle SUMO-Semantik und Lehren
-│     ├─ sumo-community-faq-lessons.md           # Forum- und Häufige-Fragen-Lehren
-│     ├─ public-code-lessons.md                  # Lehren aus öffentlichem Verkehrscode
-│     └─ *metrics*, *baseline*, *claim-boundary* # Bericht und Evidenzgrenzen
+│     ├─ route-project-workflow.md               # Szenario-Routing und Projektzustand
+│     ├─ preflight-sumo-environment.md           # Nachweis der SUMO/Python-Werkzeugkette
+│     ├─ plan-experiment.md                      # Sokratische Vorabklärung und SUMO-Versuchsplan
+│     ├─ develop-and-verify-code.md              # Rot/Grün/Überarbeitung und Abschlussevidenz
+│     ├─ model-osm-detectors.md                  # OSM/importierte Netze, Signalprüfung und Detektorabgleich
+│     ├─ learn-sumo-knowledge.md                 # Offizielle, Forum- und öffentliche Code-Lehren
+│     ├─ audit-sumo-controllers.md               # NEMA/TLS/TraCI-Steuerungsgrenzen
+│     ├─ compare-corridor-perturbations.md       # Fest begrenzte Störungsvergleiche
+│     ├─ evaluate-and-report-results.md          # Ausgaben, Metriken, Vergleich und Aussagen
+│     ├─ capture-field-lesson.md                 # Selbsterweiternde Felderfahrung
+│     └─ release-project.md                      # Veröffentlichung, Marke, Datenschutz, Sichtbarkeit
 │
 ├─ debugging-helper-skill-for-eclipse-sumo/       # Fokussierte Fehlersuchfähigkeit
 │  ├─ SKILL.md                                    # Aktivierung und Ablauf der Fehlersuche
 │  ├─ agents/openai.yaml                          # Codex/OpenAI-Metadaten
 │  └─ references/
-│     ├─ closed-loop-debugging.md                 # Beobachten, klassifizieren, prüfen, aktualisieren
-│     ├─ symptom-to-evidence-map.md              # Symptom -> nötige Evidenz
-│     └─ debugging-gates-and-claim-boundaries.md # Reparieren, wiederholen oder abstufen
+│     └─ debug-sumo-traci.md                      # Beobachten, klassifizieren, prüfen, abstufen
 │
 └─ examples/                                      # Direkt nutzbare Prüfszenarien
    ├─ 01_fixed_time_audit/
@@ -154,36 +156,24 @@ skills/
 <details>
 <summary><strong>Referenzmodule für die Simulationshilfe</strong></summary>
 
-- [`workflow-router.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/workflow-router.md) - oberster Szenario-Router.
-- [`project-control-screen.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/project-control-screen.md) - Ziel, Zustand, Abweichung und nächster Schritt für laufende Projekte.
-- [`environment-preflight-and-smoke-test.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/environment-preflight-and-smoke-test.md) - Nachweis der SUMO/Python-Umgebung und minimale Rauchtest-Grenze.
-- [`experiment-intake-interview.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-intake-interview.md) - sokratische Vorabfragen und Experimentbereitschaftsprotokoll.
-- [`experiment-planning-after-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-planning-after-intake.md) - bestätigter SUMO-Experimentplan vor Quelltext, Simulation oder Aussagen.
-- [`tdd-for-sumo-traci-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/tdd-for-sumo-traci-code.md) - Rot -> Grün -> Überarbeitung für SUMO/TraCI-Quelltextänderungen.
-- [`verification-and-review-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/verification-and-review-gates.md) - Evidenz vor Abschlussbehauptung und Prüfgrenzen.
-- [`source-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/source-ladder.md) - Quellenpriorität und Evidenzhierarchie.
-- [`sumo-official-semantics.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-semantics.md) - SUMO-Netz, Routen, TLS, Detektoren und TraCI-Semantik.
-- [`sumo-official-operational-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-official-operational-lessons.md) - operative Lehren aus offizieller SUMO-Dokumentation.
-- [`sumo-community-faq-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-community-faq-lessons.md) - Forum-, Häufige-Fragen- und Gemeinschaftserfahrungen zur Fehlersuche.
-- [`sumo-nema-controller-audit.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-nema-controller-audit.md) - NEMA-Ring, Barriere, Grünzeitanteil, Rückruf, Detektor und Aussagenprüfung.
-- [`sumo-traci-controller-boundaries.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-traci-controller-boundaries.md) - Identität von TraCI-Steuerungen und API-Grenzen.
-- [`sumo-output-hard-gates.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/sumo-output-hard-gates.md) - Grenzen für Ausgaben, Warnungen, Fahrzeugteleportation und Artefakte.
-- [`evaluation-metrics-and-completion.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluation-metrics-and-completion.md) - Metrikdefinitionen und fertigstellungsbewusste Berichterstattung.
-- [`baseline-and-ablation-design.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/baseline-and-ablation-design.md) - gepaarte Vergleichsverfahren, Ablation und Sensitivitätsdesign.
-- [`experiment-validation-ladder.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/experiment-validation-ladder.md) - Validierungsleiter für Experimente und Fehlerbehebungen.
-- [`field-lesson-capture.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/field-lesson-capture.md) - datenschutzfreundliche Abstraktion von Nutzerlösungen.
-- [`claim-boundary-taxonomy.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/claim-boundary-taxonomy.md) - evidenzbegrenzte Aussageformulierung.
-- [`public-code-lessons.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-code-lessons.md) - Lehren aus öffentlichem Verkehrssimulationsquelltext.
-- [`public-release-checklist.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/public-release-checklist.md) - Veröffentlichung, Marke, Datenschutz und Sichtbarkeitsprüfung.
+- [`route-project-workflow.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md) - Szenario-Routing und Prüfung des Projektzustands.
+- [`preflight-sumo-environment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md) - Nachweis der SUMO/Python-Umgebung und minimale Rauchtest-Grenze.
+- [`plan-experiment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/plan-experiment.md) - sokratische Vorabklärung, Experimentbereitschaftsprotokoll und bestätigter SUMO-Versuchsplan.
+- [`develop-and-verify-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/develop-and-verify-code.md) - Rot -> Grün -> Überarbeitung und Abschlussevidenz für SUMO/TraCI-Quelltextänderungen.
+- [`model-osm-detectors.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/model-osm-detectors.md) - OSM/importierte Netzmodellierung, Wahl der Netztiefe, Google-Maps/externe Signalprüfung, redundante TLS-Bereinigung, Detektorabbildung und Felddatenabgleich.
+- [`learn-sumo-knowledge.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/learn-sumo-knowledge.md) - Quellenhierarchie, offizielle Semantik, Forum-Lehren und Muster aus öffentlichem Code.
+- [`audit-sumo-controllers.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/audit-sumo-controllers.md) - Identität und API-Grenzen von NEMA/TLS/TraCI-Steuerungen.
+- [`compare-corridor-perturbations.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/compare-corridor-perturbations.md) - fest begrenzte Störungsvergleiche, Informationskontrollen und Aussagegrenzen.
+- [`evaluate-and-report-results.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluate-and-report-results.md) - Ausgaben, Metriken, Fertigstellung, Vergleichsverfahren, Validierung und Aussageformulierung.
+- [`capture-field-lesson.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/capture-field-lesson.md) - datenschutzfreundliche Abstraktion von Nutzerlösungen.
+- [`release-project.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md) - Veröffentlichung, Marke, Datenschutz und Sichtbarkeitsprüfung.
 
 </details>
 
 <details>
 <summary><strong>Referenzmodule für die Fehlersuche</strong></summary>
 
-- [`closed-loop-debugging.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/closed-loop-debugging.md) - beobachten, klassifizieren, prüfen, vergleichen, aktualisieren.
-- [`symptom-to-evidence-map.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/symptom-to-evidence-map.md) - ordnet häufige Symptome der nötigen Evidenz zu.
-- [`debugging-gates-and-claim-boundaries.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debugging-gates-and-claim-boundaries.md) - Abstufungsregeln für fehlgeschlagene oder nur teilweise behobene Läufe.
+- [`debug-sumo-traci.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debug-sumo-traci.md) - geschlossene Diagnose, Symptomprüfungen und Regeln zur Aussageabstufung.
 
 </details>
 

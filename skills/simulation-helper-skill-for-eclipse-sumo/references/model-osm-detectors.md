@@ -1,0 +1,197 @@
+# Model OSM Networks and Detector Alignment
+
+Use this reference when building or editing a SUMO network from OSM, netconvert, Netedit, or another imported source; cross-checking signalized intersections against Google Maps, public map sources, aerial imagery, or agency inventories; aligning field detector points with SUMO lanes; or adding background visualization for diagnostic inspection.
+
+The goal is construction discipline. A network that looks plausible in `sumo-gui` is not automatically ready for controller comparison or metric claims.
+
+## Scope Discipline
+
+- Keep each construction variant separate. Do not overwrite the validated baseline network when testing a denser road hierarchy, detector repair, TLS cleanup, or background layer.
+- Name variants by modeling rule, for example:
+  - `*_major_roads`: trunk/primary/secondary/tertiary or the locally relevant arterial classes.
+  - `*_plus_minor_roads`: add the next lower road class for diagnostic inspection.
+  - `*_detector_repaired`: repaired detector-to-lane mapping profile.
+- Treat GUI inspection and map screenshots as diagnostic evidence only. Formal readiness still needs headless SUMO load, routeability, detector output, and completion checks.
+
+## User Granularity Gate
+
+Before changing the network, ask the user what level of road detail is needed for the study:
+
+```text
+network_detail_target:
+minimum road classes:
+next road class to test:
+classes explicitly excluded:
+why this detail is needed:
+visualization only or formal experiment candidate:
+```
+
+Use a small option set rather than silently adding everything:
+
+| Option | Typical use | Risk |
+|---|---|---|
+| arterial/core roads only | signal-control corridor or clean controller comparison | may omit local access and visual context |
+| arterial/core + next lower road class | finer visual model or routeability test | more junctions, more TLS candidates, harder review |
+| include residential/service/access roads | high-detail local access study | fragmented topology, noisy TLS candidates, heavier GUI |
+| background-only layers | water, buildings, land use, visual context | not routeable network evidence |
+
+When producing a denser variant, quantify what changed:
+
+```text
+kept_osm_classes:
+added_osm_classes:
+osm_way_count_before_after:
+sumo_edge_count_before_after:
+sumo_lane_count_before_after:
+lane_length_before_after:
+junction_count_before_after:
+routeability_status:
+```
+
+If the user only wants to inspect what changed, generate a diagnostic highlight layer instead of changing the validated experiment network.
+
+## Construction Plan Gate
+
+Before generating, editing, or committing an imported network, produce a short plan and ask for confirmation:
+
+```text
+Network Modeling Plan
+target:
+study_area_scope:
+source_data:
+road_class_rule:
+variant_name:
+TLS_rule:
+detector_alignment_rule:
+background_layers:
+validation_commands:
+files_to_create:
+files_not_to_overwrite:
+claim_status:
+```
+
+Do not proceed to formal controller comparison from an unplanned network edit. Network construction is its own evidence gate.
+
+## Road-Class Ladder
+
+Start sparse and add detail only when the target requires it.
+
+1. Keep arterial or study-relevant road classes first.
+2. Add lower road classes only when they affect the experimental target, route realism, or detector coverage.
+3. Add residential, service, foot, bicycle, or access roads only with an explicit purpose. They can fragment topology, create low-value junctions, and make traffic-light review noisy.
+4. Record the exact keep/remove rule, source extract, netconvert command, warnings, and output network path for every variant.
+
+Do not call a network experiment-ready merely because it opens in GUI, has many traffic lights, or passes a one-step SUMO load.
+
+## Google Maps and External Signal Cross-Check
+
+Use Google Maps, public map sources, aerial imagery, or agency signal inventories as an external visual audit, not as an automatic source of SUMO truth.
+
+1. Convert every candidate junction or detector point to a stable coordinate record such as `lat,lon`.
+2. Cluster close SUMO TLS candidates before review. Many SUMO junction IDs may represent one physical intersection.
+3. Verify vehicle signals visually or from public inventory:
+   - Keep SUMO TLS where the external source shows a vehicle signal at that intersection.
+   - Remove, downgrade, or mark for review SUMO TLS where the source shows no vehicle signal.
+   - Be careful with pedestrian crossings, bicycle crossings, tram signals, ramp meters, and nearby separate intersections.
+4. Record review fields such as `sumo_node_id`, `lat`, `lon`, road names, external-source URL or inventory ID, `audit_status`, and action (`keep_tls`, `remove_tls`, `needs_review`).
+5. Bound claims: external visual evidence supports a modeling decision. It does not prove signal timing, phasing, recall, detector actuation, or operational control.
+
+## Redundant TLS Removal Gate
+
+When OSM/netconvert creates many traffic lights, force a TLS audit before using the network for signal-control claims:
+
+```text
+candidate_tls_count:
+clustered_physical_intersections:
+external_signal_source:
+keep_tls:
+remove_tls:
+downgrade_to_priority_or_uncontrolled:
+needs_manual_review:
+```
+
+Rules:
+
+- Remove or downgrade SUMO TLS that correspond only to geometry nodes, pedestrian-only crossings, ramp meters outside scope, or map artifacts.
+- Keep TLS that correspond to real vehicle-signalized intersections in the modeled scope.
+- If a cluster of SUMO nodes represents one physical intersection, document whether they should remain separate controllers, become a joined TLS, or be simplified.
+- After TLS removal or rebuilding, rerun routeability smoke, TLS phase audit, and controller mapping checks.
+- Do not claim "realistic signal control" from OSM TLS alone. The claim requires source-bounded TLS existence, phase semantics, timing policy, and controller evidence.
+
+## Detector-to-Lane Mapping
+
+Field, paper, or agency detector points often represent directional or lane-specific measurements. Nearest-lane projection is not enough.
+
+1. Preserve the original detector source table as an immutable reference.
+2. Generate a separate mapping table with generic fields such as:
+   `sensor_id`, `station_id`, `source_location`, `field_lane`, `lane_id`, `edge_id`, `lane_pos`, `match_distance_m`, `mapping_status`.
+3. Parse source text for direction, road side, lane side, movement, or station grouping. Use local-language direction phrases only as evidence, not as hard-coded private project assumptions.
+4. For same-lane conflicts, expand the repair group to the full detector station or movement group, not only the pair that first collided.
+5. Candidate lanes should include nearby passenger lanes within a bounded radius, the current lane for traceability, lane index, edge ID, distance, and lane position.
+6. Decision rules:
+   - Reject duplicate SUMO `lane_id` within the active detector group unless duplicates are explicitly intended.
+   - Same direction: prefer distinct lane indices on the same directed edge.
+   - Mixed directions: avoid sharing one directed edge across different directions unless the source justifies it.
+   - If strict rules cannot select a unique low-distance assignment, stop with `manual_review` instead of silently accepting a duplicate lane.
+
+## Field-Data Alignment Validation
+
+For aggregate loop or sensor data, the strongest supported claim is usually sensor/time-bin count alignment, not real vehicle identity.
+
+Required chain:
+
+```text
+field sensor/time/count record
+-> selected mapping row
+-> SUMO detector id/lane/position
+-> validation route vehicles
+-> detector output count
+-> comparison row
+```
+
+Hard gates:
+
+- Every active source sensor is present in the field data.
+- Every active source sensor has exactly the intended SUMO detector.
+- Detector ID, lane ID, lane position, and aggregation period match between the mapping table and additional XML.
+- Every active sensor has every expected validation interval.
+- For every sensor/time-bin, simulated detector count equals the expected validation count in the controlled validation case.
+- Repaired same-lane conflict files have zero unresolved rows.
+- SUMO summary reports loaded/inserted/arrived consistency and no unexplained running vehicles, collisions, or teleports.
+
+Claim boundary:
+
+- If field data includes sensors outside the modeled study area, report them as out of scope rather than failures.
+- Detector entry counts prove count observability. They do not prove real per-vehicle identity unless a separate vehicle-ID audit is run.
+
+## Background Visualization
+
+SUMO road networks do not automatically include rivers, land-use polygons, map tiles, or static imagery.
+
+Options:
+
+1. Prefer a non-destructive polygon or background layer for diagnostic inspection. A road-only extract cannot show water or land-use features by SUMO GUI configuration alone.
+2. Generate a polygon additional with `polyconvert` and a documented typemap, then load it alongside the road network in `sumo-gui`.
+3. If using GUI background images, decals, or map tiles, save view settings separately from experiment configs.
+4. Keep heavy building or land-use layers optional. They may make GUI inspection slow and are usually not needed for formal simulation evidence.
+5. State clearly whether the background is static diagnostic visualization or part of the simulation network. Visual polygons are not routeable vehicle edges unless the experiment explicitly models that mode.
+
+## Minimal Output Record
+
+For each modeling pass, record:
+
+```text
+target:
+study_area_scope:
+source_extract:
+road_class_rule:
+network_output:
+optional_background_output:
+external_signal_audit:
+detector_mapping:
+validation_commands:
+key_results:
+out_of_scope_items:
+residual_risks:
+claim_status:
+```
