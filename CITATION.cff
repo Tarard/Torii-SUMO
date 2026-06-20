@@ -4,11 +4,11 @@ type: software
 title: "Torii: Task-Oriented Road Infrastructure Intelligence"
 authors:
   - name: "Tarard"
-version: "v0.2.0"
+version: "v1.0.0"
 date-released: "2026-06-20"
 license: "MIT AND CC-BY-4.0"
-repository-code: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO"
-url: "https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"
+repository-code: "https://github.com/Tarard/Torii-SUMO"
+url: "https://tarard.github.io/Torii-SUMO/"
 abstract: "An agent plugin for SUMO that bundles a SUMO expert skill with local MCP tools for OSM-to-SUMO network construction, TLS review, routeability checks, evidence bundles, and feedback-driven simulation repair."
 keywords:
   - "Eclipse SUMO"

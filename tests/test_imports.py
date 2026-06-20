@@ -20,7 +20,7 @@ EXPECTED_TOOL_NAMES = sorted(
 def test_package_imports() -> None:
     import torii_sumo
 
-    assert torii_sumo.__version__ == "0.2.0"
+    assert torii_sumo.__version__ == "1.0.0"
 
 
 def test_server_factory_imports() -> None:

@@ -15,7 +15,7 @@
 <img src="https://img.shields.io/badge/OSM%20to%20SUMO-%E8%B7%AF%E7%BD%91%E6%B8%85%E7%90%86-1d8e57" alt="OSM 到 SUMO 路网清理">
 <img src="https://img.shields.io/badge/MCP%20Tools-local%20stdio-c98a05" alt="本地 stdio MCP tools">
 
-<a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>项目网站</strong></a> |
+<a href="https://tarard.github.io/Torii-SUMO/"><strong>项目网站</strong></a> |
 <a href="docs/codex-plugin-install.md"><strong>Codex 插件安装</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>示例</strong></a> |
 <a href="docs/common-sumo-signal-control-failures.md"><strong>失败清单</strong></a> |
@@ -59,7 +59,7 @@ Torii 的含义是 **Task-Oriented Road Infrastructure Intelligence**。它的�
 从 GitHub 安装：
 
 ```powershell
-codex plugin marketplace add Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO --ref main
+codex plugin marketplace add Tarard/Torii-SUMO --ref main
 codex plugin add torii-sumo@torii-sumo
 ```
 

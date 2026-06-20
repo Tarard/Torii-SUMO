@@ -3,7 +3,7 @@
 Use this manifest for the public Torii repository hosted at:
 
 ```text
-Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO
+Tarard/Torii-SUMO
 ```
 
 The repository keeps the original starred URL while presenting the product as:

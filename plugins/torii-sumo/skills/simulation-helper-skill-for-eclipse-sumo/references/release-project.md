@@ -27,7 +27,7 @@ This reference can be used from either the standalone public skill repository or
 ## Trademark Hygiene
 
 - The public display title is `Torii` and the expansion is `Task-Oriented Road Infrastructure Intelligence`.
-- The repository currently uses the legacy starred slug `Simulation-Helper-Skill-for-Eclipse-SUMO` while presenting the product as Torii.
+- The repository slug is `Torii-SUMO`; the product name remains `Torii` for readability and `SUMO` is kept in the slug for searchability.
 - Skill slugs use the `<product name>-for-eclipse-sumo` pattern, not `sumo-*` or `eclipse-sumo-*`.
 - README includes a trademark notice stating that the project is independent and not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, or DLR.
 - README does not use official, certified, endorsed, sponsored, maintained, or similar wording for this project except inside a negative non-affiliation disclaimer.
@@ -52,12 +52,12 @@ This reference can be used from either the standalone public skill repository or
 
 - README first screen reads like a tool, not a personal note.
 - README has language-switch badges linking between `README.md`, `README.zh-CN.md`, and `README.de.md`.
-- README links to the GitHub Pages language-switch page at `https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/`.
+- README links to the GitHub Pages language-switch page at `https://tarard.github.io/Torii-SUMO/`.
 - `docs/index.html` exists as a no-build GitHub Pages landing page with in-place English, Chinese, and German language switching.
 - README states what it is, who it is for, and what failures it prevents.
 - README includes a scenario-based usage table that maps user situations to skills/references and expected outputs.
 - README Skill Catalog lists the packaged reference Markdown modules with clickable relative links.
-- README includes the repository slug `Simulation-Helper-Skill-for-Eclipse-SUMO`.
+- README includes the repository slug `Torii-SUMO`.
 - README quick start uses concrete repository-scoped install paths for Codex (`.agents/skills/`) and Claude Code (`.claude/skills/`).
 - README includes current boundaries, clarifying which MCP tools are implemented and which roadmap tools are not complete.
 - README includes `## Limitations`, clarifying that the audit does not certify experiment correctness.

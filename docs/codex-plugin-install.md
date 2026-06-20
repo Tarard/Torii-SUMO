@@ -43,7 +43,7 @@ Start a new Codex thread after installing or reinstalling so the skill and MCP t
 For a GitHub source, the expected marketplace command is:
 
 ```powershell
-codex plugin marketplace add Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO --ref main
+codex plugin marketplace add Tarard/Torii-SUMO --ref main
 codex plugin add torii-sumo@torii-sumo
 ```
 

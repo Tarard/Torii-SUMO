@@ -26,7 +26,7 @@
   ],
   "related_identifiers": [
     {
-      "identifier": "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO",
+      "identifier": "https://github.com/Tarard/Torii-SUMO",
       "relation": "isSupplementTo",
       "scheme": "url",
       "resource_type": "software"
