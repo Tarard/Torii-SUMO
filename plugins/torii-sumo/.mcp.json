@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "torii-sumo": {
+      "command": "python",
+      "args": [
+        "./scripts/run_torii_sumo.py"
+      ]
+    }
+  }
+}

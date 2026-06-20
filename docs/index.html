@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="A SUMO skill for Codex and Claude that guides the full SUMO/TraCI experiment workflow: asking, planning, building, debugging, verifying, and reporting.">
-  <title>Simulation Helper Skill for Eclipse SUMO</title>
+  <title>Torii</title>
   <link rel="canonical" href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/">
   <link rel="icon" href="assets/app-logo.png">
   <link rel="apple-touch-icon" href="assets/app-logo.png">
@@ -502,11 +502,11 @@
 <body>
   <main class="shell">
     <header class="topbar">
-      <div class="brand" aria-label="Simulation Helper Skill for Eclipse SUMO">
+      <div class="brand" aria-label="Torii">
         <div class="mark" aria-hidden="true">
           <img src="assets/app-logo.png" alt="">
         </div>
-        <span data-i18n="brandName">Simulation Helper Skill for Eclipse SUMO</span>
+        <span data-i18n="brandName">Torii</span>
       </div>
       <nav class="lang-switch" aria-label="Language">
         <button type="button" data-lang="en" aria-pressed="true">English</button>
@@ -517,17 +517,17 @@
 
     <section class="hero">
       <div>
-        <div class="eyebrow" data-i18n="eyebrow">Codex/Claude Experiment Workflow</div>
-        <h1 data-i18n="heroTitle">Ask. Plan. Build. Debug. Verify. Report.</h1>
-        <p class="subtitle" data-i18n="heroSubtitle">The full SUMO/TraCI experiment workflow, guided by Codex and Claude.</p>
-        <code class="prompt" data-i18n="promptText">Use $simulation-helper-skill-for-eclipse-sumo on this SUMO project. Start with the project control screen, then tell me the next safe step.</code>
+        <div class="eyebrow" data-i18n="eyebrow">Task-Oriented Road Infrastructure Intelligence</div>
+        <h1 data-i18n="heroTitle">One prompt, structured SUMO work.</h1>
+        <p class="subtitle" data-i18n="heroSubtitle">Agent plugin for SUMO: skill-guided reasoning plus local MCP tools for OSM-to-SUMO workflows.</p>
+        <code class="prompt" data-i18n="promptText">Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.</code>
         <div class="hero-points" aria-label="Core mechanisms">
-          <span data-i18n="heroPointOne">Ask</span>
-          <span data-i18n="heroPointTwo">Plan</span>
+          <span data-i18n="heroPointOne">Intent</span>
+          <span data-i18n="heroPointTwo">Observe</span>
           <span data-i18n="heroPointThree">Build</span>
-          <span data-i18n="heroPointFour">Debug</span>
-          <span data-i18n="heroPointFive">Verify</span>
-          <span data-i18n="heroPointSix">Report</span>
+          <span data-i18n="heroPointFour">Audit</span>
+          <span data-i18n="heroPointFive">Diagnose</span>
+          <span data-i18n="heroPointSix">Evidence</span>
         </div>
         <div class="actions">
           <a class="button" href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO" data-i18n="repoButton">GitHub Repository</a>
@@ -544,43 +544,43 @@
 
     <section class="grid" aria-label="Project summary">
       <article class="panel">
-        <h2 data-i18n="whatTitle">The painful part</h2>
-        <p class="muted" data-i18n="whatText">SUMO can finish a run while the experiment is still not comparable, reproducible, or safe to describe as a controller result.</p>
+        <h2 data-i18n="whatTitle">The product</h2>
+        <p class="muted" data-i18n="whatText">Torii packages a SUMO expert skill with local MCP tools, so Codex can reason about intent and run bounded checks on real SUMO artifacts.</p>
       </article>
       <article class="panel">
-        <h2 data-i18n="whoTitle">What this skill changes</h2>
-        <p class="muted" data-i18n="whoText">It makes the agent audit the experiment workflow before it writes code, trusts metrics, or upgrades a result into a paper-style claim.</p>
+        <h2 data-i18n="whoTitle">What Torii changes</h2>
+        <p class="muted" data-i18n="whoText">It makes the agent ask what result the user needs, observe network and metric feedback, and then choose the smallest defensible next action.</p>
       </article>
       <article class="panel">
         <h2 data-i18n="preventsTitle">Who should use it</h2>
-        <p class="muted" data-i18n="preventsText">Researchers building fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style signal-control experiments in Eclipse SUMO.</p>
+        <p class="muted" data-i18n="preventsText">Researchers and builders who need OSM-to-SUMO import, TLS review, routeability checks, controller workflow guidance, and evidence-bounded SUMO repair.</p>
       </article>
     </section>
 
     <section class="panel lead">
-      <span class="kicker" data-i18n="painKicker">Built for real SUMO failure modes</span>
-      <h2 data-i18n="painTitle">It catches the mistakes that usually appear after the paper draft is already written.</h2>
-      <p class="muted" data-i18n="painText">The skill is written around concrete failure patterns from SUMO documentation, community troubleshooting, public traffic-simulation code, and practical experiment experience.</p>
+      <span class="kicker" data-i18n="painKicker">Built for OSM-to-SUMO feedback loops</span>
+      <h2 data-i18n="painTitle">It treats warnings, bad metrics, disconnected routes, TLS mismatches, and map disagreements as feedback about the model.</h2>
+      <p class="muted" data-i18n="painText">Torii uses a closed loop: user intent, observed SUMO artifacts, feedback diagnosis, smallest model or code change, rerun, and evidence-bounded report.</p>
       <ul class="pain-grid">
-        <li data-i18n="painOne">Routes or demand differ across baselines.</li>
-        <li data-i18n="painTwo">TLS phase indexes do not match the intended movements.</li>
-        <li data-i18n="painThree">Tripinfo, summary, or edgeData outputs are missing or overwritten.</li>
-        <li data-i18n="painFour">A run stops early, teleports vehicles, or leaves unfinished demand.</li>
-        <li data-i18n="painFive">Controller comparisons are not paired by seed, horizon, demand, and outputs.</li>
-        <li data-i18n="painSix">The result is stronger than the evidence actually supports.</li>
+        <li data-i18n="painOne">OSM extracts need tiling, retry, deduplication, and road-class filtering.</li>
+        <li data-i18n="painTwo">Generated SUMO TLS candidates need physical-intersection review.</li>
+        <li data-i18n="painThree">Google Maps can be a reality baseline only after current vs historical scope is confirmed.</li>
+        <li data-i18n="painFour">Routeability probes expose disconnected roads before result claims.</li>
+        <li data-i18n="painFive">Controller work must be planned, tested, and interpreted against completion evidence.</li>
+        <li data-i18n="painSix">Bad metrics are feedback for diagnosis, not the final optimization target.</li>
       </ul>
     </section>
 
     <section class="panel scope">
       <h2 data-i18n="scopeTitle">Current scope</h2>
-      <p class="muted" data-i18n="scopeText">The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.</p>
-      <p class="muted" data-i18n="futureText">Future skills may add audit support for routing and demand, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation workflows, calibration, safety analysis, and simulation-mode comparisons.</p>
+      <p class="muted" data-i18n="scopeText">Current tools cover bounded environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS audit candidates, and routeability probes.</p>
+      <p class="muted" data-i18n="futureText">Place-name geocoding, full city-scale intelligent cleanup, max-pressure controller generation, and controller-log inspection are roadmap tools, not finished promises.</p>
     </section>
 
     <section class="panel">
       <span class="kicker" data-i18n="mechanismKicker">The core idea</span>
-      <h2 data-i18n="mechanismTitle">It routes the work before it audits the work.</h2>
-      <p class="muted" data-i18n="mechanismText">The SKILL.md files are deliberately compact. They first classify the situation, then load only the subskill and reference modules needed for that path, so a new experiment, a failing run, a controller code change, and a claim review do not share one oversized checklist.</p>
+      <h2 data-i18n="mechanismTitle">It connects reasoning to bounded execution.</h2>
+      <p class="muted" data-i18n="mechanismText">The skill decides the workflow and interprets feedback. The MCP server runs bounded checks and returns structured observations. Tool output is evidence to analyze, not an automatic final answer.</p>
       <div class="route-list">
         <div class="route-step">
           <strong data-i18n="routeOneTitle">Ongoing project</strong>
@@ -608,7 +608,7 @@
     <section class="grid" aria-label="Skills">
       <article class="panel">
         <h2>simulation-helper-skill-for-eclipse-sumo</h2>
-        <p class="muted" data-i18n="academicSkillText">Use for planning, reviewing, comparing, and writing evidence-bounded claims from SUMO/TraCI signal-control experiments.</p>
+        <p class="muted" data-i18n="academicSkillText">Use for OSM modeling, TLS audit, controller workflow planning, metric feedback diagnosis, and evidence-bounded SUMO claims.</p>
       </article>
       <article class="panel">
         <h2>debugging-helper-skill-for-eclipse-sumo</h2>
@@ -650,7 +650,7 @@
       <p class="muted" data-i18n="referenceText">This SUMO skill is split into focused Markdown modules so the agent can load the right evidence rules only when needed.</p>
       <div class="two-col">
         <div>
-          <h3 data-i18n="academicRefsTitle">Simulation helper references</h3>
+          <h3 data-i18n="academicRefsTitle">Torii reasoning references</h3>
           <ul>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md">route-project-workflow.md</a></li>
             <li><a href="https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md">preflight-sumo-environment.md</a></li>
@@ -704,15 +704,10 @@
 
     <section class="two-col">
       <article class="panel">
-        <h2 data-i18n="installTitle">Install</h2>
-        <p class="muted" data-i18n="installText">Copy the skill folders into a repository-scoped skill directory for Codex or Claude Code.</p>
-        <pre><code>.agents/skills/
-  simulation-helper-skill-for-eclipse-sumo/
-  debugging-helper-skill-for-eclipse-sumo/
-
-.claude/skills/
-  simulation-helper-skill-for-eclipse-sumo/
-  debugging-helper-skill-for-eclipse-sumo/</code></pre>
+        <h2 data-i18n="installTitle">Install Torii</h2>
+        <p class="muted" data-i18n="installText">Install the Codex plugin to get both the reasoning skill and local MCP tools.</p>
+        <pre><code>codex plugin marketplace add Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO --ref main
+codex plugin add torii-sumo@torii-sumo</code></pre>
       </article>
       <article class="panel">
         <h2 data-i18n="limitsTitle">Limitations</h2>
@@ -729,42 +724,42 @@
   <script>
     const translations = {
       en: {
-        pageTitle: "Simulation Helper Skill for Eclipse SUMO",
-        brandName: "Simulation Helper Skill for Eclipse SUMO",
-        eyebrow: "Codex/Claude Experiment Workflow",
-        heroTitle: "Ask. Plan. Build. Debug. Verify. Report.",
-        heroSubtitle: "The full SUMO/TraCI experiment workflow, guided by Codex and Claude.",
-        promptText: "Use $simulation-helper-skill-for-eclipse-sumo on this SUMO project. Start with the project control screen, then tell me the next safe step.",
-        heroPointOne: "Ask",
-        heroPointTwo: "Plan",
+        pageTitle: "Torii",
+        brandName: "Torii",
+        eyebrow: "Task-Oriented Road Infrastructure Intelligence",
+        heroTitle: "One prompt, structured SUMO work.",
+        heroSubtitle: "Agent plugin for SUMO: skill-guided reasoning plus local MCP tools for OSM-to-SUMO workflows.",
+        promptText: "Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.",
+        heroPointOne: "Intent",
+        heroPointTwo: "Observe",
         heroPointThree: "Build",
-        heroPointFour: "Debug",
-        heroPointFive: "Verify",
-        heroPointSix: "Report",
+        heroPointFour: "Audit",
+        heroPointFive: "Diagnose",
+        heroPointSix: "Evidence",
         repoButton: "GitHub Repository",
         readmeButton: "Open README",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO#readme",
-        whatTitle: "The painful part",
-        whatText: "SUMO can finish a run while the experiment is still not comparable, reproducible, or safe to describe as a controller result.",
-        whoTitle: "What this skill changes",
-        whoText: "It makes the agent audit the experiment workflow before it writes code, trusts metrics, or upgrades a result into a paper-style claim.",
+        whatTitle: "The product",
+        whatText: "Torii packages a SUMO expert skill with local MCP tools, so Codex can reason about intent and run bounded checks on real SUMO artifacts.",
+        whoTitle: "What Torii changes",
+        whoText: "It makes the agent ask what result the user needs, observe network and metric feedback, and then choose the smallest defensible next action.",
         preventsTitle: "Who should use it",
-        preventsText: "Researchers building fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style signal-control experiments in Eclipse SUMO.",
-        painKicker: "Built for real SUMO failure modes",
-        painTitle: "It catches the mistakes that usually appear after the paper draft is already written.",
-        painText: "The skill is written around concrete failure patterns from SUMO documentation, community troubleshooting, public traffic-simulation code, and practical experiment experience.",
-        painOne: "Routes or demand differ across baselines.",
-        painTwo: "TLS phase indexes do not match the intended movements.",
-        painThree: "Tripinfo, summary, or edgeData outputs are missing or overwritten.",
-        painFour: "A run stops early, teleports vehicles, or leaves unfinished demand.",
-        painFive: "Controller comparisons are not paired by seed, horizon, demand, and outputs.",
-        painSix: "The result is stronger than the evidence actually supports.",
+        preventsText: "Researchers and builders who need OSM-to-SUMO import, TLS review, routeability checks, controller workflow guidance, and evidence-bounded SUMO repair.",
+        painKicker: "Built for OSM-to-SUMO feedback loops",
+        painTitle: "It treats warnings, bad metrics, disconnected routes, TLS mismatches, and map disagreements as feedback about the model.",
+        painText: "Torii uses a closed loop: user intent, observed SUMO artifacts, feedback diagnosis, smallest model or code change, rerun, and evidence-bounded report.",
+        painOne: "OSM extracts need tiling, retry, deduplication, and road-class filtering.",
+        painTwo: "Generated SUMO TLS candidates need physical-intersection review.",
+        painThree: "Google Maps can be a reality baseline only after current vs historical scope is confirmed.",
+        painFour: "Routeability probes expose disconnected roads before result claims.",
+        painFive: "Controller work must be planned, tested, and interpreted against completion evidence.",
+        painSix: "Bad metrics are feedback for diagnosis, not the final optimization target.",
         scopeTitle: "Current scope",
-        scopeText: "The current release focuses on SUMO/TraCI traffic signal control experiments. It is not yet a general-purpose audit skill for every Eclipse SUMO use case.",
-        futureText: "Future skills may add audit support for routing and demand, emissions and energy, public transport, pedestrian and intermodal scenarios, AV/CAV and co-simulation workflows, calibration, safety analysis, and simulation-mode comparisons.",
+        scopeText: "Current tools cover bounded environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS audit candidates, and routeability probes.",
+        futureText: "Place-name geocoding, full city-scale intelligent cleanup, max-pressure controller generation, and controller-log inspection are roadmap tools, not finished promises.",
         mechanismKicker: "The core idea",
-        mechanismTitle: "It routes the work before it audits the work.",
-        mechanismText: "The SKILL.md files are deliberately compact. They first classify the situation, then load only the subskill and reference modules needed for that path, so a new experiment, a failing run, a controller code change, and a claim review do not share one oversized checklist.",
+        mechanismTitle: "It connects reasoning to bounded execution.",
+        mechanismText: "The skill decides the workflow and interprets feedback. The MCP server runs bounded checks and returns structured observations. Tool output is evidence to analyze, not an automatic final answer.",
         routeOneTitle: "Ongoing project",
         routeOneText: "Workflow screen -> target, state, deviation, next-step plan.",
         routeTwoTitle: "New experiment",
@@ -775,7 +770,7 @@
         routeFourText: "Debugging helper -> symptom evidence -> fix, rerun, or claim demotion.",
         routeFiveTitle: "Results and claims",
         routeFiveText: "Evaluate and report -> outputs, metrics, baselines, validation, claim boundary.",
-        academicSkillText: "Use for planning, reviewing, comparing, and writing evidence-bounded claims from SUMO/TraCI signal-control experiments.",
+        academicSkillText: "Use for OSM modeling, TLS audit, controller workflow planning, metric feedback diagnosis, and evidence-bounded SUMO claims.",
         debugSkillText: "Use for closed-loop diagnosis of route, TraCI, TLS, demand, detector, output, seed, completion, and reproducibility failures.",
         designTitle: "Design approach",
         designText: "The skills distill official SUMO documentation, SUMO forum and community troubleshooting, public traffic-simulation code patterns, the author's practical experiment experience, Socratic intake, confirmed experiment planning, TDD for SUMO/TraCI code changes, evidence-before-completion review gates, and privacy-safe field lesson capture into an agent audit workflow.",
@@ -796,7 +791,7 @@
         tryPromptFive: "The skill missed a failure mode that I later fixed. Turn my solution path into a privacy-safe field lesson candidate.",
         referenceTitle: "Reference modules",
         referenceText: "This SUMO skill is split into focused Markdown modules so the agent can load the right evidence rules only when needed.",
-        academicRefsTitle: "Simulation helper references",
+        academicRefsTitle: "Torii reasoning references",
         debugRefsTitle: "Debugging audit references",
         auditTitle: "Audit checks",
         audit1: "Network, route, config, detector, and additional-file consistency.",
@@ -814,50 +809,50 @@
         exampleOne: "01 fixed-time",
         exampleTwo: "02 max-pressure",
         exampleThree: "03 data-informed",
-        installTitle: "Install",
-        installText: "Copy the skill folders into a repository-scoped skill directory for Codex or Claude Code.",
+        installTitle: "Install Torii",
+        installText: "Install the Codex plugin to get both the reasoning skill and local MCP tools.",
         limitsTitle: "Limitations",
         limitsText: "This repository provides agent instructions, checklists, and audit procedures. It does not certify that a SUMO experiment is correct, publishable, or officially validated.",
         trademarkText: "Eclipse SUMO is a trademark of the Eclipse Foundation. This project is independent and is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, or DLR.",
         footer: "Use the audit as review support, not as a replacement for SUMO documentation, controller-specific validation, or independent reproduction."
       },
       zh: {
-        pageTitle: "Eclipse SUMO 仿真助手技能",
-        brandName: "Eclipse SUMO 仿真助手技能",
-        eyebrow: "Codex/Claude 实验工作流",
-        heroTitle: "思辨。计划。构造。纠错。检验。报告。",
-        heroSubtitle: "由 Codex 和 Claude 引导的完整 SUMO/TraCI 实验工作流。",
-        promptText: "请对这个 SUMO 项目使用 $simulation-helper-skill-for-eclipse-sumo。先做项目控制屏，再告诉我下一步最稳妥的动作。",
-        heroPointOne: "思辨",
-        heroPointTwo: "计划",
-        heroPointThree: "构造",
-        heroPointFour: "纠错",
-        heroPointFive: "检验",
-        heroPointSix: "报告",
+        pageTitle: "Torii",
+        brandName: "Torii",
+        eyebrow: "Task-Oriented Road Infrastructure Intelligence",
+        heroTitle: "一句话启动结构化 SUMO 工作流。",
+        heroSubtitle: "面向 SUMO 的 Agent plugin：用 skill 推理层和本地 MCP 工具层处理 OSM-to-SUMO 工作流。",
+        promptText: "请使用 Torii 构建并审计这个 SUMO 路网。把坏指标当作模型反馈，而不是直接优化目标。",
+        heroPointOne: "意图",
+        heroPointTwo: "观察",
+        heroPointThree: "构建",
+        heroPointFour: "审计",
+        heroPointFive: "诊断",
+        heroPointSix: "证据",
         repoButton: "GitHub 仓库",
         readmeButton: "打开说明文档",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.zh-CN.md",
-        whatTitle: "真正麻烦的地方",
-        whatText: "SUMO 仿真可以正常跑完，但实验仍然可能不可比较、不可复现，也不能安全地描述为某个控制器的有效结果。",
-        whoTitle: "这个技能改变什么",
-        whoText: "它要求智能体先审计实验工作流，再写代码、相信指标，或把一次运行结果升级成论文式结论。",
+        whatTitle: "产品定位",
+        whatText: "Torii 把 SUMO expert skill 和本地 MCP tools 打包在一起，让 Codex 能理解用户意图，并对真实 SUMO 文件运行受限检查。",
+        whoTitle: "Torii 改变什么",
+        whoText: "它要求 agent 先理解用户需要的结果，再观察路网、日志和指标反馈，最后选择最小且可解释的下一步。",
         preventsTitle: "谁应该使用它",
-        preventsText: "适合用 Eclipse SUMO 构建固定配时、感应控制、最大压力、NEMA、数据辅助或 MPC 风格信号控制实验的研究者。",
-        painKicker: "围绕真实 SUMO 失败模式设计",
-        painTitle: "它专门抓那些通常到论文初稿写完后才暴露的问题。",
-        painText: "这个技能围绕 SUMO 官方文档、社区排错经验、公开交通仿真代码和实际实验经验中反复出现的失败模式编写。",
-        painOne: "不同基准方法使用了不同路线或需求。",
-        painTwo: "TLS 相位索引没有对应预期放行方向。",
-        painThree: "tripinfo、summary 或 edgeData 输出缺失或被覆盖。",
-        painFour: "运行提前停止、车辆被传送，或仍有未完成需求。",
-        painFive: "控制器比较没有按随机种子、时段、需求和输出配对。",
-        painSix: "论文式结论强于已有证据实际能支撑的范围。",
+        preventsText: "适合需要 OSM-to-SUMO 导入、TLS 审查、路线可达性检查、控制器工作流和证据边界修复的 SUMO 用户。",
+        painKicker: "围绕 OSM-to-SUMO 反馈闭环设计",
+        painTitle: "它把 warning、坏指标、断开的路线、TLS 不匹配和地图差异都当作模型反馈。",
+        painText: "Torii 使用闭环：用户意图、SUMO 产物观察、反馈诊断、最小模型或代码修改、重跑，以及有证据边界的报告。",
+        painOne: "OSM 数据需要分块、重试、去重和道路等级筛选。",
+        painTwo: "自动生成的 SUMO TLS 候选点需要物理路口级审查。",
+        painThree: "Google Maps 只能在确认当前/历史时间范围后作为现实基线。",
+        painFour: "路线可达性 probes 在结果结论前暴露断路问题。",
+        painFive: "控制器修改必须经过计划、测试，并结合完成度证据解释。",
+        painSix: "坏指标是诊断反馈，不是最终优化目标本身。",
         scopeTitle: "当前范围",
-        scopeText: "当前版本聚焦 SUMO/TraCI 交通信号控制实验。它还不是覆盖所有 Eclipse SUMO 用途的通用审计技能。",
-        futureText: "未来可以继续增加面向路线与需求、排放与能耗、公共交通、行人与多模式场景、自动驾驶/网联自动驾驶与联合仿真、校准、安全分析和仿真模式比较的审计技能。",
+        scopeText: "当前工具覆盖环境检查、配置预检、冒烟运行、证据包、OSM 构网、TLS 候选审计和路线可达性 probes。",
+        futureText: "地名解析、整城级智能清洗、最大压力控制器生成和 controller-log inspection 是后续工具，不是当前完成承诺。",
         mechanismKicker: "核心思路",
-        mechanismTitle: "先判断工作场景，再开始审计。",
-        mechanismText: "SKILL.md 被刻意保持为轻量入口。它先判断用户所处场景，再只加载该路径需要的子技能和参考模块，所以新实验、失败运行、控制器代码修改和结论审查不会共用一张过大的检查清单。",
+        mechanismTitle: "把推理层和受限执行层连接起来。",
+        mechanismText: "Skill 决定工作流并解释反馈；MCP server 运行受限检查并返回结构化观察。工具输出是需要分析的证据，不是自动最终答案。",
         routeOneTitle: "进行中的项目",
         routeOneText: "工作流筛查 -> 目标、状态、偏差、下一步计划。",
         routeTwoTitle: "新实验",
@@ -868,7 +863,7 @@
         routeFourText: "调试助手 -> 症状证据 -> 修复、重跑或降低结论等级。",
         routeFiveTitle: "结果与结论",
         routeFiveText: "评估与报告 -> 输出门槛、指标、基准、验证和结论边界。",
-        academicSkillText: "用于规划、审阅、比较 SUMO/TraCI 信号控制实验，并撰写有证据边界的实验结论。",
+        academicSkillText: "用于 OSM 建模、TLS 审计、控制器工作流计划、指标反馈诊断和有证据边界的 SUMO 结论。",
         debugSkillText: "用于闭环诊断路线、TraCI、TLS、需求、检测器、输出、随机种子、完成状态和可复现性问题。",
         designTitle: "设计来源",
         designText: "这些技能把 SUMO 官方文档、SUMO 论坛和社区常见排错经验、公开交通仿真代码模式、作者个人实验经验、苏格拉底式追问、已确认的实验计划、面向 SUMO/TraCI 代码修改的测试驱动开发（TDD）、完成前证据审阅门槛，以及隐私安全的现场经验捕获流程整理成智能体可执行的审计流程。",
@@ -889,7 +884,7 @@
         tryPromptFive: "这个技能漏掉了一个失败模式，后来我自己找到了解法。请把我的解决路径整理成隐私安全的现场经验候选条目。",
         referenceTitle: "参考模块",
         referenceText: "这个 SUMO 技能被拆成聚焦的 Markdown 模块，智能体可以按需要加载对应的证据规则。",
-        academicRefsTitle: "仿真助手参考模块",
+        academicRefsTitle: "Torii 参考模块",
         debugRefsTitle: "调试审计参考模块",
         auditTitle: "审计检查项",
         audit1: "路网、路线、配置、检测器与附加文件的一致性。",
@@ -907,50 +902,50 @@
         exampleOne: "01 固定配时",
         exampleTwo: "02 最大压力",
         exampleThree: "03 数据辅助",
-        installTitle: "安装",
-        installText: "把技能文件夹复制到 Codex 或 Claude Code 的仓库级技能目录。",
+        installTitle: "安装 Torii",
+        installText: "安装 Codex plugin 后会同时获得推理 skill 和本地 MCP tools。",
         limitsTitle: "限制",
         limitsText: "本仓库提供智能体指令、检查清单和审计流程。它不认证 SUMO 实验一定正确、可发表或已经被官方验证。",
         trademarkText: "Eclipse SUMO 是 Eclipse Foundation 的商标。本项目是独立资源，不隶属于 Eclipse Foundation、Eclipse SUMO 项目或 DLR，也未得到其认可、赞助或维护。",
         footer: "请把审计输出当作审阅辅助，而不是 SUMO 文档、控制器专项验证或独立复现实验的替代品。"
       },
       de: {
-        pageTitle: "Simulationshelfer-Skill für Eclipse SUMO",
-        brandName: "Simulationshelfer-Skill für Eclipse SUMO",
-        eyebrow: "Codex/Claude-Experimentablauf",
-        heroTitle: "Hinterfragen. Planen. Aufbauen. Korrigieren. Prüfen. Berichten.",
-        heroSubtitle: "Der vollständige SUMO/TraCI-Experimentablauf, geführt von Codex und Claude.",
-        promptText: "Nutze $simulation-helper-skill-for-eclipse-sumo für dieses SUMO-Projekt. Beginne mit der Projekt-Kontrollansicht und nenne mir den nächsten belastbaren Schritt.",
-        heroPointOne: "Hinterfragen",
-        heroPointTwo: "Planen",
-        heroPointThree: "Aufbauen",
-        heroPointFour: "Korrigieren",
-        heroPointFive: "Prüfen",
-        heroPointSix: "Berichten",
+        pageTitle: "Torii",
+        brandName: "Torii",
+        eyebrow: "Task-Oriented Road Infrastructure Intelligence",
+        heroTitle: "Ein Prompt, strukturierte SUMO-Arbeit.",
+        heroSubtitle: "Agent plugin for SUMO: Skill-gestuetztes Denken plus lokale MCP-Werkzeuge fuer OSM-zu-SUMO-Workflows.",
+        promptText: "Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.",
+        heroPointOne: "Ziel",
+        heroPointTwo: "Beobachten",
+        heroPointThree: "Bauen",
+        heroPointFour: "Pruefen",
+        heroPointFive: "Diagnose",
+        heroPointSix: "Evidenz",
         repoButton: "GitHub-Repository",
         readmeButton: "Dokumentation öffnen",
         readmeHref: "https://github.com/Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO/blob/main/README.de.md",
-        whatTitle: "Der schmerzhafte Punkt",
-        whatText: "Ein SUMO-Lauf kann vollständig enden, obwohl das Experiment noch nicht vergleichbar, reproduzierbar oder als Steuerungsergebnis belastbar ist.",
-        whoTitle: "Was dieser Skill ändert",
-        whoText: "Er zwingt den Agenten, den Versuchsablauf zu prüfen, bevor er Code schreibt, Metriken vertraut oder ein Ergebnis in eine wissenschaftliche Aussage verwandelt.",
+        whatTitle: "Das Produkt",
+        whatText: "Torii buendelt einen SUMO Expert Skill mit lokalen MCP-Werkzeugen, damit Codex Nutzerziele versteht und echte SUMO-Artefakte begrenzt prueft.",
+        whoTitle: "Was Torii aendert",
+        whoText: "Es laesst den Agenten zuerst das Nutzerziel klaeren, dann Netz- und Metrikfeedback beobachten und danach die kleinste begruendbare Aktion waehlen.",
         preventsTitle: "Wer ihn nutzen sollte",
-        preventsText: "Forschende, die in Eclipse SUMO Festzeit-, verkehrsabhängige, Max-Pressure-, NEMA-, dateninformierte oder MPC-artige Ampelsteuerungsexperimente bauen.",
-        painKicker: "Für echte SUMO-Fehlermuster gebaut",
-        painTitle: "Er fängt Fehler ab, die sonst oft erst nach dem ersten Manuskript sichtbar werden.",
-        painText: "Der Skill orientiert sich an konkreten Fehlermustern aus der SUMO-Dokumentation, Community-Fehlersuche, öffentlichem Verkehrssimulationscode und praktischer Versuchserfahrung.",
-        painOne: "Routen oder Nachfrage unterscheiden sich zwischen Basislinien.",
-        painTwo: "TLS-Phasenindizes passen nicht zu den beabsichtigten Fahrbeziehungen.",
-        painThree: "tripinfo-, summary- oder edgeData-Ausgaben fehlen oder werden überschrieben.",
-        painFour: "Ein Lauf stoppt zu früh, teleportiert Fahrzeuge oder lässt Nachfrage unvollendet.",
-        painFive: "Steuerungsvergleiche sind nicht nach Seed, Horizont, Nachfrage und Ausgaben gepaart.",
-        painSix: "Die Aussage ist stärker als die vorhandene Evidenz erlaubt.",
+        preventsText: "Forschende und Entwickler, die OSM-zu-SUMO-Import, TLS-Pruefung, Erreichbarkeitschecks, Controller-Workflow und evidenzgebundene SUMO-Reparatur brauchen.",
+        painKicker: "Fuer OSM-zu-SUMO-Feedbackschleifen gebaut",
+        painTitle: "Es behandelt Warnungen, schlechte Metriken, getrennte Routen, TLS-Abweichungen und Kartenkonflikte als Modellfeedback.",
+        painText: "Torii arbeitet als Regelkreis: Nutzerziel, beobachtete SUMO-Artefakte, Feedbackdiagnose, kleinste Modell- oder Codeaenderung, erneuter Lauf und evidenzgebundener Bericht.",
+        painOne: "OSM-Exporte brauchen Kachelung, Retry, Deduplizierung und Strassenklassenfilter.",
+        painTwo: "Generierte SUMO-TLS-Kandidaten brauchen Pruefung auf physische Kreuzungen.",
+        painThree: "Google Maps ist nur nach Klaerung aktueller oder historischer Zielzeit als Realitaetsbasis nutzbar.",
+        painFour: "Erreichbarkeitsproben zeigen getrennte Strassen vor Ergebnisaussagen.",
+        painFive: "Controller-Arbeit muss geplant, getestet und mit Abschlussnachweisen interpretiert werden.",
+        painSix: "Schlechte Metriken sind Diagnosefeedback, nicht das endgueltige Optimierungsziel.",
         scopeTitle: "Aktueller Umfang",
-        scopeText: "Diese Version konzentriert sich auf SUMO/TraCI-Experimente zur Verkehrssignalsteuerung. Sie ist noch kein allgemeines Prüfwerkzeug für alle Eclipse SUMO-Anwendungsfälle.",
-        futureText: "Künftige Fähigkeiten können Prüfungen für Routenwahl und Nachfrage, Emissionen und Energie, öffentlichen Verkehr, Fußgänger- und intermodale Szenarien, automatisierte und vernetzte Fahrzeuge mit Co-Simulation, Kalibrierung, Sicherheitsanalyse und Vergleiche von Simulationsmodi ergänzen.",
+        scopeText: "Aktuelle Werkzeuge decken Umgebungstests, Konfigurationspruefung, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten und Erreichbarkeitsproben ab.",
+        futureText: "Ortsnamen-Geokodierung, vollstaendige intelligente Stadtbereinigung, Max-Pressure-Controller-Generierung und Controller-Log-Inspection sind Roadmap-Werkzeuge.",
         mechanismKicker: "Kernidee",
-        mechanismTitle: "Er wählt zuerst den Arbeitskontext und prüft erst dann.",
-        mechanismText: "Die SKILL.md-Dateien sind bewusst kompakt. Sie ordnen zuerst die Situation ein und laden danach nur die passenden Subskills und Referenzmodule, damit ein neues Experiment, ein fehlgeschlagener Lauf, eine Codeänderung und eine Aussagenprüfung nicht dieselbe übergroße Prüfliste verwenden.",
+        mechanismTitle: "Es verbindet Reasoning mit begrenzter Ausfuehrung.",
+        mechanismText: "Der Skill waehlt den Workflow und interpretiert Feedback. Der MCP Server fuehrt begrenzte Checks aus und liefert strukturierte Beobachtungen. Tool-Ausgabe ist Evidenz zur Analyse, keine automatische Endantwort.",
         routeOneTitle: "Laufendes Projekt",
         routeOneText: "Ablaufprüfung -> Ziel, Zustand, Abweichung, nächster Schritt.",
         routeTwoTitle: "Neues Experiment",
@@ -961,7 +956,7 @@
         routeFourText: "Debugging-Helfer -> Symptombelege -> Fix, erneuter Lauf oder Aussageabstufung.",
         routeFiveTitle: "Ergebnisse und Aussagen",
         routeFiveText: "Auswerten und berichten -> Ausgaben, Metriken, Basislinien, Validierung und Aussagegrenze.",
-        academicSkillText: "Für Planung, Prüfung, Vergleich und evidenzgebundene Aussagen aus SUMO/TraCI-Signalsteuerungs-Experimenten.",
+        academicSkillText: "Fuer OSM-Modellierung, TLS-Pruefung, Controller-Workflowplanung, Metrikfeedback-Diagnose und evidenzgebundene SUMO-Aussagen.",
         debugSkillText: "Für die Diagnose von Routen-, TraCI-, TLS-, Nachfrage-, Detektor-, Ausgabe-, Zufallsseed-, Abschluss- und Reproduzierbarkeitsproblemen im geschlossenen Regelkreis.",
         designTitle: "Designansatz",
         designText: "Die Fähigkeiten verdichten offizielle SUMO-Dokumentation, Fehlersuchmuster aus SUMO-Forum und Community, Muster aus öffentlichem Verkehrssimulationscode, praktische Versuchserfahrung des Autors, sokratische Vorabklärung, bestätigte Versuchsplanung, testgetriebene Entwicklung (TDD) für SUMO/TraCI-Codeänderungen, Prüfungen mit Evidenz vor Abschluss und datenschutzsichere Erfassung von Praxislektionen zu einem ausführbaren Prüfablauf für Agenten.",
@@ -982,7 +977,7 @@
         tryPromptFive: "Der Skill hat ein Fehlermuster übersehen, das ich später gelöst habe. Verwandle meinen Lösungsweg in einen datenschutzsicheren Field-Lesson-Kandidaten.",
         referenceTitle: "Referenzmodule",
         referenceText: "Diese SUMO-Fähigkeit ist in fokussierte Markdown-Module aufgeteilt, damit der Agent die jeweils passenden Evidenzregeln nur bei Bedarf lädt.",
-        academicRefsTitle: "Referenzmodule für Simulationshilfe",
+        academicRefsTitle: "Torii Reasoning-Referenzen",
         debugRefsTitle: "Referenzmodule für Fehlersuche",
         auditTitle: "Prüfpunkte",
         audit1: "Konsistenz von Netz, Routen, Konfiguration, Detektoren und Zusatzdateien.",
@@ -1000,8 +995,8 @@
         exampleOne: "01 Festzeit",
         exampleTwo: "02 Max-Pressure",
         exampleThree: "03 dateninformiert",
-        installTitle: "Installation",
-        installText: "Kopieren Sie die Fähigkeitsordner in ein projektspezifisches Fähigkeitsverzeichnis für Codex oder Claude Code.",
+        installTitle: "Torii installieren",
+        installText: "Installieren Sie das Codex Plugin, um Reasoning Skill und lokale MCP Tools zusammen zu erhalten.",
         limitsTitle: "Grenzen",
         limitsText: "Dieses Repository bietet Agentenanweisungen, Prüflisten und Prüfabläufe. Es zertifiziert nicht, dass ein SUMO-Experiment korrekt, publikationsfähig oder offiziell validiert ist.",
         trademarkText: "Eclipse SUMO ist eine Marke der Eclipse Foundation. Dieses Projekt ist eine unabhängige Ressource. Es gehört nicht zur Eclipse Foundation, zum Eclipse SUMO-Projekt oder zu DLR und wird von ihnen weder empfohlen, gesponsert noch gepflegt.",

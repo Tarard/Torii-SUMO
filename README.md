@@ -1,65 +1,78 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="Simulation Helper Skill for Eclipse SUMO banner">
+  <img src="docs/assets/banner.png" alt="Torii agent plugin for SUMO banner">
 </p>
 
-# <img src="docs/assets/app-logo.png" width="42" alt="App logo"> Simulation Helper Skill for Eclipse SUMO
+# <img src="docs/assets/app-logo.png" width="42" alt="Torii logo"> Torii
 
 <div align="center">
 
-**Ask. Plan. Build. Debug. Verify. Report.**
+**Task-Oriented Road Infrastructure Intelligence**
 
-**The full SUMO/TraCI experiment workflow, guided by Codex and Claude.**
+**Agent plugin for SUMO**
 
-<img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
-<img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
-<img src="https://img.shields.io/badge/Skill%20Files-2-1d8e57" alt="Two skills">
-<img src="https://img.shields.io/badge/Reference%20Modules-13-c98a05" alt="13 reference modules">
+<img src="https://img.shields.io/badge/Agent%20Plugin-Codex%20%2F%20Claude-6f42c1" alt="Agent plugin for Codex and Claude">
+<img src="https://img.shields.io/badge/SUMO%2FTraCI-traffic%20simulation-blue" alt="SUMO and TraCI">
+<img src="https://img.shields.io/badge/OSM%20to%20SUMO-network%20cleanup-1d8e57" alt="OSM to SUMO network cleanup">
+<img src="https://img.shields.io/badge/MCP%20Tools-local%20stdio-c98a05" alt="Local stdio MCP tools">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Website</strong></a> |
+<a href="docs/codex-plugin-install.md"><strong>Codex Plugin Installation</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>Examples</strong></a> |
 <a href="docs/common-sumo-signal-control-failures.md"><strong>Failure Checklist</strong></a> |
-<a href="LICENSE-DOCS"><strong>CC BY 4.0</strong></a>
+<a href="LICENSE-CODE"><strong>MIT Code</strong></a> |
+<a href="LICENSE-DOCS"><strong>CC BY 4.0 Docs</strong></a>
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
 
 </div>
 
 > [!IMPORTANT]
-> Current scope: this release focuses on **SUMO/TraCI traffic-signal control experiments**. It is not yet a general-purpose audit package for every Eclipse SUMO use case.
+> Torii is a plugin-and-skill package for agentic SUMO work. It already bundles executable local MCP tools for environment checks, config preflight, smoke runs, evidence bundles, OSM-to-SUMO network construction, TLS audit candidates, and routeability probes. It does not yet claim fully automatic place-name geocoding, full city-scale OSM cleanup, or controller generation as finished MCP tools.
 
 > [!NOTE]
-> This is an independent academic workflow resource. It is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, or DLR.
+> This project is independent. It is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, DLR, OpenAI, Anthropic, Google, or any external OSM tooling project.
 
-## 🔥 Why This Exists
+## What Torii Is
 
-SUMO can run without crashing while the experiment is still not valid evidence.
+Torii turns a coding agent into a more reliable SUMO assistant by giving it two layers:
 
-This skill is built for the mistakes that often appear late:
+| Layer | Role |
+|---|---|
+| Reasoning layer | The SUMO expert skill interprets the user's intent, chooses the workflow, asks for missing evidence, and explains what bad metrics imply. |
+| Execution layer | The local MCP server runs bounded checks and returns structured observations: files, warnings, metrics, routes, TLS candidates, and evidence bundles. |
 
-- routes or demand silently differ across baselines
-- TLS phase indexes do not match intended movements
-- `tripinfo`, `summary`, or `edgeData` outputs are missing or overwritten
-- controller comparisons are not paired by seed, horizon, demand, and outputs
-- simulations stop before demand completes
-- arrived-only metrics hide unfinished vehicles
-- result claims become stronger than the evidence supports
+Installing Torii gives Codex both **skills and MCP tools**. The goal is not to make the agent chase a raw metric. The goal is to help the agent infer the modeling problem behind the metric, make the smallest defensible change, and report what the evidence can and cannot support.
 
-## 🧠 What It Does
+## What You Can Ask
 
-```text
-What it is:      A reusable SUMO skill for Codex and Claude, focused on the full SUMO/TraCI signal-control experiment workflow.
-Who it is for:   Researchers using Eclipse SUMO for fixed-time, actuated, max-pressure, NEMA, data-informed, or MPC-style controllers.
-How it works:    A compact SKILL.md acts as a scenario router and loads focused reference modules only when needed.
-Where it comes from:
-                 Official SUMO documentation, SUMO FAQ/forum lessons, public traffic-simulation code patterns, and the author's own experiment practice.
-What it catches: Broken routes, unsafe TLS phases, unpaired baselines, overwritten outputs, invalid metrics, and unreproducible batches.
+| User request | Torii response pattern |
+|---|---|
+| "Build a SUMO network from this OSM area." | Use bounded OSM import, tiled Overpass download or local extract reuse, road-class filtering, XML deduplication, `netconvert`, and artifact reporting. |
+| "Clean this Munich core network." | If a bbox or extract is supplied, run the implemented OSM-to-SUMO path. If only a place name is supplied, route to a small clarification or code-development step until geocoding is implemented. |
+| "Audit all traffic lights against Google Maps." | Extract SUMO TLS candidates, cluster likely physical intersections, generate Google Maps review links, and ask whether the baseline should be current Google Maps or a historical target date. |
+| "Check whether these roads or bridges are connected." | Generate named-road routeability probes and report missing key edges, route generation evidence, and residual SUMO completion risk. |
+| "My metrics got worse after a run." | Treat metrics as feedback: diagnose route, demand, network, TLS, controller, output, horizon, or completion problems before proposing code changes. |
+| "Add a max-pressure controller." | Use the bundled SUMO skill and public controller-pattern guidance to plan and verify the implementation path. Full controller generation is a roadmap MCP tool, not a finished promise in this release. |
+
+## Quick Start
+
+Install from GitHub:
+
+```powershell
+codex plugin marketplace add Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO --ref main
+codex plugin add torii-sumo@torii-sumo
 ```
 
-The package is intentionally not a Python validator yet. It is a **workflow protocol and agent skill**: copy it into Codex or Claude, point it at a SUMO experiment repository, and use the structured checks to plan, debug, verify, and report with clear evidence boundaries.
+Start a new Codex thread after installing or reinstalling so the plugin's skills and MCP tools are discovered.
 
-## ⚡ Quick Start
+For local development, run the marketplace command from a checkout or pass the checkout path:
 
-For **Codex**, copy the skill folders into a repository-scoped skill directory:
+```powershell
+codex plugin marketplace add <path-to-this-repo>
+codex plugin add torii-sumo@torii-sumo
+```
+
+Manual skill-only usage is still supported. Copy the root skill folders into a repository-scoped skill directory:
 
 ```text
 .agents/skills/
@@ -67,246 +80,131 @@ For **Codex**, copy the skill folders into a repository-scoped skill directory:
   debugging-helper-skill-for-eclipse-sumo/
 ```
 
-For **Claude Code**, copy the same folders into:
+Then ask the agent:
 
 ```text
-.claude/skills/
-  simulation-helper-skill-for-eclipse-sumo/
-  debugging-helper-skill-for-eclipse-sumo/
+Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.
 ```
 
-Then call the skill from the agent:
+## Repository Layout
 
 ```text
-Use $simulation-helper-skill-for-eclipse-sumo to audit this SUMO/TraCI traffic signal control experiment before I report results.
+plugins/
+  torii-sumo/
+    .codex-plugin/plugin.json        # Codex plugin manifest
+    .mcp.json                        # local stdio MCP server config
+    scripts/run_torii_sumo.py        # bundled server launcher
+    src/torii_sumo/                  # MCP tool implementation
+    skills/simulation-helper-skill-for-eclipse-sumo/
+
+skills/
+  simulation-helper-skill-for-eclipse-sumo/      # manual skill install path
+  debugging-helper-skill-for-eclipse-sumo/       # focused SUMO/TraCI debugging skill
+
+docs/
+  codex-plugin-install.md
+  osm-source-patterns.md
+  skill-integration.md
 ```
 
-For a failed or suspicious run:
+The original `Simulation Helper Skill for Eclipse SUMO` is not deleted. It is now Torii's reasoning layer, and the installable plugin bundles it together with the MCP execution layer.
+
+## Implemented MCP Tools
+
+| Tool | Current scope |
+|---|---|
+| `sumo_preflight` | Detect SUMO/Python/TraCI environment evidence before experiment claims. |
+| `sumo_get_environment` | Return structured environment details for handoff and diagnosis. |
+| `sumo_config_pair_preflight` | Check paired `.sumocfg` inputs for missing files and shared outputs. |
+| `sumo_run_config` | Run a bounded SUMO config and return logs and declared-output observations. |
+| `sumo_run_minimal_smoke` | Produce a small diagnostic smoke proof for local toolchain checks. |
+| `sumo_compare_outputs` | Compare summary/tripinfo outputs with completion-first reporting. |
+| `sumo_collect_evidence` | Write a reproducibility evidence bundle. |
+| `sumo_osm_build_network` | Download or reuse OSM extracts, tile Overpass calls, retry, deduplicate XML, filter roads, and run `netconvert`. |
+| `sumo_tls_audit` | Extract TLS candidates, cluster review groups, and attach Google Maps temporal-baseline fields. |
+| `sumo_network_routeability_probe` | Generate named-road routeability probe routes and a bounded `.sumocfg`. |
+
+See [`docs/codex-plugin-install.md`](docs/codex-plugin-install.md) for installation details and [`docs/osm-source-patterns.md`](docs/osm-source-patterns.md) for the OSM architecture borrowed from OSMnx, OSMNet, pyrosm, SUMO `osmGet/osmBuild`, and osm-to-xodr without vendoring their source code.
+
+## Feedback Diagnosis
+
+Torii uses bad run evidence as feedback:
 
 ```text
-Use $debugging-helper-skill-for-eclipse-sumo to diagnose why this SUMO/TraCI run is invalid or unreproducible.
+user intent
+-> observed SUMO outputs, warnings, metrics, and logs
+-> diagnose what the metric implies
+-> identify the likely network, demand, routing, controller, code, or experiment-design problem
+-> choose the smallest next change
+-> rerun the relevant check
+-> report whether the user's intent is better satisfied
 ```
 
-The skill should ask for missing experiment details first. It should not endorse results just because SUMO ran without crashing.
+Examples:
 
-## 🧩 Included Skills
+- Low arrived count can indicate disconnected routes, failed insertion, too short a horizon, or blocked signal phases.
+- High waiting time can indicate wrong phase-lane mapping, joined TLS that should be split, demand outside the intended scope, or an unsuitable controller policy.
+- Teleports are construction or control feedback, not a result to hide.
+- A better average with worse completion is not a clean win; completion regression is reported first.
 
-| Skill | Use When | Main Outputs |
+## Included Skills
+
+| Skill | Use when | Main outputs |
 |---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | Planning, auditing, comparing, coding, release checks, and evidence-bounded claim writing for SUMO/TraCI signal-control experiments. | Project Control Screen, Experiment Readiness Record, SUMO Experiment Plan, evidence class, claim boundary, next-step plan. |
+| `simulation-helper-skill-for-eclipse-sumo` | Planning, OSM modeling, TLS audit, controller work, result interpretation, evidence bundles, and release checks. | Project control screen, readiness record, SUMO experiment plan, feedback diagnosis, claim boundary. |
 | `debugging-helper-skill-for-eclipse-sumo` | SUMO/TraCI route, demand, detector, TLS, output, seed, completion, reproducibility, or runtime failures. | Fault class, next diagnostic probe, evidence, fix/rerun/demotion decision. |
 
-Both skills keep `SKILL.md` deliberately lean. The agent first classifies the scenario, then loads only the relevant reference modules.
+## Current Boundaries
 
-## 🗺️ Scenario Router
+Torii is useful today, but it should stay honest:
 
-| Scenario | Load | Expected Output |
-|---|---|---|
-| New machine, fresh clone, missing SUMO proof, or setup doubt | `preflight-sumo-environment.md` | Environment Preflight record and smoke-test pass/fail route |
-| OSM/imported-network cleanup, road-detail selection, Google Maps/external signal check, detector mapping, or field-data alignment | `model-osm-detectors.md` | modeling plan, road-class ladder, TLS audit, detector-alignment gates, and visualization boundary |
-| Ongoing project, unclear progress, or "what next?" | `route-project-workflow.md` | Project Control Screen and next-step plan |
-| New, vague, or assumption-heavy experiment | `interactive-experiment-intake.md` | one-question-at-a-time intake, recommended answers, and readiness route |
-| Confirmed experiment intake ready for planning | `plan-experiment.md` | Experiment Readiness Record, then SUMO Experiment Plan |
-| Failed or suspicious run | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
-| Controller, parser, runner, validator, or audit-code change | `develop-and-verify-code.md` | RED/GREEN/REFACTOR or explicit `test-after` record |
-| Controller/TLS/NEMA/TraCI boundary question | `audit-sumo-controllers.md` | controller identity, API boundary, and missing evidence |
-| Fixed-scope corridor perturbation or controller-information comparison | `compare-corridor-perturbations.md` | paired perturbation logic, negative controls, and claim boundary |
-| SUMO semantics, official/forum lessons, or public-code pattern | `learn-sumo-knowledge.md` | source-bounded lesson and evidence requirement |
-| Results, metrics, baseline comparison, or paper/report claim | `evaluate-and-report-results.md` | evidence class and allowed/prohibited claim wording |
-| User found a fix the skill missed | `capture-field-lesson.md` | privacy-safe field lesson candidate |
-| Public release check | `release-project.md` | release checklist and residual risk |
+- It can build SUMO networks from supplied bbox/extract inputs; place-name geocoding is not yet a finished MCP tool.
+- It can assist OSM cleanup with road-class selection, deduplication, TLS candidates, routeability probes, and warnings; it does not certify a whole city network automatically.
+- It can use Google Maps as an external reality baseline only after the user confirms whether the intended reference is current or historical.
+- It can guide controller implementation using public patterns such as SUMO Lights; full controller generation and controller-log inspection are roadmap tools.
+- It can support evidence-bounded claims; it does not certify experiment correctness.
 
-## 🔗 Skill Structure
+## Development
 
-The package uses a compact entry-point plus deep-reference format. `SKILL.md` stays lean enough for Codex and Claude to load quickly; focused reference files hold the detailed SUMO/TraCI experiment workflow.
+Run tests from the repository root:
 
-```text
-skills/
-├─ simulation-helper-skill-for-eclipse-sumo/      # Main workflow skill
-│  ├─ SKILL.md                                    # Scenario router and activation rules
-│  │  ├─ when to use the skill
-│  │  ├─ Ask -> Plan -> Build -> Debug -> Verify -> Report
-│  │  ├─ required outputs and claim boundaries
-│  │  └─ links to focused references
-│  ├─ agents/
-│  │  └─ openai.yaml                             # Codex/OpenAI metadata
-│  └─ references/                                # Deep workflow documentation
-│     ├─ route-project-workflow.md               # Route by scenario and screen project state
-│     ├─ preflight-sumo-environment.md           # SUMO/Python toolchain proof
-│     ├─ interactive-experiment-intake.md        # One-question-at-a-time SUMO experiment intake
-│     ├─ plan-experiment.md                      # Socratic intake and SUMO experiment plan
-│     ├─ develop-and-verify-code.md              # RED/GREEN/REFACTOR and completion evidence
-│     ├─ model-osm-detectors.md                  # OSM/imported networks, signal checks, detector alignment
-│     ├─ learn-sumo-knowledge.md                 # Official, forum, and public-code lessons
-│     ├─ audit-sumo-controllers.md               # NEMA/TLS/TraCI controller boundaries
-│     ├─ compare-corridor-perturbations.md       # Fixed-scope perturbation comparisons
-│     ├─ evaluate-and-report-results.md          # Outputs, metrics, baselines, claims
-│     ├─ capture-field-lesson.md                 # Self-evolving field lesson capture
-│     └─ release-project.md                      # Release, trademark, privacy, exposure
-│
-├─ debugging-helper-skill-for-eclipse-sumo/       # Focused debug subskill
-│  ├─ SKILL.md                                    # Debug activation and workflow
-│  ├─ agents/openai.yaml                          # Codex/OpenAI metadata
-│  └─ references/
-│     └─ debug-sumo-traci.md                      # Observe, classify, probe, demote
-│
-└─ examples/                                      # Prompt-ready audit scenarios
-   ├─ 01_fixed_time_audit/
-   ├─ 02_max_pressure_audit/
-   └─ 03_data_informed_signal_control_audit/
+```powershell
+python -m pytest -q
 ```
 
-<details>
-<summary><strong> Simulation helper references</strong></summary>
+Validate the plugin:
 
-- [`route-project-workflow.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md) - scenario routing and project-state screening.
-- [`preflight-sumo-environment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md) - SUMO/Python environment proof and minimal smoke-test gate.
-- [`interactive-experiment-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/interactive-experiment-intake.md) - one-question-at-a-time SUMO experiment intake with recommended answers before planning.
-- [`plan-experiment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/plan-experiment.md) - Socratic intake, readiness record, and confirmed SUMO Experiment Plan.
-- [`develop-and-verify-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/develop-and-verify-code.md) - RED -> GREEN -> REFACTOR workflow and completion evidence.
-- [`model-osm-detectors.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/model-osm-detectors.md) - OSM/imported-network modeling, road-detail selection, Google Maps/external signal checks, redundant TLS cleanup, detector mapping, and field-data alignment.
-- [`learn-sumo-knowledge.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/learn-sumo-knowledge.md) - source ladder, official semantics, forum lessons, and public-code patterns.
-- [`audit-sumo-controllers.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/audit-sumo-controllers.md) - NEMA/TLS/TraCI controller identity and API-boundary checks.
-- [`compare-corridor-perturbations.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/compare-corridor-perturbations.md) - fixed-scope perturbation comparisons, information controls, and claim boundaries.
-- [`evaluate-and-report-results.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/evaluate-and-report-results.md) - outputs, metrics, completion, baselines, validation, and claim wording.
-- [`capture-field-lesson.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/capture-field-lesson.md) - privacy-safe capture of user-discovered fixes.
-- [`release-project.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md) - release, trademark, privacy, and exposure checks.
-
-</details>
-
-<details>
-<summary><strong> Debugging references</strong></summary>
-
-- [`debug-sumo-traci.md`](skills/debugging-helper-skill-for-eclipse-sumo/references/debug-sumo-traci.md) - closed-loop diagnosis, symptom probes, and claim demotion rules.
-
-</details>
-
-## 🧪 Examples
-
-Each example is prompt-ready:
-
-```text
-examples/
-  01_fixed_time_audit/
-    task.md
-    expected_audit_report.md
-    bad_case/
-    fixed_case/
-  02_max_pressure_audit/
-    task.md
-    expected_audit_report.md
-    bad_case/
-    fixed_case/
-  03_data_informed_signal_control_audit/
-    task.md
-    expected_audit_report.md
-    bad_case/
-    fixed_case/
+```powershell
+python <codex-home>/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/torii-sumo
 ```
 
-Try:
+Validate the bundled skill:
 
-```text
-Use $simulation-helper-skill-for-eclipse-sumo on examples/02_max_pressure_audit/task.md and produce an evidence-bounded audit report.
+```powershell
+python <codex-home>/skills/.system/skill-creator/scripts/quick_validate.py plugins/torii-sumo/skills/simulation-helper-skill-for-eclipse-sumo
 ```
 
-## ✅ What It Audits
+## License
 
-- network, routes, configs, detectors, and additional files
-- TLS phase, movement-green, yellow, all-red, and NEMA evidence
-- paired seeds, demand, outputs, simulation horizons, and baselines
-- `tripinfo`, `summary`, `edgeData`, TLS switch output, controller logs, warnings, teleports, and unfinished vehicles
-- travel time, delay, stops, throughput, queue, emissions, fairness, and completion-aware reporting
-- fixed-time, actuated, max-pressure, NEMA, data-informed, and MPC-style controller comparisons
-- TDD records for SUMO/TraCI controller, metric parser, runner, validator, and audit-code changes
-- field lessons from user-discovered fixes that should become reusable guidance
+Source code is licensed under MIT. See [`LICENSE-CODE`](LICENSE-CODE).
 
-See [`docs/common-sumo-signal-control-failures.md`](docs/common-sumo-signal-control-failures.md) for a longer failure checklist.
+Skill files, documentation, checklists, and protocol text are licensed under Creative Commons Attribution 4.0 International (`CC BY 4.0`). See [`LICENSE-DOCS`](LICENSE-DOCS).
 
-## 🛠️ Design Principles
+## Trademark Notice
 
-- **Progressive disclosure:** `SKILL.md` stays compact and routes the agent to focused references only when needed.
-- **Socratic intake:** unclear experiments become an Experiment Readiness Record before execution.
-- **TDD before experiment code:** behavior-changing code starts from a failing test or reproducible probe when feasible.
-- **Hard gates before claims:** outputs, warnings, completion, and baseline pairing must support the claim.
-- **Evidence before completion:** no completion claim without fresh commands, artifacts, tests, and residual risk.
-- **Debugging as a closed loop:** observe -> classify -> probe -> compare -> update.
-- **Self-evolution:** missed real-world fixes can become privacy-safe field lesson candidates.
+Eclipse SUMO is a trademark of the Eclipse Foundation. This project supports workflows for experiments using Eclipse SUMO, but it is independent and does not use official Eclipse or Eclipse SUMO logos.
 
-## 🧭 Project Status
+Google Maps is referenced as an external map-review baseline. Torii is not affiliated with Google, and map reviews should respect the user's temporal modeling target.
 
-Current version: **instruction-only skill and checklist package**.
-
-This repository contains Markdown-based agent skills, audit checklists, examples, documentation, and release materials. It does not yet provide executable SUMO validators or Python audit scripts.
-
-### Roadmap
-
-- keep improving signal-control audit coverage
-- add more bad-case/fixed-case examples
-- add optional Python validators when patterns stabilize
-- later expand to other SUMO domains such as routing and demand, emissions and energy, public transport, pedestrian/intermodal scenarios, AV/CAV and co-simulation, calibration, safety analysis, and simulation-mode comparison
-
-## ❓ FAQ
-
-**Do I need to call the skill manually?**
-
-Usually yes for predictable behavior. Use `$simulation-helper-skill-for-eclipse-sumo` when you want the audit path explicitly.
-
-**Does it certify my SUMO experiment?**
-
-No. It provides review support, not formal verification or official certification.
-
-**Why keep `SKILL.md` short?**
-
-Because agents have limited context. The skill should route to the right evidence rules instead of loading every checklist at once.
-
-**Can it debug failed SUMO runs?**
-
-Yes. Use `$debugging-helper-skill-for-eclipse-sumo` for route, TraCI, TLS, output, seed, completion, and reproducibility failures.
-
-**Can it learn from fixes users find later?**
-
-Yes. The field-lesson workflow can abstract a reusable diagnostic path, redact private details, and ask before any update is persisted.
-
-## ⚠️ Limitations
-
-This repository provides agent instructions, checklists, and audit procedures. It does not certify that a SUMO experiment is correct.
-
-The skills do not replace manual review, SUMO documentation, controller-specific validation, or independent reproduction. The audit output should be treated as review support, not as a formal verification result.
-
-## ™️ Trademark Notice
-
-Eclipse SUMO is a trademark of the Eclipse Foundation. This project is independent and is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, or DLR.
-
-This project supports academic and research workflows for experiments using Eclipse SUMO. It does not use official Eclipse or Eclipse SUMO logos.
-
-## 📚 Citing Eclipse SUMO
-
-If your research uses SUMO, cite the official SUMO reference recommended by the SUMO project:
-
-- Pablo Alvarez Lopez, Michael Behrisch, Laura Bieker-Walz, Jakob Erdmann, Yun-Pang Floetteroed, Robert Hilbrich, Leonhard Luecken, Johannes Rummel, Peter Wagner, and Evamarie Wiessner. "Microscopic Traffic Simulation using SUMO." IEEE Intelligent Transportation Systems Conference, 2018. DOI: `10.1109/ITSC.2018.8569938`.
-
-The Eclipse SUMO about page also notes that release-specific DOIs have been provided since SUMO 1.2.0.
-
-## 📄 License
-
-The skill files, documentation, checklists, and protocol text in this repository are licensed under Creative Commons Attribution 4.0 International (`CC BY 4.0`). See [`LICENSE-DOCS`](LICENSE-DOCS).
-
-If future versions add Python audit scripts or other source code, add a separate code license such as MIT and clearly split `LICENSE-CODE` for source code from `LICENSE-DOCS` for text.
-
-## 🔗 References and Related Resources
+## References and Related Resources
 
 These links provide context. They do not imply endorsement of this repository.
 
 - Eclipse SUMO documentation and licensing pages: [About Eclipse SUMO](https://eclipse.dev/sumo/about/), [SUMO FAQ](https://sumo.dlr.de/docs/FAQ.html), and [SUMO Downloads and Licensing Note](https://sumo.dlr.de/docs/Downloads.html).
 - Eclipse Foundation trademark usage policy: [Eclipse Foundation Trademark Usage Policy](https://www.eclipse.org/legal/logo-guidelines/).
-- Public agent-skill examples and conventions: [Anthropic public skills repository](https://github.com/anthropics/skills).
-- Public planning-skill patterns that inspired the interactive intake design, without copied text or endorsement: [Matt Pocock's skills](https://github.com/mattpocock/skills), [grill-me-codex](https://github.com/chaseai-yt/grill-me-codex), and the Superpowers planning/TDD/verification skill pattern.
+- Public OSM/SUMO architecture references used as design input, without vendored source: OSMnx, OSMNet, pyrosm, SUMO `osmGet/osmBuild`, and osm-to-xodr.
+- Public controller-pattern reference: SUMO Lights.
 
-## ⭐ Support
+## Archive
 
-If this checklist helps you avoid a broken SUMO/TraCI experiment, star the repository and adapt the examples for your own research workflow.
-
-## 🔖 Archive
-
-Versioned releases are archived on Zenodo: https://doi.org/10.5281/zenodo.20627976
+Earlier skill-only releases are archived on Zenodo: https://doi.org/10.5281/zenodo.20627976

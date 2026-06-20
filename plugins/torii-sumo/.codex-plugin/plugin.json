@@ -1,0 +1,30 @@
+{
+  "name": "torii-sumo",
+  "version": "0.2.0",
+  "description": "Torii bundles a SUMO expert skill and local MCP tools for OSM-to-SUMO workflows.",
+  "author": {
+    "name": "Torii contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "sumo",
+    "traci",
+    "mcp",
+    "traffic-simulation",
+    "codex-skill"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Torii",
+    "shortDescription": "Agent plugin for SUMO.",
+    "longDescription": "Bundles a SUMO expert skill, bounded local stdio MCP tools, OSM-to-SUMO helpers, TLS audit candidates, routeability probes, and evidence-aware feedback diagnosis.",
+    "developerName": "Torii contributors",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": "Use Torii to understand the SUMO task, run MCP tools only when evidence is needed, and treat bad metrics as model feedback."
+  }
+}
