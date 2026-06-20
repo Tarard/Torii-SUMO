@@ -48,7 +48,7 @@ Installing Torii gives Codex both **skills and MCP tools**. The goal is not to m
 | User request | Torii response pattern |
 |---|---|
 | "Build a SUMO network from this OSM area." | Use bounded OSM import, tiled Overpass download or local extract reuse, road-class filtering, XML deduplication, `netconvert`, and artifact reporting. |
-| "Clean this Munich core network." | If a bbox or extract is supplied, run the implemented OSM-to-SUMO path. If only a place name is supplied, route to a small clarification or code-development step until geocoding is implemented. |
+| "Clean this Dresden core network." | If a bbox or extract is supplied, run the implemented OSM-to-SUMO path. If only a place name is supplied, route to a small clarification or code-development step until geocoding is implemented. |
 | "Audit all traffic lights against Google Maps." | Extract SUMO TLS candidates, cluster likely physical intersections, generate Google Maps review links, and ask whether the baseline should be current Google Maps or a historical target date. |
 | "Check whether these roads or bridges are connected." | Generate named-road routeability probes and report missing key edges, route generation evidence, and residual SUMO completion risk. |
 | "My metrics got worse after a run." | Treat metrics as feedback: diagnose route, demand, network, TLS, controller, output, horizon, or completion problems before proposing code changes. |
