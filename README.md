@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-signal%20control-blue" alt="SUMO/TraCI signal control">
 <img src="https://img.shields.io/badge/Agent-Codex%20%2F%20Claude-6f42c1" alt="Codex and Claude">
 <img src="https://img.shields.io/badge/Skill%20Files-2-1d8e57" alt="Two skills">
-<img src="https://img.shields.io/badge/Reference%20Modules-12-c98a05" alt="12 reference modules">
+<img src="https://img.shields.io/badge/Reference%20Modules-13-c98a05" alt="13 reference modules">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Website</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>Examples</strong></a> |
@@ -105,7 +105,8 @@ Both skills keep `SKILL.md` deliberately lean. The agent first classifies the sc
 | New machine, fresh clone, missing SUMO proof, or setup doubt | `preflight-sumo-environment.md` | Environment Preflight record and smoke-test pass/fail route |
 | OSM/imported-network cleanup, road-detail selection, Google Maps/external signal check, detector mapping, or field-data alignment | `model-osm-detectors.md` | modeling plan, road-class ladder, TLS audit, detector-alignment gates, and visualization boundary |
 | Ongoing project, unclear progress, or "what next?" | `route-project-workflow.md` | Project Control Screen and next-step plan |
-| New or vague experiment | `plan-experiment.md` | Experiment Readiness Record, then SUMO Experiment Plan |
+| New, vague, or assumption-heavy experiment | `interactive-experiment-intake.md` | one-question-at-a-time intake, recommended answers, and readiness route |
+| Confirmed experiment intake ready for planning | `plan-experiment.md` | Experiment Readiness Record, then SUMO Experiment Plan |
 | Failed or suspicious run | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
 | Controller, parser, runner, validator, or audit-code change | `develop-and-verify-code.md` | RED/GREEN/REFACTOR or explicit `test-after` record |
 | Controller/TLS/NEMA/TraCI boundary question | `audit-sumo-controllers.md` | controller identity, API boundary, and missing evidence |
@@ -132,6 +133,7 @@ skills/
 │  └─ references/                                # Deep workflow documentation
 │     ├─ route-project-workflow.md               # Route by scenario and screen project state
 │     ├─ preflight-sumo-environment.md           # SUMO/Python toolchain proof
+│     ├─ interactive-experiment-intake.md        # One-question-at-a-time SUMO experiment intake
 │     ├─ plan-experiment.md                      # Socratic intake and SUMO experiment plan
 │     ├─ develop-and-verify-code.md              # RED/GREEN/REFACTOR and completion evidence
 │     ├─ model-osm-detectors.md                  # OSM/imported networks, signal checks, detector alignment
@@ -159,6 +161,7 @@ skills/
 
 - [`route-project-workflow.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md) - scenario routing and project-state screening.
 - [`preflight-sumo-environment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md) - SUMO/Python environment proof and minimal smoke-test gate.
+- [`interactive-experiment-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/interactive-experiment-intake.md) - one-question-at-a-time SUMO experiment intake with recommended answers before planning.
 - [`plan-experiment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/plan-experiment.md) - Socratic intake, readiness record, and confirmed SUMO Experiment Plan.
 - [`develop-and-verify-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/develop-and-verify-code.md) - RED -> GREEN -> REFACTOR workflow and completion evidence.
 - [`model-osm-detectors.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/model-osm-detectors.md) - OSM/imported-network modeling, road-detail selection, Google Maps/external signal checks, redundant TLS cleanup, detector mapping, and field-data alignment.
@@ -298,6 +301,7 @@ These links provide context. They do not imply endorsement of this repository.
 - Eclipse SUMO documentation and licensing pages: [About Eclipse SUMO](https://eclipse.dev/sumo/about/), [SUMO FAQ](https://sumo.dlr.de/docs/FAQ.html), and [SUMO Downloads and Licensing Note](https://sumo.dlr.de/docs/Downloads.html).
 - Eclipse Foundation trademark usage policy: [Eclipse Foundation Trademark Usage Policy](https://www.eclipse.org/legal/logo-guidelines/).
 - Public agent-skill examples and conventions: [Anthropic public skills repository](https://github.com/anthropics/skills).
+- Public planning-skill patterns that inspired the interactive intake design, without copied text or endorsement: [Matt Pocock's skills](https://github.com/mattpocock/skills), [grill-me-codex](https://github.com/chaseai-yt/grill-me-codex), and the Superpowers planning/TDD/verification skill pattern.
 
 ## ⭐ Support
 

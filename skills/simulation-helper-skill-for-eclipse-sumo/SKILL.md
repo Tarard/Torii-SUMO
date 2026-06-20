@@ -22,7 +22,8 @@ request -> classify scenario -> load minimal references -> ask or act -> verify 
 | SUMO environment, executable toolchain, or runnable smoke proof is missing | `references/preflight-sumo-environment.md` | `Environment Preflight` record and pass/fail route |
 | OSM/imported-network cleanup, road-detail selection, Google Maps or external signal cross-check, detector lane mapping, field-data sensor alignment, or background visualization | `references/model-osm-detectors.md` | modeling plan, road-class ladder, TLS audit, detector-alignment gates, and visualization boundary |
 | Ongoing project, unclear progress, repo/logs/outputs provided, or "what next?" | `references/route-project-workflow.md` | `Project Control Screen` and next-step plan |
-| New or vague experiment | `references/plan-experiment.md` | `Experiment Readiness Record`, then `SUMO Experiment Plan` |
+| New, vague, or assumption-heavy experiment | `references/interactive-experiment-intake.md` | one-question-at-a-time intake, recommended answers, and readiness route |
+| Confirmed experiment intake ready for planning | `references/plan-experiment.md` | `Experiment Readiness Record`, then `SUMO Experiment Plan` |
 | SUMO/TraCI failure or suspicious behavior | `debugging-helper-skill-for-eclipse-sumo` | root cause, next probe, fix/rerun/demotion |
 | Controller, parser, runner, validator, or audit-code change | `references/develop-and-verify-code.md` | RED/GREEN/REFACTOR or explicit `test-after` record |
 | Controller/TLS/NEMA/TraCI boundary question | `references/audit-sumo-controllers.md` | controller identity, API boundary, and missing evidence |
@@ -52,7 +53,8 @@ Load these only when the scenario requires them:
 
 - Ongoing project routing, state screening, or "what next?": `references/route-project-workflow.md`.
 - SUMO executable environment, `SUMO_HOME`, Python tooling, or smoke-test proof: `references/preflight-sumo-environment.md`.
-- Experiment intake and planning: `references/plan-experiment.md`.
+- Interactive intake for vague, ambitious, or assumption-heavy experiments: `references/interactive-experiment-intake.md`.
+- Confirmed experiment intake and planning: `references/plan-experiment.md`.
 - Code implementation, TDD, and completion evidence: `references/develop-and-verify-code.md`.
 - OSM/imported-network modeling, road-detail selection, Google Maps or external signal cross-check, detector lane repair, field-data sensor alignment, and background visualization: `references/model-osm-detectors.md`.
 - SUMO semantics, official/forum lessons, and public-code patterns: `references/learn-sumo-knowledge.md`.
