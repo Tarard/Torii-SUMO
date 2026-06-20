@@ -1,4 +1,6 @@
 __pycache__/
 *.py[cod]
 outputs/
+!tests/fixtures/outputs/
+!tests/fixtures/outputs/**
 *.pdf
