@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-Signalsteuerung-blue" alt="SUMO/TraCI-Signalsteuerung">
 <img src="https://img.shields.io/badge/Assistent-Codex%2FClaude-6f42c1" alt="Codex und Claude">
 <img src="https://img.shields.io/badge/F%C3%A4higkeitsdateien-2-1d8e57" alt="Zwei Fähigkeitsdateien">
-<img src="https://img.shields.io/badge/Referenzmodule-12-c98a05" alt="Zwoelf Referenzmodule">
+<img src="https://img.shields.io/badge/Referenzmodule-13-c98a05" alt="Dreizehn Referenzmodule">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Webseite</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>Beispiele</strong></a> |
@@ -104,7 +104,8 @@ Beide `SKILL.md`-Dateien bleiben bewusst schlank. Der Assistent klassifiziert zu
 | Neue Maschine, frischer Klon, fehlender SUMO-Nachweis oder unsichere Umgebung | `preflight-sumo-environment.md` | Umgebungsvorprüfung und Bestehen/Fehlschlag des Rauchtests |
 | OSM-/importierte Netze, Wahl der Netztiefe, Google-Maps/externe Signalprüfung, Detektorabbildung oder Felddatenabgleich | `model-osm-detectors.md` | Modellierungsplan, Straßenklassenleiter, TLS-Prüfung, Detektorabgleich und Visualisierungsgrenze |
 | Laufendes Projekt, unklarer Fortschritt oder unklarer nächster Schritt | `route-project-workflow.md` | Projekt-Kontrollprüfung und Plan für den nächsten Schritt |
-| Neues oder vages Experiment | `plan-experiment.md` | Experimentbereitschaftsprotokoll, danach SUMO-Experimentplan |
+| Neues, vages oder annahmenreiches Experiment | `interactive-experiment-intake.md` | Vorabklärung mit jeweils einer Frage, Empfehlung und Bereitschaftspfad |
+| Bestätigte Vorabklärung, bereit für Planung | `plan-experiment.md` | Experimentbereitschaftsprotokoll, danach SUMO-Experimentplan |
 | Fehlgeschlagener oder verdächtiger Lauf | `debugging-helper-skill-for-eclipse-sumo` | Ursache, nächste Prüfung, Reparatur/Wiederholung/Abstufung |
 | Änderung an Steuerung, Auswerter, Laufskript, Prüfer oder Prüfquelltext | `develop-and-verify-code.md` | Rot/Grün/Überarbeitung oder expliziter `test-after`-Eintrag |
 | Steuerungs-, TLS-, NEMA- oder TraCI-Grenzfrage | `audit-sumo-controllers.md` | Steuerungsidentität, API-Grenze und fehlende Evidenz |
@@ -131,6 +132,7 @@ skills/
 │  └─ references/                                # Vertiefende Ablaufdokumentation
 │     ├─ route-project-workflow.md               # Szenario-Routing und Projektzustand
 │     ├─ preflight-sumo-environment.md           # Nachweis der SUMO/Python-Werkzeugkette
+│     ├─ interactive-experiment-intake.md        # SUMO-Vorabklärung mit jeweils einer Frage
 │     ├─ plan-experiment.md                      # Sokratische Vorabklärung und SUMO-Versuchsplan
 │     ├─ develop-and-verify-code.md              # Rot/Grün/Überarbeitung und Abschlussevidenz
 │     ├─ model-osm-detectors.md                  # OSM/importierte Netze, Signalprüfung und Detektorabgleich
@@ -158,6 +160,7 @@ skills/
 
 - [`route-project-workflow.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md) - Szenario-Routing und Prüfung des Projektzustands.
 - [`preflight-sumo-environment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md) - Nachweis der SUMO/Python-Umgebung und minimale Rauchtest-Grenze.
+- [`interactive-experiment-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/interactive-experiment-intake.md) - Vorabklärung von SUMO-Experimenten mit jeweils einer Frage und empfohlener Antwort vor der Planung.
 - [`plan-experiment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/plan-experiment.md) - sokratische Vorabklärung, Experimentbereitschaftsprotokoll und bestätigter SUMO-Versuchsplan.
 - [`develop-and-verify-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/develop-and-verify-code.md) - Rot -> Grün -> Überarbeitung und Abschlussevidenz für SUMO/TraCI-Quelltextänderungen.
 - [`model-osm-detectors.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/model-osm-detectors.md) - OSM/importierte Netzmodellierung, Wahl der Netztiefe, Google-Maps/externe Signalprüfung, redundante TLS-Bereinigung, Detektorabbildung und Felddatenabgleich.
@@ -297,6 +300,7 @@ Diese Links liefern Kontext. Sie bedeuten keine Unterstützung dieses Projektarc
 - Eclipse-SUMO-Dokumentation und Lizenzseiten: [Eclipse-SUMO-Überblick](https://eclipse.dev/sumo/about/), [SUMO-Häufige-Fragen](https://sumo.dlr.de/docs/FAQ.html) und [SUMO-Download- und Lizenzhinweise](https://sumo.dlr.de/docs/Downloads.html).
 - Markenrichtlinie der Eclipse Foundation: [Markenrichtlinie der Eclipse Foundation](https://www.eclipse.org/legal/logo-guidelines/).
 - Öffentliche Beispiele und Konventionen für Assistentenfähigkeiten: [öffentliches Anthropic-Fähigkeitenarchiv](https://github.com/anthropics/skills).
+- Öffentliche Planungsfähigkeitsmuster, die die interaktive Vorabklärung inspiriert haben, ohne kopierten Text oder Unterstützung zu behaupten: [Matt Pococks skills](https://github.com/mattpocock/skills), [grill-me-codex](https://github.com/chaseai-yt/grill-me-codex) und das Superpowers-Muster für Planung, TDD und Verifikation vor Abschluss.
 
 ## ⭐ Unterstützung
 

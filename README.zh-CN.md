@@ -13,7 +13,7 @@
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-%E4%BF%A1%E5%8F%B7%E6%8E%A7%E5%88%B6-blue" alt="SUMO/TraCI 信号控制">
 <img src="https://img.shields.io/badge/%E5%8A%A9%E6%89%8B-Codex%2FClaude-6f42c1" alt="Codex 和 Claude">
 <img src="https://img.shields.io/badge/%E6%8A%80%E8%83%BD%E6%96%87%E4%BB%B6-2-1d8e57" alt="两个技能文件">
-<img src="https://img.shields.io/badge/%E5%8F%82%E8%80%83%E6%A8%A1%E5%9D%97-12-c98a05" alt="十二个参考模块">
+<img src="https://img.shields.io/badge/%E5%8F%82%E8%80%83%E6%A8%A1%E5%9D%97-13-c98a05" alt="十三个参考模块">
 
 <a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>项目网站</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>示例</strong></a> |
@@ -104,7 +104,8 @@ SUMO 能顺利跑完，并不代表实验结果已经可以作为有效证据。
 | 新机器、新克隆、缺少 SUMO 运行证据或环境可疑 | `preflight-sumo-environment.md` | 环境前置检查记录和冒烟测试通过/失败路径 |
 | OSM/导入路网清理、路网细致程度选择、Google Maps/外部地图信号核查、检测器映射或实测数据对齐 | `model-osm-detectors.md` | 建模计划、道路等级阶梯、TLS 审计、检测器对齐门槛和可视化边界 |
 | 进行中项目、进度不清、或不知道下一步 | `route-project-workflow.md` | 项目控制筛查记录和下一步计划 |
-| 新实验或模糊实验想法 | `plan-experiment.md` | 实验就绪记录，然后生成 SUMO 实验计划 |
+| 新实验、模糊实验或假设很多的实验想法 | `interactive-experiment-intake.md` | 一次一个问题的追问、推荐答案和就绪路径 |
+| 已完成追问、可以进入计划的实验 | `plan-experiment.md` | 实验就绪记录，然后生成 SUMO 实验计划 |
 | 失败或可疑运行 | `debugging-helper-skill-for-eclipse-sumo` | 根因、下一步检查、修复/重跑/降级 |
 | 控制器、解析器、运行器、验证器或审计代码修改 | `develop-and-verify-code.md` | 红灯/绿灯/重构记录，或明确的 `test-after` 记录 |
 | 控制器/TLS/NEMA/TraCI 边界问题 | `audit-sumo-controllers.md` | 控制器身份、API 边界和缺失证据 |
@@ -131,6 +132,7 @@ skills/
 │  └─ references/                                # 深层工作流文档
 │     ├─ route-project-workflow.md               # 按场景路由并筛查项目状态
 │     ├─ preflight-sumo-environment.md           # SUMO/Python 工具链证据
+│     ├─ interactive-experiment-intake.md        # 一次一个问题的 SUMO 实验追问入口
 │     ├─ plan-experiment.md                      # 苏格拉底式追问和 SUMO 实验计划
 │     ├─ develop-and-verify-code.md              # 红灯/绿灯/重构和完成证据
 │     ├─ model-osm-detectors.md                  # OSM/导入路网、信号核查和检测器对齐
@@ -158,6 +160,7 @@ skills/
 
 - [`route-project-workflow.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/route-project-workflow.md) - 场景路由和项目状态筛查。
 - [`preflight-sumo-environment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/preflight-sumo-environment.md) - SUMO/Python 环境证据和最小冒烟测试门槛。
+- [`interactive-experiment-intake.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/interactive-experiment-intake.md) - 计划前一次一个问题地追问 SUMO 实验细节，并给出推荐答案。
 - [`plan-experiment.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/plan-experiment.md) - 苏格拉底式追问、实验就绪记录和确认后的 SUMO 实验计划。
 - [`develop-and-verify-code.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/develop-and-verify-code.md) - SUMO/TraCI 代码修改的红灯 -> 绿灯 -> 重构流程和完成证据。
 - [`model-osm-detectors.md`](skills/simulation-helper-skill-for-eclipse-sumo/references/model-osm-detectors.md) - OSM/导入路网建模、路网细致程度选择、Google Maps/外部信号核查、冗余 TLS 清理、检测器映射和实测数据对齐。
@@ -297,6 +300,7 @@ Eclipse SUMO 介绍页面还说明，从 SUMO 1.2.0 起，已提供版本专属 
 - Eclipse SUMO 文档和许可页面：[Eclipse SUMO 介绍](https://eclipse.dev/sumo/about/)、[SUMO 常见问题](https://sumo.dlr.de/docs/FAQ.html)、[SUMO 下载与许可说明](https://sumo.dlr.de/docs/Downloads.html)。
 - Eclipse Foundation 商标使用政策：[Eclipse Foundation 商标使用政策](https://www.eclipse.org/legal/logo-guidelines/)。
 - 公开助手技能示例和约定：[Anthropic 公开技能仓库](https://github.com/anthropics/skills)。
+- 启发交互式追问入口设计的公开计划类技能模式，未复制原文，也不代表这些项目认可本仓库：[Matt Pocock 的 skills](https://github.com/mattpocock/skills)、[grill-me-codex](https://github.com/chaseai-yt/grill-me-codex)，以及 Superpowers 的计划、TDD 和完成前验证模式。
 
 ## ⭐ 支持
 
