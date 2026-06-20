@@ -48,7 +48,7 @@ Die Installation von Torii gibt Codex sowohl **skills and MCP tools**. Das Ziel 
 | Anfrage | Torii-Verhalten |
 |---|---|
 | "Baue aus diesem OSM-Gebiet ein SUMO-Netz." | Bbox oder lokalen OSM-Extract verwenden, tiled Overpass, Retry, XML-Deduplizierung, Strassenklassenfilter und `netconvert` ausfuehren. |
-| "Bereinige das Kernnetz von Muenchen." | Mit vorhandener bbox oder Extract den implementierten OSM-zu-SUMO-Pfad nutzen; bei reinem Ortsnamen zuerst den Bereich klaeren oder den Geokodierungs-Entwicklungspfad waehlen. |
+| "Bereinige das Kernnetz von Dresden." | Mit vorhandener bbox oder Extract den implementierten OSM-zu-SUMO-Pfad nutzen; bei reinem Ortsnamen zuerst den Bereich klaeren oder den Geokodierungs-Entwicklungspfad waehlen. |
 | "Vergleiche alle Ampeln mit Google Maps." | SUMO-TLS-Kandidaten extrahieren, physische Kreuzungsgruppen bilden, Google-Maps-Links erzeugen und klaeren, ob aktuelle oder historische Kartenlage gemeint ist. |
 | "Sind diese Strassen oder Bruecken befahrbar?" | Named-road routeability probes erzeugen und fehlende Kanten, Routenerzeugung und restliches SUMO-Fertigstellungsrisiko berichten. |
 | "Die Metriken wurden schlechter." | Metriken als Feedback behandeln und zuerst Routen-, Nachfrage-, Netz-, TLS-, Controller-, Ausgabe-, Horizont- oder Fertigstellungsprobleme diagnostizieren. |
