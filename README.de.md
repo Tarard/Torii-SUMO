@@ -15,7 +15,7 @@
 <img src="https://img.shields.io/badge/OSM%20to%20SUMO-Netzbereinigung-1d8e57" alt="OSM zu SUMO Netzbereinigung">
 <img src="https://img.shields.io/badge/MCP%20Tools-local%20stdio-c98a05" alt="Lokale stdio MCP Tools">
 
-<a href="https://tarard.github.io/Simulation-Helper-Skill-for-Eclipse-SUMO/"><strong>Webseite</strong></a> |
+<a href="https://tarard.github.io/Torii-SUMO/"><strong>Webseite</strong></a> |
 <a href="docs/codex-plugin-install.md"><strong>Codex Plugin Installation</strong></a> |
 <a href="examples/01_fixed_time_audit/task.md"><strong>Beispiele</strong></a> |
 <a href="docs/common-sumo-signal-control-failures.md"><strong>Fehlerliste</strong></a> |
@@ -59,7 +59,7 @@ Die Installation von Torii gibt Codex sowohl **skills and MCP tools**. Das Ziel 
 Installation von GitHub:
 
 ```powershell
-codex plugin marketplace add Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO --ref main
+codex plugin marketplace add Tarard/Torii-SUMO --ref main
 codex plugin add torii-sumo@torii-sumo
 ```
 

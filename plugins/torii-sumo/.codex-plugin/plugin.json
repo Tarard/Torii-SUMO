@@ -1,6 +1,6 @@
 {
   "name": "torii-sumo",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Torii bundles a SUMO expert skill and local MCP tools for OSM-to-SUMO workflows.",
   "author": {
     "name": "Torii contributors"

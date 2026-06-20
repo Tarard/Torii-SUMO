@@ -18,7 +18,7 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     doc = (ROOT / "docs" / "codex-plugin-install.md").read_text(encoding="utf-8")
 
     assert "codex plugin marketplace add" in doc
-    assert "codex plugin marketplace add Tarard/Simulation-Helper-Skill-for-Eclipse-SUMO --ref main" in doc
+    assert "codex plugin marketplace add Tarard/Torii-SUMO --ref main" in doc
     assert "codex plugin add torii-sumo@torii-sumo" in doc
     assert "Start a new Codex thread" in doc
     assert "plugins/torii-sumo" in doc
