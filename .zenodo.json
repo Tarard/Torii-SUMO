@@ -1,17 +1,20 @@
 {
-  "title": "Simulation Helper Skill for Eclipse SUMO",
+  "title": "Torii: Task-Oriented Road Infrastructure Intelligence",
   "upload_type": "software",
-  "description": "A reusable Codex/Claude skill package and checklist for auditing SUMO/TraCI traffic-signal control experiments before results are reported. The package focuses on experiment planning, route and configuration consistency, TLS/NEMA checks, TraCI controller boundaries, paired controller comparison, output auditing, completion-aware metrics, reproducibility risks, debugging paths, and evidence-bounded claim wording.",
+  "description": "An agent plugin for SUMO that bundles a SUMO expert skill with local MCP tools for OSM-to-SUMO network construction, TLS review, routeability checks, evidence bundles, and feedback-driven simulation repair. Torii treats bad metrics, warnings, teleports, disconnected routes, and map disagreements as feedback about the model rather than raw optimization targets.",
   "creators": [
     {
       "name": "Tarard"
     }
   ],
   "access_right": "open",
-  "license": "cc-by-4.0",
+  "license": "MIT",
   "keywords": [
     "Eclipse SUMO",
     "TraCI",
+    "OpenStreetMap",
+    "MCP",
+    "agent plugin",
     "traffic simulation",
     "traffic signal control",
     "transportation",

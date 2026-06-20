@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torii-sumo"
+version = "0.2.0"
+description = "Torii agent plugin for evidence-aware Eclipse SUMO and OSM-to-SUMO workflows."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Torii contributors" }
+]
+dependencies = [
+  "anyio>=4.0",
+  "mcp[cli]>=1.0.0",
+  "pydantic>=2.7",
+  "sumolib>=1.20",
+  "traci>=1.20"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "PyYAML>=6.0"
+]
+
+[project.scripts]
+torii-sumo = "torii_sumo.server:main"
+
+[tool.setuptools.packages.find]
+where = ["plugins/torii-sumo/src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["plugins/torii-sumo/src"]

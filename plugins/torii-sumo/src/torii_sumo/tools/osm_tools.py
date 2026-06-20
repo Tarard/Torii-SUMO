@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from torii_sumo.core.osm_network import (
+    DEFAULT_ALLOWED_HIGHWAYS,
+    audit_tls,
+    build_osm_network,
+    build_routeability_probe,
+)
+
+
+DRIVE_HIGHWAYS = {
+    "motorway",
+    "motorway_link",
+    "trunk",
+    "trunk_link",
+    "primary",
+    "primary_link",
+    "secondary",
+    "secondary_link",
+    "tertiary",
+    "tertiary_link",
+    "residential",
+    "living_street",
+    "road",
+}
+
+HIGHWAY_CLASS_PRESETS = {
+    "arterial": set(DEFAULT_ALLOWED_HIGHWAYS),
+    "drive": set(DRIVE_HIGHWAYS),
+    "drive_plus_unclassified": set(DRIVE_HIGHWAYS) | {"unclassified"},
+    "full_vehicle": set(DRIVE_HIGHWAYS) | {"unclassified", "service"},
+}
+
+
+def resolve_highway_classes(value: str | None) -> set[str]:
+    if value is None or not value.strip():
+        return set(DEFAULT_ALLOWED_HIGHWAYS)
+    normalized = value.strip().lower()
+    if normalized in HIGHWAY_CLASS_PRESETS:
+        return set(HIGHWAY_CLASS_PRESETS[normalized])
+    return {item.strip() for item in value.split(",") if item.strip()}
+
+
+def sumo_osm_build_network(
+    bbox: str,
+    output_dir: str,
+    prefix: str = "sumo_osm_network",
+    source_osm_path: str | None = None,
+    highway_classes: str | None = None,
+    historical_date: str | None = None,
+    overpass_url: str = "https://overpass-api.de/api/interpreter",
+    timeout_seconds: float = 240.0,
+    max_tile_area_km2: float = 2500.0,
+    max_retries: int = 2,
+    retry_pause_seconds: float = 5.0,
+) -> dict[str, Any]:
+    return build_osm_network(
+        bbox=bbox,
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        source_osm_path=Path(source_osm_path) if source_osm_path else None,
+        allowed_highways=resolve_highway_classes(highway_classes),
+        historical_date=historical_date,
+        overpass_url=overpass_url,
+        timeout_seconds=timeout_seconds,
+        max_tile_area_km2=max_tile_area_km2,
+        max_retries=max_retries,
+        retry_pause_seconds=retry_pause_seconds,
+    )
+
+
+def sumo_tls_audit(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "sumo_tls_audit",
+    osm_file: str | None = None,
+    min_connections: int = 1,
+    cluster_radius_m: float = 60.0,
+    google_maps_temporal_scope: str = "unspecified",
+    google_maps_target_date: str | None = None,
+) -> dict[str, Any]:
+    return audit_tls(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        osm_file=Path(osm_file) if osm_file else None,
+        min_connections=min_connections,
+        cluster_radius_m=cluster_radius_m,
+        google_maps_temporal_scope=google_maps_temporal_scope,
+        google_maps_target_date=google_maps_target_date,
+    )
+
+
+def sumo_network_routeability_probe(
+    net_file: str,
+    output_dir: str,
+    key_edge_queries: list[dict[str, Any]],
+    prefix: str = "routeability_probe",
+    seed: int = 42,
+    end: int = 180,
+) -> dict[str, Any]:
+    return build_routeability_probe(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        key_edge_queries=key_edge_queries,
+        seed=seed,
+        end=end,
+    )
