@@ -25,6 +25,8 @@
       "Interactive",
       "Write"
     ],
+    "composerIcon": "./assets/app-logo.png",
+    "logo": "./assets/app-logo.png",
     "defaultPrompt": "Use Torii to understand the SUMO task, run MCP tools only when evidence is needed, and treat bad metrics as model feedback."
   }
 }
