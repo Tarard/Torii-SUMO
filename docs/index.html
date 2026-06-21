@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A SUMO skill for Codex and Claude that guides the full SUMO/TraCI experiment workflow: asking, planning, building, debugging, verifying, and reporting.">
+  <meta name="description" content="A SUMO plugin for Codex and Claude that routes one-sentence SUMO/TraCI requests into planning, OSM construction, TLS review, debugging, verification, and reporting workflows.">
   <title>Torii</title>
   <link rel="canonical" href="https://tarard.github.io/Torii-SUMO/">
   <link rel="icon" href="assets/app-logo.png">
@@ -519,8 +519,8 @@
       <div>
         <div class="eyebrow" data-i18n="eyebrow">Task-Oriented Road Infrastructure Intelligence</div>
         <h1 data-i18n="heroTitle">One prompt, structured SUMO work.</h1>
-        <p class="subtitle" data-i18n="heroSubtitle">Agent plugin for SUMO: skill-guided reasoning plus local MCP tools for OSM-to-SUMO workflows.</p>
-        <code class="prompt" data-i18n="promptText">Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.</code>
+        <p class="subtitle" data-i18n="heroSubtitle">Agent plugin for SUMO: one-sentence workflow routing plus local MCP tools for OSM-to-SUMO work.</p>
+        <code class="prompt" data-i18n="promptText">Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.</code>
         <div class="hero-points" aria-label="Core mechanisms">
           <span data-i18n="heroPointOne">Intent</span>
           <span data-i18n="heroPointTwo">Observe</span>
@@ -580,7 +580,7 @@
     <section class="panel">
       <span class="kicker" data-i18n="mechanismKicker">The core idea</span>
       <h2 data-i18n="mechanismTitle">It connects reasoning to bounded execution.</h2>
-      <p class="muted" data-i18n="mechanismText">The skill decides the workflow and interprets feedback. The MCP server runs bounded checks and returns structured observations. Tool output is evidence to analyze, not an automatic final answer.</p>
+      <p class="muted" data-i18n="mechanismText">The workflow router classifies the request first. The skill interprets feedback, and the MCP server runs bounded checks that return structured observations.</p>
       <div class="route-list">
         <div class="route-step">
           <strong data-i18n="routeOneTitle">Ongoing project</strong>
@@ -635,9 +635,9 @@
     <section class="panel">
       <span class="kicker" data-i18n="promptKicker">Try it immediately</span>
       <h2 data-i18n="promptTitle">Copy-ready prompts for real projects</h2>
-      <p class="muted" data-i18n="promptIntro">These prompts are intentionally concrete. They tell the agent which workflow step to start with and what evidence to produce.</p>
+      <p class="muted" data-i18n="promptIntro">Start with one sentence. Torii should choose the workflow, ask only blocking questions, and report evidence before claims.</p>
       <div class="prompt-list">
-        <code data-i18n="tryPromptOne">Use $simulation-helper-skill-for-eclipse-sumo on this repo. Start with the project control screen and give me the next safe step.</code>
+        <code data-i18n="tryPromptOne">Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.</code>
         <code data-i18n="tryPromptTwo">Audit this TraCI signal controller before I compare it with the fixed-time baseline.</code>
         <code data-i18n="tryPromptThree">This SUMO run finishes, but tripinfo and summary disagree. Use the debugging helper and tell me whether the run is valid.</code>
         <code data-i18n="tryPromptFour">Controller A has lower travel time, but some vehicles are unfinished. What can I claim and what must be demoted?</code>
@@ -728,8 +728,8 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         brandName: "Torii",
         eyebrow: "Task-Oriented Road Infrastructure Intelligence",
         heroTitle: "One prompt, structured SUMO work.",
-        heroSubtitle: "Agent plugin for SUMO: skill-guided reasoning plus local MCP tools for OSM-to-SUMO workflows.",
-        promptText: "Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.",
+        heroSubtitle: "Agent plugin for SUMO: one-sentence workflow routing plus local MCP tools for OSM-to-SUMO work.",
+        promptText: "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.",
         heroPointOne: "Intent",
         heroPointTwo: "Observe",
         heroPointThree: "Build",
@@ -759,7 +759,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         futureText: "Unconfirmed place-name-to-bbox geocoding, full city-scale intelligent cleanup, max-pressure controller generation, and controller-log inspection are roadmap tools, not finished promises.",
         mechanismKicker: "The core idea",
         mechanismTitle: "It connects reasoning to bounded execution.",
-        mechanismText: "The skill decides the workflow and interprets feedback. The MCP server runs bounded checks and returns structured observations. Tool output is evidence to analyze, not an automatic final answer.",
+        mechanismText: "The workflow router classifies the request first. The skill interprets feedback, and the MCP server runs bounded checks that return structured observations.",
         routeOneTitle: "Ongoing project",
         routeOneText: "Workflow screen -> target, state, deviation, next-step plan.",
         routeTwoTitle: "New experiment",
@@ -783,8 +783,8 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         scenarioFive: "Results or claims: evaluate-and-report-results -> evidence class -> claim boundary.",
         promptKicker: "Try it immediately",
         promptTitle: "Copy-ready prompts for real projects",
-        promptIntro: "These prompts are intentionally concrete. They tell the agent which workflow step to start with and what evidence to produce.",
-        tryPromptOne: "Use $simulation-helper-skill-for-eclipse-sumo on this repo. Start with the project control screen and give me the next safe step.",
+        promptIntro: "Start with one sentence. Torii should choose the workflow, ask only blocking questions, and report evidence before claims.",
+        tryPromptOne: "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.",
         tryPromptTwo: "Audit this TraCI signal controller before I compare it with the fixed-time baseline.",
         tryPromptThree: "This SUMO run finishes, but tripinfo and summary disagree. Use the debugging helper and tell me whether the run is valid.",
         tryPromptFour: "Controller A has lower travel time, but some vehicles are unfinished. What can I claim and what must be demoted?",
@@ -821,8 +821,8 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         brandName: "Torii",
         eyebrow: "Task-Oriented Road Infrastructure Intelligence",
         heroTitle: "一句话启动结构化 SUMO 工作流。",
-        heroSubtitle: "面向 SUMO 的 Agent plugin：用 skill 推理层和本地 MCP 工具层处理 OSM-to-SUMO 工作流。",
-        promptText: "请使用 Torii 构建并审计这个 SUMO 路网。把坏指标当作模型反馈，而不是直接优化目标。",
+        heroSubtitle: "面向 SUMO 的 Agent plugin：用一句话路由工作流，并用本地 MCP 工具处理 OSM-to-SUMO 工作。",
+        promptText: "使用 Torii 从 OSM 下载 Dresden 的 Altstadt 地图，清理它，并在 SUMO 中打开。",
         heroPointOne: "意图",
         heroPointTwo: "观察",
         heroPointThree: "构建",
@@ -852,7 +852,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         futureText: "未经确认的地名自动转 bbox、整城级智能清洗、最大压力控制器生成和 controller-log inspection 是后续工具，不是当前完成承诺。",
         mechanismKicker: "核心思路",
         mechanismTitle: "把推理层和受限执行层连接起来。",
-        mechanismText: "Skill 决定工作流并解释反馈；MCP server 运行受限检查并返回结构化观察。工具输出是需要分析的证据，不是自动最终答案。",
+        mechanismText: "Workflow router 先判断请求类型；skill 解释反馈；MCP server 运行受限检查并返回结构化观察。",
         routeOneTitle: "进行中的项目",
         routeOneText: "工作流筛查 -> 目标、状态、偏差、下一步计划。",
         routeTwoTitle: "新实验",
@@ -876,8 +876,8 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         scenarioFive: "结果或结论：evaluate-and-report-results -> 证据等级 -> 结论边界。",
         promptKicker: "马上试用",
         promptTitle: "可以直接复制到真实项目里的提示词",
-        promptIntro: "这些提示词刻意写得很具体：它们会告诉智能体从哪个工作流步骤开始，以及需要产出什么证据。",
-        tryPromptOne: "请对这个仓库使用 $simulation-helper-skill-for-eclipse-sumo。先做项目控制屏，再给我下一步最稳妥的动作。",
+        promptIntro: "从一句话开始。Torii 应该自己选择工作流，只追问阻塞问题，并先报告证据再给结论。",
+        tryPromptOne: "使用 Torii 从 OSM 下载 Dresden 的 Altstadt 地图，清理它，并在 SUMO 中打开。",
         tryPromptTwo: "在我把这个 TraCI 信号控制器和固定配时基准比较之前，请先审计这个控制器。",
         tryPromptThree: "这个 SUMO 运行能结束，但 tripinfo 和 summary 不一致。请使用调试助手判断这次运行是否有效。",
         tryPromptFour: "控制器 A 的旅行时间更低，但仍有未完成车辆。我能声称什么？哪些结论必须降级？",
@@ -914,8 +914,8 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         brandName: "Torii",
         eyebrow: "Task-Oriented Road Infrastructure Intelligence",
         heroTitle: "Ein Prompt, strukturierte SUMO-Arbeit.",
-        heroSubtitle: "Agent plugin for SUMO: Skill-gestuetztes Denken plus lokale MCP-Werkzeuge fuer OSM-zu-SUMO-Workflows.",
-        promptText: "Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.",
+        heroSubtitle: "Agent plugin fuer SUMO: Ein-Satz-Workflow-Routing plus lokale MCP-Werkzeuge fuer OSM-zu-SUMO-Arbeit.",
+        promptText: "Nutze Torii, um die Altstadt-Karte in Dresden aus OSM zu laden, zu bereinigen und in SUMO zu oeffnen.",
         heroPointOne: "Ziel",
         heroPointTwo: "Beobachten",
         heroPointThree: "Bauen",
@@ -945,7 +945,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         futureText: "Unbestaetigte Ortsname-zu-bbox-Geokodierung, vollstaendige intelligente Stadtbereinigung, Max-Pressure-Controller-Generierung und Controller-Log-Inspection sind Roadmap-Werkzeuge.",
         mechanismKicker: "Kernidee",
         mechanismTitle: "Es verbindet Reasoning mit begrenzter Ausfuehrung.",
-        mechanismText: "Der Skill waehlt den Workflow und interpretiert Feedback. Der MCP Server fuehrt begrenzte Checks aus und liefert strukturierte Beobachtungen. Tool-Ausgabe ist Evidenz zur Analyse, keine automatische Endantwort.",
+        mechanismText: "Der Workflow Router klassifiziert zuerst die Anfrage. Der Skill interpretiert Feedback, und der MCP Server fuehrt begrenzte Checks mit strukturierten Beobachtungen aus.",
         routeOneTitle: "Laufendes Projekt",
         routeOneText: "Ablaufprüfung -> Ziel, Zustand, Abweichung, nächster Schritt.",
         routeTwoTitle: "Neues Experiment",
@@ -969,8 +969,8 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         scenarioFive: "Ergebnisse oder Aussagen: evaluate-and-report-results -> Evidenzklasse -> Aussagegrenze.",
         promptKicker: "Sofort ausprobieren",
         promptTitle: "Direkt kopierbare Prompts für echte Projekte",
-        promptIntro: "Diese Prompts sind absichtlich konkret. Sie sagen dem Agenten, mit welchem Arbeitsablaufschritt er beginnen und welche Evidenz er liefern soll.",
-        tryPromptOne: "Nutze $simulation-helper-skill-for-eclipse-sumo für dieses Repository. Beginne mit der Projekt-Kontrollansicht und gib mir den nächsten belastbaren Schritt.",
+        promptIntro: "Beginnen Sie mit einem Satz. Torii soll den Workflow waehlen, nur blockierende Fragen stellen und vor Aussagen Evidenz berichten.",
+        tryPromptOne: "Nutze Torii, um die Altstadt-Karte in Dresden aus OSM zu laden, zu bereinigen und in SUMO zu oeffnen.",
         tryPromptTwo: "Prüfe diesen TraCI-Signalcontroller, bevor ich ihn mit der Festzeit-Basislinie vergleiche.",
         tryPromptThree: "Dieser SUMO-Lauf endet, aber tripinfo und summary widersprechen sich. Nutze den Debugging-Helfer und sage mir, ob der Lauf gültig ist.",
         tryPromptFour: "Controller A hat eine geringere Reisezeit, aber einige Fahrzeuge sind unvollendet. Was darf ich behaupten und was muss abgestuft werden?",
