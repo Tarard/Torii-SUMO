@@ -27,7 +27,7 @@
 </div>
 
 > [!IMPORTANT]
-> Torii ist ein Plugin- und Skill-Paket fuer agentische SUMO-Arbeit. Es enthaelt bereits lokale stdio MCP-Werkzeuge fuer Umgebungstests, Konfigurationspruefungen, Smoke Runs, Evidenzpakete, OSM-zu-SUMO-Netzaufbau, TLS-Kandidatenpruefung und Erreichbarkeitsproben. Vollstaendige Ortsnamen-Geokodierung, vollautomatische OSM-Bereinigung ganzer Staedte und Controller-Generierung sind in dieser Version noch keine fertigen MCP-Werkzeuge.
+> Torii ist ein Plugin- und Skill-Paket fuer agentische SUMO-Arbeit. Es enthaelt bereits lokale stdio MCP-Werkzeuge fuer Umgebungstests, Konfigurationspruefungen, Smoke Runs, Evidenzpakete, OSM-Cleanup-Hard-Gates, OSM-zu-SUMO-Netzaufbau, TLS-Kandidatenpruefung, Konnektivitaetschecks, Netedit-Startnachweise und Erreichbarkeitsproben. Stille vollstaendige Ortsnamen-Geokodierung, vollstaendige Stadtzertifizierung und Controller-Generierung sind in dieser Version keine fertigen MCP-Werkzeuge.
 
 > [!NOTE]
 > Dieses Projekt ist unabhaengig. Es ist nicht mit der Eclipse Foundation, dem Eclipse-SUMO-Projekt, DLR, OpenAI, Anthropic, Google oder externen OSM-Werkzeugprojekten verbunden und wird von ihnen nicht unterstuetzt, gesponsert oder gepflegt.
@@ -47,8 +47,8 @@ Die Installation von Torii gibt Codex sowohl **skills and MCP tools**. Das Ziel 
 
 | Anfrage | Torii-Verhalten |
 |---|---|
-| "Baue aus diesem OSM-Gebiet ein SUMO-Netz." | Bbox oder lokalen OSM-Extract verwenden, tiled Overpass, Retry, XML-Deduplizierung, Strassenklassenfilter und `netconvert` ausfuehren. |
-| "Bereinige das Kernnetz von Dresden." | Mit vorhandener bbox oder Extract den implementierten OSM-zu-SUMO-Pfad nutzen; bei reinem Ortsnamen zuerst den Bereich klaeren oder den Geokodierungs-Entwicklungspfad waehlen. |
+| "Ein SUMO-Netz aus diesem OSM-Gebiet bauen." | Nutzt den OSM-Cleanup-Hard-Gate-Workflow: Gebietsbestaetigung bei Bedarf, begrenzter OSM-Import, TLS-Kartenpruefung, Pkw-Netz-Konnektivitaet und Netedit-Startnachweis. |
+| "Dieses Dresdner Kernnetz bereinigen." | Bei bbox oder Extract wird der Hard-Gate-Workflow direkt ausgefuehrt. Bei nur einem Ortsnamen erzeugt Torii zuerst einen OSM-Vorschaupunkt und fragt nach Bestaetigung. |
 | "Vergleiche alle Ampeln mit Google Maps." | SUMO-TLS-Kandidaten extrahieren, physische Kreuzungsgruppen bilden, Google-Maps-Links erzeugen und klaeren, ob aktuelle oder historische Kartenlage gemeint ist. |
 | "Sind diese Strassen oder Bruecken befahrbar?" | Named-road routeability probes erzeugen und fehlende Kanten, Routenerzeugung und restliches SUMO-Fertigstellungsrisiko berichten. |
 | "Die Metriken wurden schlechter." | Metriken als Feedback behandeln und zuerst Routen-, Nachfrage-, Netz-, TLS-, Controller-, Ausgabe-, Horizont- oder Fertigstellungsprobleme diagnostizieren. |
@@ -112,6 +112,7 @@ Der fruehere `Simulation Helper Skill for Eclipse SUMO` wurde nicht geloescht. E
 | `sumo_config_pair_preflight` | Fehlende Eingaben und gemeinsame Ausgaben in `.sumocfg`-Paaren pruefen. |
 | `sumo_run_config` / `sumo_run_minimal_smoke` | Begrenzte SUMO-Konfiguration oder minimalen Smoke Test ausfuehren. |
 | `sumo_compare_outputs` / `sumo_collect_evidence` | Ergebnisse mit Fertigstellung zuerst vergleichen und Evidenzpakete schreiben. |
+| `sumo_osm_cleanup_workflow` | High-Level-Workflow fuer OSM-Cleanup mit Gebietsbestaetigung, OSM-Netzaufbau, TLS-Kartenpruefung, Konnektivitaetscheck und Netedit-Startnachweis. |
 | `sumo_osm_build_network` | OSM-Download oder Extract-Reuse, Overpass-Kacheln, Retry, XML-Deduplizierung, Strassenfilter und `netconvert`. |
 | `sumo_tls_audit` | TLS-Kandidaten extrahieren, Kreuzungsgruppen clustern und Google-Maps-Zeitbasisfelder ergaenzen. |
 | `sumo_network_routeability_probe` | Erreichbarkeitsproben fuer benannte Strassen oder Bruecken erzeugen. |
@@ -135,9 +136,9 @@ Niedrige Ankunftsrate kann auf getrennte Routen, Einfuegefehler, zu kurzen Horiz
 
 ## Grenzen
 
-- SUMO-Netze koennen aus bbox oder Extracts gebaut werden; freie Ortsnamen-Geokodierung ist noch kein fertiges MCP Tool.
-- Strassenfilter, OSM-Deduplizierung, TLS-Kandidaten, Erreichbarkeitsproben und Warnungen werden unterstuetzt; ein ganzes Stadtnetz wird nicht automatisch zertifiziert.
-- Google Maps kann nur nach Klaerung des aktuellen oder historischen Zielzeitpunkts als externe Realitaetsbasis genutzt werden.
+- SUMO-Netze koennen aus bbox oder Extracts gebaut werden; bei unbestaetigten Ortsnamen blockiert der Workflow. Vollautomatische Ortsnamen-Geokodierung bleibt ein Workflow-Pruefpunkt, kein stiller Konstruktionsschritt.
+- Strassenfilter, OSM-Deduplizierung, TLS-Kandidaten, Google-Maps- oder nutzerzielbezogene Pruefartefakte, Konnektivitaetschecks, Erreichbarkeitsproben, Warnungen und Netedit-Startnachweise werden unterstuetzt; ein ganzes Stadtnetz wird nicht automatisch zertifiziert.
+- Google Maps ist die Standard-Realitaetsbasis fuer aktuelle Netze. Wenn der Nutzer ein historisches Netz verlangt, steuert sein historisches Ziel die Basis und braucht zeitlich passende Evidenz.
 - Controller-Implementierung kann anhand oeffentlicher Muster wie SUMO Lights geplant werden; Controller-Generierung und Controller-Log-Inspection sind Roadmap-Werkzeuge.
 - Evidenzbegrenzte Aussagen werden unterstuetzt; Experimentkorrektheit wird nicht zertifiziert.
 

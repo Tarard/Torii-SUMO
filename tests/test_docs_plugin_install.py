@@ -25,6 +25,9 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     assert "plugins/torii-sumo/.codex-plugin/plugin.json" in doc
     assert "skill is the reasoning layer" in doc
     assert "MCP server is the execution layer" in doc
+    assert "sumo_osm_cleanup_workflow" in doc
+    assert "area confirmation" in doc
+    assert "Netedit" in doc
     assert "sumo_osm_build_network" in doc
     assert "sumo_tls_audit" in doc
     assert "sumo_network_routeability_probe" in doc

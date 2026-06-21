@@ -72,6 +72,20 @@ claim_status:
 
 Do not proceed to formal controller comparison from an unplanned network edit. Network construction is its own evidence gate.
 
+## OSM Cleanup Hard Gates
+
+For OSM-to-SUMO network construction, default to the high-level `sumo_osm_cleanup_workflow` when the Torii MCP tools are available. Do not treat `netconvert` success as enough evidence that the SUMO network is real.
+
+Hard gates:
+
+1. If the user gives only a place name, produce an OSM preview checkpoint for area confirmation and ask the user to confirm the area before construction.
+2. After construction, run TLS candidate extraction and Google Maps review-link generation by default.
+3. For current-network modeling, Google Maps is the default reality baseline. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned Google Maps evidence, OSM history, dated imagery, Street View history, or agency inventory where available.
+4. Run passenger connectivity checks before making stronger claims.
+5. Open the cleaned network in Netedit and report launch evidence.
+
+If any gate is incomplete, keep the claim at `diagnostic-demo`, `construction-invalid`, or `blocked`. GUI inspection, Google Maps links, and clean SUMO loading do not prove timing, phasing, demand realism, or controller readiness.
+
 ## Road-Class Ladder
 
 Start sparse and add detail only when the target requires it.

@@ -125,6 +125,10 @@ def test_skill_routes_osm_source_patterns_and_google_maps_temporal_baseline() ->
     source_reference = (SKILL / "references" / "osm-source-patterns.md").read_text(encoding="utf-8")
 
     assert "references/osm-source-patterns.md" in body
+    assert "sumo_osm_cleanup_workflow" in model_reference
+    assert "area confirmation" in model_reference
+    assert "Netedit" in model_reference
+    assert "user's stated historical target controls the baseline" in model_reference
     assert "Google Maps is the external reality baseline" in model_reference
     assert "current map or a historical target date" in model_reference
     assert "map_temporal_scope" in model_reference
