@@ -80,7 +80,7 @@ Hard gates:
 
 1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, preview checkpoint, and area confirmation request before construction.
 2. After construction, run TLS candidate extraction and Google Maps review-link generation by default.
-3. For current-network modeling, Google Maps is the default reality baseline. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned Google Maps evidence, OSM history, dated imagery, Street View history, or agency inventory where available.
+3. For current-network modeling, use a region-aware reality baseline. Google Maps can be the default where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
 4. Run passenger connectivity checks before making stronger claims.
 5. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
 6. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
@@ -98,19 +98,25 @@ Start sparse and add detail only when the target requires it.
 
 Do not call a network experiment-ready merely because it opens in GUI, has many traffic lights, or passes a one-step SUMO load.
 
-## Google Maps Reality Baseline
+## Region-Aware Reality Baseline
 
-Google Maps is the external reality baseline for current OSM/SUMO road and TLS existence audit. It can justify `keep_tls`, `remove_tls`, or `needs_review` decisions after the map time scope is confirmed.
+Use the external map baseline that is appropriate for the modeled region. OSM can be a useful open construction source, but it is not automatically the ground truth for current road and TLS existence.
 
-Before using Google Maps as the standard, ask whether the user needs the current map or a historical target date. If the user is modeling a past network, the latest Google Maps view is not automatically decisive. Use dated imagery, Street View history, OSM history, or agency signal inventory when available.
+For mainland China, do not default to Google Maps as the current-road/TLS baseline. Prefer Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos. Record whether review coordinates are WGS84, GCJ-02, or BD-09 before comparing them with SUMO/OSM coordinates.
+
+For regions where Google Maps is reliable and appropriate, it can support `keep_tls`, `remove_tls`, or `needs_review` decisions after the map time scope is confirmed.
+
+Before using any map source as the standard, ask whether the user needs the current map or a historical target date. If the user is modeling a past network, the latest public map view is not automatically decisive. Use dated imagery, street-level imagery history, OSM history, or agency signal inventory when available.
 
 Record:
 
 ```text
 map_baseline_source: Google Maps
+regional_baseline_source:
+coordinate_system: WGS84 | GCJ-02 | BD-09 | unknown
 map_temporal_scope: current | historical | unspecified
 map_target_date:
-google_maps_url:
+map_review_url:
 audit_status:
 action:
 time_scope_residual_risk:

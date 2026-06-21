@@ -46,8 +46,9 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     assert "pyrosm" in doc
     assert "SUMO osmGet/osmBuild" in doc
     assert "osm-to-xodr" in doc
-    assert "Google Maps is the required workflow baseline" in doc
-    assert "do not remove the Google Maps gate" in doc
+    assert "Use a region-aware reality baseline" in doc
+    assert "Amap/Gaode" in doc
+    assert "WGS84/GCJ-02/BD-09" in doc
     assert "current map or a historical target date" in doc
     assert "full OSM intelligent cleanup" in doc
     assert "TLS inventory" in doc

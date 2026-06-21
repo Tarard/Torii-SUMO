@@ -26,9 +26,9 @@ Preferred ladder:
 
 ## Google Maps Baseline
 
-Google Maps is the external reality baseline for current OSM/SUMO road and TLS existence audit. It can support `keep_tls`, `remove_tls`, or `needs_review` decisions after the map time scope is confirmed.
+Use a region-aware external reality baseline for current OSM/SUMO road and TLS existence audit. Google Maps can support `keep_tls`, `remove_tls`, or `needs_review` decisions where it is reliable and appropriate. For mainland China, prefer Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions.
 
-Always ask whether the audit should use the current map or a historical target date. If the user models a past network, latest Google Maps is not automatically decisive; use dated imagery, Street View history, OSM history, or agency inventory when available.
+Always ask whether the audit should use the current map or a historical target date. If the user models a past network, the latest public map is not automatically decisive; use dated imagery, street-level imagery history, OSM history, or agency inventory when available.
 
 Record:
 
