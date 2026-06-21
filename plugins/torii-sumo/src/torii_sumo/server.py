@@ -12,6 +12,7 @@ from .tools.evidence_tools import (
 from .tools.osm_tools import (
     sumo_network_routeability_probe,
     sumo_osm_build_network,
+    sumo_osm_cleanup_workflow,
     sumo_tls_audit,
 )
 from .tools.run_tools import sumo_run_config, sumo_run_minimal_smoke
@@ -34,6 +35,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Write a JSON and Markdown evidence bundle.")(
         sumo_collect_evidence
+    )
+    server.tool(description="Run the OSM cleanup hard-gate workflow: area confirmation, OSM build, TLS map audit, connectivity check, and Netedit launch.")(
+        sumo_osm_cleanup_workflow
     )
     server.tool(description="Download or reuse OSM, filter road classes, and build a SUMO network with netconvert.")(
         sumo_osm_build_network

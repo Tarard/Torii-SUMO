@@ -9,6 +9,7 @@ from torii_sumo.core.osm_network import (
     build_osm_network,
     build_routeability_probe,
 )
+from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
 
 
 DRIVE_HIGHWAYS = {
@@ -109,4 +110,44 @@ def sumo_network_routeability_probe(
         key_edge_queries=key_edge_queries,
         seed=seed,
         end=end,
+    )
+
+
+def sumo_osm_cleanup_workflow(
+    output_dir: str,
+    bbox: str | None = None,
+    place_name: str | None = None,
+    confirmed_area: bool = False,
+    prefix: str = "sumo_osm_cleanup",
+    source_osm_path: str | None = None,
+    highway_classes: str | None = None,
+    historical_date: str | None = None,
+    overpass_url: str = "https://overpass-api.de/api/interpreter",
+    timeout_seconds: float = 240.0,
+    max_tile_area_km2: float = 2500.0,
+    max_retries: int = 2,
+    retry_pause_seconds: float = 5.0,
+    map_temporal_scope: str = "current",
+    map_target_date: str | None = None,
+    launch_netedit_after_build: bool = True,
+    key_edge_queries: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return run_osm_cleanup_workflow(
+        output_dir=Path(output_dir),
+        bbox=bbox,
+        place_name=place_name,
+        confirmed_area=confirmed_area,
+        prefix=prefix,
+        source_osm_path=Path(source_osm_path) if source_osm_path else None,
+        highway_classes=resolve_highway_classes(highway_classes),
+        historical_date=historical_date,
+        overpass_url=overpass_url,
+        timeout_seconds=timeout_seconds,
+        max_tile_area_km2=max_tile_area_km2,
+        max_retries=max_retries,
+        retry_pause_seconds=retry_pause_seconds,
+        map_temporal_scope=map_temporal_scope,
+        map_target_date=map_target_date,
+        launch_netedit_after_build=launch_netedit_after_build,
+        key_edge_queries=key_edge_queries,
     )
