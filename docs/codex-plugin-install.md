@@ -59,10 +59,10 @@ For one-sentence requests, start with the workflow router:
 
 Implemented OSM/network tools:
 
-- `sumo_osm_cleanup_workflow`: run the hard-gate OSM cleanup workflow, including area confirmation when needed, network construction, TLS map audit, passenger connectivity summary, connected-core extraction when needed, completion-aware routeability audit, routeability probes when supplied, and Netedit launch evidence.
+- `sumo_osm_cleanup_workflow`: run the hard-gate OSM cleanup workflow, including area inference or confirmation when needed, network construction, region-aware TLS map audit, passenger connectivity summary, connected-core extraction when needed, completion-aware routeability audit, routeability probes when supplied, and Netedit launch evidence.
 - `sumo_osm_build_network`: download or reuse an OSM extract, use tiled Overpass requests with retry, deduplicate merged OSM XML by object id, apply road-class presets or explicit highway classes, run `netconvert`, and return artifact/log paths.
 - `sumo_tls_audit`: extract SUMO TLS audit candidates, cluster nearby candidates into physical-intersection review groups, and attach map-review baseline fields.
-- `sumo_tls_multisource_review`: create a human-review CSV that combines SUMO TLS candidates with OSM traffic-signal matches, Google Maps, Mapillary, KartaView, optional official signal inventory rows, optional signal-plan rows, and optional field-photo evidence rows.
+- `sumo_tls_multisource_review`: create a human-review CSV that combines SUMO TLS candidates with OSM traffic-signal matches, region-aware map links such as Amap/Gaode for mainland China or Google Maps where appropriate, Mapillary, KartaView, optional official signal inventory rows, optional signal-plan rows, and optional field-photo evidence rows.
 - `sumo_network_connected_core`: extract the largest passenger component from an existing SUMO `.net.xml`, write a reusable connected-core network, and report discarded fragments.
 - `sumo_network_routeability_probe`: generate named-road probe routes and a bounded `.sumocfg` for routeability checks.
 - `sumo_network_routeability_audit`: generate random passenger trips, run SUMO, parse `summary.xml` and `tripinfo.xml`, and extend the horizon until all generated vehicles finish or `max_end` is reached.

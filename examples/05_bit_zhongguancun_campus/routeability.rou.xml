@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-06-21 19:21:54.438012 by Eclipse SUMO randomTrips.py v1_26_0+0000-fa7df22d7f1
+<configuration>
+    <net-file value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\bit_zhongguancun.net.xml"/>
+    <output-trip-file value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\routeability.trips.xml"/>
+    <route-file value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\routeability.rou.xml"/>
+    <vehicle-class value="passenger"/>
+    <fringe-factor value="10"/>
+    <end value="300.0"/>
+    <period value="30.0"/>
+</configuration>
+-->
+
+<!-- generated on 2026-06-21T19:21:54.344714+01:00 by Eclipse SUMO duarouter 1.26.0
+<duarouterConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/duarouterConfiguration.xsd">
+
+    <input>
+        <net-file value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\bit_zhongguancun.net.xml"/>
+        <route-files value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\routeability.trips.xml"/>
+    </input>
+
+    <output>
+        <output-file value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\routeability.rou.xml"/>
+        <alternatives-output value="NUL"/>
+    </output>
+
+    <time>
+        <begin value="0.0"/>
+        <end value="300.0"/>
+    </time>
+
+    <report>
+        <no-warnings value="true"/>
+        <ignore-errors value="true"/>
+        <no-step-log value="true"/>
+    </report>
+
+</duarouterConfiguration>
+-->
+
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <vType id="passenger" vClass="passenger"/>
+    <vehicle id="0" type="passenger" depart="0.00">
+        <route edges="167649023#0 1055449633 219487087 -182042882#4 -182042882#1 -182042882#0 1518745787#0 -1341230760#0"/>
+    </vehicle>
+    <vehicle id="1" type="passenger" depart="30.00">
+        <route edges="-934714246#3 -60105853#11 -60105853#10 934714239#0 -352009351#1 -352009351#0"/>
+    </vehicle>
+    <vehicle id="2" type="passenger" depart="60.00">
+        <route edges="257453039#4 -838013187 838013189#0 30064875#3 30064875#4 -182042882#4 -182042882#1 182042882#1"/>
+    </vehicle>
+    <vehicle id="3" type="passenger" depart="90.00">
+        <route edges="1341230759 60105853#6 -1341230779 -1341230760#1 -1341230760#0"/>
+    </vehicle>
+    <vehicle id="4" type="passenger" depart="120.00">
+        <route edges="-934713612#6 -934713612#5 -934713612#4 -934713612#3 -934713612#2 -934713612#1 -352009353#1 1341230765"/>
+    </vehicle>
+    <vehicle id="5" type="passenger" depart="150.00">
+        <route edges="-1341230762 -1341230763#0 -1341230761#0 60105853#5 60105853#6 60105853#7 60105853#9 60105853#11 -934714246#2 257453039#0 -257453041"/>
+    </vehicle>
+    <vehicle id="6" type="passenger" depart="180.00">
+        <route edges="182040093 1518745786#2 1518745786#3 30748082 182042882#0 182042882#1 182042882#2 1055449634 139339318#0 139339318#1"/>
+    </vehicle>
+    <vehicle id="7" type="passenger" depart="210.00">
+        <route edges="-934713612#6 -1341230768#1 -1341230767#2 934713613#0 -257453039#5 -838013187 838013189#0 30064875#3 160097699#0"/>
+    </vehicle>
+    <vehicle id="8" type="passenger" depart="240.00">
+        <route edges="42399132 -182042882#1 1341230780#1 -60105853#10 -60105853#7 -60105853#6 -1341230759"/>
+    </vehicle>
+    <vehicle id="9" type="passenger" depart="270.00">
+        <route edges="42399132 182042882#2 219439618#0"/>
+    </vehicle>
+</routes>

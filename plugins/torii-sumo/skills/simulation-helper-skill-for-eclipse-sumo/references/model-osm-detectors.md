@@ -123,7 +123,7 @@ Before using any map source as the standard, ask whether the user needs the curr
 Record:
 
 ```text
-map_baseline_source: Google Maps
+map_baseline_source: Amap/Gaode | Google Maps | official inventory | field evidence | other
 regional_baseline_source:
 coordinate_system: WGS84 | GCJ-02 | BD-09 | unknown
 map_temporal_scope: current | historical | unspecified
