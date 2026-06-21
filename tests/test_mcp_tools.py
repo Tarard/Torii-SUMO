@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
+from torii_sumo.tools.osm_tools import sumo_network_routeability_audit
 from torii_sumo.tools.run_tools import sumo_run_minimal_smoke
 
 
@@ -80,3 +81,32 @@ def test_sumo_run_minimal_smoke_can_be_forced_blocked(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert report["claim_status"] == "blocked"
+
+
+def test_sumo_network_routeability_audit_tool_returns_json_compatible_report(monkeypatch, tmp_path: Path) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "network.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_audit(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["vehicle_count"] == 25
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "report_file": str(tmp_path / "audit.json"),
+        }
+
+    monkeypatch.setattr(osm_tools, "run_routeability_audit", fake_audit)
+
+    report = sumo_network_routeability_audit(
+        net_file=str(net_file),
+        output_dir=str(tmp_path / "audit"),
+        vehicle_count=25,
+    )
+
+    assert report["status"] == "pass"
+    assert report["routeability_status"] == "pass"
+    json.dumps(report)

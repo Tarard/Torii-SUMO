@@ -13,6 +13,7 @@ from torii_sumo.core.osm_network import (
 )
 from torii_sumo.core.osm_area import resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.routeability_audit import run_routeability_audit
 
 
 DRIVE_HIGHWAYS = {
@@ -142,6 +143,28 @@ def sumo_network_routeability_probe(
     )
 
 
+def sumo_network_routeability_audit(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "routeability_audit",
+    vehicle_count: int = 100,
+    seed: int = 42,
+    initial_end: int = 300,
+    max_end: int = 2400,
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return run_routeability_audit(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        vehicle_count=vehicle_count,
+        seed=seed,
+        initial_end=initial_end,
+        max_end=max_end,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def sumo_network_connected_core(
     net_file: str,
     output_dir: str,
@@ -188,6 +211,10 @@ def sumo_osm_cleanup_workflow(
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
     launch_sumo_gui_after_build: bool = True,
+    run_routeability_audit_after_build: bool = True,
+    routeability_vehicle_count: int = 100,
+    routeability_initial_end: int = 300,
+    routeability_max_end: int = 2400,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return run_osm_cleanup_workflow(
@@ -208,5 +235,9 @@ def sumo_osm_cleanup_workflow(
         map_target_date=map_target_date,
         launch_netedit_after_build=launch_netedit_after_build,
         launch_sumo_gui_after_build=launch_sumo_gui_after_build,
+        run_routeability_audit_after_build=run_routeability_audit_after_build,
+        routeability_vehicle_count=routeability_vehicle_count,
+        routeability_initial_end=routeability_initial_end,
+        routeability_max_end=routeability_max_end,
         key_edge_queries=key_edge_queries,
     )

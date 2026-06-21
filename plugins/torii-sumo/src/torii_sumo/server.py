@@ -11,6 +11,7 @@ from .tools.evidence_tools import (
 )
 from .tools.osm_tools import (
     sumo_network_connected_core,
+    sumo_network_routeability_audit,
     sumo_network_routeability_probe,
     sumo_osm_build_network,
     sumo_osm_cleanup_workflow,
@@ -63,6 +64,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Generate routeability probe routes and a bounded .sumocfg for named key roads.")(
         sumo_network_routeability_probe
+    )
+    server.tool(description="Run a completion-aware SUMO routeability audit, extending the horizon until all generated vehicles finish or max_end is reached.")(
+        sumo_network_routeability_audit
     )
 
     return server

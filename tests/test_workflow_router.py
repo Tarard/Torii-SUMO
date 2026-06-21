@@ -82,6 +82,52 @@ def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
     assert calls["osm_file"] == Path("network.osm.xml")
 
 
+def test_auto_workflow_enables_routeability_audit_when_cleanup_supports_it(tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_audit_status": "pass",
+        }
+
+    report = run_auto_workflow(
+        user_request="Build a SUMO network for Altstadt, Dresden from OSM",
+        output_dir=tmp_path,
+        bbox="13.6,50.9,13.9,51.1",
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert captured["run_routeability_audit_after_build"] is True
+
+
+def test_auto_workflow_keeps_legacy_cleanup_fake_compatible(tmp_path: Path) -> None:
+    def fake_cleanup(output_dir, bbox, place_name, confirmed_area):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "received": {
+                "output_dir": str(output_dir),
+                "bbox": bbox,
+                "place_name": place_name,
+                "confirmed_area": confirmed_area,
+            },
+        }
+
+    report = run_auto_workflow(
+        user_request="Build a SUMO network for Altstadt, Dresden from OSM",
+        output_dir=tmp_path,
+        bbox="13.6,50.9,13.9,51.1",
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert report["workflow_result"]["received"]["bbox"] == "13.6,50.9,13.9,51.1"
+
+
 def test_auto_workflow_inspect_only_returns_plan_without_running_tools(tmp_path: Path) -> None:
     report = run_auto_workflow(
         user_request="Compare fixed-time and max-pressure controllers",

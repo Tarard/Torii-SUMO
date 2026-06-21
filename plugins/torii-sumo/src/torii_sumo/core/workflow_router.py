@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import re
 from pathlib import Path
 from typing import Any, Callable
@@ -20,6 +21,7 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
             "sumo_osm_cleanup_workflow",
             "sumo_tls_multisource_review",
             "sumo_network_routeability_probe",
+            "sumo_network_routeability_audit",
             "sumo_collect_evidence",
         ],
     },
@@ -29,7 +31,7 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
     },
     "routeability": {
         "description": "Snap named route endpoints to passenger-accessible SUMO edges, generate routes, run a bounded smoke check, and report completion before claims.",
-        "tool_chain": ["sumo_network_routeability_probe", "sumo_run_config", "sumo_compare_outputs"],
+        "tool_chain": ["sumo_network_routeability_probe", "sumo_network_routeability_audit", "sumo_compare_outputs"],
     },
     "debug_bad_run": {
         "description": "Treat bad metrics as model feedback, inspect outputs, classify the likely issue, and propose the smallest next probe.",
@@ -244,12 +246,15 @@ def _run_osm_to_sumo(
         report["next_question"] = "Confirm this OSM area and bbox before network construction?"
         return report
 
-    workflow_report = cleanup_workflow_func(
-        output_dir=output_dir,
-        bbox=bbox,
-        place_name=inferred or None,
-        confirmed_area=confirmed_area,
-    )
+    cleanup_kwargs = {
+        "output_dir": output_dir,
+        "bbox": bbox,
+        "place_name": inferred or None,
+        "confirmed_area": confirmed_area,
+    }
+    if _supports_keyword(cleanup_workflow_func, "run_routeability_audit_after_build"):
+        cleanup_kwargs["run_routeability_audit_after_build"] = True
+    workflow_report = cleanup_workflow_func(**cleanup_kwargs)
     report.update(
         {
             "status": workflow_report.get("status", "fail"),
@@ -260,6 +265,18 @@ def _run_osm_to_sumo(
         }
     )
     return report
+
+
+def _supports_keyword(func: Callable[..., Any], name: str) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return False
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        or (parameter.name == name and parameter.kind in {inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD})
+        for parameter in signature.parameters.values()
+    )
 
 
 def _run_tls_review(

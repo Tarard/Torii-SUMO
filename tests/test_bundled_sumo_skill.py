@@ -100,6 +100,7 @@ def test_skill_routes_mcp_tools_and_feedback_diagnosis() -> None:
     assert "sumo_preflight" in reference
     assert "sumo_compare_outputs" in reference
     assert "sumo_osm_resolve_place" in reference
+    assert "sumo_network_routeability_audit" in reference
     assert "MCP tool output is observation" in reference
     assert "diagnose what the metric implies" in reference
 

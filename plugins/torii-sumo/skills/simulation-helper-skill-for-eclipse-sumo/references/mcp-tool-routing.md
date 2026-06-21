@@ -19,12 +19,13 @@ Use this reference when the installed `torii-sumo` plugin is available, when the
 | Single `.sumocfg` execution | `sumo_run_config` | Inspect declared outputs before interpreting performance metrics |
 | Need a minimal toolchain smoke test | `sumo_run_minimal_smoke` | Label as `diagnostic-demo`, not formal experiment evidence |
 | Need to resolve a named OSM area before construction | `sumo_osm_resolve_place` | Return Nominatim/OSM candidate display name, relation/node/way id, bbox, OSM preview link, and confirmation boundary |
-| Need OSM cleanup from place name, bbox, or extract with mandatory gates | `sumo_osm_cleanup_workflow` | Enforce area confirmation, OSM build, Google Maps/current-or-user-targeted TLS audit, passenger connectivity, optional routeability probes, SUMO-GUI/Netedit launch, and claim boundary |
+| Need OSM cleanup from place name, bbox, or extract with mandatory gates | `sumo_osm_cleanup_workflow` | Enforce area confirmation, OSM build, Google Maps/current-or-user-targeted TLS audit, passenger connectivity, connected-core extraction, completion-aware routeability audit, optional routeability probes, SUMO-GUI/Netedit launch, and claim boundary |
 | Need bbox OSM download/reuse, road-class filtering, and SUMO network construction | `sumo_osm_build_network` | Treat tiled Overpass, retry, OSM deduplication, and netconvert output as construction evidence; inspect warnings before accepting the network |
 | Need OSM/netconvert traffic-light cleanup review | `sumo_tls_audit` | Extract TLS candidates, cluster nearby candidates, and create first-pass map review fields |
 | Need traffic-light evidence from OSM, public map links, official inventory, signal plans, or field photos | `sumo_tls_multisource_review` | Keep Google Maps as the current-network baseline gate; use Mapillary, KartaView, OSM tags, inventories, signal plans, and photos as supporting evidence; keep every row at `needs_manual_review` until a human confirms it |
 | Need a reusable 100% passenger-connected core from an existing `.net.xml` | `sumo_network_connected_core` | Extract the largest passenger component into a `connected-core` network, keep the raw network as audit evidence, and report discarded fragments before routeability claims |
 | Need routeability probes for named roads or bridges | `sumo_network_routeability_probe` | Check missing key edges, generated routes, and later SUMO completion before claim escalation |
+| Need to prove random passenger routes finish before saying a network is usable | `sumo_network_routeability_audit` | Generate random passenger routes, run SUMO, parse `summary.xml`/`tripinfo.xml`, auto-extend the horizon when vehicles remain running, and fail rather than overclaim incomplete runs |
 | Baseline and variant summary or tripinfo outputs | `sumo_compare_outputs` | Report completion, unfinished vehicles, and teleports before averages |
 | Result handoff or reproducibility artifact | `sumo_collect_evidence` | Store raw observations, warnings, claim label, and residual risk |
 
@@ -46,7 +47,7 @@ Do not optimize a raw number without explaining the problem it indicates.
 
 Examples:
 
-- Low arrived count can mean the horizon is too short, insertion failed, routes are disconnected, or a controller blocked movement.
+- Low arrived count can mean the horizon is too short, insertion failed, routes are disconnected, or a controller blocked movement. Use `sumo_network_routeability_audit` before treating a random-route smoke run as usable evidence.
 - High waiting time can mean demand is outside the intended scope, phase-lane mapping is wrong, TLS were joined incorrectly, or the controller policy is unsuitable.
 - Teleports indicate construction or control feedback requiring lane, route, capacity, conflict, and controller checks.
 - `connected-core` means Torii preserved the raw network but routed downstream checks through a netconvert-built largest passenger component with strict connectivity passing.
@@ -72,4 +73,4 @@ residual_risk:
 
 If the user asks for full place-name geocoding, fully automated OSM intelligent cleanup, max-pressure controller generation, controller application, or controller-log inspection and no MCP tool exists yet, say that the plugin has the skill workflow but not that execution tool. Then provide the smallest manual or code-development next step.
 
-The current OSM tools cover named-area resolution, bounded bbox/source-OSM network construction, tiled Overpass requests, retry, OSM XML deduplication, road-class filtering, TLS audit candidate extraction, TLS clustering, Google Maps/Mapillary/KartaView review-link emission, optional inventory/signal-plan/field-evidence review fields, passenger connectivity checks, connected-core extraction, SUMO-GUI/Netedit launch evidence, and named-road routeability probe generation. The high-level cleanup workflow coordinates these tools and blocks or demotes claims when area confirmation, map/TLS review, connectivity, or GUI inspection evidence is missing. They do not by themselves prove signal timing, phasing, or controller readiness.
+The current OSM tools cover named-area resolution, bounded bbox/source-OSM network construction, tiled Overpass requests, retry, OSM XML deduplication, road-class filtering, TLS audit candidate extraction, TLS clustering, Google Maps/Mapillary/KartaView review-link emission, optional inventory/signal-plan/field-evidence review fields, passenger connectivity checks, connected-core extraction, completion-aware routeability audit, SUMO-GUI/Netedit launch evidence, and named-road routeability probe generation. The high-level cleanup workflow coordinates these tools and blocks or demotes claims when area confirmation, map/TLS review, connectivity, routeability completion, or GUI inspection evidence is missing. They do not by themselves prove signal timing, phasing, or controller readiness.

@@ -17,6 +17,7 @@ class SummaryMetrics(BaseModel):
     running: int | None
     waiting: int | None
     teleports: int | None
+    collisions: int | None
     completion_ratio: float | None
     warnings: list[str]
 
@@ -135,6 +136,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             running=None,
             waiting=None,
             teleports=None,
+            collisions=None,
             completion_ratio=None,
             warnings=[f"summary file does not exist: {path}"],
         )
@@ -153,6 +155,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             running=None,
             waiting=None,
             teleports=None,
+            collisions=None,
             completion_ratio=None,
             warnings=[f"invalid summary XML: {exc}"],
         )
@@ -168,6 +171,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             running=None,
             waiting=None,
             teleports=None,
+            collisions=None,
             completion_ratio=None,
             warnings=[f"could not read summary XML: {exc}"],
         )
@@ -185,6 +189,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
             running=None,
             waiting=None,
             teleports=None,
+            collisions=None,
             completion_ratio=None,
             warnings=["summary has no step elements"],
         )
@@ -202,12 +207,15 @@ def inspect_summary(path: Path) -> SummaryMetrics:
     running = _int_attr(last, "running")
     waiting = _int_attr(last, "waiting")
     teleports = _int_attr(last, "teleports")
+    collisions = _int_attr(last, "collisions")
     if running and running > 0:
         warnings.append(f"{running} vehicles still running at final summary step")
     if waiting and waiting > 0:
         warnings.append(f"{waiting} vehicles waiting for insertion at final summary step")
     if teleports and teleports > 0:
         warnings.append(f"{teleports} teleports reported at final summary step")
+    if collisions and collisions > 0:
+        warnings.append(f"{collisions} collisions reported at final summary step")
 
     return SummaryMetrics(
         path=str(path),
@@ -220,6 +228,7 @@ def inspect_summary(path: Path) -> SummaryMetrics:
         running=running,
         waiting=waiting,
         teleports=teleports,
+        collisions=collisions,
         completion_ratio=completion_ratio,
         warnings=warnings,
     )

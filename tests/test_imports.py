@@ -18,6 +18,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_tls_multisource_review",
         "sumo_network_connected_core",
         "sumo_network_routeability_probe",
+        "sumo_network_routeability_audit",
     ]
 )
 

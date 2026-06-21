@@ -116,7 +116,7 @@ Torii has two layers:
 | Reasoning layer | SUMO expert skills that ask the right questions, choose a workflow, and bound claims. |
 | Execution layer | Local stdio MCP tools that run bounded SUMO checks and return structured observations. |
 
-Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, connected-core extraction, routeability probes, and Netedit launch evidence.
+Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, connected-core extraction, routeability probes, completion-aware routeability audits, and Netedit launch evidence.
 
 The original `Simulation Helper Skill for Eclipse SUMO` is now Torii's reasoning layer. The plugin bundles it with executable local tools.
 
