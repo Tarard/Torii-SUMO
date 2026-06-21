@@ -2,6 +2,7 @@ import gzip
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from torii_sumo.core.connectivity import summarize_passenger_connectivity
 from torii_sumo.core.command_runner import CommandResult
 from torii_sumo.core.osm_network import (
     build_osm_network,
@@ -333,3 +334,57 @@ def test_build_routeability_probe_uses_user_supplied_road_queries(tmp_path: Path
     assert route_root.find("route").attrib["edges"] == "pre main post"
     assert cfg_root.find("input/net-file").attrib["value"] == "../network.net.xml"
     assert "main_road,arterial,n1,n2,main" in key_rows
+
+
+def test_summarize_passenger_connectivity_passes_single_component(tmp_path: Path) -> None:
+    net_file = tmp_path / "connected.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n0" to="n1">
+    <lane id="a_0" allow="passenger" speed="13.9" length="10.0"/>
+  </edge>
+  <edge id="b" from="n1" to="n2">
+    <lane id="b_0" allow="passenger" speed="13.9" length="10.0"/>
+  </edge>
+  <connection from="a" to="b"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = summarize_passenger_connectivity(net_file)
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["connectivity_status"] == "pass"
+    assert report["passenger_edge_count"] == 2
+    assert report["passenger_component_count"] == 1
+    assert report["largest_component_edge_count"] == 2
+    assert report["small_component_count"] == 0
+    assert report["isolated_passenger_edge_count"] == 0
+
+
+def test_summarize_passenger_connectivity_fails_disconnected_components(tmp_path: Path) -> None:
+    net_file = tmp_path / "disconnected.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n0" to="n1">
+    <lane id="a_0" allow="passenger" speed="13.9" length="10.0"/>
+  </edge>
+  <edge id="b" from="n2" to="n3">
+    <lane id="b_0" allow="passenger" speed="13.9" length="10.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = summarize_passenger_connectivity(net_file)
+
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["connectivity_status"] == "fail"
+    assert report["passenger_edge_count"] == 2
+    assert report["passenger_component_count"] == 2
+    assert report["largest_component_edge_count"] == 1
+    assert report["small_component_count"] == 2
+    assert report["isolated_passenger_edge_count"] == 2
+    assert "passenger network has 2 disconnected components" in report["warnings"]
