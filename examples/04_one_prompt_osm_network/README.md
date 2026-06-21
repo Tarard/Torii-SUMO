@@ -35,7 +35,7 @@ Zoomed connected route detail:
 | Junctions | 5,034 |
 | SUMO traffic-light junctions | 154 |
 | TLS multi-source review | 154 rows: 147 `osm-only`, 7 `sumo-guess-only`, all `needs_manual_review` |
-| Largest passenger component | 6,363 / 6,364 edges, 99.98% |
+| Passenger connectivity | connected-core network: 6,363 / 6,363 passenger edges, 100% |
 | Routeability smoke | 12 / 12 generated passenger trips arrived |
 | Teleports / collisions | 0 / 0 |
 | Claim status | `diagnostic-demo` |

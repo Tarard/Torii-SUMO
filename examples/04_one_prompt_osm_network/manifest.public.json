@@ -36,7 +36,9 @@
     "passenger_connectivity": {
       "total_edges": 6364,
       "largest_component_edges": 6363,
-      "largest_component_coverage": "99.98%"
+      "largest_component_coverage": "99.98%",
+      "connected_core_edges": 6363,
+      "connected_core_coverage": "100%"
     },
     "routeability_smoke": {
       "generated_passenger_trips": 12,

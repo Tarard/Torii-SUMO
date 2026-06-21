@@ -57,9 +57,9 @@ This demo produced a diagnostic SUMO network for Dresden Altstadt:
 
 | Evidence | Result |
 |---|---:|
-| SUMO network | 6,364 edges, 27,392 lanes, 5,034 junctions |
+| SUMO network | raw network: 6,364 edges, 27,392 lanes, 5,034 junctions |
 | Traffic-light candidates | 154, marked `needs_review` |
-| Passenger connectivity | largest component 6,363 / 6,364 edges, 99.98% |
+| Passenger connectivity | connected-core network: 6,363 / 6,363 passenger edges, 100% |
 | Routeability smoke | 12 / 12 generated passenger trips arrived |
 | Teleports / collisions | 0 / 0 |
 | Claim status | `diagnostic-demo` |
