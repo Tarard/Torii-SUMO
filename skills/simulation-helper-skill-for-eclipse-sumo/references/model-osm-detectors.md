@@ -13,9 +13,21 @@ The goal is construction discipline. A network that looks plausible in `sumo-gui
   - `*_detector_repaired`: repaired detector-to-lane mapping profile.
 - Treat GUI inspection and map screenshots as diagnostic evidence only. Formal readiness still needs headless SUMO load, routeability, detector output, and completion checks.
 
+## One-Sentence Autopilot Contract
+
+Torii's first job is to get a bounded diagnostic result from a short user request. Do not turn region-aware baselines, road-detail choices, or TLS review into a long intake form.
+
+Default behavior:
+
+1. Infer the place, region, road-detail preset, and current-vs-historical baseline when the prompt and resolved OSM candidate make them clear.
+2. Run bounded construction, connectivity, connected-core, routeability, and launch-evidence steps with conservative defaults.
+3. Ask the user only when the next action would be unsafe or impossible, such as ambiguous place resolution, missing bbox/extract, missing SUMO binaries, or a destructive overwrite.
+4. If regional map/TLS reality evidence is missing, continue the diagnostic build and mark the claim boundary instead of blocking the workflow.
+5. Report the exact assumptions and residual risks so the user can decide whether to strengthen the evidence.
+
 ## User Granularity Gate
 
-Before changing the network, ask the user what level of road detail is needed for the study:
+For formal experiment candidates, destructive edits, or user-requested variants, ask the user what level of road detail is needed for the study. For one-sentence diagnostic builds, use the conservative arterial/core preset first and report the road-class assumption:
 
 ```text
 network_detail_target:
@@ -52,7 +64,7 @@ If the user only wants to inspect what changed, generate a diagnostic highlight 
 
 ## Construction Plan Gate
 
-Before generating, editing, or committing an imported network, produce a short plan and ask for confirmation:
+Before destructive edits, committing an imported network as an experiment baseline, or starting formal controller comparison, produce a short plan and ask for confirmation. For one-sentence diagnostic OSM-to-SUMO construction, generate into a fresh output directory with conservative defaults and record this plan as an evidence artifact:
 
 ```text
 Network Modeling Plan
@@ -78,8 +90,8 @@ For OSM-to-SUMO network construction, default to the high-level `sumo_osm_cleanu
 
 Hard gates:
 
-1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, preview checkpoint, and area confirmation request before construction.
-2. After construction, run TLS candidate extraction and Google Maps review-link generation by default.
+1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, and preview checkpoint. In one-sentence diagnostic mode, proceed when the candidate is clear and record it as an assumption; block only when the area is ambiguous, missing, or unsafe.
+2. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
 3. For current-network modeling, use a region-aware reality baseline. Google Maps can be the default where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
 4. Run passenger connectivity checks before making stronger claims.
 5. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.

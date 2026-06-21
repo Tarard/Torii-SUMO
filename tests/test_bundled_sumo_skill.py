@@ -121,18 +121,21 @@ def test_skill_routes_sumolights_controller_patterns_without_source_copy() -> No
     assert "create a code-development plan instead of pretending the controller was applied" in reference
 
 
-def test_skill_routes_osm_source_patterns_and_google_maps_temporal_baseline() -> None:
+def test_skill_routes_osm_source_patterns_and_region_aware_temporal_baseline() -> None:
     body = read_skill()
     model_reference = (SKILL / "references" / "model-osm-detectors.md").read_text(encoding="utf-8")
     source_reference = (SKILL / "references" / "osm-source-patterns.md").read_text(encoding="utf-8")
 
     assert "references/osm-source-patterns.md" in body
     assert "sumo_osm_cleanup_workflow" in model_reference
-    assert "area confirmation" in model_reference
+    assert "proceed when the candidate is clear" in model_reference
+    assert "block only when the area is ambiguous, missing, or unsafe" in model_reference
     assert "Netedit" in model_reference
     assert "SUMO-GUI" in model_reference
     assert "user's stated historical target controls the baseline" in model_reference
     assert "Region-Aware Reality Baseline" in model_reference
+    assert "One-Sentence Autopilot Contract" in model_reference
+    assert "regional map/TLS reality evidence" in model_reference
     assert "Amap/Gaode" in model_reference
     assert "WGS84/GCJ-02/BD-09" in model_reference
     assert "current map or a historical target date" in model_reference
