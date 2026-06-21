@@ -16,6 +16,7 @@ from torii_sumo.core.osm_network import (
     robust_download_osm,
     split_bbox,
 )
+from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
 from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network
 
 
@@ -438,3 +439,170 @@ def test_launch_netedit_starts_non_blocking_process(tmp_path: Path) -> None:
     assert report["netedit_binary"] == "C:/SUMO/bin/netedit.exe"
     assert report["netedit_process_id"] == 12345
     assert calls == [["C:/SUMO/bin/netedit.exe", "-s", str(net_file)]]
+
+
+def test_osm_cleanup_workflow_blocks_unconfirmed_place_name(tmp_path: Path) -> None:
+    report = run_osm_cleanup_workflow(
+        place_name="Altstadt, Dresden",
+        output_dir=tmp_path,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    assert report["area_resolution_status"] == "needs_user_confirmation"
+    assert report["area_input"] == "Altstadt, Dresden"
+    assert report["user_confirmed_area"] == "no"
+    assert "openstreetmap.org/search" in report["osm_preview_url"]
+    assert report["gate_status"]["area_confirmation"] == "blocked"
+
+
+def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "demo.net.xml"
+    filtered_osm = tmp_path / "osm" / "demo_filtered.osm.xml.gz"
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    def fake_tls(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["osm_file"] == filtered_osm
+        assert kwargs["google_maps_temporal_scope"] == "current"
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 2,
+            "tls_cluster_count": 1,
+            "candidates_file": str(tmp_path / "tls_candidates.csv"),
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "google_maps_baseline": {
+                "google_maps_baseline_source": "Google Maps",
+                "google_maps_temporal_scope": "current",
+                "google_maps_target_date": "",
+                "google_maps_requires_time_confirmation": "no",
+            },
+            "warnings": [],
+        }
+
+    def fake_connectivity(net_path):
+        assert net_path == net_file
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 3,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 3,
+            "small_component_count": 0,
+            "isolated_passenger_edge_count": 0,
+            "warnings": [],
+        }
+
+    def fake_netedit(net_path):
+        assert net_path == net_file
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "netedit_status": "opened",
+            "netedit_binary": "netedit",
+            "netedit_process_id": 100,
+            "netedit_window_title": "",
+            "netedit_network_file": str(net_file),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="demo",
+        highway_classes={"primary"},
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        connectivity_func=fake_connectivity,
+        netedit_func=fake_netedit,
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["area_resolution_status"] == "confirmed_by_input"
+    assert report["gate_status"] == {
+        "area_confirmation": "pass",
+        "network_build": "pass",
+        "tls_reality_audit": "pass",
+        "connectivity": "pass",
+        "netedit": "pass",
+    }
+    assert report["tls_review_complete"] == "no"
+    assert report["tls_needs_review_count"] == 1
+    assert report["connectivity_status"] == "pass"
+    assert report["netedit_status"] == "opened"
+
+
+def test_osm_cleanup_workflow_preserves_historical_user_target(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "historical.net.xml"
+    filtered_osm = tmp_path / "osm" / "historical_filtered.osm.xml.gz"
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    captured = {}
+
+    def fake_tls(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "candidates_file": str(tmp_path / "tls_candidates.csv"),
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "google_maps_baseline": {
+                "google_maps_baseline_source": "Google Maps",
+                "google_maps_temporal_scope": "historical",
+                "google_maps_target_date": "2019-06",
+                "google_maps_requires_time_confirmation": "no",
+            },
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="historical",
+        map_temporal_scope="historical",
+        map_target_date="2019-06",
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "claim_status": "diagnostic-demo", "warnings": []},
+        netedit_func=lambda _path: {"status": "blocked", "netedit_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
+    )
+
+    assert captured["google_maps_temporal_scope"] == "historical"
+    assert captured["google_maps_target_date"] == "2019-06"
+    assert report["map_temporal_scope"] == "historical"
+    assert report["map_target_date"] == "2019-06"
