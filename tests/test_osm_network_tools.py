@@ -388,3 +388,53 @@ def test_summarize_passenger_connectivity_fails_disconnected_components(tmp_path
     assert report["small_component_count"] == 2
     assert report["isolated_passenger_edge_count"] == 2
     assert "passenger network has 2 disconnected components" in report["warnings"]
+
+
+def test_launch_netedit_reports_unavailable_when_binary_missing(tmp_path: Path) -> None:
+    from torii_sumo.core.netedit import launch_netedit
+
+    net_file = tmp_path / "network.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    report = launch_netedit(
+        net_file,
+        which_func=lambda _name: None,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["netedit_status"] == "unavailable"
+    assert report["netedit_network_file"] == str(net_file)
+    assert "netedit binary not found" in report["warnings"]
+
+
+def test_launch_netedit_starts_non_blocking_process(tmp_path: Path) -> None:
+    from torii_sumo.core.netedit import launch_netedit
+
+    class FakeProcess:
+        pid = 12345
+
+    calls: list[list[str]] = []
+
+    def fake_popen(command, **kwargs):
+        calls.append(command)
+        assert kwargs["stdin"] is not None
+        assert kwargs["stdout"] is not None
+        assert kwargs["stderr"] is not None
+        return FakeProcess()
+
+    net_file = tmp_path / "network.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    report = launch_netedit(
+        net_file,
+        which_func=lambda _name: "C:/SUMO/bin/netedit.exe",
+        popen_func=fake_popen,
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["netedit_status"] == "opened"
+    assert report["netedit_binary"] == "C:/SUMO/bin/netedit.exe"
+    assert report["netedit_process_id"] == 12345
+    assert calls == [["C:/SUMO/bin/netedit.exe", "-s", str(net_file)]]
