@@ -13,6 +13,7 @@ EXISTING_PUBLIC_REFERENCES = {
     "capture-field-lesson.md",
     "compare-corridor-perturbations.md",
     "develop-and-verify-code.md",
+    "detector-constrained-demand-reconstruction.md",
     "evaluate-and-report-results.md",
     "interactive-experiment-intake.md",
     "learn-sumo-knowledge.md",
@@ -146,3 +147,19 @@ def test_skill_routes_osm_source_patterns_and_region_aware_temporal_baseline() -
     assert "SUMO osmGet/osmBuild" in source_reference
     assert "osm-to-xodr" in source_reference
     assert "Do not vendor external source code" in source_reference
+
+
+def test_skill_routes_detector_constrained_demand_reconstruction() -> None:
+    body = read_skill()
+    reference = (SKILL / "references" / "detector-constrained-demand-reconstruction.md").read_text(encoding="utf-8")
+
+    assert "references/detector-constrained-demand-reconstruction.md" in body
+    assert "references/sensor-to-od-route-reconstruction.md" not in body
+    assert "references/detector-constrained-od-reconstruction.md" not in body
+    assert "Detector counts are route constraints, not OD observations" in reference
+    assert "Field Pattern: Sensor-Only Demand Reconstruction" in reference
+    assert "RouteSampler Ladder" in reference
+    assert "Month-Long Daily Workflow" in reference
+    assert "Tool Boundary" in reference
+    assert "Public Data Boundary" in reference
+    assert "Treat detector-matched routes as a plausible demand reconstruction" in reference
