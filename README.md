@@ -13,6 +13,8 @@
 <img src="https://img.shields.io/badge/Agent%20Plugin-Codex%20%2F%20Claude-6f42c1" alt="Agent plugin for Codex and Claude">
 <img src="https://img.shields.io/badge/SUMO%2FTraCI-traffic%20simulation-blue" alt="SUMO and TraCI">
 <img src="https://img.shields.io/badge/OSM%20to%20SUMO-network%20cleanup-1d8e57" alt="OSM to SUMO network cleanup">
+<img src="https://img.shields.io/badge/One%20Prompt-SUMO%20Network-0b7a75" alt="One prompt to SUMO network">
+<img src="https://img.shields.io/badge/Model--Agnostic-workflow-7a5c00" alt="Model-agnostic workflow">
 <img src="https://img.shields.io/badge/MCP%20Tools-local%20stdio-c98a05" alt="Local stdio MCP tools">
 
 <a href="https://tarard.github.io/Torii-SUMO/"><strong>Website</strong></a> |
@@ -29,13 +31,13 @@
 > [!NOTE]
 > Torii is independent. It is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, DLR, OpenAI, Anthropic, Google, or any external OSM tooling project.
 
-## One Prompt to SUMO
+## One Prompt to a SUMO Network, Across Models
 
-Torii can turn a short natural-language request into a bounded OSM-to-SUMO workflow with confirmation, construction evidence, and a clear claim boundary.
+Torii is designed for model-agnostic SUMO work: one short natural-language prompt can become a bounded OSM-to-SUMO network workflow with construction evidence, routeability checks, and a clear claim boundary.
 
 The plugin now starts from a workflow router: `torii_auto_workflow` classifies the request, chooses a recipe, asks only blocking questions, and runs safe MCP steps when the required evidence is available.
 
-Torii is deliberately guardrail-heavy: even small or weak coding models can use the workflow because the router and MCP tools carry the SUMO-specific checks instead of relying on model memory.
+Torii is deliberately guardrail-heavy. The workflow is not meant to depend on frontier-model memory: smaller or lower-cost coding models can still follow the router because the MCP tools carry the SUMO-specific checks.
 
 ```text
 Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO
