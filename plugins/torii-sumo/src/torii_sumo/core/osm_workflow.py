@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .osm_area import osm_preview_url, resolve_osm_place
-from .connectivity import summarize_passenger_connectivity
+from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .netedit import launch_netedit
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe
 from .sumo_gui import launch_sumo_gui
@@ -154,6 +154,7 @@ def run_osm_cleanup_workflow(
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
     connectivity_func: Callable[[Path], dict[str, Any]] = summarize_passenger_connectivity,
+    connected_core_func: Callable[..., dict[str, Any]] = extract_largest_passenger_component_core,
     routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     sumo_gui_func: Callable[[Path, Path, str], dict[str, Any]] = launch_sumo_gui,
@@ -230,19 +231,40 @@ def run_osm_cleanup_workflow(
             "warnings": list(build_report.get("warnings", [])),
         }
 
-    net_file = Path(str(build_report["net_file"]))
+    raw_net_file = Path(str(build_report["net_file"]))
+    net_file = raw_net_file
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
     tls_report = tls_audit_func(
-        net_file=net_file,
+        net_file=raw_net_file,
         output_dir=output_dir / "tls_audit",
         prefix=f"{prefix}_tls_audit",
         osm_file=osm_file,
         google_maps_temporal_scope=map_temporal_scope,
         google_maps_target_date=map_target_date,
     )
-    connectivity_report = connectivity_func(net_file)
+    raw_connectivity_report = connectivity_func(raw_net_file)
+    connectivity_report = raw_connectivity_report
     connectivity_quality = _connectivity_quality(connectivity_report)
+    connected_core_report = None
+    connected_core_connectivity_report = None
+    if connectivity_quality["strict_connectivity_status"] != "pass":
+        connected_core_report = connected_core_func(
+            raw_net_file,
+            output_dir=output_dir / "connected_core",
+            prefix=prefix,
+            timeout_seconds=timeout_seconds,
+        )
+        core_file_value = connected_core_report.get("connected_core_file", "") if connected_core_report else ""
+        if connected_core_report.get("status") == "pass" and core_file_value:
+            candidate_core_file = Path(str(core_file_value))
+            connected_core_connectivity_report = connectivity_func(candidate_core_file)
+            connected_core_quality = _connectivity_quality(connected_core_connectivity_report)
+            if connected_core_quality["strict_connectivity_status"] == "pass":
+                net_file = candidate_core_file
+                connectivity_report = connected_core_connectivity_report
+                connectivity_quality = dict(connected_core_quality)
+                connectivity_quality["network_quality"] = "connected-core"
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -277,12 +299,22 @@ def run_osm_cleanup_workflow(
 
     tls_summary = _tls_review_summary(tls_report)
     warnings = []
-    for child in (build_report, tls_report, connectivity_report, netedit_report, sumo_gui_report):
+    for child in (
+        build_report,
+        tls_report,
+        raw_connectivity_report,
+        connected_core_report or {},
+        connected_core_connectivity_report or {},
+        connectivity_report,
+        netedit_report,
+        sumo_gui_report,
+    ):
         warnings.extend(str(item) for item in child.get("warnings", []))
     if tls_summary["tls_review_complete"] == "no":
         warnings.append("TLS reality review still requires human Google Maps/current-or-user-targeted map inspection")
     if connectivity_quality["quality_warning"]:
         warnings.append(str(connectivity_quality["quality_warning"]))
+    warnings = list(dict.fromkeys(warnings))
 
     gate_status = {
         "area_confirmation": "pass",
@@ -312,6 +344,7 @@ def run_osm_cleanup_workflow(
         "map_target_date": map_target_date or "",
         **tls_summary,
         "connectivity_status": connectivity_report.get("connectivity_status", connectivity_report.get("status", "fail")),
+        "raw_connectivity_status": raw_connectivity_report.get("connectivity_status", raw_connectivity_report.get("status", "fail")),
         "strict_connectivity_status": connectivity_quality["strict_connectivity_status"],
         "connectivity_main_component_ratio": connectivity_quality["connectivity_main_component_ratio"],
         "network_quality": connectivity_quality["network_quality"],
@@ -321,6 +354,10 @@ def run_osm_cleanup_workflow(
         "largest_component_edge_count": connectivity_report.get("largest_component_edge_count", 0),
         "small_component_count": connectivity_report.get("small_component_count", 0),
         "isolated_passenger_edge_count": connectivity_report.get("isolated_passenger_edge_count", 0),
+        "raw_passenger_edge_count": raw_connectivity_report.get("passenger_edge_count", 0),
+        "raw_passenger_component_count": raw_connectivity_report.get("passenger_component_count", 0),
+        "raw_largest_component_edge_count": raw_connectivity_report.get("largest_component_edge_count", 0),
+        "raw_isolated_passenger_edge_count": raw_connectivity_report.get("isolated_passenger_edge_count", 0),
         "routeability_probe_file": "" if routeability_report is None else str(routeability_report.get("sumocfg_file", "")),
         "missing_key_edges": [] if routeability_report is None else routeability_report.get("missing_key_edges", []),
         "routeability_probe_status": "skipped" if routeability_report is None else routeability_report.get("status", "fail"),
@@ -335,9 +372,14 @@ def run_osm_cleanup_workflow(
         "sumo_gui_config_file": sumo_gui_report.get("sumo_gui_config_file", ""),
         "sumo_gui_network_file": sumo_gui_report.get("sumo_gui_network_file", str(net_file)),
         "net_file": str(net_file),
+        "raw_net_file": str(raw_net_file),
+        "connected_core_file": "" if connected_core_report is None else str(connected_core_report.get("connected_core_file", "")),
         "filtered_osm_file": str(filtered_osm_value) if filtered_osm_value else "",
         "build": build_report,
         "tls_audit": tls_report,
+        "raw_connectivity": raw_connectivity_report,
+        "connected_core": connected_core_report or {},
+        "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
         "netedit": netedit_report,
         "sumo_gui": sumo_gui_report,

@@ -51,7 +51,7 @@ Die Installation von Torii gibt Codex sowohl **skills and MCP tools**. Das Ziel 
 
 | Anfrage | Torii-Verhalten |
 |---|---|
-| "Ein SUMO-Netz aus diesem OSM-Gebiet bauen." | Nutzt den OSM-Cleanup-Hard-Gate-Workflow: Gebietsbestaetigung bei Bedarf, begrenzter OSM-Import, TLS-Kartenpruefung, Pkw-Netz-Konnektivitaet und Netedit-Startnachweis. |
+| "Ein SUMO-Netz aus diesem OSM-Gebiet bauen." | Nutzt den OSM-Cleanup-Hard-Gate-Workflow: Gebietsbestaetigung bei Bedarf, begrenzter OSM-Import, TLS-Kartenpruefung, Pkw-Netz-Konnektivitaet; bei kleinen Fragmenten wird ein verbundenes Kernnetz extrahiert und dann Netedit-Evidenz erzeugt. |
 | "Dieses Dresdner Kernnetz bereinigen." | Bei bbox oder Extract wird der Hard-Gate-Workflow direkt ausgefuehrt. Bei nur einem Ortsnamen erzeugt Torii zuerst einen OSM-Vorschaupunkt und fragt nach Bestaetigung. |
 | "Erstelle zuerst eine Google-Maps-Basispruefung fuer diese SUMO-Ampeln und ergaenze OSM, Mapillary, KartaView, amtliches Inventar, Signalplaene und Feldfotos." | SUMO-TLS-Kandidaten extrahieren, Google Maps als Gate fuer aktuelle Netze behalten, mehrquellige Prueffelder erzeugen und fehlende menschliche Bestaetigung melden. |
 | "Sind diese Strassen oder Bruecken befahrbar?" | Named-road routeability probes erzeugen und fehlende Kanten, Routenerzeugung und restliches SUMO-Fertigstellungsrisiko berichten. |
@@ -119,10 +119,11 @@ Der fruehere `Simulation Helper Skill for Eclipse SUMO` wurde nicht geloescht. E
 | `sumo_config_pair_preflight` | Fehlende Eingaben und gemeinsame Ausgaben in `.sumocfg`-Paaren pruefen. |
 | `sumo_run_config` / `sumo_run_minimal_smoke` | Begrenzte SUMO-Konfiguration oder minimalen Smoke Test ausfuehren. |
 | `sumo_compare_outputs` / `sumo_collect_evidence` | Ergebnisse mit Fertigstellung zuerst vergleichen und Evidenzpakete schreiben. |
-| `sumo_osm_cleanup_workflow` | High-Level-Workflow fuer OSM-Cleanup mit Gebietsbestaetigung, OSM-Netzaufbau, TLS-Kartenpruefung, Konnektivitaetscheck und Netedit-Startnachweis. |
+| `sumo_osm_cleanup_workflow` | High-Level-Workflow fuer OSM-Cleanup mit Gebietsbestaetigung, OSM-Netzaufbau, TLS-Kartenpruefung, Konnektivitaetscheck, Connected-Core-Extraktion und Netedit-Startnachweis. |
 | `sumo_osm_build_network` | OSM-Download oder Extract-Reuse, Overpass-Kacheln, Retry, XML-Deduplizierung, Strassenfilter und `netconvert`. |
 | `sumo_tls_audit` | TLS-Kandidaten extrahieren, Kreuzungsgruppen clustern und Kartenprueffelder ergaenzen. |
 | `sumo_tls_multisource_review` | Mehrquellige TLS-Prueftabelle mit OSM, Google Maps, Mapillary, KartaView, amtlichem Inventar, Signalplaenen und Feldevidenz erzeugen. |
+| `sumo_network_connected_core` | Aus einem vorhandenen SUMO `.net.xml` die groesste Passenger-Komponente als wiederverwendbares `connected-core`-Netz extrahieren und verworfene Fragmente berichten. |
 | `sumo_network_routeability_probe` | Erreichbarkeitsproben fuer benannte Strassen oder Bruecken erzeugen. |
 
 Die OSM-Architektur nimmt Ideen aus OSMnx, OSMNet, pyrosm, SUMO `osmGet/osmBuild` und osm-to-xodr auf, ohne externen Quelltext zu vendorn.
@@ -145,8 +146,9 @@ Niedrige Ankunftsrate kann auf getrennte Routen, Einfuegefehler, zu kurzen Horiz
 ## Grenzen
 
 - SUMO-Netze koennen aus bbox oder Extracts gebaut werden; bei unbestaetigten Ortsnamen blockiert der Workflow. Vollautomatische Ortsnamen-Geokodierung bleibt ein Workflow-Pruefpunkt, kein stiller Konstruktionsschritt.
-- Strassenfilter, OSM-Deduplizierung, TLS-Kandidaten, mehrquellige TLS-Pruefartefakte, Konnektivitaetschecks, Erreichbarkeitsproben, Warnungen und Netedit-Startnachweise werden unterstuetzt; ein ganzes Stadtnetz wird nicht automatisch zertifiziert.
-- Wenn strikte Konnektivitaet scheitert, aber die groesste Passenger-Komponente dominiert, markiert Torii das Netz als `partial-main-component`: nutzbar fuer diagnostische Smoke Tests, nicht experimentbereit.
+- Strassenfilter, OSM-Deduplizierung, TLS-Kandidaten, mehrquellige TLS-Pruefartefakte, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, Warnungen und Netedit-Startnachweise werden unterstuetzt; ein ganzes Stadtnetz wird nicht automatisch zertifiziert.
+- Wenn der rohe OSM-Import kleine getrennte Fragmente enthaelt, behaelt Torii das rohe Netz als Audit-Evidenz und fuehrt nachgelagerte Checks auf einem `connected-core`-Netz aus der groessten Passenger-Komponente aus.
+- Wenn strikte Konnektivitaet auch nach der Bereinigung scheitert, markiert Torii das Netz als `partial-main-component`: nutzbar fuer diagnostische Smoke Tests, nicht experimentbereit.
 - Google Maps bleibt das erforderliche Basis-Gate fuer aktuelle Strassen-/TLS-Bereinigung. OSM-Tags, Mapillary, KartaView, amtliche Inventare, Signalplaene und Feldfotos koennen die Pruefung staerken. Wenn der Nutzer ein historisches Netz verlangt, steuert sein historisches Ziel die Basis und braucht zeitlich passende Evidenz.
 - Controller-Implementierung kann anhand oeffentlicher Muster wie SUMO Lights geplant werden; Controller-Generierung und Controller-Log-Inspection sind Roadmap-Werkzeuge.
 - Evidenzbegrenzte Aussagen werden unterstuetzt; Experimentkorrektheit wird nicht zertifiziert.

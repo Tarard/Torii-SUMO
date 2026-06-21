@@ -95,8 +95,9 @@ For MCP-first use, call `torii_auto_workflow` with the one-sentence request and 
 
 | Prompt | What Torii Does |
 |---|---|
-| "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO." | Confirms the area, builds a passenger-road SUMO network, runs connectivity/routeability checks, opens SUMO/Netedit, and reports a claim boundary. |
+| "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO." | Confirms the area, builds a passenger-road SUMO network, extracts a connected simulation core when needed, runs connectivity/routeability checks, opens SUMO/Netedit, and reports a claim boundary. |
 | "Build a SUMO network from this OSM bbox or extract." | Runs bounded OSM import, road-class filtering, XML deduplication, `netconvert`, and construction evidence capture. |
+| "Make this SUMO network 100% connected for passenger routeability checks." | Extracts the largest passenger component into a reusable `connected-core` `.net.xml` and reports discarded fragments instead of hiding them. |
 | "Audit the traffic lights in this SUMO network." | Extracts TLS candidates, prepares map-review fields, and separates SUMO-generated TLS from manually validated signal evidence. |
 | "Create a Google Maps baseline review table for these SUMO traffic lights, plus OSM, Mapillary, KartaView, official inventory, signal plans, and field photos." | Builds a multi-source TLS evidence CSV, keeps Google Maps as the current-network baseline gate, and reports what evidence still needs manual confirmation. |
 | "Check whether these roads or bridges are connected." | Creates routeability probes and reports missing routes, disconnected components, teleports, and residual risk. |
@@ -115,7 +116,7 @@ Torii has two layers:
 | Reasoning layer | SUMO expert skills that ask the right questions, choose a workflow, and bound claims. |
 | Execution layer | Local stdio MCP tools that run bounded SUMO checks and return structured observations. |
 
-Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, routeability probes, and Netedit launch evidence.
+Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, connected-core extraction, routeability probes, and Netedit launch evidence.
 
 The original `Simulation Helper Skill for Eclipse SUMO` is now Torii's reasoning layer. The plugin bundles it with executable local tools.
 
@@ -124,8 +125,9 @@ The original `Simulation Helper Skill for Eclipse SUMO` is now Torii's reasoning
 Torii is useful today, but it is not a magic SUMO certifier.
 
 - It can build bounded OSM-to-SUMO networks from confirmed areas or extracts.
-- It can produce diagnostic evidence for connectivity, routeability, outputs, warnings, TLS candidates, and completion.
-- If strict connectivity fails but the main passenger component is dominant, Torii labels the network `partial-main-component`: usable for diagnostic smoke tests, not experiment-ready.
+- It can produce diagnostic evidence for connectivity, connected-core extraction, routeability, outputs, warnings, TLS candidates, and completion.
+- If raw OSM import contains small disconnected fragments, Torii keeps the raw network as audit evidence and routes downstream checks through a `connected-core` network built from the largest passenger component.
+- If strict connectivity still fails after cleanup, Torii labels the network `partial-main-component`: usable for diagnostic smoke tests, not experiment-ready.
 - It does not automatically certify full city networks, traffic-light timing/phasing, demand realism, controller correctness, or formal experiment validity.
 - Google Maps remains the required baseline gate for current road/TLS cleanup. OSM tags, Mapillary, KartaView, official inventories, signal plans, and field photos can strengthen the review, but they do not automatically certify signal timing, phasing, or controller readiness.
 

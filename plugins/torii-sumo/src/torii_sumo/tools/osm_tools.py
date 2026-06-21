@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from torii_sumo.core.connectivity import extract_largest_passenger_component_core
 from torii_sumo.core.osm_network import (
     DEFAULT_ALLOWED_HIGHWAYS,
     audit_tls,
@@ -138,6 +139,20 @@ def sumo_network_routeability_probe(
         key_edge_queries=key_edge_queries,
         seed=seed,
         end=end,
+    )
+
+
+def sumo_network_connected_core(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "sumo_network",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return extract_largest_passenger_component_core(
+        Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        timeout_seconds=timeout_seconds,
     )
 
 

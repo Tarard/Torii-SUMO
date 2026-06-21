@@ -10,6 +10,7 @@ from .tools.evidence_tools import (
     sumo_config_pair_preflight,
 )
 from .tools.osm_tools import (
+    sumo_network_connected_core,
     sumo_network_routeability_probe,
     sumo_osm_build_network,
     sumo_osm_cleanup_workflow,
@@ -56,6 +57,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Create a human-review TLS evidence table with OSM, Google Maps, Mapillary, KartaView, official inventory, signal-plan, and field-evidence fields.")(
         sumo_tls_multisource_review
+    )
+    server.tool(description="Extract the largest passenger component of a SUMO network into a connected-core .net.xml and report discarded fragments.")(
+        sumo_network_connected_core
     )
     server.tool(description="Generate routeability probe routes and a bounded .sumocfg for named key roads.")(
         sumo_network_routeability_probe
