@@ -8,6 +8,7 @@ from torii_sumo.core.osm_network import (
     build_osm_network,
     build_overpass_query,
     build_routeability_probe,
+    build_tls_multisource_review,
     cluster_tls_candidates,
     filter_osm_by_highways,
     google_maps_baseline_fields,
@@ -332,6 +333,82 @@ def test_google_maps_baseline_fields_record_temporal_scope() -> None:
     assert historical["google_maps_target_date"] == "2020-05"
     assert historical["google_maps_requires_time_confirmation"] == "no"
     assert unspecified["google_maps_requires_time_confirmation"] == "yes"
+
+
+def test_build_tls_multisource_review_keeps_human_review_boundary() -> None:
+    rows = build_tls_multisource_review(
+        [
+            {
+                "tls_id": "J1",
+                "lat": "51.0505920",
+                "lon": "13.7339600",
+                "connection_count": 12,
+                "nearest_osm_signal_id": "osm-100",
+                "nearest_osm_signal_distance_m": "8.5",
+                "has_osm_signal_within_35m": "yes",
+                "incoming_road_names": "Main Street",
+                "outgoing_road_names": "Bridge Street",
+                "google_maps_url": "https://www.google.com/maps/search/?api=1&query=51.050592,13.733960",
+            },
+            {
+                "tls_id": "J2",
+                "lat": "51.0600000",
+                "lon": "13.7400000",
+                "connection_count": 4,
+                "nearest_osm_signal_id": "",
+                "nearest_osm_signal_distance_m": "",
+                "has_osm_signal_within_35m": "no",
+                "incoming_road_names": "Side Road",
+                "outgoing_road_names": "",
+                "google_maps_url": "https://www.google.com/maps/search/?api=1&query=51.060000,13.740000",
+            },
+        ],
+        official_inventory={
+            "J1": {"status": "confirmed", "source_id": "agency-42", "note": "official inventory row"}
+        },
+        signal_plans={
+            "J1": {"status": "available", "source_id": "plan-7", "note": "timing plan exists"}
+        },
+        field_evidence={
+            "J1": {"status": "photo_confirmed", "source_id": "photo-3", "note": "field photo manifest"}
+        },
+    )
+
+    confirmed = rows[0]
+    assert confirmed["tls_id"] == "J1"
+    assert confirmed["official_inventory_status"] == "confirmed"
+    assert confirmed["official_inventory_id"] == "agency-42"
+    assert confirmed["signal_plan_status"] == "available"
+    assert confirmed["field_evidence_status"] == "photo_confirmed"
+    assert confirmed["mapillary_url"].startswith("https://www.mapillary.com/app/")
+    assert confirmed["kartaview_url"].startswith("https://kartaview.org/map/@51.050592,13.733960")
+    assert confirmed["evidence_level"] == "authoritative"
+    assert confirmed["review_status"] == "needs_manual_review"
+    assert confirmed["claim_status"] == "diagnostic-demo"
+
+    guessed = rows[1]
+    assert guessed["tls_id"] == "J2"
+    assert guessed["evidence_level"] == "sumo-guess-only"
+    assert guessed["review_status"] == "needs_manual_review"
+    assert guessed["claim_status"] == "diagnostic-demo"
+
+
+def test_net_xy_to_latlon_falls_back_when_sumolib_reports_missing_pyproj() -> None:
+    from torii_sumo.core.osm_network import _net_xy_to_latlon
+
+    class FakeNet:
+        _location = {"projParameter": "+proj=utm +zone=33 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"}
+
+        def convertXY2LonLat(self, _x: float, _y: float) -> tuple[float, float]:
+            raise RuntimeError("Network does not provide geo-projection or pyproj not installed.")
+
+        def getLocationOffset(self) -> tuple[float, float]:
+            return (0.0, 0.0)
+
+    lat, lon = _net_xy_to_latlon(FakeNet(), 391000.0, 5655000.0)
+
+    assert 50.0 < lat < 52.0
+    assert 12.0 < lon < 15.0
 
 
 def test_cluster_tls_candidates_carries_google_maps_temporal_baseline() -> None:

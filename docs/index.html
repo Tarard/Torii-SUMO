@@ -564,7 +564,7 @@
       <ul class="pain-grid">
         <li data-i18n="painOne">OSM extracts need tiling, retry, deduplication, and road-class filtering.</li>
         <li data-i18n="painTwo">Generated SUMO TLS candidates need physical-intersection review.</li>
-        <li data-i18n="painThree">Google Maps is the required reality baseline for current maps; historical requests use the user's stated target date.</li>
+        <li data-i18n="painThree">Google Maps remains the required baseline gate for current TLS review; OSM tags, Mapillary, KartaView, inventories, signal plans, and field photos strengthen the evidence.</li>
         <li data-i18n="painFour">Routeability probes expose disconnected roads before result claims.</li>
         <li data-i18n="painFive">Controller work must be planned, tested, and interpreted against completion evidence.</li>
         <li data-i18n="painSix">Bad metrics are feedback for diagnosis, not the final optimization target.</li>
@@ -573,7 +573,7 @@
 
     <section class="panel scope">
       <h2 data-i18n="scopeTitle">Current scope</h2>
-      <p class="muted" data-i18n="scopeText">Current tools cover bounded environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, area confirmation, Google Maps TLS audit, passenger connectivity checks, routeability probes, and Netedit launch evidence.</p>
+      <p class="muted" data-i18n="scopeText">Current tools cover bounded environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, area confirmation, multi-source TLS review tables, passenger connectivity checks, routeability probes, and Netedit launch evidence.</p>
       <p class="muted" data-i18n="futureText">Unconfirmed place-name-to-bbox geocoding, full city-scale intelligent cleanup, max-pressure controller generation, and controller-log inspection are roadmap tools, not finished promises.</p>
     </section>
 
@@ -750,12 +750,12 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         painText: "Torii uses a closed loop: user intent, observed SUMO artifacts, feedback diagnosis, smallest model or code change, rerun, and evidence-bounded report.",
         painOne: "OSM extracts need tiling, retry, deduplication, and road-class filtering.",
         painTwo: "Generated SUMO TLS candidates need physical-intersection review.",
-        painThree: "Google Maps is the required reality baseline for current maps; historical requests use the user's stated target date.",
+        painThree: "Google Maps remains the required baseline gate for current TLS review; OSM tags, Mapillary, KartaView, inventories, signal plans, and field photos strengthen the evidence.",
         painFour: "Routeability probes expose disconnected roads before result claims.",
         painFive: "Controller work must be planned, tested, and interpreted against completion evidence.",
         painSix: "Bad metrics are feedback for diagnosis, not the final optimization target.",
         scopeTitle: "Current scope",
-        scopeText: "Current tools cover bounded environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, area confirmation, Google Maps TLS audit, passenger connectivity checks, routeability probes, and Netedit launch evidence.",
+        scopeText: "Current tools cover bounded environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, area confirmation, multi-source TLS review tables, passenger connectivity checks, routeability probes, and Netedit launch evidence.",
         futureText: "Unconfirmed place-name-to-bbox geocoding, full city-scale intelligent cleanup, max-pressure controller generation, and controller-log inspection are roadmap tools, not finished promises.",
         mechanismKicker: "The core idea",
         mechanismTitle: "It connects reasoning to bounded execution.",
@@ -843,12 +843,12 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         painText: "Torii 使用闭环：用户意图、SUMO 产物观察、反馈诊断、最小模型或代码修改、重跑，以及有证据边界的报告。",
         painOne: "OSM 数据需要分块、重试、去重和道路等级筛选。",
         painTwo: "自动生成的 SUMO TLS 候选点需要物理路口级审查。",
-        painThree: "当前路网必须用 Google Maps 作现实基线；历史请求以用户明确的目标日期为准。",
+        painThree: "Google Maps 仍然是当前 TLS 复核的必需基线 gate；OSM 标签、Mapillary、KartaView、官方清单、信号配时方案和现场照片用于增强证据。",
         painFour: "路线可达性 probes 在结果结论前暴露断路问题。",
         painFive: "控制器修改必须经过计划、测试，并结合完成度证据解释。",
         painSix: "坏指标是诊断反馈，不是最终优化目标本身。",
         scopeTitle: "当前范围",
-        scopeText: "当前工具覆盖环境检查、配置预检、冒烟运行、证据包、OSM 构网、区域确认、Google Maps 信号灯审计、乘用车连通性检查、路线可达性探针和 Netedit 自动打开证据。",
+        scopeText: "当前工具覆盖环境检查、配置预检、冒烟运行、证据包、OSM 构网、区域确认、多源 TLS 复核表、乘用车连通性检查、路线可达性探针和 Netedit 自动打开证据。",
         futureText: "未经确认的地名自动转 bbox、整城级智能清洗、最大压力控制器生成和 controller-log inspection 是后续工具，不是当前完成承诺。",
         mechanismKicker: "核心思路",
         mechanismTitle: "把推理层和受限执行层连接起来。",
@@ -936,12 +936,12 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         painText: "Torii arbeitet als Regelkreis: Nutzerziel, beobachtete SUMO-Artefakte, Feedbackdiagnose, kleinste Modell- oder Codeaenderung, erneuter Lauf und evidenzgebundener Bericht.",
         painOne: "OSM-Exporte brauchen Kachelung, Retry, Deduplizierung und Strassenklassenfilter.",
         painTwo: "Generierte SUMO-TLS-Kandidaten brauchen Pruefung auf physische Kreuzungen.",
-        painThree: "Google Maps ist die verpflichtende Realitaetsbasis fuer aktuelle Netze; historische Anfragen nutzen das vom Nutzer genannte Zieldatum.",
+        painThree: "Google Maps bleibt das erforderliche Basis-Gate fuer aktuelle TLS-Pruefung; OSM-Tags, Mapillary, KartaView, Inventare, Signalplaene und Feldfotos staerken die Evidenz.",
         painFour: "Erreichbarkeitsproben zeigen getrennte Strassen vor Ergebnisaussagen.",
         painFive: "Controller-Arbeit muss geplant, getestet und mit Abschlussnachweisen interpretiert werden.",
         painSix: "Schlechte Metriken sind Diagnosefeedback, nicht das endgueltige Optimierungsziel.",
         scopeTitle: "Aktueller Umfang",
-        scopeText: "Aktuelle Werkzeuge decken Umgebungstests, Konfigurationspruefung, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, Gebietsbestaetigung, Google-Maps-TLS-Audit, Pkw-Konnektivitaetspruefung, Erreichbarkeitsproben und Netedit-Startnachweise ab.",
+        scopeText: "Aktuelle Werkzeuge decken Umgebungstests, Konfigurationspruefung, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, Gebietsbestaetigung, mehrquellige TLS-Prueftabellen, Pkw-Konnektivitaetspruefung, Erreichbarkeitsproben und Netedit-Startnachweise ab.",
         futureText: "Unbestaetigte Ortsname-zu-bbox-Geokodierung, vollstaendige intelligente Stadtbereinigung, Max-Pressure-Controller-Generierung und Controller-Log-Inspection sind Roadmap-Werkzeuge.",
         mechanismKicker: "Kernidee",
         mechanismTitle: "Es verbindet Reasoning mit begrenzter Ausfuehrung.",

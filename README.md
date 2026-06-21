@@ -16,9 +16,8 @@
 <img src="https://img.shields.io/badge/MCP%20Tools-local%20stdio-c98a05" alt="Local stdio MCP tools">
 
 <a href="https://tarard.github.io/Torii-SUMO/"><strong>Website</strong></a> |
-<a href="docs/codex-plugin-install.md"><strong>Codex Plugin Installation</strong></a> |
-<a href="examples/01_fixed_time_audit/task.md"><strong>Examples</strong></a> |
-<a href="docs/common-sumo-signal-control-failures.md"><strong>Failure Checklist</strong></a> |
+<a href="docs/codex-plugin-install.md"><strong>Install</strong></a> |
+<a href="examples/04_one_prompt_osm_network/README.md"><strong>One-Prompt Demo</strong></a> |
 <a href="LICENSE-CODE"><strong>MIT Code</strong></a> |
 <a href="LICENSE-DOCS"><strong>CC BY 4.0 Docs</strong></a>
 
@@ -26,33 +25,41 @@
 
 </div>
 
-> [!IMPORTANT]
-> Torii is a plugin-and-skill package for agentic SUMO work. It already bundles executable local MCP tools for environment checks, config preflight, smoke runs, evidence bundles, OSM cleanup hard gates, OSM-to-SUMO network construction, TLS audit candidates, connectivity checks, Netedit launch evidence, and routeability probes. It does not claim silent fully automatic place-name geocoding, full city-scale network certification, or controller generation as finished MCP tools.
-
 > [!NOTE]
-> This project is independent. It is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, DLR, OpenAI, Anthropic, Google, or any external OSM tooling project.
+> Torii is independent. It is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, DLR, OpenAI, Anthropic, Google, or any external OSM tooling project.
 
-## What Torii Is
+## One Prompt to SUMO
 
-Torii turns a coding agent into a more reliable SUMO assistant by giving it two layers:
+Torii can turn a short natural-language request into a bounded OSM-to-SUMO workflow with confirmation, construction evidence, and a clear claim boundary.
 
-| Layer | Role |
-|---|---|
-| Reasoning layer | The SUMO expert skill interprets the user's intent, chooses the workflow, asks for missing evidence, and explains what bad metrics imply. |
-| Execution layer | The local MCP server runs bounded checks and returns structured observations: files, warnings, metrics, routes, TLS candidates, and evidence bundles. |
+```text
+Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO
+```
 
-Installing Torii gives Codex both **skills and MCP tools**. The goal is not to make the agent chase a raw metric. The goal is to help the agent infer the modeling problem behind the metric, make the smallest defensible change, and report what the evidence can and cannot support.
+![Torii OSM intake](examples/04_one_prompt_osm_network/assets/torii-altstadt-intake.png)
 
-## What You Can Ask
+![Torii build evidence](examples/04_one_prompt_osm_network/assets/torii-altstadt-build-evidence.png)
 
-| User request | Torii response pattern |
-|---|---|
-| "Build a SUMO network from this OSM area." | Use the OSM cleanup hard-gate workflow: area confirmation when needed, bounded OSM import, TLS map audit, passenger connectivity check, and Netedit launch evidence. |
-| "Clean this Dresden core network." | If a bbox or extract is supplied, run the hard-gate workflow directly. If only a place name is supplied, produce an OSM preview checkpoint and ask the user to confirm the area before construction. |
-| "Audit all traffic lights against Google Maps." | Extract SUMO TLS candidates, cluster likely physical intersections, generate Google Maps review links, and ask whether the baseline should be current Google Maps or a historical target date. |
-| "Check whether these roads or bridges are connected." | Generate named-road routeability probes and report missing key edges, route generation evidence, and residual SUMO completion risk. |
-| "My metrics got worse after a run." | Treat metrics as feedback: diagnose route, demand, network, TLS, controller, output, horizon, or completion problems before proposing code changes. |
-| "Add a max-pressure controller." | Use the bundled SUMO skill and public controller-pattern guidance to plan and verify the implementation path. Full controller generation is a roadmap MCP tool, not a finished promise in this release. |
+Generated SUMO network:
+
+![Generated Dresden Altstadt SUMO network](examples/04_one_prompt_osm_network/assets/altstadt-sumo-network-overview.png)
+
+Zoomed connected route detail:
+
+![Connected route detail from the generated SUMO network](examples/04_one_prompt_osm_network/assets/altstadt-connected-route-zoom.png)
+
+This demo produced a diagnostic SUMO network for Dresden Altstadt:
+
+| Evidence | Result |
+|---|---:|
+| SUMO network | 6,364 edges, 27,392 lanes, 5,034 junctions |
+| Traffic-light candidates | 154, marked `needs_review` |
+| Passenger connectivity | largest component 6,363 / 6,364 edges, 99.98% |
+| Routeability smoke | 12 / 12 generated passenger trips arrived |
+| Teleports / collisions | 0 / 0 |
+| Claim status | `diagnostic-demo` |
+
+See [`examples/04_one_prompt_osm_network`](examples/04_one_prompt_osm_network/README.md). The full generated `.osm.xml` and `.net.xml` files are distributed as a GitHub release asset instead of being committed into git history.
 
 ## Quick Start
 
@@ -63,111 +70,63 @@ codex plugin marketplace add Tarard/Torii-SUMO --ref main
 codex plugin add torii-sumo@torii-sumo
 ```
 
-Start a new Codex thread after installing or reinstalling so the plugin's skills and MCP tools are discovered.
+Start a new Codex thread after installing so the plugin's skills and MCP tools are discovered.
 
-For local development, run the marketplace command from a checkout or pass the checkout path:
+Full setup details: [Codex Plugin Installation](docs/codex-plugin-install.md).
+
+For local development:
 
 ```powershell
 codex plugin marketplace add <path-to-this-repo>
 codex plugin add torii-sumo@torii-sumo
 ```
 
-Manual skill-only usage is still supported. Copy the root skill folders into a repository-scoped skill directory:
-
-```text
-.agents/skills/
-  simulation-helper-skill-for-eclipse-sumo/
-  debugging-helper-skill-for-eclipse-sumo/
-```
-
-Then ask the agent:
+Then ask:
 
 ```text
 Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.
 ```
 
-## Repository Layout
+## What You Can Ask Me
 
-```text
-plugins/
-  torii-sumo/
-    .codex-plugin/plugin.json        # Codex plugin manifest
-    .mcp.json                        # local stdio MCP server config
-    scripts/run_torii_sumo.py        # bundled server launcher
-    src/torii_sumo/                  # MCP tool implementation
-    skills/simulation-helper-skill-for-eclipse-sumo/
-
-skills/
-  simulation-helper-skill-for-eclipse-sumo/      # manual skill install path
-  debugging-helper-skill-for-eclipse-sumo/       # focused SUMO/TraCI debugging skill
-
-docs/
-  codex-plugin-install.md
-  osm-source-patterns.md
-  skill-integration.md
-```
-
-The original `Simulation Helper Skill for Eclipse SUMO` is not deleted. It is now Torii's reasoning layer, and the installable plugin bundles it together with the MCP execution layer.
-
-## Implemented MCP Tools
-
-| Tool | Current scope |
+| Prompt | What Torii Does |
 |---|---|
-| `sumo_preflight` | Detect SUMO/Python/TraCI environment evidence before experiment claims. |
-| `sumo_get_environment` | Return structured environment details for handoff and diagnosis. |
-| `sumo_config_pair_preflight` | Check paired `.sumocfg` inputs for missing files and shared outputs. |
-| `sumo_run_config` | Run a bounded SUMO config and return logs and declared-output observations. |
-| `sumo_run_minimal_smoke` | Produce a small diagnostic smoke proof for local toolchain checks. |
-| `sumo_compare_outputs` | Compare summary/tripinfo outputs with completion-first reporting. |
-| `sumo_collect_evidence` | Write a reproducibility evidence bundle. |
-| `sumo_osm_cleanup_workflow` | High-level OSM cleanup workflow with area confirmation, OSM build, TLS map audit, connectivity check, and Netedit launch evidence. |
-| `sumo_osm_build_network` | Download or reuse OSM extracts, tile Overpass calls, retry, deduplicate XML, filter roads, and run `netconvert`. |
-| `sumo_tls_audit` | Extract TLS candidates, cluster review groups, and attach Google Maps temporal-baseline fields. |
-| `sumo_network_routeability_probe` | Generate named-road routeability probe routes and a bounded `.sumocfg`. |
+| "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO." | Confirms the area, builds a passenger-road SUMO network, runs connectivity/routeability checks, opens SUMO/Netedit, and reports a claim boundary. |
+| "Build a SUMO network from this OSM bbox or extract." | Runs bounded OSM import, road-class filtering, XML deduplication, `netconvert`, and construction evidence capture. |
+| "Audit the traffic lights in this SUMO network." | Extracts TLS candidates, prepares map-review fields, and separates SUMO-generated TLS from manually validated signal evidence. |
+| "Create a Google Maps baseline review table for these SUMO traffic lights, plus OSM, Mapillary, KartaView, official inventory, signal plans, and field photos." | Builds a multi-source TLS evidence CSV, keeps Google Maps as the current-network baseline gate, and reports what evidence still needs manual confirmation. |
+| "Check whether these roads or bridges are connected." | Creates routeability probes and reports missing routes, disconnected components, teleports, and residual risk. |
+| "This SUMO run finishes, but tripinfo and summary disagree." | Diagnoses output consistency, completion, insertion, teleport, route, and horizon problems before accepting metrics. |
+| "Controller A has lower travel time, but some vehicles are unfinished." | Reports completion first, then demotes or bounds the performance claim. |
+| "Compare fixed-time, actuated, max-pressure, and my TraCI controller." | Forces paired demand, seeds, horizon, output intervals, completion policy, and metric definitions before comparison. |
+| "My waiting time got worse after cleanup." | Treats the metric as feedback and looks for network, demand, TLS, routing, or controller causes. |
+| "Turn this fix I found into reusable guidance." | Abstracts the solution into a privacy-safe field lesson for future SUMO workflows. |
 
-See [`docs/codex-plugin-install.md`](docs/codex-plugin-install.md) for installation details and [`docs/osm-source-patterns.md`](docs/osm-source-patterns.md) for the OSM architecture borrowed from OSMnx, OSMNet, pyrosm, SUMO `osmGet/osmBuild`, and osm-to-xodr without vendoring their source code.
+## What Torii Is
 
-## Feedback Diagnosis
+Torii has two layers:
 
-Torii uses bad run evidence as feedback:
+| Layer | Role |
+|---|---|
+| Reasoning layer | SUMO expert skills that ask the right questions, choose a workflow, and bound claims. |
+| Execution layer | Local stdio MCP tools that run bounded SUMO checks and return structured observations. |
 
-```text
-user intent
--> observed SUMO outputs, warnings, metrics, and logs
--> diagnose what the metric implies
--> identify the likely network, demand, routing, controller, code, or experiment-design problem
--> choose the smallest next change
--> rerun the relevant check
--> report whether the user's intent is better satisfied
-```
+Current MCP tools cover environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, routeability probes, and Netedit launch evidence.
 
-Examples:
+The original `Simulation Helper Skill for Eclipse SUMO` is now Torii's reasoning layer. The plugin bundles it with executable local tools.
 
-- Low arrived count can indicate disconnected routes, failed insertion, too short a horizon, or blocked signal phases.
-- High waiting time can indicate wrong phase-lane mapping, joined TLS that should be split, demand outside the intended scope, or an unsuitable controller policy.
-- Teleports are construction or control feedback, not a result to hide.
-- A better average with worse completion is not a clean win; completion regression is reported first.
+## Boundaries
 
-## Included Skills
+Torii is useful today, but it is not a magic SUMO certifier.
 
-| Skill | Use when | Main outputs |
-|---|---|---|
-| `simulation-helper-skill-for-eclipse-sumo` | Planning, OSM modeling, TLS audit, controller work, result interpretation, evidence bundles, and release checks. | Project control screen, readiness record, SUMO experiment plan, feedback diagnosis, claim boundary. |
-| `debugging-helper-skill-for-eclipse-sumo` | SUMO/TraCI route, demand, detector, TLS, output, seed, completion, reproducibility, or runtime failures. | Fault class, next diagnostic probe, evidence, fix/rerun/demotion decision. |
-
-## Current Boundaries
-
-Torii is useful today, but it should stay honest:
-
-- It can build SUMO networks from supplied bbox/extract inputs and can block on unconfirmed place-name areas; fully automatic place-name geocoding remains a workflow checkpoint rather than a silent construction step.
-- It can assist OSM cleanup with road-class selection, deduplication, TLS candidates, Google Maps/current-or-user-targeted review artifacts, connectivity checks, routeability probes, warnings, and Netedit launch evidence; it does not certify a whole city network automatically.
-- It uses Google Maps as the default current-network reality baseline. If the user requests a historical network, the user's stated historical target controls the baseline and requires time-aligned evidence.
-- It can guide controller implementation using public patterns such as SUMO Lights; full controller generation and controller-log inspection are roadmap tools.
-- It can support evidence-bounded claims; it does not certify experiment correctness.
+- It can build bounded OSM-to-SUMO networks from confirmed areas or extracts.
+- It can produce diagnostic evidence for connectivity, routeability, outputs, warnings, TLS candidates, and completion.
+- It does not automatically certify full city networks, traffic-light timing/phasing, demand realism, controller correctness, or formal experiment validity.
+- Google Maps remains the required baseline gate for current road/TLS cleanup. OSM tags, Mapillary, KartaView, official inventories, signal plans, and field photos can strengthen the review, but they do not automatically certify signal timing, phasing, or controller readiness.
 
 ## Development
 
-Run tests from the repository root:
+Run tests:
 
 ```powershell
 python -m pytest -q
@@ -179,33 +138,12 @@ Validate the plugin:
 python <codex-home>/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/torii-sumo
 ```
 
-Validate the bundled skill:
+See [`docs/codex-plugin-install.md`](docs/codex-plugin-install.md) and [`docs/osm-source-patterns.md`](docs/osm-source-patterns.md) for implementation details.
 
-```powershell
-python <codex-home>/skills/.system/skill-creator/scripts/quick_validate.py plugins/torii-sumo/skills/simulation-helper-skill-for-eclipse-sumo
-```
+## License and Notices
 
-## License
+Source code is licensed under MIT. Skill files, docs, checklists, and protocol text are licensed under CC BY 4.0.
 
-Source code is licensed under MIT. See [`LICENSE-CODE`](LICENSE-CODE).
-
-Skill files, documentation, checklists, and protocol text are licensed under Creative Commons Attribution 4.0 International (`CC BY 4.0`). See [`LICENSE-DOCS`](LICENSE-DOCS).
-
-## Trademark Notice
-
-Eclipse SUMO is a trademark of the Eclipse Foundation. This project supports workflows for experiments using Eclipse SUMO, but it is independent and does not use official Eclipse or Eclipse SUMO logos.
-
-Google Maps is referenced as an external map-review baseline. Torii is not affiliated with Google, and map reviews should respect the user's temporal modeling target.
-
-## References and Related Resources
-
-These links provide context. They do not imply endorsement of this repository.
-
-- Eclipse SUMO documentation and licensing pages: [About Eclipse SUMO](https://eclipse.dev/sumo/about/), [SUMO FAQ](https://sumo.dlr.de/docs/FAQ.html), and [SUMO Downloads and Licensing Note](https://sumo.dlr.de/docs/Downloads.html).
-- Eclipse Foundation trademark usage policy: [Eclipse Foundation Trademark Usage Policy](https://www.eclipse.org/legal/logo-guidelines/).
-- Public OSM/SUMO architecture references used as design input, without vendored source: OSMnx, OSMNet, pyrosm, SUMO `osmGet/osmBuild`, and osm-to-xodr.
-- Public controller-pattern reference: SUMO Lights.
-
-## Archive
+Eclipse SUMO is a trademark of the Eclipse Foundation. Map data in the OSM demo is © OpenStreetMap contributors and available under the Open Database License (ODbL).
 
 Earlier skill-only releases are archived on Zenodo: https://doi.org/10.5281/zenodo.20627976

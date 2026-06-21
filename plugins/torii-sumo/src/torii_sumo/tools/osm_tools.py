@@ -6,6 +6,7 @@ from typing import Any
 from torii_sumo.core.osm_network import (
     DEFAULT_ALLOWED_HIGHWAYS,
     audit_tls,
+    audit_tls_multisource,
     build_osm_network,
     build_routeability_probe,
 )
@@ -91,6 +92,32 @@ def sumo_tls_audit(
         osm_file=Path(osm_file) if osm_file else None,
         min_connections=min_connections,
         cluster_radius_m=cluster_radius_m,
+        google_maps_temporal_scope=google_maps_temporal_scope,
+        google_maps_target_date=google_maps_target_date,
+    )
+
+
+def sumo_tls_multisource_review(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "sumo_tls_multisource_review",
+    osm_file: str | None = None,
+    official_inventory_csv: str | None = None,
+    signal_plan_csv: str | None = None,
+    field_evidence_csv: str | None = None,
+    min_connections: int = 1,
+    google_maps_temporal_scope: str = "unspecified",
+    google_maps_target_date: str | None = None,
+) -> dict[str, Any]:
+    return audit_tls_multisource(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        osm_file=Path(osm_file) if osm_file else None,
+        official_inventory_csv=Path(official_inventory_csv) if official_inventory_csv else None,
+        signal_plan_csv=Path(signal_plan_csv) if signal_plan_csv else None,
+        field_evidence_csv=Path(field_evidence_csv) if field_evidence_csv else None,
+        min_connections=min_connections,
         google_maps_temporal_scope=google_maps_temporal_scope,
         google_maps_target_date=google_maps_target_date,
     )

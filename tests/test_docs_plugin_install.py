@@ -30,6 +30,9 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     assert "Netedit" in doc
     assert "sumo_osm_build_network" in doc
     assert "sumo_tls_audit" in doc
+    assert "sumo_tls_multisource_review" in doc
+    assert "Mapillary" in doc
+    assert "KartaView" in doc
     assert "sumo_network_routeability_probe" in doc
     assert "tiled Overpass" in doc
     assert "retry" in doc
@@ -39,7 +42,8 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     assert "pyrosm" in doc
     assert "SUMO osmGet/osmBuild" in doc
     assert "osm-to-xodr" in doc
-    assert "Google Maps is the external reality baseline" in doc
+    assert "Google Maps is the required workflow baseline" in doc
+    assert "do not remove the Google Maps gate" in doc
     assert "current map or a historical target date" in doc
     assert "full OSM intelligent cleanup" in doc
     assert "TLS inventory" in doc

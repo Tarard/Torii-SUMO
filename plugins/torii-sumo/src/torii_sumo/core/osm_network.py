@@ -510,6 +510,14 @@ def google_maps_url(lat: float, lon: float) -> str:
     return f"https://www.google.com/maps/search/?api=1&query={lat:.6f},{lon:.6f}"
 
 
+def mapillary_url(lat: float, lon: float) -> str:
+    return f"https://www.mapillary.com/app/?lat={lat:.6f}&lng={lon:.6f}&z=18"
+
+
+def kartaview_url(lat: float, lon: float) -> str:
+    return f"https://kartaview.org/map/@{lat:.6f},{lon:.6f},18z"
+
+
 def google_maps_baseline_fields(
     temporal_scope: str = "unspecified",
     target_date: str | None = None,
@@ -752,6 +760,9 @@ def _net_xy_to_latlon(net: Any, x: float, y: float) -> tuple[float, float]:
     except ModuleNotFoundError as exc:
         if exc.name != "pyproj":
             raise
+    except RuntimeError as exc:
+        if "geo-projection" not in str(exc) and "pyproj" not in str(exc):
+            raise
     x_off, y_off = net.getLocationOffset()
     zone = _parse_utm_zone(net._location["projParameter"])
     return _utm_to_latlon(x - x_off, y - y_off, zone=zone, northern=True)
@@ -865,12 +876,173 @@ TLS_CLUSTER_FIELDS = [
 ]
 
 
+TLS_MULTISOURCE_REVIEW_FIELDS = [
+    "tls_id",
+    "lat",
+    "lon",
+    "connection_count",
+    "incoming_road_names",
+    "outgoing_road_names",
+    "osm_signal_status",
+    "nearest_osm_signal_id",
+    "nearest_osm_signal_distance_m",
+    "google_maps_url",
+    "mapillary_url",
+    "kartaview_url",
+    "official_inventory_status",
+    "official_inventory_id",
+    "signal_plan_status",
+    "signal_plan_id",
+    "field_evidence_status",
+    "field_evidence_id",
+    "evidence_level",
+    "review_status",
+    "claim_status",
+    "review_note",
+]
+
+
 def _write_csv(path: Path, rows: list[Mapping[str, Any]], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _clean_review_value(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _source_record(
+    records: Mapping[str, Mapping[str, Any]] | None,
+    tls_id: str,
+) -> Mapping[str, Any]:
+    if not records:
+        return {}
+    return records.get(tls_id, {})
+
+
+def _source_field(record: Mapping[str, Any], *names: str) -> str:
+    for name in names:
+        value = _clean_review_value(record.get(name))
+        if value:
+            return value
+    return ""
+
+
+def _status_confirms_external_evidence(status: str) -> bool:
+    normalized = normalize_text(status)
+    if not normalized:
+        return False
+    negative_tokens = {
+        "missing",
+        "none",
+        "no",
+        "not found",
+        "not available",
+        "rejected",
+        "unknown",
+        "unverified",
+    }
+    return normalized not in negative_tokens
+
+
+def _tls_evidence_level(
+    *,
+    official_status: str,
+    signal_plan_status: str,
+    field_evidence_status: str,
+    has_osm_signal: bool,
+) -> str:
+    if _status_confirms_external_evidence(official_status) or _status_confirms_external_evidence(signal_plan_status):
+        return "authoritative"
+    if _status_confirms_external_evidence(field_evidence_status):
+        return "field-observed"
+    if has_osm_signal:
+        return "osm-only"
+    return "sumo-guess-only"
+
+
+def _join_review_notes(*values: str) -> str:
+    notes = [value for value in values if value]
+    notes.append("Human review required before treating the TLS as correct.")
+    return " | ".join(notes)
+
+
+def build_tls_multisource_review(
+    rows: list[Mapping[str, Any]],
+    *,
+    official_inventory: Mapping[str, Mapping[str, Any]] | None = None,
+    signal_plans: Mapping[str, Mapping[str, Any]] | None = None,
+    field_evidence: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    review_rows = []
+    for row in rows:
+        tls_id = _clean_review_value(row.get("tls_id"))
+        lat = float(row["lat"])
+        lon = float(row["lon"])
+        official = _source_record(official_inventory, tls_id)
+        signal_plan = _source_record(signal_plans, tls_id)
+        field = _source_record(field_evidence, tls_id)
+        official_status = _source_field(official, "status", "review_status", "audit_status")
+        signal_plan_status = _source_field(signal_plan, "status", "review_status", "audit_status")
+        field_status = _source_field(field, "status", "review_status", "audit_status")
+        has_osm_signal = _clean_review_value(row.get("has_osm_signal_within_35m")) == "yes"
+        review_rows.append(
+            {
+                "tls_id": tls_id,
+                "lat": f"{lat:.7f}",
+                "lon": f"{lon:.7f}",
+                "connection_count": _clean_review_value(row.get("connection_count")),
+                "incoming_road_names": _clean_review_value(row.get("incoming_road_names")),
+                "outgoing_road_names": _clean_review_value(row.get("outgoing_road_names")),
+                "osm_signal_status": "match_within_35m" if has_osm_signal else "no_nearby_osm_signal",
+                "nearest_osm_signal_id": _clean_review_value(row.get("nearest_osm_signal_id")),
+                "nearest_osm_signal_distance_m": _clean_review_value(row.get("nearest_osm_signal_distance_m")),
+                "google_maps_url": _clean_review_value(row.get("google_maps_url")) or google_maps_url(lat, lon),
+                "mapillary_url": mapillary_url(lat, lon),
+                "kartaview_url": kartaview_url(lat, lon),
+                "official_inventory_status": official_status,
+                "official_inventory_id": _source_field(official, "source_id", "record_id", "inventory_id", "id"),
+                "signal_plan_status": signal_plan_status,
+                "signal_plan_id": _source_field(signal_plan, "source_id", "record_id", "plan_id", "id"),
+                "field_evidence_status": field_status,
+                "field_evidence_id": _source_field(field, "source_id", "record_id", "photo_id", "id"),
+                "evidence_level": _tls_evidence_level(
+                    official_status=official_status,
+                    signal_plan_status=signal_plan_status,
+                    field_evidence_status=field_status,
+                    has_osm_signal=has_osm_signal,
+                ),
+                "review_status": "needs_manual_review",
+                "claim_status": "diagnostic-demo",
+                "review_note": _join_review_notes(
+                    _source_field(official, "note", "review_note"),
+                    _source_field(signal_plan, "note", "review_note"),
+                    _source_field(field, "note", "review_note"),
+                ),
+            }
+        )
+    return review_rows
+
+
+def read_tls_review_status_csv(path: Path | None) -> dict[str, dict[str, str]]:
+    if path is None:
+        return {}
+    records: dict[str, dict[str, str]] = {}
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            tls_id = _source_field(row, "tls_id", "sumo_tls_id", "junction_id")
+            if not tls_id:
+                continue
+            records[tls_id] = {
+                "status": _source_field(row, "status", "review_status", "audit_status"),
+                "source_id": _source_field(row, "source_id", "record_id", "inventory_id", "plan_id", "photo_id", "id"),
+                "note": _source_field(row, "note", "review_note"),
+            }
+    return records
 
 
 def audit_tls(
@@ -925,6 +1097,73 @@ def audit_tls(
             if google_maps_baseline["google_maps_requires_time_confirmation"] == "yes"
             else []
         ),
+    }
+
+
+def audit_tls_multisource(
+    *,
+    net_file: Path,
+    output_dir: Path,
+    prefix: str = "sumo_tls_multisource_review",
+    osm_file: Path | None = None,
+    official_inventory_csv: Path | None = None,
+    signal_plan_csv: Path | None = None,
+    field_evidence_csv: Path | None = None,
+    min_connections: int = 1,
+    google_maps_temporal_scope: str = "unspecified",
+    google_maps_target_date: str | None = None,
+) -> dict[str, Any]:
+    try:
+        google_maps_baseline = google_maps_baseline_fields(
+            google_maps_temporal_scope,
+            google_maps_target_date,
+        )
+        rows = extract_tls_candidates(
+            net_file=net_file,
+            osm_file=osm_file,
+            min_connections=min_connections,
+            google_maps_temporal_scope=google_maps_temporal_scope,
+            google_maps_target_date=google_maps_target_date,
+        )
+        review_rows = build_tls_multisource_review(
+            rows,
+            official_inventory=read_tls_review_status_csv(official_inventory_csv),
+            signal_plans=read_tls_review_status_csv(signal_plan_csv),
+            field_evidence=read_tls_review_status_csv(field_evidence_csv),
+        )
+    except (OSError, ET.ParseError, RuntimeError, ValueError, KeyError) as exc:
+        return _failure(f"{type(exc).__name__}: {exc}")
+
+    review_file = output_dir / f"{prefix}.csv"
+    _write_csv(review_file, review_rows, TLS_MULTISOURCE_REVIEW_FIELDS)
+    needs_review_count = sum(1 for row in review_rows if row["review_status"] == "needs_manual_review")
+    evidence_counts: dict[str, int] = {}
+    for row in review_rows:
+        level = str(row["evidence_level"])
+        evidence_counts[level] = evidence_counts.get(level, 0) + 1
+    warnings = [
+        "Multi-source TLS review is a human review aid; it does not certify signal existence, phasing, timing, or controller readiness."
+    ]
+    if google_maps_baseline["google_maps_requires_time_confirmation"] == "yes":
+        warnings.append(
+            "Google Maps temporal scope is unspecified; ask whether current map or historical target date applies."
+        )
+    if not official_inventory_csv and not signal_plan_csv:
+        warnings.append("No official inventory or signal-plan manifest was supplied.")
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "net_file": str(net_file),
+        "osm_file": str(osm_file) if osm_file else None,
+        "official_inventory_csv": str(official_inventory_csv) if official_inventory_csv else None,
+        "signal_plan_csv": str(signal_plan_csv) if signal_plan_csv else None,
+        "field_evidence_csv": str(field_evidence_csv) if field_evidence_csv else None,
+        "tls_candidate_count": len(review_rows),
+        "needs_manual_review_count": needs_review_count,
+        "evidence_level_counts": evidence_counts,
+        "review_file": str(review_file),
+        "google_maps_baseline": google_maps_baseline,
+        "warnings": warnings,
     }
 
 
