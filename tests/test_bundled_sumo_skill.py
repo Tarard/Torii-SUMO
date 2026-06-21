@@ -99,6 +99,7 @@ def test_skill_routes_mcp_tools_and_feedback_diagnosis() -> None:
     assert "feedback signals" in body
     assert "sumo_preflight" in reference
     assert "sumo_compare_outputs" in reference
+    assert "sumo_osm_resolve_place" in reference
     assert "MCP tool output is observation" in reference
     assert "diagnose what the metric implies" in reference
 
@@ -128,6 +129,7 @@ def test_skill_routes_osm_source_patterns_and_google_maps_temporal_baseline() ->
     assert "sumo_osm_cleanup_workflow" in model_reference
     assert "area confirmation" in model_reference
     assert "Netedit" in model_reference
+    assert "SUMO-GUI" in model_reference
     assert "user's stated historical target controls the baseline" in model_reference
     assert "Google Maps is the external reality baseline" in model_reference
     assert "current map or a historical target date" in model_reference

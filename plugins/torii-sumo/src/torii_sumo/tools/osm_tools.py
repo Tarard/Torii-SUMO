@@ -9,6 +9,7 @@ from torii_sumo.core.osm_network import (
     build_osm_network,
     build_routeability_probe,
 )
+from torii_sumo.core.osm_area import resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
 
 
@@ -113,6 +114,20 @@ def sumo_network_routeability_probe(
     )
 
 
+def sumo_osm_resolve_place(
+    place_name: str,
+    limit: int = 1,
+    nominatim_url: str = "https://nominatim.openstreetmap.org/search",
+    timeout_seconds: float = 30.0,
+) -> dict[str, Any]:
+    return resolve_osm_place(
+        place_name,
+        limit=limit,
+        nominatim_url=nominatim_url,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def sumo_osm_cleanup_workflow(
     output_dir: str,
     bbox: str | None = None,
@@ -130,6 +145,7 @@ def sumo_osm_cleanup_workflow(
     map_temporal_scope: str = "current",
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
+    launch_sumo_gui_after_build: bool = True,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return run_osm_cleanup_workflow(
@@ -149,5 +165,6 @@ def sumo_osm_cleanup_workflow(
         map_temporal_scope=map_temporal_scope,
         map_target_date=map_target_date,
         launch_netedit_after_build=launch_netedit_after_build,
+        launch_sumo_gui_after_build=launch_sumo_gui_after_build,
         key_edge_queries=key_edge_queries,
     )

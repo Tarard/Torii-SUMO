@@ -16,6 +16,7 @@ from torii_sumo.core.osm_network import (
     robust_download_osm,
     split_bbox,
 )
+from torii_sumo.core.osm_area import resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
 from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network
 
@@ -52,6 +53,62 @@ def test_split_bbox_subdivides_large_bbox_without_losing_extent() -> None:
     assert min(tile.south for tile in tiles) == bbox.south
     assert max(tile.east for tile in tiles) == bbox.east
     assert max(tile.north for tile in tiles) == bbox.north
+
+
+def test_resolve_osm_place_parses_first_nominatim_candidate() -> None:
+    def fake_fetch_json(*, url: str, headers: dict[str, str], timeout_seconds: float):
+        assert "nominatim.openstreetmap.org/search" in url
+        assert "Altstadt%2C+Dresden" in url
+        assert headers["User-Agent"].startswith("Torii-SUMO")
+        assert timeout_seconds == 30.0
+        return [
+            {
+                "display_name": "Altstadt, Dresden, Sachsen, Deutschland",
+                "osm_type": "relation",
+                "osm_id": 192900,
+                "lat": "51.0523842",
+                "lon": "13.7381876",
+                "boundingbox": ["51.0280799", "51.0766681", "13.6864402", "13.7872926"],
+            }
+        ]
+
+    report = resolve_osm_place(
+        "Altstadt, Dresden",
+        fetch_json=fake_fetch_json,
+        timeout_seconds=30.0,
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["area_resolution_status"] == "candidate_found"
+    assert report["candidate_display_name"] == "Altstadt, Dresden, Sachsen, Deutschland"
+    assert report["candidate_osm_type"] == "relation"
+    assert report["candidate_osm_id"] == "192900"
+    assert report["candidate_bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
+    assert report["candidate_lat"] == "51.0523842"
+    assert report["candidate_lon"] == "13.7381876"
+    assert "openstreetmap.org/search" in report["osm_preview_url"]
+    assert report["candidate_osm_url"] == "https://www.openstreetmap.org/relation/192900"
+
+
+def test_sumo_osm_resolve_place_tool_returns_candidate(monkeypatch) -> None:
+    from torii_sumo.tools import osm_tools
+
+    monkeypatch.setattr(
+        osm_tools,
+        "resolve_osm_place",
+        lambda place_name, **_kwargs: {
+            "status": "pass",
+            "candidate_bbox": "13.6864402,51.0280799,13.7872926,51.0766681",
+            "area_input": place_name,
+        },
+    )
+
+    report = osm_tools.sumo_osm_resolve_place("Altstadt, Dresden")
+
+    assert report["status"] == "pass"
+    assert report["area_input"] == "Altstadt, Dresden"
+    assert report["candidate_bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
 
 
 def test_merge_osm_xml_payloads_deduplicates_nodes_ways_and_relations() -> None:
@@ -441,6 +498,46 @@ def test_launch_netedit_starts_non_blocking_process(tmp_path: Path) -> None:
     assert calls == [["C:/SUMO/bin/netedit.exe", "-s", str(net_file)]]
 
 
+def test_launch_sumo_gui_writes_minimal_config_and_starts_non_blocking_process(tmp_path: Path) -> None:
+    from torii_sumo.core.sumo_gui import launch_sumo_gui
+
+    class FakeProcess:
+        pid = 24680
+
+    calls: list[list[str]] = []
+
+    def fake_popen(command, **kwargs):
+        calls.append(command)
+        assert kwargs["stdin"] is not None
+        assert kwargs["stdout"] is not None
+        assert kwargs["stderr"] is not None
+        return FakeProcess()
+
+    net_file = tmp_path / "network.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    report = launch_sumo_gui(
+        net_file,
+        output_dir=tmp_path / "gui",
+        prefix="demo",
+        which_func=lambda _name: "C:/SUMO/bin/sumo-gui.exe",
+        popen_func=fake_popen,
+    )
+
+    cfg_file = Path(report["sumo_gui_config_file"])
+    cfg_root = ET.parse(cfg_file).getroot()
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["sumo_gui_status"] == "opened"
+    assert report["sumo_gui_binary"] == "C:/SUMO/bin/sumo-gui.exe"
+    assert report["sumo_gui_process_id"] == 24680
+    assert report["sumo_gui_network_file"] == str(net_file)
+    assert cfg_root.find("input/net-file").attrib["value"] == str(net_file)
+    assert cfg_root.find("time/end").attrib["value"] == "1"
+    assert calls == [["C:/SUMO/bin/sumo-gui.exe", "-c", str(cfg_file)]]
+
+
 def test_osm_cleanup_workflow_blocks_unconfirmed_place_name(tmp_path: Path) -> None:
     report = run_osm_cleanup_workflow(
         place_name="Altstadt, Dresden",
@@ -454,6 +551,119 @@ def test_osm_cleanup_workflow_blocks_unconfirmed_place_name(tmp_path: Path) -> N
     assert report["user_confirmed_area"] == "no"
     assert "openstreetmap.org/search" in report["osm_preview_url"]
     assert report["gate_status"]["area_confirmation"] == "blocked"
+
+
+def test_osm_cleanup_workflow_blocks_unconfirmed_place_with_resolved_bbox(tmp_path: Path) -> None:
+    candidate = {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "area_resolution_status": "candidate_found",
+        "candidate_display_name": "Altstadt, Dresden, Sachsen, Deutschland",
+        "candidate_osm_type": "relation",
+        "candidate_osm_id": "192900",
+        "candidate_bbox": "13.6864402,51.0280799,13.7872926,51.0766681",
+        "candidate_lat": "51.0523842",
+        "candidate_lon": "13.7381876",
+        "osm_preview_url": "https://www.openstreetmap.org/search?query=Altstadt%2C+Dresden",
+        "candidate_osm_url": "https://www.openstreetmap.org/relation/192900",
+        "warnings": [],
+    }
+
+    report = run_osm_cleanup_workflow(
+        place_name="Altstadt, Dresden",
+        output_dir=tmp_path,
+        place_resolver=lambda _place_name: candidate,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    assert report["area_resolution_status"] == "needs_user_confirmation"
+    assert report["candidate_display_name"] == "Altstadt, Dresden, Sachsen, Deutschland"
+    assert report["candidate_osm_type"] == "relation"
+    assert report["candidate_osm_id"] == "192900"
+    assert report["candidate_bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
+    assert report["candidate_osm_url"] == "https://www.openstreetmap.org/relation/192900"
+    assert report["gate_status"]["area_confirmation"] == "blocked"
+    assert report["gate_status"]["network_build"] == "not_started"
+
+
+def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_path: Path) -> None:
+    candidate = {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "area_resolution_status": "candidate_found",
+        "candidate_display_name": "Altstadt, Dresden, Sachsen, Deutschland",
+        "candidate_osm_type": "relation",
+        "candidate_osm_id": "192900",
+        "candidate_bbox": "13.6864402,51.0280799,13.7872926,51.0766681",
+        "candidate_lat": "51.0523842",
+        "candidate_lon": "13.7381876",
+        "osm_preview_url": "https://www.openstreetmap.org/search?query=Altstadt%2C+Dresden",
+        "candidate_osm_url": "https://www.openstreetmap.org/relation/192900",
+        "warnings": [],
+    }
+    net_file = tmp_path / "sumo" / "resolved.net.xml"
+    filtered_osm = tmp_path / "osm" / "resolved_filtered.osm.xml.gz"
+    captured: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        captured["bbox"] = kwargs["bbox"]
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        place_name="Altstadt, Dresden",
+        confirmed_area=True,
+        output_dir=tmp_path,
+        prefix="resolved",
+        place_resolver=lambda _place_name: candidate,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "netedit_status": "unavailable",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "sumo_gui_status": "unavailable",
+            "warnings": [],
+        },
+    )
+
+    assert captured["bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
+    assert report["status"] == "pass"
+    assert report["area_resolution_status"] == "confirmed_by_user"
+    assert report["candidate_display_name"] == "Altstadt, Dresden, Sachsen, Deutschland"
+    assert report["candidate_bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
+    assert report["user_confirmed_area"] == "yes"
 
 
 def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: Path) -> None:
@@ -523,6 +733,21 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
             "warnings": [],
         }
 
+    def fake_sumo_gui(net_path, output_dir, prefix):
+        assert net_path == net_file
+        assert output_dir == tmp_path / "sumo_gui"
+        assert prefix == "demo_sumo_gui"
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "sumo_gui_status": "opened",
+            "sumo_gui_binary": "sumo-gui",
+            "sumo_gui_process_id": 101,
+            "sumo_gui_config_file": str(tmp_path / "sumo_gui" / "demo_sumo_gui.sumocfg"),
+            "sumo_gui_network_file": str(net_file),
+            "warnings": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
@@ -532,6 +757,7 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
         tls_audit_func=fake_tls,
         connectivity_func=fake_connectivity,
         netedit_func=fake_netedit,
+        sumo_gui_func=fake_sumo_gui,
     )
 
     assert report["status"] == "pass"
@@ -543,11 +769,14 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
         "tls_reality_audit": "pass",
         "connectivity": "pass",
         "netedit": "pass",
+        "sumo_gui": "pass",
     }
     assert report["tls_review_complete"] == "no"
     assert report["tls_needs_review_count"] == 1
     assert report["connectivity_status"] == "pass"
     assert report["netedit_status"] == "opened"
+    assert report["sumo_gui_status"] == "opened"
+    assert report["sumo_gui_process_id"] == 101
 
 
 def test_osm_cleanup_workflow_preserves_historical_user_target(tmp_path: Path) -> None:
@@ -600,6 +829,7 @@ def test_osm_cleanup_workflow_preserves_historical_user_target(tmp_path: Path) -
         tls_audit_func=fake_tls,
         connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "claim_status": "diagnostic-demo", "warnings": []},
         netedit_func=lambda _path: {"status": "blocked", "netedit_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {"status": "blocked", "sumo_gui_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
     )
 
     assert captured["google_maps_temporal_scope"] == "historical"

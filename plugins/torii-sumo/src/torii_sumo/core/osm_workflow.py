@@ -2,28 +2,52 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Callable, Mapping
-from urllib import parse
 
+from .osm_area import osm_preview_url, resolve_osm_place
 from .connectivity import summarize_passenger_connectivity
 from .netedit import launch_netedit
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe
+from .sumo_gui import launch_sumo_gui
 
 
-def _osm_preview_url(place_name: str) -> str:
-    return "https://www.openstreetmap.org/search?" + parse.urlencode({"query": place_name})
+def _candidate_fields(place_report: Mapping[str, Any] | None) -> dict[str, Any]:
+    if place_report is None:
+        return {
+            "candidate_display_name": "",
+            "candidate_osm_type": "",
+            "candidate_osm_id": "",
+            "candidate_bbox": "",
+            "candidate_lat": "",
+            "candidate_lon": "",
+            "candidate_osm_url": "",
+        }
+    return {
+        "candidate_display_name": str(place_report.get("candidate_display_name", "")),
+        "candidate_osm_type": str(place_report.get("candidate_osm_type", "")),
+        "candidate_osm_id": str(place_report.get("candidate_osm_id", "")),
+        "candidate_bbox": str(place_report.get("candidate_bbox", "")),
+        "candidate_lat": str(place_report.get("candidate_lat", "")),
+        "candidate_lon": str(place_report.get("candidate_lon", "")),
+        "candidate_osm_url": str(place_report.get("candidate_osm_url", "")),
+    }
 
 
-def _blocked_place_report(place_name: str, output_dir: Path) -> dict[str, Any]:
+def _blocked_place_report(
+    place_name: str,
+    output_dir: Path,
+    place_report: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "status": "blocked",
         "claim_status": "blocked",
         "area_input": place_name,
         "area_resolution_status": "needs_user_confirmation",
-        "candidate_display_name": "",
-        "candidate_osm_type": "",
-        "candidate_osm_id": "",
-        "candidate_bbox": "",
-        "osm_preview_url": _osm_preview_url(place_name),
+        **_candidate_fields(place_report),
+        "osm_preview_url": str(
+            place_report.get("osm_preview_url", osm_preview_url(place_name))
+            if place_report is not None
+            else osm_preview_url(place_name)
+        ),
         "user_confirmed_area": "no",
         "output_dir": str(output_dir),
         "gate_status": {
@@ -32,8 +56,10 @@ def _blocked_place_report(place_name: str, output_dir: Path) -> dict[str, Any]:
             "tls_reality_audit": "not_started",
             "connectivity": "not_started",
             "netedit": "not_started",
+            "sumo_gui": "not_started",
         },
-        "warnings": ["place-name input requires OSM preview and user confirmation before network construction"],
+        "warnings": list(place_report.get("warnings", []) if place_report is not None else [])
+        + ["place-name input requires OSM preview and user confirmation before network construction"],
     }
 
 
@@ -79,22 +105,50 @@ def run_osm_cleanup_workflow(
     map_temporal_scope: str = "current",
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
+    launch_sumo_gui_after_build: bool = True,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
     connectivity_func: Callable[[Path], dict[str, Any]] = summarize_passenger_connectivity,
     routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
+    sumo_gui_func: Callable[[Path, Path, str], dict[str, Any]] = launch_sumo_gui,
+    place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
 ) -> dict[str, Any]:
     cleaned_place_name = (place_name or "").strip()
-    if cleaned_place_name and not confirmed_area and not bbox and source_osm_path is None:
-        return _blocked_place_report(cleaned_place_name, output_dir)
+    place_report = None
+    if cleaned_place_name and not bbox and source_osm_path is None:
+        place_report = place_resolver(cleaned_place_name)
+        if not confirmed_area:
+            return _blocked_place_report(cleaned_place_name, output_dir, place_report)
+        resolved_bbox = str(place_report.get("candidate_bbox", ""))
+        if place_report.get("status") != "pass" or not resolved_bbox:
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name,
+                "area_resolution_status": str(place_report.get("area_resolution_status", "blocked")),
+                **_candidate_fields(place_report),
+                "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))),
+                "user_confirmed_area": "yes",
+                "gate_status": {
+                    "area_confirmation": "fail",
+                    "network_build": "not_started",
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(place_report.get("warnings", [])) + ["confirmed place_name could not be resolved to a bbox"],
+            }
+        bbox = resolved_bbox
     if not bbox:
         return {
             "status": "fail",
             "claim_status": "construction-invalid",
             "area_input": cleaned_place_name,
             "area_resolution_status": "blocked",
+            **_candidate_fields(place_report),
             "warnings": ["bbox is required for OSM network construction"],
         }
 
@@ -118,6 +172,7 @@ def run_osm_cleanup_workflow(
             "claim_status": "construction-invalid",
             "area_input": cleaned_place_name or bbox,
             "area_resolution_status": area_status,
+            **_candidate_fields(place_report),
             "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
             "build": build_report,
             "gate_status": {
@@ -126,6 +181,7 @@ def run_osm_cleanup_workflow(
                 "tls_reality_audit": "not_started",
                 "connectivity": "not_started",
                 "netedit": "not_started",
+                "sumo_gui": "not_started",
             },
             "warnings": list(build_report.get("warnings", [])),
         }
@@ -160,10 +216,23 @@ def run_osm_cleanup_workflow(
             "netedit_network_file": str(net_file),
             "warnings": ["netedit launch disabled by caller"],
         }
+    if launch_sumo_gui_after_build:
+        sumo_gui_report = sumo_gui_func(net_file, output_dir / "sumo_gui", f"{prefix}_sumo_gui")
+    else:
+        sumo_gui_report = {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "sumo_gui_status": "skipped",
+            "sumo_gui_binary": None,
+            "sumo_gui_process_id": None,
+            "sumo_gui_config_file": "",
+            "sumo_gui_network_file": str(net_file),
+            "warnings": ["sumo-gui launch disabled by caller"],
+        }
 
     tls_summary = _tls_review_summary(tls_report)
     warnings = []
-    for child in (build_report, tls_report, connectivity_report, netedit_report):
+    for child in (build_report, tls_report, connectivity_report, netedit_report, sumo_gui_report):
         warnings.extend(str(item) for item in child.get("warnings", []))
     if tls_summary["tls_review_complete"] == "no":
         warnings.append("TLS reality review still requires human Google Maps/current-or-user-targeted map inspection")
@@ -174,23 +243,22 @@ def run_osm_cleanup_workflow(
         "tls_reality_audit": _gate_value(tls_report),
         "connectivity": _gate_value(connectivity_report),
         "netedit": _gate_value(netedit_report),
+        "sumo_gui": _gate_value(sumo_gui_report),
     }
     workflow_ok = (
         gate_status["network_build"] == "pass"
         and gate_status["tls_reality_audit"] == "pass"
         and gate_status["connectivity"] == "pass"
         and gate_status["netedit"] in {"pass", "blocked"}
+        and gate_status["sumo_gui"] in {"pass", "blocked"}
     )
     return {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
         "area_input": cleaned_place_name or bbox,
         "area_resolution_status": area_status,
-        "candidate_display_name": "",
-        "candidate_osm_type": "",
-        "candidate_osm_id": "",
-        "candidate_bbox": bbox,
-        "osm_preview_url": _osm_preview_url(cleaned_place_name) if cleaned_place_name else "",
+        **(_candidate_fields(place_report) if place_report is not None else {**_candidate_fields(None), "candidate_bbox": bbox}),
+        "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))) if place_report is not None else (osm_preview_url(cleaned_place_name) if cleaned_place_name else ""),
         "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
         "map_baseline_source": "Google Maps",
         "map_temporal_scope": map_temporal_scope,
@@ -210,12 +278,18 @@ def run_osm_cleanup_workflow(
         "netedit_process_id": netedit_report.get("netedit_process_id"),
         "netedit_window_title": netedit_report.get("netedit_window_title", ""),
         "netedit_network_file": netedit_report.get("netedit_network_file", str(net_file)),
+        "sumo_gui_status": sumo_gui_report.get("sumo_gui_status", "failed"),
+        "sumo_gui_binary": sumo_gui_report.get("sumo_gui_binary"),
+        "sumo_gui_process_id": sumo_gui_report.get("sumo_gui_process_id"),
+        "sumo_gui_config_file": sumo_gui_report.get("sumo_gui_config_file", ""),
+        "sumo_gui_network_file": sumo_gui_report.get("sumo_gui_network_file", str(net_file)),
         "net_file": str(net_file),
         "filtered_osm_file": str(filtered_osm_value) if filtered_osm_value else "",
         "build": build_report,
         "tls_audit": tls_report,
         "connectivity": connectivity_report,
         "netedit": netedit_report,
+        "sumo_gui": sumo_gui_report,
         "gate_status": gate_status,
         "warnings": warnings,
     }
