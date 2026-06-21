@@ -18,6 +18,7 @@ from .tools.osm_tools import (
     sumo_tls_multisource_review,
 )
 from .tools.run_tools import sumo_run_config, sumo_run_minimal_smoke
+from .tools.workflow_tools import torii_auto_workflow
 
 
 def create_server() -> FastMCP:
@@ -37,6 +38,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Write a JSON and Markdown evidence bundle.")(
         sumo_collect_evidence
+    )
+    server.tool(description="Route one natural-language SUMO request into a Torii workflow, ask only blocking questions, and run safe MCP steps when possible.")(
+        torii_auto_workflow
     )
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(
         sumo_osm_resolve_place

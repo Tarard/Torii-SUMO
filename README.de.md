@@ -29,6 +29,8 @@
 > [!IMPORTANT]
 > Torii ist ein Plugin- und Skill-Paket fuer agentische SUMO-Arbeit. Es enthaelt bereits lokale stdio MCP-Werkzeuge fuer Umgebungstests, Konfigurationspruefungen, Smoke Runs, Evidenzpakete, OSM-Cleanup-Hard-Gates, OSM-zu-SUMO-Netzaufbau, TLS-Kandidatenpruefung, mehrquellige TLS-Prueftabellen, Konnektivitaetschecks, Netedit-Startnachweise und Erreichbarkeitsproben. Stille vollstaendige Ortsnamen-Geokodierung, vollstaendige Stadtzertifizierung und Controller-Generierung sind in dieser Version keine fertigen MCP-Werkzeuge.
 
+Torii beginnt jetzt mit einem Workflow Router: `torii_auto_workflow` versteht eine Ein-Satz-Anfrage, waehlt das passende Recipe, stellt nur blockierende Rueckfragen und fuehrt sichere MCP-Schritte aus, sobald genug Evidenz vorhanden ist.
+
 > [!NOTE]
 > Dieses Projekt ist unabhaengig. Es ist nicht mit der Eclipse Foundation, dem Eclipse-SUMO-Projekt, DLR, OpenAI, Anthropic, Google oder externen OSM-Werkzeugprojekten verbunden und wird von ihnen nicht unterstuetzt, gesponsert oder gepflegt.
 
@@ -40,6 +42,8 @@ Torii bedeutet **Task-Oriented Road Infrastructure Intelligence**. Es soll einem
 |---|---|
 | Reasoning layer | Der SUMO Expert Skill versteht die Nutzerabsicht, waehlt den Workflow, fragt nach fehlender Evidenz und erklaert, welches Modellproblem eine schlechte Metrik anzeigen kann. |
 | Execution layer | Der lokale MCP Server fuehrt begrenzte Werkzeuge aus und liefert strukturierte Beobachtungen: Dateien, Logs, Warnungen, Metriken, TLS-Kandidaten, Routen und Evidenzpakete. |
+
+Der Standardeinstieg ist `torii_auto_workflow`. Er routet eine natuerliche Anfrage zu OSM-Netzaufbau, TLS-Pruefung, Erreichbarkeit, Diagnose schlechter Laeufe oder Experiment-Audit.
 
 Die Installation von Torii gibt Codex sowohl **skills and MCP tools**. Das Ziel ist nicht, eine einzelne Zahl blind zu optimieren, sondern die Ursache hinter der Zahl zu diagnostizieren.
 
@@ -86,6 +90,8 @@ Beispiel:
 Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.
 ```
 
+Bei MCP-first Nutzung kann `torii_auto_workflow` direkt mit der Ein-Satz-Anfrage und einem Ausgabeordner aufgerufen werden.
+
 ## Projektstruktur
 
 ```text
@@ -108,6 +114,7 @@ Der fruehere `Simulation Helper Skill for Eclipse SUMO` wurde nicht geloescht. E
 
 | Tool | Aktueller Umfang |
 |---|---|
+| `torii_auto_workflow` | Eine natuerliche SUMO-Anfrage klassifizieren, ein Workflow-Recipe waehlen, nur blockierende Rueckfragen stellen und sichere MCP-Schritte ausfuehren. |
 | `sumo_preflight` / `sumo_get_environment` | SUMO-, Python-, TraCI- und Toolchain-Evidenz pruefen. |
 | `sumo_config_pair_preflight` | Fehlende Eingaben und gemeinsame Ausgaben in `.sumocfg`-Paaren pruefen. |
 | `sumo_run_config` / `sumo_run_minimal_smoke` | Begrenzte SUMO-Konfiguration oder minimalen Smoke Test ausfuehren. |

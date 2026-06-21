@@ -32,6 +32,8 @@
 
 Torii can turn a short natural-language request into a bounded OSM-to-SUMO workflow with confirmation, construction evidence, and a clear claim boundary.
 
+The plugin now starts from a workflow router: `torii_auto_workflow` classifies the request, chooses a recipe, asks only blocking questions, and runs safe MCP steps when the required evidence is available.
+
 ```text
 Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO
 ```
@@ -87,6 +89,8 @@ Then ask:
 Use Torii to build and audit this SUMO network. Treat bad metrics as feedback about the model, not as the optimization target itself.
 ```
 
+For MCP-first use, call `torii_auto_workflow` with the one-sentence request and an output directory.
+
 ## What You Can Ask Me
 
 | Prompt | What Torii Does |
@@ -111,7 +115,7 @@ Torii has two layers:
 | Reasoning layer | SUMO expert skills that ask the right questions, choose a workflow, and bound claims. |
 | Execution layer | Local stdio MCP tools that run bounded SUMO checks and return structured observations. |
 
-Current MCP tools cover environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, routeability probes, and Netedit launch evidence.
+Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, routeability probes, and Netedit launch evidence.
 
 The original `Simulation Helper Skill for Eclipse SUMO` is now Torii's reasoning layer. The plugin bundles it with executable local tools.
 

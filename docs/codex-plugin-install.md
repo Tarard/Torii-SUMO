@@ -53,6 +53,10 @@ If the Codex CLI reports a marketplace-source mismatch, verify that `.agents/plu
 
 The plugin can run bounded environment checks, config preflight, smoke runs, output comparison, evidence bundle writing, and OSM/network construction helpers through MCP tools.
 
+For one-sentence requests, start with the workflow router:
+
+- `torii_auto_workflow`: classify the user's natural-language SUMO request, choose the workflow recipe, ask only blocking questions, and run safe MCP steps when enough evidence is available.
+
 Implemented OSM/network tools:
 
 - `sumo_osm_cleanup_workflow`: run the hard-gate OSM cleanup workflow, including area confirmation when needed, network construction, TLS map audit, passenger connectivity summary, routeability probes when supplied, and Netedit launch evidence.

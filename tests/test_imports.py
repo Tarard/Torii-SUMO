@@ -10,6 +10,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_run_minimal_smoke",
         "sumo_compare_outputs",
         "sumo_collect_evidence",
+        "torii_auto_workflow",
         "sumo_osm_resolve_place",
         "sumo_osm_cleanup_workflow",
         "sumo_osm_build_network",
