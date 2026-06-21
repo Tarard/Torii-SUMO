@@ -18,6 +18,7 @@
 <a href="https://tarard.github.io/Torii-SUMO/"><strong>Website</strong></a> |
 <a href="docs/codex-plugin-install.md"><strong>Install</strong></a> |
 <a href="examples/04_one_prompt_osm_network/README.md"><strong>One-Prompt Demo</strong></a> |
+<a href="examples/05_bit_zhongguancun_campus/README.md"><strong>BIT Campus Example</strong></a> |
 <a href="LICENSE-CODE"><strong>MIT Code</strong></a> |
 <a href="LICENSE-DOCS"><strong>CC BY 4.0 Docs</strong></a>
 
@@ -63,7 +64,7 @@ This demo produced a diagnostic SUMO network for Dresden Altstadt:
 | Teleports / collisions | 0 / 0 |
 | Claim status | `diagnostic-demo` |
 
-See [`examples/04_one_prompt_osm_network`](examples/04_one_prompt_osm_network/README.md). The full generated `.osm.xml` and `.net.xml` files are distributed as a GitHub release asset instead of being committed into git history.
+See [`examples/04_one_prompt_osm_network`](examples/04_one_prompt_osm_network/README.md). The full generated `.osm.xml` and `.net.xml` files are distributed as a GitHub release asset instead of being committed into git history. A smaller China-region campus test case is available at [`examples/05_bit_zhongguancun_campus`](examples/05_bit_zhongguancun_campus/README.md).
 
 ## Quick Start
 

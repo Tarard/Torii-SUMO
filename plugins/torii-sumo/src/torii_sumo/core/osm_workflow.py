@@ -6,7 +6,7 @@ from typing import Any, Callable, Mapping
 from .osm_area import osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .netedit import launch_netedit
-from .osm_network import audit_tls, build_osm_network, build_routeability_probe
+from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
 
@@ -352,6 +352,11 @@ def run_osm_cleanup_workflow(
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
     )
+    bbox_regional_map_baseline = regional_map_baseline_for_bbox(bbox, label=cleaned_place_name or "SUMO network area")
+    tls_regional_map_baseline = dict(tls_summary.get("regional_map_baseline") or {})
+    provider_counts = tls_regional_map_baseline.get("regional_map_provider_counts")
+    has_tls_regional_rows = not isinstance(provider_counts, dict) or any(int(count) > 0 for count in provider_counts.values())
+    regional_map_baseline = tls_regional_map_baseline if tls_regional_map_baseline and has_tls_regional_rows else bbox_regional_map_baseline
     return {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -360,7 +365,8 @@ def run_osm_cleanup_workflow(
         **(_candidate_fields(place_report) if place_report is not None else {**_candidate_fields(None), "candidate_bbox": bbox}),
         "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))) if place_report is not None else (osm_preview_url(cleaned_place_name) if cleaned_place_name else ""),
         "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-        "map_baseline_source": "Google Maps",
+        "map_baseline_source": regional_map_baseline["regional_map_provider"],
+        "regional_map_baseline": regional_map_baseline,
         "map_temporal_scope": map_temporal_scope,
         "map_target_date": map_target_date or "",
         **tls_summary,

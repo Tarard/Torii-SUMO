@@ -510,6 +510,117 @@ def google_maps_url(lat: float, lon: float) -> str:
     return f"https://www.google.com/maps/search/?api=1&query={lat:.6f},{lon:.6f}"
 
 
+def is_mainland_china_coordinate(lat: float, lon: float) -> bool:
+    if not (18.0 <= lat <= 54.0 and 73.0 <= lon <= 135.5):
+        return False
+    if 21.7 <= lat <= 22.7 and 113.4 <= lon <= 114.7:
+        return False
+    if 21.5 <= lat <= 25.7 and 119.0 <= lon <= 122.5:
+        return False
+    return True
+
+
+def _gcj02_transform_lat(x: float, y: float) -> float:
+    ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.sqrt(abs(x))
+    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+    ret += (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) * 2.0 / 3.0
+    ret += (160.0 * math.sin(y / 12.0 * math.pi) + 320 * math.sin(y * math.pi / 30.0)) * 2.0 / 3.0
+    return ret
+
+
+def _gcj02_transform_lon(x: float, y: float) -> float:
+    ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(abs(x))
+    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+    ret += (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) * 2.0 / 3.0
+    ret += (150.0 * math.sin(x / 12.0 * math.pi) + 300.0 * math.sin(x / 30.0 * math.pi)) * 2.0 / 3.0
+    return ret
+
+
+def wgs84_to_gcj02(lat: float, lon: float) -> tuple[float, float]:
+    if not is_mainland_china_coordinate(lat, lon):
+        return lat, lon
+    semi_major_axis = 6378245.0
+    eccentricity_squared = 0.00669342162296594323
+    dlat = _gcj02_transform_lat(lon - 105.0, lat - 35.0)
+    dlon = _gcj02_transform_lon(lon - 105.0, lat - 35.0)
+    radlat = lat / 180.0 * math.pi
+    magic = math.sin(radlat)
+    magic = 1 - eccentricity_squared * magic * magic
+    sqrt_magic = math.sqrt(magic)
+    dlat = (dlat * 180.0) / ((semi_major_axis * (1 - eccentricity_squared)) / (magic * sqrt_magic) * math.pi)
+    dlon = (dlon * 180.0) / (semi_major_axis / sqrt_magic * math.cos(radlat) * math.pi)
+    return lat + dlat, lon + dlon
+
+
+def amap_marker_url(lat: float, lon: float, *, label: str = "SUMO TLS candidate") -> str:
+    marker_lat, marker_lon = wgs84_to_gcj02(lat, lon)
+    encoded_label = parse.quote_plus(label)
+    return f"https://uri.amap.com/marker?position={marker_lon:.6f},{marker_lat:.6f}&name={encoded_label}"
+
+
+def regional_map_fields(lat: float, lon: float, *, label: str = "SUMO TLS candidate") -> dict[str, str]:
+    if is_mainland_china_coordinate(lat, lon):
+        return {
+            "regional_map_provider": "Amap/Gaode",
+            "regional_map_url": amap_marker_url(lat, lon, label=label),
+            "regional_map_coordinate_system": "GCJ-02",
+            "regional_map_source_coordinate_system": "WGS84",
+            "regional_map_audit_status": "needs_amap_review",
+            "regional_map_note": "Generated from WGS84 SUMO/OSM coordinates converted to GCJ-02 for Amap/Gaode visual review.",
+        }
+    return {
+        "regional_map_provider": "Google Maps",
+        "regional_map_url": google_maps_url(lat, lon),
+        "regional_map_coordinate_system": "WGS84",
+        "regional_map_source_coordinate_system": "WGS84",
+        "regional_map_audit_status": "needs_google_review",
+        "regional_map_note": "Use Google Maps only where it is reliable for the modeled region and time scope.",
+    }
+
+
+def regional_map_baseline_for_bbox(bbox: str, *, label: str = "SUMO network area") -> dict[str, str]:
+    parsed = parse_bbox(bbox)
+    center_lat = (parsed.south + parsed.north) / 2.0
+    center_lon = (parsed.west + parsed.east) / 2.0
+    fields = regional_map_fields(center_lat, center_lon, label=label)
+    return {
+        **fields,
+        "regional_map_center_lat": f"{center_lat:.7f}",
+        "regional_map_center_lon": f"{center_lon:.7f}",
+    }
+
+
+def regional_map_baseline_for_rows(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        fields = regional_map_fields(0.0, 0.0)
+        return {
+            **fields,
+            "regional_map_provider_counts": {fields["regional_map_provider"]: 0},
+        }
+    providers: dict[str, int] = {}
+    selected: Mapping[str, Any] | None = None
+    for row in rows:
+        provider = str(row.get("regional_map_provider") or "")
+        if not provider:
+            lat = float(row["lat"])
+            lon = float(row["lon"])
+            row = {**row, **regional_map_fields(lat, lon)}
+            provider = str(row["regional_map_provider"])
+        providers[provider] = providers.get(provider, 0) + 1
+        if selected is None or provider == "Amap/Gaode":
+            selected = row
+    assert selected is not None
+    return {
+        "regional_map_provider": str(selected.get("regional_map_provider", "")),
+        "regional_map_url": str(selected.get("regional_map_url", "")),
+        "regional_map_coordinate_system": str(selected.get("regional_map_coordinate_system", "")),
+        "regional_map_source_coordinate_system": str(selected.get("regional_map_source_coordinate_system", "")),
+        "regional_map_audit_status": str(selected.get("regional_map_audit_status", "")),
+        "regional_map_note": str(selected.get("regional_map_note", "")),
+        "regional_map_provider_counts": providers,
+    }
+
+
 def mapillary_url(lat: float, lon: float) -> str:
     return f"https://www.mapillary.com/app/?lat={lat:.6f}&lng={lon:.6f}&z=18"
 
@@ -609,6 +720,7 @@ def _summarize_cluster(
         "google_maps_url": google_maps_url(lat, lon),
         "google_audit_status": "needs_google_review",
         "google_audit_note": "",
+        **regional_map_fields(lat, lon, label=f"SUMO TLS cluster {cluster_id}"),
         **google_maps_baseline_fields(google_maps_temporal_scope, google_maps_target_date),
     }
 
@@ -826,6 +938,7 @@ def extract_tls_candidates(
                 "google_maps_url": google_maps_url(lat, lon),
                 "google_audit_status": "needs_google_review",
                 "google_audit_note": "",
+                **regional_map_fields(lat, lon, label=f"SUMO TLS {tls.getID()}"),
                 **google_maps_baseline_fields(google_maps_temporal_scope, google_maps_target_date),
             }
         )
@@ -848,6 +961,12 @@ TLS_CANDIDATE_FIELDS = [
     "google_maps_url",
     "google_audit_status",
     "google_audit_note",
+    "regional_map_provider",
+    "regional_map_url",
+    "regional_map_coordinate_system",
+    "regional_map_source_coordinate_system",
+    "regional_map_audit_status",
+    "regional_map_note",
     "google_maps_baseline_source",
     "google_maps_temporal_scope",
     "google_maps_target_date",
@@ -868,6 +987,12 @@ TLS_CLUSTER_FIELDS = [
     "google_maps_url",
     "google_audit_status",
     "google_audit_note",
+    "regional_map_provider",
+    "regional_map_url",
+    "regional_map_coordinate_system",
+    "regional_map_source_coordinate_system",
+    "regional_map_audit_status",
+    "regional_map_note",
     "google_maps_baseline_source",
     "google_maps_temporal_scope",
     "google_maps_target_date",
@@ -887,6 +1012,12 @@ TLS_MULTISOURCE_REVIEW_FIELDS = [
     "nearest_osm_signal_id",
     "nearest_osm_signal_distance_m",
     "google_maps_url",
+    "regional_map_provider",
+    "regional_map_url",
+    "regional_map_coordinate_system",
+    "regional_map_source_coordinate_system",
+    "regional_map_audit_status",
+    "regional_map_note",
     "mapillary_url",
     "kartaview_url",
     "official_inventory_status",
@@ -989,6 +1120,7 @@ def build_tls_multisource_review(
         signal_plan_status = _source_field(signal_plan, "status", "review_status", "audit_status")
         field_status = _source_field(field, "status", "review_status", "audit_status")
         has_osm_signal = _clean_review_value(row.get("has_osm_signal_within_35m")) == "yes"
+        regional_fields = regional_map_fields(lat, lon, label=f"SUMO TLS {tls_id}")
         review_rows.append(
             {
                 "tls_id": tls_id,
@@ -1001,6 +1133,12 @@ def build_tls_multisource_review(
                 "nearest_osm_signal_id": _clean_review_value(row.get("nearest_osm_signal_id")),
                 "nearest_osm_signal_distance_m": _clean_review_value(row.get("nearest_osm_signal_distance_m")),
                 "google_maps_url": _clean_review_value(row.get("google_maps_url")) or google_maps_url(lat, lon),
+                "regional_map_provider": _clean_review_value(row.get("regional_map_provider")) or regional_fields["regional_map_provider"],
+                "regional_map_url": _clean_review_value(row.get("regional_map_url")) or regional_fields["regional_map_url"],
+                "regional_map_coordinate_system": _clean_review_value(row.get("regional_map_coordinate_system")) or regional_fields["regional_map_coordinate_system"],
+                "regional_map_source_coordinate_system": _clean_review_value(row.get("regional_map_source_coordinate_system")) or regional_fields["regional_map_source_coordinate_system"],
+                "regional_map_audit_status": _clean_review_value(row.get("regional_map_audit_status")) or regional_fields["regional_map_audit_status"],
+                "regional_map_note": _clean_review_value(row.get("regional_map_note")) or regional_fields["regional_map_note"],
                 "mapillary_url": mapillary_url(lat, lon),
                 "kartaview_url": kartaview_url(lat, lon),
                 "official_inventory_status": official_status,
@@ -1074,6 +1212,7 @@ def audit_tls(
             google_maps_temporal_scope=google_maps_temporal_scope,
             google_maps_target_date=google_maps_target_date,
         )
+        regional_map_baseline = regional_map_baseline_for_rows(rows)
     except (OSError, ET.ParseError, RuntimeError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
@@ -1092,6 +1231,7 @@ def audit_tls(
         "clusters_file": str(clusters_file),
         "cluster_radius_m": cluster_radius_m,
         "google_maps_baseline": google_maps_baseline,
+        "regional_map_baseline": regional_map_baseline,
         "warnings": (
             ["Google Maps baseline temporal scope is unspecified; ask whether current map or historical target date applies."]
             if google_maps_baseline["google_maps_requires_time_confirmation"] == "yes"
@@ -1131,6 +1271,7 @@ def audit_tls_multisource(
             signal_plans=read_tls_review_status_csv(signal_plan_csv),
             field_evidence=read_tls_review_status_csv(field_evidence_csv),
         )
+        regional_map_baseline = regional_map_baseline_for_rows(review_rows)
     except (OSError, ET.ParseError, RuntimeError, ValueError, KeyError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
@@ -1163,6 +1304,7 @@ def audit_tls_multisource(
         "evidence_level_counts": evidence_counts,
         "review_file": str(review_file),
         "google_maps_baseline": google_maps_baseline,
+        "regional_map_baseline": regional_map_baseline,
         "warnings": warnings,
     }
 

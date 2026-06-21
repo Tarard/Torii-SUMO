@@ -1,0 +1,91 @@
+[
+  {
+    "network": "C:\\Users\\huqio\\Documents\\AgiMo Project\\outputs\\bit-zhongguancun-campus\\bit_zhongguancun.net.xml",
+    "edge_count": 227,
+    "passenger_edge_count": 227,
+    "passenger_lane_count": 251,
+    "passenger_lane_length_m": 43634.71,
+    "junction_count": 110,
+    "node_types": {
+      "dead_end": 20,
+      "priority": 81,
+      "traffic_light": 9
+    },
+    "traffic_light_count": 9,
+    "traffic_light_ids": [
+      "1527880406",
+      "1527880408",
+      "321556298",
+      "340056192",
+      "340056195",
+      "528926236",
+      "529341803",
+      "529969707",
+      "586467254"
+    ],
+    "weak_passenger_components": [
+      110
+    ],
+    "largest_weak_passenger_component_nodes": 110
+  },
+  {
+    "network": "C:\\Users\\huqio\\Documents\\AgiMo Project\\outputs\\bit-zhongguancun-campus\\bit_zhongguancun.raw.net.xml",
+    "edge_count": 233,
+    "passenger_edge_count": 233,
+    "passenger_lane_count": 263,
+    "passenger_lane_length_m": 49868.16,
+    "junction_count": 118,
+    "node_types": {
+      "dead_end": 26,
+      "priority": 83,
+      "traffic_light": 9
+    },
+    "traffic_light_count": 9,
+    "traffic_light_ids": [
+      "1527880406",
+      "1527880408",
+      "321556298",
+      "340056192",
+      "340056195",
+      "528926236",
+      "529341803",
+      "529969707",
+      "586467254"
+    ],
+    "weak_passenger_components": [
+      110,
+      4,
+      4
+    ],
+    "largest_weak_passenger_component_nodes": 110
+  },
+  {
+    "network": "C:\\Users\\huqio\\Documents\\AgiMo Project\\outputs\\bit-zhongguancun-campus\\bit_zhongguancun.connected-core.net.xml",
+    "edge_count": 227,
+    "passenger_edge_count": 227,
+    "passenger_lane_count": 251,
+    "passenger_lane_length_m": 43634.71,
+    "junction_count": 110,
+    "node_types": {
+      "dead_end": 20,
+      "priority": 81,
+      "traffic_light": 9
+    },
+    "traffic_light_count": 9,
+    "traffic_light_ids": [
+      "1527880406",
+      "1527880408",
+      "321556298",
+      "340056192",
+      "340056195",
+      "528926236",
+      "529341803",
+      "529969707",
+      "586467254"
+    ],
+    "weak_passenger_components": [
+      110
+    ],
+    "largest_weak_passenger_component_nodes": 110
+  }
+]

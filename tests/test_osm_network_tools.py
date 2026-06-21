@@ -18,6 +18,7 @@ from torii_sumo.core.osm_network import (
     google_maps_baseline_fields,
     merge_osm_xml_payloads,
     parse_bbox,
+    regional_map_fields,
     robust_download_osm,
     split_bbox,
 )
@@ -337,6 +338,39 @@ def test_google_maps_baseline_fields_record_temporal_scope() -> None:
     assert historical["google_maps_target_date"] == "2020-05"
     assert historical["google_maps_requires_time_confirmation"] == "no"
     assert unspecified["google_maps_requires_time_confirmation"] == "yes"
+
+
+def test_regional_map_fields_use_amap_for_mainland_china_coordinate() -> None:
+    fields = regional_map_fields(39.959984, 116.315469, label="BIT Zhongguancun TLS")
+
+    assert fields["regional_map_provider"] == "Amap/Gaode"
+    assert fields["regional_map_coordinate_system"] == "GCJ-02"
+    assert "uri.amap.com/marker" in fields["regional_map_url"]
+    assert "BIT+Zhongguancun+TLS" in fields["regional_map_url"]
+    assert "WGS84" in fields["regional_map_note"]
+
+
+def test_build_tls_multisource_review_uses_amap_for_mainland_china_rows() -> None:
+    rows = build_tls_multisource_review(
+        [
+            {
+                "tls_id": "BIT-TLS-1",
+                "lat": "39.9599840",
+                "lon": "116.3154690",
+                "connection_count": 8,
+                "nearest_osm_signal_id": "",
+                "nearest_osm_signal_distance_m": "",
+                "has_osm_signal_within_35m": "no",
+                "incoming_road_names": "Zhongguancun South Street",
+                "outgoing_road_names": "Campus Road",
+            }
+        ]
+    )
+
+    assert rows[0]["regional_map_provider"] == "Amap/Gaode"
+    assert rows[0]["regional_map_audit_status"] == "needs_amap_review"
+    assert "uri.amap.com/marker" in rows[0]["regional_map_url"]
+    assert rows[0]["google_maps_url"].startswith("https://www.google.com/maps/search/")
 
 
 def test_build_tls_multisource_review_keeps_human_review_boundary() -> None:
@@ -1346,3 +1380,53 @@ def test_osm_cleanup_workflow_preserves_historical_user_target(tmp_path: Path) -
     assert captured["google_maps_target_date"] == "2019-06"
     assert report["map_temporal_scope"] == "historical"
     assert report["map_target_date"] == "2019-06"
+
+
+def test_osm_cleanup_workflow_sets_amap_baseline_for_mainland_china_bbox(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "bit.net.xml"
+    filtered_osm = tmp_path / "osm" / "bit_filtered.osm.xml.gz"
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="116.3018,39.9548,116.3176,39.9608",
+        output_dir=tmp_path,
+        prefix="bit",
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "candidates_file": str(tmp_path / "tls_candidates.csv"),
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "regional_map_baseline": {
+                "regional_map_provider": "Google Maps",
+                "regional_map_url": "https://www.google.com/maps/search/?api=1&query=0.000000,0.000000",
+                "regional_map_coordinate_system": "WGS84",
+                "regional_map_provider_counts": {"Google Maps": 0},
+            },
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "claim_status": "diagnostic-demo", "warnings": []},
+        netedit_func=lambda _path: {"status": "blocked", "netedit_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {"status": "blocked", "sumo_gui_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
+    )
+
+    assert report["map_baseline_source"] == "Amap/Gaode"
+    assert report["regional_map_baseline"]["regional_map_provider"] == "Amap/Gaode"
+    assert "uri.amap.com/marker" in report["regional_map_baseline"]["regional_map_url"]

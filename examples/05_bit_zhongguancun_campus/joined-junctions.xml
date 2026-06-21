@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-06-21T19:21:38.827663+01:00 by Eclipse SUMO netconvert 1.26.0
+<netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+
+    <input>
+        <osm-files value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\bit_zhongguancun.osm.xml"/>
+    </input>
+
+    <output>
+        <output-file value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\bit_zhongguancun.raw.net.xml"/>
+        <junctions.join-output value="C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\joined-junctions.xml"/>
+    </output>
+
+    <projection>
+        <proj.utm value="true"/>
+    </projection>
+
+    <processing>
+        <geometry.remove value="true"/>
+    </processing>
+
+    <tls_building>
+        <tls.discard-simple value="true"/>
+        <tls.guess-signals value="true"/>
+    </tls_building>
+
+    <ramp_guessing>
+        <ramps.guess value="false"/>
+    </ramp_guessing>
+
+    <edge_removal>
+        <keep-edges.in-geo-boundary value="116.3018,39.9548,116.3176,39.9608"/>
+        <keep-edges.by-vclass value="passenger"/>
+        <remove-edges.isolated value="true"/>
+    </edge_removal>
+
+    <junctions>
+        <junctions.join value="true"/>
+    </junctions>
+
+    <formats>
+        <osm.lane-access value="true"/>
+        <osm.turn-lanes value="true"/>
+    </formats>
+
+    <report>
+        <verbose value="true"/>
+    </report>
+
+</netconvertConfiguration>
+-->
+
+<nodes version="1.20" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/nodes_file.xsd">
+    <join nodes="12406694673 3577937728"/>
+    <join nodes="2377138436 8662360260"/>
+</nodes>

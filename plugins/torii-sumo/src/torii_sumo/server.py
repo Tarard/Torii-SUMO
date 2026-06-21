@@ -47,7 +47,7 @@ def create_server() -> FastMCP:
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(
         sumo_osm_resolve_place
     )
-    server.tool(description="Run the OSM cleanup hard-gate workflow: area confirmation, OSM build, TLS map audit, connectivity check, SUMO-GUI launch, and Netedit launch.")(
+    server.tool(description="Run the OSM cleanup hard-gate workflow: area inference/confirmation, OSM build, region-aware TLS map audit, connectivity check, SUMO-GUI launch, and Netedit launch.")(
         sumo_osm_cleanup_workflow
     )
     server.tool(description="Download or reuse OSM, filter road classes, and build a SUMO network with netconvert.")(
@@ -56,7 +56,7 @@ def create_server() -> FastMCP:
     server.tool(description="Extract SUMO TLS audit candidates and cluster nearby physical intersections.")(
         sumo_tls_audit
     )
-    server.tool(description="Create a human-review TLS evidence table with OSM, Google Maps, Mapillary, KartaView, official inventory, signal-plan, and field-evidence fields.")(
+    server.tool(description="Create a human-review TLS evidence table with OSM, region-aware map links such as Amap/Gaode or Google Maps, Mapillary, KartaView, official inventory, signal-plan, and field-evidence fields.")(
         sumo_tls_multisource_review
     )
     server.tool(description="Extract the largest passenger component of a SUMO network into a connected-core .net.xml and report discarded fragments.")(

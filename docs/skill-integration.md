@@ -17,9 +17,9 @@ Do not describe this as skills being inside MCP. The Codex plugin bundles both c
 - baseline/variant configs => `sumo_config_pair_preflight` before running/comparing
 - single config => `sumo_run_config` then inspect declared outputs
 - baseline/variant metrics => `sumo_compare_outputs` before interpreting duration/waiting/time loss/throughput/delay
-- OSM cleanup from place name, bbox, or extract => `sumo_osm_cleanup_workflow`, then inspect area confirmation, Google Maps/current-or-user-targeted TLS audit artifacts, connectivity status, Netedit launch evidence, and claim boundary.
+- OSM cleanup from place name, bbox, or extract => `sumo_osm_cleanup_workflow`, then inspect area inference or confirmation, region-aware TLS audit artifacts, connectivity status, Netedit launch evidence, and claim boundary.
 - bbox-only low-level OSM network construction => `sumo_osm_build_network`, then inspect tiled Overpass, retry, deduplication, netconvert status, and artifact paths
-- OSM/netconvert TLS cleanup review => `sumo_tls_audit`, then use Google Maps as the reality baseline only after confirming current vs historical map scope
+- OSM/netconvert TLS cleanup review => `sumo_tls_audit`, then use the automatically selected regional map baseline: Amap/Gaode for mainland China coordinates, Google Maps where appropriate elsewhere, with current vs historical map scope still recorded
 - named-road connectivity check => `sumo_network_routeability_probe`, then run or inspect the generated `.sumocfg`
 - evidence handoff => `sumo_collect_evidence`
 
@@ -29,4 +29,4 @@ Do not describe this as skills being inside MCP. The Codex plugin bundles both c
 - minimal smoke diagnostic demo only
 - output comparison remains diagnostic unless the skill has separate evidence for matched route, demand, seed, horizon, controller identity, output interval, completion criteria
 - GUI/screenshot evidence not part of MVP and must not be used as performance evidence
-- Google Maps URLs and TLS clusters support reality-baseline review, but latest Google Maps must not override a historical modeling target without time-aligned evidence
+- Regional map URLs and TLS clusters support reality-baseline review, but the latest public map must not override a historical modeling target without time-aligned evidence

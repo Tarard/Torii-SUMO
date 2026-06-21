@@ -1,0 +1,99 @@
+Parsing types from 'C:\Program Files (x86)\Eclipse\Sumo\/data/typemap/osmNetconvert.typ.xml' ... done.
+Parsing nodes from osm-file 'C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\bit_zhongguancun.osm.xml' ... done (33ms).
+Parsing edges from osm-file 'C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\bit_zhongguancun.osm.xml' ... done (34ms).
+Removing duplicate edges ... done.
+Warning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|highway.tertiary_link' (first occurrence for edge '42454222').
+Warning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|highway.tertiary' (first occurrence for edge '143599498').
+Warning: Discarding unknown compound 'cycleway.track' in type 'cycleway.track|highway.tertiary' (first occurrence for edge '167648259').
+Warning: Discarding unknown compound 'cycleway.track' in type 'cycleway.track|highway.secondary' (first occurrence for edge '1055449634').
+Warning: Discarding unknown compound 'cycleway.track' in type 'cycleway.track|highway.primary' (first occurrence for edge '1072680077').
+Warning: Removing pt stop '9549707551' on non existing edge '201288048#0'.
+Warning: Removing pt stop '9549707552' on non existing edge '201288048#0'.
+Warning: Removing pt stop '9549707553' on non existing edge '1076997191#2'.
+Warning: Removing pt stop '9549707554' on non existing edge '1076997191#2'.
+Parsing relations from osm-file 'C:\Users\huqio\Documents\AgiMo Project\outputs\bit-zhongguancun-campus\bit_zhongguancun.osm.xml' ... done (0ms).
+ Removed 13 traffic lights before loading plain-XML
+ Import done:
+   211 nodes loaded.
+   38 types loaded.
+   284 edges loaded.
+Proj projection parameters used: '+proj=utm +zone=50 +ellps=WGS84 +datum=WGS84 +units=m +no_defs'.
+Removing self-loops ... done (1ms).
+Finding isolated roads ...
+Warning: Removed a road without junctions: -849088062.
+Warning: Removed a road without junctions: 849088062.
+ done (1ms).
+Processing public transport stops ... done (1ms).
+Align pt stop id signs with corresponding edge id signs ... done (0ms).
+Joining junction clusters ...
+Warning: Not joining junctions 1527880406,1527880408,340056195,528926236,586467254 (6 incoming edges).
+Warning: Not joining junctions 12406694675,12406694677 (parallel incoming -1341230762,1341230761#0).
+Warning: Not joining junctions 321556298,9841538121 (parallel incoming 1072680077,1072680079).
+Warning: Not joining junctions 1923832780,1923857569 (parallel outgoing 182041286,240367924).
+Warning: Reducing junction cluster 2377138434,2377138436,8662360253,8662360260,8662360269 (long edge).
+Warning: Not joining junctions 2629760242,7821451108 (parallel incoming 257453038,838013187).
+ done (6ms).
+ Joined 2 junction cluster(s).
+Removing empty nodes and geometry nodes ... done (1ms).
+   89 nodes removed.
+Moving network to origin ... done (9ms).
+Computing turning directions ... done (0ms).
+Assigning nodes to traffic lights ... done (0ms).
+Sorting nodes' edges ... done (1ms).
+Computing node shapes ...
+Warning: Shape for junction '321557243' has distance 29.72 to its given position.
+ done (14ms).
+Computing edge shapes ... done (6ms).
+Computing node types ... done (0ms).
+Computing priorities ... done (1ms).
+Computing approached edges ... done (1ms).
+Guessing and setting roundabouts ... done (1ms).
+Computing approaching lanes ... done (3ms).
+Dividing of lanes on approached lanes ... done (3ms).
+Processing turnarounds ... done (1ms).
+Rechecking of lane endings ... done (1ms).
+Computing traffic light control information ... done (1ms).
+Computing node logics ... done (8ms).
+Computing traffic light logics ...
+Warning: The traffic light '10761298770' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '10761298770'
+Warning: The traffic light '10761298771' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '10761298771'
+Warning: The traffic light '10761298772' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '10761298772'
+Warning: The traffic light '1527880418' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '1527880418'
+Warning: The traffic light '1573977324' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '1573977324'
+Warning: Minor green from edge '30748082' to edge '1518745787#0' exceeds 19.44m/s. Maybe a left-turn lane is missing.
+Warning: Minor green from edge '-182042882#4' to edge '-42399132' exceeds 19.44m/s. Maybe a left-turn lane is missing.
+ done (11ms).
+ 9 traffic light(s) computed.
+Building inner edges ...
+Warning: Speed of turning connection '1055449634_0->1055449633_1' reduced by 22.88 due to turning radius of 4.37 (length=5.75, angle=107.29).
+Warning: Speed of straight connection '-934717405#1_0->-934717405#0_0' reduced by 5.46 due to turning radius of 12.91 (length=12.96, angle=76.31).
+Warning: Speed of turning connection '219487087_0->1055449634_0' reduced by 22.71 due to turning radius of 4.68 (length=9.00, angle=147.97).
+Warning: Speed of turning connection '1055449633_1->219487087_0' reduced by 22.76 due to turning radius of 4.59 (length=5.93, angle=104.74).
+Warning: Intersecting left turns at junction 'cluster_2377138436_8662360260' from lane '934717405#2_0' and lane '-934714248_0' (increase junction radius to avoid this).
+ done (27ms).
+Warning: Minor green from edge '-182042882#4' to edge '-42399132' exceeds 19.44m/s. Maybe a left-turn lane is missing.
+Warning: Minor green from edge '30748082' to edge '1518745787#0' exceeds 19.44m/s. Maybe a left-turn lane is missing.
+Find accesses for pt rail stops ... done (2ms).
+-----------------------------------------------------
+Summary:
+ Node type statistics:
+  Unregulated junctions       : 0
+  Dead-end junctions          : 26
+  Priority junctions          : 83
+  Right-before-left junctions : 0
+  Traffic light junctions      : 9
+ Network boundaries:
+  Original boundary  : 116.30,39.94,116.34,39.97
+  Applied offset     : -440236.59,-4421822.41
+  Converted boundary : 0.00,0.00,3392.68,2319.82
+-----------------------------------------------------
+Writing network ... done (116ms).
+Warning: 12 total messages of type: Could not build program '%' for traffic light '%'
+Warning: 8 total messages of type: Not joining junctions % (%).
+Warning: 12 total messages of type: The traffic light '%' does not control any links; it will not be build.
+Success.
