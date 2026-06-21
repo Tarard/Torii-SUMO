@@ -856,6 +856,143 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
     assert report["sumo_gui_process_id"] == 101
 
 
+def test_osm_cleanup_workflow_demotes_partial_connectivity_to_diagnostic_demo(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "partial.net.xml"
+    filtered_osm = tmp_path / "osm" / "partial_filtered.osm.xml.gz"
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="partial",
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 2,
+            "tls_cluster_count": 1,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "connectivity_status": "fail",
+            "passenger_edge_count": 1000,
+            "passenger_component_count": 4,
+            "largest_component_edge_count": 992,
+            "small_component_count": 3,
+            "isolated_passenger_edge_count": 2,
+            "warnings": ["passenger network has 4 disconnected components"],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["network_quality"] == "partial-main-component"
+    assert report["experiment_readiness"] == "no"
+    assert report["strict_connectivity_status"] == "fail"
+    assert report["connectivity_main_component_ratio"] == 0.992
+    assert report["gate_status"]["connectivity"] == "partial"
+    assert any(
+        "strict connectivity failed; largest passenger component covers 99.20%" in warning
+        for warning in report["warnings"]
+    )
+
+
+def test_osm_cleanup_workflow_keeps_severe_connectivity_failure_invalid(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "severe.net.xml"
+    filtered_osm = tmp_path / "osm" / "severe_filtered.osm.xml.gz"
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="severe",
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "connectivity_status": "fail",
+            "passenger_edge_count": 1000,
+            "passenger_component_count": 20,
+            "largest_component_edge_count": 700,
+            "small_component_count": 12,
+            "isolated_passenger_edge_count": 12,
+            "warnings": ["passenger network has 20 disconnected components"],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+    )
+
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["network_quality"] == "construction-invalid"
+    assert report["experiment_readiness"] == "no"
+    assert report["strict_connectivity_status"] == "fail"
+    assert report["gate_status"]["connectivity"] == "fail"
+
+
 def test_osm_cleanup_workflow_preserves_historical_user_target(tmp_path: Path) -> None:
     net_file = tmp_path / "sumo" / "historical.net.xml"
     filtered_osm = tmp_path / "osm" / "historical_filtered.osm.xml.gz"
