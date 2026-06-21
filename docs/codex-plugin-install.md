@@ -55,12 +55,13 @@ The plugin can run bounded environment checks, config preflight, smoke runs, out
 
 Implemented OSM/network tools:
 
+- `sumo_osm_cleanup_workflow`: run the hard-gate OSM cleanup workflow, including area confirmation when needed, network construction, TLS map audit, passenger connectivity summary, routeability probes when supplied, and Netedit launch evidence.
 - `sumo_osm_build_network`: download or reuse an OSM extract, use tiled Overpass requests with retry, deduplicate merged OSM XML by object id, apply road-class presets or explicit highway classes, run `netconvert`, and return artifact/log paths.
 - `sumo_tls_audit`: extract SUMO TLS audit candidates, cluster nearby candidates into physical-intersection review groups, and attach Google Maps reality-baseline fields.
 - `sumo_network_routeability_probe`: generate named-road probe routes and a bounded `.sumocfg` for routeability checks.
 
-Google Maps is the external reality baseline for road/TLS existence review. Before using it as the standard, confirm whether the user wants the current map or a historical target date; latest Google Maps should not automatically override a historical modeling target.
+Google Maps is the external reality baseline for road/TLS existence review. Ask whether the user needs the current map or a historical target date; if the user requests a historical target date, the user's stated target controls the baseline and requires time-aligned Google Maps, OSM history, dated imagery, Street View history, or agency-inventory evidence.
 
 External OSM source patterns are tracked from OSMnx, OSMNet, pyrosm, SUMO osmGet/osmBuild, and osm-to-xodr. Torii borrows architecture and validation ideas from these projects without vendoring their source code.
 
-The plugin does not yet implement full OSM intelligent cleanup, geocoded area resolution from place names, authoritative TLS inventory, max-pressure controller generation, or controller-log inspection as MCP tools. The bundled skill will route those requests into a plan or code-development path until those tools are added.
+The plugin does not silently certify full OSM intelligent cleanup, automatic geocoded area resolution from place names, authoritative TLS inventory, max-pressure controller generation, or controller-log inspection as complete MCP tools. The bundled skill will route unconfirmed place names into area confirmation checkpoints and keep incomplete gates out of stronger claims.

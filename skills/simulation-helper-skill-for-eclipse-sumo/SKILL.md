@@ -21,7 +21,7 @@ request -> classify scenario -> load minimal references -> ask or act -> verify 
 |---|---|---|
 | SUMO environment, executable toolchain, or runnable smoke proof is missing | `references/preflight-sumo-environment.md` | `Environment Preflight` record and pass/fail route |
 | Torii MCP execution, installable plugin use, MCP tool output, or feedback from a SUMO run | `references/mcp-tool-routing.md` | `MCP Tool Use Record`, feedback diagnosis, and claim boundary |
-| OSM/imported-network cleanup, road-detail selection, Google Maps or external signal cross-check, detector lane mapping, field-data sensor alignment, or background visualization | `references/model-osm-detectors.md` | modeling plan, road-class ladder, TLS audit, detector-alignment gates, and visualization boundary |
+| OSM/imported-network cleanup, road-detail selection, Google Maps or external signal cross-check, detector lane mapping, field-data sensor alignment, or background visualization | `references/model-osm-detectors.md` | OSM cleanup hard-gate workflow, area confirmation, Google Maps/current-or-user-targeted TLS audit, connectivity check, Netedit launch, and claim boundary |
 | Public OSM import libraries, Overpass robustness, offline PBF import, SUMO OSM scripts, OpenDRIVE conversion, or source-code reuse decisions | `references/osm-source-patterns.md` | source-pattern map, integration ladder, no-vendoring boundary, and Google Maps temporal baseline |
 | Ongoing project, unclear progress, repo/logs/outputs provided, or "what next?" | `references/route-project-workflow.md` | `Project Control Screen` and next-step plan |
 | New, vague, or assumption-heavy experiment | `references/interactive-experiment-intake.md` | one-question-at-a-time intake, recommended answers, and readiness route |
@@ -62,7 +62,7 @@ Load these only when the scenario requires them:
 - Interactive intake for vague, ambitious, or assumption-heavy experiments: `references/interactive-experiment-intake.md`.
 - Confirmed experiment intake and planning: `references/plan-experiment.md`.
 - Code implementation, TDD, and completion evidence: `references/develop-and-verify-code.md`.
-- OSM/imported-network modeling, road-detail selection, Google Maps or external signal cross-check, detector lane repair, field-data sensor alignment, and background visualization: `references/model-osm-detectors.md`.
+- OSM/imported-network modeling, road-detail selection, Google Maps or external signal cross-check, detector lane repair, field-data sensor alignment, and background visualization: `references/model-osm-detectors.md`. For OSM cleanup, default to the `sumo_osm_cleanup_workflow` hard-gate route when Torii MCP tools are available.
 - Public OSM source patterns from OSMnx, OSMNet, pyrosm, SUMO osmGet/osmBuild, or osm-to-xodr: `references/osm-source-patterns.md`.
 - SUMO semantics, official/forum lessons, and public-code patterns: `references/learn-sumo-knowledge.md`.
 - NEMA/TLS/TraCI controller identity and API-boundary checks: `references/audit-sumo-controllers.md`.

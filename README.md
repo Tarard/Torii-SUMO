@@ -27,7 +27,7 @@
 </div>
 
 > [!IMPORTANT]
-> Torii is a plugin-and-skill package for agentic SUMO work. It already bundles executable local MCP tools for environment checks, config preflight, smoke runs, evidence bundles, OSM-to-SUMO network construction, TLS audit candidates, and routeability probes. It does not yet claim fully automatic place-name geocoding, full city-scale OSM cleanup, or controller generation as finished MCP tools.
+> Torii is a plugin-and-skill package for agentic SUMO work. It already bundles executable local MCP tools for environment checks, config preflight, smoke runs, evidence bundles, OSM cleanup hard gates, OSM-to-SUMO network construction, TLS audit candidates, connectivity checks, Netedit launch evidence, and routeability probes. It does not claim silent fully automatic place-name geocoding, full city-scale network certification, or controller generation as finished MCP tools.
 
 > [!NOTE]
 > This project is independent. It is not affiliated with, endorsed by, sponsored by, or maintained by the Eclipse Foundation, the Eclipse SUMO project, DLR, OpenAI, Anthropic, Google, or any external OSM tooling project.
@@ -47,8 +47,8 @@ Installing Torii gives Codex both **skills and MCP tools**. The goal is not to m
 
 | User request | Torii response pattern |
 |---|---|
-| "Build a SUMO network from this OSM area." | Use bounded OSM import, tiled Overpass download or local extract reuse, road-class filtering, XML deduplication, `netconvert`, and artifact reporting. |
-| "Clean this Dresden core network." | If a bbox or extract is supplied, run the implemented OSM-to-SUMO path. If only a place name is supplied, route to a small clarification or code-development step until geocoding is implemented. |
+| "Build a SUMO network from this OSM area." | Use the OSM cleanup hard-gate workflow: area confirmation when needed, bounded OSM import, TLS map audit, passenger connectivity check, and Netedit launch evidence. |
+| "Clean this Dresden core network." | If a bbox or extract is supplied, run the hard-gate workflow directly. If only a place name is supplied, produce an OSM preview checkpoint and ask the user to confirm the area before construction. |
 | "Audit all traffic lights against Google Maps." | Extract SUMO TLS candidates, cluster likely physical intersections, generate Google Maps review links, and ask whether the baseline should be current Google Maps or a historical target date. |
 | "Check whether these roads or bridges are connected." | Generate named-road routeability probes and report missing key edges, route generation evidence, and residual SUMO completion risk. |
 | "My metrics got worse after a run." | Treat metrics as feedback: diagnose route, demand, network, TLS, controller, output, horizon, or completion problems before proposing code changes. |
@@ -120,6 +120,7 @@ The original `Simulation Helper Skill for Eclipse SUMO` is not deleted. It is no
 | `sumo_run_minimal_smoke` | Produce a small diagnostic smoke proof for local toolchain checks. |
 | `sumo_compare_outputs` | Compare summary/tripinfo outputs with completion-first reporting. |
 | `sumo_collect_evidence` | Write a reproducibility evidence bundle. |
+| `sumo_osm_cleanup_workflow` | High-level OSM cleanup workflow with area confirmation, OSM build, TLS map audit, connectivity check, and Netedit launch evidence. |
 | `sumo_osm_build_network` | Download or reuse OSM extracts, tile Overpass calls, retry, deduplicate XML, filter roads, and run `netconvert`. |
 | `sumo_tls_audit` | Extract TLS candidates, cluster review groups, and attach Google Maps temporal-baseline fields. |
 | `sumo_network_routeability_probe` | Generate named-road routeability probe routes and a bounded `.sumocfg`. |
@@ -158,9 +159,9 @@ Examples:
 
 Torii is useful today, but it should stay honest:
 
-- It can build SUMO networks from supplied bbox/extract inputs; place-name geocoding is not yet a finished MCP tool.
-- It can assist OSM cleanup with road-class selection, deduplication, TLS candidates, routeability probes, and warnings; it does not certify a whole city network automatically.
-- It can use Google Maps as an external reality baseline only after the user confirms whether the intended reference is current or historical.
+- It can build SUMO networks from supplied bbox/extract inputs and can block on unconfirmed place-name areas; fully automatic place-name geocoding remains a workflow checkpoint rather than a silent construction step.
+- It can assist OSM cleanup with road-class selection, deduplication, TLS candidates, Google Maps/current-or-user-targeted review artifacts, connectivity checks, routeability probes, warnings, and Netedit launch evidence; it does not certify a whole city network automatically.
+- It uses Google Maps as the default current-network reality baseline. If the user requests a historical network, the user's stated historical target controls the baseline and requires time-aligned evidence.
 - It can guide controller implementation using public patterns such as SUMO Lights; full controller generation and controller-log inspection are roadmap tools.
 - It can support evidence-bounded claims; it does not certify experiment correctness.
 

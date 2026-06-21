@@ -17,7 +17,8 @@ Do not describe this as skills being inside MCP. The Codex plugin bundles both c
 - baseline/variant configs => `sumo_config_pair_preflight` before running/comparing
 - single config => `sumo_run_config` then inspect declared outputs
 - baseline/variant metrics => `sumo_compare_outputs` before interpreting duration/waiting/time loss/throughput/delay
-- bbox OSM network construction => `sumo_osm_build_network`, then inspect tiled Overpass, retry, deduplication, netconvert status, and artifact paths
+- OSM cleanup from place name, bbox, or extract => `sumo_osm_cleanup_workflow`, then inspect area confirmation, Google Maps/current-or-user-targeted TLS audit artifacts, connectivity status, Netedit launch evidence, and claim boundary.
+- bbox-only low-level OSM network construction => `sumo_osm_build_network`, then inspect tiled Overpass, retry, deduplication, netconvert status, and artifact paths
 - OSM/netconvert TLS cleanup review => `sumo_tls_audit`, then use Google Maps as the reality baseline only after confirming current vs historical map scope
 - named-road connectivity check => `sumo_network_routeability_probe`, then run or inspect the generated `.sumocfg`
 - evidence handoff => `sumo_collect_evidence`
