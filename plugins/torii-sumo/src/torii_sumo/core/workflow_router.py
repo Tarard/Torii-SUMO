@@ -15,7 +15,7 @@ AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run
 
 WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
     "osm_to_sumo": {
-        "description": "Resolve a place or bbox, confirm area, build an OSM-derived SUMO network, audit TLS, check connectivity, and collect launch evidence.",
+        "description": "Resolve or infer a place/bbox, build an OSM-derived SUMO network with conservative defaults, audit TLS, check connectivity, and collect launch evidence.",
         "tool_chain": [
             "sumo_osm_resolve_place",
             "sumo_osm_cleanup_workflow",
@@ -26,7 +26,7 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
         ],
     },
     "tls_review": {
-        "description": "Create a Google Maps baseline TLS review table with supporting OSM, Mapillary, KartaView, inventory, signal-plan, and field-evidence columns.",
+        "description": "Create a region-aware TLS review table with supporting OSM, street-level imagery, inventory, signal-plan, and field-evidence columns.",
         "tool_chain": ["sumo_tls_audit", "sumo_tls_multisource_review", "sumo_collect_evidence"],
     },
     "routeability": {
@@ -173,6 +173,7 @@ def run_auto_workflow(
             place_name=place_name,
             bbox=bbox,
             confirmed_area=confirmed_area,
+            autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
             cleanup_workflow_func=cleanup_workflow_func,
         )
@@ -224,6 +225,7 @@ def _run_osm_to_sumo(
     place_name: str | None,
     bbox: str | None,
     confirmed_area: bool,
+    autonomy_mode: str,
     place_resolver: Callable[[str], dict[str, Any]],
     cleanup_workflow_func: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
@@ -237,14 +239,27 @@ def _run_osm_to_sumo(
             missing=["place_name_or_bbox"],
             next_question="Which OSM place name or bbox should Torii use?",
         )
+    candidate: dict[str, Any] | None = None
     if not confirmed_area and not bbox:
         candidate = place_resolver(inferred)
         report.update(candidate)
-        report["execution_status"] = "needs_user_confirmation"
-        report["status"] = "blocked"
-        report["claim_status"] = "blocked"
-        report["next_question"] = "Confirm this OSM area and bbox before network construction?"
-        return report
+        if autonomy_mode != "ask-first":
+            resolved_bbox = str(candidate.get("candidate_bbox", ""))
+            if candidate.get("status") == "pass" and resolved_bbox:
+                bbox = resolved_bbox
+                report["execution_status"] = "auto_area_candidate"
+            else:
+                report["execution_status"] = "needs_user_confirmation"
+                report["status"] = "blocked"
+                report["claim_status"] = "blocked"
+                report["next_question"] = "Which OSM area or bbox should Torii use?"
+                return report
+        else:
+            report["execution_status"] = "needs_user_confirmation"
+            report["status"] = "blocked"
+            report["claim_status"] = "blocked"
+            report["next_question"] = "Confirm this OSM area and bbox before network construction?"
+            return report
 
     cleanup_kwargs = {
         "output_dir": output_dir,

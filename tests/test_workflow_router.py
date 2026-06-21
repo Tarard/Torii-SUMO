@@ -39,6 +39,7 @@ def test_auto_workflow_blocks_osm_place_until_area_confirmation(tmp_path: Path) 
     report = run_auto_workflow(
         user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
         output_dir=tmp_path,
+        autonomy_mode="ask-first",
         place_resolver=fake_resolver,
     )
 
@@ -50,6 +51,48 @@ def test_auto_workflow_blocks_osm_place_until_area_confirmation(tmp_path: Path) 
     assert report["candidate_bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
     assert report["next_question"] == "Confirm this OSM area and bbox before network construction?"
     assert report["tool_chain"][:2] == ["sumo_osm_resolve_place", "sumo_osm_cleanup_workflow"]
+
+
+def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_resolver(_place_name: str):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "area_resolution_status": "candidate_found",
+            "candidate_display_name": "Altstadt, Dresden, Sachsen, Deutschland",
+            "candidate_osm_type": "relation",
+            "candidate_osm_id": "192900",
+            "candidate_bbox": "13.6864402,51.0280799,13.7872926,51.0766681",
+            "osm_preview_url": "https://www.openstreetmap.org/search?query=Altstadt%2C+Dresden",
+            "candidate_osm_url": "https://www.openstreetmap.org/relation/192900",
+            "warnings": [],
+        }
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "net_file": str(tmp_path / "resolved.net.xml"),
+            "warnings": ["regional map/TLS reality evidence still needs manual strengthening"],
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
+        output_dir=tmp_path,
+        place_resolver=fake_resolver,
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert report["execution_status"] == "executed"
+    assert report["tool_called"] == "sumo_osm_cleanup_workflow"
+    assert captured["bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
+    assert captured["place_name"] == "Altstadt, Dresden"
+    assert captured["run_routeability_audit_after_build"] is True
+    assert report["area_resolution_status"] == "candidate_found"
 
 
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
