@@ -35,6 +35,7 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     assert "sumo_tls_multisource_review" in doc
     assert "Mapillary" in doc
     assert "KartaView" in doc
+    assert "sumo_network_connected_core" in doc
     assert "sumo_network_routeability_probe" in doc
     assert "tiled Overpass" in doc
     assert "retry" in doc

@@ -16,6 +16,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_osm_build_network",
         "sumo_tls_audit",
         "sumo_tls_multisource_review",
+        "sumo_network_connected_core",
         "sumo_network_routeability_probe",
     ]
 )

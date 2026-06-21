@@ -1,8 +1,12 @@
+import csv
 import gzip
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from torii_sumo.core.connectivity import summarize_passenger_connectivity
+from torii_sumo.core.connectivity import (
+    extract_largest_passenger_component_core,
+    summarize_passenger_connectivity,
+)
 from torii_sumo.core.command_runner import CommandResult
 from torii_sumo.core.osm_network import (
     build_osm_network,
@@ -525,6 +529,62 @@ def test_summarize_passenger_connectivity_fails_disconnected_components(tmp_path
     assert "passenger network has 2 disconnected components" in report["warnings"]
 
 
+def test_extract_largest_passenger_component_core_writes_keep_and_discard_records(tmp_path: Path) -> None:
+    net_file = tmp_path / "raw.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n0" to="n1">
+    <lane id="a_0" allow="passenger" speed="13.9" length="10.0"/>
+  </edge>
+  <edge id="b" from="n1" to="n2">
+    <lane id="b_0" allow="passenger" speed="13.9" length="10.0"/>
+  </edge>
+  <edge id="c" from="n3" to="n4">
+    <lane id="c_0" allow="passenger" speed="13.9" length="10.0"/>
+  </edge>
+  <connection from="a" to="b"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    def fake_command_runner(command, **kwargs):
+        calls.append((command, kwargs))
+        output_file = Path(command[command.index("--output-file") + 1])
+        output_file.write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "returncode": 0, "stdout": "Success.", "stderr": "", "error": ""}
+
+    report = extract_largest_passenger_component_core(
+        net_file,
+        output_dir=tmp_path / "core",
+        prefix="demo",
+        command_runner=fake_command_runner,
+    )
+
+    keep_edges = Path(report["keep_edges_file"]).read_text(encoding="utf-8").splitlines()
+    discard_rows = list(csv.DictReader(Path(report["discarded_components_file"]).open(encoding="utf-8")))
+
+    assert report["status"] == "pass"
+    assert report["network_quality"] == "connected-core"
+    assert report["raw_passenger_component_count"] == 2
+    assert report["core_passenger_edge_count"] == 2
+    assert report["discarded_passenger_edge_count"] == 1
+    assert keep_edges == ["a", "b"]
+    assert discard_rows == [
+        {
+            "component_rank": "2",
+            "component_size": "1",
+            "edge_id": "c",
+            "discard_reason": "outside_largest_passenger_component",
+        }
+    ]
+    command = calls[0][0]
+    assert command[:2] == ["netconvert", "--sumo-net-file"]
+    assert "--keep-edges.input-file" in command
+    assert "--keep-edges.postload" in command
+
+
 def test_launch_netedit_reports_unavailable_when_binary_missing(tmp_path: Path) -> None:
     from torii_sumo.core.netedit import launch_netedit
 
@@ -854,6 +914,140 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
     assert report["netedit_status"] == "opened"
     assert report["sumo_gui_status"] == "opened"
     assert report["sumo_gui_process_id"] == 101
+
+
+def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path: Path) -> None:
+    raw_net = tmp_path / "sumo" / "raw.net.xml"
+    core_net = tmp_path / "connected_core" / "demo_connected_core.net.xml"
+    filtered_osm = tmp_path / "osm" / "demo_filtered.osm.xml.gz"
+    downstream_paths: dict[str, Path] = {}
+
+    def fake_build(**kwargs):
+        raw_net.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        raw_net.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(raw_net),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    def fake_connectivity(net_path):
+        if net_path == raw_net:
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "connectivity_status": "fail",
+                "passenger_edge_count": 1000,
+                "passenger_component_count": 4,
+                "largest_component_edge_count": 992,
+                "small_component_count": 3,
+                "isolated_passenger_edge_count": 2,
+                "warnings": ["passenger network has 4 disconnected components"],
+            }
+        assert net_path == core_net
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 992,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 992,
+            "small_component_count": 0,
+            "isolated_passenger_edge_count": 0,
+            "warnings": [],
+        }
+
+    def fake_connected_core(net_path, **kwargs):
+        assert net_path == raw_net
+        assert kwargs["prefix"] == "demo"
+        core_net.parent.mkdir(parents=True, exist_ok=True)
+        core_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "network_quality": "connected-core",
+            "connected_core_file": str(core_net),
+            "keep_edges_file": str(tmp_path / "connected_core" / "demo_connected_core.keep_edges.txt"),
+            "discarded_components_file": str(tmp_path / "connected_core" / "demo_discarded_components.csv"),
+            "raw_passenger_edge_count": 1000,
+            "raw_passenger_component_count": 4,
+            "core_passenger_edge_count": 992,
+            "discarded_passenger_edge_count": 8,
+            "warnings": ["extracted largest passenger component as connected simulation core"],
+        }
+
+    def fake_routeability(**kwargs):
+        downstream_paths["routeability"] = kwargs["net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "sumocfg_file": str(tmp_path / "routeability" / "demo.sumocfg"),
+            "missing_key_edges": [],
+            "warnings": [],
+        }
+
+    def fake_netedit(net_path):
+        downstream_paths["netedit"] = net_path
+        return {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "netedit_status": "skipped",
+            "netedit_network_file": str(net_path),
+            "warnings": [],
+        }
+
+    def fake_sumo_gui(net_path, _output_dir, _prefix):
+        downstream_paths["sumo_gui"] = net_path
+        return {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "sumo_gui_status": "skipped",
+            "sumo_gui_network_file": str(net_path),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="demo",
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 2,
+            "tls_cluster_count": 1,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=fake_connectivity,
+        connected_core_func=fake_connected_core,
+        routeability_func=fake_routeability,
+        netedit_func=fake_netedit,
+        sumo_gui_func=fake_sumo_gui,
+        key_edge_queries=[{"label": "main", "role": "arterial", "search_terms": ["Main"]}],
+    )
+
+    assert report["status"] == "pass"
+    assert report["gate_status"]["connectivity"] == "pass"
+    assert report["connectivity_status"] == "pass"
+    assert report["raw_connectivity_status"] == "fail"
+    assert report["network_quality"] == "connected-core"
+    assert report["net_file"] == str(core_net)
+    assert report["raw_net_file"] == str(raw_net)
+    assert report["connected_core_file"] == str(core_net)
+    assert downstream_paths == {
+        "routeability": core_net,
+        "netedit": core_net,
+        "sumo_gui": core_net,
+    }
+    assert "extracted largest passenger component as connected simulation core" in report["warnings"]
 
 
 def test_osm_cleanup_workflow_demotes_partial_connectivity_to_diagnostic_demo(tmp_path: Path) -> None:

@@ -82,7 +82,8 @@ Hard gates:
 2. After construction, run TLS candidate extraction and Google Maps review-link generation by default.
 3. For current-network modeling, Google Maps is the default reality baseline. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned Google Maps evidence, OSM history, dated imagery, Street View history, or agency inventory where available.
 4. Run passenger connectivity checks before making stronger claims.
-5. Open the cleaned network in SUMO-GUI and Netedit and report launch evidence.
+5. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
+6. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
 
 If any gate is incomplete, keep the claim at `diagnostic-demo`, `construction-invalid`, or `blocked`. GUI inspection, Google Maps links, and clean SUMO loading do not prove timing, phasing, demand realism, or controller readiness.
 
