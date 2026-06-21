@@ -20,19 +20,21 @@ This project treats public OSM repositories as source-pattern evidence for Torii
 4. Add a pyrosm-style offline PBF path for large regions, historical extracts, and repeated city-scale builds.
 5. Add osm-to-xodr-style staged conversion records when the user needs OpenDRIVE, CARLA-style maps, or metadata post-processing.
 
-## Google Maps Baseline Rule
+## Region-Aware Baseline Rule
 
-Google Maps is the external reality baseline for OSM/SUMO network and TLS existence audit, but its time scope must match the user's modeling target.
+Use a region-aware external reality baseline for OSM/SUMO network and TLS existence audit. Google Maps can be the baseline where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions.
 
-Before using Google Maps to decide `keep_tls`, `remove_tls`, or `needs_review`, record whether the user wants the current map or a historical target date. If the user is modeling a historical network, do not treat the latest Google Maps view as decisive unless its imagery, Street View, or inventory evidence matches the study period.
+Before using any map source to decide `keep_tls`, `remove_tls`, or `needs_review`, record whether the user wants the current map or a historical target date. If the user is modeling a historical network, do not treat the latest public map view as decisive unless imagery, street-level imagery, or inventory evidence matches the study period.
 
 Minimum record:
 
 ```text
-map_baseline_source: Google Maps
+map_baseline_source:
+regional_baseline_source:
+coordinate_system: WGS84 | GCJ-02 | BD-09 | unknown
 map_temporal_scope: current | historical | unspecified
 map_target_date:
-google_maps_url:
+map_review_url:
 audit_status:
 action:
 time_scope_residual_risk:

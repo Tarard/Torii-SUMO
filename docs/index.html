@@ -564,7 +564,7 @@
       <ul class="pain-grid">
         <li data-i18n="painOne">OSM extracts need tiling, retry, deduplication, and road-class filtering.</li>
         <li data-i18n="painTwo">Generated SUMO TLS candidates need physical-intersection review.</li>
-        <li data-i18n="painThree">Google Maps remains the required baseline gate for current TLS review; OSM tags, Mapillary, KartaView, inventories, signal plans, and field photos strengthen the evidence.</li>
+        <li data-i18n="painThree">Reality baselines are region-aware: use Google Maps where appropriate, and Amap/Gaode, Baidu Maps, Tencent Maps, inventories, signal plans, or field photos for mainland China.</li>
         <li data-i18n="painFour">Routeability probes expose disconnected roads before result claims.</li>
         <li data-i18n="painFive">Controller work must be planned, tested, and interpreted against completion evidence.</li>
         <li data-i18n="painSix">Bad metrics are feedback for diagnosis, not the final optimization target.</li>
@@ -750,7 +750,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         painText: "Torii uses a closed loop: user intent, observed SUMO artifacts, feedback diagnosis, smallest model or code change, rerun, and evidence-bounded report.",
         painOne: "OSM extracts need tiling, retry, deduplication, and road-class filtering.",
         painTwo: "Generated SUMO TLS candidates need physical-intersection review.",
-        painThree: "Google Maps remains the required baseline gate for current TLS review; OSM tags, Mapillary, KartaView, inventories, signal plans, and field photos strengthen the evidence.",
+        painThree: "Reality baselines are region-aware: use Google Maps where appropriate, and Amap/Gaode, Baidu Maps, Tencent Maps, inventories, signal plans, or field photos for mainland China.",
         painFour: "Routeability probes expose disconnected roads before result claims.",
         painFive: "Controller work must be planned, tested, and interpreted against completion evidence.",
         painSix: "Bad metrics are feedback for diagnosis, not the final optimization target.",
@@ -843,7 +843,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         painText: "Torii 使用闭环：用户意图、SUMO 产物观察、反馈诊断、最小模型或代码修改、重跑，以及有证据边界的报告。",
         painOne: "OSM 数据需要分块、重试、去重和道路等级筛选。",
         painTwo: "自动生成的 SUMO TLS 候选点需要物理路口级审查。",
-        painThree: "Google Maps 仍然是当前 TLS 复核的必需基线 gate；OSM 标签、Mapillary、KartaView、官方清单、信号配时方案和现场照片用于增强证据。",
+        painThree: "现实校验基线必须按地区选择：中国大陆优先使用高德、百度地图、腾讯地图、官方清单、信号配时方案或现场照片，并记录坐标系假设。",
         painFour: "路线可达性 probes 在结果结论前暴露断路问题。",
         painFive: "控制器修改必须经过计划、测试，并结合完成度证据解释。",
         painSix: "坏指标是诊断反馈，不是最终优化目标本身。",
@@ -936,7 +936,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         painText: "Torii arbeitet als Regelkreis: Nutzerziel, beobachtete SUMO-Artefakte, Feedbackdiagnose, kleinste Modell- oder Codeaenderung, erneuter Lauf und evidenzgebundener Bericht.",
         painOne: "OSM-Exporte brauchen Kachelung, Retry, Deduplizierung und Strassenklassenfilter.",
         painTwo: "Generierte SUMO-TLS-Kandidaten brauchen Pruefung auf physische Kreuzungen.",
-        painThree: "Google Maps bleibt das erforderliche Basis-Gate fuer aktuelle TLS-Pruefung; OSM-Tags, Mapillary, KartaView, Inventare, Signalplaene und Feldfotos staerken die Evidenz.",
+        painThree: "Realitaetsbaselines sind regional: Google Maps wo passend; fuer Festlandchina Amap/Gaode, Baidu Maps, Tencent Maps, Inventare, Signalplaene oder Feldfotos.",
         painFour: "Erreichbarkeitsproben zeigen getrennte Strassen vor Ergebnisaussagen.",
         painFive: "Controller-Arbeit muss geplant, getestet und mit Abschlussnachweisen interpretiert werden.",
         painSix: "Schlechte Metriken sind Diagnosefeedback, nicht das endgueltige Optimierungsziel.",

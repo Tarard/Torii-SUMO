@@ -132,7 +132,9 @@ def test_skill_routes_osm_source_patterns_and_google_maps_temporal_baseline() ->
     assert "Netedit" in model_reference
     assert "SUMO-GUI" in model_reference
     assert "user's stated historical target controls the baseline" in model_reference
-    assert "Google Maps is the external reality baseline" in model_reference
+    assert "Region-Aware Reality Baseline" in model_reference
+    assert "Amap/Gaode" in model_reference
+    assert "WGS84/GCJ-02/BD-09" in model_reference
     assert "current map or a historical target date" in model_reference
     assert "map_temporal_scope" in model_reference
     assert "OSMnx" in source_reference
