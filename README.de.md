@@ -146,6 +146,7 @@ Niedrige Ankunftsrate kann auf getrennte Routen, Einfuegefehler, zu kurzen Horiz
 
 - SUMO-Netze koennen aus bbox oder Extracts gebaut werden; bei unbestaetigten Ortsnamen blockiert der Workflow. Vollautomatische Ortsnamen-Geokodierung bleibt ein Workflow-Pruefpunkt, kein stiller Konstruktionsschritt.
 - Strassenfilter, OSM-Deduplizierung, TLS-Kandidaten, mehrquellige TLS-Pruefartefakte, Konnektivitaetschecks, Erreichbarkeitsproben, Warnungen und Netedit-Startnachweise werden unterstuetzt; ein ganzes Stadtnetz wird nicht automatisch zertifiziert.
+- Wenn strikte Konnektivitaet scheitert, aber die groesste Passenger-Komponente dominiert, markiert Torii das Netz als `partial-main-component`: nutzbar fuer diagnostische Smoke Tests, nicht experimentbereit.
 - Google Maps bleibt das erforderliche Basis-Gate fuer aktuelle Strassen-/TLS-Bereinigung. OSM-Tags, Mapillary, KartaView, amtliche Inventare, Signalplaene und Feldfotos koennen die Pruefung staerken. Wenn der Nutzer ein historisches Netz verlangt, steuert sein historisches Ziel die Basis und braucht zeitlich passende Evidenz.
 - Controller-Implementierung kann anhand oeffentlicher Muster wie SUMO Lights geplant werden; Controller-Generierung und Controller-Log-Inspection sind Roadmap-Werkzeuge.
 - Evidenzbegrenzte Aussagen werden unterstuetzt; Experimentkorrektheit wird nicht zertifiziert.

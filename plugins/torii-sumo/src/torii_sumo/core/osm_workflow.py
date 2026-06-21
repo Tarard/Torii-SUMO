@@ -10,6 +10,9 @@ from .osm_network import audit_tls, build_osm_network, build_routeability_probe
 from .sumo_gui import launch_sumo_gui
 
 
+PARTIAL_MAIN_COMPONENT_RATIO = 0.98
+
+
 def _candidate_fields(place_report: Mapping[str, Any] | None) -> dict[str, Any]:
     if place_report is None:
         return {
@@ -70,6 +73,47 @@ def _gate_value(report: Mapping[str, Any]) -> str:
     if status == "blocked":
         return "blocked"
     return "fail"
+
+
+def _int_field(report: Mapping[str, Any], key: str) -> int:
+    try:
+        return int(report.get(key, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _connectivity_quality(connectivity_report: Mapping[str, Any]) -> dict[str, Any]:
+    passenger_count = _int_field(connectivity_report, "passenger_edge_count")
+    largest_count = _int_field(connectivity_report, "largest_component_edge_count")
+    ratio = round(largest_count / passenger_count, 3) if passenger_count else 0.0
+    strict_status = str(connectivity_report.get("connectivity_status", connectivity_report.get("status", "fail")))
+
+    if strict_status == "pass":
+        return {
+            "connectivity_gate": "pass",
+            "network_quality": "strict-connected",
+            "strict_connectivity_status": "pass",
+            "connectivity_main_component_ratio": ratio,
+            "quality_warning": "",
+        }
+    if passenger_count and ratio >= PARTIAL_MAIN_COMPONENT_RATIO:
+        return {
+            "connectivity_gate": "partial",
+            "network_quality": "partial-main-component",
+            "strict_connectivity_status": "fail",
+            "connectivity_main_component_ratio": ratio,
+            "quality_warning": (
+                f"strict connectivity failed; largest passenger component covers {ratio:.2%}; "
+                "demote to diagnostic-demo and do not treat as experiment-ready"
+            ),
+        }
+    return {
+        "connectivity_gate": "fail",
+        "network_quality": "construction-invalid",
+        "strict_connectivity_status": "fail",
+        "connectivity_main_component_ratio": ratio,
+        "quality_warning": "",
+    }
 
 
 def _tls_review_summary(tls_report: Mapping[str, Any]) -> dict[str, Any]:
@@ -198,6 +242,7 @@ def run_osm_cleanup_workflow(
         google_maps_target_date=map_target_date,
     )
     connectivity_report = connectivity_func(net_file)
+    connectivity_quality = _connectivity_quality(connectivity_report)
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -236,19 +281,21 @@ def run_osm_cleanup_workflow(
         warnings.extend(str(item) for item in child.get("warnings", []))
     if tls_summary["tls_review_complete"] == "no":
         warnings.append("TLS reality review still requires human Google Maps/current-or-user-targeted map inspection")
+    if connectivity_quality["quality_warning"]:
+        warnings.append(str(connectivity_quality["quality_warning"]))
 
     gate_status = {
         "area_confirmation": "pass",
         "network_build": _gate_value(build_report),
         "tls_reality_audit": _gate_value(tls_report),
-        "connectivity": _gate_value(connectivity_report),
+        "connectivity": str(connectivity_quality["connectivity_gate"]),
         "netedit": _gate_value(netedit_report),
         "sumo_gui": _gate_value(sumo_gui_report),
     }
     workflow_ok = (
         gate_status["network_build"] == "pass"
         and gate_status["tls_reality_audit"] == "pass"
-        and gate_status["connectivity"] == "pass"
+        and gate_status["connectivity"] in {"pass", "partial"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
     )
@@ -265,6 +312,10 @@ def run_osm_cleanup_workflow(
         "map_target_date": map_target_date or "",
         **tls_summary,
         "connectivity_status": connectivity_report.get("connectivity_status", connectivity_report.get("status", "fail")),
+        "strict_connectivity_status": connectivity_quality["strict_connectivity_status"],
+        "connectivity_main_component_ratio": connectivity_quality["connectivity_main_component_ratio"],
+        "network_quality": connectivity_quality["network_quality"],
+        "experiment_readiness": "no",
         "passenger_edge_count": connectivity_report.get("passenger_edge_count", 0),
         "passenger_component_count": connectivity_report.get("passenger_component_count", 0),
         "largest_component_edge_count": connectivity_report.get("largest_component_edge_count", 0),

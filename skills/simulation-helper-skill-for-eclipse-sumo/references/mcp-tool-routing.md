@@ -48,6 +48,7 @@ Examples:
 - Low arrived count can mean the horizon is too short, insertion failed, routes are disconnected, or a controller blocked movement.
 - High waiting time can mean demand is outside the intended scope, phase-lane mapping is wrong, TLS were joined incorrectly, or the controller policy is unsuitable.
 - Teleports indicate construction or control feedback requiring lane, route, capacity, conflict, and controller checks.
+- `partial-main-component` means the main passenger component is dominant but strict connectivity failed; treat it as diagnostic smoke-test material, not an experiment-ready network.
 - A controller metric improvement with worse completion is not success; surface the completion regression first.
 
 ## MCP Tool Use Record

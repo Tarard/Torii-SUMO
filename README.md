@@ -125,6 +125,7 @@ Torii is useful today, but it is not a magic SUMO certifier.
 
 - It can build bounded OSM-to-SUMO networks from confirmed areas or extracts.
 - It can produce diagnostic evidence for connectivity, routeability, outputs, warnings, TLS candidates, and completion.
+- If strict connectivity fails but the main passenger component is dominant, Torii labels the network `partial-main-component`: usable for diagnostic smoke tests, not experiment-ready.
 - It does not automatically certify full city networks, traffic-light timing/phasing, demand realism, controller correctness, or formal experiment validity.
 - Google Maps remains the required baseline gate for current road/TLS cleanup. OSM tags, Mapillary, KartaView, official inventories, signal plans, and field photos can strengthen the review, but they do not automatically certify signal timing, phasing, or controller readiness.
 

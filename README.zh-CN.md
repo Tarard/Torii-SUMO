@@ -146,6 +146,7 @@ Torii 不把“指标最优”当作唯一目标。它会先问：
 
 - 可以构建 bbox/extract 输入的 SUMO 路网，也可以在只有地名且区域未确认时阻塞；完整自动地名解析仍是工作流检查点，不是静默构网步骤。
 - 可以做道路筛选、OSM 去重、TLS 候选、多源 TLS 复核材料、连接性检查、路线可达性、warning 观察和 Netedit 打开证据；不能声称自动认证整个城市路网。
+- 如果严格连通性失败但 passenger 主 component 占绝大多数，Torii 会标为 `partial-main-component`：可以做诊断 smoke test，不能当作实验就绪路网。
 - Google Maps 仍然是当前路网/TLS 清洗的必需基线 gate。OSM 标签、Mapillary、KartaView、官方清单、信号方案和现场照片可以增强复核；如果用户要求历史路网，则以用户声明的历史目标为准，并需要时间对齐的证据。
 - 可以借助 SUMO Lights 等公开模式指导控制器实现；完整控制器生成和 controller-log inspection 仍是后续工具。
 - 可以支持有证据边界的结论；不能认证实验一定正确。
