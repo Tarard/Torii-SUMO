@@ -7,6 +7,7 @@ from .osm_area import osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .netedit import launch_netedit
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe
+from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
 
 
@@ -150,12 +151,17 @@ def run_osm_cleanup_workflow(
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
     launch_sumo_gui_after_build: bool = True,
+    run_routeability_audit_after_build: bool = False,
+    routeability_vehicle_count: int = 100,
+    routeability_initial_end: int = 300,
+    routeability_max_end: int = 2400,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
     connectivity_func: Callable[[Path], dict[str, Any]] = summarize_passenger_connectivity,
     connected_core_func: Callable[..., dict[str, Any]] = extract_largest_passenger_component_core,
     routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
+    routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     sumo_gui_func: Callable[[Path, Path, str], dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
@@ -273,6 +279,17 @@ def run_osm_cleanup_workflow(
             prefix=f"{prefix}_routeability",
             key_edge_queries=key_edge_queries,
         )
+    routeability_audit_report = None
+    if run_routeability_audit_after_build:
+        routeability_audit_report = routeability_audit_func(
+            net_file=net_file,
+            output_dir=output_dir / "routeability_audit",
+            prefix=f"{prefix}_routeability_audit",
+            vehicle_count=routeability_vehicle_count,
+            initial_end=routeability_initial_end,
+            max_end=routeability_max_end,
+            timeout_seconds=timeout_seconds,
+        )
     if launch_netedit_after_build:
         netedit_report = netedit_func(net_file)
     else:
@@ -306,6 +323,7 @@ def run_osm_cleanup_workflow(
         connected_core_report or {},
         connected_core_connectivity_report or {},
         connectivity_report,
+        routeability_audit_report or {},
         netedit_report,
         sumo_gui_report,
     ):
@@ -324,10 +342,13 @@ def run_osm_cleanup_workflow(
         "netedit": _gate_value(netedit_report),
         "sumo_gui": _gate_value(sumo_gui_report),
     }
+    if routeability_audit_report is not None:
+        gate_status["routeability_audit"] = _gate_value(routeability_audit_report)
     workflow_ok = (
         gate_status["network_build"] == "pass"
         and gate_status["tls_reality_audit"] == "pass"
         and gate_status["connectivity"] in {"pass", "partial"}
+        and gate_status.get("routeability_audit", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
     )
@@ -361,6 +382,8 @@ def run_osm_cleanup_workflow(
         "routeability_probe_file": "" if routeability_report is None else str(routeability_report.get("sumocfg_file", "")),
         "missing_key_edges": [] if routeability_report is None else routeability_report.get("missing_key_edges", []),
         "routeability_probe_status": "skipped" if routeability_report is None else routeability_report.get("status", "fail"),
+        "routeability_audit_status": "skipped" if routeability_audit_report is None else routeability_audit_report.get("routeability_status", routeability_audit_report.get("status", "fail")),
+        "routeability_audit_report_file": "" if routeability_audit_report is None else str(routeability_audit_report.get("report_file", "")),
         "netedit_status": netedit_report.get("netedit_status", "failed"),
         "netedit_binary": netedit_report.get("netedit_binary"),
         "netedit_process_id": netedit_report.get("netedit_process_id"),
@@ -381,6 +404,7 @@ def run_osm_cleanup_workflow(
         "connected_core": connected_core_report or {},
         "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
+        "routeability_audit": routeability_audit_report or {},
         "netedit": netedit_report,
         "sumo_gui": sumo_gui_report,
         "gate_status": gate_status,

@@ -1050,6 +1050,108 @@ def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path
     assert "extracted largest passenger component as connected simulation core" in report["warnings"]
 
 
+def test_osm_cleanup_workflow_runs_routeability_audit_on_connected_core(tmp_path: Path) -> None:
+    raw_net = tmp_path / "sumo" / "raw.net.xml"
+    core_net = tmp_path / "connected_core" / "demo_connected_core.net.xml"
+    filtered_osm = tmp_path / "osm" / "demo_filtered.osm.xml.gz"
+    audited: dict[str, Path] = {}
+
+    def fake_build(**kwargs):
+        raw_net.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        raw_net.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(raw_net),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    def fake_connectivity(net_path):
+        if net_path == raw_net:
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "connectivity_status": "fail",
+                "passenger_edge_count": 10,
+                "passenger_component_count": 2,
+                "largest_component_edge_count": 9,
+                "warnings": ["passenger network has 2 disconnected components"],
+            }
+        assert net_path == core_net
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 9,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 9,
+            "warnings": [],
+        }
+
+    def fake_connected_core(net_path, **kwargs):
+        assert net_path == raw_net
+        core_net.parent.mkdir(parents=True, exist_ok=True)
+        core_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connected_core_file": str(core_net),
+            "warnings": [],
+        }
+
+    def fake_routeability_audit(**kwargs):
+        audited["net_file"] = kwargs["net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "report_file": str(tmp_path / "routeability_audit.json"),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="demo",
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=fake_connectivity,
+        connected_core_func=fake_connected_core,
+        routeability_audit_func=fake_routeability_audit,
+        run_routeability_audit_after_build=True,
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+    )
+
+    assert audited["net_file"] == core_net
+    assert report["status"] == "pass"
+    assert report["gate_status"]["routeability_audit"] == "pass"
+    assert report["routeability_audit_status"] == "pass"
+
+
 def test_osm_cleanup_workflow_demotes_partial_connectivity_to_diagnostic_demo(tmp_path: Path) -> None:
     net_file = tmp_path / "sumo" / "partial.net.xml"
     filtered_osm = tmp_path / "osm" / "partial_filtered.osm.xml.gz"
