@@ -59,4 +59,22 @@ def test_osm_source_patterns_doc_tracks_external_projects_without_vendoring() ->
 
 
 def test_internal_superpowers_plans_are_not_public_release_content() -> None:
-    assert not (ROOT / "docs" / "superpowers").exists()
+    public_files = [
+        ROOT / "README.md",
+        ROOT / "README.zh-CN.md",
+        ROOT / "README.de.md",
+        ROOT / "docs" / "index.html",
+        ROOT / "docs" / "release" / "mailing-list-announcement.md",
+        ROOT / "docs" / "release" / "linkedin-posts.md",
+    ]
+
+    for path in public_files:
+        body = path.read_text(encoding="utf-8")
+        assert "docs/superpowers" not in body
+        assert "superpowers/plans" not in body
+        assert "superpowers/specs" not in body
+
+    manifest = (ROOT / "docs" / "release" / "public-repo-manifest.md").read_text(encoding="utf-8")
+    assert "docs/superpowers/" in manifest
+    assert "docs/superpowers/plans/" not in manifest
+    assert "docs/superpowers/specs/" not in manifest
