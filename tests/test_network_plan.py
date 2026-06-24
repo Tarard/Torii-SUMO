@@ -74,18 +74,25 @@ def test_network_plan_derives_reference_policy_from_reference_net(tmp_path: Path
     assert plan["reference_net_file"] == str(reference_net_file)
     assert plan["network_detail_target"] == "reference_matched"
     assert plan["primary_network_layer"] == "passenger_vehicle"
+    assert plan["default_routeability_layer"] == "vehicle_core"
+    assert plan["default_netedit_comparison_layer"] == "reference_visual_detail"
+    assert plan["vehicle_core_highway_classes"] == plan["highway_classes"]
     assert "service" in plan["highway_classes"]
     assert "primary" in plan["highway_classes"]
     assert "residential" in plan["highway_classes"]
     assert "cycleway" not in plan["highway_classes"]
     assert "footway" not in plan["highway_classes"]
     assert "path" not in plan["highway_classes"]
+    assert {"cycleway", "footway", "path"} <= set(plan["reference_visual_detail_highway_classes"])
+    assert {"cycleway", "footway", "path"} <= set(plan["reference_visual_detail_only_highway_classes"])
     assert {"passenger", "bicycle", "pedestrian", "bus"} <= set(plan["movement_layers"])
     assert set(plan["auxiliary_modal_layers"]) == {"bicycle", "pedestrian", "bus"}
     assert plan["reference_policy"]["reference_policy_status"] == "analyzed"
     assert plan["reference_policy"]["passenger_edge_type_counts"]["highway.service"] == 2
+    assert plan["reference_policy"]["visual_detail_edge_type_counts"]["highway.footway"] == 1
     assert plan["service_passenger_policy"] == "reference_match"
     assert "routeability_audit" in plan["validation_gates"]
+    assert "scope_matched_reference_comparison" in plan["validation_gates"]
 
 
 def test_apply_service_passenger_permissions_adds_passenger_to_service_lanes(tmp_path: Path) -> None:
@@ -120,13 +127,20 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     _write_reference_net(reference_net_file)
     net_file = tmp_path / "sumo" / "reference-matched.net.xml"
     filtered_osm = tmp_path / "osm" / "reference-matched_filtered.osm.xml.gz"
-    captured: dict[str, object] = {}
+    build_calls: list[dict[str, object]] = []
 
     def fake_build(**kwargs):
-        captured["allowed_highways"] = kwargs["allowed_highways"]
-        net_file.parent.mkdir(parents=True, exist_ok=True)
+        build_calls.append(
+            {
+                "prefix": kwargs["prefix"],
+                "allowed_highways": set(kwargs["allowed_highways"]),
+                "source_osm_path": kwargs.get("source_osm_path"),
+            }
+        )
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
         filtered_osm.parent.mkdir(parents=True, exist_ok=True)
-        net_file.write_text(
+        current_net_file.write_text(
             """<net>
     <edge id="service_a" type="highway.service">
         <lane id="service_a_0" index="0" allow="bicycle delivery pedestrian" speed="5.0" length="25.0"/>
@@ -139,7 +153,7 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "bbox": kwargs["bbox"],
-            "net_file": str(net_file),
+            "net_file": str(current_net_file),
             "filtered_osm_file": str(filtered_osm),
             "source_osm_file": str(filtered_osm),
             "road_classes": sorted(kwargs["allowed_highways"]),
@@ -196,15 +210,26 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
         },
     )
 
+    visual_detail_net_file = tmp_path / "sumo" / "reference-matched_reference_visual_detail.net.xml"
     service_lane = ET.parse(net_file).getroot().find("./edge[@id='service_a']/lane")
+    visual_service_lane = ET.parse(visual_detail_net_file).getroot().find("./edge[@id='service_a']/lane")
     assert report["status"] == "pass"
     assert report["network_profile"] == "reference_matched"
     assert report["network_plan_status"] == "inferred_from_reference_policy"
     assert report["reference_net_file"] == str(reference_net_file)
     assert report["service_passenger_policy"] == "reference_match"
-    assert "service" in captured["allowed_highways"]
-    assert "cycleway" not in captured["allowed_highways"]
-    assert "footway" not in captured["allowed_highways"]
-    assert "path" not in captured["allowed_highways"]
+    assert len(build_calls) == 2
+    assert build_calls[0]["prefix"] == "reference-matched"
+    assert build_calls[1]["prefix"] == "reference-matched_reference_visual_detail"
+    assert "service" in build_calls[0]["allowed_highways"]
+    assert "cycleway" not in build_calls[0]["allowed_highways"]
+    assert "footway" not in build_calls[0]["allowed_highways"]
+    assert "path" not in build_calls[0]["allowed_highways"]
+    assert {"cycleway", "footway", "path"} <= build_calls[1]["allowed_highways"]
+    assert build_calls[1]["source_osm_path"] == filtered_osm
     assert "passenger" in service_lane.attrib["allow"].split()
+    assert "passenger" in visual_service_lane.attrib["allow"].split()
     assert report["service_passenger_permissions"]["changed_lane_count"] == 1
+    assert report["reference_visual_detail_status"] == "built"
+    assert report["reference_visual_detail_net_file"] == str(visual_detail_net_file)
+    assert report["reference_visual_detail_build"]["road_classes"] == sorted(build_calls[1]["allowed_highways"])

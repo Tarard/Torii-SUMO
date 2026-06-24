@@ -74,6 +74,8 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
     service_edge_count = 0
     service_passenger_edge_count = 0
     selected_highways: set[str] = set()
+    visual_detail_highways: set[str] = set()
+    visual_detail_edge_type_counts: Counter[str] = Counter()
     auxiliary_highways: dict[str, set[str]] = defaultdict(set)
 
     root = ET.parse(net_file).getroot()
@@ -86,6 +88,9 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
             continue
 
         edge_type_counts[edge_type] += 1
+        if edge_type.startswith("highway."):
+            visual_detail_highways.add(base_class)
+            visual_detail_edge_type_counts[edge_type] += 1
         allows_passenger = _edge_allows(edge, "passenger", base_class=base_class)
         allows_bicycle = _edge_allows(edge, "bicycle", base_class=base_class)
         allows_pedestrian = _edge_allows(edge, "pedestrian", base_class=base_class)
@@ -128,6 +133,9 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
         "reference_net_file": str(net_file),
         "primary_network_layer": "passenger_vehicle",
         "selected_highway_classes": sorted(selected_highways),
+        "vehicle_core_highway_classes": sorted(selected_highways),
+        "visual_detail_highway_classes": sorted(visual_detail_highways),
+        "visual_detail_only_highway_classes": sorted(visual_detail_highways - selected_highways),
         "auxiliary_modal_layers": auxiliary_layers,
         "auxiliary_modal_highway_classes": {
             layer: sorted(values) for layer, values in sorted(auxiliary_highways.items())
@@ -138,6 +146,7 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
         "service_passenger_edge_count": service_passenger_edge_count,
         "service_passenger_ratio": round(service_ratio, 3),
         "edge_type_counts": _sorted_counter(edge_type_counts),
+        "visual_detail_edge_type_counts": _sorted_counter(visual_detail_edge_type_counts),
         "passenger_edge_type_counts": _sorted_counter(passenger_edge_type_counts),
         "bicycle_edge_type_counts": _sorted_counter(bicycle_edge_type_counts),
         "pedestrian_edge_type_counts": _sorted_counter(pedestrian_edge_type_counts),
@@ -162,6 +171,10 @@ def load_reference_policy_report(report: str | Path | Mapping[str, Any]) -> dict
             payload = json.loads(report_text)
 
     selected = payload.get("selected_highway_classes") or payload.get("highway_classes") or []
+    vehicle_core = payload.get("vehicle_core_highway_classes") or selected
+    visual_detail = payload.get("visual_detail_highway_classes") or payload.get("reference_visual_detail_highway_classes") or selected
+    visual_detail_set = {str(item) for item in visual_detail}
+    vehicle_core_set = {str(item) for item in vehicle_core}
     movement_layers = payload.get("movement_layers") or ["passenger", *payload.get("auxiliary_modal_layers", [])]
     return {
         "status": str(payload.get("status", "pass")),
@@ -170,11 +183,15 @@ def load_reference_policy_report(report: str | Path | Mapping[str, Any]) -> dict
         "reference_net_file": str(payload.get("reference_net_file", "")),
         "primary_network_layer": str(payload.get("primary_network_layer", "passenger_vehicle")),
         "selected_highway_classes": sorted(str(item) for item in selected),
+        "vehicle_core_highway_classes": sorted(vehicle_core_set),
+        "visual_detail_highway_classes": sorted(visual_detail_set),
+        "visual_detail_only_highway_classes": sorted(visual_detail_set - vehicle_core_set),
         "auxiliary_modal_layers": sorted(str(item) for item in payload.get("auxiliary_modal_layers", [])),
         "auxiliary_modal_highway_classes": dict(payload.get("auxiliary_modal_highway_classes", {})),
         "movement_layers": sorted(str(item) for item in movement_layers),
         "service_passenger_policy": str(payload.get("service_passenger_policy", "sumo_default")),
         "edge_type_counts": dict(payload.get("edge_type_counts", {})),
+        "visual_detail_edge_type_counts": dict(payload.get("visual_detail_edge_type_counts", {})),
         "passenger_edge_type_counts": dict(payload.get("passenger_edge_type_counts", {})),
         "bicycle_edge_type_counts": dict(payload.get("bicycle_edge_type_counts", {})),
         "pedestrian_edge_type_counts": dict(payload.get("pedestrian_edge_type_counts", {})),
