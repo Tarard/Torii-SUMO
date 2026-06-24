@@ -40,7 +40,7 @@ def test_plugin_manifest_declares_skill_and_mcp_companion() -> None:
     manifest = load_json(PLUGIN / ".codex-plugin" / "plugin.json")
 
     assert manifest["name"] == "torii-sumo"
-    assert manifest["version"] == "1.0.0"
+    assert manifest["version"] == "1.0.2"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"
     assert manifest["author"]["name"] == "Torii contributors"
