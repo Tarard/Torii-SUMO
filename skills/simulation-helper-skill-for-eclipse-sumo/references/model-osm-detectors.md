@@ -121,7 +121,7 @@ Hard gates:
 
 1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, and preview checkpoint. In one-sentence diagnostic mode, proceed when the candidate is clear and record it as an assumption; block only when the area is ambiguous, missing, or unsafe.
 2. Before construction, resolve or infer a network plan. If no user intent or reference target identifies the traffic layers, block on the network-plan question instead of silently choosing all road types.
-3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. If no explicit bbox or source OSM extract was supplied, derive the construction bbox from the reference `.net.xml` geometry rather than `origBoundary`. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them. After construction, run reference join and reference scope audits on the candidate `reference_visual_detail` network, and create only non-destructive aggregation or pruning review variants.
+3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. If no explicit bbox or source OSM extract was supplied, derive the construction bbox from the reference `.net.xml` geometry rather than `origBoundary`. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them. After construction, run reference join, hierarchy, and scope audits on the candidate `reference_visual_detail` network, and create only non-destructive aggregation or pruning review variants.
 4. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
 5. When the TLS audit reports multiple SUMO TLS nodes for one physical cluster, create a separate TLS aggregation review variant with one real SUMO junction selected per physical cluster. Use the physical cluster count and aggregated `tlLogic` count as the comparison signal; treat raw `traffic_light` junction count as diagnostic noise.
 6. For current-network modeling, treat Google Maps TLS review as a hard gate. Any unresolved TLS candidate keeps the workflow claim at `construction-invalid` even if construction, routeability, SUMO-GUI, and Netedit artifacts were produced. Regional maps, official inventories, signal plans, or field photos may supplement Google Maps where coordinate systems differ; record WGS84/GCJ-02/BD-09 assumptions when comparing coordinates. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
@@ -252,6 +252,17 @@ learned_rule:
 Use source-node matches to learn general aggregation rules from the reference network. For example, if the reference joins two to four source OSM nodes and the candidate contains short internal edges between the same ids, that case is a `tum_like_join_candidate` regardless of city name. Keep city-specific examples as evidence, not hardcoded plugin logic.
 
 Before pruning a denser candidate, run a reusable reference scope audit. It compares reference and candidate `highway.*` type counts, then flags only absent-in-reference or overrepresented short dead-end detail fragments as pruning candidates. This is a review scorer, not a city-specific rule and not an automatic deletion policy.
+
+Before changing high-hierarchy roads, run a reusable reference hierarchy audit. It should classify high-road differences into `matched_but_oversplit`, `out_of_reference_scope`, `type_hierarchy_mismatch`, and `link_or_slip_lane`. Do not prune, merge, or downgrade primary/secondary/tertiary/motorway/trunk roads from type counts alone.
+
+At the end of reference-matched cleanup, report the high-road hierarchy summary to the user:
+
+```text
+reference_hierarchy_status:
+reference_hierarchy_issue_count:
+reference_hierarchy_decision_counts:
+reference_hierarchy_cases_file:
+```
 
 At the end of reference-matched cleanup, report the scope summary to the user:
 

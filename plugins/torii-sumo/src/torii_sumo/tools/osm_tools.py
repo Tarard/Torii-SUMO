@@ -20,6 +20,7 @@ from torii_sumo.core.road_scope import (
     resolve_highway_classes as resolve_highway_classes_from_scope,
 )
 from torii_sumo.core.routeability_audit import run_routeability_audit
+from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 from torii_sumo.core.reference_scope import audit_reference_scope, build_scope_pruning_variant
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
@@ -196,6 +197,26 @@ def sumo_network_reference_join_audit(
     )
 
 
+def sumo_network_reference_hierarchy_audit(
+    reference_net_file: str,
+    candidate_net_file: str,
+    output_dir: str,
+    prefix: str = "reference_hierarchy_audit",
+    match_distance_m: float = 35.0,
+    oversplit_length_ratio: float = 0.6,
+    min_extra_edges: int = 10,
+) -> dict[str, Any]:
+    return audit_reference_hierarchy(
+        reference_net_file=Path(reference_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        match_distance_m=match_distance_m,
+        oversplit_length_ratio=oversplit_length_ratio,
+        min_extra_edges=min_extra_edges,
+    )
+
+
 def sumo_network_junction_aggregation_variant(
     net_file: str,
     output_dir: str,
@@ -329,6 +350,7 @@ def sumo_osm_cleanup_workflow(
     run_tls_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
+    run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = True,
     key_edge_queries: list[dict[str, Any]] | None = None,
@@ -367,6 +389,7 @@ def sumo_osm_cleanup_workflow(
         run_tls_aggregation_after_build=run_tls_aggregation_after_build,
         run_reference_join_audit_after_build=run_reference_join_audit_after_build,
         run_reference_join_aggregation_after_build=run_reference_join_aggregation_after_build,
+        run_reference_hierarchy_audit_after_build=run_reference_hierarchy_audit_after_build,
         run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
         run_scope_pruning_after_build=run_scope_pruning_after_build,
         key_edge_queries=key_edge_queries,

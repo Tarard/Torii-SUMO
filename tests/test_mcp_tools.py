@@ -4,6 +4,7 @@ from pathlib import Path
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
 from torii_sumo.tools.osm_tools import (
     sumo_network_junction_aggregation_variant,
+    sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
     sumo_network_routeability_audit,
@@ -187,6 +188,47 @@ def test_sumo_network_reference_join_audit_tool_returns_json_compatible_report(m
 
     assert report["status"] == "pass"
     assert report["matched_case_count"] == 2
+    json.dumps(report)
+
+
+def test_sumo_network_reference_hierarchy_audit_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    reference_net_file = tmp_path / "reference.net.xml"
+    candidate_net_file = tmp_path / "candidate.net.xml"
+    reference_net_file.write_text("<net/>", encoding="utf-8")
+    candidate_net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_audit(**kwargs):
+        assert kwargs["reference_net_file"] == reference_net_file
+        assert kwargs["candidate_net_file"] == candidate_net_file
+        assert kwargs["match_distance_m"] == 25.0
+        assert kwargs["oversplit_length_ratio"] == 0.4
+        assert kwargs["min_extra_edges"] == 2
+        return {
+            "status": "blocked",
+            "claim_status": "blocked",
+            "reference_hierarchy_status": "needs_review",
+            "high_hierarchy_issue_count": 3,
+            "cases_file": str(tmp_path / "cases.csv"),
+        }
+
+    monkeypatch.setattr(osm_tools, "audit_reference_hierarchy", fake_audit)
+
+    report = sumo_network_reference_hierarchy_audit(
+        reference_net_file=str(reference_net_file),
+        candidate_net_file=str(candidate_net_file),
+        output_dir=str(tmp_path / "hierarchy"),
+        match_distance_m=25.0,
+        oversplit_length_ratio=0.4,
+        min_extra_edges=2,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["reference_hierarchy_status"] == "needs_review"
+    assert report["high_hierarchy_issue_count"] == 3
     json.dumps(report)
 
 
