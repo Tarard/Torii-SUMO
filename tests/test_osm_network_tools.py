@@ -24,6 +24,7 @@ from torii_sumo.core.osm_network import (
 )
 from torii_sumo.core.osm_area import resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network
 
 
@@ -95,6 +96,64 @@ def test_resolve_osm_place_parses_first_nominatim_candidate() -> None:
     assert report["candidate_lon"] == "13.7381876"
     assert "openstreetmap.org/search" in report["osm_preview_url"]
     assert report["candidate_osm_url"] == "https://www.openstreetmap.org/relation/192900"
+
+
+def test_topology_audit_flags_dense_junction_clusters_within_radius(tmp_path: Path) -> None:
+    net_file = tmp_path / "fragmented.net.xml"
+    net_file.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<net>
+  <junction id="j1" x="0.0" y="0.0" type="traffic_light"/>
+  <junction id="j2" x="12.0" y="0.0" type="priority"/>
+  <junction id="j3" x="25.0" y="3.0" type="traffic_light"/>
+  <junction id="j4" x="120.0" y="120.0" type="priority"/>
+  <junction id=":j1_0" x="3.0" y="3.0" type="internal"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = audit_topology_fragmentation(
+        net_file=net_file,
+        output_dir=tmp_path / "topology",
+        prefix="demo",
+        cluster_radius_m=30.0,
+        min_cluster_nodes=3,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    assert report["topology_fragmentation_status"] == "needs_review"
+    assert report["junction_count"] == 4
+    assert report["suspicious_cluster_count"] == 1
+    assert report["max_cluster_node_count"] == 3
+    assert set(report["suspicious_clusters"][0]["node_ids"]) == {"j1", "j2", "j3"}
+    assert Path(report["clusters_file"]).is_file()
+
+
+def test_topology_audit_passes_sparse_junctions(tmp_path: Path) -> None:
+    net_file = tmp_path / "sparse.net.xml"
+    net_file.write_text(
+        """<net>
+  <junction id="a" x="0.0" y="0.0" type="priority"/>
+  <junction id="b" x="100.0" y="0.0" type="priority"/>
+  <junction id="c" x="0.0" y="100.0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = audit_topology_fragmentation(
+        net_file=net_file,
+        output_dir=tmp_path / "topology",
+        cluster_radius_m=30.0,
+        min_cluster_nodes=3,
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["topology_fragmentation_status"] == "pass"
+    assert report["suspicious_cluster_count"] == 0
 
 
 def test_sumo_osm_resolve_place_tool_returns_candidate(monkeypatch) -> None:
@@ -959,6 +1018,7 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
         "network_build": "pass",
         "tls_reality_audit": "pass",
         "connectivity": "pass",
+        "topology_audit": "pass",
         "netedit": "pass",
         "sumo_gui": "pass",
     }
@@ -1042,6 +1102,92 @@ def test_osm_cleanup_workflow_runs_routeability_audit_by_default(tmp_path: Path)
     assert audited["net_file"] == net_file
     assert report["gate_status"]["routeability_audit"] == "pass"
     assert report["routeability_audit_status"] == "pass"
+
+
+def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "fragmented.net.xml"
+    filtered_osm = tmp_path / "osm" / "fragmented_filtered.osm.xml.gz"
+    audited: dict[str, Path] = {}
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    def fake_topology_audit(**kwargs):
+        audited["net_file"] = kwargs["net_file"]
+        return {
+            "status": "blocked",
+            "claim_status": "blocked",
+            "topology_fragmentation_status": "needs_review",
+            "suspicious_cluster_count": 1,
+            "max_cluster_node_count": 3,
+            "clusters_file": str(tmp_path / "topology.csv"),
+            "suspicious_clusters": [{"cluster_id": "C001", "node_ids": ["j1", "j2", "j3"]}],
+            "warnings": ["topology audit found 1 suspicious dense junction cluster"],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="fragmented",
+        highway_classes={"primary"},
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 3,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 3,
+            "warnings": [],
+        },
+        topology_audit_func=fake_topology_audit,
+        routeability_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+    )
+
+    assert audited["net_file"] == net_file
+    assert report["status"] == "fail"
+    assert report["gate_status"]["topology_audit"] == "blocked"
+    assert report["topology_fragmentation_status"] == "needs_review"
+    assert report["suspicious_topology_cluster_count"] == 1
+    assert report["topology_audit"]["suspicious_clusters"][0]["node_ids"] == ["j1", "j2", "j3"]
 
 
 def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path: Path) -> None:

@@ -14,6 +14,7 @@ from .road_scope import (
 )
 from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
+from .topology_audit import audit_topology_fragmentation
 
 
 PARTIAL_MAIN_COMPONENT_RATIO = 0.98
@@ -207,6 +208,9 @@ def run_osm_cleanup_workflow(
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
     launch_sumo_gui_after_build: bool = True,
+    run_topology_audit_after_build: bool = True,
+    topology_cluster_radius_m: float = 30.0,
+    topology_min_cluster_nodes: int = 3,
     run_routeability_audit_after_build: bool = True,
     routeability_vehicle_count: int = 100,
     routeability_initial_end: int = 300,
@@ -217,6 +221,7 @@ def run_osm_cleanup_workflow(
     connectivity_func: Callable[[Path], dict[str, Any]] = summarize_passenger_connectivity,
     connected_core_func: Callable[..., dict[str, Any]] = extract_largest_passenger_component_core,
     routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
+    topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     sumo_gui_func: Callable[[Path, Path, str], dict[str, Any]] = launch_sumo_gui,
@@ -349,6 +354,15 @@ def run_osm_cleanup_workflow(
                 connectivity_report = connected_core_connectivity_report
                 connectivity_quality = dict(connected_core_quality)
                 connectivity_quality["network_quality"] = "connected-core"
+    topology_audit_report = None
+    if run_topology_audit_after_build:
+        topology_audit_report = topology_audit_func(
+            net_file=net_file,
+            output_dir=output_dir / "topology_audit",
+            prefix=f"{prefix}_topology_audit",
+            cluster_radius_m=topology_cluster_radius_m,
+            min_cluster_nodes=topology_min_cluster_nodes,
+        )
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -401,6 +415,7 @@ def run_osm_cleanup_workflow(
         connected_core_report or {},
         connected_core_connectivity_report or {},
         connectivity_report,
+        topology_audit_report or {},
         routeability_audit_report or {},
         netedit_report,
         sumo_gui_report,
@@ -410,6 +425,8 @@ def run_osm_cleanup_workflow(
         warnings.append("TLS reality review still requires human Google Maps/current-or-user-targeted map inspection")
     if connectivity_quality["quality_warning"]:
         warnings.append(str(connectivity_quality["quality_warning"]))
+    if topology_audit_report is not None and topology_audit_report.get("topology_fragmentation_status") == "needs_review":
+        warnings.append("topology fragmentation audit needs human review before treating the network as clean")
     warnings = list(dict.fromkeys(warnings))
 
     gate_status = {
@@ -421,12 +438,15 @@ def run_osm_cleanup_workflow(
         "netedit": _gate_value(netedit_report),
         "sumo_gui": _gate_value(sumo_gui_report),
     }
+    if topology_audit_report is not None:
+        gate_status["topology_audit"] = _gate_value(topology_audit_report)
     if routeability_audit_report is not None:
         gate_status["routeability_audit"] = _gate_value(routeability_audit_report)
     workflow_ok = (
         gate_status["network_build"] == "pass"
         and gate_status["tls_reality_audit"] == "pass"
         and gate_status["connectivity"] in {"pass", "partial"}
+        and gate_status.get("topology_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("routeability_audit", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
@@ -466,6 +486,10 @@ def run_osm_cleanup_workflow(
         "raw_passenger_component_count": raw_connectivity_report.get("passenger_component_count", 0),
         "raw_largest_component_edge_count": raw_connectivity_report.get("largest_component_edge_count", 0),
         "raw_isolated_passenger_edge_count": raw_connectivity_report.get("isolated_passenger_edge_count", 0),
+        "topology_fragmentation_status": "skipped" if topology_audit_report is None else topology_audit_report.get("topology_fragmentation_status", topology_audit_report.get("status", "fail")),
+        "suspicious_topology_cluster_count": 0 if topology_audit_report is None else topology_audit_report.get("suspicious_cluster_count", 0),
+        "max_topology_cluster_node_count": 0 if topology_audit_report is None else topology_audit_report.get("max_cluster_node_count", 0),
+        "topology_audit_clusters_file": "" if topology_audit_report is None else str(topology_audit_report.get("clusters_file", "")),
         "routeability_probe_file": "" if routeability_report is None else str(routeability_report.get("sumocfg_file", "")),
         "missing_key_edges": [] if routeability_report is None else routeability_report.get("missing_key_edges", []),
         "routeability_probe_status": "skipped" if routeability_report is None else routeability_report.get("status", "fail"),
@@ -491,6 +515,7 @@ def run_osm_cleanup_workflow(
         "connected_core": connected_core_report or {},
         "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
+        "topology_audit": topology_audit_report or {},
         "routeability_audit": routeability_audit_report or {},
         "netedit": netedit_report,
         "sumo_gui": sumo_gui_report,
