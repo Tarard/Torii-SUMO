@@ -64,9 +64,8 @@ This reference can be used from either the standalone public skill repository or
 - README includes `## No Warranty or Certification`.
 - README includes suggested GitHub topics:
   `sumo`, `eclipse-sumo`, `traci`, `traffic-simulation`, `traffic-signal-control`, `transportation`, `intelligent-transportation-systems`, `max-pressure-control`, `reproducibility`, `research-software`, `agent-skills`, `codex`, `claude`.
-- `examples/01_fixed_time_audit/` contains `task.md`, `expected_audit_report.md`, `bad_case/`, and `fixed_case/`.
-- `examples/02_max_pressure_audit/` contains `task.md`, `expected_audit_report.md`, `bad_case/`, and `fixed_case/`.
-- `examples/03_data_informed_signal_control_audit/` contains `task.md`, `expected_audit_report.md`, `bad_case/`, and `fixed_case/`.
+- `examples/01_signal_control_audit/` contains `task.md`, `README.md`, and the `fixed_time/`, `max_pressure/`, and `data_informed/` subcases.
+- `examples/04_one_prompt_osm_network/` contains the Ingolstadt OSM-to-SUMO prompt plus a public TUM-reference comparison summary.
 - `docs/common-sumo-signal-control-failures.md` exists and emphasizes practical failure modes.
 - `docs/release/` contains GitHub topics, mailing-list announcement draft, LinkedIn post drafts, conference/demo positioning, and a public repository manifest.
 
@@ -107,8 +106,7 @@ Run these after installation:
 
 Before publishing:
 
-- add `LICENSE-DOCS` with Creative Commons Attribution 4.0 International (`CC BY 4.0`) for skill files, documentation, checklists, and protocol text;
-- add `LICENSE-CODE` with a code license such as MIT before publishing Python audit scripts or other source code;
+- add `LICENSE` with scoped MIT terms for source code and Creative Commons Attribution 4.0 International (`CC BY 4.0`) terms for skill files, documentation, checklists, examples, and protocol text;
 - decide whether to publish the skill alone or as part of a skills collection;
 - include `## Trademark Notice` and `## Citing Eclipse SUMO` in the repository README;
 - include `## References and Related Resources` without implying endorsement by Eclipse SUMO, Eclipse Foundation, DLR, Anthropic, or any agent-skill project;

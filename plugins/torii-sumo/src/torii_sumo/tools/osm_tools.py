@@ -5,7 +5,6 @@ from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
 from torii_sumo.core.osm_network import (
-    DEFAULT_ALLOWED_HIGHWAYS,
     audit_tls,
     audit_tls_multisource,
     build_osm_network,
@@ -13,40 +12,18 @@ from torii_sumo.core.osm_network import (
 )
 from torii_sumo.core.osm_area import resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.road_scope import (
+    HIGHWAY_CLASS_PRESETS,
+    resolve_highway_classes as resolve_highway_classes_from_scope,
+)
 from torii_sumo.core.routeability_audit import run_routeability_audit
-
-
-DRIVE_HIGHWAYS = {
-    "motorway",
-    "motorway_link",
-    "trunk",
-    "trunk_link",
-    "primary",
-    "primary_link",
-    "secondary",
-    "secondary_link",
-    "tertiary",
-    "tertiary_link",
-    "residential",
-    "living_street",
-    "road",
-}
-
-HIGHWAY_CLASS_PRESETS = {
-    "arterial": set(DEFAULT_ALLOWED_HIGHWAYS),
-    "drive": set(DRIVE_HIGHWAYS),
-    "drive_plus_unclassified": set(DRIVE_HIGHWAYS) | {"unclassified"},
-    "full_vehicle": set(DRIVE_HIGHWAYS) | {"unclassified", "service"},
-}
+from torii_sumo.core.topology_audit import audit_topology_fragmentation
 
 
 def resolve_highway_classes(value: str | None) -> set[str]:
-    if value is None or not value.strip():
-        return set(DEFAULT_ALLOWED_HIGHWAYS)
-    normalized = value.strip().lower()
-    if normalized in HIGHWAY_CLASS_PRESETS:
-        return set(HIGHWAY_CLASS_PRESETS[normalized])
-    return {item.strip() for item in value.split(",") if item.strip()}
+    resolved = resolve_highway_classes_from_scope(value, default_to_recommended=True)
+    assert resolved is not None
+    return resolved
 
 
 def sumo_osm_build_network(
@@ -165,6 +142,22 @@ def sumo_network_routeability_audit(
     )
 
 
+def sumo_network_topology_audit(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "topology_audit",
+    cluster_radius_m: float = 30.0,
+    min_cluster_nodes: int = 3,
+) -> dict[str, Any]:
+    return audit_topology_fragmentation(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        cluster_radius_m=cluster_radius_m,
+        min_cluster_nodes=min_cluster_nodes,
+    )
+
+
 def sumo_network_connected_core(
     net_file: str,
     output_dir: str,
@@ -201,6 +194,11 @@ def sumo_osm_cleanup_workflow(
     prefix: str = "sumo_osm_cleanup",
     source_osm_path: str | None = None,
     highway_classes: str | None = None,
+    traffic_layers: str | None = None,
+    network_profile: str | None = None,
+    reference_net_file: str | None = None,
+    reference_policy_report: str | None = None,
+    service_passenger_policy: str | None = None,
     historical_date: str | None = None,
     overpass_url: str = "https://overpass-api.de/api/interpreter",
     timeout_seconds: float = 240.0,
@@ -211,12 +209,16 @@ def sumo_osm_cleanup_workflow(
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
     launch_sumo_gui_after_build: bool = True,
+    run_topology_audit_after_build: bool = True,
+    topology_cluster_radius_m: float = 30.0,
+    topology_min_cluster_nodes: int = 3,
     run_routeability_audit_after_build: bool = True,
     routeability_vehicle_count: int = 100,
     routeability_initial_end: int = 300,
     routeability_max_end: int = 2400,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
     return run_osm_cleanup_workflow(
         output_dir=Path(output_dir),
         bbox=bbox,
@@ -224,7 +226,12 @@ def sumo_osm_cleanup_workflow(
         confirmed_area=confirmed_area,
         prefix=prefix,
         source_osm_path=Path(source_osm_path) if source_osm_path else None,
-        highway_classes=resolve_highway_classes(highway_classes),
+        highway_classes=selected_highway_classes,
+        traffic_layers=traffic_layers,
+        network_profile=network_profile,
+        reference_net_file=Path(reference_net_file) if reference_net_file else None,
+        reference_policy_report=reference_policy_report,
+        service_passenger_policy=service_passenger_policy,
         historical_date=historical_date,
         overpass_url=overpass_url,
         timeout_seconds=timeout_seconds,
@@ -235,6 +242,9 @@ def sumo_osm_cleanup_workflow(
         map_target_date=map_target_date,
         launch_netedit_after_build=launch_netedit_after_build,
         launch_sumo_gui_after_build=launch_sumo_gui_after_build,
+        run_topology_audit_after_build=run_topology_audit_after_build,
+        topology_cluster_radius_m=topology_cluster_radius_m,
+        topology_min_cluster_nodes=topology_min_cluster_nodes,
         run_routeability_audit_after_build=run_routeability_audit_after_build,
         routeability_vehicle_count=routeability_vehicle_count,
         routeability_initial_end=routeability_initial_end,
