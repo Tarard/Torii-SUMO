@@ -30,7 +30,7 @@ TUM's Ingolstadt model is a multimodal simulation network. In the city-center bb
 
 ## Result Summary
 
-![TUM bbox reference and Torii reference visual-detail comparison](assets/tum_vs_torii_reference_visual_detail.png)
+![TUM bbox reference and Torii 5.5 TLS-aggregated visual-detail comparison](assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
 
 | Evidence | Torii `vehicle_core` | Torii `reference_visual_detail` | TUM city-center bbox cut |
 |---|---:|---:|---:|
@@ -78,12 +78,18 @@ Torii should not automatically join these nodes from geometry alone. The audit s
 
 - [`prompt.md`](prompt.md): the one-prompt request.
 - [`manifest.public.json`](manifest.public.json): public, path-sanitized artifact manifest.
+- [`networks/tum_ingolstadt_center_reference.net.xml`](networks/tum_ingolstadt_center_reference.net.xml): TUM bbox reference network used for comparison.
+- [`networks/torii_5_5_connected_core_tls_aggregated.net.xml`](networks/torii_5_5_connected_core_tls_aggregated.net.xml): Torii 5.5 connected-core simulation network after TLS aggregation.
+- [`networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml`](networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml): Torii 5.5 visual-detail comparison network after TLS aggregation.
 - [`validation/comparison_summary.json`](validation/comparison_summary.json): compact validation record.
 - [`validation/tum_vs_torii_bbox_comparison.csv`](validation/tum_vs_torii_bbox_comparison.csv): count, topology, and routeability comparison.
-- [`assets/tum_vs_torii_reference_visual_detail.png`](assets/tum_vs_torii_reference_visual_detail.png): Netedit comparison screenshot.
+- [`validation/run_2026-06-24_5_5`](validation/run_2026-06-24_5_5): 5.5 run summaries, TLS representative tables, and TUM spatial TLS matching.
+- [`assets/tum_vs_torii_5_5_tls_aggregated_overview.png`](assets/tum_vs_torii_5_5_tls_aggregated_overview.png): TUM vs Torii 5.5 TLS-aggregated overview screenshot.
+- [`assets/tum_vs_torii_5_5_tls_aggregated_detail.png`](assets/tum_vs_torii_5_5_tls_aggregated_detail.png): TUM vs Torii 5.5 intersection-detail screenshot.
+- [`assets/torii_5_5_core_vs_visual_detail.png`](assets/torii_5_5_core_vs_visual_detail.png): Torii connected-core vs visual-detail screenshot.
 - [`assets/junction_fragmentation_gap.png`](assets/junction_fragmentation_gap.png): known junction-fragmentation cleanup target.
 
-Generated `.net.xml`, route, and log files are intentionally not committed. They should be rebuilt into a fresh output directory when the example is rerun.
+Generated OSM extracts, route files, and full logs are intentionally not committed. They should be rebuilt into a fresh output directory when the example is rerun.
 
 ## Reproduction Notes
 

@@ -47,7 +47,7 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 
 这个 demo 现在使用 Ingolstadt 市中心，用来测试 Torii 从 OSM 清洗出的路网是否能向人工清洗参考路网收敛，而不是把 OSM 导入成功当作充分结果。
 
-![TUM bbox reference 与 Torii reference visual-detail 对比](examples/02_one_prompt_osm_network/assets/tum_vs_torii_reference_visual_detail.png)
+![TUM bbox reference 与 Torii 5.5 TLS 聚合 visual-detail 对比](examples/02_one_prompt_osm_network/assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
 
 | 证据 | 结果 |
 |---|---:|
@@ -58,7 +58,7 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 | 剩余清洗目标 | 对多出的 TLS 候选做 Google Maps 复核，并继续做可复用的物理交叉口聚合 |
 | claim status | `diagnostic-demo` |
 
-详见 [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md)。生成的 `.osm.xml`、`.net.xml`、route 和 log 文件不会提交到仓库；仓库只保留 prompt 和轻量验证摘要。
+详见 [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md)。这次 5.5 对比用的关键路网和截图已提交到 example；生成的 OSM extract、route 和完整 log 仍然作为可重建产物保留。
 
 ## Quick Start
 

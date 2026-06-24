@@ -47,7 +47,7 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 
 Dieses Demo nutzt jetzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein von Torii aus OSM bereinigtes Netz in Richtung eines manuell bereinigten Referenznetzes konvergiert, statt OSM-Import-Erfolg als ausreichend zu behandeln.
 
-![TUM-bbox-Referenz im Vergleich mit Torii reference visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_reference_visual_detail.png)
+![TUM-bbox-Referenz im Vergleich mit Torii 5.5 TLS-aggregated visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
 
 | Evidenz | Ergebnis |
 |---|---:|
@@ -58,7 +58,7 @@ Dieses Demo nutzt jetzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein von 
 | Verbleibendes Bereinigungsziel | Google-Maps-Pruefung der zusaetzlichen TLS-Kandidaten und wiederverwendbare physische Kreuzungsaggregation |
 | Claim status | `diagnostic-demo` |
 
-Siehe [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). Die erzeugten `.osm.xml`, `.net.xml`, Routen- und Logdateien werden absichtlich nicht committed; das Repository behaelt nur den Prompt und eine leichte Validierungszusammenfassung.
+Siehe [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). Die 5.5-Vergleichsnetze und Screenshots sind dort committed; erzeugte OSM-Extracts, Routen und vollstaendige Logs bleiben rebuild-only Artefakte.
 
 ## Quick Start
 
