@@ -17,6 +17,7 @@ from torii_sumo.core.road_scope import (
     resolve_highway_classes as resolve_highway_classes_from_scope,
 )
 from torii_sumo.core.routeability_audit import run_routeability_audit
+from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 
 
@@ -155,6 +156,28 @@ def sumo_network_topology_audit(
         prefix=prefix,
         cluster_radius_m=cluster_radius_m,
         min_cluster_nodes=min_cluster_nodes,
+    )
+
+
+def sumo_network_reference_join_audit(
+    reference_net_file: str,
+    candidate_net_file: str,
+    output_dir: str,
+    prefix: str = "reference_join_audit",
+    reference_cluster_prefix: str = "cluster_",
+    candidate_cluster_radius_m: float = 30.0,
+    candidate_min_cluster_nodes: int = 3,
+    match_radius_m: float = 45.0,
+) -> dict[str, Any]:
+    return audit_reference_join_patterns(
+        reference_net_file=Path(reference_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        reference_cluster_prefix=reference_cluster_prefix,
+        candidate_cluster_radius_m=candidate_cluster_radius_m,
+        candidate_min_cluster_nodes=candidate_min_cluster_nodes,
+        match_radius_m=match_radius_m,
     )
 
 
