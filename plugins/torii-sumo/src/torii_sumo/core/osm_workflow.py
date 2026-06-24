@@ -12,6 +12,7 @@ from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .reference_bbox import derive_reference_net_bbox
 from .reference_join_audit import audit_reference_join_patterns
+from .reference_scope import audit_reference_scope, build_scope_pruning_variant
 from .road_scope import (
     ROAD_LEVEL_SCOPE_OPTIONS,
     RECOMMENDED_ROAD_LEVEL_SCOPE,
@@ -306,6 +307,24 @@ def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
     return "pass"
 
 
+def _reference_scope_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    return _gate_value(report)
+
+
+def _reference_scope_pruning_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    if report.get("scope_pruning_status") == "not_needed":
+        return "skipped"
+    if report.get("status") != "pass":
+        return _gate_value(report)
+    if report.get("scope_pruning_status") == "variant_created_for_review":
+        return "blocked"
+    return "pass"
+
+
 def _should_run_tls_aggregation(
     tls_report: Mapping[str, Any],
     tls_aggregation_func: Callable[..., dict[str, Any]],
@@ -403,6 +422,8 @@ def run_osm_cleanup_workflow(
     run_tls_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
+    run_reference_scope_audit_after_build: bool = True,
+    run_scope_pruning_after_build: bool = True,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
@@ -414,6 +435,8 @@ def run_osm_cleanup_workflow(
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
+    reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
+    scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
@@ -625,6 +648,10 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
+    reference_scope_audit_report: dict[str, Any] | None = None
+    reference_scope_pruning_report: dict[str, Any] | None = None
+    reference_scope_candidate_layer = "not_applicable"
+    reference_scope_candidate_net_file: Path | None = None
     reference_join_audit_candidate_layer = "not_applicable"
     reference_join_audit_candidate_net_file: Path | None = None
     tls_aggregation_report: dict[str, Any] | None = None
@@ -853,6 +880,31 @@ def run_osm_cleanup_workflow(
     if (
         str(network_plan.get("network_profile", "")) == "reference_matched"
         and reference_net_file is not None
+        and run_reference_scope_audit_after_build
+    ):
+        reference_scope_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
+        reference_scope_candidate_layer = (
+            "reference_visual_detail"
+            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
+            else "vehicle_core"
+        )
+        reference_scope_audit_report = reference_scope_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_scope_candidate_net_file,
+            output_dir=output_dir / "reference_scope_audit",
+            prefix=f"{prefix}_reference_scope_audit",
+        )
+        if run_scope_pruning_after_build and _int_field(reference_scope_audit_report, "prune_candidate_count") > 0:
+            reference_scope_pruning_report = scope_pruning_func(
+                net_file=reference_scope_candidate_net_file,
+                reference_scope_report=reference_scope_audit_report,
+                output_dir=output_dir / "reference_scope_pruning",
+                prefix=f"{prefix}_reference_scope_pruning",
+                timeout_seconds=timeout_seconds,
+            )
+    if (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
         and run_reference_join_audit_after_build
     ):
         reference_join_audit_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
@@ -959,6 +1011,8 @@ def run_osm_cleanup_workflow(
         connected_core_connectivity_report or {},
         connectivity_report,
         topology_audit_report or {},
+        reference_scope_audit_report or {},
+        reference_scope_pruning_report or {},
         reference_join_audit_report or {},
         reference_join_aggregation_report or {},
         routeability_audit_report or {},
@@ -999,6 +1053,19 @@ def run_osm_cleanup_workflow(
             "reference join aggregation created a separate review variant; compare it in Netedit and Google Maps "
             "before adopting it as the clean network"
         )
+    if reference_scope_audit_report is not None and _int_field(reference_scope_audit_report, "prune_candidate_count") > 0:
+        warnings.append(
+            "reference scope audit found over-included short detail fragments; inspect the candidate CSV and "
+            "the map context before adopting any pruning"
+        )
+    if (
+        reference_scope_pruning_report is not None
+        and reference_scope_pruning_report.get("scope_pruning_status") == "variant_created_for_review"
+    ):
+        warnings.append(
+            "reference scope pruning created a separate review variant; compare it in Netedit and map imagery "
+            "before adopting it as the clean network"
+        )
     warnings = list(dict.fromkeys(warnings))
 
     gate_status = {
@@ -1014,6 +1081,8 @@ def run_osm_cleanup_workflow(
         gate_status["tls_aggregation"] = "blocked" if tls_aggregation_report.get("status") == "pass" else _gate_value(tls_aggregation_report)
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         gate_status["reference_visual_detail"] = "pass" if reference_visual_detail_status in {"built", "same_as_vehicle_core"} else "fail"
+        gate_status["reference_scope_audit"] = _reference_scope_gate(reference_scope_audit_report)
+        gate_status["reference_scope_pruning"] = _reference_scope_pruning_gate(reference_scope_pruning_report)
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
         gate_status["reference_join_aggregation"] = _reference_join_aggregation_gate(reference_join_aggregation_report)
     if topology_audit_report is not None:
@@ -1027,6 +1096,8 @@ def run_osm_cleanup_workflow(
         and gate_status.get("topology_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("routeability_audit", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status.get("reference_visual_detail", "skipped") in {"pass", "skipped"}
+        and gate_status.get("reference_scope_audit", "skipped") in {"pass", "skipped"}
+        and gate_status.get("reference_scope_pruning", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_aggregation", "skipped") in {"pass", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
@@ -1150,6 +1221,34 @@ def run_osm_cleanup_workflow(
         "reference_join_aggregation_variant_file": ""
         if reference_join_aggregation_report is None
         else str(reference_join_aggregation_report.get("junction_aggregation_variant_file", "")),
+        "reference_scope_status": "skipped"
+        if reference_scope_audit_report is None
+        else reference_scope_audit_report.get("reference_scope_status", reference_scope_audit_report.get("status", "fail")),
+        "reference_scope_audit_candidate_layer": reference_scope_candidate_layer,
+        "reference_scope_audit_candidate_net_file": ""
+        if reference_scope_candidate_net_file is None
+        else str(reference_scope_candidate_net_file),
+        "reference_scope_prune_candidate_count": 0
+        if reference_scope_audit_report is None
+        else reference_scope_audit_report.get("prune_candidate_count", 0),
+        "reference_scope_audit_report_file": ""
+        if reference_scope_audit_report is None
+        else str(reference_scope_audit_report.get("report_file", "")),
+        "reference_scope_prune_candidates_file": ""
+        if reference_scope_audit_report is None
+        else str(reference_scope_audit_report.get("prune_candidates_file", "")),
+        "reference_scope_pruning_status": "skipped"
+        if reference_scope_pruning_report is None
+        else reference_scope_pruning_report.get("scope_pruning_status", reference_scope_pruning_report.get("status", "fail")),
+        "reference_scope_pruning_removed_edge_count": 0
+        if reference_scope_pruning_report is None
+        else reference_scope_pruning_report.get("scope_pruning_removed_edge_count", 0),
+        "reference_scope_pruning_variant_file": ""
+        if reference_scope_pruning_report is None
+        else str(reference_scope_pruning_report.get("scope_pruning_variant_file", "")),
+        "reference_scope_pruning_plan_file": ""
+        if reference_scope_pruning_report is None
+        else str(reference_scope_pruning_report.get("scope_pruning_plan_file", "")),
         "routeability_probe_file": "" if routeability_report is None else str(routeability_report.get("sumocfg_file", "")),
         "missing_key_edges": [] if routeability_report is None else routeability_report.get("missing_key_edges", []),
         "routeability_probe_status": "skipped" if routeability_report is None else routeability_report.get("status", "fail"),
@@ -1210,6 +1309,8 @@ def run_osm_cleanup_workflow(
         "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
         "topology_audit": topology_audit_report or {},
+        "reference_scope_audit": reference_scope_audit_report or {},
+        "reference_scope_pruning": reference_scope_pruning_report or {},
         "reference_join_audit": reference_join_audit_report or {},
         "reference_join_aggregation": reference_join_aggregation_report or {},
         "routeability_audit": routeability_audit_report or {},

@@ -123,7 +123,7 @@ Hard gates:
 
 1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, and preview checkpoint. In one-sentence diagnostic mode, proceed when the candidate is clear and record it as an assumption; block only when the area is ambiguous, missing, or unsafe.
 2. Before construction, resolve or infer a network plan. If no user intent or reference target identifies the traffic layers, block on the network-plan question instead of silently choosing all road types.
-3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. If no explicit bbox or source OSM extract was supplied, derive the construction bbox from the reference `.net.xml` geometry rather than `origBoundary`. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them. When the reference contains joined junctions, run a reference join audit after construction and use the matched cases to guide any aggregation plan.
+3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. If no explicit bbox or source OSM extract was supplied, derive the construction bbox from the reference `.net.xml` geometry rather than `origBoundary`. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them. After construction, run reference join and reference scope audits on the candidate `reference_visual_detail` network, and create only non-destructive aggregation or pruning review variants.
 4. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
 5. When the TLS audit reports multiple SUMO TLS nodes for one physical cluster, create a separate TLS aggregation review variant with one real SUMO junction selected per physical cluster. Use the physical cluster count and aggregated `tlLogic` count as the comparison signal; treat raw `traffic_light` junction count as diagnostic noise.
 6. For current-network modeling, treat Google Maps TLS review as a hard gate. Any unresolved TLS candidate keeps the workflow claim at `construction-invalid` even if construction, routeability, SUMO-GUI, and Netedit artifacts were produced. Regional maps, official inventories, signal plans, or field photos may supplement Google Maps where coordinate systems differ; record WGS84/GCJ-02/BD-09 assumptions when comparing coordinates. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
@@ -253,9 +253,23 @@ learned_rule:
 
 Use source-node matches to learn general aggregation rules from the reference network. For example, if the reference joins two to four source OSM nodes and the candidate contains short internal edges between the same ids, that case is a `tum_like_join_candidate` regardless of city name. Keep city-specific examples as evidence, not hardcoded plugin logic.
 
+Before pruning a denser candidate, run a reusable reference scope audit. It compares reference and candidate `highway.*` type counts, then flags only absent-in-reference or overrepresented short dead-end detail fragments as pruning candidates. This is a review scorer, not a city-specific rule and not an automatic deletion policy.
+
+At the end of reference-matched cleanup, report the scope summary to the user:
+
+```text
+reference_scope_status:
+reference_scope_prune_candidate_count:
+reference_scope_prune_candidates_file:
+reference_scope_pruning_status:
+reference_scope_pruning_variant_file:
+```
+
 For regions where Google Maps is reliable and appropriate, use the default Google Maps road geometry to compare the cluster against the physical intersection footprint before any destructive aggregation. Use satellite view only when the default map is ambiguous. For mainland China or other regions where Google Maps is not the right current-road baseline, keep the map-review field but add the appropriate regional source in the correction record.
 
 Torii may produce a separate `*_junction_aggregated.net.xml` review variant with `sumo_network_junction_aggregation_variant`, but it must not overwrite the source network or treat the variant as adopted before map/source-bounded review. Keep the raw network, visual-detail network, audit CSV/JSON, and aggregation output separate, then rerun connectivity, routeability, TLS audit, and topology audit before stronger claims.
+
+Torii may produce a separate `*_scope_pruned.net.xml` review variant with `sumo_network_scope_pruning_variant`, but it must not overwrite the source network or treat the variant as adopted before map/source-bounded review. Keep the type-comparison CSV, prune-candidate CSV, remove-edge list, and review network together.
 
 For redundant signal clusters, Torii may also produce a separate `*_tls_aggregated.net.xml` review variant with `sumo_network_tls_aggregation_variant`. This is a signal-controller cleanup artifact, not a geometry-join artifact: it rebuilds TLS definitions from physical TLS clusters while preserving the source geometry for review.
 
