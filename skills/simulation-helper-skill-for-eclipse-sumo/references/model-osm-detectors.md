@@ -123,10 +123,11 @@ Hard gates:
 2. Before construction, resolve or infer a network plan. If no user intent or reference target identifies the traffic layers, block on the network-plan question instead of silently choosing all road types.
 3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them. When the reference contains joined junctions, run a reference join audit after construction and use the matched cases to guide any aggregation plan.
 4. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
-5. For current-network modeling, treat Google Maps TLS review as a hard gate. Any unresolved TLS candidate keeps the workflow claim at `construction-invalid` even if construction, routeability, SUMO-GUI, and Netedit artifacts were produced. Regional maps, official inventories, signal plans, or field photos may supplement Google Maps where coordinate systems differ; record WGS84/GCJ-02/BD-09 assumptions when comparing coordinates. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
-6. Run passenger connectivity checks before making stronger claims.
-7. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
-8. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
+5. When the TLS audit reports multiple SUMO TLS nodes for one physical cluster, create a separate TLS aggregation review variant with one real SUMO junction selected per physical cluster. Use the physical cluster count and aggregated `tlLogic` count as the comparison signal; treat raw `traffic_light` junction count as diagnostic noise.
+6. For current-network modeling, treat Google Maps TLS review as a hard gate. Any unresolved TLS candidate keeps the workflow claim at `construction-invalid` even if construction, routeability, SUMO-GUI, and Netedit artifacts were produced. Regional maps, official inventories, signal plans, or field photos may supplement Google Maps where coordinate systems differ; record WGS84/GCJ-02/BD-09 assumptions when comparing coordinates. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
+7. Run passenger connectivity checks before making stronger claims.
+8. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
+9. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
 
 If any gate is incomplete, keep the claim at `diagnostic-demo`, `construction-invalid`, or `blocked`. GUI inspection, Google Maps links, and clean SUMO loading do not prove timing, phasing, demand realism, or controller readiness.
 
@@ -254,6 +255,8 @@ For regions where Google Maps is reliable and appropriate, use the default Googl
 
 Torii may produce a separate `*_junction_aggregated.net.xml` review variant with `sumo_network_junction_aggregation_variant`, but it must not overwrite the source network or treat the variant as adopted before map/source-bounded review. Keep the raw network, visual-detail network, audit CSV/JSON, and aggregation output separate, then rerun connectivity, routeability, TLS audit, and topology audit before stronger claims.
 
+For redundant signal clusters, Torii may also produce a separate `*_tls_aggregated.net.xml` review variant with `sumo_network_tls_aggregation_variant`. This is a signal-controller cleanup artifact, not a geometry-join artifact: it rebuilds TLS definitions from physical TLS clusters while preserving the source geometry for review.
+
 ## Redundant TLS Removal Gate
 
 When OSM/netconvert creates many traffic lights, force a TLS audit before using the network for signal-control claims:
@@ -275,6 +278,7 @@ Rules:
 - Remove or downgrade SUMO TLS that correspond only to geometry nodes, pedestrian-only crossings, ramp meters outside scope, or map artifacts.
 - Keep TLS that correspond to real vehicle-signalized intersections in the modeled scope.
 - If a cluster of SUMO nodes represents one physical intersection, document whether they should remain separate controllers, become a joined TLS, or be simplified.
+- If the cluster should become one signalized intersection, build a TLS aggregation review variant first; do not hand-edit the source network or compare raw SUMO TLS-node counts against a manual reference as if they were physical signals.
 - After TLS removal or rebuilding, rerun routeability smoke, TLS phase audit, and controller mapping checks.
 - Do not claim "realistic signal control" from OSM TLS alone. The claim requires source-bounded TLS existence, phase semantics, timing policy, and controller evidence.
 

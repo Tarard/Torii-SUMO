@@ -15,6 +15,7 @@ from .tools.osm_tools import (
     sumo_network_reference_join_audit,
     sumo_network_routeability_audit,
     sumo_network_routeability_probe,
+    sumo_network_tls_aggregation_variant,
     sumo_network_topology_audit,
     sumo_osm_build_network,
     sumo_osm_cleanup_workflow,
@@ -79,6 +80,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Create a separate netconvert --junctions.join review variant from topology or reference-join audit reports without overwriting the source network.")(
         sumo_network_junction_aggregation_variant
+    )
+    server.tool(description="Create a separate TLS cleanup review variant with one real SUMO junction set as TLS per physical TLS audit cluster.")(
+        sumo_network_tls_aggregation_variant
     )
 
     return server

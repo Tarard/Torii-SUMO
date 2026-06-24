@@ -50,20 +50,27 @@
     "network_profile": "reference_matched",
     "default_routeability_layer": "vehicle_core",
     "default_netedit_comparison_layer": "reference_visual_detail",
-    "raw_edges": 2545,
-    "raw_passenger_edges": 2545,
-    "raw_lanes": 3099,
-    "raw_junctions": 1417,
+    "raw_edges": 2541,
+    "raw_passenger_edges": 2541,
+    "raw_lanes": 3093,
+    "raw_junctions": 1249,
     "raw_traffic_light_junctions": 202,
-    "connected_core_edges": 2497,
-    "connected_core_passenger_edges": 2497,
-    "connected_core_lanes": 3051,
-    "connected_core_junctions": 1221,
-    "connected_core_traffic_light_junctions": 202,
-    "reference_visual_detail_edges": 6130,
-    "reference_visual_detail_lanes": 6701,
-    "reference_visual_detail_junctions": 2998,
+    "raw_tlLogic": 146,
+    "tls_aggregation_traffic_light_junctions": 34,
+    "tls_aggregation_tlLogic": 34,
+    "connected_core_edges": 2493,
+    "connected_core_passenger_edges": 2493,
+    "connected_core_lanes": 3045,
+    "connected_core_junctions": 1220,
+    "connected_core_traffic_light_junctions": 34,
+    "connected_core_tlLogic": 34,
+    "reference_visual_detail_edges": 6126,
+    "reference_visual_detail_lanes": 6695,
+    "reference_visual_detail_junctions": 2997,
     "reference_visual_detail_traffic_light_junctions": 217,
+    "reference_visual_detail_tlLogic": 82,
+    "reference_visual_detail_tls_aggregation_traffic_light_junctions": 34,
+    "reference_visual_detail_tls_aggregation_tlLogic": 34,
     "reference_visual_detail_only_highway_classes": [
       "cycleway",
       "footway",
@@ -91,10 +98,14 @@
       "review_requirement": "local cluster-graph audit and Google Maps default-map review before junction aggregation; satellite view is optional when ambiguous"
     },
     "routeability": {
-      "status": "incomplete_under_bounded_test",
-      "vehicle_count": 12,
-      "max_end": 360,
-      "claim": "diagnostic only; rerun with a longer horizon before simulation-readiness claims"
+      "status": "pass",
+      "vehicle_count": 100,
+      "final_end": 600,
+      "arrived": 100,
+      "running": 0,
+      "teleports": 0,
+      "collisions": 0,
+      "claim": "routeability smoke only; TLS reality and topology gates still bound stronger claims"
     }
   },
   "tum_reference_bbox_cut": {
@@ -117,6 +128,6 @@
       "claim": "reference comparator only"
     }
   },
-  "interpretation": "The reference-matched workflow now builds a separate Torii reference_visual_detail network for full-detail Netedit comparison. The remaining gap is reusable physical-intersection and TLS aggregation; dense clusters require local cluster-graph audit plus Google Maps default-map review before any destructive join, with satellite view only as an optional fallback.",
+  "interpretation": "The reference-matched workflow now builds a separate Torii reference_visual_detail network for full-detail Netedit comparison and a non-destructive TLS aggregation review variant. TLS count drops from raw 217 traffic-light junctions / 82 tlLogic definitions to 34 physical TLS representatives, compared with TUM's 29 traffic-light junctions / 28 tlLogic definitions. The remaining gap is Google Maps review for extra TLS candidates plus reusable physical-intersection aggregation; dense clusters require local cluster-graph audit before any destructive join, with satellite view only as an optional fallback.",
   "claim_status": "diagnostic-demo"
 }

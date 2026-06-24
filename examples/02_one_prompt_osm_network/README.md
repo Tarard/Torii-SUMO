@@ -34,12 +34,13 @@ TUM's Ingolstadt model is a multimodal simulation network. In the city-center bb
 
 | Evidence | Torii `vehicle_core` | Torii `reference_visual_detail` | TUM city-center bbox cut |
 |---|---:|---:|---:|
-| All non-internal edges | 2,497 | 6,130 | 3,577 |
-| Lanes | 3,051 | 6,701 | 4,955 |
-| Junctions | 1,221 | 2,998 | 1,752 |
-| Traffic-light junctions | 202 | 217 | 29 |
+| All non-internal edges | 2,493 | 6,126 | 3,577 |
+| Lanes | 3,045 | 6,695 | 4,955 |
+| Junctions | 1,220 | 2,997 | 1,752 |
+| Raw traffic-light junctions | 202 raw / 34 after TLS aggregation | 217 raw / 34 after TLS aggregation | 29 |
+| `tlLogic` count | 146 raw / 34 after TLS aggregation | 82 raw / 34 after TLS aggregation | 28 |
 | Default use | routeability / simulation core | Netedit full-detail comparison | reference comparator |
-| Claim status | `diagnostic-demo` | topology/TLS grouping needs correction | reference comparator only |
+| Claim status | routeability passed; TLS still needs map review | topology grouping still needs correction | reference comparator only |
 
 TUM passenger-drivable hierarchy in this bbox:
 
@@ -62,8 +63,8 @@ The reference-matched workflow now avoids the earlier unfair comparison. Torii d
 The key remaining comparison signals are physical-intersection grouping, TLS grouping, lane permissions, and routeability, not only edge count.
 
 - TUM keeps a high-detail city-center bbox with 3,577 edges and 4,955 lanes.
-- Torii `reference_visual_detail` keeps the lower-level visible layers too, but it is over-fragmented: 2,998 junctions and 217 traffic-light junctions.
-- TUM exposes only 29 traffic-light junctions in the same bbox. This indicates that physical-intersection and TLS aggregation is the next cleanup target.
+- Torii `reference_visual_detail` keeps the lower-level visible layers too, but it is still over-fragmented: 2,997 junctions.
+- The TLS aggregation review variant reduces Torii from 217 raw traffic-light junctions / 82 `tlLogic` definitions to 34 physical TLS representatives. TUM exposes 29 traffic-light junctions / 28 `tlLogic` definitions in the same bbox, so the remaining TLS gap is now a small set of map-review candidates rather than hundreds of raw SUMO nodes.
 
 ## Known Gap: Junction Aggregation
 
@@ -98,7 +99,7 @@ Generated `.net.xml`, route, and log files are intentionally not committed. They
 
 ## Claim Boundary
 
-This is a diagnostic comparison example. A scope-matched Netedit view does not prove that the Torii network is equivalent to the manually cleaned TUM network. The current comparison shows the next required cleanup target: reusable physical-intersection/TLS grouping, with local cluster-graph audit and Google Maps default-map review before any destructive aggregation.
+This is a diagnostic comparison example. A scope-matched Netedit view does not prove that the Torii network is equivalent to the manually cleaned TUM network. The current comparison shows the next required cleanup target: reusable physical-intersection grouping and Google Maps review for the remaining TLS candidates before any destructive aggregation.
 
 ## Data Attribution
 

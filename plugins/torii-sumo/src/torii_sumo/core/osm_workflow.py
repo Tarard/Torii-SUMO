@@ -18,6 +18,7 @@ from .road_scope import (
 )
 from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
+from .tls_aggregation import build_tls_aggregation_variant
 from .topology_audit import audit_topology_fragmentation
 
 
@@ -305,6 +306,16 @@ def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
     return "pass"
 
 
+def _should_run_tls_aggregation(
+    tls_report: Mapping[str, Any],
+    tls_aggregation_func: Callable[..., dict[str, Any]],
+) -> bool:
+    if _int_field(tls_report, "tls_cluster_count") <= 0:
+        return False
+    clusters_file = Path(str(tls_report.get("clusters_file", "")))
+    return clusters_file.exists() or tls_aggregation_func is not build_tls_aggregation_variant
+
+
 def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | None) -> dict[str, Any]:
     if topology_audit_report is None:
         return {
@@ -389,6 +400,7 @@ def run_osm_cleanup_workflow(
     routeability_vehicle_count: int | None = None,
     routeability_initial_end: int | None = None,
     routeability_max_end: int | None = None,
+    run_tls_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
@@ -399,6 +411,7 @@ def run_osm_cleanup_workflow(
     routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
+    tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
@@ -604,13 +617,17 @@ def run_osm_cleanup_workflow(
     net_file = raw_net_file
     reference_visual_detail_status = "not_applicable"
     reference_visual_detail_net_file: Path | None = None
+    reference_visual_detail_comparison_net_file: Path | None = None
     reference_visual_detail_build_report: dict[str, Any] = {}
     reference_visual_detail_service_permission_report: dict[str, Any] = {}
     reference_visual_detail_netedit_report: dict[str, Any] = {}
+    reference_visual_detail_tls_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_candidate_layer = "not_applicable"
     reference_join_audit_candidate_net_file: Path | None = None
+    tls_aggregation_report: dict[str, Any] | None = None
     vehicle_core_highway_classes = _class_set(
         network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", []))
     )
@@ -754,6 +771,7 @@ def run_osm_cleanup_workflow(
                 + list(reference_visual_detail_service_permission_report.get("warnings", [])),
             }
         reference_visual_detail_status = "built"
+        reference_visual_detail_comparison_net_file = reference_visual_detail_net_file
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
     tls_report = tls_audit_func(
@@ -764,14 +782,51 @@ def run_osm_cleanup_workflow(
         google_maps_temporal_scope=map_temporal_scope,
         google_maps_target_date=map_target_date,
     )
-    raw_connectivity_report = connectivity_func(raw_net_file)
+    if run_tls_aggregation_after_build and _should_run_tls_aggregation(tls_report, tls_aggregation_func):
+        tls_aggregation_report = tls_aggregation_func(
+            net_file=raw_net_file,
+            tls_audit_report=tls_report,
+            output_dir=output_dir / "tls_aggregation",
+            prefix=f"{prefix}_tls_aggregation",
+            timeout_seconds=timeout_seconds,
+        )
+        tls_variant_value = tls_aggregation_report.get("tls_aggregation_variant_file", "") if tls_aggregation_report else ""
+        if tls_aggregation_report.get("status") == "pass" and tls_variant_value:
+            candidate_tls_net_file = Path(str(tls_variant_value))
+            if candidate_tls_net_file.exists():
+                net_file = candidate_tls_net_file
+    if reference_visual_detail_net_file is not None and run_tls_aggregation_after_build:
+        reference_visual_detail_tls_report = tls_audit_func(
+            net_file=reference_visual_detail_net_file,
+            output_dir=output_dir / "reference_visual_detail_tls_audit",
+            prefix=f"{prefix}_reference_visual_detail_tls_audit",
+            osm_file=osm_file,
+            google_maps_temporal_scope=map_temporal_scope,
+            google_maps_target_date=map_target_date,
+        )
+        if _should_run_tls_aggregation(reference_visual_detail_tls_report, tls_aggregation_func):
+            reference_visual_detail_tls_aggregation_report = tls_aggregation_func(
+                net_file=reference_visual_detail_net_file,
+                tls_audit_report=reference_visual_detail_tls_report,
+                output_dir=output_dir / "reference_visual_detail_tls_aggregation",
+                prefix=f"{prefix}_reference_visual_detail_tls_aggregation",
+                timeout_seconds=timeout_seconds,
+            )
+            visual_tls_variant_value = reference_visual_detail_tls_aggregation_report.get(
+                "tls_aggregation_variant_file", ""
+            )
+            if reference_visual_detail_tls_aggregation_report.get("status") == "pass" and visual_tls_variant_value:
+                candidate_visual_tls_net_file = Path(str(visual_tls_variant_value))
+                if candidate_visual_tls_net_file.exists():
+                    reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
+    raw_connectivity_report = connectivity_func(net_file)
     connectivity_report = raw_connectivity_report
     connectivity_quality = _connectivity_quality(connectivity_report)
     connected_core_report = None
     connected_core_connectivity_report = None
     if connectivity_quality["strict_connectivity_status"] != "pass":
         connected_core_report = connected_core_func(
-            raw_net_file,
+            net_file,
             output_dir=output_dir / "connected_core",
             prefix=prefix,
             timeout_seconds=timeout_seconds,
@@ -800,9 +855,9 @@ def run_osm_cleanup_workflow(
         and reference_net_file is not None
         and run_reference_join_audit_after_build
     ):
-        reference_join_audit_candidate_net_file = reference_visual_detail_net_file or net_file
+        reference_join_audit_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
         reference_join_audit_candidate_layer = (
-            "reference_visual_detail" if reference_visual_detail_net_file is not None else "vehicle_core"
+            "reference_visual_detail" if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None else "vehicle_core"
         )
         reference_join_audit_report = reference_join_audit_func(
             reference_net_file=reference_net_file,
@@ -857,15 +912,15 @@ def run_osm_cleanup_workflow(
             "netedit_network_file": str(net_file),
             "warnings": ["netedit launch disabled by caller"],
         }
-    if reference_visual_detail_net_file is not None:
+    if reference_visual_detail_comparison_net_file is not None:
         if launch_netedit_after_build:
-            reference_visual_detail_netedit_report = netedit_func(reference_visual_detail_net_file)
+            reference_visual_detail_netedit_report = netedit_func(reference_visual_detail_comparison_net_file)
         else:
             reference_visual_detail_netedit_report = {
                 "status": "blocked",
                 "claim_status": "diagnostic-demo",
                 "netedit_status": "skipped",
-                "netedit_network_file": str(reference_visual_detail_net_file),
+                "netedit_network_file": str(reference_visual_detail_comparison_net_file),
                 "warnings": ["reference visual-detail netedit launch disabled by caller"],
             }
     if launch_sumo_gui_after_build:
@@ -896,6 +951,9 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_build_report,
         reference_visual_detail_service_permission_report,
         tls_report,
+        tls_aggregation_report or {},
+        reference_visual_detail_tls_report or {},
+        reference_visual_detail_tls_aggregation_report or {},
         raw_connectivity_report,
         connected_core_report or {},
         connected_core_connectivity_report or {},
@@ -911,6 +969,19 @@ def run_osm_cleanup_workflow(
         warnings.extend(str(item) for item in child.get("warnings", []))
     if tls_summary["tls_review_complete"] == "no":
         warnings.append("TLS reality review still requires human Google Maps/current-or-user-targeted map inspection")
+    if tls_aggregation_report is not None and tls_aggregation_report.get("tls_aggregation_status") == "variant_created_for_review":
+        warnings.append(
+            "TLS aggregation created a separate review variant; compare physical TLS clusters in Netedit and Google Maps "
+            "before adopting it as the clean signal network"
+        )
+    if (
+        reference_visual_detail_tls_aggregation_report is not None
+        and reference_visual_detail_tls_aggregation_report.get("tls_aggregation_status") == "variant_created_for_review"
+    ):
+        warnings.append(
+            "reference visual-detail TLS aggregation created a separate comparison variant; use it for TUM/manual-reference "
+            "Netedit comparison before adopting signal cleanup"
+        )
     if connectivity_quality["quality_warning"]:
         warnings.append(str(connectivity_quality["quality_warning"]))
     if topology_audit_report is not None and topology_audit_report.get("topology_fragmentation_status") == "needs_review":
@@ -939,6 +1010,8 @@ def run_osm_cleanup_workflow(
         "netedit": _gate_value(netedit_report),
         "sumo_gui": _gate_value(sumo_gui_report),
     }
+    if tls_aggregation_report is not None:
+        gate_status["tls_aggregation"] = "blocked" if tls_aggregation_report.get("status") == "pass" else _gate_value(tls_aggregation_report)
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         gate_status["reference_visual_detail"] = "pass" if reference_visual_detail_status in {"built", "same_as_vehicle_core"} else "fail"
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
@@ -999,6 +1072,27 @@ def run_osm_cleanup_workflow(
         "map_temporal_scope": map_temporal_scope,
         "map_target_date": map_target_date or "",
         **tls_summary,
+        "tls_physical_cluster_count": tls_aggregation_report.get("tls_physical_cluster_count", tls_summary["tls_cluster_count"])
+        if tls_aggregation_report is not None
+        else tls_summary["tls_cluster_count"],
+        "tls_aggregation_status": "skipped"
+        if tls_aggregation_report is None
+        else tls_aggregation_report.get("tls_aggregation_status", tls_aggregation_report.get("status", "fail")),
+        "tls_aggregation_variant_file": ""
+        if tls_aggregation_report is None
+        else str(tls_aggregation_report.get("tls_aggregation_variant_file", "")),
+        "tls_aggregation_plan_file": ""
+        if tls_aggregation_report is None
+        else str(tls_aggregation_report.get("tls_aggregation_plan_file", "")),
+        "tls_aggregation_representatives_file": ""
+        if tls_aggregation_report is None
+        else str(tls_aggregation_report.get("tls_aggregation_representatives_file", "")),
+        "tls_aggregated_traffic_light_junction_count": ""
+        if tls_aggregation_report is None
+        else tls_aggregation_report.get("tls_aggregated_traffic_light_junction_count", ""),
+        "tls_aggregated_tl_logic_count": ""
+        if tls_aggregation_report is None
+        else tls_aggregation_report.get("tls_aggregated_tl_logic_count", ""),
         "connectivity_status": connectivity_report.get("connectivity_status", connectivity_report.get("status", "fail")),
         "raw_connectivity_status": raw_connectivity_report.get("connectivity_status", raw_connectivity_report.get("status", "fail")),
         "strict_connectivity_status": connectivity_quality["strict_connectivity_status"],
@@ -1069,6 +1163,29 @@ def run_osm_cleanup_workflow(
         "netedit_network_file": netedit_report.get("netedit_network_file", str(net_file)),
         "reference_visual_detail_status": reference_visual_detail_status,
         "reference_visual_detail_net_file": "" if reference_visual_detail_net_file is None else str(reference_visual_detail_net_file),
+        "reference_visual_detail_comparison_net_file": ""
+        if reference_visual_detail_comparison_net_file is None
+        else str(reference_visual_detail_comparison_net_file),
+        "reference_visual_detail_tls_candidate_count": ""
+        if reference_visual_detail_tls_report is None
+        else reference_visual_detail_tls_report.get("tls_candidate_count", ""),
+        "reference_visual_detail_tls_cluster_count": ""
+        if reference_visual_detail_tls_report is None
+        else reference_visual_detail_tls_report.get("tls_cluster_count", ""),
+        "reference_visual_detail_tls_aggregation_status": "skipped"
+        if reference_visual_detail_tls_aggregation_report is None
+        else reference_visual_detail_tls_aggregation_report.get(
+            "tls_aggregation_status", reference_visual_detail_tls_aggregation_report.get("status", "fail")
+        ),
+        "reference_visual_detail_tls_aggregation_variant_file": ""
+        if reference_visual_detail_tls_aggregation_report is None
+        else str(reference_visual_detail_tls_aggregation_report.get("tls_aggregation_variant_file", "")),
+        "reference_visual_detail_tls_aggregated_traffic_light_junction_count": ""
+        if reference_visual_detail_tls_aggregation_report is None
+        else reference_visual_detail_tls_aggregation_report.get("tls_aggregated_traffic_light_junction_count", ""),
+        "reference_visual_detail_tls_aggregated_tl_logic_count": ""
+        if reference_visual_detail_tls_aggregation_report is None
+        else reference_visual_detail_tls_aggregation_report.get("tls_aggregated_tl_logic_count", ""),
         "reference_visual_detail_netedit_status": reference_visual_detail_netedit_report.get("netedit_status", "not_started"),
         "reference_visual_detail_netedit_network_file": reference_visual_detail_netedit_report.get("netedit_network_file", ""),
         "sumo_gui_status": sumo_gui_report.get("sumo_gui_status", "failed"),
@@ -1085,6 +1202,9 @@ def run_osm_cleanup_workflow(
         "service_passenger_permissions": service_permission_report,
         "reference_visual_detail_service_passenger_permissions": reference_visual_detail_service_permission_report,
         "tls_audit": tls_report,
+        "tls_aggregation": tls_aggregation_report or {},
+        "reference_visual_detail_tls_audit": reference_visual_detail_tls_report or {},
+        "reference_visual_detail_tls_aggregation": reference_visual_detail_tls_aggregation_report or {},
         "raw_connectivity": raw_connectivity_report,
         "connected_core": connected_core_report or {},
         "connected_core_connectivity": connected_core_connectivity_report or {},

@@ -6,6 +6,7 @@ from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
 from torii_sumo.core.junction_aggregation import build_junction_aggregation_variant
+from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
 from torii_sumo.core.osm_network import (
     audit_tls,
     audit_tls_multisource,
@@ -214,6 +215,22 @@ def sumo_network_junction_aggregation_variant(
     )
 
 
+def sumo_network_tls_aggregation_variant(
+    net_file: str,
+    tls_audit_report_file: str,
+    output_dir: str,
+    prefix: str = "tls_aggregation",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_tls_aggregation_variant(
+        net_file=Path(net_file),
+        tls_audit_report=_read_json_report(tls_audit_report_file) or {},
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def sumo_network_connected_core(
     net_file: str,
     output_dir: str,
@@ -272,6 +289,7 @@ def sumo_osm_cleanup_workflow(
     routeability_vehicle_count: int | None = None,
     routeability_initial_end: int | None = None,
     routeability_max_end: int | None = None,
+    run_tls_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
     key_edge_queries: list[dict[str, Any]] | None = None,
@@ -307,6 +325,7 @@ def sumo_osm_cleanup_workflow(
         routeability_vehicle_count=routeability_vehicle_count,
         routeability_initial_end=routeability_initial_end,
         routeability_max_end=routeability_max_end,
+        run_tls_aggregation_after_build=run_tls_aggregation_after_build,
         run_reference_join_audit_after_build=run_reference_join_audit_after_build,
         run_reference_join_aggregation_after_build=run_reference_join_aggregation_after_build,
         key_edge_queries=key_edge_queries,

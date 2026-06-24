@@ -35,7 +35,7 @@ Torii hat zwei Schichten:
 | Reasoning layer | SUMO Expert Skills stellen die richtigen Fragen, waehlen einen Workflow und begrenzen Aussagen. |
 | Execution layer | Lokale sichere stdio MCP Tools fuehren begrenzte SUMO-Checks aus und liefern strukturierte Beobachtungen. |
 
-Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
+Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
 
 ## Example
 
@@ -51,11 +51,11 @@ Dieses Demo nutzt jetzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein von 
 
 | Evidenz | Ergebnis |
 |---|---:|
-| Torii vehicle core | 2,497 Kanten, 3,051 Spuren, 1,221 Knoten im Vergleichs-bbox |
-| Torii reference visual-detail | 6,130 Kanten, 6,701 Spuren, 2,998 Knoten im Vergleichs-bbox |
+| Torii vehicle core | 2,493 Kanten, 3,045 Spuren, 1,220 Knoten im Vergleichs-bbox nach Connected-Core-Extraktion |
+| Torii reference visual-detail | 6,126 Kanten, 6,695 Spuren, 2,997 Knoten im Vergleichs-bbox |
 | TUM bereinigter Referenzausschnitt | 3,577 Kanten, 4,955 Spuren, 1,752 Knoten im selben bbox |
-| Ampel-Knoten | Torii visual-detail 217 vs TUM 29 |
-| Verbleibendes Bereinigungsziel | wiederverwendbare physische Kreuzungs-/TLS-Aggregation mit Cluster-Graph-Audit und Google Maps Kartenpruefung |
+| Ampel-Knoten | Torii visual-detail raw 217; TLS-Aggregation Review-Variante 34 vs TUM 29 |
+| Verbleibendes Bereinigungsziel | Google-Maps-Pruefung der zusaetzlichen TLS-Kandidaten und wiederverwendbare physische Kreuzungsaggregation |
 | Claim status | `diagnostic-demo` |
 
 Siehe [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). Die erzeugten `.osm.xml`, `.net.xml`, Routen- und Logdateien werden absichtlich nicht committed; das Repository behaelt nur den Prompt und eine leichte Validierungszusammenfassung.
