@@ -127,8 +127,17 @@ def test_topology_audit_flags_dense_junction_clusters_within_radius(tmp_path: Pa
     assert report["junction_count"] == 4
     assert report["suspicious_cluster_count"] == 1
     assert report["max_cluster_node_count"] == 3
-    assert set(report["suspicious_clusters"][0]["node_ids"]) == {"j1", "j2", "j3"}
+    cluster = report["suspicious_clusters"][0]
+    assert set(cluster["node_ids"]) == {"j1", "j2", "j3"}
+    assert cluster["manual_correction_status"] == "needs_map_review"
+    assert cluster["map_review_source"] == "Google Maps default map"
+    assert cluster["google_maps_url"].startswith("https://www.google.com/maps/@")
+    assert "data=!3m1!1e3" not in cluster["google_maps_url"]
+    assert "data=!3m1!1e3" in cluster["optional_google_maps_satellite_url"]
     assert Path(report["clusters_file"]).is_file()
+    csv_header = Path(report["clusters_file"]).read_text(encoding="utf-8").splitlines()[0]
+    assert "google_maps_url" in csv_header
+    assert "optional_google_maps_satellite_url" in csv_header
 
 
 def test_topology_audit_passes_sparse_junctions(tmp_path: Path) -> None:

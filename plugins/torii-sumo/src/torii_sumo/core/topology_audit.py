@@ -4,9 +4,12 @@ import csv
 import json
 import math
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
+
+from .osm_network import _net_xy_to_latlon
 
 
 def audit_topology_fragmentation(
@@ -29,7 +32,13 @@ def audit_topology_fragmentation(
     except (OSError, ET.ParseError, KeyError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
-    clusters = _dense_clusters(junctions, radius_m=cluster_radius_m, min_cluster_nodes=min_cluster_nodes)
+    xy_to_latlon = _coordinate_converter(net_file)
+    clusters = _dense_clusters(
+        junctions,
+        radius_m=cluster_radius_m,
+        min_cluster_nodes=min_cluster_nodes,
+        xy_to_latlon=xy_to_latlon,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     clusters_file = output_dir / f"{prefix}_dense_junction_clusters.csv"
     report_file = output_dir / f"{prefix}_topology_audit.json"
@@ -93,6 +102,7 @@ def _dense_clusters(
     *,
     radius_m: float,
     min_cluster_nodes: int,
+    xy_to_latlon: Callable[[float, float], tuple[float, float]] | None = None,
 ) -> list[dict[str, Any]]:
     neighbors = {index: set() for index in range(len(junctions))}
     for left in range(len(junctions)):
@@ -115,14 +125,20 @@ def _dense_clusters(
                     component.add(neighbor)
                     queue.append(neighbor)
         if len(component) >= min_cluster_nodes:
-            clusters.append(_cluster_summary(junctions, component, radius_m))
+            clusters.append(_cluster_summary(junctions, component, radius_m, xy_to_latlon=xy_to_latlon))
     clusters.sort(key=lambda cluster: (-cluster["node_count"], cluster["centroid_x"], cluster["centroid_y"]))
     for index, cluster in enumerate(clusters, start=1):
         cluster["cluster_id"] = f"C{index:03d}"
     return clusters
 
 
-def _cluster_summary(junctions: list[dict[str, Any]], component: set[int], radius_m: float) -> dict[str, Any]:
+def _cluster_summary(
+    junctions: list[dict[str, Any]],
+    component: set[int],
+    radius_m: float,
+    *,
+    xy_to_latlon: Callable[[float, float], tuple[float, float]] | None,
+) -> dict[str, Any]:
     nodes = [junctions[index] for index in sorted(component, key=lambda item: junctions[item]["id"])]
     centroid_x = sum(node["x"] for node in nodes) / len(nodes)
     centroid_y = sum(node["y"] for node in nodes) / len(nodes)
@@ -130,6 +146,7 @@ def _cluster_summary(junctions: list[dict[str, Any]], component: set[int], radiu
     for left in range(len(nodes)):
         for right in range(left + 1, len(nodes)):
             max_pair_distance = max(max_pair_distance, _distance(nodes[left], nodes[right]))
+    lat, lon, coordinate_status = _cluster_latlon(centroid_x, centroid_y, xy_to_latlon)
     return {
         "cluster_id": "",
         "node_count": len(nodes),
@@ -137,6 +154,14 @@ def _cluster_summary(junctions: list[dict[str, Any]], component: set[int], radiu
         "node_types": [str(node["type"]) for node in nodes],
         "centroid_x": round(centroid_x, 3),
         "centroid_y": round(centroid_y, 3),
+        "centroid_lat": round(lat, 7),
+        "centroid_lon": round(lon, 7),
+        "coordinate_status": coordinate_status,
+        "map_review_source": "Google Maps default map",
+        "google_maps_url": _google_maps_default_url(lat, lon),
+        "optional_google_maps_satellite_url": _google_maps_satellite_url(lat, lon),
+        "manual_correction_status": "needs_map_review",
+        "suggested_correction_action": "compare the Google Maps road/intersection footprint before joining SUMO junctions",
         "max_pair_distance_m": round(max_pair_distance, 3),
         "cluster_radius_m": radius_m,
     }
@@ -144,6 +169,38 @@ def _cluster_summary(junctions: list[dict[str, Any]], component: set[int], radiu
 
 def _distance(left: dict[str, Any], right: dict[str, Any]) -> float:
     return math.hypot(float(left["x"]) - float(right["x"]), float(left["y"]) - float(right["y"]))
+
+
+def _coordinate_converter(net_file: Path) -> Callable[[float, float], tuple[float, float]] | None:
+    try:
+        import sumolib  # type: ignore
+
+        net = sumolib.net.readNet(str(net_file))
+        return lambda x, y: _net_xy_to_latlon(net, x, y)
+    except Exception:
+        return None
+
+
+def _cluster_latlon(
+    centroid_x: float,
+    centroid_y: float,
+    xy_to_latlon: Callable[[float, float], tuple[float, float]] | None,
+) -> tuple[float, float, str]:
+    if xy_to_latlon is None:
+        return centroid_y, centroid_x, "xy_fallback_no_geo_projection"
+    try:
+        lat, lon = xy_to_latlon(centroid_x, centroid_y)
+    except Exception:
+        return centroid_y, centroid_x, "xy_fallback_geo_projection_failed"
+    return lat, lon, "wgs84_from_sumo_projection"
+
+
+def _google_maps_default_url(lat: float, lon: float) -> str:
+    return f"https://www.google.com/maps/@{lat:.7f},{lon:.7f},50m"
+
+
+def _google_maps_satellite_url(lat: float, lon: float) -> str:
+    return f"https://www.google.com/maps/@{lat:.7f},{lon:.7f},50m/data=!3m1!1e3"
 
 
 def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
@@ -157,6 +214,14 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "node_types",
                 "centroid_x",
                 "centroid_y",
+                "centroid_lat",
+                "centroid_lon",
+                "coordinate_status",
+                "map_review_source",
+                "google_maps_url",
+                "optional_google_maps_satellite_url",
+                "manual_correction_status",
+                "suggested_correction_action",
                 "max_pair_distance_m",
                 "cluster_radius_m",
             ],

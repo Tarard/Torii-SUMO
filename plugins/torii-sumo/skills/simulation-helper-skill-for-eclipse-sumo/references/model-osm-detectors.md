@@ -172,6 +172,30 @@ time_scope_residual_risk:
 4. Record review fields such as `sumo_node_id`, `lat`, `lon`, road names, external-source URL or inventory ID, `map_temporal_scope`, `map_target_date`, `audit_status`, and action (`keep_tls`, `remove_tls`, `needs_review`).
 5. Bound claims: external visual evidence supports a modeling decision. It does not prove signal timing, phasing, recall, detector actuation, or operational control.
 
+## Junction Aggregation Audit
+
+When OSM/netconvert creates many close junctions or short edges around one physical intersection, do not immediately edit or join the network. First run a reusable dense-junction audit and create a non-destructive correction record.
+
+Required fields for each suspicious junction cluster:
+
+```text
+cluster_id:
+node_ids:
+node_count:
+node_types:
+centroid_lat:
+centroid_lon:
+map_review_source: Google Maps default map
+google_maps_url:
+optional_google_maps_satellite_url:
+manual_correction_status: needs_map_review
+suggested_correction_action:
+```
+
+For regions where Google Maps is reliable and appropriate, use the default Google Maps road geometry to compare the cluster against the physical intersection footprint before any destructive aggregation. Use satellite view only when the default map is ambiguous. For mainland China or other regions where Google Maps is not the right current-road baseline, keep the map-review field but add the appropriate regional source in the correction record.
+
+Only after map/source-bounded review may Torii produce a `*_junction_aggregated.net.xml` variant. Keep the raw network, visual-detail network, audit CSV/JSON, and aggregation output separate, then rerun connectivity, routeability, TLS audit, and topology audit.
+
 ## Redundant TLS Removal Gate
 
 When OSM/netconvert creates many traffic lights, force a TLS audit before using the network for signal-control claims:

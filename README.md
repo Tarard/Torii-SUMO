@@ -47,14 +47,15 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 
 This demo now uses Ingolstadt city center to test whether a Torii OSM-cleaned network converges toward a manually cleaned reference network instead of treating OSM import success as enough.
 
+![TUM bbox reference compared with Torii reference visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_reference_visual_detail.png)
+
 | Evidence | Result |
 |---|---:|
-| Torii OSM full-vehicle connected core | 1,427 edges, 1,978 lanes, 782 junctions in the comparison bbox |
+| Torii vehicle core | 2,497 edges, 3,051 lanes, 1,221 junctions in the comparison bbox |
+| Torii reference visual-detail | 6,130 edges, 6,701 lanes, 2,998 junctions in the comparison bbox |
 | TUM cleaned reference subset | 3,577 edges, 4,955 lanes, 1,752 junctions in the same bbox |
-| Traffic-light junctions | Torii 198 vs TUM 29 |
-| Joined-junction evidence | Torii 0 joined-junction endpoint refs vs TUM 1,136 |
-| Routeability smoke | both networks: 40 / 40 generated passenger trips arrived at `end=800` |
-| Teleports / collisions | 0 / 0 |
+| Traffic-light junctions | Torii visual-detail 217 vs TUM 29 |
+| Remaining cleanup target | reusable physical-intersection/TLS aggregation with Google Maps map review |
 | Claim status | `diagnostic-demo` |
 
 See [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). The generated `.osm.xml`, `.net.xml`, route, and log files are intentionally not committed; the repository keeps the prompt and lightweight validation summary.

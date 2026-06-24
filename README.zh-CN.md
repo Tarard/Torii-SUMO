@@ -47,14 +47,15 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 
 这个 demo 现在使用 Ingolstadt 市中心，用来测试 Torii 从 OSM 清洗出的路网是否能向人工清洗参考路网收敛，而不是把 OSM 导入成功当作充分结果。
 
+![TUM bbox reference 与 Torii reference visual-detail 对比](examples/02_one_prompt_osm_network/assets/tum_vs_torii_reference_visual_detail.png)
+
 | 证据 | 结果 |
 |---|---:|
-| Torii OSM full-vehicle connected core | 对比 bbox 内 1,427 条 edge、1,978 条 lane、782 个 junction |
+| Torii vehicle core | 对比 bbox 内 2,497 条 edge、3,051 条 lane、1,221 个 junction |
+| Torii reference visual-detail | 对比 bbox 内 6,130 条 edge、6,701 条 lane、2,998 个 junction |
 | TUM 人工清洗参考子集 | 同一 bbox 内 3,577 条 edge、4,955 条 lane、1,752 个 junction |
-| 信号灯 junction | Torii 198 vs TUM 29 |
-| joined-junction 证据 | Torii 0 个 joined-junction endpoint refs vs TUM 1,136 个 |
-| routeability smoke | 两个路网均为 40 / 40 个生成 passenger trips 在 `end=800` 到达 |
-| teleports / collisions | 0 / 0 |
+| 信号灯 junction | Torii visual-detail 217 vs TUM 29 |
+| 剩余清洗目标 | 可复用的物理交叉口 / TLS 聚合，并先用 Google Maps 默认地图复核 |
 | claim status | `diagnostic-demo` |
 
 详见 [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md)。生成的 `.osm.xml`、`.net.xml`、route 和 log 文件不会提交到仓库；仓库只保留 prompt 和轻量验证摘要。
