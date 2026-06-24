@@ -10,7 +10,7 @@ Ask only the missing questions needed to produce a usable `Experiment Readiness 
 
 1. Objective: What question or claim should the experiment answer?
 2. Scenario and network: toy intersection, corridor, grid, OSM import, benchmark, or field-calibrated network?
-3. Demand: fixed routes, generated trips, OD matrix, measured counts, or scenario demand?
+3. Demand: fixed routes, generated trips, OD matrix, measured counts, scenario demand, and arrival type?
 4. Controller: fixed-time, SUMO actuated, NEMA, max-pressure, data-informed, MPC-style, RL, or custom?
 5. Baselines: which controllers are compared, and what must remain paired?
 6. TLS and detectors: which TLS IDs, phase mappings, movements, detectors, and yellow/all-red policies are involved?
@@ -29,6 +29,8 @@ objective:
 scenario:
 network_artifacts:
 demand_artifacts:
+arrival_type:
+arrival_evidence_or_generation_rule:
 controller_family:
 baseline_family:
 tls_detector_evidence:
@@ -41,6 +43,23 @@ readiness: ready_to_plan / needs_answers / diagnostic_only / blocked
 ```
 
 If readiness is not `ready_to_plan`, ask one focused follow-up instead of inventing missing design choices.
+
+## Arrival Type
+
+`arrival type` describes the temporal pattern of vehicles entering the simulated network, corridor, OD pair, or demand group. It is separate from demand volume, OD structure, route choice, vehicle type, and controller policy.
+
+Use these generic categories when planning generated, calibrated, or sampled demand:
+
+| Arrival type | Meaning |
+|---|---|
+| `smooth_even` | Vehicles are distributed nearly uniformly across the analysis window. Useful as a diagnostic simplification, but often less realistic for signalized corridors. |
+| `poisson_random` | Vehicles are generated from an independent random process around a target rate. Useful when arrivals are assumed memoryless or weakly coordinated. |
+| `platoon_burst` | Vehicles arrive in short clusters separated by gaps, such as from upstream signal releases, ramp metering, parking exits, or coordinated flows. |
+| `scheduled_pulse` | Vehicles are concentrated around known external schedules, such as events, shift changes, school release, ferry/train arrivals, or facility opening/closing times. |
+| `detector_matched_profile` | Arrival timing follows measured detector or count data, preserving the observed bin profile and any supported peak or burst structure. |
+| `mixed_profile` | Demand combines multiple arrival patterns. State the mixture and which demand groups use each pattern. |
+
+For generated demand, record the seed selection rule separately from the controller outcome. Seeds should be justified by ex-ante arrival features, calibration evidence, or baseline scenario definition, not by treatment performance.
 
 ## Planning Workflow
 
@@ -66,6 +85,8 @@ If the user skips planning, mark the work `diagnostic-only` and do not present t
 ### 2. Scenario and Artifacts
 - Network:
 - Route/demand files:
+- Arrival type and temporal pattern:
+- Arrival evidence or generation rule:
 - Additional files:
 - SUMO config:
 - Controller code:
@@ -85,7 +106,9 @@ If the user skips planning, mark the work `diagnostic-only` and do not present t
 - Baselines:
 - Ablations:
 - Demand levels:
+- Arrival type(s):
 - Random seeds:
+- Seed selection rule:
 - Paired variables:
 - Variables intentionally changed:
 
@@ -126,6 +149,7 @@ If the user skips planning, mark the work `diagnostic-only` and do not present t
 - Output gate:
 - Warning/error/teleport gate:
 - Baseline pairing gate:
+- Arrival type and seed-selection gate:
 - Metric validity gate:
 - Reproducibility gate:
 
@@ -150,6 +174,7 @@ Next allowed action:
 - Use concrete file names, commands, outputs, seeds, and horizons when they are known.
 - If exact artifacts are unknown, ask a focused follow-up question instead of inventing details.
 - Do not hide design choices inside implementation. If demand, seeds, controller policy, or metrics change, show the change in the plan.
+- Record arrival type separately from demand volume and route choice. If arrivals are generated from seeds, state the seed selection rule before controller results are known.
 - Do not bundle root-cause debugging fixes with formal comparison runs. Plan diagnostic runs separately.
 - Do not let baseline and treatment runs share output paths.
 - Do not approve a plan that compares controllers with different demand, seeds, horizons, output intervals, or metric denominators unless the claim is explicitly diagnostic.
