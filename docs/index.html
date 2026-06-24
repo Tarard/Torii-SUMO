@@ -520,7 +520,7 @@
         <div class="eyebrow" data-i18n="eyebrow">Task-Oriented Road Infrastructure Intelligence</div>
         <h1 data-i18n="heroTitle">One prompt, structured SUMO work.</h1>
         <p class="subtitle" data-i18n="heroSubtitle">Agent plugin for SUMO: one-sentence workflow routing plus local MCP tools for OSM-to-SUMO work.</p>
-        <code class="prompt" data-i18n="promptText">Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.</code>
+        <code class="prompt" data-i18n="promptText">Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt.</code>
         <div class="hero-points" aria-label="Core mechanisms">
           <span data-i18n="heroPointOne">Intent</span>
           <span data-i18n="heroPointTwo">Observe</span>
@@ -637,7 +637,7 @@
       <h2 data-i18n="promptTitle">Copy-ready prompts for real projects</h2>
       <p class="muted" data-i18n="promptIntro">Start with one sentence. Torii should choose the workflow, ask only blocking questions, and report evidence before claims.</p>
       <div class="prompt-list">
-        <code data-i18n="tryPromptOne">Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.</code>
+        <code data-i18n="tryPromptOne">Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt.</code>
         <code data-i18n="tryPromptTwo">Audit this TraCI signal controller before I compare it with the fixed-time baseline.</code>
         <code data-i18n="tryPromptThree">This SUMO run finishes, but tripinfo and summary disagree. Use the debugging helper and tell me whether the run is valid.</code>
         <code data-i18n="tryPromptFour">Controller A has lower travel time, but some vehicles are unfinished. What can I claim and what must be demoted?</code>
@@ -693,11 +693,11 @@
       </article>
       <article class="panel">
         <h2 data-i18n="examplesTitle">Examples</h2>
-        <p class="muted" data-i18n="examplesText">The repository includes small prompt-ready audit examples for fixed-time, max-pressure, and data-informed signal-control workflows.</p>
+        <p class="muted" data-i18n="examplesText">The repository includes a unified signal-control audit example and an Ingolstadt OSM-to-SUMO network comparison against a manually cleaned TUM reference.</p>
         <div class="link-list">
-          <a href="https://github.com/Tarard/Torii-SUMO/blob/main/examples/01_fixed_time_audit/task.md" data-i18n="exampleOne">01 fixed-time</a>
-          <a href="https://github.com/Tarard/Torii-SUMO/blob/main/examples/02_max_pressure_audit/task.md" data-i18n="exampleTwo">02 max-pressure</a>
-          <a href="https://github.com/Tarard/Torii-SUMO/blob/main/examples/03_data_informed_signal_control_audit/task.md" data-i18n="exampleThree">03 data-informed</a>
+          <a href="https://github.com/Tarard/Torii-SUMO/blob/main/examples/01_signal_control_audit/task.md" data-i18n="exampleOne">01 signal-control audit</a>
+          <a href="https://github.com/Tarard/Torii-SUMO/blob/main/examples/04_one_prompt_osm_network/README.md" data-i18n="exampleTwo">04 Ingolstadt OSM comparison</a>
+          <a href="https://github.com/Tarard/Torii-SUMO/blob/main/docs/common-sumo-signal-control-failures.md" data-i18n="exampleThree">Failure checklist</a>
         </div>
       </article>
     </section>
@@ -729,7 +729,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         eyebrow: "Task-Oriented Road Infrastructure Intelligence",
         heroTitle: "One prompt, structured SUMO work.",
         heroSubtitle: "Agent plugin for SUMO: one-sentence workflow routing plus local MCP tools for OSM-to-SUMO work.",
-        promptText: "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.",
+        promptText: "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt.",
         heroPointOne: "Intent",
         heroPointTwo: "Observe",
         heroPointThree: "Build",
@@ -784,7 +784,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         promptKicker: "Try it immediately",
         promptTitle: "Copy-ready prompts for real projects",
         promptIntro: "Start with one sentence. Torii should choose the workflow, ask only blocking questions, and report evidence before claims.",
-        tryPromptOne: "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO.",
+        tryPromptOne: "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt.",
         tryPromptTwo: "Audit this TraCI signal controller before I compare it with the fixed-time baseline.",
         tryPromptThree: "This SUMO run finishes, but tripinfo and summary disagree. Use the debugging helper and tell me whether the run is valid.",
         tryPromptFour: "Controller A has lower travel time, but some vehicles are unfinished. What can I claim and what must be demoted?",
@@ -805,10 +805,10 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         audit9: "Fresh verification evidence and review findings before completion claims.",
         audit10: "Confirmed SUMO Experiment Plan after intake and before execution.",
         examplesTitle: "Examples",
-        examplesText: "The repository includes small prompt-ready audit examples for fixed-time, max-pressure, and data-informed signal-control workflows.",
-        exampleOne: "01 fixed-time",
-        exampleTwo: "02 max-pressure",
-        exampleThree: "03 data-informed",
+        examplesText: "The repository includes a unified signal-control audit example and an Ingolstadt OSM-to-SUMO network comparison against a manually cleaned TUM reference.",
+        exampleOne: "01 signal-control audit",
+        exampleTwo: "04 Ingolstadt OSM comparison",
+        exampleThree: "Failure checklist",
         installTitle: "Install Torii",
         installText: "Install the Codex plugin to get both the reasoning skill and local MCP tools.",
         limitsTitle: "Limitations",
@@ -822,7 +822,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         eyebrow: "Task-Oriented Road Infrastructure Intelligence",
         heroTitle: "一句话启动结构化 SUMO 工作流。",
         heroSubtitle: "面向 SUMO 的 Agent plugin：用一句话路由工作流，并用本地 MCP 工具处理 OSM-to-SUMO 工作。",
-        promptText: "使用 Torii 从 OSM 下载 Dresden 的 Altstadt 地图，清理它，并在 SUMO 中打开。",
+        promptText: "使用 Torii 从 OSM 清洗 Ingolstadt 市中心路网，并与 TUM-VT/sumo_ingolstadt 手工清洗路网对比。",
         heroPointOne: "意图",
         heroPointTwo: "观察",
         heroPointThree: "构建",
@@ -877,7 +877,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         promptKicker: "马上试用",
         promptTitle: "可以直接复制到真实项目里的提示词",
         promptIntro: "从一句话开始。Torii 应该自己选择工作流，只追问阻塞问题，并先报告证据再给结论。",
-        tryPromptOne: "使用 Torii 从 OSM 下载 Dresden 的 Altstadt 地图，清理它，并在 SUMO 中打开。",
+        tryPromptOne: "使用 Torii 从 OSM 清洗 Ingolstadt 市中心路网，并与 TUM-VT/sumo_ingolstadt 手工清洗路网对比。",
         tryPromptTwo: "在我把这个 TraCI 信号控制器和固定配时基准比较之前，请先审计这个控制器。",
         tryPromptThree: "这个 SUMO 运行能结束，但 tripinfo 和 summary 不一致。请使用调试助手判断这次运行是否有效。",
         tryPromptFour: "控制器 A 的旅行时间更低，但仍有未完成车辆。我能声称什么？哪些结论必须降级？",
@@ -898,10 +898,10 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         audit9: "在声称完成前，提供新的验证证据和审阅发现。",
         audit10: "在追问之后、执行之前确认 SUMO 实验计划。",
         examplesTitle: "示例",
-        examplesText: "仓库包含可以直接放进提示词的固定配时、最大压力和数据辅助信号控制审计示例。",
-        exampleOne: "01 固定配时",
-        exampleTwo: "02 最大压力",
-        exampleThree: "03 数据辅助",
+        examplesText: "仓库包含统一的信号控制审计示例，以及 Ingolstadt OSM-to-SUMO 路网与 TUM 手工清洗参考网的对比示例。",
+        exampleOne: "01 信号控制审计",
+        exampleTwo: "04 Ingolstadt OSM 对比",
+        exampleThree: "失败清单",
         installTitle: "安装 Torii",
         installText: "安装 Codex plugin 后会同时获得推理 skill 和本地 MCP tools。",
         limitsTitle: "限制",
@@ -915,7 +915,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         eyebrow: "Task-Oriented Road Infrastructure Intelligence",
         heroTitle: "Ein Prompt, strukturierte SUMO-Arbeit.",
         heroSubtitle: "Agent plugin fuer SUMO: Ein-Satz-Workflow-Routing plus lokale MCP-Werkzeuge fuer OSM-zu-SUMO-Arbeit.",
-        promptText: "Nutze Torii, um die Altstadt-Karte in Dresden aus OSM zu laden, zu bereinigen und in SUMO zu oeffnen.",
+        promptText: "Nutze Torii, um das Ingolstadt-Zentrum aus OSM zu bereinigen und mit TUM-VT/sumo_ingolstadt zu vergleichen.",
         heroPointOne: "Ziel",
         heroPointTwo: "Beobachten",
         heroPointThree: "Bauen",
@@ -970,7 +970,7 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         promptKicker: "Sofort ausprobieren",
         promptTitle: "Direkt kopierbare Prompts für echte Projekte",
         promptIntro: "Beginnen Sie mit einem Satz. Torii soll den Workflow waehlen, nur blockierende Fragen stellen und vor Aussagen Evidenz berichten.",
-        tryPromptOne: "Nutze Torii, um die Altstadt-Karte in Dresden aus OSM zu laden, zu bereinigen und in SUMO zu oeffnen.",
+        tryPromptOne: "Nutze Torii, um das Ingolstadt-Zentrum aus OSM zu bereinigen und mit TUM-VT/sumo_ingolstadt zu vergleichen.",
         tryPromptTwo: "Prüfe diesen TraCI-Signalcontroller, bevor ich ihn mit der Festzeit-Basislinie vergleiche.",
         tryPromptThree: "Dieser SUMO-Lauf endet, aber tripinfo und summary widersprechen sich. Nutze den Debugging-Helfer und sage mir, ob der Lauf gültig ist.",
         tryPromptFour: "Controller A hat eine geringere Reisezeit, aber einige Fahrzeuge sind unvollendet. Was darf ich behaupten und was muss abgestuft werden?",
@@ -991,10 +991,10 @@ codex plugin add torii-sumo@torii-sumo</code></pre>
         audit9: "Aktuelle Verifikationsnachweise und Review-Befunde vor Abschlussaussagen.",
         audit10: "Bestätigter SUMO-Versuchsplan nach der Vorabklärung und vor der Ausführung.",
         examplesTitle: "Beispiele",
-        examplesText: "Das Repository enthält kleine, direkt als Eingabe nutzbare Prüfbeispiele für Festzeitsteuerung, Max-Pressure und dateninformierte Signalsteuerung.",
-        exampleOne: "01 Festzeit",
-        exampleTwo: "02 Max-Pressure",
-        exampleThree: "03 dateninformiert",
+        examplesText: "Das Repository enthaelt ein gebuendeltes Signalsteuerungs-Audit und einen Ingolstadt-OSM-zu-SUMO-Vergleich mit einem manuell bereinigten TUM-Referenznetz.",
+        exampleOne: "01 Signalsteuerungs-Audit",
+        exampleTwo: "04 Ingolstadt OSM-Vergleich",
+        exampleThree: "Fehlerliste",
         installTitle: "Torii installieren",
         installText: "Installieren Sie das Codex Plugin, um Reasoning Skill und lokale MCP Tools zusammen zu erhalten.",
         limitsTitle: "Grenzen",

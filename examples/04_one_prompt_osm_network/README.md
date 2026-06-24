@@ -1,92 +1,72 @@
 # One-Prompt OSM-to-SUMO Network Demo
 
-This example records a one-prompt Torii workflow that builds a diagnostic SUMO network for Altstadt, Dresden from OpenStreetMap data and opens it for inspection.
+This example records an Ingolstadt city-center Torii workflow target: build a bounded SUMO network from OpenStreetMap, clean it, and compare the result with the manually cleaned TUM `sumo_ingolstadt` reference network for the same area.
 
 Prompt:
 
 ```text
-Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO
+Use Torii to clean the Ingolstadt city-center network around https://www.openstreetmap.org/#map=17/48.765391/11.423800 from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, and open the cleaned network in Netedit.
 ```
 
-Torii resolved the area, asked for confirmation of the bbox and vehicle-road detail level, built the network with SUMO tooling, opened it in SUMO/Netedit, and reported validation evidence.
+## Area and Reference
 
-![Torii intake and area confirmation](assets/torii-altstadt-intake.png)
+| Item | Value |
+|---|---|
+| Center | `48.765391, 11.423800` |
+| OSM view | <https://www.openstreetmap.org/#map=17/48.765391/11.423800> |
+| Comparison bbox | `11.413800,48.755391,11.433800,48.775391` |
+| Torii source | OSM, `highway_classes='arterial'` |
+| Reference source | TUM-VT [`sumo_ingolstadt`](https://github.com/TUM-VT/sumo_ingolstadt), `simulation/Ingolstadt SUMO 365/ingolstadt_net.net.xml` |
 
-![Torii build evidence](assets/torii-altstadt-build-evidence.png)
-
-Generated SUMO network:
-
-![Generated Dresden Altstadt SUMO network](assets/altstadt-sumo-network-overview.png)
-
-Zoomed connected route detail:
-
-![Connected route detail from the generated SUMO network](assets/altstadt-connected-route-zoom.png)
+The TUM network is the manually cleaned reference, not an input source for Torii. The Torii network must be generated from OSM and then compared against that reference.
 
 ## Result Summary
 
-| Item | Value |
-|---|---:|
-| OSM place | Altstadt, Dresden, Sachsen, Deutschland |
-| OSM relation | 192900 |
-| Bbox | 51.0280799, 13.6864402 to 51.0766681, 13.7872926 |
-| SUMO version | 1.26.0 |
-| Edges | 6,364 |
-| Lanes | 27,392 |
-| Junctions | 5,034 |
-| SUMO traffic-light junctions | 154 |
-| TLS multi-source review | 154 rows: 147 `osm-only`, 7 `sumo-guess-only`, all `needs_manual_review` |
-| Passenger connectivity | connected-core network: 6,363 / 6,363 passenger edges, 100% |
-| Routeability smoke | 12 / 12 generated passenger trips arrived |
-| Teleports / collisions | 0 / 0 |
-| Claim status | `diagnostic-demo` |
+| Evidence | Torii OSM cleaned core | TUM cleaned reference subset |
+|---|---:|---:|
+| Edges in comparison bbox | 606 | 3,577 |
+| Passenger edges | 606 | 2,032 |
+| Lanes | 1,056 | 4,955 |
+| Junctions | 367 | 1,752 |
+| Traffic-light junctions | 158 | 29 |
+| Joined-junction endpoint references | 0 | 1,136 |
+| Dense-junction clusters, 30 m audit | 35 | 132 |
+| Max dense-cluster node count | 24 | 93 |
+| Routeability smoke | 40 / 40 arrived at `end=800` | 40 / 40 arrived at `end=800` |
+| Teleports / collisions | 0 / 0 | 0 / 0 |
+| Claim status | `diagnostic-demo`, topology/TLS review required | reference comparator only |
+
+## Interpretation
+
+The routeability result is good enough to show that the Torii-connected core is runnable for diagnostic inspection. It is not enough to claim that the OSM-cleaned network matches the TUM manual network.
+
+The key comparison signal is topology, not only connectivity. The TUM reference uses many `cluster_*` junctions and exposes far fewer traffic-light junctions in the same bbox. The current Torii OSM build still exposes many SUMO TLS nodes that likely belong to a smaller number of physical intersections. That is the exact OSM import problem this example is meant to test.
 
 ## Files in This Example
 
-This repository example keeps only lightweight, reviewable artifacts:
-
 - [`prompt.md`](prompt.md): the one-prompt request.
 - [`manifest.public.json`](manifest.public.json): public, path-sanitized artifact manifest.
-- [`validation/netcheck.txt`](validation/netcheck.txt): passenger connectivity summary.
-- [`validation/components.txt`](validation/components.txt): component output.
-- [`validation/routeability.summary.xml`](validation/routeability.summary.xml): routeability smoke summary.
-- [`validation/routeability.tripinfo.xml`](validation/routeability.tripinfo.xml): routeability smoke tripinfo.
-- [`validation/summary.xml`](validation/summary.xml): one-step network load summary.
-- [`validation/tls_candidates.csv`](validation/tls_candidates.csv): SUMO traffic-light candidate table for manual review.
-- [`validation/altstadt_tls_multisource_review.csv`](validation/altstadt_tls_multisource_review.csv): Google Maps baseline review table with OSM, Mapillary, KartaView, inventory, signal-plan, and field-evidence columns.
-- [`assets/`](assets/): screenshots of the intake and build evidence.
+- [`validation/comparison_summary.json`](validation/comparison_summary.json): compact validation record.
+- [`validation/tum_vs_torii_bbox_comparison.csv`](validation/tum_vs_torii_bbox_comparison.csv): count, topology, and routeability comparison.
 
-The full generated network is intentionally distributed as a GitHub release asset rather than committed into git history:
-
-- `dresden_altstadt_vehicle_roads.osm.xml`
-- `dresden_altstadt_vehicle_roads.net.xml`
-- `dresden_altstadt_vehicle_roads.sumocfg`
-- routeability trips/routes/summary/tripinfo
-- build log, connectivity output, TLS candidate table, and public manifest
-
-Release asset: `torii-one-prompt-altstadt-osm-sumo-demo-v1.0.2.zip`
+Generated `.net.xml`, route, and log files are intentionally not committed. They should be rebuilt into a fresh output directory when the example is rerun.
 
 ## Reproduction Notes
 
-The workflow used the Torii OSM cleanup hard gate:
-
-1. Resolve the place name to an OSM area and bbox.
-2. Ask the user to confirm the area and recommended vehicle-road detail level.
-3. Download OSM `highway=*` ways and turn-restriction relations for the confirmed bbox.
-4. Run SUMO `netconvert` with passenger-vehicle filtering.
-5. Run a headless SUMO load check.
-6. Run a passenger connectivity check.
-7. Run a routeability smoke test with generated passenger trips.
-8. Emit TLS candidate and multi-source review tables. Google Maps remains the required current-network baseline gate; OSM, Mapillary, KartaView, official inventory, signal-plan, and field-evidence columns support the review.
-9. Open the generated network in SUMO/Netedit for inspection.
-
-## Data Attribution
-
-The map extract is derived from OpenStreetMap data downloaded through Overpass.
-
-Map data: © OpenStreetMap contributors. OpenStreetMap data is available under the Open Database License (ODbL). See <https://www.openstreetmap.org/copyright>.
+1. Confirm the OSM area around the supplied map URL and ask for the road-detail target.
+2. Build the Torii OSM network for the confirmed bbox, using the selected road-class rule.
+3. Extract a connected passenger core when the raw OSM import has small disconnected fragments.
+4. Run passenger connectivity and routeability audits on the Torii core.
+5. Extract or crop the TUM reference network to the same bbox.
+6. Compare edge, lane, junction, TLS, joined-junction, dense-cluster, and routeability evidence.
+7. Open the Torii cleaned network in Netedit for manual topology and TLS review.
 
 ## Claim Boundary
 
-This is a diagnostic construction artifact. It demonstrates that Torii can turn a short natural-language request into a bounded OSM-to-SUMO construction workflow with evidence.
+This is a diagnostic comparison example. A matching routeability smoke test does not prove that the Torii network is equivalent to the manually cleaned TUM network. The current comparison shows the next required cleanup target: physical-intersection grouping and TLS candidate reduction.
 
-It does not certify the network as a formal experiment-ready baseline. Traffic-light existence, grouping, phasing, timing, demand realism, and controller readiness still require a manual Google Maps baseline audit plus experiment-specific validation.
+## Data Attribution
+
+Torii input data comes from OpenStreetMap and is available under the Open Database License (ODbL). See <https://www.openstreetmap.org/copyright>.
+
+The reference comparator is the public TUM-VT `sumo_ingolstadt` project. See <https://github.com/TUM-VT/sumo_ingolstadt>.

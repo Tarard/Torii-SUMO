@@ -1,98 +1,30 @@
 {
-  "title": "One-prompt OSM-to-SUMO network construction demo",
-  "plugin": "Torii",
-  "claim_status": "diagnostic-demo",
+  "example": "one_prompt_osm_network",
+  "target": "Ingolstadt city-center OSM-to-SUMO cleanup compared with TUM-VT/sumo_ingolstadt",
   "prompt_file": "prompt.md",
-  "source_area": {
-    "display_name": "Altstadt, Dresden, Sachsen, Deutschland",
-    "osm_type": "relation",
-    "osm_id": 192900,
-    "bbox": {
-      "south": 51.0280799,
-      "west": 13.6864402,
-      "north": 51.0766681,
-      "east": 13.7872926
-    }
+  "center": {
+    "lat": 48.765391,
+    "lon": 11.4238,
+    "osm_url": "https://www.openstreetmap.org/#map=17/48.765391/11.423800"
   },
-  "data_source": {
-    "provider": "OpenStreetMap contributors via Overpass",
-    "license": "Open Database License (ODbL)",
-    "attribution": "© OpenStreetMap contributors"
+  "comparison_bbox": {
+    "min_lon": 11.4138,
+    "min_lat": 48.755391,
+    "max_lon": 11.4338,
+    "max_lat": 48.775391
   },
-  "road_rule": {
-    "source_filter": "OSM highway=* ways and turn-restriction relations inside the confirmed bbox",
-    "sumo_filter": "netconvert --keep-edges.by-vclass passenger",
-    "excluded_detail": "Pedestrian/bicycle-only detail is not retained as routable vehicle-road detail in this demo"
+  "torii_source": {
+    "kind": "OpenStreetMap",
+    "road_class_rule": "arterial"
   },
-  "network_counts": {
-    "edge_count": 6364,
-    "lane_count": 27392,
-    "junction_count": 5034,
-    "traffic_light_junction_count": 154,
-    "lane_length_m": 900533.15
+  "reference_source": {
+    "kind": "manual SUMO network",
+    "repository": "https://github.com/TUM-VT/sumo_ingolstadt",
+    "network_file": "simulation/Ingolstadt SUMO 365/ingolstadt_net.net.xml"
   },
-  "validation": {
-    "headless_sumo_load": true,
-    "passenger_connectivity": {
-      "total_edges": 6364,
-      "largest_component_edges": 6363,
-      "largest_component_coverage": "99.98%",
-      "connected_core_edges": 6363,
-      "connected_core_coverage": "100%"
-    },
-    "routeability_smoke": {
-      "generated_passenger_trips": 12,
-      "loaded": 12,
-      "inserted": 12,
-      "arrived": 12,
-      "running": 0,
-      "waiting": 0,
-      "collisions": 0,
-      "teleports": 0
-    },
-    "tls_candidates": {
-      "count": 154,
-      "status": "needs_manual_review"
-    },
-    "tls_multisource_review": {
-      "file": "validation/altstadt_tls_multisource_review.csv",
-      "count": 154,
-      "review_status": "needs_manual_review",
-      "google_maps_baseline": "required_current_network_gate",
-      "evidence_level_counts": {
-        "osm-only": 147,
-        "sumo-guess-only": 7
-      }
-    }
-  },
-  "repository_artifacts": {
-    "readme": "README.md",
-    "prompt": "prompt.md",
-    "public_manifest": "manifest.public.json",
-    "validation": "validation/",
-    "screenshots": "assets/"
-  },
-  "release_asset_expected_contents": [
-    "dresden_altstadt_vehicle_roads.osm.xml",
-    "dresden_altstadt_vehicle_roads.net.xml",
-    "dresden_altstadt_vehicle_roads.sumocfg",
-    "dresden_altstadt_vehicle_roads.routeability.trips.xml",
-    "dresden_altstadt_vehicle_roads.routeability.rou.xml",
-    "dresden_altstadt_vehicle_roads.routeability.summary.xml",
-    "dresden_altstadt_vehicle_roads.routeability.tripinfo.xml",
-    "dresden_altstadt_vehicle_roads.summary.xml",
-    "dresden_altstadt_vehicle_roads.tls_candidates.csv",
-    "altstadt_tls_multisource_review.csv",
-    "dresden_altstadt_vehicle_roads.netcheck.txt",
-    "dresden_altstadt_vehicle_roads.components.txt",
-    "dresden_altstadt_vehicle_roads.build.log",
-    "README_altstadt_sumo.md",
-    "manifest.public.json"
+  "validation": [
+    "validation/comparison_summary.json",
+    "validation/tum_vs_torii_bbox_comparison.csv"
   ],
-  "claim_boundary": [
-    "This artifact demonstrates a one-prompt Torii OSM-to-SUMO construction workflow.",
-    "It supports diagnostic inspection in SUMO/Netedit and a passenger-routeability smoke check.",
-    "It does not prove traffic-light existence, grouping, phasing, timing, demand realism, or controller readiness.",
-    "A formal experiment-ready baseline still requires a manual Google Maps baseline TLS audit and experiment-specific validation."
-  ]
+  "claim_status": "diagnostic-demo"
 }
