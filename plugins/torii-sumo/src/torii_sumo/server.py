@@ -48,7 +48,7 @@ def create_server() -> FastMCP:
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(
         sumo_osm_resolve_place
     )
-    server.tool(description="Run the OSM cleanup hard-gate workflow: area inference/confirmation, OSM build, region-aware TLS map audit, connectivity check, SUMO-GUI launch, and Netedit launch.")(
+    server.tool(description="Run the OSM cleanup hard-gate workflow: area inference/confirmation, traffic-layer or reference-matched network planning, OSM build, service-road passenger-permission cleanup when requested, region-aware TLS map audit, connectivity and routeability checks, SUMO-GUI launch, and Netedit launch.")(
         sumo_osm_cleanup_workflow
     )
     server.tool(description="Download or reuse OSM, filter road classes, and build a SUMO network with netconvert.")(

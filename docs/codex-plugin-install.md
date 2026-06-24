@@ -59,7 +59,7 @@ For one-sentence requests, start with the workflow router:
 
 Implemented OSM/network tools:
 
-- `sumo_osm_cleanup_workflow`: run the hard-gate OSM cleanup workflow, including area inference or confirmation when needed, network construction, region-aware TLS map audit, passenger connectivity summary, connected-core extraction when needed, completion-aware routeability audit, routeability probes when supplied, and Netedit launch evidence.
+- `sumo_osm_cleanup_workflow`: run the hard-gate OSM cleanup workflow, including area inference or confirmation when needed, network-plan gating for traffic layers and reference-matched profiles, network construction, `highway.service` passenger-permission cleanup when requested by the plan, region-aware TLS map audit, passenger connectivity summary, connected-core extraction when needed, completion-aware routeability audit, routeability probes when supplied, and Netedit launch evidence.
 - `sumo_osm_build_network`: download or reuse an OSM extract, use tiled Overpass requests with retry, deduplicate merged OSM XML by object id, apply road-class presets or explicit highway classes, run `netconvert`, and return artifact/log paths.
 - `sumo_tls_audit`: extract SUMO TLS audit candidates, cluster nearby candidates into physical-intersection review groups, and attach map-review baseline fields.
 - `sumo_tls_multisource_review`: create a human-review CSV that combines SUMO TLS candidates with OSM traffic-signal matches, region-aware map links such as Amap/Gaode for mainland China or Google Maps where appropriate, Mapillary, KartaView, optional official signal inventory rows, optional signal-plan rows, and optional field-photo evidence rows.
@@ -71,4 +71,4 @@ Use a region-aware reality baseline for current road/TLS existence review. Googl
 
 External OSM source patterns are tracked from OSMnx, OSMNet, pyrosm, SUMO osmGet/osmBuild, and osm-to-xodr. Torii borrows architecture and validation ideas from these projects without vendoring their source code.
 
-The plugin does not silently certify full OSM intelligent cleanup, automatic geocoded area resolution from place names, authoritative TLS inventory, max-pressure controller generation, or controller-log inspection as complete MCP tools. The bundled skill will route unconfirmed place names into area confirmation checkpoints and keep incomplete gates out of stronger claims.
+The plugin does not silently certify full OSM intelligent cleanup, automatic geocoded area resolution from place names, authoritative TLS inventory, max-pressure controller generation, or controller-log inspection as complete MCP tools. The bundled skill will route unconfirmed place names into area confirmation checkpoints, route unspecified road/layer requests into the network-plan question, infer known reference-matched profiles such as `tum_ingolstadt` when the user asks to match TUM Ingolstadt, and keep incomplete gates out of stronger claims.
