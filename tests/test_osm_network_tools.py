@@ -758,6 +758,22 @@ def test_osm_cleanup_workflow_blocks_unconfirmed_place_with_resolved_bbox(tmp_pa
     assert report["gate_status"]["network_build"] == "not_started"
 
 
+def test_osm_cleanup_workflow_blocks_until_road_level_scope_is_selected(tmp_path: Path) -> None:
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    assert report["area_resolution_status"] == "confirmed_by_input"
+    assert report["road_level_scope_status"] == "needs_user_confirmation"
+    assert report["missing_blockers"] == ["highway_classes"]
+    assert report["next_question"] == "Which road level should Torii include: arterial, drive, drive_plus_unclassified, or full_vehicle?"
+    assert report["gate_status"]["road_level_scope"] == "blocked"
+    assert report["gate_status"]["network_build"] == "not_started"
+
+
 def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_path: Path) -> None:
     candidate = {
         "status": "pass",
@@ -799,6 +815,8 @@ def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_pat
         confirmed_area=True,
         output_dir=tmp_path,
         prefix="resolved",
+        highway_classes={"primary"},
+        run_routeability_audit_after_build=False,
         place_resolver=lambda _place_name: candidate,
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {
@@ -924,6 +942,7 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
         output_dir=tmp_path,
         prefix="demo",
         highway_classes={"primary"},
+        run_routeability_audit_after_build=False,
         build_func=fake_build,
         tls_audit_func=fake_tls,
         connectivity_func=fake_connectivity,
@@ -936,6 +955,7 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
     assert report["area_resolution_status"] == "confirmed_by_input"
     assert report["gate_status"] == {
         "area_confirmation": "pass",
+        "road_level_scope": "pass",
         "network_build": "pass",
         "tls_reality_audit": "pass",
         "connectivity": "pass",
@@ -948,6 +968,80 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
     assert report["netedit_status"] == "opened"
     assert report["sumo_gui_status"] == "opened"
     assert report["sumo_gui_process_id"] == 101
+
+
+def test_osm_cleanup_workflow_runs_routeability_audit_by_default(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "default-audit.net.xml"
+    filtered_osm = tmp_path / "osm" / "default-audit_filtered.osm.xml.gz"
+    audited: dict[str, Path] = {}
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    def fake_routeability_audit(**kwargs):
+        audited["net_file"] = kwargs["net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "report_file": str(tmp_path / "routeability_audit.json"),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="default-audit",
+        highway_classes={"primary"},
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 3,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 3,
+            "warnings": [],
+        },
+        routeability_audit_func=fake_routeability_audit,
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+    )
+
+    assert audited["net_file"] == net_file
+    assert report["gate_status"]["routeability_audit"] == "pass"
+    assert report["routeability_audit_status"] == "pass"
 
 
 def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path: Path) -> None:
@@ -1051,6 +1145,8 @@ def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
         prefix="demo",
+        highway_classes={"primary"},
+        run_routeability_audit_after_build=False,
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {
             "status": "pass",
@@ -1153,6 +1249,7 @@ def test_osm_cleanup_workflow_runs_routeability_audit_on_connected_core(tmp_path
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
         prefix="demo",
+        highway_classes={"primary"},
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {
             "status": "pass",
@@ -1210,6 +1307,8 @@ def test_osm_cleanup_workflow_demotes_partial_connectivity_to_diagnostic_demo(tm
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
         prefix="partial",
+        highway_classes={"primary"},
+        run_routeability_audit_after_build=False,
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {
             "status": "pass",
@@ -1281,6 +1380,8 @@ def test_osm_cleanup_workflow_keeps_severe_connectivity_failure_invalid(tmp_path
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
         prefix="severe",
+        highway_classes={"primary"},
+        run_routeability_audit_after_build=False,
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {
             "status": "pass",
@@ -1367,6 +1468,8 @@ def test_osm_cleanup_workflow_preserves_historical_user_target(tmp_path: Path) -
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
         prefix="historical",
+        highway_classes={"primary"},
+        run_routeability_audit_after_build=False,
         map_temporal_scope="historical",
         map_target_date="2019-06",
         build_func=fake_build,
@@ -1406,6 +1509,8 @@ def test_osm_cleanup_workflow_sets_amap_baseline_for_mainland_china_bbox(tmp_pat
         bbox="116.3018,39.9548,116.3176,39.9608",
         output_dir=tmp_path,
         prefix="bit",
+        highway_classes={"primary"},
+        run_routeability_audit_after_build=False,
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {
             "status": "pass",

@@ -5,7 +5,6 @@ from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
 from torii_sumo.core.osm_network import (
-    DEFAULT_ALLOWED_HIGHWAYS,
     audit_tls,
     audit_tls_multisource,
     build_osm_network,
@@ -13,40 +12,17 @@ from torii_sumo.core.osm_network import (
 )
 from torii_sumo.core.osm_area import resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.road_scope import (
+    HIGHWAY_CLASS_PRESETS,
+    resolve_highway_classes as resolve_highway_classes_from_scope,
+)
 from torii_sumo.core.routeability_audit import run_routeability_audit
 
 
-DRIVE_HIGHWAYS = {
-    "motorway",
-    "motorway_link",
-    "trunk",
-    "trunk_link",
-    "primary",
-    "primary_link",
-    "secondary",
-    "secondary_link",
-    "tertiary",
-    "tertiary_link",
-    "residential",
-    "living_street",
-    "road",
-}
-
-HIGHWAY_CLASS_PRESETS = {
-    "arterial": set(DEFAULT_ALLOWED_HIGHWAYS),
-    "drive": set(DRIVE_HIGHWAYS),
-    "drive_plus_unclassified": set(DRIVE_HIGHWAYS) | {"unclassified"},
-    "full_vehicle": set(DRIVE_HIGHWAYS) | {"unclassified", "service"},
-}
-
-
 def resolve_highway_classes(value: str | None) -> set[str]:
-    if value is None or not value.strip():
-        return set(DEFAULT_ALLOWED_HIGHWAYS)
-    normalized = value.strip().lower()
-    if normalized in HIGHWAY_CLASS_PRESETS:
-        return set(HIGHWAY_CLASS_PRESETS[normalized])
-    return {item.strip() for item in value.split(",") if item.strip()}
+    resolved = resolve_highway_classes_from_scope(value, default_to_recommended=True)
+    assert resolved is not None
+    return resolved
 
 
 def sumo_osm_build_network(
@@ -217,6 +193,7 @@ def sumo_osm_cleanup_workflow(
     routeability_max_end: int = 2400,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
     return run_osm_cleanup_workflow(
         output_dir=Path(output_dir),
         bbox=bbox,
@@ -224,7 +201,7 @@ def sumo_osm_cleanup_workflow(
         confirmed_area=confirmed_area,
         prefix=prefix,
         source_osm_path=Path(source_osm_path) if source_osm_path else None,
-        highway_classes=resolve_highway_classes(highway_classes),
+        highway_classes=selected_highway_classes,
         historical_date=historical_date,
         overpass_url=overpass_url,
         timeout_seconds=timeout_seconds,

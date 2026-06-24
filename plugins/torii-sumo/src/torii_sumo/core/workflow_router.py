@@ -8,6 +8,12 @@ from typing import Any, Callable
 from .osm_area import resolve_osm_place
 from .osm_network import audit_tls_multisource
 from .osm_workflow import run_osm_cleanup_workflow
+from .road_scope import (
+    ROAD_LEVEL_SCOPE_OPTIONS,
+    ROAD_LEVEL_SCOPE_QUESTION,
+    RECOMMENDED_ROAD_LEVEL_SCOPE,
+    resolve_highway_classes,
+)
 
 
 AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run"}
@@ -144,6 +150,7 @@ def run_auto_workflow(
     place_name: str | None = None,
     bbox: str | None = None,
     confirmed_area: bool = False,
+    highway_classes: str | None = None,
     net_file: Path | None = None,
     osm_file: Path | None = None,
     official_inventory_csv: Path | None = None,
@@ -173,6 +180,7 @@ def run_auto_workflow(
             place_name=place_name,
             bbox=bbox,
             confirmed_area=confirmed_area,
+            highway_classes=highway_classes,
             autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
             cleanup_workflow_func=cleanup_workflow_func,
@@ -225,6 +233,7 @@ def _run_osm_to_sumo(
     place_name: str | None,
     bbox: str | None,
     confirmed_area: bool,
+    highway_classes: str | None,
     autonomy_mode: str,
     place_resolver: Callable[[str], dict[str, Any]],
     cleanup_workflow_func: Callable[..., dict[str, Any]],
@@ -261,12 +270,29 @@ def _run_osm_to_sumo(
             report["next_question"] = "Confirm this OSM area and bbox before network construction?"
             return report
 
+    selected_highway_classes = resolve_highway_classes(highway_classes, default_to_recommended=False)
+    if selected_highway_classes is None:
+        report.update(
+            {
+                "status": "blocked",
+                "claim_status": "blocked",
+                "execution_status": "needs_road_level_scope",
+                "missing_blockers": ["highway_classes"],
+                "road_level_options": list(ROAD_LEVEL_SCOPE_OPTIONS),
+                "recommended_road_level": RECOMMENDED_ROAD_LEVEL_SCOPE,
+                "next_question": ROAD_LEVEL_SCOPE_QUESTION,
+            }
+        )
+        return report
+
     cleanup_kwargs = {
         "output_dir": output_dir,
         "bbox": bbox,
         "place_name": inferred or None,
         "confirmed_area": confirmed_area,
     }
+    if _supports_keyword(cleanup_workflow_func, "highway_classes"):
+        cleanup_kwargs["highway_classes"] = selected_highway_classes
     if _supports_keyword(cleanup_workflow_func, "run_routeability_audit_after_build"):
         cleanup_kwargs["run_routeability_audit_after_build"] = True
     workflow_report = cleanup_workflow_func(**cleanup_kwargs)
