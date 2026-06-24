@@ -19,8 +19,7 @@
 <a href="docs/codex-plugin-install.md"><strong>Codex Plugin Installation</strong></a> |
 <a href="examples/01_signal_control_audit/task.md"><strong>Beispiele</strong></a> |
 <a href="docs/common-sumo-signal-control-failures.md"><strong>Fehlerliste</strong></a> |
-<a href="LICENSE-CODE"><strong>MIT Code</strong></a> |
-<a href="LICENSE-DOCS"><strong>CC BY 4.0 Dokumente</strong></a>
+<a href="LICENSE"><strong>Lizenz</strong></a>
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
 
@@ -155,9 +154,9 @@ Niedrige Ankunftsrate kann auf getrennte Routen, Einfuegefehler, zu kurzen Horiz
 
 ## Lizenz
 
-Quelltext steht unter MIT. Siehe [`LICENSE-CODE`](LICENSE-CODE).
+Quelltext steht unter MIT.
 
-Skills, Dokumentation, Checklisten und Protokolltexte stehen unter Creative Commons Attribution 4.0 International (`CC BY 4.0`). Siehe [`LICENSE-DOCS`](LICENSE-DOCS).
+Skills, Dokumentation, Checklisten, Beispiele und Protokolltexte stehen unter Creative Commons Attribution 4.0 International (`CC BY 4.0`). Beide Lizenzbereiche stehen in [`LICENSE`](LICENSE).
 
 ## Markenhinweis
 

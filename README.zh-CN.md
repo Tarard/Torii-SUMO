@@ -19,8 +19,7 @@
 <a href="docs/codex-plugin-install.md"><strong>Codex 插件安装</strong></a> |
 <a href="examples/01_signal_control_audit/task.md"><strong>示例</strong></a> |
 <a href="docs/common-sumo-signal-control-failures.md"><strong>失败清单</strong></a> |
-<a href="LICENSE-CODE"><strong>MIT 代码许可</strong></a> |
-<a href="LICENSE-DOCS"><strong>CC BY 4.0 文档许可</strong></a>
+<a href="LICENSE"><strong>许可证</strong></a>
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
 
@@ -155,9 +154,9 @@ Torii 不把“指标最优”当作唯一目标。它会先问：
 
 ## 许可证
 
-源代码使用 MIT 许可证，见 [`LICENSE-CODE`](LICENSE-CODE)。
+源代码使用 MIT 许可证。
 
-skill、文档、检查清单和协议文本使用 Creative Commons Attribution 4.0 International (`CC BY 4.0`)，见 [`LICENSE-DOCS`](LICENSE-DOCS)。
+skill、文档、检查清单、示例和协议文本使用 Creative Commons Attribution 4.0 International (`CC BY 4.0`)。两个授权范围都写在 [`LICENSE`](LICENSE)。
 
 ## 商标说明
 

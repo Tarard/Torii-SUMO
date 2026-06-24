@@ -106,8 +106,7 @@ Run these after installation:
 
 Before publishing:
 
-- add `LICENSE-DOCS` with Creative Commons Attribution 4.0 International (`CC BY 4.0`) for skill files, documentation, checklists, and protocol text;
-- add `LICENSE-CODE` with a code license such as MIT before publishing Python audit scripts or other source code;
+- add `LICENSE` with scoped MIT terms for source code and Creative Commons Attribution 4.0 International (`CC BY 4.0`) terms for skill files, documentation, checklists, examples, and protocol text;
 - decide whether to publish the skill alone or as part of a skills collection;
 - include `## Trademark Notice` and `## Citing Eclipse SUMO` in the repository README;
 - include `## References and Related Resources` without implying endorsement by Eclipse SUMO, Eclipse Foundation, DLR, Anthropic, or any agent-skill project;
