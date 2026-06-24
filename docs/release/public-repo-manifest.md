@@ -19,8 +19,7 @@ Agent plugin for SUMO
 README.md
 README.zh-CN.md
 README.de.md
-LICENSE-CODE
-LICENSE-DOCS
+LICENSE
 NOTICE.md
 CITATION.cff
 .zenodo.json

@@ -7,6 +7,23 @@ from torii_sumo.core.workflow_router import (
 )
 
 
+def _write_reference_net(path: Path) -> None:
+    path.write_text(
+        """<net>
+    <edge id="primary_a" type="highway.primary">
+        <lane id="primary_a_0" index="0" allow="passenger bus" speed="13.9" length="25.0"/>
+    </edge>
+    <edge id="service_a" type="highway.service">
+        <lane id="service_a_0" index="0" allow="delivery passenger" speed="5.0" length="25.0"/>
+    </edge>
+    <edge id="cycle_a" type="highway.cycleway">
+        <lane id="cycle_a_0" index="0" allow="bicycle" speed="5.0" length="25.0"/>
+    </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+
 def test_infer_place_name_from_one_prompt_osm_request() -> None:
     request = "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO"
 
@@ -82,6 +99,7 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     report = run_auto_workflow(
         user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
         output_dir=tmp_path,
+        highway_classes="arterial",
         place_resolver=fake_resolver,
         cleanup_workflow_func=fake_cleanup,
     )
@@ -91,8 +109,88 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     assert report["tool_called"] == "sumo_osm_cleanup_workflow"
     assert captured["bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
     assert captured["place_name"] == "Altstadt, Dresden"
+    assert {"primary", "tertiary"} <= captured["highway_classes"]
     assert captured["run_routeability_audit_after_build"] is True
     assert report["area_resolution_status"] == "candidate_found"
+
+
+def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp_path: Path) -> None:
+    def fake_resolver(_place_name: str):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "area_resolution_status": "candidate_found",
+            "candidate_display_name": "Altstadt, Dresden, Sachsen, Deutschland",
+            "candidate_osm_type": "relation",
+            "candidate_osm_id": "192900",
+            "candidate_bbox": "13.6864402,51.0280799,13.7872926,51.0766681",
+            "osm_preview_url": "https://www.openstreetmap.org/search?query=Altstadt%2C+Dresden",
+            "candidate_osm_url": "https://www.openstreetmap.org/relation/192900",
+            "warnings": [],
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
+        output_dir=tmp_path,
+        place_resolver=fake_resolver,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    assert report["execution_status"] == "needs_network_plan"
+    assert report["missing_blockers"] == ["network_plan"]
+    assert "traffic layers" in report["next_question"]
+    assert "reference_matched" in report["network_detail_options"]
+
+
+def test_auto_workflow_blocks_reference_match_without_reference_artifact(tmp_path: Path) -> None:
+    def fake_cleanup(**_kwargs):
+        raise AssertionError("cleanup must not run without a reference network or policy report")
+
+    report = run_auto_workflow(
+        user_request="Use Torii to build this city-center SUMO network with the same layer policy as a manually cleaned reference network",
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["execution_status"] == "needs_network_plan"
+    assert report["network_plan_status"] == "needs_reference_artifact"
+    assert report["missing_blockers"] == ["reference_network_or_policy"]
+
+
+def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "manual-reference.net.xml"
+    _write_reference_net(reference_net_file)
+    captured = {}
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "network_profile": "reference_matched",
+            "service_passenger_policy": "reference_match",
+            "routeability_audit_status": "pass",
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to build this city-center SUMO network with the same layer policy as a manually cleaned reference network",
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert report["execution_status"] == "executed"
+    assert captured["network_profile"] == "reference_matched"
+    assert captured["reference_net_file"] == reference_net_file
+    assert captured["service_passenger_policy"] == "reference_match"
+    assert "service" in captured["highway_classes"]
+    assert "cycleway" not in captured["highway_classes"]
 
 
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
@@ -140,10 +238,12 @@ def test_auto_workflow_enables_routeability_audit_when_cleanup_supports_it(tmp_p
         user_request="Build a SUMO network for Altstadt, Dresden from OSM",
         output_dir=tmp_path,
         bbox="13.6,50.9,13.9,51.1",
+        highway_classes="arterial",
         cleanup_workflow_func=fake_cleanup,
     )
 
     assert report["status"] == "pass"
+    assert {"primary", "tertiary"} <= captured["highway_classes"]
     assert captured["run_routeability_audit_after_build"] is True
 
 
@@ -164,6 +264,7 @@ def test_auto_workflow_keeps_legacy_cleanup_fake_compatible(tmp_path: Path) -> N
         user_request="Build a SUMO network for Altstadt, Dresden from OSM",
         output_dir=tmp_path,
         bbox="13.6,50.9,13.9,51.1",
+        highway_classes="arterial",
         cleanup_workflow_func=fake_cleanup,
     )
 

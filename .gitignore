@@ -3,4 +3,5 @@ __pycache__/
 outputs/
 !tests/fixtures/outputs/
 !tests/fixtures/outputs/**
+docs/superpowers/
 *.pdf

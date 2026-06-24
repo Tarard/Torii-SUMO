@@ -4,8 +4,8 @@ type: software
 title: "Torii: Task-Oriented Road Infrastructure Intelligence"
 authors:
   - name: "Tarard"
-version: "v1.0.0"
-date-released: "2026-06-20"
+version: "v1.0.2"
+date-released: "2026-06-24"
 license: "MIT AND CC-BY-4.0"
 repository-code: "https://github.com/Tarard/Torii-SUMO"
 url: "https://tarard.github.io/Torii-SUMO/"
