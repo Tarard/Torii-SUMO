@@ -12,6 +12,7 @@ from .tools.evidence_tools import (
 from .tools.osm_tools import (
     sumo_network_connected_core,
     sumo_network_junction_aggregation_variant,
+    sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
     sumo_network_routeability_audit,
@@ -79,6 +80,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Mine joined-junction cases from a reference SUMO network and match them against fragmented candidate topology clusters.")(
         sumo_network_reference_join_audit
+    )
+    server.tool(description="Audit high-hierarchy road differences against a reference network, separating over-split corridors, out-of-scope roads, hierarchy mismatches, and link/slip-lane cases.")(
+        sumo_network_reference_hierarchy_audit
     )
     server.tool(description="Compare a candidate SUMO network against a reference network by OSM road-type scope and flag over-included short detail fragments for review.")(
         sumo_network_reference_scope_audit

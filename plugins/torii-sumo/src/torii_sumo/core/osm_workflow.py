@@ -11,6 +11,7 @@ from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .reference_bbox import derive_reference_net_bbox
+from .reference_hierarchy import audit_reference_hierarchy
 from .reference_join_audit import audit_reference_join_patterns
 from .reference_scope import audit_reference_scope, build_scope_pruning_variant
 from .road_scope import (
@@ -325,6 +326,12 @@ def _reference_scope_pruning_gate(report: Mapping[str, Any] | None) -> str:
     return "pass"
 
 
+def _reference_hierarchy_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    return _gate_value(report)
+
+
 def _should_run_tls_aggregation(
     tls_report: Mapping[str, Any],
     tls_aggregation_func: Callable[..., dict[str, Any]],
@@ -422,6 +429,7 @@ def run_osm_cleanup_workflow(
     run_tls_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
+    run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = True,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
@@ -433,6 +441,7 @@ def run_osm_cleanup_workflow(
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
+    reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
@@ -648,6 +657,9 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
+    reference_hierarchy_audit_report: dict[str, Any] | None = None
+    reference_hierarchy_audit_candidate_layer = "not_applicable"
+    reference_hierarchy_audit_candidate_net_file: Path | None = None
     reference_scope_audit_report: dict[str, Any] | None = None
     reference_scope_pruning_report: dict[str, Any] | None = None
     reference_scope_candidate_layer = "not_applicable"
@@ -880,6 +892,23 @@ def run_osm_cleanup_workflow(
     if (
         str(network_plan.get("network_profile", "")) == "reference_matched"
         and reference_net_file is not None
+        and run_reference_hierarchy_audit_after_build
+    ):
+        reference_hierarchy_audit_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
+        reference_hierarchy_audit_candidate_layer = (
+            "reference_visual_detail"
+            if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None
+            else "vehicle_core"
+        )
+        reference_hierarchy_audit_report = reference_hierarchy_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_hierarchy_audit_candidate_net_file,
+            output_dir=output_dir / "reference_hierarchy_audit",
+            prefix=f"{prefix}_reference_hierarchy_audit",
+        )
+    if (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
         and run_reference_scope_audit_after_build
     ):
         reference_scope_candidate_net_file = reference_visual_detail_comparison_net_file or reference_visual_detail_net_file or net_file
@@ -1011,6 +1040,7 @@ def run_osm_cleanup_workflow(
         connected_core_connectivity_report or {},
         connectivity_report,
         topology_audit_report or {},
+        reference_hierarchy_audit_report or {},
         reference_scope_audit_report or {},
         reference_scope_pruning_report or {},
         reference_join_audit_report or {},
@@ -1040,6 +1070,14 @@ def run_osm_cleanup_workflow(
         warnings.append(str(connectivity_quality["quality_warning"]))
     if topology_audit_report is not None and topology_audit_report.get("topology_fragmentation_status") == "needs_review":
         warnings.append("topology fragmentation audit needs human review before treating the network as clean")
+    if (
+        reference_hierarchy_audit_report is not None
+        and _int_field(reference_hierarchy_audit_report, "high_hierarchy_issue_count") > 0
+    ):
+        warnings.append(
+            "reference hierarchy audit found high-road review cases; inspect over-split corridors, out-of-scope roads, "
+            "hierarchy mismatches, and link/slip-lane cases before pruning or merging high-level roads"
+        )
     if junction_aggregation_summary["junction_aggregation_candidate_count"]:
         warnings.append(
             "junction aggregation audit identified "
@@ -1081,6 +1119,7 @@ def run_osm_cleanup_workflow(
         gate_status["tls_aggregation"] = "blocked" if tls_aggregation_report.get("status") == "pass" else _gate_value(tls_aggregation_report)
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         gate_status["reference_visual_detail"] = "pass" if reference_visual_detail_status in {"built", "same_as_vehicle_core"} else "fail"
+        gate_status["reference_hierarchy_audit"] = _reference_hierarchy_gate(reference_hierarchy_audit_report)
         gate_status["reference_scope_audit"] = _reference_scope_gate(reference_scope_audit_report)
         gate_status["reference_scope_pruning"] = _reference_scope_pruning_gate(reference_scope_pruning_report)
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
@@ -1096,6 +1135,7 @@ def run_osm_cleanup_workflow(
         and gate_status.get("topology_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("routeability_audit", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status.get("reference_visual_detail", "skipped") in {"pass", "skipped"}
+        and gate_status.get("reference_hierarchy_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_scope_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_scope_pruning", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_audit", "skipped") in {"pass", "skipped"}
@@ -1221,6 +1261,30 @@ def run_osm_cleanup_workflow(
         "reference_join_aggregation_variant_file": ""
         if reference_join_aggregation_report is None
         else str(reference_join_aggregation_report.get("junction_aggregation_variant_file", "")),
+        "reference_hierarchy_status": "skipped"
+        if reference_hierarchy_audit_report is None
+        else reference_hierarchy_audit_report.get(
+            "reference_hierarchy_status", reference_hierarchy_audit_report.get("status", "fail")
+        ),
+        "reference_hierarchy_audit_candidate_layer": reference_hierarchy_audit_candidate_layer,
+        "reference_hierarchy_audit_candidate_net_file": ""
+        if reference_hierarchy_audit_candidate_net_file is None
+        else str(reference_hierarchy_audit_candidate_net_file),
+        "reference_hierarchy_issue_count": 0
+        if reference_hierarchy_audit_report is None
+        else reference_hierarchy_audit_report.get("high_hierarchy_issue_count", 0),
+        "reference_hierarchy_decision_counts": {}
+        if reference_hierarchy_audit_report is None
+        else reference_hierarchy_audit_report.get("decision_counts", {}),
+        "reference_hierarchy_cases_file": ""
+        if reference_hierarchy_audit_report is None
+        else str(reference_hierarchy_audit_report.get("cases_file", "")),
+        "reference_hierarchy_type_comparison_file": ""
+        if reference_hierarchy_audit_report is None
+        else str(reference_hierarchy_audit_report.get("type_comparison_file", "")),
+        "reference_hierarchy_audit_report_file": ""
+        if reference_hierarchy_audit_report is None
+        else str(reference_hierarchy_audit_report.get("summary_file", "")),
         "reference_scope_status": "skipped"
         if reference_scope_audit_report is None
         else reference_scope_audit_report.get("reference_scope_status", reference_scope_audit_report.get("status", "fail")),
@@ -1309,6 +1373,7 @@ def run_osm_cleanup_workflow(
         "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
         "topology_audit": topology_audit_report or {},
+        "reference_hierarchy_audit": reference_hierarchy_audit_report or {},
         "reference_scope_audit": reference_scope_audit_report or {},
         "reference_scope_pruning": reference_scope_pruning_report or {},
         "reference_join_audit": reference_join_audit_report or {},
