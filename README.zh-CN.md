@@ -10,10 +10,7 @@
 
 **Agent plugin for SUMO**
 
-<img src="https://img.shields.io/badge/Agent%20Plugin-Codex%20%2F%20Claude-6f42c1" alt="Codex 和 Claude agent plugin">
-<img src="https://img.shields.io/badge/SUMO%2FTraCI-%E4%BA%A4%E9%80%9A%E4%BB%BF%E7%9C%9F-blue" alt="SUMO 和 TraCI">
-<img src="https://img.shields.io/badge/OSM%20to%20SUMO-%E8%B7%AF%E7%BD%91%E6%B8%85%E7%90%86-1d8e57" alt="OSM 到 SUMO 路网清理">
-<img src="https://img.shields.io/badge/MCP%20Tools-local%20stdio-c98a05" alt="本地 stdio MCP tools">
+<p><strong>Codex / Claude agent plugin</strong> · SUMO/TraCI 工作流 · OSM-to-SUMO 清洗 · 本地 MCP tools</p>
 
 <a href="https://tarard.github.io/Torii-SUMO/"><strong>项目网站</strong></a> |
 <a href="docs/codex-plugin-install.md"><strong>Codex 插件安装</strong></a> |
