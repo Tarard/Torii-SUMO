@@ -66,6 +66,8 @@ Implemented OSM/network tools:
 - `sumo_network_connected_core`: extract the largest passenger component from an existing SUMO `.net.xml`, write a reusable connected-core network, and report discarded fragments.
 - `sumo_network_routeability_probe`: generate named-road probe routes and a bounded `.sumocfg` for routeability checks.
 - `sumo_network_routeability_audit`: generate random passenger trips, run SUMO, parse `summary.xml` and `tripinfo.xml`, and extend the horizon until all generated vehicles finish or `max_end` is reached.
+- `sumo_network_topology_audit`: audit dense junction clusters and short internal edges that indicate over-fragmented OSM/netconvert topology.
+- `sumo_network_reference_join_audit`: mine joined-junction cases from a reference `.net.xml` and match them against the candidate network by encoded source nodes first, with spatial topology clusters as a fallback.
 
 Use a region-aware reality baseline for current road/TLS existence review. Google Maps can be the default where it is reliable and appropriate; mainland China workflows should use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and must record WGS84/GCJ-02/BD-09 coordinate-system assumptions. Ask whether the user needs the current map or a historical target date; if the user requests a historical target date, the user's stated target controls the baseline and requires time-aligned map evidence, OSM history, dated imagery, Street View or street-level imagery history where available, field photos, or agency-inventory evidence.
 

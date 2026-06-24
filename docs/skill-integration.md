@@ -20,6 +20,7 @@ Do not describe this as skills being inside MCP. The Codex plugin bundles both c
 - OSM cleanup from place name, bbox, or extract => `sumo_osm_cleanup_workflow`, then inspect area inference or confirmation, network-plan status, traffic-layer choices, reference artifact or policy-report analysis, service-road passenger permissions, region-aware TLS audit artifacts, connectivity status, Netedit launch evidence, and claim boundary.
 - bbox-only low-level OSM network construction => `sumo_osm_build_network`, then inspect tiled Overpass, retry, deduplication, netconvert status, and artifact paths
 - OSM/netconvert TLS cleanup review => `sumo_tls_audit`, then use the automatically selected regional map baseline: Amap/Gaode for mainland China coordinates, Google Maps where appropriate elsewhere, with current vs historical map scope still recorded
+- reference-matched junction cleanup => `sumo_network_reference_join_audit`, then inspect source-node matches, internal edges, approach counts, map-review URLs, and routeability/topology gates before generating an aggregated variant
 - named-road connectivity check => `sumo_network_routeability_probe`, then run or inspect the generated `.sumocfg`
 - evidence handoff => `sumo_collect_evidence`
 

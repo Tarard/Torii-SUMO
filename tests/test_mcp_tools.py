@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
-from torii_sumo.tools.osm_tools import sumo_network_routeability_audit, sumo_network_topology_audit
+from torii_sumo.tools.osm_tools import (
+    sumo_network_reference_join_audit,
+    sumo_network_routeability_audit,
+    sumo_network_topology_audit,
+)
 from torii_sumo.tools.run_tools import sumo_run_minimal_smoke
 
 
@@ -141,4 +145,42 @@ def test_sumo_network_topology_audit_tool_returns_json_compatible_report(monkeyp
 
     assert report["status"] == "blocked"
     assert report["topology_fragmentation_status"] == "needs_review"
+    json.dumps(report)
+
+
+def test_sumo_network_reference_join_audit_tool_returns_json_compatible_report(monkeypatch, tmp_path: Path) -> None:
+    from torii_sumo.tools import osm_tools
+
+    reference_net_file = tmp_path / "reference.net.xml"
+    candidate_net_file = tmp_path / "candidate.net.xml"
+    reference_net_file.write_text("<net/>", encoding="utf-8")
+    candidate_net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_audit(**kwargs):
+        assert kwargs["reference_net_file"] == reference_net_file
+        assert kwargs["candidate_net_file"] == candidate_net_file
+        assert kwargs["candidate_cluster_radius_m"] == 25.0
+        assert kwargs["candidate_min_cluster_nodes"] == 4
+        assert kwargs["match_radius_m"] == 50.0
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "reference_case_count": 3,
+            "matched_case_count": 2,
+            "summary_file": str(tmp_path / "summary.json"),
+        }
+
+    monkeypatch.setattr(osm_tools, "audit_reference_join_patterns", fake_audit)
+
+    report = sumo_network_reference_join_audit(
+        reference_net_file=str(reference_net_file),
+        candidate_net_file=str(candidate_net_file),
+        output_dir=str(tmp_path / "reference-join"),
+        candidate_cluster_radius_m=25.0,
+        candidate_min_cluster_nodes=4,
+        match_radius_m=50.0,
+    )
+
+    assert report["status"] == "pass"
+    assert report["matched_case_count"] == 2
     json.dumps(report)

@@ -65,6 +65,8 @@ If the user asks to match, mimic, compare against, or learn from a reference net
 
 Apply `highway.service` passenger permissions only when the reference policy uses them, and require connectivity, routeability, topology, scope-matched reference comparison, and Netedit launch evidence. Never compare a Torii `connected-core` vehicle network against a full-detail manual reference network. If no reference artifact can be located or supplied, block on `reference_net_file` or `reference_policy_report` instead of guessing the road levels.
 
+When the reference artifact is a SUMO `.net.xml` with joined-junction ids such as `cluster_*`, run `sumo_network_reference_join_audit` after building the candidate visual-detail network. Treat encoded source-node matches as stronger evidence than spatial proximity: the audit should report joined source-node counts, matched source-node ids, internal edges between those source nodes, approach counts, map-review URLs, and unmatched reference cases. Use spatial dense-junction clusters only as a fallback when source-node ids cannot be matched.
+
 Use a small option set rather than silently adding everything:
 
 | Option | Typical use | Risk |
@@ -119,7 +121,7 @@ Hard gates:
 
 1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, and preview checkpoint. In one-sentence diagnostic mode, proceed when the candidate is clear and record it as an assumption; block only when the area is ambiguous, missing, or unsafe.
 2. Before construction, resolve or infer a network plan. If no user intent or reference target identifies the traffic layers, block on the network-plan question instead of silently choosing all road types.
-3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them.
+3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them. When the reference contains joined junctions, run a reference join audit after construction and use the matched cases to guide any aggregation plan.
 4. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
 5. For current-network modeling, use a region-aware reality baseline. Google Maps can be the default where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
 6. Run passenger connectivity checks before making stronger claims.
@@ -204,6 +206,26 @@ risk_flags:
 ```
 
 Use the cluster graph fields to separate edges whose endpoints are both inside the suspicious junction cluster from edges that connect the cluster to outside junctions. Do not join by radius alone. A cluster becomes a join candidate only when local topology indicates the short internal edges are likely intersection-internal fragments and the default map confirms the physical intersection footprint.
+
+For reference-matched cleanup, prefer case mining over manual parameter sweeps. A reusable reference join audit should first read the manual reference's joined-junction cases, then compare each case with the candidate network:
+
+```text
+reference_id:
+reference_type:
+reference_joined_source_node_count:
+reference_approach_edge_count:
+matched_reference_source_node_count:
+reference_source_node_match_ratio:
+matched_reference_source_internal_edge_ids:
+matched_reference_source_boundary_edge_ids:
+matched_candidate_cluster_id:
+matched_candidate_node_count:
+matched_candidate_internal_edge_count:
+learned_rule_basis: reference_source_nodes | spatial_cluster | none
+learned_rule:
+```
+
+Use source-node matches to learn general aggregation rules from the reference network. For example, if the reference joins two to four source OSM nodes and the candidate contains short internal edges between the same ids, that case is a `tum_like_join_candidate` regardless of city name. Keep city-specific examples as evidence, not hardcoded plugin logic.
 
 For regions where Google Maps is reliable and appropriate, use the default Google Maps road geometry to compare the cluster against the physical intersection footprint before any destructive aggregation. Use satellite view only when the default map is ambiguous. For mainland China or other regions where Google Maps is not the right current-road baseline, keep the map-review field but add the appropriate regional source in the correction record.
 

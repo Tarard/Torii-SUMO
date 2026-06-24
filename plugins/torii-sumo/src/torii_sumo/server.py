@@ -11,6 +11,7 @@ from .tools.evidence_tools import (
 )
 from .tools.osm_tools import (
     sumo_network_connected_core,
+    sumo_network_reference_join_audit,
     sumo_network_routeability_audit,
     sumo_network_routeability_probe,
     sumo_network_topology_audit,
@@ -71,6 +72,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Audit dense SUMO junction clusters that suggest OSM-to-SUMO over-fragmented topology.")(
         sumo_network_topology_audit
+    )
+    server.tool(description="Mine joined-junction cases from a reference SUMO network and match them against fragmented candidate topology clusters.")(
+        sumo_network_reference_join_audit
     )
 
     return server
