@@ -15,33 +15,31 @@ Use Torii to clean the Ingolstadt city-center network around https://www.openstr
 | Center | `48.765391, 11.423800` |
 | OSM view | <https://www.openstreetmap.org/#map=17/48.765391/11.423800> |
 | Comparison bbox | `11.413800,48.755391,11.433800,48.775391` |
-| Torii source | OSM, `highway_classes='full_vehicle'` |
+| Torii source | OSM, `network_profile='reference_matched'` |
 | Reference source | TUM-VT [`sumo_ingolstadt`](https://github.com/TUM-VT/sumo_ingolstadt), `simulation/Ingolstadt SUMO 365/ingolstadt_net.net.xml` |
 
 The TUM network is the manually cleaned reference, not an input source for Torii. The correct comparison sequence is:
 
 1. Inspect the TUM network's retained hierarchy and permissions.
 2. Cut the same city-center bbox from the TUM network.
-3. Build the Torii network from OSM with the closest matching vehicle-road scope.
-4. Compare the TUM bbox cut with the Torii bbox product.
+3. Build the Torii network from OSM with a reference-matched plan.
+4. Keep two Torii scopes separate: `vehicle_core` for routeability and `reference_visual_detail` for full-detail Netedit comparison.
+5. Compare the TUM bbox cut with the Torii `reference_visual_detail` product.
 
-TUM's Ingolstadt model is a multimodal simulation network. In the city-center bbox it retains passenger, bicycle, pedestrian, bus, and rail-related edges. For vehicle-network comparison, use the TUM passenger-drivable subset as the closest target, not the whole multimodal edge count.
+TUM's Ingolstadt model is a multimodal simulation network. In the city-center bbox it retains passenger, bicycle, pedestrian, bus, and rail-related edges. Torii therefore generates a passenger `vehicle_core` plus a separate `reference_visual_detail` network so that routeability checks and visual topology comparisons do not get mixed.
 
 ## Result Summary
 
-| Evidence | Torii OSM `full_vehicle` core | TUM city-center bbox cut |
-|---|---:|---:|
-| All non-internal edges | 1,427 | 3,577 |
-| Passenger-drivable edges | 1,427 | 2,032 |
-| Lanes | 1,978 | 4,955 |
-| Junctions | 782 | 1,752 |
-| Traffic-light junctions | 198 | 29 |
-| Joined-junction endpoint references | 0 | 1,136 |
-| Dense-junction clusters, 30 m audit | 64 | 132 |
-| Max dense-cluster node count | 32 | 93 |
-| Routeability smoke | 40 / 40 arrived at `end=800` | 40 / 40 arrived at `end=800` |
-| Teleports / collisions | 0 / 0 | 0 / 0 |
-| Claim status | `diagnostic-demo`, topology/TLS review required | reference comparator only |
+![TUM bbox reference and Torii reference visual-detail comparison](assets/tum_vs_torii_reference_visual_detail.png)
+
+| Evidence | Torii `vehicle_core` | Torii `reference_visual_detail` | TUM city-center bbox cut |
+|---|---:|---:|---:|
+| All non-internal edges | 2,497 | 6,130 | 3,577 |
+| Lanes | 3,051 | 6,701 | 4,955 |
+| Junctions | 1,221 | 2,998 | 1,752 |
+| Traffic-light junctions | 202 | 217 | 29 |
+| Default use | routeability / simulation core | Netedit full-detail comparison | reference comparator |
+| Claim status | `diagnostic-demo` | topology/TLS grouping needs correction | reference comparator only |
 
 TUM passenger-drivable hierarchy in this bbox:
 
@@ -59,13 +57,21 @@ TUM passenger-drivable hierarchy in this bbox:
 
 ## Interpretation
 
-The routeability result is good enough to show that the Torii-connected core is runnable for diagnostic inspection. It is not enough to claim that the OSM-cleaned network matches the TUM manual network.
+The reference-matched workflow now avoids the earlier unfair comparison. Torii does not compare a passenger connected-core against TUM's full-detail reference. It builds `reference_visual_detail` separately and opens that network for Netedit comparison.
 
-The key comparison signals are road hierarchy, lane permissions, and topology, not only connectivity.
+The key remaining comparison signals are physical-intersection grouping, TLS grouping, lane permissions, and routeability, not only edge count.
 
-- TUM keeps a high-detail passenger-drivable network in the bbox, including many `highway.service` edges.
-- Torii `full_vehicle` keeps service OSM ways, but SUMO's default OSM typemap does not make those service edges passenger-drivable. This is a concrete cleanup gap, not just a count difference.
-- TUM uses many `cluster_*` joined junctions and exposes far fewer traffic-light junctions. The current Torii OSM build still exposes many SUMO TLS nodes that likely belong to a smaller number of physical intersections.
+- TUM keeps a high-detail city-center bbox with 3,577 edges and 4,955 lanes.
+- Torii `reference_visual_detail` keeps the lower-level visible layers too, but it is over-fragmented: 2,998 junctions and 217 traffic-light junctions.
+- TUM exposes only 29 traffic-light junctions in the same bbox. This indicates that physical-intersection and TLS aggregation is the next cleanup target.
+
+## Known Gap: Junction Aggregation
+
+![TUM joined intersection versus Torii fragmented intersection](assets/junction_fragmentation_gap.png)
+
+The screenshot above shows the current reusable cleanup target. TUM represents the physical intersection as a clean joined junction, while the Torii OSM-derived visual-detail network exposes many small SUMO nodes and short edges around the same physical intersection.
+
+Torii should not automatically join these nodes from geometry alone. The audit step must first generate dense-junction clusters and Google Maps default-map review links, then require manual or source-bounded correction before building a junction-aggregated variant. Satellite view can still be used when the default map is ambiguous, but it is not the default gate.
 
 ## Files in This Example
 
@@ -73,6 +79,8 @@ The key comparison signals are road hierarchy, lane permissions, and topology, n
 - [`manifest.public.json`](manifest.public.json): public, path-sanitized artifact manifest.
 - [`validation/comparison_summary.json`](validation/comparison_summary.json): compact validation record.
 - [`validation/tum_vs_torii_bbox_comparison.csv`](validation/tum_vs_torii_bbox_comparison.csv): count, topology, and routeability comparison.
+- [`assets/tum_vs_torii_reference_visual_detail.png`](assets/tum_vs_torii_reference_visual_detail.png): Netedit comparison screenshot.
+- [`assets/junction_fragmentation_gap.png`](assets/junction_fragmentation_gap.png): known junction-fragmentation cleanup target.
 
 Generated `.net.xml`, route, and log files are intentionally not committed. They should be rebuilt into a fresh output directory when the example is rerun.
 
@@ -80,16 +88,17 @@ Generated `.net.xml`, route, and log files are intentionally not committed. They
 
 1. Inspect the TUM reference network structure and retained edge types.
 2. Cut the TUM reference network to the confirmed city-center bbox.
-3. Confirm the Torii road-detail target. For this comparison the closest implemented preset is `full_vehicle`.
+3. Confirm the Torii road-detail target. For this comparison use `network_profile='reference_matched'` and provide the TUM `.net.xml` as the reference artifact.
 4. Build the Torii OSM network for the same bbox.
 5. Extract a connected passenger core when the raw OSM import has disconnected fragments.
-6. Run passenger connectivity and routeability audits on both the TUM cut and the Torii core.
-7. Compare edge, lane, road-type, lane-permission, junction, TLS, joined-junction, dense-cluster, and routeability evidence.
-8. Open the Torii cleaned network in Netedit for manual topology and TLS review.
+6. Build the separate `reference_visual_detail` network when the reference contains lower-level or modal visible layers.
+7. Run passenger connectivity and routeability audits on the vehicle core.
+8. Compare edge, lane, road-type, lane-permission, junction, TLS, joined-junction, dense-cluster, and routeability evidence.
+9. Open the Torii `reference_visual_detail` network and TUM bbox cut in Netedit for scope-matched topology and TLS review.
 
 ## Claim Boundary
 
-This is a diagnostic comparison example. A matching routeability smoke test does not prove that the Torii network is equivalent to the manually cleaned TUM network. The current comparison shows two required cleanup targets: service-road passenger permissions and physical-intersection/TLS grouping.
+This is a diagnostic comparison example. A scope-matched Netedit view does not prove that the Torii network is equivalent to the manually cleaned TUM network. The current comparison shows the next required cleanup target: reusable physical-intersection/TLS grouping, with Google Maps default-map review before any destructive aggregation.
 
 ## Data Attribution
 

@@ -45,19 +45,33 @@
       }
     }
   },
-  "torii_osm_full_vehicle_connected_core": {
+  "torii_osm_reference_matched": {
     "source": "OpenStreetMap",
-    "road_class_rule": "full_vehicle",
+    "network_profile": "reference_matched",
+    "default_routeability_layer": "vehicle_core",
+    "default_netedit_comparison_layer": "reference_visual_detail",
     "raw_edges": 2545,
-    "raw_passenger_edges": 1435,
+    "raw_passenger_edges": 2545,
     "raw_lanes": 3099,
-    "raw_junctions": 1250,
+    "raw_junctions": 1417,
     "raw_traffic_light_junctions": 202,
-    "connected_core_edges": 1427,
-    "connected_core_passenger_edges": 1427,
-    "connected_core_lanes": 1978,
-    "connected_core_junctions": 782,
-    "connected_core_traffic_light_junctions": 198,
+    "connected_core_edges": 2497,
+    "connected_core_passenger_edges": 2497,
+    "connected_core_lanes": 3051,
+    "connected_core_junctions": 1221,
+    "connected_core_traffic_light_junctions": 202,
+    "reference_visual_detail_edges": 6130,
+    "reference_visual_detail_lanes": 6701,
+    "reference_visual_detail_junctions": 2998,
+    "reference_visual_detail_traffic_light_junctions": 217,
+    "reference_visual_detail_only_highway_classes": [
+      "cycleway",
+      "footway",
+      "path",
+      "pedestrian",
+      "steps",
+      "track"
+    ],
     "joined_junction_endpoint_refs_in_bbox": 0,
     "passenger_road_type_counts": {
       "highway.residential": 455,
@@ -70,21 +84,17 @@
       "highway.secondary_link": 9,
       "highway.primary_link": 3
     },
-    "known_scope_gap": "TUM's bbox passenger subset includes 945 highway.service edges. Torii full_vehicle retains service OSM ways, but the default SUMO OSM typemap does not make those service edges passenger-drivable.",
+    "known_scope_gap": "The previous unfair comparison between Torii connected-core and TUM full-detail was corrected by building a separate reference_visual_detail network.",
     "topology_audit": {
       "cluster_radius_m": 30,
       "status": "needs_review",
-      "suspicious_cluster_count": 64,
-      "max_cluster_node_count": 32
+      "review_requirement": "Google Maps default-map review before junction aggregation; satellite view is optional when ambiguous"
     },
     "routeability": {
-      "status": "pass",
-      "vehicle_count": 40,
-      "final_end": 800,
-      "arrived": 40,
-      "running": 0,
-      "teleports": 0,
-      "collisions": 0
+      "status": "incomplete_under_bounded_test",
+      "vehicle_count": 12,
+      "max_end": 360,
+      "claim": "diagnostic only; rerun with a longer horizon before simulation-readiness claims"
     }
   },
   "tum_reference_bbox_cut": {
@@ -103,15 +113,10 @@
       "max_cluster_node_count": 93
     },
     "routeability": {
-      "status": "pass",
-      "vehicle_count": 40,
-      "final_end": 800,
-      "arrived": 40,
-      "running": 0,
-      "teleports": 0,
-      "collisions": 0
+      "status": "not_rerun_in_visual_detail_smoke",
+      "claim": "reference comparator only"
     }
   },
-  "interpretation": "Routeability passes for both networks, but Torii full_vehicle still differs from the TUM manual reference in service-road passenger permissions and physical-intersection/TLS grouping. The example is a diagnostic comparator, not a formal equivalence claim.",
+  "interpretation": "The reference-matched workflow now builds a separate Torii reference_visual_detail network for full-detail Netedit comparison. The remaining gap is reusable physical-intersection and TLS aggregation; dense clusters require Google Maps default-map review before any destructive join, with satellite view only as an optional fallback.",
   "claim_status": "diagnostic-demo"
 }

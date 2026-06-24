@@ -15,7 +15,9 @@
   },
   "torii_source": {
     "kind": "OpenStreetMap",
-    "road_class_rule": "full_vehicle"
+    "network_profile": "reference_matched",
+    "vehicle_core_rule": "reference passenger-drivable layer",
+    "visual_detail_rule": "reference visible highway layers"
   },
   "reference_source": {
     "kind": "manual SUMO network",
@@ -24,7 +26,9 @@
   },
   "validation": [
     "validation/comparison_summary.json",
-    "validation/tum_vs_torii_bbox_comparison.csv"
+    "validation/tum_vs_torii_bbox_comparison.csv",
+    "assets/tum_vs_torii_reference_visual_detail.png",
+    "assets/junction_fragmentation_gap.png"
   ],
   "claim_status": "diagnostic-demo"
 }

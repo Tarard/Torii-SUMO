@@ -47,14 +47,15 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 
 Dieses Demo nutzt jetzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein von Torii aus OSM bereinigtes Netz in Richtung eines manuell bereinigten Referenznetzes konvergiert, statt OSM-Import-Erfolg als ausreichend zu behandeln.
 
+![TUM-bbox-Referenz im Vergleich mit Torii reference visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_reference_visual_detail.png)
+
 | Evidenz | Ergebnis |
 |---|---:|
-| Torii OSM full-vehicle connected core | 1,427 Kanten, 1,978 Spuren, 782 Knoten im Vergleichs-bbox |
+| Torii vehicle core | 2,497 Kanten, 3,051 Spuren, 1,221 Knoten im Vergleichs-bbox |
+| Torii reference visual-detail | 6,130 Kanten, 6,701 Spuren, 2,998 Knoten im Vergleichs-bbox |
 | TUM bereinigter Referenzausschnitt | 3,577 Kanten, 4,955 Spuren, 1,752 Knoten im selben bbox |
-| Ampel-Knoten | Torii 198 vs TUM 29 |
-| Joined-junction Evidenz | Torii 0 joined-junction endpoint refs vs TUM 1,136 |
-| Routeability smoke | beide Netze: 40 / 40 generierte passenger trips kamen bei `end=800` an |
-| Teleports / collisions | 0 / 0 |
+| Ampel-Knoten | Torii visual-detail 217 vs TUM 29 |
+| Verbleibendes Bereinigungsziel | wiederverwendbare physische Kreuzungs-/TLS-Aggregation mit Google Maps Kartenpruefung |
 | Claim status | `diagnostic-demo` |
 
 Siehe [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). Die erzeugten `.osm.xml`, `.net.xml`, Routen- und Logdateien werden absichtlich nicht committed; das Repository behaelt nur den Prompt und eine leichte Validierungszusammenfassung.
