@@ -230,7 +230,7 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
             "claim_status": "diagnostic-demo",
@@ -343,7 +343,7 @@ def test_reference_matched_workflow_derives_bbox_from_reference_geometry(tmp_pat
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
             "claim_status": "diagnostic-demo",
