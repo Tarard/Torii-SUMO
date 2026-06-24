@@ -203,6 +203,37 @@ def _tls_review_summary(tls_report: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | None) -> dict[str, Any]:
+    if topology_audit_report is None:
+        return {
+            "junction_aggregation_candidate_count": 0,
+            "junction_aggregation_join_candidate_count": 0,
+            "junction_aggregation_needs_map_review_count": 0,
+            "junction_aggregation_do_not_join_count": 0,
+            "junction_aggregation_candidates_file": "",
+            "junction_aggregation_decision_counts": {},
+        }
+    clusters = list(topology_audit_report.get("suspicious_clusters", []))
+    decision_counts = {
+        "join": 0,
+        "needs_map_review": 0,
+        "do_not_join": 0,
+    }
+    for cluster in clusters:
+        decision = str(cluster.get("aggregation_decision", "needs_map_review"))
+        if decision not in decision_counts:
+            decision = "needs_map_review"
+        decision_counts[decision] += 1
+    return {
+        "junction_aggregation_candidate_count": decision_counts["join"] + decision_counts["needs_map_review"],
+        "junction_aggregation_join_candidate_count": decision_counts["join"],
+        "junction_aggregation_needs_map_review_count": decision_counts["needs_map_review"],
+        "junction_aggregation_do_not_join_count": decision_counts["do_not_join"],
+        "junction_aggregation_candidates_file": str(topology_audit_report.get("clusters_file", "")),
+        "junction_aggregation_decision_counts": decision_counts,
+    }
+
+
 def run_osm_cleanup_workflow(
     *,
     output_dir: Path,
@@ -673,6 +704,7 @@ def run_osm_cleanup_workflow(
         }
 
     tls_summary = _tls_review_summary(tls_report)
+    junction_aggregation_summary = _junction_aggregation_summary(topology_audit_report)
     warnings = []
     for child in (
         build_report,
@@ -697,6 +729,12 @@ def run_osm_cleanup_workflow(
         warnings.append(str(connectivity_quality["quality_warning"]))
     if topology_audit_report is not None and topology_audit_report.get("topology_fragmentation_status") == "needs_review":
         warnings.append("topology fragmentation audit needs human review before treating the network as clean")
+    if junction_aggregation_summary["junction_aggregation_candidate_count"]:
+        warnings.append(
+            "junction aggregation audit identified "
+            f"{junction_aggregation_summary['junction_aggregation_candidate_count']} possible physical-intersection "
+            "aggregation candidate(s); inspect the candidate CSV and map-review links before destructive joining"
+        )
     warnings = list(dict.fromkeys(warnings))
 
     gate_status = {
@@ -782,6 +820,7 @@ def run_osm_cleanup_workflow(
         "suspicious_topology_cluster_count": 0 if topology_audit_report is None else topology_audit_report.get("suspicious_cluster_count", 0),
         "max_topology_cluster_node_count": 0 if topology_audit_report is None else topology_audit_report.get("max_cluster_node_count", 0),
         "topology_audit_clusters_file": "" if topology_audit_report is None else str(topology_audit_report.get("clusters_file", "")),
+        **junction_aggregation_summary,
         "routeability_probe_file": "" if routeability_report is None else str(routeability_report.get("sumocfg_file", "")),
         "missing_key_edges": [] if routeability_report is None else routeability_report.get("missing_key_edges", []),
         "routeability_probe_status": "skipped" if routeability_report is None else routeability_report.get("status", "fail"),
