@@ -7,6 +7,11 @@ from .osm_area import osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .netedit import launch_netedit
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
+from .road_scope import (
+    ROAD_LEVEL_SCOPE_OPTIONS,
+    ROAD_LEVEL_SCOPE_QUESTION,
+    RECOMMENDED_ROAD_LEVEL_SCOPE,
+)
 from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
 
@@ -56,14 +61,65 @@ def _blocked_place_report(
         "output_dir": str(output_dir),
         "gate_status": {
             "area_confirmation": "blocked",
+            "road_level_scope": "not_started",
             "network_build": "not_started",
             "tls_reality_audit": "not_started",
             "connectivity": "not_started",
+            "routeability_audit": "not_started",
             "netedit": "not_started",
             "sumo_gui": "not_started",
         },
         "warnings": list(place_report.get("warnings", []) if place_report is not None else [])
         + ["place-name input requires OSM preview and user confirmation before network construction"],
+    }
+
+
+def _road_level_scope_fields() -> dict[str, Any]:
+    return {
+        "road_level_options": list(ROAD_LEVEL_SCOPE_OPTIONS),
+        "recommended_road_level": RECOMMENDED_ROAD_LEVEL_SCOPE,
+    }
+
+
+def _blocked_road_level_scope_report(
+    *,
+    area_input: str,
+    area_status: str,
+    place_report: Mapping[str, Any] | None,
+    cleaned_place_name: str,
+    bbox: str,
+) -> dict[str, Any]:
+    return {
+        "status": "blocked",
+        "claim_status": "blocked",
+        "area_input": area_input,
+        "area_resolution_status": area_status,
+        **(
+            _candidate_fields(place_report)
+            if place_report is not None
+            else {**_candidate_fields(None), "candidate_bbox": bbox}
+        ),
+        "osm_preview_url": (
+            str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name)))
+            if place_report is not None
+            else (osm_preview_url(cleaned_place_name) if cleaned_place_name else "")
+        ),
+        "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+        "road_level_scope_status": "needs_user_confirmation",
+        **_road_level_scope_fields(),
+        "missing_blockers": ["highway_classes"],
+        "next_question": ROAD_LEVEL_SCOPE_QUESTION,
+        "gate_status": {
+            "area_confirmation": "pass",
+            "road_level_scope": "blocked",
+            "network_build": "not_started",
+            "tls_reality_audit": "not_started",
+            "connectivity": "not_started",
+            "routeability_audit": "not_started",
+            "netedit": "not_started",
+            "sumo_gui": "not_started",
+        },
+        "warnings": ["road level scope must be confirmed before OSM network construction"],
     }
 
 
@@ -151,7 +207,7 @@ def run_osm_cleanup_workflow(
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
     launch_sumo_gui_after_build: bool = True,
-    run_routeability_audit_after_build: bool = False,
+    run_routeability_audit_after_build: bool = True,
     routeability_vehicle_count: int = 100,
     routeability_initial_end: int = 300,
     routeability_max_end: int = 2400,
@@ -184,9 +240,11 @@ def run_osm_cleanup_workflow(
                 "user_confirmed_area": "yes",
                 "gate_status": {
                     "area_confirmation": "fail",
+                    "road_level_scope": "not_started",
                     "network_build": "not_started",
                     "tls_reality_audit": "not_started",
                     "connectivity": "not_started",
+                    "routeability_audit": "not_started",
                     "netedit": "not_started",
                     "sumo_gui": "not_started",
                 },
@@ -200,10 +258,28 @@ def run_osm_cleanup_workflow(
             "area_input": cleaned_place_name,
             "area_resolution_status": "blocked",
             **_candidate_fields(place_report),
+            "gate_status": {
+                "area_confirmation": "fail",
+                "road_level_scope": "not_started",
+                "network_build": "not_started",
+                "tls_reality_audit": "not_started",
+                "connectivity": "not_started",
+                "routeability_audit": "not_started",
+                "netedit": "not_started",
+                "sumo_gui": "not_started",
+            },
             "warnings": ["bbox is required for OSM network construction"],
         }
 
     area_status = "confirmed_by_user" if cleaned_place_name and confirmed_area else "confirmed_by_input"
+    if highway_classes is None:
+        return _blocked_road_level_scope_report(
+            area_input=cleaned_place_name or bbox,
+            area_status=area_status,
+            place_report=place_report,
+            cleaned_place_name=cleaned_place_name,
+            bbox=bbox,
+        )
     build_report = build_func(
         bbox=bbox,
         output_dir=output_dir,
@@ -228,9 +304,11 @@ def run_osm_cleanup_workflow(
             "build": build_report,
             "gate_status": {
                 "area_confirmation": "pass",
+                "road_level_scope": "pass",
                 "network_build": _gate_value(build_report),
                 "tls_reality_audit": "not_started",
                 "connectivity": "not_started",
+                "routeability_audit": "not_started",
                 "netedit": "not_started",
                 "sumo_gui": "not_started",
             },
@@ -336,6 +414,7 @@ def run_osm_cleanup_workflow(
 
     gate_status = {
         "area_confirmation": "pass",
+        "road_level_scope": "pass",
         "network_build": _gate_value(build_report),
         "tls_reality_audit": _gate_value(tls_report),
         "connectivity": str(connectivity_quality["connectivity_gate"]),
@@ -365,6 +444,8 @@ def run_osm_cleanup_workflow(
         **(_candidate_fields(place_report) if place_report is not None else {**_candidate_fields(None), "candidate_bbox": bbox}),
         "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))) if place_report is not None else (osm_preview_url(cleaned_place_name) if cleaned_place_name else ""),
         "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+        "road_level_scope_status": "confirmed",
+        **_road_level_scope_fields(),
         "map_baseline_source": regional_map_baseline["regional_map_provider"],
         "regional_map_baseline": regional_map_baseline,
         "map_temporal_scope": map_temporal_scope,

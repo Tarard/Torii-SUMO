@@ -82,6 +82,7 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     report = run_auto_workflow(
         user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
         output_dir=tmp_path,
+        highway_classes="arterial",
         place_resolver=fake_resolver,
         cleanup_workflow_func=fake_cleanup,
     )
@@ -91,8 +92,39 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     assert report["tool_called"] == "sumo_osm_cleanup_workflow"
     assert captured["bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
     assert captured["place_name"] == "Altstadt, Dresden"
+    assert {"primary", "tertiary"} <= captured["highway_classes"]
     assert captured["run_routeability_audit_after_build"] is True
     assert report["area_resolution_status"] == "candidate_found"
+
+
+def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp_path: Path) -> None:
+    def fake_resolver(_place_name: str):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "area_resolution_status": "candidate_found",
+            "candidate_display_name": "Altstadt, Dresden, Sachsen, Deutschland",
+            "candidate_osm_type": "relation",
+            "candidate_osm_id": "192900",
+            "candidate_bbox": "13.6864402,51.0280799,13.7872926,51.0766681",
+            "osm_preview_url": "https://www.openstreetmap.org/search?query=Altstadt%2C+Dresden",
+            "candidate_osm_url": "https://www.openstreetmap.org/relation/192900",
+            "warnings": [],
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
+        output_dir=tmp_path,
+        place_resolver=fake_resolver,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    assert report["execution_status"] == "needs_road_level_scope"
+    assert report["missing_blockers"] == ["highway_classes"]
+    assert report["next_question"] == "Which road level should Torii include: arterial, drive, drive_plus_unclassified, or full_vehicle?"
+    assert report["road_level_options"] == ["arterial", "drive", "drive_plus_unclassified", "full_vehicle"]
+    assert report["recommended_road_level"] == "arterial"
 
 
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
@@ -140,10 +172,12 @@ def test_auto_workflow_enables_routeability_audit_when_cleanup_supports_it(tmp_p
         user_request="Build a SUMO network for Altstadt, Dresden from OSM",
         output_dir=tmp_path,
         bbox="13.6,50.9,13.9,51.1",
+        highway_classes="arterial",
         cleanup_workflow_func=fake_cleanup,
     )
 
     assert report["status"] == "pass"
+    assert {"primary", "tertiary"} <= captured["highway_classes"]
     assert captured["run_routeability_audit_after_build"] is True
 
 
@@ -164,6 +198,7 @@ def test_auto_workflow_keeps_legacy_cleanup_fake_compatible(tmp_path: Path) -> N
         user_request="Build a SUMO network for Altstadt, Dresden from OSM",
         output_dir=tmp_path,
         bbox="13.6,50.9,13.9,51.1",
+        highway_classes="arterial",
         cleanup_workflow_func=fake_cleanup,
     )
 
