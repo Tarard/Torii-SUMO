@@ -15,7 +15,7 @@
   },
   "torii_source": {
     "kind": "OpenStreetMap",
-    "road_class_rule": "arterial"
+    "road_class_rule": "full_vehicle"
   },
   "reference_source": {
     "kind": "manual SUMO network",
