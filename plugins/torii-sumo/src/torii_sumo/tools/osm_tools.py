@@ -21,6 +21,7 @@ from torii_sumo.core.road_scope import (
 )
 from torii_sumo.core.routeability_audit import run_routeability_audit
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+from torii_sumo.core.reference_scope import audit_reference_scope, build_scope_pruning_variant
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 
 
@@ -215,6 +216,42 @@ def sumo_network_junction_aggregation_variant(
     )
 
 
+def sumo_network_reference_scope_audit(
+    reference_net_file: str,
+    candidate_net_file: str,
+    output_dir: str,
+    prefix: str = "reference_scope",
+    overrepresentation_ratio: float = 1.5,
+    min_extra_edges: int = 10,
+    max_prune_edge_length_m: float = 80.0,
+) -> dict[str, Any]:
+    return audit_reference_scope(
+        reference_net_file=Path(reference_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        overrepresentation_ratio=overrepresentation_ratio,
+        min_extra_edges=min_extra_edges,
+        max_prune_edge_length_m=max_prune_edge_length_m,
+    )
+
+
+def sumo_network_scope_pruning_variant(
+    net_file: str,
+    reference_scope_report_file: str,
+    output_dir: str,
+    prefix: str = "scope_pruning",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_scope_pruning_variant(
+        net_file=Path(net_file),
+        reference_scope_report=_read_json_report(reference_scope_report_file) or {},
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def sumo_network_tls_aggregation_variant(
     net_file: str,
     tls_audit_report_file: str,
@@ -292,6 +329,8 @@ def sumo_osm_cleanup_workflow(
     run_tls_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
+    run_reference_scope_audit_after_build: bool = True,
+    run_scope_pruning_after_build: bool = True,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
@@ -328,5 +367,7 @@ def sumo_osm_cleanup_workflow(
         run_tls_aggregation_after_build=run_tls_aggregation_after_build,
         run_reference_join_audit_after_build=run_reference_join_audit_after_build,
         run_reference_join_aggregation_after_build=run_reference_join_aggregation_after_build,
+        run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
+        run_scope_pruning_after_build=run_scope_pruning_after_build,
         key_edge_queries=key_edge_queries,
     )

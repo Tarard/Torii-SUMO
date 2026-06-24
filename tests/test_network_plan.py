@@ -514,6 +514,162 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
     assert report["reference_visual_detail_tls_aggregated_tl_logic_count"] == 2
 
 
+def test_reference_matched_workflow_runs_reference_scope_audit_and_pruning_variant(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-scope_filtered.osm.xml.gz"
+    visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
+    scope_pruned_net_file = tmp_path / "scope_pruning" / "scope_pruned.net.xml"
+    calls: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_tls(**kwargs):
+        net_file = Path(kwargs["net_file"])
+        if "reference_visual_detail" in net_file.name:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "tls_candidate_count": 2,
+                "tls_cluster_count": 1,
+                "clusters_file": str(tmp_path / "visual_tls_clusters.csv"),
+                "warnings": [],
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**kwargs):
+        visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
+        visual_tls_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_aggregation_variant_file": str(visual_tls_net_file),
+            "warnings": [],
+        }
+
+    def fake_reference_scope_audit(**kwargs):
+        calls["scope_reference_net_file"] = kwargs["reference_net_file"]
+        calls["scope_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "blocked",
+            "claim_status": "blocked",
+            "reference_scope_status": "needs_pruning_review",
+            "prune_candidate_count": 4,
+            "report_file": str(tmp_path / "scope_audit.json"),
+            "prune_candidates_file": str(tmp_path / "scope_candidates.csv"),
+            "warnings": ["reference scope audit found 4 prune candidate edge(s)"],
+        }
+
+    def fake_scope_pruning(**kwargs):
+        calls["scope_pruning_net_file"] = kwargs["net_file"]
+        calls["scope_pruning_report"] = kwargs["reference_scope_report"]
+        scope_pruned_net_file.parent.mkdir(parents=True, exist_ok=True)
+        scope_pruned_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "scope_pruning_status": "variant_created_for_review",
+            "scope_pruning_removed_edge_count": 4,
+            "scope_pruning_variant_file": str(scope_pruned_net_file),
+            "warnings": ["scope pruning variant requires Netedit/map review before adoption"],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-scope",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        tls_aggregation_func=fake_tls_aggregation,
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 100,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 100,
+            "warnings": [],
+        },
+        topology_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "topology_fragmentation_status": "pass",
+            "warnings": [],
+        },
+        routeability_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        reference_join_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "reference_case_count": 0,
+            "matched_case_count": 0,
+            "unmatched_case_count": 0,
+            "warnings": [],
+        },
+        reference_join_aggregation_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_aggregation_status": "not_needed",
+            "junction_aggregation_candidate_count": 0,
+            "warnings": [],
+        },
+        reference_scope_audit_func=fake_reference_scope_audit,
+        scope_pruning_func=fake_scope_pruning,
+    )
+
+    assert calls["scope_reference_net_file"] == reference_net_file
+    assert calls["scope_candidate_net_file"] == visual_tls_net_file
+    assert calls["scope_pruning_net_file"] == visual_tls_net_file
+    assert calls["scope_pruning_report"]["prune_candidate_count"] == 4
+    assert report["reference_scope_status"] == "needs_pruning_review"
+    assert report["reference_scope_prune_candidate_count"] == 4
+    assert report["reference_scope_pruning_status"] == "variant_created_for_review"
+    assert report["reference_scope_pruning_variant_file"] == str(scope_pruned_net_file)
+    assert report["gate_status"]["reference_scope_audit"] == "blocked"
+    assert report["gate_status"]["reference_scope_pruning"] == "blocked"
+
+
 def test_reference_matched_workflow_derives_bbox_from_reference_geometry(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
