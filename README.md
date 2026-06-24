@@ -83,18 +83,9 @@ For MCP-first use, call `torii_auto_workflow` with the one-sentence request and 
 
 | Prompt | What Torii Does |
 |---|---|
-| "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt." | Confirms the area and road-detail target, builds a passenger-road SUMO network from OSM, extracts a connected simulation core when needed, compares topology/TLS evidence against the TUM cleaned reference, runs connectivity/routeability checks, opens Netedit, and reports a claim boundary. |
-| "Build a SUMO network from this OSM bbox or extract." | Runs bounded OSM import, road-class filtering, XML deduplication, `netconvert`, and construction evidence capture. |
-| "Make this SUMO network 100% connected for passenger routeability checks." | Extracts the largest passenger component into a reusable `connected-core` `.net.xml` and reports discarded fragments instead of hiding them. |
-| "Audit the traffic lights in this SUMO network." | Extracts TLS candidates, prepares map-review fields, and separates SUMO-generated TLS from manually validated signal evidence. |
-| "Create a region-aware map baseline review table for these SUMO traffic lights." | Builds a multi-source TLS evidence CSV with the right regional baseline, such as Google Maps where appropriate or Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, and field photos for mainland China. |
-| "Clean a SUMO network for a city in mainland China." | Treats OSM as an import seed, uses region-aware defaults where possible, records WGS84/GCJ-02/BD-09 coordinate assumptions, and reports missing local-map evidence as a claim boundary instead of blocking the diagnostic build. |
-| "Check whether these roads or bridges are connected." | Creates routeability probes and reports missing routes, disconnected components, teleports, and residual risk. |
-| "This SUMO run finishes, but tripinfo and summary disagree." | Diagnoses output consistency, completion, insertion, teleport, route, and horizon problems before accepting metrics. |
-| "Controller A has lower travel time, but some vehicles are unfinished." | Reports completion first, then demotes or bounds the performance claim. |
-| "Compare fixed-time, actuated, max-pressure, and my TraCI controller." | Forces paired demand, seeds, horizon, output intervals, completion policy, and metric definitions before comparison. |
-| "My waiting time got worse after cleanup." | Treats the metric as feedback and looks for network, demand, TLS, routing, or controller causes. |
-| "Turn this fix I found into reusable guidance." | Abstracts the solution into a privacy-safe field lesson for future SUMO workflows. |
+| "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt." | Builds from OSM, checks connectivity and routeability, compares topology/TLS evidence with the reference, and opens Netedit. |
+| "Audit this TraCI signal controller before I compare it with fixed-time or max-pressure." | Checks controller identity, paired demand/seeds/horizon, TLS mapping, outputs, and completion before any performance claim. |
+| "This SUMO run finishes, but tripinfo and summary disagree." | Diagnoses output consistency, unfinished vehicles, teleports, route errors, and claim boundary. |
 
 ## What Torii Is
 
@@ -111,14 +102,11 @@ The original `Simulation Helper Skill for Eclipse SUMO` is now Torii's reasoning
 
 ## Boundaries
 
-Torii is useful today, but it is not a magic SUMO certifier.
+Torii builds and audits SUMO artifacts, but it does not certify a model as correct.
 
-- It can build bounded OSM-to-SUMO networks from confirmed areas or extracts.
-- It can produce diagnostic evidence for connectivity, connected-core extraction, routeability, outputs, warnings, TLS candidates, and completion.
-- If raw OSM import contains small disconnected fragments, Torii keeps the raw network as audit evidence and routes downstream checks through a `connected-core` network built from the largest passenger component.
-- If strict connectivity still fails after cleanup, Torii labels the network `partial-main-component`: usable for diagnostic smoke tests, not experiment-ready.
-- It does not automatically certify full city networks, traffic-light timing/phasing, demand realism, controller correctness, or formal experiment validity.
-- Reality baselines are region-specific. OSM is a useful open construction source, but it is not automatically the ground truth; mainland China workflows should use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos as the current-road/TLS review baseline and record WGS84/GCJ-02/BD-09 coordinate-system assumptions.
+- OSM imports remain diagnostic until road scope, connectivity, routeability, TLS reality, and map baseline evidence are checked.
+- `connected-core` networks are useful for smoke tests, but discarded fragments and topology warnings remain part of the claim boundary.
+- It does not prove traffic-light timing, phasing, demand realism, controller correctness, or full experiment validity.
 
 ## Development
 
