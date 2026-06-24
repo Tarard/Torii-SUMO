@@ -146,6 +146,14 @@ def _int_field(report: Mapping[str, Any], key: str) -> int:
         return 0
 
 
+def _class_set(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        return {item.strip() for item in value.replace(";", ",").split(",") if item.strip()}
+    return {str(item) for item in value if str(item)}
+
+
 def _connectivity_quality(connectivity_report: Mapping[str, Any]) -> dict[str, Any]:
     passenger_count = _int_field(connectivity_report, "passenger_edge_count")
     largest_count = _int_field(connectivity_report, "largest_component_edge_count")
@@ -421,6 +429,154 @@ def run_osm_cleanup_workflow(
             "warnings": list(build_report.get("warnings", [])) + list(service_permission_report.get("warnings", [])),
         }
     net_file = raw_net_file
+    reference_visual_detail_status = "not_applicable"
+    reference_visual_detail_net_file: Path | None = None
+    reference_visual_detail_build_report: dict[str, Any] = {}
+    reference_visual_detail_service_permission_report: dict[str, Any] = {}
+    reference_visual_detail_netedit_report: dict[str, Any] = {}
+    vehicle_core_highway_classes = _class_set(
+        network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", []))
+    )
+    reference_visual_detail_highway_classes = _class_set(
+        network_plan.get("reference_visual_detail_highway_classes", [])
+    )
+    should_build_reference_visual_detail = (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and bool(reference_visual_detail_highway_classes)
+        and reference_visual_detail_highway_classes != vehicle_core_highway_classes
+    )
+    if str(network_plan.get("network_profile", "")) == "reference_matched":
+        reference_visual_detail_status = "same_as_vehicle_core"
+    if should_build_reference_visual_detail:
+        visual_source_osm_value = build_report.get("source_osm_file") or source_osm_path
+        if not visual_source_osm_value:
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name or bbox,
+                "area_resolution_status": area_status,
+                **_candidate_fields(place_report),
+                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+                "network_profile": network_plan.get("network_profile", ""),
+                "reference_target": network_plan.get("reference_target", ""),
+                "reference_net_file": network_plan.get("reference_net_file", ""),
+                "network_detail_target": network_plan.get("network_detail_target", ""),
+                "selected_highway_classes": network_plan.get("highway_classes", []),
+                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
+                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
+                "reference_visual_detail_status": "failed",
+                "network_plan": network_plan,
+                "reference_policy": network_plan.get("reference_policy", {}),
+                "build": build_report,
+                "service_passenger_permissions": service_permission_report,
+                "gate_status": {
+                    "area_confirmation": "pass",
+                    "road_level_scope": "pass",
+                    "network_build": _gate_value(build_report),
+                    "reference_visual_detail": "fail",
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(build_report.get("warnings", []))
+                + ["reference visual-detail network requires a reusable source OSM file"],
+            }
+        reference_visual_detail_build_report = build_func(
+            bbox=bbox,
+            output_dir=output_dir,
+            prefix=f"{prefix}_reference_visual_detail",
+            source_osm_path=Path(str(visual_source_osm_value)),
+            allowed_highways=reference_visual_detail_highway_classes,
+            historical_date=historical_date,
+            overpass_url=overpass_url,
+            timeout_seconds=timeout_seconds,
+            max_tile_area_km2=max_tile_area_km2,
+            max_retries=max_retries,
+            retry_pause_seconds=retry_pause_seconds,
+        )
+        if reference_visual_detail_build_report.get("status") != "pass":
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name or bbox,
+                "area_resolution_status": area_status,
+                **_candidate_fields(place_report),
+                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+                "network_profile": network_plan.get("network_profile", ""),
+                "reference_target": network_plan.get("reference_target", ""),
+                "reference_net_file": network_plan.get("reference_net_file", ""),
+                "network_detail_target": network_plan.get("network_detail_target", ""),
+                "selected_highway_classes": network_plan.get("highway_classes", []),
+                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
+                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
+                "reference_visual_detail_status": "failed",
+                "network_plan": network_plan,
+                "reference_policy": network_plan.get("reference_policy", {}),
+                "build": build_report,
+                "reference_visual_detail_build": reference_visual_detail_build_report,
+                "service_passenger_permissions": service_permission_report,
+                "gate_status": {
+                    "area_confirmation": "pass",
+                    "road_level_scope": "pass",
+                    "network_build": _gate_value(build_report),
+                    "reference_visual_detail": _gate_value(reference_visual_detail_build_report),
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(build_report.get("warnings", []))
+                + list(reference_visual_detail_build_report.get("warnings", [])),
+            }
+        reference_visual_detail_net_file = Path(str(reference_visual_detail_build_report["net_file"]))
+        reference_visual_detail_service_permission_report = service_permission_func(
+            reference_visual_detail_net_file,
+            policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
+        )
+        if reference_visual_detail_service_permission_report.get("status") != "pass":
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "area_input": cleaned_place_name or bbox,
+                "area_resolution_status": area_status,
+                **_candidate_fields(place_report),
+                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+                "network_profile": network_plan.get("network_profile", ""),
+                "reference_target": network_plan.get("reference_target", ""),
+                "reference_net_file": network_plan.get("reference_net_file", ""),
+                "network_detail_target": network_plan.get("network_detail_target", ""),
+                "selected_highway_classes": network_plan.get("highway_classes", []),
+                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
+                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
+                "reference_visual_detail_status": "failed",
+                "network_plan": network_plan,
+                "reference_policy": network_plan.get("reference_policy", {}),
+                "build": build_report,
+                "reference_visual_detail_build": reference_visual_detail_build_report,
+                "service_passenger_permissions": service_permission_report,
+                "reference_visual_detail_service_passenger_permissions": reference_visual_detail_service_permission_report,
+                "gate_status": {
+                    "area_confirmation": "pass",
+                    "road_level_scope": "pass",
+                    "network_build": _gate_value(build_report),
+                    "reference_visual_detail": "fail",
+                    "tls_reality_audit": "not_started",
+                    "connectivity": "not_started",
+                    "routeability_audit": "not_started",
+                    "netedit": "not_started",
+                    "sumo_gui": "not_started",
+                },
+                "warnings": list(build_report.get("warnings", []))
+                + list(reference_visual_detail_build_report.get("warnings", []))
+                + list(reference_visual_detail_service_permission_report.get("warnings", [])),
+            }
+        reference_visual_detail_status = "built"
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
     tls_report = tls_audit_func(
@@ -491,6 +647,17 @@ def run_osm_cleanup_workflow(
             "netedit_network_file": str(net_file),
             "warnings": ["netedit launch disabled by caller"],
         }
+    if reference_visual_detail_net_file is not None:
+        if launch_netedit_after_build:
+            reference_visual_detail_netedit_report = netedit_func(reference_visual_detail_net_file)
+        else:
+            reference_visual_detail_netedit_report = {
+                "status": "blocked",
+                "claim_status": "diagnostic-demo",
+                "netedit_status": "skipped",
+                "netedit_network_file": str(reference_visual_detail_net_file),
+                "warnings": ["reference visual-detail netedit launch disabled by caller"],
+            }
     if launch_sumo_gui_after_build:
         sumo_gui_report = sumo_gui_func(net_file, output_dir / "sumo_gui", f"{prefix}_sumo_gui")
     else:
@@ -510,6 +677,8 @@ def run_osm_cleanup_workflow(
     for child in (
         build_report,
         service_permission_report,
+        reference_visual_detail_build_report,
+        reference_visual_detail_service_permission_report,
         tls_report,
         raw_connectivity_report,
         connected_core_report or {},
@@ -518,6 +687,7 @@ def run_osm_cleanup_workflow(
         topology_audit_report or {},
         routeability_audit_report or {},
         netedit_report,
+        reference_visual_detail_netedit_report,
         sumo_gui_report,
     ):
         warnings.extend(str(item) for item in child.get("warnings", []))
@@ -538,6 +708,8 @@ def run_osm_cleanup_workflow(
         "netedit": _gate_value(netedit_report),
         "sumo_gui": _gate_value(sumo_gui_report),
     }
+    if str(network_plan.get("network_profile", "")) == "reference_matched":
+        gate_status["reference_visual_detail"] = "pass" if reference_visual_detail_status in {"built", "same_as_vehicle_core"} else "fail"
     if topology_audit_report is not None:
         gate_status["topology_audit"] = _gate_value(topology_audit_report)
     if routeability_audit_report is not None:
@@ -548,6 +720,7 @@ def run_osm_cleanup_workflow(
         and gate_status["connectivity"] in {"pass", "partial"}
         and gate_status.get("topology_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("routeability_audit", "skipped") in {"pass", "blocked", "skipped"}
+        and gate_status.get("reference_visual_detail", "skipped") in {"pass", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
     )
@@ -571,10 +744,16 @@ def run_osm_cleanup_workflow(
         "reference_net_file": network_plan.get("reference_net_file", ""),
         "network_detail_target": network_plan.get("network_detail_target", ""),
         "primary_network_layer": network_plan.get("primary_network_layer", ""),
+        "default_routeability_layer": network_plan.get("default_routeability_layer", ""),
+        "default_netedit_comparison_layer": network_plan.get("default_netedit_comparison_layer", ""),
+        "comparison_scope_mode": network_plan.get("comparison_scope_mode", ""),
         "auxiliary_modal_layers": network_plan.get("auxiliary_modal_layers", []),
         "auxiliary_modal_highway_classes": network_plan.get("auxiliary_modal_highway_classes", {}),
         "movement_layers": network_plan.get("movement_layers", []),
         "selected_highway_classes": network_plan.get("highway_classes", []),
+        "vehicle_core_highway_classes": network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", [])),
+        "reference_visual_detail_highway_classes": network_plan.get("reference_visual_detail_highway_classes", []),
+        "reference_visual_detail_only_highway_classes": network_plan.get("reference_visual_detail_only_highway_classes", []),
         "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
         "network_plan": network_plan,
         "reference_policy": network_plan.get("reference_policy", {}),
@@ -613,6 +792,10 @@ def run_osm_cleanup_workflow(
         "netedit_process_id": netedit_report.get("netedit_process_id"),
         "netedit_window_title": netedit_report.get("netedit_window_title", ""),
         "netedit_network_file": netedit_report.get("netedit_network_file", str(net_file)),
+        "reference_visual_detail_status": reference_visual_detail_status,
+        "reference_visual_detail_net_file": "" if reference_visual_detail_net_file is None else str(reference_visual_detail_net_file),
+        "reference_visual_detail_netedit_status": reference_visual_detail_netedit_report.get("netedit_status", "not_started"),
+        "reference_visual_detail_netedit_network_file": reference_visual_detail_netedit_report.get("netedit_network_file", ""),
         "sumo_gui_status": sumo_gui_report.get("sumo_gui_status", "failed"),
         "sumo_gui_binary": sumo_gui_report.get("sumo_gui_binary"),
         "sumo_gui_process_id": sumo_gui_report.get("sumo_gui_process_id"),
@@ -623,7 +806,9 @@ def run_osm_cleanup_workflow(
         "connected_core_file": "" if connected_core_report is None else str(connected_core_report.get("connected_core_file", "")),
         "filtered_osm_file": str(filtered_osm_value) if filtered_osm_value else "",
         "build": build_report,
+        "reference_visual_detail_build": reference_visual_detail_build_report,
         "service_passenger_permissions": service_permission_report,
+        "reference_visual_detail_service_passenger_permissions": reference_visual_detail_service_permission_report,
         "tls_audit": tls_report,
         "raw_connectivity": raw_connectivity_report,
         "connected_core": connected_core_report or {},
@@ -632,6 +817,7 @@ def run_osm_cleanup_workflow(
         "topology_audit": topology_audit_report or {},
         "routeability_audit": routeability_audit_report or {},
         "netedit": netedit_report,
+        "reference_visual_detail_netedit": reference_visual_detail_netedit_report,
         "sumo_gui": sumo_gui_report,
         "gate_status": gate_status,
         "warnings": warnings,

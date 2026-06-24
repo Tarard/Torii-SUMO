@@ -49,11 +49,21 @@ reference_artifact: reference_net_file | reference_policy_report | locate_refere
 primary_network_layer:
 auxiliary_modal_layers:
 selected_highway_classes:
+vehicle_core_highway_classes:
+reference_visual_detail_highway_classes:
+reference_visual_detail_net_file:
+default_routeability_layer: vehicle_core
+default_netedit_comparison_layer: reference_visual_detail
 service_passenger_policy: sumo_default | allow_vehicle_service | reference_match
 validation_gates:
 ```
 
-If the user asks to match, mimic, compare against, or learn from a reference network or dataset, first locate or request the reference artifact. The artifact may be a local SUMO `.net.xml`, a JSON reference policy report, a user-supplied file, a downloaded public release, or a cloned public dataset. Do not hardcode a city, repository, or named reference into the plugin. Once the artifact is available, infer the vehicle road hierarchy from the reference passenger-drivable layer, record bicycle/pedestrian/bus as auxiliary modal layers, apply `highway.service` passenger permissions only when the reference policy uses them, and require connectivity, routeability, topology, reference-comparison, and Netedit launch evidence. If no reference artifact can be located or supplied, block on `reference_net_file` or `reference_policy_report` instead of guessing the road levels.
+If the user asks to match, mimic, compare against, or learn from a reference network or dataset, first locate or request the reference artifact. The artifact may be a local SUMO `.net.xml`, a JSON reference policy report, a user-supplied file, a downloaded public release, or a cloned public dataset. Do not hardcode a city, repository, or named reference into the plugin. Once the artifact is available, infer two explicit scopes:
+
+- `vehicle_core`: road classes from the reference passenger-drivable layer. Use this for passenger connectivity, connected-core extraction, routeability, topology audit, and simulation-readiness claims.
+- `reference_visual_detail`: all visible OSM `highway.*` classes observed in the reference artifact. Build this as a separate Netedit comparison network when it differs from `vehicle_core`.
+
+Apply `highway.service` passenger permissions only when the reference policy uses them, and require connectivity, routeability, topology, scope-matched reference comparison, and Netedit launch evidence. Never compare a Torii `connected-core` vehicle network against a full-detail manual reference network. If no reference artifact can be located or supplied, block on `reference_net_file` or `reference_policy_report` instead of guessing the road levels.
 
 Use a small option set rather than silently adding everything:
 
@@ -109,7 +119,7 @@ Hard gates:
 
 1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, and preview checkpoint. In one-sentence diagnostic mode, proceed when the candidate is clear and record it as an assumption; block only when the area is ambiguous, missing, or unsafe.
 2. Before construction, resolve or infer a network plan. If no user intent or reference target identifies the traffic layers, block on the network-plan question instead of silently choosing all road types.
-3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary network, keep non-vehicle modal layers as auxiliary reporting or separately planned layers, and apply service-road passenger permissions only when the analyzed reference policy requires them.
+3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them.
 4. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
 5. For current-network modeling, use a region-aware reality baseline. Google Maps can be the default where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
 6. Run passenger connectivity checks before making stronger claims.
