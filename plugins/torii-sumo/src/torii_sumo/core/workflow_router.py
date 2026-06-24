@@ -26,6 +26,7 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
             "sumo_osm_resolve_place",
             "sumo_osm_cleanup_workflow",
             "sumo_tls_multisource_review",
+            "sumo_network_topology_audit",
             "sumo_network_routeability_probe",
             "sumo_network_routeability_audit",
             "sumo_collect_evidence",

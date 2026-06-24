@@ -13,6 +13,7 @@ from .tools.osm_tools import (
     sumo_network_connected_core,
     sumo_network_routeability_audit,
     sumo_network_routeability_probe,
+    sumo_network_topology_audit,
     sumo_osm_build_network,
     sumo_osm_cleanup_workflow,
     sumo_osm_resolve_place,
@@ -67,6 +68,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Run a completion-aware SUMO routeability audit, extending the horizon until all generated vehicles finish or max_end is reached.")(
         sumo_network_routeability_audit
+    )
+    server.tool(description="Audit dense SUMO junction clusters that suggest OSM-to-SUMO over-fragmented topology.")(
+        sumo_network_topology_audit
     )
 
     return server

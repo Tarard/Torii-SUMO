@@ -17,6 +17,7 @@ from torii_sumo.core.road_scope import (
     resolve_highway_classes as resolve_highway_classes_from_scope,
 )
 from torii_sumo.core.routeability_audit import run_routeability_audit
+from torii_sumo.core.topology_audit import audit_topology_fragmentation
 
 
 def resolve_highway_classes(value: str | None) -> set[str]:
@@ -141,6 +142,22 @@ def sumo_network_routeability_audit(
     )
 
 
+def sumo_network_topology_audit(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "topology_audit",
+    cluster_radius_m: float = 30.0,
+    min_cluster_nodes: int = 3,
+) -> dict[str, Any]:
+    return audit_topology_fragmentation(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        cluster_radius_m=cluster_radius_m,
+        min_cluster_nodes=min_cluster_nodes,
+    )
+
+
 def sumo_network_connected_core(
     net_file: str,
     output_dir: str,
@@ -187,6 +204,9 @@ def sumo_osm_cleanup_workflow(
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
     launch_sumo_gui_after_build: bool = True,
+    run_topology_audit_after_build: bool = True,
+    topology_cluster_radius_m: float = 30.0,
+    topology_min_cluster_nodes: int = 3,
     run_routeability_audit_after_build: bool = True,
     routeability_vehicle_count: int = 100,
     routeability_initial_end: int = 300,
@@ -212,6 +232,9 @@ def sumo_osm_cleanup_workflow(
         map_target_date=map_target_date,
         launch_netedit_after_build=launch_netedit_after_build,
         launch_sumo_gui_after_build=launch_sumo_gui_after_build,
+        run_topology_audit_after_build=run_topology_audit_after_build,
+        topology_cluster_radius_m=topology_cluster_radius_m,
+        topology_min_cluster_nodes=topology_min_cluster_nodes,
         run_routeability_audit_after_build=run_routeability_audit_after_build,
         routeability_vehicle_count=routeability_vehicle_count,
         routeability_initial_end=routeability_initial_end,

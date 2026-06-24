@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
-from torii_sumo.tools.osm_tools import sumo_network_routeability_audit
+from torii_sumo.tools.osm_tools import sumo_network_routeability_audit, sumo_network_topology_audit
 from torii_sumo.tools.run_tools import sumo_run_minimal_smoke
 
 
@@ -109,4 +109,36 @@ def test_sumo_network_routeability_audit_tool_returns_json_compatible_report(mon
 
     assert report["status"] == "pass"
     assert report["routeability_status"] == "pass"
+    json.dumps(report)
+
+
+def test_sumo_network_topology_audit_tool_returns_json_compatible_report(monkeypatch, tmp_path: Path) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "network.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_audit(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["cluster_radius_m"] == 25.0
+        assert kwargs["min_cluster_nodes"] == 3
+        return {
+            "status": "blocked",
+            "claim_status": "blocked",
+            "topology_fragmentation_status": "needs_review",
+            "suspicious_cluster_count": 1,
+            "clusters_file": str(tmp_path / "clusters.csv"),
+        }
+
+    monkeypatch.setattr(osm_tools, "audit_topology_fragmentation", fake_audit)
+
+    report = sumo_network_topology_audit(
+        net_file=str(net_file),
+        output_dir=str(tmp_path / "topology"),
+        cluster_radius_m=25.0,
+        min_cluster_nodes=3,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["topology_fragmentation_status"] == "needs_review"
     json.dumps(report)
