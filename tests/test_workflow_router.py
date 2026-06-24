@@ -120,11 +120,37 @@ def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp
 
     assert report["status"] == "blocked"
     assert report["claim_status"] == "blocked"
-    assert report["execution_status"] == "needs_road_level_scope"
-    assert report["missing_blockers"] == ["highway_classes"]
-    assert report["next_question"] == "Which road level should Torii include: arterial, drive, drive_plus_unclassified, or full_vehicle?"
-    assert report["road_level_options"] == ["arterial", "drive", "drive_plus_unclassified", "full_vehicle"]
-    assert report["recommended_road_level"] == "arterial"
+    assert report["execution_status"] == "needs_network_plan"
+    assert report["missing_blockers"] == ["network_plan"]
+    assert "traffic layers" in report["next_question"]
+    assert "reference_matched" in report["network_detail_options"]
+
+
+def test_auto_workflow_infers_tum_reference_plan_without_explicit_highway_classes(tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "network_profile": "tum_ingolstadt",
+            "service_passenger_policy": "reference_match",
+            "routeability_audit_status": "pass",
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to build the Ingolstadt SUMO network with the same layer policy as the TUM version",
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert report["execution_status"] == "executed"
+    assert captured["network_profile"] == "tum_ingolstadt"
+    assert captured["service_passenger_policy"] == "reference_match"
+    assert "service" in captured["highway_classes"]
 
 
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:

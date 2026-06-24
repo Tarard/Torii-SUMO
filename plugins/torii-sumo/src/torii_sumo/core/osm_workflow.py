@@ -6,10 +6,11 @@ from typing import Any, Callable, Mapping
 from .osm_area import osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .netedit import launch_netedit
+from .network_permissions import apply_service_passenger_permissions
+from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .road_scope import (
     ROAD_LEVEL_SCOPE_OPTIONS,
-    ROAD_LEVEL_SCOPE_QUESTION,
     RECOMMENDED_ROAD_LEVEL_SCOPE,
 )
 from .routeability_audit import run_routeability_audit
@@ -89,6 +90,7 @@ def _blocked_road_level_scope_report(
     place_report: Mapping[str, Any] | None,
     cleaned_place_name: str,
     bbox: str,
+    network_plan: Mapping[str, Any],
 ) -> dict[str, Any]:
     return {
         "status": "blocked",
@@ -107,9 +109,13 @@ def _blocked_road_level_scope_report(
         ),
         "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
         "road_level_scope_status": "needs_user_confirmation",
+        "network_plan_status": str(network_plan.get("network_plan_status", "needs_user_confirmation")),
         **_road_level_scope_fields(),
-        "missing_blockers": ["highway_classes"],
-        "next_question": ROAD_LEVEL_SCOPE_QUESTION,
+        "traffic_layer_options": list(network_plan.get("traffic_layer_options", [])),
+        "network_detail_options": list(network_plan.get("network_detail_options", [])),
+        "recommended_network_detail": str(network_plan.get("recommended_network_detail", "")),
+        "missing_blockers": list(network_plan.get("missing_blockers", ["network_plan"])),
+        "next_question": str(network_plan.get("next_question", NETWORK_PLAN_QUESTION)),
         "gate_status": {
             "area_confirmation": "pass",
             "road_level_scope": "blocked",
@@ -198,6 +204,9 @@ def run_osm_cleanup_workflow(
     prefix: str = "sumo_osm_cleanup",
     source_osm_path: Path | None = None,
     highway_classes: set[str] | None = None,
+    traffic_layers: str | set[str] | None = None,
+    network_profile: str | None = None,
+    service_passenger_policy: str | None = None,
     historical_date: str | None = None,
     overpass_url: str = "https://overpass-api.de/api/interpreter",
     timeout_seconds: float = 240.0,
@@ -226,6 +235,7 @@ def run_osm_cleanup_workflow(
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     sumo_gui_func: Callable[[Path, Path, str], dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
+    service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
 ) -> dict[str, Any]:
     cleaned_place_name = (place_name or "").strip()
     place_report = None
@@ -277,20 +287,28 @@ def run_osm_cleanup_workflow(
         }
 
     area_status = "confirmed_by_user" if cleaned_place_name and confirmed_area else "confirmed_by_input"
-    if highway_classes is None:
+    network_plan = derive_network_plan(
+        highway_classes=highway_classes,
+        traffic_layers=traffic_layers,
+        network_profile=network_profile,
+        service_passenger_policy=service_passenger_policy,
+    )
+    if network_plan.get("status") == "blocked":
         return _blocked_road_level_scope_report(
             area_input=cleaned_place_name or bbox,
             area_status=area_status,
             place_report=place_report,
             cleaned_place_name=cleaned_place_name,
             bbox=bbox,
+            network_plan=network_plan,
         )
+    selected_highway_classes = set(network_plan.get("highway_classes", []))
     build_report = build_func(
         bbox=bbox,
         output_dir=output_dir,
         prefix=prefix,
         source_osm_path=source_osm_path,
-        allowed_highways=highway_classes,
+        allowed_highways=selected_highway_classes,
         historical_date=historical_date,
         overpass_url=overpass_url,
         timeout_seconds=timeout_seconds,
@@ -306,6 +324,12 @@ def run_osm_cleanup_workflow(
             "area_resolution_status": area_status,
             **_candidate_fields(place_report),
             "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+            "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+            "network_profile": network_plan.get("network_profile", ""),
+            "network_detail_target": network_plan.get("network_detail_target", ""),
+            "movement_layers": network_plan.get("movement_layers", []),
+            "selected_highway_classes": network_plan.get("highway_classes", []),
+            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
             "build": build_report,
             "gate_status": {
                 "area_confirmation": "pass",
@@ -321,6 +345,38 @@ def run_osm_cleanup_workflow(
         }
 
     raw_net_file = Path(str(build_report["net_file"]))
+    service_permission_report = service_permission_func(
+        raw_net_file,
+        policy=str(network_plan.get("service_passenger_policy", "sumo_default")),
+    )
+    if service_permission_report.get("status") != "pass":
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "area_input": cleaned_place_name or bbox,
+            "area_resolution_status": area_status,
+            **_candidate_fields(place_report),
+            "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
+            "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+            "network_profile": network_plan.get("network_profile", ""),
+            "network_detail_target": network_plan.get("network_detail_target", ""),
+            "movement_layers": network_plan.get("movement_layers", []),
+            "selected_highway_classes": network_plan.get("highway_classes", []),
+            "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
+            "build": build_report,
+            "service_passenger_permissions": service_permission_report,
+            "gate_status": {
+                "area_confirmation": "pass",
+                "road_level_scope": "pass",
+                "network_build": _gate_value(build_report),
+                "tls_reality_audit": "not_started",
+                "connectivity": "not_started",
+                "routeability_audit": "not_started",
+                "netedit": "not_started",
+                "sumo_gui": "not_started",
+            },
+            "warnings": list(build_report.get("warnings", [])) + list(service_permission_report.get("warnings", [])),
+        }
     net_file = raw_net_file
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
@@ -410,6 +466,7 @@ def run_osm_cleanup_workflow(
     warnings = []
     for child in (
         build_report,
+        service_permission_report,
         tls_report,
         raw_connectivity_report,
         connected_core_report or {},
@@ -465,6 +522,14 @@ def run_osm_cleanup_workflow(
         "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))) if place_report is not None else (osm_preview_url(cleaned_place_name) if cleaned_place_name else ""),
         "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
         "road_level_scope_status": "confirmed",
+        "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
+        "network_profile": network_plan.get("network_profile", ""),
+        "reference_target": network_plan.get("reference_target", ""),
+        "network_detail_target": network_plan.get("network_detail_target", ""),
+        "movement_layers": network_plan.get("movement_layers", []),
+        "selected_highway_classes": network_plan.get("highway_classes", []),
+        "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
+        "network_plan": network_plan,
         **_road_level_scope_fields(),
         "map_baseline_source": regional_map_baseline["regional_map_provider"],
         "regional_map_baseline": regional_map_baseline,
@@ -510,6 +575,7 @@ def run_osm_cleanup_workflow(
         "connected_core_file": "" if connected_core_report is None else str(connected_core_report.get("connected_core_file", "")),
         "filtered_osm_file": str(filtered_osm_value) if filtered_osm_value else "",
         "build": build_report,
+        "service_passenger_permissions": service_permission_report,
         "tls_audit": tls_report,
         "raw_connectivity": raw_connectivity_report,
         "connected_core": connected_core_report or {},

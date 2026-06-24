@@ -827,8 +827,10 @@ def test_osm_cleanup_workflow_blocks_until_road_level_scope_is_selected(tmp_path
     assert report["claim_status"] == "blocked"
     assert report["area_resolution_status"] == "confirmed_by_input"
     assert report["road_level_scope_status"] == "needs_user_confirmation"
-    assert report["missing_blockers"] == ["highway_classes"]
-    assert report["next_question"] == "Which road level should Torii include: arterial, drive, drive_plus_unclassified, or full_vehicle?"
+    assert report["network_plan_status"] == "needs_user_confirmation"
+    assert report["missing_blockers"] == ["network_plan"]
+    assert "traffic layers" in report["next_question"]
+    assert "reference_matched" in report["network_detail_options"]
     assert report["gate_status"]["road_level_scope"] == "blocked"
     assert report["gate_status"]["network_build"] == "not_started"
 

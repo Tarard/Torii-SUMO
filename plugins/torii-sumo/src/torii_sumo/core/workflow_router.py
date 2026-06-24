@@ -5,15 +5,10 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from .network_plan import derive_network_plan
 from .osm_area import resolve_osm_place
 from .osm_network import audit_tls_multisource
 from .osm_workflow import run_osm_cleanup_workflow
-from .road_scope import (
-    ROAD_LEVEL_SCOPE_OPTIONS,
-    ROAD_LEVEL_SCOPE_QUESTION,
-    RECOMMENDED_ROAD_LEVEL_SCOPE,
-    resolve_highway_classes,
-)
 
 
 AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run"}
@@ -152,6 +147,9 @@ def run_auto_workflow(
     bbox: str | None = None,
     confirmed_area: bool = False,
     highway_classes: str | None = None,
+    traffic_layers: str | None = None,
+    network_profile: str | None = None,
+    service_passenger_policy: str | None = None,
     net_file: Path | None = None,
     osm_file: Path | None = None,
     official_inventory_csv: Path | None = None,
@@ -182,6 +180,9 @@ def run_auto_workflow(
             bbox=bbox,
             confirmed_area=confirmed_area,
             highway_classes=highway_classes,
+            traffic_layers=traffic_layers,
+            network_profile=network_profile,
+            service_passenger_policy=service_passenger_policy,
             autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
             cleanup_workflow_func=cleanup_workflow_func,
@@ -235,6 +236,9 @@ def _run_osm_to_sumo(
     bbox: str | None,
     confirmed_area: bool,
     highway_classes: str | None,
+    traffic_layers: str | None,
+    network_profile: str | None,
+    service_passenger_policy: str | None,
     autonomy_mode: str,
     place_resolver: Callable[[str], dict[str, Any]],
     cleanup_workflow_func: Callable[..., dict[str, Any]],
@@ -271,20 +275,18 @@ def _run_osm_to_sumo(
             report["next_question"] = "Confirm this OSM area and bbox before network construction?"
             return report
 
-    selected_highway_classes = resolve_highway_classes(highway_classes, default_to_recommended=False)
-    if selected_highway_classes is None:
-        report.update(
-            {
-                "status": "blocked",
-                "claim_status": "blocked",
-                "execution_status": "needs_road_level_scope",
-                "missing_blockers": ["highway_classes"],
-                "road_level_options": list(ROAD_LEVEL_SCOPE_OPTIONS),
-                "recommended_road_level": RECOMMENDED_ROAD_LEVEL_SCOPE,
-                "next_question": ROAD_LEVEL_SCOPE_QUESTION,
-            }
-        )
+    network_plan = derive_network_plan(
+        user_request=user_request,
+        highway_classes=highway_classes,
+        traffic_layers=traffic_layers,
+        network_profile=network_profile,
+        service_passenger_policy=service_passenger_policy,
+    )
+    if network_plan.get("status") == "blocked":
+        report.update(network_plan)
+        report["execution_status"] = "needs_network_plan"
         return report
+    selected_highway_classes = set(network_plan.get("highway_classes", []))
 
     cleanup_kwargs = {
         "output_dir": output_dir,
@@ -294,6 +296,12 @@ def _run_osm_to_sumo(
     }
     if _supports_keyword(cleanup_workflow_func, "highway_classes"):
         cleanup_kwargs["highway_classes"] = selected_highway_classes
+    if _supports_keyword(cleanup_workflow_func, "traffic_layers"):
+        cleanup_kwargs["traffic_layers"] = ",".join(network_plan.get("movement_layers", []))
+    if _supports_keyword(cleanup_workflow_func, "network_profile"):
+        cleanup_kwargs["network_profile"] = network_plan.get("network_profile") or network_profile
+    if _supports_keyword(cleanup_workflow_func, "service_passenger_policy"):
+        cleanup_kwargs["service_passenger_policy"] = network_plan.get("service_passenger_policy")
     if _supports_keyword(cleanup_workflow_func, "run_routeability_audit_after_build"):
         cleanup_kwargs["run_routeability_audit_after_build"] = True
     workflow_report = cleanup_workflow_func(**cleanup_kwargs)
@@ -303,6 +311,7 @@ def _run_osm_to_sumo(
             "claim_status": workflow_report.get("claim_status", "diagnostic-demo"),
             "execution_status": "executed",
             "tool_called": "sumo_osm_cleanup_workflow",
+            "network_plan": network_plan,
             "workflow_result": workflow_report,
         }
     )

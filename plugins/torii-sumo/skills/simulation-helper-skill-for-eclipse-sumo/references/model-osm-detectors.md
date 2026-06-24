@@ -38,6 +38,19 @@ why this detail is needed:
 visualization only or formal experiment candidate:
 ```
 
+Use the network planning gate before construction. Road classes are only one output of the plan; first identify the needed traffic layers and whether the network is reference-matched:
+
+```text
+network_plan_status:
+traffic_layers: passenger | bicycle | pedestrian | bus
+network_detail_target: arterial_core | passenger_vehicle | passenger_plus_service | bicycle | pedestrian | multimodal | reference_matched
+reference_target:
+service_passenger_policy: sumo_default | allow_vehicle_service | reference_match
+validation_gates:
+```
+
+If the user asks to match a reference network, infer the plan from that reference instead of asking for a generic road-level preset. For `TUM-VT/sumo_ingolstadt`, the reference-matched profile includes the full vehicle hierarchy, keeps `highway.service`, treats reference-matched service roads as passenger-drivable, records bicycle/pedestrian/bus layers as modeled layers, and requires connectivity, routeability, topology, reference-comparison, and Netedit launch evidence.
+
 Use a small option set rather than silently adding everything:
 
 | Option | Typical use | Risk |
@@ -91,11 +104,13 @@ For OSM-to-SUMO network construction, default to the high-level `sumo_osm_cleanu
 Hard gates:
 
 1. If the user gives only a place name, use `sumo_osm_resolve_place` or the place-resolution stage of `sumo_osm_cleanup_workflow` to produce an OSM/Nominatim candidate, bbox, and preview checkpoint. In one-sentence diagnostic mode, proceed when the candidate is clear and record it as an assumption; block only when the area is ambiguous, missing, or unsafe.
-2. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
-3. For current-network modeling, use a region-aware reality baseline. Google Maps can be the default where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
-4. Run passenger connectivity checks before making stronger claims.
-5. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
-6. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
+2. Before construction, resolve or infer a network plan. If no user intent or reference target identifies the traffic layers, block on the network-plan question instead of silently choosing all road types.
+3. If a reference-matched profile such as `tum_ingolstadt` is active, apply its permission policy before validation. In the TUM profile, `highway.service` is retained and made passenger-drivable when matching the full vehicle layer.
+4. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
+5. For current-network modeling, use a region-aware reality baseline. Google Maps can be the default where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
+6. Run passenger connectivity checks before making stronger claims.
+7. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
+8. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
 
 If any gate is incomplete, keep the claim at `diagnostic-demo`, `construction-invalid`, or `blocked`. GUI inspection, Google Maps links, and clean SUMO loading do not prove timing, phasing, demand realism, or controller readiness.
 
