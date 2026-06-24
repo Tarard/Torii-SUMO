@@ -27,8 +27,19 @@
   "validation": [
     "validation/comparison_summary.json",
     "validation/tum_vs_torii_bbox_comparison.csv",
-    "assets/tum_vs_torii_reference_visual_detail.png",
+    "validation/run_2026-06-24_5_5/summary.json",
+    "validation/run_2026-06-24_5_5/tls_vehicle_representatives.csv",
+    "validation/run_2026-06-24_5_5/tls_reference_visual_detail_representatives.csv",
+    "validation/run_2026-06-24_5_5/tls_spatial_match_to_tum.json",
+    "assets/tum_vs_torii_5_5_tls_aggregated_overview.png",
+    "assets/tum_vs_torii_5_5_tls_aggregated_detail.png",
+    "assets/torii_5_5_core_vs_visual_detail.png",
     "assets/junction_fragmentation_gap.png"
+  ],
+  "committed_networks": [
+    "networks/tum_ingolstadt_center_reference.net.xml",
+    "networks/torii_5_5_connected_core_tls_aggregated.net.xml",
+    "networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml"
   ],
   "claim_status": "diagnostic-demo"
 }
