@@ -75,7 +75,7 @@ def create_server() -> FastMCP:
     server.tool(description="Run a completion-aware SUMO routeability audit, extending the horizon until all generated vehicles finish or max_end is reached.")(
         sumo_network_routeability_audit
     )
-    server.tool(description="Audit dense SUMO junction clusters that suggest OSM-to-SUMO over-fragmented topology.")(
+    server.tool(description="Audit dense SUMO junction clusters, including physical cross/T approach-axis shape scoring for over-fragmented OSM topology.")(
         sumo_network_topology_audit
     )
     server.tool(description="Mine joined-junction cases from a reference SUMO network and match them against fragmented candidate topology clusters.")(
