@@ -9,6 +9,7 @@ from .netedit import launch_netedit
 from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
+from .reference_bbox import derive_reference_net_bbox
 from .road_scope import (
     ROAD_LEVEL_SCOPE_OPTIONS,
     RECOMMENDED_ROAD_LEVEL_SCOPE,
@@ -234,6 +235,28 @@ def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | Non
     }
 
 
+def _reference_bbox_fields(reference_bbox_report: Mapping[str, Any] | None) -> dict[str, Any]:
+    if reference_bbox_report is None:
+        return {
+            "reference_bbox_status": "not_used",
+            "reference_bbox": "",
+            "reference_bbox_source": "",
+            "reference_bbox_padding_m": "",
+            "reference_orig_boundary": "",
+            "reference_conv_boundary": "",
+            "reference_bbox_report": {},
+        }
+    return {
+        "reference_bbox_status": str(reference_bbox_report.get("reference_bbox_status", "not_used")),
+        "reference_bbox": str(reference_bbox_report.get("reference_bbox", "")),
+        "reference_bbox_source": str(reference_bbox_report.get("reference_bbox_source", "")),
+        "reference_bbox_padding_m": reference_bbox_report.get("reference_bbox_padding_m", ""),
+        "reference_orig_boundary": str(reference_bbox_report.get("reference_orig_boundary", "")),
+        "reference_conv_boundary": str(reference_bbox_report.get("reference_conv_boundary", "")),
+        "reference_bbox_report": dict(reference_bbox_report),
+    }
+
+
 def run_osm_cleanup_workflow(
     *,
     output_dir: Path,
@@ -276,10 +299,12 @@ def run_osm_cleanup_workflow(
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     sumo_gui_func: Callable[[Path, Path, str], dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
+    reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
     service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
 ) -> dict[str, Any]:
     cleaned_place_name = (place_name or "").strip()
     place_report = None
+    reference_bbox_report: dict[str, Any] | None = None
     if cleaned_place_name and not bbox and source_osm_path is None:
         place_report = place_resolver(cleaned_place_name)
         if not confirmed_area:
@@ -307,13 +332,25 @@ def run_osm_cleanup_workflow(
                 "warnings": list(place_report.get("warnings", [])) + ["confirmed place_name could not be resolved to a bbox"],
             }
         bbox = resolved_bbox
+    if not bbox and not cleaned_place_name and source_osm_path is None and reference_net_file is not None:
+        reference_bbox_report = reference_bbox_func(reference_net_file)
+        derived_bbox = str(reference_bbox_report.get("reference_bbox", "")).strip()
+        if reference_bbox_report.get("status") == "pass" and derived_bbox:
+            bbox = derived_bbox
     if not bbox:
+        reference_bbox_status = (
+            str(reference_bbox_report.get("reference_bbox_status", "blocked"))
+            if reference_bbox_report is not None
+            else "blocked"
+        )
+        reference_bbox_warnings = list(reference_bbox_report.get("warnings", [])) if reference_bbox_report else []
         return {
             "status": "fail",
             "claim_status": "construction-invalid",
             "area_input": cleaned_place_name,
-            "area_resolution_status": "blocked",
+            "area_resolution_status": reference_bbox_status,
             **_candidate_fields(place_report),
+            **_reference_bbox_fields(reference_bbox_report),
             "gate_status": {
                 "area_confirmation": "fail",
                 "road_level_scope": "not_started",
@@ -324,7 +361,7 @@ def run_osm_cleanup_workflow(
                 "netedit": "not_started",
                 "sumo_gui": "not_started",
             },
-            "warnings": ["bbox is required for OSM network construction"],
+            "warnings": reference_bbox_warnings + ["bbox is required for OSM network construction"],
         }
 
     area_status = "confirmed_by_user" if cleaned_place_name and confirmed_area else "confirmed_by_input"
@@ -707,6 +744,7 @@ def run_osm_cleanup_workflow(
     junction_aggregation_summary = _junction_aggregation_summary(topology_audit_report)
     warnings = []
     for child in (
+        reference_bbox_report or {},
         build_report,
         service_permission_report,
         reference_visual_detail_build_report,
@@ -773,6 +811,7 @@ def run_osm_cleanup_workflow(
         "area_input": cleaned_place_name or bbox,
         "area_resolution_status": area_status,
         **(_candidate_fields(place_report) if place_report is not None else {**_candidate_fields(None), "candidate_bbox": bbox}),
+        **_reference_bbox_fields(reference_bbox_report),
         "osm_preview_url": str(place_report.get("osm_preview_url", osm_preview_url(cleaned_place_name))) if place_report is not None else (osm_preview_url(cleaned_place_name) if cleaned_place_name else ""),
         "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
         "road_level_scope_status": "confirmed",
