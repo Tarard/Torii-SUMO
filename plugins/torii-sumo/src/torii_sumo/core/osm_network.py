@@ -407,6 +407,7 @@ def build_osm_network(
     command_record = logs_dir / f"{prefix}_commands.txt"
     netconvert_log = logs_dir / f"{prefix}_netconvert.log"
     root.mkdir(parents=True, exist_ok=True)
+    sumo_dir.mkdir(parents=True, exist_ok=True)
     _write_text(query_file, query)
     overpass_report: dict[str, Any] | None = None
 

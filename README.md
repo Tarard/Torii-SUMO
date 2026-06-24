@@ -47,9 +47,9 @@ This demo now uses Ingolstadt city center to test whether a Torii OSM-cleaned ne
 
 | Evidence | Result |
 |---|---:|
-| Torii OSM cleaned core | 606 edges, 1,056 lanes, 367 junctions in the comparison bbox |
+| Torii OSM full-vehicle connected core | 1,427 edges, 1,978 lanes, 782 junctions in the comparison bbox |
 | TUM cleaned reference subset | 3,577 edges, 4,955 lanes, 1,752 junctions in the same bbox |
-| Traffic-light junctions | Torii 158 vs TUM 29 |
+| Traffic-light junctions | Torii 198 vs TUM 29 |
 | Joined-junction evidence | Torii 0 joined-junction endpoint refs vs TUM 1,136 |
 | Routeability smoke | both networks: 40 / 40 generated passenger trips arrived at `end=800` |
 | Teleports / collisions | 0 / 0 |

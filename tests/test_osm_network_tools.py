@@ -286,7 +286,7 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
         if not output.is_absolute():
             assert cwd is not None
             output = cwd / output
-        output.parent.mkdir(parents=True, exist_ok=True)
+        assert output.parent.is_dir()
         output.write_text("<net/>", encoding="utf-8")
         return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
 
