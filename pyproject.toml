@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torii-sumo"
-version = "1.0.0"
+version = "1.0.2"
 description = "Torii agent plugin for evidence-aware Eclipse SUMO and OSM-to-SUMO workflows."
 readme = "README.md"
 requires-python = ">=3.11"
