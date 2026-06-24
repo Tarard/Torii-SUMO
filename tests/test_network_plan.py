@@ -734,6 +734,8 @@ def test_reference_matched_workflow_runs_reference_hierarchy_audit_on_visual_det
             "reference_hierarchy_status": "needs_review",
             "high_hierarchy_issue_count": 5,
             "decision_counts": {"matched_but_oversplit": 3, "out_of_reference_scope": 2},
+            "corridor_match_basis_counts": {"same_name": 2, "same_type_distance": 3},
+            "same_name_match_status_counts": {"matched_by_name": 4, "no_same_name_reference": 1},
             "cases_file": str(tmp_path / "hierarchy_cases.csv"),
             "type_comparison_file": str(tmp_path / "hierarchy_types.csv"),
             "summary_file": str(tmp_path / "hierarchy_summary.json"),
@@ -816,6 +818,14 @@ def test_reference_matched_workflow_runs_reference_hierarchy_audit_on_visual_det
     assert report["reference_hierarchy_decision_counts"] == {
         "matched_but_oversplit": 3,
         "out_of_reference_scope": 2,
+    }
+    assert report["reference_hierarchy_corridor_match_basis_counts"] == {
+        "same_name": 2,
+        "same_type_distance": 3,
+    }
+    assert report["reference_hierarchy_same_name_match_status_counts"] == {
+        "matched_by_name": 4,
+        "no_same_name_reference": 1,
     }
     assert report["reference_hierarchy_cases_file"] == str(tmp_path / "hierarchy_cases.csv")
     assert report["gate_status"]["reference_hierarchy_audit"] == "blocked"

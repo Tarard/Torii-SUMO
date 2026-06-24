@@ -255,7 +255,7 @@ Use source-node matches to learn general aggregation rules from the reference ne
 
 Before pruning a denser candidate, run a reusable reference scope audit. It compares reference and candidate `highway.*` type counts, then flags only absent-in-reference or overrepresented short dead-end detail fragments as pruning candidates. This is a review scorer, not a city-specific rule and not an automatic deletion policy.
 
-Before changing high-hierarchy roads, run a reusable reference hierarchy audit. It should classify high-road differences into `matched_but_oversplit`, `out_of_reference_scope`, `type_hierarchy_mismatch`, and `link_or_slip_lane`. Do not prune, merge, or downgrade primary/secondary/tertiary/motorway/trunk roads from type counts alone.
+Before changing high-hierarchy roads, run a reusable reference hierarchy audit. It should classify high-road differences into `matched_but_oversplit`, `out_of_reference_scope`, `type_hierarchy_mismatch`, and `link_or_slip_lane`. Road names are corridor evidence: if candidate and reference high roads share a normalized name, treat the candidate as a likely same-corridor review case even when the geometry is outside the normal distance threshold. Do not prune, merge, or downgrade primary/secondary/tertiary/motorway/trunk roads from type counts alone.
 
 At the end of reference-matched cleanup, report the high-road hierarchy summary to the user:
 
@@ -263,6 +263,8 @@ At the end of reference-matched cleanup, report the high-road hierarchy summary 
 reference_hierarchy_status:
 reference_hierarchy_issue_count:
 reference_hierarchy_decision_counts:
+reference_hierarchy_corridor_match_basis_counts:
+reference_hierarchy_same_name_match_status_counts:
 reference_hierarchy_cases_file:
 ```
 

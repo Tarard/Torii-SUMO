@@ -73,6 +73,12 @@ def audit_reference_hierarchy(
         for edge in candidate_high_edges
     ]
     decision_counts = dict(sorted(Counter(case["hierarchy_decision"] for case in candidate_cases).items()))
+    corridor_match_basis_counts = dict(
+        sorted(Counter(case["corridor_match_basis"] for case in candidate_cases).items())
+    )
+    same_name_match_status_counts = dict(
+        sorted(Counter(case["same_name_match_status"] for case in candidate_cases).items())
+    )
     issue_count = sum(1 for case in candidate_cases if case["hierarchy_decision"] != "aligned")
 
     cases_file = output_dir / f"{prefix}_high_hierarchy_cases.csv"
@@ -96,6 +102,8 @@ def audit_reference_hierarchy(
         "candidate_high_hierarchy_edge_count": len(candidate_high_edges),
         "high_hierarchy_issue_count": issue_count,
         "decision_counts": decision_counts,
+        "corridor_match_basis_counts": corridor_match_basis_counts,
+        "same_name_match_status_counts": same_name_match_status_counts,
         "type_comparisons": type_comparisons,
         "candidate_cases": candidate_cases,
         "cases_file": str(cases_file),
@@ -126,13 +134,15 @@ def _read_edges(net_file: Path) -> list[dict[str, Any]]:
         lanes = edge.findall("lane")
         shape = _edge_shape(edge, lanes, junction_positions)
         geo_shape = [coordinate_converter(x, y) for x, y in shape] if coordinate_converter else []
+        edge_name = _edge_name(edge)
         edges.append(
             {
                 "id": edge_id,
                 "from": edge.attrib.get("from", ""),
                 "to": edge.attrib.get("to", ""),
                 "type": edge.attrib.get("type", "<missing>") or "<missing>",
-                "name": edge.attrib.get("name", ""),
+                "name": edge_name,
+                "normalized_name": _normalized_name(edge_name),
                 "length": _edge_length(lanes, shape),
                 "shape": shape,
                 "geo_shape": geo_shape,
@@ -140,6 +150,28 @@ def _read_edges(net_file: Path) -> list[dict[str, Any]]:
             }
         )
     return edges
+
+
+def _edge_name(edge: ET.Element) -> str:
+    direct_name = edge.attrib.get("name", "")
+    if direct_name:
+        return direct_name
+    for key in ("name", "ref"):
+        value = _edge_param_value(edge, key)
+        if value:
+            return value
+    return ""
+
+
+def _edge_param_value(edge: ET.Element, key: str) -> str:
+    for param in edge.findall("param"):
+        if param.attrib.get("key") == key:
+            return param.attrib.get("value", "")
+    return ""
+
+
+def _normalized_name(value: str) -> str:
+    return " ".join(value.casefold().strip().split())
 
 
 def _coordinate_converter(root: ET.Element):
@@ -268,11 +300,18 @@ def _classify_candidate_edge(
     oversplit_length_ratio: float,
 ) -> dict[str, Any]:
     nearest_same = _nearest_edge(edge, [item for item in reference_high_edges if item["type"] == edge["type"]])
+    same_name_candidates = [
+        item
+        for item in reference_high_edges
+        if edge.get("normalized_name") and item.get("normalized_name") == edge.get("normalized_name")
+    ]
+    nearest_same_name = _nearest_edge(edge, same_name_candidates)
     nearest_any = _nearest_edge(edge, reference_edges)
     if _is_link_or_slip_lane(edge):
         decision = "link_or_slip_lane"
         action = "protect_for_map_review"
         reason = "high-hierarchy link/slip lane requires map review before pruning or downgrading"
+        corridor_match_basis = "link_or_slip_lane"
     elif nearest_same["distance_m"] <= match_distance_m:
         reference_length = float(nearest_same["edge"].get("length", 0.0))
         type_decision = type_decisions.get(str(edge["type"]), "reference_aligned")
@@ -285,21 +324,36 @@ def _classify_candidate_edge(
             decision = "aligned"
             action = "keep"
             reason = "candidate high-road edge has a nearby same-type reference corridor"
+        corridor_match_basis = "same_type_distance"
+    elif nearest_same_name["edge"] is not None and _is_same_name_oversplit_case(
+        edge=edge,
+        reference_edge=nearest_same_name["edge"],
+        type_decisions=type_decisions,
+        oversplit_length_ratio=oversplit_length_ratio,
+    ):
+        decision = "matched_but_oversplit"
+        action = "corridor_merge_review"
+        reason = "candidate high-road edge shares a road name with a reference corridor and appears over-split"
+        corridor_match_basis = "same_name"
     elif nearest_any["distance_m"] <= match_distance_m:
         decision = "type_hierarchy_mismatch"
         action = "map_review_type_or_scope"
         reason = "candidate high-road edge is near reference geometry but not the same hierarchy type"
+        corridor_match_basis = "nearest_any"
     else:
         decision = "out_of_reference_scope"
         action = "verify_bbox_or_exclude"
         reason = "candidate high-road edge has no nearby reference geometry within the match distance"
+        corridor_match_basis = "same_name" if nearest_same_name["edge"] is not None else "none"
 
     nearest_same_edge = nearest_same["edge"]
+    nearest_same_name_edge = nearest_same_name["edge"]
     nearest_any_edge = nearest_any["edge"]
     return {
         "candidate_edge_id": str(edge["id"]),
         "candidate_edge_type": str(edge["type"]),
         "candidate_edge_name": str(edge.get("name", "")),
+        "candidate_edge_name_normalized": str(edge.get("normalized_name", "")),
         "candidate_length_m": round(float(edge["length"]), 3),
         "candidate_center_x": round(float(edge["center"][0]), 3),
         "candidate_center_y": round(float(edge["center"][1]), 3),
@@ -311,10 +365,39 @@ def _classify_candidate_edge(
         "nearest_any_reference_edge_id": str(nearest_any_edge.get("id", "")) if nearest_any_edge else "",
         "nearest_any_reference_edge_type": str(nearest_any_edge.get("type", "")) if nearest_any_edge else "",
         "nearest_any_reference_distance_m": _distance_field(nearest_any["distance_m"]),
+        "same_name_reference_edge_id": str(nearest_same_name_edge.get("id", "")) if nearest_same_name_edge else "",
+        "same_name_reference_edge_type": str(nearest_same_name_edge.get("type", "")) if nearest_same_name_edge else "",
+        "same_name_reference_distance_m": _distance_field(nearest_same_name["distance_m"]),
+        "same_name_match_status": _same_name_match_status(edge, nearest_same_name_edge),
+        "corridor_match_basis": corridor_match_basis,
         "hierarchy_decision": decision,
         "recommended_action": action,
         "reason": reason,
     }
+
+
+def _is_same_name_oversplit_case(
+    *,
+    edge: dict[str, Any],
+    reference_edge: dict[str, Any],
+    type_decisions: dict[str, str],
+    oversplit_length_ratio: float,
+) -> bool:
+    type_decision = type_decisions.get(str(edge["type"]), "reference_aligned")
+    if type_decision not in {"overrepresented_in_candidate", "absent_in_reference"}:
+        return False
+    reference_length = float(reference_edge.get("length", 0.0))
+    if reference_length <= 0:
+        return False
+    return float(edge["length"]) <= reference_length * oversplit_length_ratio
+
+
+def _same_name_match_status(edge: dict[str, Any], same_name_edge: dict[str, Any] | None) -> str:
+    if not edge.get("normalized_name"):
+        return "candidate_name_missing"
+    if same_name_edge is None:
+        return "no_same_name_reference"
+    return "matched_by_name"
 
 
 def _nearest_edge(edge: dict[str, Any], candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -428,6 +511,7 @@ def _write_cases_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "candidate_edge_id",
         "candidate_edge_type",
         "candidate_edge_name",
+        "candidate_edge_name_normalized",
         "candidate_length_m",
         "candidate_center_x",
         "candidate_center_y",
@@ -437,6 +521,11 @@ def _write_cases_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "nearest_any_reference_edge_id",
         "nearest_any_reference_edge_type",
         "nearest_any_reference_distance_m",
+        "same_name_reference_edge_id",
+        "same_name_reference_edge_type",
+        "same_name_reference_distance_m",
+        "same_name_match_status",
+        "corridor_match_basis",
         "hierarchy_decision",
         "recommended_action",
         "reason",
