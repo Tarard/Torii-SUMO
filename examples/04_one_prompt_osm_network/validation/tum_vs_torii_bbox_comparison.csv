@@ -1,0 +1,12 @@
+metric,torii_osm_connected_core,tum_reference_subset,interpretation
+edges_in_bbox,606,3577,Torii arterial build is much sparser than the TUM reference subset.
+passenger_edges_in_bbox,606,2032,Torii core is passenger-routeable but does not match full TUM coverage.
+lanes_in_bbox,1056,4955,TUM carries substantially more lane detail.
+junctions_in_bbox,367,1752,Raw counts differ because TUM keeps more modeled detail while also joining selected junction groups.
+traffic_light_junctions_in_bbox,158,29,Torii exposes many more TLS nodes and needs physical-intersection grouping.
+joined_junction_endpoint_refs_in_bbox,0,1136,TUM uses cluster-style joined junctions while this Torii run does not.
+dense_junction_clusters_30m,35,132,Both require review under the generic dense-cluster audit; compare with TLS and joined-junction evidence.
+max_dense_cluster_node_count,24,93,TUM has large joined/intersection groups; Torii still has smaller but more numerous TLS candidates.
+routeability_arrived_end800,40/40,40/40,Both pass the diagnostic routeability smoke.
+teleports_collisions,0/0,0/0,No teleports or collisions in the diagnostic routeability smoke.
+claim_status,diagnostic-demo,reference-comparator,Routeability alone is not an equivalence proof.

@@ -17,7 +17,7 @@
 
 <a href="https://tarard.github.io/Torii-SUMO/"><strong>Webseite</strong></a> |
 <a href="docs/codex-plugin-install.md"><strong>Codex Plugin Installation</strong></a> |
-<a href="examples/01_fixed_time_audit/task.md"><strong>Beispiele</strong></a> |
+<a href="examples/01_signal_control_audit/task.md"><strong>Beispiele</strong></a> |
 <a href="docs/common-sumo-signal-control-failures.md"><strong>Fehlerliste</strong></a> |
 <a href="LICENSE-CODE"><strong>MIT Code</strong></a> |
 <a href="LICENSE-DOCS"><strong>CC BY 4.0 Dokumente</strong></a>

@@ -1,5 +1,0 @@
-Total Edges: 6364
-Largest Component: #0 Edge Count: 6363 Coverage: 99.98%
-Edges	Incidence
-1	1
-6363	1

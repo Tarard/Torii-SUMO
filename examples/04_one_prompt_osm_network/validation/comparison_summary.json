@@ -1,0 +1,66 @@
+{
+  "target": "Ingolstadt city-center OSM-to-SUMO cleanup compared with TUM-VT/sumo_ingolstadt",
+  "center": {
+    "lat": 48.765391,
+    "lon": 11.4238,
+    "osm_url": "https://www.openstreetmap.org/#map=17/48.765391/11.423800"
+  },
+  "comparison_bbox": {
+    "min_lon": 11.4138,
+    "min_lat": 48.755391,
+    "max_lon": 11.4338,
+    "max_lat": 48.775391
+  },
+  "torii_osm_connected_core": {
+    "source": "OpenStreetMap",
+    "road_class_rule": "arterial",
+    "edges_in_bbox": 606,
+    "passenger_edges_in_bbox": 606,
+    "lanes_in_bbox": 1056,
+    "junctions_in_bbox": 367,
+    "traffic_light_junctions_in_bbox": 158,
+    "joined_junction_endpoint_refs_in_bbox": 0,
+    "topology_audit": {
+      "cluster_radius_m": 30,
+      "status": "needs_review",
+      "suspicious_cluster_count": 35,
+      "max_cluster_node_count": 24
+    },
+    "routeability": {
+      "status": "pass",
+      "vehicle_count": 40,
+      "final_end": 800,
+      "arrived": 40,
+      "running": 0,
+      "teleports": 0,
+      "collisions": 0
+    }
+  },
+  "tum_reference_subset": {
+    "source": "https://github.com/TUM-VT/sumo_ingolstadt",
+    "network_file": "simulation/Ingolstadt SUMO 365/ingolstadt_net.net.xml",
+    "edges_in_bbox": 3577,
+    "passenger_edges_in_bbox": 2032,
+    "lanes_in_bbox": 4955,
+    "junctions_in_bbox": 1752,
+    "traffic_light_junctions_in_bbox": 29,
+    "joined_junction_endpoint_refs_in_bbox": 1136,
+    "topology_audit": {
+      "cluster_radius_m": 30,
+      "status": "needs_review",
+      "suspicious_cluster_count": 132,
+      "max_cluster_node_count": 93
+    },
+    "routeability": {
+      "status": "pass",
+      "vehicle_count": 40,
+      "final_end": 800,
+      "arrived": 40,
+      "running": 0,
+      "teleports": 0,
+      "collisions": 0
+    }
+  },
+  "interpretation": "Routeability passes for both networks, but Torii still differs from the TUM manual reference in physical-intersection grouping and traffic-light candidate count. The example is a diagnostic comparator, not a formal equivalence claim.",
+  "claim_status": "diagnostic-demo"
+}

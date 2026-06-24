@@ -19,8 +19,8 @@
 
 <a href="https://tarard.github.io/Torii-SUMO/"><strong>Website</strong></a> |
 <a href="docs/codex-plugin-install.md"><strong>Install</strong></a> |
+<a href="examples/01_signal_control_audit/task.md"><strong>Signal-Control Audit</strong></a> |
 <a href="examples/04_one_prompt_osm_network/README.md"><strong>One-Prompt Demo</strong></a> |
-<a href="examples/05_bit_zhongguancun_campus/README.md"><strong>BIT Campus Example</strong></a> |
 <a href="LICENSE-CODE"><strong>MIT Code</strong></a> |
 <a href="LICENSE-DOCS"><strong>CC BY 4.0 Docs</strong></a>
 
@@ -40,33 +40,22 @@ The plugin now starts from a workflow router: `torii_auto_workflow` classifies t
 Torii is deliberately guardrail-heavy. The workflow is not meant to depend on frontier-model memory: smaller or lower-cost coding models can still follow the router because the MCP tools carry the SUMO-specific checks.
 
 ```text
-Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO
+Use Torii to clean the Ingolstadt city-center network around https://www.openstreetmap.org/#map=17/48.765391/11.423800 from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, and open the cleaned network in Netedit.
 ```
 
-![Torii OSM intake](examples/04_one_prompt_osm_network/assets/torii-altstadt-intake.png)
-
-![Torii build evidence](examples/04_one_prompt_osm_network/assets/torii-altstadt-build-evidence.png)
-
-Generated SUMO network:
-
-![Generated Dresden Altstadt SUMO network](examples/04_one_prompt_osm_network/assets/altstadt-sumo-network-overview.png)
-
-Zoomed connected route detail:
-
-![Connected route detail from the generated SUMO network](examples/04_one_prompt_osm_network/assets/altstadt-connected-route-zoom.png)
-
-This demo produced a diagnostic SUMO network for Dresden Altstadt:
+This demo now uses Ingolstadt city center to test whether a Torii OSM-cleaned network converges toward a manually cleaned reference network instead of treating OSM import success as enough.
 
 | Evidence | Result |
 |---|---:|
-| SUMO network | raw network: 6,364 edges, 27,392 lanes, 5,034 junctions |
-| Traffic-light candidates | 154, marked `needs_review` |
-| Passenger connectivity | connected-core network: 6,363 / 6,363 passenger edges, 100% |
-| Routeability smoke | 12 / 12 generated passenger trips arrived |
+| Torii OSM cleaned core | 606 edges, 1,056 lanes, 367 junctions in the comparison bbox |
+| TUM cleaned reference subset | 3,577 edges, 4,955 lanes, 1,752 junctions in the same bbox |
+| Traffic-light junctions | Torii 158 vs TUM 29 |
+| Joined-junction evidence | Torii 0 joined-junction endpoint refs vs TUM 1,136 |
+| Routeability smoke | both networks: 40 / 40 generated passenger trips arrived at `end=800` |
 | Teleports / collisions | 0 / 0 |
 | Claim status | `diagnostic-demo` |
 
-See [`examples/04_one_prompt_osm_network`](examples/04_one_prompt_osm_network/README.md). The full generated `.osm.xml` and `.net.xml` files are distributed as a GitHub release asset instead of being committed into git history. A smaller China-region campus test case is available at [`examples/05_bit_zhongguancun_campus`](examples/05_bit_zhongguancun_campus/README.md).
+See [`examples/04_one_prompt_osm_network`](examples/04_one_prompt_osm_network/README.md). The generated `.osm.xml`, `.net.xml`, route, and log files are intentionally not committed; the repository keeps the prompt and lightweight validation summary.
 
 ## Quick Start
 
@@ -100,7 +89,7 @@ For MCP-first use, call `torii_auto_workflow` with the one-sentence request and 
 
 | Prompt | What Torii Does |
 |---|---|
-| "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO." | Confirms the area, builds a passenger-road SUMO network, extracts a connected simulation core when needed, runs connectivity/routeability checks, opens SUMO/Netedit, and reports a claim boundary. |
+| "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt." | Confirms the area and road-detail target, builds a passenger-road SUMO network from OSM, extracts a connected simulation core when needed, compares topology/TLS evidence against the TUM cleaned reference, runs connectivity/routeability checks, opens Netedit, and reports a claim boundary. |
 | "Build a SUMO network from this OSM bbox or extract." | Runs bounded OSM import, road-class filtering, XML deduplication, `netconvert`, and construction evidence capture. |
 | "Make this SUMO network 100% connected for passenger routeability checks." | Extracts the largest passenger component into a reusable `connected-core` `.net.xml` and reports discarded fragments instead of hiding them. |
 | "Audit the traffic lights in this SUMO network." | Extracts TLS candidates, prepares map-review fields, and separates SUMO-generated TLS from manually validated signal evidence. |
