@@ -21,8 +21,7 @@
 <a href="docs/codex-plugin-install.md"><strong>Install</strong></a> |
 <a href="examples/01_signal_control_audit/task.md"><strong>Signal-Control Audit</strong></a> |
 <a href="examples/04_one_prompt_osm_network/README.md"><strong>One-Prompt Demo</strong></a> |
-<a href="LICENSE-CODE"><strong>MIT Code</strong></a> |
-<a href="LICENSE-DOCS"><strong>CC BY 4.0 Docs</strong></a>
+<a href="LICENSE"><strong>License</strong></a>
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [Deutsch](README.de.md)
 
@@ -144,7 +143,7 @@ See [`docs/codex-plugin-install.md`](docs/codex-plugin-install.md) and [`docs/os
 
 ## License and Notices
 
-Source code is licensed under MIT. Skill files, docs, checklists, and protocol text are licensed under CC BY 4.0.
+Source code is licensed under MIT. Skill files, docs, checklists, examples, and protocol text are licensed under CC BY 4.0. Both scopes are recorded in [`LICENSE`](LICENSE).
 
 Eclipse SUMO is a trademark of the Eclipse Foundation. Map data in the OSM demo is © OpenStreetMap contributors and available under the Open Database License (ODbL).
 
