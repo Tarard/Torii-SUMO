@@ -14,4 +14,4 @@ Required behavior:
 - Keep Torii's `vehicle_core` routeability layer separate from its `reference_visual_detail` Netedit comparison layer.
 - Run connectivity, connected-core, topology, routeability, and Netedit launch evidence steps.
 - Bound the claim if topology or traffic-light grouping differs from the TUM reference.
-- For dense physical-intersection candidates, generate Google Maps default-map review links before proposing junction aggregation; satellite view is optional when the road-map geometry is ambiguous.
+- For dense physical-intersection candidates, inspect local cluster-graph fields (`internal_edge_ids`, `boundary_edge_ids`, `connected_node_pairs`, overlap hints, and approach count), then generate Google Maps default-map review links before proposing junction aggregation; satellite view is optional when the road-map geometry is ambiguous.

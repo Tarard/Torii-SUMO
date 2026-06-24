@@ -55,7 +55,7 @@ Dieses Demo nutzt jetzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein von 
 | Torii reference visual-detail | 6,130 Kanten, 6,701 Spuren, 2,998 Knoten im Vergleichs-bbox |
 | TUM bereinigter Referenzausschnitt | 3,577 Kanten, 4,955 Spuren, 1,752 Knoten im selben bbox |
 | Ampel-Knoten | Torii visual-detail 217 vs TUM 29 |
-| Verbleibendes Bereinigungsziel | wiederverwendbare physische Kreuzungs-/TLS-Aggregation mit Google Maps Kartenpruefung |
+| Verbleibendes Bereinigungsziel | wiederverwendbare physische Kreuzungs-/TLS-Aggregation mit Cluster-Graph-Audit und Google Maps Kartenpruefung |
 | Claim status | `diagnostic-demo` |
 
 Siehe [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). Die erzeugten `.osm.xml`, `.net.xml`, Routen- und Logdateien werden absichtlich nicht committed; das Repository behaelt nur den Prompt und eine leichte Validierungszusammenfassung.

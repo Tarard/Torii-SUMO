@@ -71,7 +71,7 @@ The key remaining comparison signals are physical-intersection grouping, TLS gro
 
 The screenshot above shows the current reusable cleanup target. TUM represents the physical intersection as a clean joined junction, while the Torii OSM-derived visual-detail network exposes many small SUMO nodes and short edges around the same physical intersection.
 
-Torii should not automatically join these nodes from geometry alone. The audit step must first generate dense-junction clusters and Google Maps default-map review links, then require manual or source-bounded correction before building a junction-aggregated variant. Satellite view can still be used when the default map is ambiguous, but it is not the default gate.
+Torii should not automatically join these nodes from geometry alone. The audit step must first generate dense-junction clusters, inspect each cluster's local graph (`internal_edge_ids`, `boundary_edge_ids`, `connected_node_pairs`, overlap hints, and approach count), and provide Google Maps default-map review links. Only source-bounded clusters should be used to build a junction-aggregated variant. Satellite view can still be used when the default map is ambiguous, but it is not the default gate.
 
 ## Files in This Example
 
@@ -98,7 +98,7 @@ Generated `.net.xml`, route, and log files are intentionally not committed. They
 
 ## Claim Boundary
 
-This is a diagnostic comparison example. A scope-matched Netedit view does not prove that the Torii network is equivalent to the manually cleaned TUM network. The current comparison shows the next required cleanup target: reusable physical-intersection/TLS grouping, with Google Maps default-map review before any destructive aggregation.
+This is a diagnostic comparison example. A scope-matched Netedit view does not prove that the Torii network is equivalent to the manually cleaned TUM network. The current comparison shows the next required cleanup target: reusable physical-intersection/TLS grouping, with local cluster-graph audit and Google Maps default-map review before any destructive aggregation.
 
 ## Data Attribution
 
