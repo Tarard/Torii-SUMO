@@ -1276,6 +1276,12 @@ def run_osm_cleanup_workflow(
         "reference_hierarchy_decision_counts": {}
         if reference_hierarchy_audit_report is None
         else reference_hierarchy_audit_report.get("decision_counts", {}),
+        "reference_hierarchy_corridor_match_basis_counts": {}
+        if reference_hierarchy_audit_report is None
+        else reference_hierarchy_audit_report.get("corridor_match_basis_counts", {}),
+        "reference_hierarchy_same_name_match_status_counts": {}
+        if reference_hierarchy_audit_report is None
+        else reference_hierarchy_audit_report.get("same_name_match_status_counts", {}),
         "reference_hierarchy_cases_file": ""
         if reference_hierarchy_audit_report is None
         else str(reference_hierarchy_audit_report.get("cases_file", "")),

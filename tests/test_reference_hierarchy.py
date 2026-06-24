@@ -4,8 +4,18 @@ from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
 
 
 def _write_net(path: Path, edge_specs: list[tuple[str, str, str, str, float, str]]) -> None:
+    _write_named_net(
+        path,
+        [
+            (edge_id, from_node, to_node, edge_type, length, shape, edge_id)
+            for edge_id, from_node, to_node, edge_type, length, shape in edge_specs
+        ],
+    )
+
+
+def _write_named_net(path: Path, edge_specs: list[tuple[str, str, str, str, float, str, str]]) -> None:
     junction_positions: dict[str, tuple[float, float]] = {}
-    for _edge_id, from_node, to_node, _edge_type, _length, shape in edge_specs:
+    for _edge_id, from_node, to_node, _edge_type, _length, shape, _name in edge_specs:
         points = _shape_points(shape)
         junction_positions.setdefault(from_node, points[0])
         junction_positions.setdefault(to_node, points[-1])
@@ -14,10 +24,10 @@ def _write_net(path: Path, edge_specs: list[tuple[str, str, str, str, float, str
         for junction_id, (x, y) in sorted(junction_positions.items())
     )
     edge_xml = "\n".join(
-        f'''  <edge id="{edge_id}" from="{from_node}" to="{to_node}" type="{edge_type}" name="{edge_id}">
+        f'''  <edge id="{edge_id}" from="{from_node}" to="{to_node}" type="{edge_type}" name="{name}">
     <lane id="{edge_id}_0" index="0" speed="13.9" length="{length:.1f}" shape="{shape}"/>
   </edge>'''
-        for edge_id, from_node, to_node, edge_type, length, shape in edge_specs
+        for edge_id, from_node, to_node, edge_type, length, shape, name in edge_specs
     )
     path.write_text(f"<net>\n{junction_xml}\n{edge_xml}\n</net>\n", encoding="utf-8")
 
@@ -111,6 +121,46 @@ def test_reference_hierarchy_audit_passes_when_high_roads_are_aligned(tmp_path: 
     assert report["reference_hierarchy_status"] == "pass"
     assert report["high_hierarchy_issue_count"] == 0
     assert report["decision_counts"] == {"aligned": 1}
+
+
+def test_reference_hierarchy_audit_uses_same_road_name_as_corridor_evidence(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [("ref_ring", "ra", "rb", "highway.primary", 300.0, "0,0 300,0", "Ringstrasse")],
+    )
+    _write_named_net(
+        candidate_net,
+        [
+            ("cand_ring_a", "ca", "cb", "highway.primary", 80.0, "0,45 80,45", " Ringstrasse "),
+            ("cand_ring_b", "cb", "cc", "highway.primary", 85.0, "80,45 165,45", "ringstrasse"),
+            ("cand_ring_c", "cc", "cd", "highway.primary", 95.0, "165,45 260,45", "RINGSTRASSE"),
+        ],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="same_name",
+        match_distance_m=20.0,
+        oversplit_length_ratio=0.5,
+        min_extra_edges=1,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["decision_counts"] == {"matched_but_oversplit": 3}
+    assert report["corridor_match_basis_counts"] == {"same_name": 3}
+    assert report["same_name_match_status_counts"] == {"matched_by_name": 3}
+    cases_by_id = {case["candidate_edge_id"]: case for case in report["candidate_cases"]}
+    assert cases_by_id["cand_ring_a"]["hierarchy_decision"] == "matched_but_oversplit"
+    assert cases_by_id["cand_ring_a"]["recommended_action"] == "corridor_merge_review"
+    assert cases_by_id["cand_ring_a"]["same_name_reference_edge_id"] == "ref_ring"
+    assert cases_by_id["cand_ring_a"]["same_name_match_status"] == "matched_by_name"
+    assert cases_by_id["cand_ring_a"]["corridor_match_basis"] == "same_name"
+    assert cases_by_id["cand_ring_a"]["candidate_edge_name_normalized"] == "ringstrasse"
+    assert cases_by_id["cand_ring_a"]["same_name_reference_distance_m"] > 20.0
 
 
 def test_reference_hierarchy_audit_matches_networks_with_different_net_offsets(tmp_path: Path) -> None:
