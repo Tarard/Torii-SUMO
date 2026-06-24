@@ -178,6 +178,8 @@ time_scope_residual_risk:
 
 When OSM/netconvert creates many close junctions or short edges around one physical intersection, do not immediately edit or join the network. First run a reusable dense-junction audit with local cluster-graph analysis and create a non-destructive correction record.
 
+If no reference network is available, use the reference-free junction aggregation scorer from the topology audit. The scorer is diagnostic: it classifies each dense cluster as `join`, `needs_map_review`, or `do_not_join` from local topology, short internal edges, road-name consistency, TLS density, and risk flags. It must not destructively edit the network by itself.
+
 Required fields for each suspicious junction cluster:
 
 ```text
@@ -202,10 +204,31 @@ approach_count:
 direct_connected_node_pair_count:
 internal_edge_overlap_pair_count:
 aggregation_recommendation:
+reference_free_scorer:
+aggregation_decision:
+aggregation_confidence:
+aggregation_reason:
+short_internal_edge_score:
+same_road_name_score:
+angle_continuity_score:
+traffic_signal_density:
+service_or_parking_risk:
+bridge_tunnel_layer_risk:
+roundabout_or_slip_lane_risk:
 risk_flags:
 ```
 
 Use the cluster graph fields to separate edges whose endpoints are both inside the suspicious junction cluster from edges that connect the cluster to outside junctions. Do not join by radius alone. A cluster becomes a join candidate only when local topology indicates the short internal edges are likely intersection-internal fragments and the default map confirms the physical intersection footprint.
+
+At the end of cleanup, report the aggregation summary to the user:
+
+```text
+junction_aggregation_candidate_count:
+junction_aggregation_join_candidate_count:
+junction_aggregation_needs_map_review_count:
+junction_aggregation_do_not_join_count:
+junction_aggregation_candidates_file:
+```
 
 For reference-matched cleanup, prefer case mining over manual parameter sweeps. A reusable reference join audit should first read the manual reference's joined-junction cases, then compare each case with the candidate network:
 

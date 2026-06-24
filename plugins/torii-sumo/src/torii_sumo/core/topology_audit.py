@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -61,6 +61,10 @@ def audit_topology_fragmentation(
         "junction_count": len(junctions),
         "suspicious_cluster_count": len(clusters),
         "max_cluster_node_count": max((cluster["node_count"] for cluster in clusters), default=0),
+        "aggregation_decision_counts": dict(Counter(cluster["aggregation_decision"] for cluster in clusters)),
+        "junction_aggregation_candidate_count": sum(
+            1 for cluster in clusters if cluster["aggregation_decision"] in {"join", "needs_map_review"}
+        ),
         "clusters_file": str(clusters_file),
         "report_file": str(report_file),
         "suspicious_clusters": clusters,
@@ -238,6 +242,15 @@ def _cluster_graph_summary(nodes: list[dict[str, Any]], edges: list[dict[str, An
         approach_count=len(external_junction_ids),
         overlap_pair_count=overlap_pair_count,
     )
+    aggregation_score = _reference_free_aggregation_score(
+        node_count=len(nodes),
+        traffic_light_count=traffic_light_count,
+        internal_edges=internal_edges,
+        boundary_edges=boundary_edges,
+        approach_count=len(external_junction_ids),
+        internal_edge_max_length=internal_length_max,
+        overlap_pair_count=overlap_pair_count,
+    )
     return {
         "internal_edge_ids": sorted(str(edge["id"]) for edge in internal_edges),
         "boundary_edge_ids": sorted(str(edge["id"]) for edge in boundary_edges),
@@ -256,6 +269,7 @@ def _cluster_graph_summary(nodes: list[dict[str, Any]], edges: list[dict[str, An
             boundary_edge_count=len(boundary_edges),
             approach_count=len(external_junction_ids),
         ),
+        **aggregation_score,
         "risk_flags": risk_flags,
     }
 
@@ -296,6 +310,122 @@ def _aggregation_recommendation(*, internal_edge_count: int, boundary_edge_count
     if internal_edge_count > 0:
         return "inspect_cluster_graph"
     return "map_review_required"
+
+
+def _reference_free_aggregation_score(
+    *,
+    node_count: int,
+    traffic_light_count: int,
+    internal_edges: list[dict[str, Any]],
+    boundary_edges: list[dict[str, Any]],
+    approach_count: int,
+    internal_edge_max_length: float,
+    overlap_pair_count: int,
+) -> dict[str, Any]:
+    internal_edge_count = len(internal_edges)
+    boundary_edge_count = len(boundary_edges)
+    short_internal_edge_score = _short_internal_edge_score(internal_edge_count, internal_edge_max_length)
+    same_road_name_score = _same_road_name_score(internal_edges + boundary_edges)
+    traffic_signal_density = round(traffic_light_count / node_count, 3) if node_count else 0.0
+    service_or_parking_risk = _edge_text_has(
+        internal_edges + boundary_edges,
+        {"service", "parking", "private", "driveway"},
+    )
+    bridge_tunnel_layer_risk = _edge_text_has(
+        internal_edges + boundary_edges,
+        {"bridge", "tunnel", "layer"},
+    )
+    roundabout_or_slip_lane_risk = _edge_text_has(
+        internal_edges + boundary_edges,
+        {"roundabout", "slip"},
+    )
+
+    decision = "join"
+    confidence = "medium"
+    reason_parts = []
+    if internal_edge_count == 0:
+        decision = "do_not_join"
+        confidence = "high"
+        reason_parts.append("no internal edges connect the dense nodes")
+    if boundary_edge_count == 0:
+        decision = "do_not_join"
+        confidence = "high"
+        reason_parts.append("no boundary approaches leave the cluster")
+    if approach_count < 2:
+        decision = "do_not_join"
+        confidence = "high"
+        reason_parts.append("too few external approaches for a physical intersection")
+
+    review_risks = []
+    if traffic_light_count > 0:
+        review_risks.append("traffic-signal semantics require map review")
+    if overlap_pair_count > 0:
+        review_risks.append("overlapping internal edges require map review")
+    if node_count >= 10:
+        review_risks.append("large cluster requires map review")
+    if approach_count >= 6:
+        review_risks.append("many approaches require map review")
+    if service_or_parking_risk:
+        review_risks.append("service or parking access risk requires map review")
+    if bridge_tunnel_layer_risk:
+        review_risks.append("bridge, tunnel, or layer risk requires map review")
+    if roundabout_or_slip_lane_risk:
+        review_risks.append("roundabout or slip-lane risk requires map review")
+    if decision != "do_not_join" and review_risks:
+        decision = "needs_map_review"
+        confidence = "low"
+        reason_parts.extend(review_risks)
+
+    if decision == "join":
+        reason_parts.append("short internal edges and external approaches indicate one physical junction candidate")
+    elif not reason_parts:
+        reason_parts.append("insufficient topology evidence for automatic joining")
+
+    return {
+        "reference_free_scorer": "topology_heuristic_v1",
+        "aggregation_decision": decision,
+        "aggregation_confidence": confidence,
+        "aggregation_reason": "; ".join(reason_parts),
+        "short_internal_edge_score": short_internal_edge_score,
+        "same_road_name_score": same_road_name_score,
+        "angle_continuity_score": 0.0,
+        "traffic_signal_density": traffic_signal_density,
+        "service_or_parking_risk": service_or_parking_risk,
+        "bridge_tunnel_layer_risk": bridge_tunnel_layer_risk,
+        "roundabout_or_slip_lane_risk": roundabout_or_slip_lane_risk,
+    }
+
+
+def _short_internal_edge_score(internal_edge_count: int, internal_edge_max_length: float) -> float:
+    if internal_edge_count == 0:
+        return 0.0
+    if internal_edge_max_length <= 10.0:
+        return 1.0
+    if internal_edge_max_length >= 30.0:
+        return 0.0
+    return round((30.0 - internal_edge_max_length) / 20.0, 3)
+
+
+def _same_road_name_score(edges: list[dict[str, Any]]) -> float:
+    names = [str(edge.get("name", "")).strip().lower() for edge in edges if str(edge.get("name", "")).strip()]
+    if not names:
+        return 0.0
+    most_common = Counter(names).most_common(1)[0][1]
+    return round(most_common / len(names), 3)
+
+
+def _edge_text_has(edges: list[dict[str, Any]], tokens: set[str]) -> bool:
+    for edge in edges:
+        text = " ".join(
+            [
+                str(edge.get("id", "")),
+                str(edge.get("type", "")),
+                str(edge.get("name", "")),
+            ]
+        ).lower()
+        if any(token in text for token in tokens):
+            return True
+    return False
 
 
 def _edge_shape(edge: ET.Element, lanes: list[ET.Element]) -> list[tuple[float, float]]:
@@ -383,6 +513,17 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "internal_edge_max_length_m",
                 "internal_edge_overlap_pair_count",
                 "aggregation_recommendation",
+                "reference_free_scorer",
+                "aggregation_decision",
+                "aggregation_confidence",
+                "aggregation_reason",
+                "short_internal_edge_score",
+                "same_road_name_score",
+                "angle_continuity_score",
+                "traffic_signal_density",
+                "service_or_parking_risk",
+                "bridge_tunnel_layer_risk",
+                "roundabout_or_slip_lane_risk",
                 "risk_flags",
                 "internal_edge_ids",
                 "boundary_edge_ids",

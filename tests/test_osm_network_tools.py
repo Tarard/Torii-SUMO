@@ -189,10 +189,73 @@ def test_topology_audit_reports_local_cluster_graph_edges(tmp_path: Path) -> Non
     assert cluster["traffic_light_node_count"] == 2
     assert cluster["internal_edge_overlap_pair_count"] == 1
     assert cluster["aggregation_recommendation"] == "map_review_join_candidate"
+    assert cluster["aggregation_decision"] == "needs_map_review"
+    assert cluster["aggregation_confidence"] == "low"
+    assert cluster["reference_free_scorer"] == "topology_heuristic_v1"
+    assert cluster["short_internal_edge_score"] > 0.8
+    assert cluster["traffic_signal_density"] == 0.667
+    assert cluster["service_or_parking_risk"] is False
+    assert cluster["bridge_tunnel_layer_risk"] is False
+    assert cluster["roundabout_or_slip_lane_risk"] is False
+    assert "map review" in cluster["aggregation_reason"]
     assert "few_approaches_for_signalized_cluster" in cluster["risk_flags"]
     csv_header = Path(report["clusters_file"]).read_text(encoding="utf-8").splitlines()[0]
     assert "internal_edge_ids" in csv_header
     assert "aggregation_recommendation" in csv_header
+    assert "aggregation_decision" in csv_header
+    assert "short_internal_edge_score" in csv_header
+
+
+def test_topology_audit_scores_small_reference_free_join_candidate(tmp_path: Path) -> None:
+    net_file = tmp_path / "small_join_candidate.net.xml"
+    net_file.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<net>
+  <edge id="internal_a" from="j1" to="j2" name="Main Street">
+    <lane id="internal_a_0" index="0" speed="13.9" length="7.0" shape="0.0,0.0 7.0,0.0"/>
+  </edge>
+  <edge id="internal_b" from="j2" to="j3" name="Main Street">
+    <lane id="internal_b_0" index="0" speed="13.9" length="8.0" shape="7.0,0.0 15.0,1.0"/>
+  </edge>
+  <edge id="west_approach" from="west" to="j1" name="Main Street">
+    <lane id="west_approach_0" index="0" speed="13.9" length="70.0" shape="-70.0,0.0 0.0,0.0"/>
+  </edge>
+  <edge id="east_departure" from="j3" to="east" name="Main Street">
+    <lane id="east_departure_0" index="0" speed="13.9" length="70.0" shape="15.0,1.0 85.0,1.0"/>
+  </edge>
+  <edge id="north_approach" from="north" to="j2" name="North Road">
+    <lane id="north_approach_0" index="0" speed="13.9" length="70.0" shape="7.0,70.0 7.0,0.0"/>
+  </edge>
+  <junction id="west" x="-70.0" y="0.0" type="priority"/>
+  <junction id="j1" x="0.0" y="0.0" type="priority"/>
+  <junction id="j2" x="7.0" y="0.0" type="priority"/>
+  <junction id="j3" x="15.0" y="1.0" type="priority"/>
+  <junction id="east" x="85.0" y="1.0" type="priority"/>
+  <junction id="north" x="7.0" y="70.0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = audit_topology_fragmentation(
+        net_file=net_file,
+        output_dir=tmp_path / "topology_score",
+        prefix="score",
+        cluster_radius_m=20.0,
+        min_cluster_nodes=3,
+    )
+
+    cluster = report["suspicious_clusters"][0]
+    assert cluster["aggregation_decision"] == "join"
+    assert cluster["aggregation_confidence"] == "medium"
+    assert cluster["short_internal_edge_score"] == 1.0
+    assert cluster["same_road_name_score"] >= 0.6
+    assert cluster["traffic_signal_density"] == 0.0
+    assert cluster["service_or_parking_risk"] is False
+    assert cluster["bridge_tunnel_layer_risk"] is False
+    assert cluster["roundabout_or_slip_lane_risk"] is False
+    assert "short internal edges" in cluster["aggregation_reason"]
+    assert report["aggregation_decision_counts"] == {"join": 1}
 
 
 def test_topology_audit_passes_sparse_junctions(tmp_path: Path) -> None:
@@ -1200,7 +1263,16 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
             "suspicious_cluster_count": 1,
             "max_cluster_node_count": 3,
             "clusters_file": str(tmp_path / "topology.csv"),
-            "suspicious_clusters": [{"cluster_id": "C001", "node_ids": ["j1", "j2", "j3"]}],
+            "suspicious_clusters": [
+                {
+                    "cluster_id": "C001",
+                    "node_ids": ["j1", "j2", "j3"],
+                    "aggregation_decision": "join",
+                    "aggregation_confidence": "medium",
+                    "google_maps_url": "https://www.google.com/maps/@1.0000000,2.0000000,50m",
+                }
+            ],
+            "aggregation_decision_counts": {"join": 1},
             "warnings": ["topology audit found 1 suspicious dense junction cluster"],
         }
 
@@ -1254,6 +1326,11 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     assert report["topology_fragmentation_status"] == "needs_review"
     assert report["suspicious_topology_cluster_count"] == 1
     assert report["topology_audit"]["suspicious_clusters"][0]["node_ids"] == ["j1", "j2", "j3"]
+    assert report["junction_aggregation_candidate_count"] == 1
+    assert report["junction_aggregation_join_candidate_count"] == 1
+    assert report["junction_aggregation_needs_map_review_count"] == 0
+    assert report["junction_aggregation_do_not_join_count"] == 0
+    assert report["junction_aggregation_candidates_file"] == str(tmp_path / "topology.csv")
 
 
 def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path: Path) -> None:
