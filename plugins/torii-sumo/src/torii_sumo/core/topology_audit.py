@@ -28,7 +28,7 @@ def audit_topology_fragmentation(
         return _failure(f"net file does not exist: {net_file}")
 
     try:
-        junctions = _read_eligible_junctions(net_file)
+        junctions, edges = _read_network_graph(net_file)
     except (OSError, ET.ParseError, KeyError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
@@ -38,6 +38,7 @@ def audit_topology_fragmentation(
         radius_m=cluster_radius_m,
         min_cluster_nodes=min_cluster_nodes,
         xy_to_latlon=xy_to_latlon,
+        edges=edges,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     clusters_file = output_dir / f"{prefix}_dense_junction_clusters.csv"
@@ -78,7 +79,7 @@ def _failure(error: str) -> dict[str, Any]:
     }
 
 
-def _read_eligible_junctions(net_file: Path) -> list[dict[str, Any]]:
+def _read_network_graph(net_file: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     root = ET.parse(net_file).getroot()
     junctions = []
     for junction in root.findall("junction"):
@@ -94,7 +95,30 @@ def _read_eligible_junctions(net_file: Path) -> list[dict[str, Any]]:
                 "y": float(junction.attrib["y"]),
             }
         )
-    return junctions
+    edges = []
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if edge_id.startswith(":") or edge.attrib.get("function") == "internal":
+            continue
+        from_node = edge.attrib.get("from")
+        to_node = edge.attrib.get("to")
+        if not from_node or not to_node:
+            continue
+        lanes = edge.findall("lane")
+        shape = _edge_shape(edge, lanes)
+        edges.append(
+            {
+                "id": edge_id,
+                "from": from_node,
+                "to": to_node,
+                "type": edge.attrib.get("type", ""),
+                "name": edge.attrib.get("name", ""),
+                "lane_count": len(lanes),
+                "length": _edge_length(shape, lanes),
+                "shape": shape,
+            }
+        )
+    return junctions, edges
 
 
 def _dense_clusters(
@@ -103,6 +127,7 @@ def _dense_clusters(
     radius_m: float,
     min_cluster_nodes: int,
     xy_to_latlon: Callable[[float, float], tuple[float, float]] | None = None,
+    edges: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     neighbors = {index: set() for index in range(len(junctions))}
     for left in range(len(junctions)):
@@ -125,7 +150,9 @@ def _dense_clusters(
                     component.add(neighbor)
                     queue.append(neighbor)
         if len(component) >= min_cluster_nodes:
-            clusters.append(_cluster_summary(junctions, component, radius_m, xy_to_latlon=xy_to_latlon))
+            clusters.append(
+                _cluster_summary(junctions, component, radius_m, xy_to_latlon=xy_to_latlon, edges=edges or [])
+            )
     clusters.sort(key=lambda cluster: (-cluster["node_count"], cluster["centroid_x"], cluster["centroid_y"]))
     for index, cluster in enumerate(clusters, start=1):
         cluster["cluster_id"] = f"C{index:03d}"
@@ -138,6 +165,7 @@ def _cluster_summary(
     radius_m: float,
     *,
     xy_to_latlon: Callable[[float, float], tuple[float, float]] | None,
+    edges: list[dict[str, Any]],
 ) -> dict[str, Any]:
     nodes = [junctions[index] for index in sorted(component, key=lambda item: junctions[item]["id"])]
     centroid_x = sum(node["x"] for node in nodes) / len(nodes)
@@ -147,6 +175,7 @@ def _cluster_summary(
         for right in range(left + 1, len(nodes)):
             max_pair_distance = max(max_pair_distance, _distance(nodes[left], nodes[right]))
     lat, lon, coordinate_status = _cluster_latlon(centroid_x, centroid_y, xy_to_latlon)
+    graph = _cluster_graph_summary(nodes, edges)
     return {
         "cluster_id": "",
         "node_count": len(nodes),
@@ -162,6 +191,7 @@ def _cluster_summary(
         "optional_google_maps_satellite_url": _google_maps_satellite_url(lat, lon),
         "manual_correction_status": "needs_map_review",
         "suggested_correction_action": "compare the Google Maps road/intersection footprint before joining SUMO junctions",
+        **graph,
         "max_pair_distance_m": round(max_pair_distance, 3),
         "cluster_radius_m": radius_m,
     }
@@ -169,6 +199,128 @@ def _cluster_summary(
 
 def _distance(left: dict[str, Any], right: dict[str, Any]) -> float:
     return math.hypot(float(left["x"]) - float(right["x"]), float(left["y"]) - float(right["y"]))
+
+
+def _cluster_graph_summary(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> dict[str, Any]:
+    node_ids = {str(node["id"]) for node in nodes}
+    traffic_light_count = sum(1 for node in nodes if str(node["type"]) == "traffic_light")
+    internal_edges = []
+    boundary_edges = []
+    external_junction_ids = set()
+    connected_pairs = set()
+    endpoint_pair_counts: dict[tuple[str, str], int] = {}
+    internal_length_total = 0.0
+    internal_length_max = 0.0
+
+    for edge in edges:
+        from_node = str(edge["from"])
+        to_node = str(edge["to"])
+        from_inside = from_node in node_ids
+        to_inside = to_node in node_ids
+        if from_inside and to_inside:
+            internal_edges.append(edge)
+            connected_pairs.add(_node_pair_label(from_node, to_node))
+            endpoint_pair = tuple(sorted((from_node, to_node)))
+            endpoint_pair_counts[endpoint_pair] = endpoint_pair_counts.get(endpoint_pair, 0) + 1
+            length = float(edge.get("length") or 0.0)
+            internal_length_total += length
+            internal_length_max = max(internal_length_max, length)
+        elif from_inside or to_inside:
+            boundary_edges.append(edge)
+            external_junction_ids.add(to_node if from_inside else from_node)
+
+    overlap_pair_count = sum((count * (count - 1)) // 2 for count in endpoint_pair_counts.values() if count > 1)
+    risk_flags = _cluster_risk_flags(
+        node_count=len(nodes),
+        traffic_light_count=traffic_light_count,
+        internal_edge_count=len(internal_edges),
+        boundary_edge_count=len(boundary_edges),
+        approach_count=len(external_junction_ids),
+        overlap_pair_count=overlap_pair_count,
+    )
+    return {
+        "internal_edge_ids": sorted(str(edge["id"]) for edge in internal_edges),
+        "boundary_edge_ids": sorted(str(edge["id"]) for edge in boundary_edges),
+        "external_junction_ids": sorted(external_junction_ids),
+        "connected_node_pairs": sorted(connected_pairs),
+        "internal_edge_count": len(internal_edges),
+        "boundary_edge_count": len(boundary_edges),
+        "approach_count": len(external_junction_ids),
+        "direct_connected_node_pair_count": len(connected_pairs),
+        "traffic_light_node_count": traffic_light_count,
+        "internal_edge_total_length_m": round(internal_length_total, 3),
+        "internal_edge_max_length_m": round(internal_length_max, 3),
+        "internal_edge_overlap_pair_count": overlap_pair_count,
+        "aggregation_recommendation": _aggregation_recommendation(
+            internal_edge_count=len(internal_edges),
+            boundary_edge_count=len(boundary_edges),
+            approach_count=len(external_junction_ids),
+        ),
+        "risk_flags": risk_flags,
+    }
+
+
+def _node_pair_label(from_node: str, to_node: str) -> str:
+    left, right = sorted((from_node, to_node))
+    return f"{left}<->{right}"
+
+
+def _cluster_risk_flags(
+    *,
+    node_count: int,
+    traffic_light_count: int,
+    internal_edge_count: int,
+    boundary_edge_count: int,
+    approach_count: int,
+    overlap_pair_count: int,
+) -> list[str]:
+    flags = ["map_review_required"]
+    if internal_edge_count == 0:
+        flags.append("no_internal_edges")
+    if boundary_edge_count == 0:
+        flags.append("no_boundary_edges")
+    if traffic_light_count > 0 and approach_count < 3:
+        flags.append("few_approaches_for_signalized_cluster")
+    if overlap_pair_count > 0:
+        flags.append("overlapping_internal_edges")
+    if internal_edge_count >= max(node_count, 1):
+        flags.append("many_internal_edges")
+    if node_count >= 10:
+        flags.append("large_cluster")
+    return flags
+
+
+def _aggregation_recommendation(*, internal_edge_count: int, boundary_edge_count: int, approach_count: int) -> str:
+    if internal_edge_count > 0 and boundary_edge_count > 0 and approach_count >= 2:
+        return "map_review_join_candidate"
+    if internal_edge_count > 0:
+        return "inspect_cluster_graph"
+    return "map_review_required"
+
+
+def _edge_shape(edge: ET.Element, lanes: list[ET.Element]) -> list[tuple[float, float]]:
+    shape_text = edge.attrib.get("shape", "")
+    if not shape_text and lanes:
+        shape_text = lanes[0].attrib.get("shape", "")
+    return _parse_shape(shape_text)
+
+
+def _parse_shape(shape_text: str) -> list[tuple[float, float]]:
+    points = []
+    for raw_point in shape_text.split():
+        parts = raw_point.split(",")
+        if len(parts) < 2:
+            continue
+        points.append((float(parts[0]), float(parts[1])))
+    return points
+
+
+def _edge_length(shape: list[tuple[float, float]], lanes: list[ET.Element]) -> float:
+    if lanes and lanes[0].attrib.get("length"):
+        return float(lanes[0].attrib["length"])
+    if len(shape) < 2:
+        return 0.0
+    return sum(math.hypot(right[0] - left[0], right[1] - left[1]) for left, right in zip(shape, shape[1:]))
 
 
 def _coordinate_converter(net_file: Path) -> Callable[[float, float], tuple[float, float]] | None:
@@ -222,6 +374,20 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "optional_google_maps_satellite_url",
                 "manual_correction_status",
                 "suggested_correction_action",
+                "internal_edge_count",
+                "boundary_edge_count",
+                "approach_count",
+                "direct_connected_node_pair_count",
+                "traffic_light_node_count",
+                "internal_edge_total_length_m",
+                "internal_edge_max_length_m",
+                "internal_edge_overlap_pair_count",
+                "aggregation_recommendation",
+                "risk_flags",
+                "internal_edge_ids",
+                "boundary_edge_ids",
+                "external_junction_ids",
+                "connected_node_pairs",
                 "max_pair_distance_m",
                 "cluster_radius_m",
             ],
@@ -229,6 +395,6 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
         writer.writeheader()
         for cluster in clusters:
             row = dict(cluster)
-            row["node_ids"] = ";".join(row["node_ids"])
-            row["node_types"] = ";".join(row["node_types"])
+            for field in ("node_ids", "node_types", "risk_flags", "internal_edge_ids", "boundary_edge_ids", "external_junction_ids", "connected_node_pairs"):
+                row[field] = ";".join(row[field])
             writer.writerow(row)

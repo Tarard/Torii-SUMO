@@ -55,7 +55,7 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 | Torii reference visual-detail | 对比 bbox 内 6,130 条 edge、6,701 条 lane、2,998 个 junction |
 | TUM 人工清洗参考子集 | 同一 bbox 内 3,577 条 edge、4,955 条 lane、1,752 个 junction |
 | 信号灯 junction | Torii visual-detail 217 vs TUM 29 |
-| 剩余清洗目标 | 可复用的物理交叉口 / TLS 聚合，并先用 Google Maps 默认地图复核 |
+| 剩余清洗目标 | 可复用的物理交叉口 / TLS 聚合，并先做 cluster graph audit，再用 Google Maps 默认地图复核 |
 | claim status | `diagnostic-demo` |
 
 详见 [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md)。生成的 `.osm.xml`、`.net.xml`、route 和 log 文件不会提交到仓库；仓库只保留 prompt 和轻量验证摘要。

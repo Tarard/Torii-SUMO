@@ -88,7 +88,7 @@
     "topology_audit": {
       "cluster_radius_m": 30,
       "status": "needs_review",
-      "review_requirement": "Google Maps default-map review before junction aggregation; satellite view is optional when ambiguous"
+      "review_requirement": "local cluster-graph audit and Google Maps default-map review before junction aggregation; satellite view is optional when ambiguous"
     },
     "routeability": {
       "status": "incomplete_under_bounded_test",
@@ -117,6 +117,6 @@
       "claim": "reference comparator only"
     }
   },
-  "interpretation": "The reference-matched workflow now builds a separate Torii reference_visual_detail network for full-detail Netedit comparison. The remaining gap is reusable physical-intersection and TLS aggregation; dense clusters require Google Maps default-map review before any destructive join, with satellite view only as an optional fallback.",
+  "interpretation": "The reference-matched workflow now builds a separate Torii reference_visual_detail network for full-detail Netedit comparison. The remaining gap is reusable physical-intersection and TLS aggregation; dense clusters require local cluster-graph audit plus Google Maps default-map review before any destructive join, with satellite view only as an optional fallback.",
   "claim_status": "diagnostic-demo"
 }

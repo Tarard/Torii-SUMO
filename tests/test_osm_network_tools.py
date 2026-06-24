@@ -140,6 +140,61 @@ def test_topology_audit_flags_dense_junction_clusters_within_radius(tmp_path: Pa
     assert "optional_google_maps_satellite_url" in csv_header
 
 
+def test_topology_audit_reports_local_cluster_graph_edges(tmp_path: Path) -> None:
+    net_file = tmp_path / "fragmented_with_edges.net.xml"
+    net_file.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<net>
+  <edge id="internal_a" from="j1" to="j2">
+    <lane id="internal_a_0" index="0" speed="13.9" length="8.0" shape="0.0,0.0,0.0 8.0,0.0,0.0"/>
+  </edge>
+  <edge id="internal_b" from="j2" to="j3">
+    <lane id="internal_b_0" index="0" speed="13.9" length="9.0" shape="8.0,0.0 16.0,1.0"/>
+  </edge>
+  <edge id="internal_overlap" from="j1" to="j2">
+    <lane id="internal_overlap_0" index="0" speed="13.9" length="8.2" shape="0.3,0.0 8.3,0.1"/>
+  </edge>
+  <edge id="west_approach" from="west" to="j1">
+    <lane id="west_approach_0" index="0" speed="13.9" length="80.0" shape="-80.0,0.0 0.0,0.0"/>
+  </edge>
+  <edge id="east_departure" from="j3" to="east">
+    <lane id="east_departure_0" index="0" speed="13.9" length="80.0" shape="16.0,1.0 96.0,1.0"/>
+  </edge>
+  <junction id="west" x="-80.0" y="0.0" type="priority"/>
+  <junction id="j1" x="0.0" y="0.0" type="traffic_light"/>
+  <junction id="j2" x="8.0" y="0.0" type="traffic_light"/>
+  <junction id="j3" x="16.0" y="1.0" type="priority"/>
+  <junction id="east" x="96.0" y="1.0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = audit_topology_fragmentation(
+        net_file=net_file,
+        output_dir=tmp_path / "topology_graph",
+        prefix="graph",
+        cluster_radius_m=25.0,
+        min_cluster_nodes=3,
+    )
+
+    cluster = report["suspicious_clusters"][0]
+    assert cluster["internal_edge_ids"] == ["internal_a", "internal_b", "internal_overlap"]
+    assert cluster["boundary_edge_ids"] == ["east_departure", "west_approach"]
+    assert set(cluster["external_junction_ids"]) == {"east", "west"}
+    assert cluster["approach_count"] == 2
+    assert cluster["direct_connected_node_pair_count"] == 2
+    assert cluster["internal_edge_count"] == 3
+    assert cluster["boundary_edge_count"] == 2
+    assert cluster["traffic_light_node_count"] == 2
+    assert cluster["internal_edge_overlap_pair_count"] == 1
+    assert cluster["aggregation_recommendation"] == "map_review_join_candidate"
+    assert "few_approaches_for_signalized_cluster" in cluster["risk_flags"]
+    csv_header = Path(report["clusters_file"]).read_text(encoding="utf-8").splitlines()[0]
+    assert "internal_edge_ids" in csv_header
+    assert "aggregation_recommendation" in csv_header
+
+
 def test_topology_audit_passes_sparse_junctions(tmp_path: Path) -> None:
     net_file = tmp_path / "sparse.net.xml"
     net_file.write_text(

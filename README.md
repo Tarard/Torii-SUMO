@@ -55,7 +55,7 @@ This demo now uses Ingolstadt city center to test whether a Torii OSM-cleaned ne
 | Torii reference visual-detail | 6,130 edges, 6,701 lanes, 2,998 junctions in the comparison bbox |
 | TUM cleaned reference subset | 3,577 edges, 4,955 lanes, 1,752 junctions in the same bbox |
 | Traffic-light junctions | Torii visual-detail 217 vs TUM 29 |
-| Remaining cleanup target | reusable physical-intersection/TLS aggregation with Google Maps map review |
+| Remaining cleanup target | reusable physical-intersection/TLS aggregation with cluster-graph audit and Google Maps map review |
 | Claim status | `diagnostic-demo` |
 
 See [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). The generated `.osm.xml`, `.net.xml`, route, and log files are intentionally not committed; the repository keeps the prompt and lightweight validation summary.

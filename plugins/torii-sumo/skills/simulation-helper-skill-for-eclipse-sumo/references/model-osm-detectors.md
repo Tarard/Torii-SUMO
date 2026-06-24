@@ -174,7 +174,7 @@ time_scope_residual_risk:
 
 ## Junction Aggregation Audit
 
-When OSM/netconvert creates many close junctions or short edges around one physical intersection, do not immediately edit or join the network. First run a reusable dense-junction audit and create a non-destructive correction record.
+When OSM/netconvert creates many close junctions or short edges around one physical intersection, do not immediately edit or join the network. First run a reusable dense-junction audit with local cluster-graph analysis and create a non-destructive correction record.
 
 Required fields for each suspicious junction cluster:
 
@@ -190,7 +190,20 @@ google_maps_url:
 optional_google_maps_satellite_url:
 manual_correction_status: needs_map_review
 suggested_correction_action:
+internal_edge_ids:
+boundary_edge_ids:
+external_junction_ids:
+connected_node_pairs:
+internal_edge_count:
+boundary_edge_count:
+approach_count:
+direct_connected_node_pair_count:
+internal_edge_overlap_pair_count:
+aggregation_recommendation:
+risk_flags:
 ```
+
+Use the cluster graph fields to separate edges whose endpoints are both inside the suspicious junction cluster from edges that connect the cluster to outside junctions. Do not join by radius alone. A cluster becomes a join candidate only when local topology indicates the short internal edges are likely intersection-internal fragments and the default map confirms the physical intersection footprint.
 
 For regions where Google Maps is reliable and appropriate, use the default Google Maps road geometry to compare the cluster against the physical intersection footprint before any destructive aggregation. Use satellite view only when the default map is ambiguous. For mainland China or other regions where Google Maps is not the right current-road baseline, keep the map-review field but add the appropriate regional source in the correction record.
 
