@@ -1027,7 +1027,7 @@ def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_pat
             "netedit_status": "unavailable",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "claim_status": "diagnostic-demo",
             "sumo_gui_status": "unavailable",
@@ -1110,7 +1110,7 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
             "warnings": [],
         }
 
-    def fake_sumo_gui(net_path, output_dir, prefix):
+    def fake_sumo_gui(net_path, *, output_dir, prefix):
         assert net_path == net_file
         assert output_dir == tmp_path / "sumo_gui"
         assert prefix == "demo_sumo_gui"
@@ -1220,7 +1220,7 @@ def test_osm_cleanup_workflow_runs_routeability_audit_by_default(tmp_path: Path)
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
             "claim_status": "diagnostic-demo",
@@ -1312,7 +1312,7 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
             "claim_status": "diagnostic-demo",
@@ -1420,7 +1420,7 @@ def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path
             "warnings": [],
         }
 
-    def fake_sumo_gui(net_path, _output_dir, _prefix):
+    def fake_sumo_gui(net_path, **_kwargs):
         downstream_paths["sumo_gui"] = net_path
         return {
             "status": "blocked",
@@ -1558,7 +1558,7 @@ def test_osm_cleanup_workflow_runs_routeability_audit_on_connected_core(tmp_path
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
             "claim_status": "diagnostic-demo",
@@ -1624,7 +1624,7 @@ def test_osm_cleanup_workflow_demotes_partial_connectivity_to_diagnostic_demo(tm
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
             "claim_status": "diagnostic-demo",
@@ -1697,7 +1697,7 @@ def test_osm_cleanup_workflow_keeps_severe_connectivity_failure_invalid(tmp_path
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {
+        sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
             "claim_status": "diagnostic-demo",
@@ -1765,7 +1765,7 @@ def test_osm_cleanup_workflow_preserves_historical_user_target(tmp_path: Path) -
         tls_audit_func=fake_tls,
         connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "claim_status": "diagnostic-demo", "warnings": []},
         netedit_func=lambda _path: {"status": "blocked", "netedit_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {"status": "blocked", "sumo_gui_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
+        sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
     )
 
     assert captured["google_maps_temporal_scope"] == "historical"
@@ -1818,7 +1818,7 @@ def test_osm_cleanup_workflow_sets_amap_baseline_for_mainland_china_bbox(tmp_pat
         },
         connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "claim_status": "diagnostic-demo", "warnings": []},
         netedit_func=lambda _path: {"status": "blocked", "netedit_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
-        sumo_gui_func=lambda _path, _output_dir, _prefix: {"status": "blocked", "sumo_gui_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
+        sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "unavailable", "claim_status": "diagnostic-demo", "warnings": []},
     )
 
     assert report["map_baseline_source"] == "Amap/Gaode"

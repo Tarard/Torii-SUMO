@@ -297,7 +297,7 @@ def run_osm_cleanup_workflow(
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
-    sumo_gui_func: Callable[[Path, Path, str], dict[str, Any]] = launch_sumo_gui,
+    sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
     service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
@@ -727,7 +727,11 @@ def run_osm_cleanup_workflow(
                 "warnings": ["reference visual-detail netedit launch disabled by caller"],
             }
     if launch_sumo_gui_after_build:
-        sumo_gui_report = sumo_gui_func(net_file, output_dir / "sumo_gui", f"{prefix}_sumo_gui")
+        sumo_gui_report = sumo_gui_func(
+            net_file,
+            output_dir=output_dir / "sumo_gui",
+            prefix=f"{prefix}_sumo_gui",
+        )
     else:
         sumo_gui_report = {
             "status": "blocked",
