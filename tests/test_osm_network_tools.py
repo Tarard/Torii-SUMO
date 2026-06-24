@@ -204,6 +204,8 @@ def test_topology_audit_reports_local_cluster_graph_edges(tmp_path: Path) -> Non
     assert "aggregation_recommendation" in csv_header
     assert "aggregation_decision" in csv_header
     assert "short_internal_edge_score" in csv_header
+    assert "physical_intersection_shape" in csv_header
+    assert "approach_axis_angles_deg" in csv_header
 
 
 def test_topology_audit_scores_small_reference_free_join_candidate(tmp_path: Path) -> None:
@@ -248,6 +250,10 @@ def test_topology_audit_scores_small_reference_free_join_candidate(tmp_path: Pat
     cluster = report["suspicious_clusters"][0]
     assert cluster["aggregation_decision"] == "join"
     assert cluster["aggregation_confidence"] == "medium"
+    assert cluster["physical_intersection_shape"] == "t_or_y"
+    assert cluster["physical_intersection_score"] > 0.6
+    assert cluster["approach_axis_count"] >= 2
+    assert cluster["angle_continuity_score"] > 0.7
     assert cluster["short_internal_edge_score"] == 1.0
     assert cluster["same_road_name_score"] >= 0.6
     assert cluster["traffic_signal_density"] == 0.0
@@ -256,6 +262,104 @@ def test_topology_audit_scores_small_reference_free_join_candidate(tmp_path: Pat
     assert cluster["roundabout_or_slip_lane_risk"] is False
     assert "short internal edges" in cluster["aggregation_reason"]
     assert report["aggregation_decision_counts"] == {"join": 1}
+
+
+def test_topology_audit_scores_cross_intersection_shape_from_approach_axes(tmp_path: Path) -> None:
+    net_file = tmp_path / "cross_shape_candidate.net.xml"
+    net_file.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<net>
+  <edge id="internal_w" from="jw" to="jc" name="Main Street">
+    <lane id="internal_w_0" index="0" speed="13.9" length="6.0" shape="-6.0,0.0 0.0,0.0"/>
+  </edge>
+  <edge id="internal_e" from="jc" to="je" name="Main Street">
+    <lane id="internal_e_0" index="0" speed="13.9" length="6.0" shape="0.0,0.0 6.0,0.0"/>
+  </edge>
+  <edge id="west_approach" from="west" to="jw" name="Main Street">
+    <lane id="west_approach_0" index="0" speed="13.9" length="70.0" shape="-76.0,0.0 -6.0,0.0"/>
+  </edge>
+  <edge id="east_departure" from="je" to="east" name="Main Street">
+    <lane id="east_departure_0" index="0" speed="13.9" length="70.0" shape="6.0,0.0 76.0,0.0"/>
+  </edge>
+  <edge id="north_approach" from="north" to="jc" name="North Road">
+    <lane id="north_approach_0" index="0" speed="13.9" length="70.0" shape="0.0,70.0 0.0,0.0"/>
+  </edge>
+  <edge id="south_departure" from="jc" to="south" name="North Road">
+    <lane id="south_departure_0" index="0" speed="13.9" length="70.0" shape="0.0,0.0 0.0,-70.0"/>
+  </edge>
+  <junction id="west" x="-76.0" y="0.0" type="priority"/>
+  <junction id="jw" x="-6.0" y="0.0" type="priority"/>
+  <junction id="jc" x="0.0" y="0.0" type="priority"/>
+  <junction id="je" x="6.0" y="0.0" type="priority"/>
+  <junction id="east" x="76.0" y="0.0" type="priority"/>
+  <junction id="north" x="0.0" y="70.0" type="priority"/>
+  <junction id="south" x="0.0" y="-70.0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = audit_topology_fragmentation(
+        net_file=net_file,
+        output_dir=tmp_path / "topology_cross_shape",
+        prefix="cross_shape",
+        cluster_radius_m=15.0,
+        min_cluster_nodes=3,
+    )
+
+    cluster = report["suspicious_clusters"][0]
+    assert cluster["physical_intersection_shape"] == "cross"
+    assert cluster["physical_intersection_score"] > 0.8
+    assert cluster["approach_axis_count"] == 2
+    assert cluster["approach_axis_arm_counts"] == [2, 2]
+    assert cluster["dominant_axis_separation_deg"] == 90.0
+    assert cluster["angle_continuity_score"] == 1.0
+    assert cluster["aggregation_decision"] == "join"
+    assert report["physical_intersection_shape_counts"] == {"cross": 1}
+    assert report["physical_intersection_candidate_count"] == 1
+
+
+def test_topology_audit_does_not_auto_join_single_axis_linear_fragment(tmp_path: Path) -> None:
+    net_file = tmp_path / "linear_fragment.net.xml"
+    net_file.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<net>
+  <edge id="internal_a" from="j1" to="j2" name="Main Street">
+    <lane id="internal_a_0" index="0" speed="13.9" length="7.0" shape="0.0,0.0 7.0,0.0"/>
+  </edge>
+  <edge id="internal_b" from="j2" to="j3" name="Main Street">
+    <lane id="internal_b_0" index="0" speed="13.9" length="8.0" shape="7.0,0.0 15.0,0.0"/>
+  </edge>
+  <edge id="west_approach" from="west" to="j1" name="Main Street">
+    <lane id="west_approach_0" index="0" speed="13.9" length="70.0" shape="-70.0,0.0 0.0,0.0"/>
+  </edge>
+  <edge id="east_departure" from="j3" to="east" name="Main Street">
+    <lane id="east_departure_0" index="0" speed="13.9" length="70.0" shape="15.0,0.0 85.0,0.0"/>
+  </edge>
+  <junction id="west" x="-70.0" y="0.0" type="priority"/>
+  <junction id="j1" x="0.0" y="0.0" type="priority"/>
+  <junction id="j2" x="7.0" y="0.0" type="priority"/>
+  <junction id="j3" x="15.0" y="0.0" type="priority"/>
+  <junction id="east" x="85.0" y="0.0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = audit_topology_fragmentation(
+        net_file=net_file,
+        output_dir=tmp_path / "topology_linear_shape",
+        prefix="linear_shape",
+        cluster_radius_m=20.0,
+        min_cluster_nodes=3,
+    )
+
+    cluster = report["suspicious_clusters"][0]
+    assert cluster["physical_intersection_shape"] == "none"
+    assert cluster["approach_axis_count"] == 1
+    assert cluster["angle_continuity_score"] == 0.0
+    assert cluster["aggregation_decision"] == "needs_map_review"
+    assert "no stable cross/T intersection shape" in cluster["aggregation_reason"]
 
 
 def test_topology_audit_passes_sparse_junctions(tmp_path: Path) -> None:

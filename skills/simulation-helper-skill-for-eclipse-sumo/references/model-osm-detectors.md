@@ -211,6 +211,12 @@ aggregation_confidence:
 aggregation_reason:
 short_internal_edge_score:
 same_road_name_score:
+physical_intersection_shape:
+physical_intersection_score:
+approach_axis_count:
+approach_axis_angles_deg:
+approach_axis_arm_counts:
+dominant_axis_separation_deg:
 angle_continuity_score:
 traffic_signal_density:
 service_or_parking_risk:
@@ -219,12 +225,14 @@ roundabout_or_slip_lane_risk:
 risk_flags:
 ```
 
-Use the cluster graph fields to separate edges whose endpoints are both inside the suspicious junction cluster from edges that connect the cluster to outside junctions. Do not join by radius alone. A cluster becomes a join candidate only when local topology indicates the short internal edges are likely intersection-internal fragments and the default map confirms the physical intersection footprint.
+Use the cluster graph fields to separate edges whose endpoints are both inside the suspicious junction cluster from edges that connect the cluster to outside junctions. Do not join by radius alone. A cluster becomes a join candidate only when local topology indicates the short internal edges are likely intersection-internal fragments and the default map confirms the physical intersection footprint. For obvious cross or T/Y intersections, use the physical-intersection shape fields to prioritize review: the scorer groups external approaches into local road axes, checks whether the dominant axes are near perpendicular, and reports the result separately from reference-matched evidence. Treat this as a reference-free priority signal, not proof that a destructive join is safe.
 
 At the end of cleanup, report the aggregation summary to the user:
 
 ```text
 junction_aggregation_candidate_count:
+physical_intersection_candidate_count:
+physical_intersection_shape_counts:
 junction_aggregation_join_candidate_count:
 junction_aggregation_needs_map_review_count:
 junction_aggregation_do_not_join_count:

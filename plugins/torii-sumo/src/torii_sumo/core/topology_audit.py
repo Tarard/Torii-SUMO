@@ -50,6 +50,13 @@ def audit_topology_fragmentation(
     if clusters:
         warnings.append(f"topology audit found {len(clusters)} suspicious dense junction cluster(s)")
 
+    physical_shape_counts = dict(Counter(cluster["physical_intersection_shape"] for cluster in clusters))
+    physical_intersection_candidate_count = sum(
+        1
+        for cluster in clusters
+        if cluster["physical_intersection_shape"] in {"cross", "t_or_y"}
+        and float(cluster["physical_intersection_score"]) >= 0.6
+    )
     report = {
         "status": status,
         "claim_status": "blocked" if clusters else "diagnostic-demo",
@@ -62,6 +69,8 @@ def audit_topology_fragmentation(
         "suspicious_cluster_count": len(clusters),
         "max_cluster_node_count": max((cluster["node_count"] for cluster in clusters), default=0),
         "aggregation_decision_counts": dict(Counter(cluster["aggregation_decision"] for cluster in clusters)),
+        "physical_intersection_shape_counts": physical_shape_counts,
+        "physical_intersection_candidate_count": physical_intersection_candidate_count,
         "junction_aggregation_candidate_count": sum(
             1 for cluster in clusters if cluster["aggregation_decision"] in {"join", "needs_map_review"}
         ),
@@ -179,7 +188,8 @@ def _cluster_summary(
         for right in range(left + 1, len(nodes)):
             max_pair_distance = max(max_pair_distance, _distance(nodes[left], nodes[right]))
     lat, lon, coordinate_status = _cluster_latlon(centroid_x, centroid_y, xy_to_latlon)
-    graph = _cluster_graph_summary(nodes, edges)
+    junction_by_id = {str(junction["id"]): junction for junction in junctions}
+    graph = _cluster_graph_summary(nodes, edges, junction_by_id)
     return {
         "cluster_id": "",
         "node_count": len(nodes),
@@ -205,7 +215,11 @@ def _distance(left: dict[str, Any], right: dict[str, Any]) -> float:
     return math.hypot(float(left["x"]) - float(right["x"]), float(left["y"]) - float(right["y"]))
 
 
-def _cluster_graph_summary(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> dict[str, Any]:
+def _cluster_graph_summary(
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    junction_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
     node_ids = {str(node["id"]) for node in nodes}
     traffic_light_count = sum(1 for node in nodes if str(node["type"]) == "traffic_light")
     internal_edges = []
@@ -234,6 +248,12 @@ def _cluster_graph_summary(nodes: list[dict[str, Any]], edges: list[dict[str, An
             external_junction_ids.add(to_node if from_inside else from_node)
 
     overlap_pair_count = sum((count * (count - 1)) // 2 for count in endpoint_pair_counts.values() if count > 1)
+    physical_shape = _physical_intersection_shape_score(
+        nodes=nodes,
+        internal_edges=internal_edges,
+        boundary_edges=boundary_edges,
+        junction_by_id=junction_by_id,
+    )
     risk_flags = _cluster_risk_flags(
         node_count=len(nodes),
         traffic_light_count=traffic_light_count,
@@ -250,6 +270,7 @@ def _cluster_graph_summary(nodes: list[dict[str, Any]], edges: list[dict[str, An
         approach_count=len(external_junction_ids),
         internal_edge_max_length=internal_length_max,
         overlap_pair_count=overlap_pair_count,
+        physical_shape=physical_shape,
     )
     return {
         "internal_edge_ids": sorted(str(edge["id"]) for edge in internal_edges),
@@ -321,6 +342,7 @@ def _reference_free_aggregation_score(
     approach_count: int,
     internal_edge_max_length: float,
     overlap_pair_count: int,
+    physical_shape: dict[str, Any],
 ) -> dict[str, Any]:
     internal_edge_count = len(internal_edges)
     boundary_edge_count = len(boundary_edges)
@@ -339,6 +361,11 @@ def _reference_free_aggregation_score(
         internal_edges + boundary_edges,
         {"roundabout", "slip"},
     )
+    physical_intersection_shape = str(physical_shape.get("physical_intersection_shape", "none"))
+    physical_intersection_score = float(physical_shape.get("physical_intersection_score", 0.0) or 0.0)
+    has_stable_cross_or_t_shape = (
+        physical_intersection_shape in {"cross", "t_or_y"} and physical_intersection_score >= 0.6
+    )
 
     decision = "join"
     confidence = "medium"
@@ -355,6 +382,10 @@ def _reference_free_aggregation_score(
         decision = "do_not_join"
         confidence = "high"
         reason_parts.append("too few external approaches for a physical intersection")
+    if decision != "do_not_join" and not has_stable_cross_or_t_shape:
+        decision = "needs_map_review"
+        confidence = "low"
+        reason_parts.append("no stable cross/T intersection shape from approach axes")
 
     review_risks = []
     if traffic_light_count > 0:
@@ -377,7 +408,9 @@ def _reference_free_aggregation_score(
         reason_parts.extend(review_risks)
 
     if decision == "join":
-        reason_parts.append("short internal edges and external approaches indicate one physical junction candidate")
+        reason_parts.append(
+            f"short internal edges and {physical_intersection_shape} approach-axis geometry indicate one physical junction candidate"
+        )
     elif not reason_parts:
         reason_parts.append("insufficient topology evidence for automatic joining")
 
@@ -388,12 +421,127 @@ def _reference_free_aggregation_score(
         "aggregation_reason": "; ".join(reason_parts),
         "short_internal_edge_score": short_internal_edge_score,
         "same_road_name_score": same_road_name_score,
-        "angle_continuity_score": 0.0,
+        **physical_shape,
         "traffic_signal_density": traffic_signal_density,
         "service_or_parking_risk": service_or_parking_risk,
         "bridge_tunnel_layer_risk": bridge_tunnel_layer_risk,
         "roundabout_or_slip_lane_risk": roundabout_or_slip_lane_risk,
     }
+
+
+def _physical_intersection_shape_score(
+    *,
+    nodes: list[dict[str, Any]],
+    internal_edges: list[dict[str, Any]],
+    boundary_edges: list[dict[str, Any]],
+    junction_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    if not nodes:
+        return _empty_physical_shape()
+
+    node_ids = {str(node["id"]) for node in nodes}
+    centroid_x = sum(float(node["x"]) for node in nodes) / len(nodes)
+    centroid_y = sum(float(node["y"]) for node in nodes) / len(nodes)
+    external_nodes: dict[str, dict[str, Any]] = {}
+    for edge in boundary_edges:
+        from_node = str(edge.get("from", ""))
+        to_node = str(edge.get("to", ""))
+        if from_node in node_ids and to_node in junction_by_id:
+            external_nodes[to_node] = junction_by_id[to_node]
+        elif to_node in node_ids and from_node in junction_by_id:
+            external_nodes[from_node] = junction_by_id[from_node]
+
+    arms = []
+    for external_node in external_nodes.values():
+        dx = float(external_node["x"]) - centroid_x
+        dy = float(external_node["y"]) - centroid_y
+        if math.hypot(dx, dy) <= 1e-6:
+            continue
+        arms.append(_axis_angle_deg(dx, dy))
+
+    axis_groups = _group_approach_axes(arms)
+    axis_angles = [round(group["mean_angle_deg"], 1) for group in axis_groups]
+    axis_arm_counts = [len(group["angles"]) for group in axis_groups]
+    dominant_axis_separation = 0.0
+    angle_continuity_score = 0.0
+    physical_shape = "none"
+    shape_score = 0.0
+
+    if len(axis_groups) >= 2:
+        dominant_axis_separation = _axis_angle_distance(
+            axis_groups[0]["mean_angle_deg"],
+            axis_groups[1]["mean_angle_deg"],
+        )
+        angle_continuity_score = max(0.0, 1.0 - abs(90.0 - dominant_axis_separation) / 45.0)
+        if len(arms) >= 4 and axis_arm_counts[0] >= 2 and axis_arm_counts[1] >= 2 and 65.0 <= dominant_axis_separation <= 115.0:
+            physical_shape = "cross"
+            shape_score = 0.72 + 0.28 * angle_continuity_score
+        elif len(arms) >= 3 and axis_arm_counts[0] >= 2 and 45.0 <= dominant_axis_separation <= 135.0:
+            physical_shape = "t_or_y"
+            shape_score = 0.55 + 0.30 * angle_continuity_score
+        elif len(arms) >= 5:
+            physical_shape = "multi_arm"
+            shape_score = 0.45
+
+    short_internal_edge_score = _short_internal_edge_score(
+        len(internal_edges),
+        max((float(edge.get("length") or 0.0) for edge in internal_edges), default=0.0),
+    )
+    physical_intersection_score = min(1.0, shape_score * 0.72 + short_internal_edge_score * 0.28)
+    return {
+        "physical_intersection_shape": physical_shape,
+        "physical_intersection_score": round(physical_intersection_score, 3),
+        "approach_axis_count": len(axis_groups),
+        "approach_axis_angles_deg": axis_angles,
+        "approach_axis_arm_counts": axis_arm_counts,
+        "dominant_axis_separation_deg": round(dominant_axis_separation, 1),
+        "angle_continuity_score": round(angle_continuity_score, 3),
+    }
+
+
+def _empty_physical_shape() -> dict[str, Any]:
+    return {
+        "physical_intersection_shape": "none",
+        "physical_intersection_score": 0.0,
+        "approach_axis_count": 0,
+        "approach_axis_angles_deg": [],
+        "approach_axis_arm_counts": [],
+        "dominant_axis_separation_deg": 0.0,
+        "angle_continuity_score": 0.0,
+    }
+
+
+def _axis_angle_deg(dx: float, dy: float) -> float:
+    return math.degrees(math.atan2(dy, dx)) % 180.0
+
+
+def _axis_angle_distance(left: float, right: float) -> float:
+    distance = abs(left - right) % 180.0
+    return min(distance, 180.0 - distance)
+
+
+def _group_approach_axes(angles: list[float], *, tolerance_deg: float = 18.0) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+    for angle in sorted(angles):
+        placed = False
+        for group in groups:
+            if _axis_angle_distance(float(group["mean_angle_deg"]), angle) <= tolerance_deg:
+                group["angles"].append(angle)
+                group["mean_angle_deg"] = _mean_axis_angle(group["angles"])
+                placed = True
+                break
+        if not placed:
+            groups.append({"mean_angle_deg": angle, "angles": [angle]})
+    groups.sort(key=lambda group: (-len(group["angles"]), float(group["mean_angle_deg"])))
+    return groups
+
+
+def _mean_axis_angle(angles: list[float]) -> float:
+    if not angles:
+        return 0.0
+    x = sum(math.cos(math.radians(2.0 * angle)) for angle in angles)
+    y = sum(math.sin(math.radians(2.0 * angle)) for angle in angles)
+    return (math.degrees(math.atan2(y, x)) / 2.0) % 180.0
 
 
 def _short_internal_edge_score(internal_edge_count: int, internal_edge_max_length: float) -> float:
@@ -519,6 +667,12 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "aggregation_reason",
                 "short_internal_edge_score",
                 "same_road_name_score",
+                "physical_intersection_shape",
+                "physical_intersection_score",
+                "approach_axis_count",
+                "approach_axis_angles_deg",
+                "approach_axis_arm_counts",
+                "dominant_axis_separation_deg",
                 "angle_continuity_score",
                 "traffic_signal_density",
                 "service_or_parking_risk",
@@ -536,6 +690,16 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
         writer.writeheader()
         for cluster in clusters:
             row = dict(cluster)
-            for field in ("node_ids", "node_types", "risk_flags", "internal_edge_ids", "boundary_edge_ids", "external_junction_ids", "connected_node_pairs"):
-                row[field] = ";".join(row[field])
+            for field in (
+                "node_ids",
+                "node_types",
+                "risk_flags",
+                "internal_edge_ids",
+                "boundary_edge_ids",
+                "external_junction_ids",
+                "connected_node_pairs",
+                "approach_axis_angles_deg",
+                "approach_axis_arm_counts",
+            ):
+                row[field] = ";".join(str(item) for item in row[field])
             writer.writerow(row)
