@@ -20,7 +20,7 @@ Torii's first job is to get a bounded diagnostic result from a short user reques
 Default behavior:
 
 1. Infer the place, region, road-detail preset, and current-vs-historical baseline when the prompt and resolved OSM candidate make them clear.
-2. Run bounded construction, connectivity, connected-core, routeability, and launch-evidence steps with conservative defaults.
+2. Run bounded construction, connectivity, connected-core, routeability, and launch-evidence steps. Let `sumo_osm_cleanup_workflow` derive fixed routeability audit parameters from passenger-network scale; do not downshift the smoke test with ad hoc smaller values.
 3. Ask the user only when the next action would be unsafe or impossible, such as ambiguous place resolution, missing bbox/extract, missing SUMO binaries, or a destructive overwrite.
 4. If regional map/TLS reality evidence is missing, continue the diagnostic build and mark the claim boundary instead of blocking the workflow.
 5. Report the exact assumptions and residual risks so the user can decide whether to strengthen the evidence.
@@ -65,7 +65,7 @@ If the user asks to match, mimic, compare against, or learn from a reference net
 
 Apply `highway.service` passenger permissions only when the reference policy uses them, and require connectivity, routeability, topology, scope-matched reference comparison, and Netedit launch evidence. Never compare a Torii `connected-core` vehicle network against a full-detail manual reference network. If no reference artifact can be located or supplied, block on `reference_net_file` or `reference_policy_report` instead of guessing the road levels.
 
-When the reference artifact is a SUMO `.net.xml` with joined-junction ids such as `cluster_*`, run `sumo_network_reference_join_audit` after building the candidate visual-detail network. Treat encoded source-node matches as stronger evidence than spatial proximity: the audit should report joined source-node counts, matched source-node ids, internal edges between those source nodes, approach counts, map-review URLs, and unmatched reference cases. Use spatial dense-junction clusters only as a fallback when source-node ids cannot be matched.
+When the reference artifact is a SUMO `.net.xml` with joined-junction ids such as `cluster_*`, run `sumo_network_reference_join_audit` after building the candidate `reference_visual_detail` network, not on the passenger connected-core. Treat encoded source-node matches as stronger evidence than spatial proximity: the audit should report joined source-node counts, matched source-node ids, internal edges between those source nodes, approach counts, map-review URLs, and unmatched reference cases. Use spatial dense-junction clusters only as a fallback when source-node ids cannot be matched.
 
 Use a small option set rather than silently adding everything:
 
@@ -123,7 +123,7 @@ Hard gates:
 2. Before construction, resolve or infer a network plan. If no user intent or reference target identifies the traffic layers, block on the network-plan question instead of silently choosing all road types.
 3. If a reference-matched workflow is active, analyze the supplied reference artifact before construction. Use only the passenger-drivable vehicle layer to select OSM highway classes for the primary `vehicle_core` network, build a separate `reference_visual_detail` network from the full visible reference `highway.*` layer when it differs, and apply service-road passenger permissions only when the analyzed reference policy requires them. When the reference contains joined junctions, run a reference join audit after construction and use the matched cases to guide any aggregation plan.
 4. After construction, run TLS candidate extraction and region-aware map review-link generation by default where supported.
-5. For current-network modeling, use a region-aware reality baseline. Google Maps can be the default where it is reliable and appropriate. For mainland China, use Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos, and record WGS84/GCJ-02/BD-09 coordinate-system assumptions. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
+5. For current-network modeling, treat Google Maps TLS review as a hard gate. Any unresolved TLS candidate keeps the workflow claim at `construction-invalid` even if construction, routeability, SUMO-GUI, and Netedit artifacts were produced. Regional maps, official inventories, signal plans, or field photos may supplement Google Maps where coordinate systems differ; record WGS84/GCJ-02/BD-09 assumptions when comparing coordinates. If the user asks for a historical network, the user's stated historical target controls the baseline; use time-aligned map evidence, OSM history, dated imagery, street-level imagery history, or agency inventory where available.
 6. Run passenger connectivity checks before making stronger claims.
 7. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
 8. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
@@ -147,7 +147,7 @@ Use the external map baseline that is appropriate for the modeled region. OSM ca
 
 For mainland China, do not default to Google Maps as the current-road/TLS baseline. Prefer Amap/Gaode, Baidu Maps, Tencent Maps, official inventories, signal plans, or field photos. Record whether review coordinates are WGS84, GCJ-02, or BD-09 before comparing them with SUMO/OSM coordinates.
 
-For regions where Google Maps is reliable and appropriate, it can support `keep_tls`, `remove_tls`, or `needs_review` decisions after the map time scope is confirmed.
+For current-network OSM cleanup, unresolved TLS candidates require Google Maps review before a clean-network claim. Regional sources can supplement or explain coordinate-system limits, but they do not remove the hard review status unless the workflow records the corresponding correction evidence.
 
 Before using any map source as the standard, ask whether the user needs the current map or a historical target date. If the user is modeling a past network, the latest public map view is not automatically decisive. Use dated imagery, street-level imagery history, OSM history, or agency signal inventory when available.
 
@@ -178,7 +178,7 @@ time_scope_residual_risk:
 
 When OSM/netconvert creates many close junctions or short edges around one physical intersection, do not immediately edit or join the network. First run a reusable dense-junction audit with local cluster-graph analysis and create a non-destructive correction record.
 
-If no reference network is available, use the reference-free junction aggregation scorer from the topology audit. The scorer is diagnostic: it classifies each dense cluster as `join`, `needs_map_review`, or `do_not_join` from local topology, short internal edges, road-name consistency, TLS density, and risk flags. It must not destructively edit the network by itself.
+If no reference network is available, use the reference-free junction aggregation scorer from the topology audit. The scorer is diagnostic: it classifies each dense cluster as `join`, `needs_map_review`, or `do_not_join` from local topology, short internal edges, road-name consistency, TLS density, and risk flags. It must not destructively edit the source network by itself.
 
 Required fields for each suspicious junction cluster:
 
@@ -252,7 +252,7 @@ Use source-node matches to learn general aggregation rules from the reference ne
 
 For regions where Google Maps is reliable and appropriate, use the default Google Maps road geometry to compare the cluster against the physical intersection footprint before any destructive aggregation. Use satellite view only when the default map is ambiguous. For mainland China or other regions where Google Maps is not the right current-road baseline, keep the map-review field but add the appropriate regional source in the correction record.
 
-Only after map/source-bounded review may Torii produce a `*_junction_aggregated.net.xml` variant. Keep the raw network, visual-detail network, audit CSV/JSON, and aggregation output separate, then rerun connectivity, routeability, TLS audit, and topology audit.
+Torii may produce a separate `*_junction_aggregated.net.xml` review variant with `sumo_network_junction_aggregation_variant`, but it must not overwrite the source network or treat the variant as adopted before map/source-bounded review. Keep the raw network, visual-detail network, audit CSV/JSON, and aggregation output separate, then rerun connectivity, routeability, TLS audit, and topology audit before stronger claims.
 
 ## Redundant TLS Removal Gate
 

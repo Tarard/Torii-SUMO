@@ -35,7 +35,7 @@ Torii hat zwei Schichten:
 | Reasoning layer | SUMO Expert Skills stellen die richtigen Fragen, waehlen einen Workflow und begrenzen Aussagen. |
 | Execution layer | Lokale sichere stdio MCP Tools fuehren begrenzte SUMO-Checks aus und liefern strukturierte Beobachtungen. |
 
-Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits und Netedit-Startnachweise ab.
+Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
 
 ## Example
 

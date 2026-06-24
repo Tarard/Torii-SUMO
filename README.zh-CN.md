@@ -35,7 +35,7 @@ Torii 有两层：
 | 推理层 | SUMO expert skills 负责提出正确问题、选择工作流并限定结论边界。 |
 | 执行层 | 本地安全 stdio MCP tools 负责运行有边界的 SUMO 检查，并返回结构化观察。 |
 
-当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit 和 Netedit 打开证据。
+当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、reference join audit、junction aggregation review variant 和 Netedit 打开证据。
 
 ## Example
 

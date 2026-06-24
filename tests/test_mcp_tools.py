@@ -3,6 +3,7 @@ from pathlib import Path
 
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
 from torii_sumo.tools.osm_tools import (
+    sumo_network_junction_aggregation_variant,
     sumo_network_reference_join_audit,
     sumo_network_routeability_audit,
     sumo_network_topology_audit,
@@ -183,4 +184,54 @@ def test_sumo_network_reference_join_audit_tool_returns_json_compatible_report(m
 
     assert report["status"] == "pass"
     assert report["matched_case_count"] == 2
+    json.dumps(report)
+
+
+def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "candidate.net.xml"
+    topology_report_file = tmp_path / "topology.json"
+    net_file.write_text("<net/>", encoding="utf-8")
+    topology_report_file.write_text(
+        json.dumps(
+            {
+                "suspicious_clusters": [
+                    {
+                        "cluster_id": "C001",
+                        "aggregation_decision": "join",
+                        "aggregation_confidence": "medium",
+                        "node_ids": ["j1", "j2"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_aggregation(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["join_dist_m"] == 25.0
+        assert kwargs["topology_audit_report"]["suspicious_clusters"][0]["cluster_id"] == "C001"
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "junction_aggregation_status": "variant_created_for_review",
+            "junction_aggregation_candidate_count": 1,
+            "junction_aggregation_variant_file": str(tmp_path / "variant.net.xml"),
+        }
+
+    monkeypatch.setattr(osm_tools, "build_junction_aggregation_variant", fake_aggregation)
+
+    report = sumo_network_junction_aggregation_variant(
+        net_file=str(net_file),
+        output_dir=str(tmp_path / "aggregation"),
+        topology_audit_report_file=str(topology_report_file),
+        join_dist_m=25.0,
+    )
+
+    assert report["status"] == "pass"
+    assert report["junction_aggregation_candidate_count"] == 1
     json.dumps(report)

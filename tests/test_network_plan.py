@@ -263,6 +263,126 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     assert report["reference_visual_detail_build"]["road_classes"] == sorted(build_calls[1]["allowed_highways"])
 
 
+def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-join_filtered.osm.xml.gz"
+    calls: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text(
+            """<net>
+    <edge id="service_a" type="highway.service">
+        <lane id="service_a_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+    </edge>
+</net>""",
+            encoding="utf-8",
+        )
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**kwargs):
+        calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "reference_case_count": 3,
+            "matched_case_count": 2,
+            "unmatched_case_count": 1,
+            "summary_file": str(tmp_path / "reference_join_audit.json"),
+            "cases_file": str(tmp_path / "reference_join_cases.csv"),
+            "warnings": [],
+        }
+
+    def fake_reference_join_aggregation(**kwargs):
+        calls["aggregation_candidate_net_file"] = kwargs["net_file"]
+        calls["aggregation_audit_report"] = kwargs["reference_join_audit_report"]
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "junction_aggregation_status": "variant_created_for_review",
+            "junction_aggregation_variant_file": str(tmp_path / "aggregated.net.xml"),
+            "junction_aggregation_plan_file": str(tmp_path / "aggregation_plan.json"),
+            "junction_aggregation_candidate_count": 2,
+            "warnings": ["junction aggregation variant requires Google Maps review before adoption"],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-join",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 100,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 100,
+            "warnings": [],
+        },
+        topology_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "topology_fragmentation_status": "pass",
+            "warnings": [],
+        },
+        routeability_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        reference_join_audit_func=fake_reference_join_audit,
+        reference_join_aggregation_func=fake_reference_join_aggregation,
+    )
+
+    visual_detail_net_file = tmp_path / "sumo" / "reference-join_reference_visual_detail.net.xml"
+    assert calls["reference_join_candidate_net_file"] == visual_detail_net_file
+    assert calls["aggregation_candidate_net_file"] == visual_detail_net_file
+    assert calls["aggregation_audit_report"]["matched_case_count"] == 2
+    assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
+    assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
+    assert report["reference_join_matched_case_count"] == 2
+    assert report["reference_join_unmatched_case_count"] == 1
+    assert report["reference_join_aggregation_status"] == "variant_created_for_review"
+    assert report["reference_join_aggregation_variant_file"] == str(tmp_path / "aggregated.net.xml")
+
+
 def test_reference_matched_workflow_derives_bbox_from_reference_geometry(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)

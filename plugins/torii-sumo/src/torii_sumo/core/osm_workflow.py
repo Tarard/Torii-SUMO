@@ -5,11 +5,13 @@ from typing import Any, Callable, Mapping
 
 from .osm_area import osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
+from .junction_aggregation import build_junction_aggregation_variant
 from .netedit import launch_netedit
 from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .reference_bbox import derive_reference_net_bbox
+from .reference_join_audit import audit_reference_join_patterns
 from .road_scope import (
     ROAD_LEVEL_SCOPE_OPTIONS,
     RECOMMENDED_ROAD_LEVEL_SCOPE,
@@ -192,16 +194,115 @@ def _connectivity_quality(connectivity_report: Mapping[str, Any]) -> dict[str, A
 def _tls_review_summary(tls_report: Mapping[str, Any]) -> dict[str, Any]:
     cluster_count = int(tls_report.get("tls_cluster_count", 0) or 0)
     candidate_count = int(tls_report.get("tls_candidate_count", 0) or 0)
+    review_required = cluster_count > 0 or candidate_count > 0
     return {
         "tls_candidate_count": candidate_count,
         "tls_cluster_count": cluster_count,
         "tls_review_file": str(tls_report.get("clusters_file", "")),
         "tls_review_complete": "yes" if cluster_count == 0 and candidate_count == 0 else "no",
+        "tls_google_maps_review_required": "yes" if review_required else "no",
+        "tls_google_maps_review_status": "needs_google_review" if review_required else "not_required",
         "tls_keep_count": 0,
         "tls_remove_count": 0,
         "tls_downgrade_count": 0,
         "tls_needs_review_count": cluster_count,
     }
+
+
+def _tls_gate_value(tls_report: Mapping[str, Any], tls_summary: Mapping[str, Any]) -> str:
+    base_gate = _gate_value(tls_report)
+    if base_gate != "pass":
+        return base_gate
+    if tls_summary.get("tls_google_maps_review_required") == "yes":
+        return "blocked"
+    return "pass"
+
+
+def _routeability_scale_profile(
+    connectivity_report: Mapping[str, Any],
+    *,
+    requested_vehicle_count: int | None,
+    requested_initial_end: int | None,
+    requested_max_end: int | None,
+) -> dict[str, Any]:
+    passenger_edge_count = _int_field(connectivity_report, "passenger_edge_count")
+    if passenger_edge_count <= 1500:
+        profile = "small"
+        floor_vehicle_count = 50
+        floor_initial_end = 180
+        floor_max_end = 1200
+    elif passenger_edge_count <= 6000:
+        profile = "medium"
+        floor_vehicle_count = 100
+        floor_initial_end = 300
+        floor_max_end = 2400
+    elif passenger_edge_count <= 15000:
+        profile = "large"
+        floor_vehicle_count = 200
+        floor_initial_end = 600
+        floor_max_end = 3600
+    else:
+        profile = "metro"
+        floor_vehicle_count = 300
+        floor_initial_end = 900
+        floor_max_end = 5400
+
+    vehicle_count = max(requested_vehicle_count or 0, floor_vehicle_count)
+    initial_end = max(requested_initial_end or 0, floor_initial_end)
+    max_end = max(requested_max_end or 0, floor_max_end)
+    requested = {
+        "vehicle_count": requested_vehicle_count,
+        "initial_end": requested_initial_end,
+        "max_end": requested_max_end,
+    }
+    floor_applied = (
+        requested_vehicle_count is not None
+        and requested_vehicle_count < floor_vehicle_count
+        or requested_initial_end is not None
+        and requested_initial_end < floor_initial_end
+        or requested_max_end is not None
+        and requested_max_end < floor_max_end
+    )
+    if all(value is None for value in requested.values()):
+        profile_status = "scale_profile_selected"
+    elif floor_applied:
+        profile_status = "scale_floor_applied"
+    else:
+        profile_status = "caller_values_confirmed"
+    return {
+        "routeability_audit_profile": profile,
+        "routeability_audit_profile_status": profile_status,
+        "routeability_audit_scale_basis": f"passenger_edge_count={passenger_edge_count}",
+        "routeability_audit_vehicle_count": vehicle_count,
+        "routeability_audit_initial_end": initial_end,
+        "routeability_audit_max_end": max_end,
+        "routeability_audit_floor_vehicle_count": floor_vehicle_count,
+        "routeability_audit_floor_initial_end": floor_initial_end,
+        "routeability_audit_floor_max_end": floor_max_end,
+        "routeability_audit_requested_vehicle_count": requested_vehicle_count if requested_vehicle_count is not None else "",
+        "routeability_audit_requested_initial_end": requested_initial_end if requested_initial_end is not None else "",
+        "routeability_audit_requested_max_end": requested_max_end if requested_max_end is not None else "",
+    }
+
+
+def _reference_join_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    if _int_field(report, "reference_case_count") == 0:
+        return "skipped"
+    return _gate_value(report)
+
+
+def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    if report.get("junction_aggregation_status") == "not_needed":
+        return "skipped"
+    if report.get("status") != "pass":
+        return _gate_value(report)
+    if _int_field(report, "junction_aggregation_candidate_count") > 0:
+        return "blocked"
+    return "pass"
 
 
 def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -285,9 +386,11 @@ def run_osm_cleanup_workflow(
     topology_cluster_radius_m: float = 30.0,
     topology_min_cluster_nodes: int = 3,
     run_routeability_audit_after_build: bool = True,
-    routeability_vehicle_count: int = 100,
-    routeability_initial_end: int = 300,
-    routeability_max_end: int = 2400,
+    routeability_vehicle_count: int | None = None,
+    routeability_initial_end: int | None = None,
+    routeability_max_end: int | None = None,
+    run_reference_join_audit_after_build: bool = True,
+    run_reference_join_aggregation_after_build: bool = True,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
@@ -296,6 +399,8 @@ def run_osm_cleanup_workflow(
     routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
+    reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
+    reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
@@ -502,6 +607,10 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_build_report: dict[str, Any] = {}
     reference_visual_detail_service_permission_report: dict[str, Any] = {}
     reference_visual_detail_netedit_report: dict[str, Any] = {}
+    reference_join_audit_report: dict[str, Any] | None = None
+    reference_join_aggregation_report: dict[str, Any] | None = None
+    reference_join_audit_candidate_layer = "not_applicable"
+    reference_join_audit_candidate_net_file: Path | None = None
     vehicle_core_highway_classes = _class_set(
         network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", []))
     )
@@ -686,6 +795,33 @@ def run_osm_cleanup_workflow(
             cluster_radius_m=topology_cluster_radius_m,
             min_cluster_nodes=topology_min_cluster_nodes,
         )
+    if (
+        str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+        and run_reference_join_audit_after_build
+    ):
+        reference_join_audit_candidate_net_file = reference_visual_detail_net_file or net_file
+        reference_join_audit_candidate_layer = (
+            "reference_visual_detail" if reference_visual_detail_net_file is not None else "vehicle_core"
+        )
+        reference_join_audit_report = reference_join_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_join_audit_candidate_net_file,
+            output_dir=output_dir / "reference_join_audit",
+            prefix=f"{prefix}_reference_join_audit",
+            candidate_cluster_radius_m=topology_cluster_radius_m,
+            candidate_min_cluster_nodes=topology_min_cluster_nodes,
+        )
+        if run_reference_join_aggregation_after_build:
+            reference_join_aggregation_report = reference_join_aggregation_func(
+                net_file=reference_join_audit_candidate_net_file,
+                output_dir=output_dir / "reference_join_aggregation",
+                prefix=f"{prefix}_reference_join_aggregation",
+                topology_audit_report=topology_audit_report,
+                reference_join_audit_report=reference_join_audit_report,
+                join_dist_m=topology_cluster_radius_m,
+                timeout_seconds=timeout_seconds,
+            )
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -695,14 +831,20 @@ def run_osm_cleanup_workflow(
             key_edge_queries=key_edge_queries,
         )
     routeability_audit_report = None
+    routeability_profile = _routeability_scale_profile(
+        connectivity_report,
+        requested_vehicle_count=routeability_vehicle_count,
+        requested_initial_end=routeability_initial_end,
+        requested_max_end=routeability_max_end,
+    )
     if run_routeability_audit_after_build:
         routeability_audit_report = routeability_audit_func(
             net_file=net_file,
             output_dir=output_dir / "routeability_audit",
             prefix=f"{prefix}_routeability_audit",
-            vehicle_count=routeability_vehicle_count,
-            initial_end=routeability_initial_end,
-            max_end=routeability_max_end,
+            vehicle_count=routeability_profile["routeability_audit_vehicle_count"],
+            initial_end=routeability_profile["routeability_audit_initial_end"],
+            max_end=routeability_profile["routeability_audit_max_end"],
             timeout_seconds=timeout_seconds,
         )
     if launch_netedit_after_build:
@@ -759,6 +901,8 @@ def run_osm_cleanup_workflow(
         connected_core_connectivity_report or {},
         connectivity_report,
         topology_audit_report or {},
+        reference_join_audit_report or {},
+        reference_join_aggregation_report or {},
         routeability_audit_report or {},
         netedit_report,
         reference_visual_detail_netedit_report,
@@ -777,19 +921,28 @@ def run_osm_cleanup_workflow(
             f"{junction_aggregation_summary['junction_aggregation_candidate_count']} possible physical-intersection "
             "aggregation candidate(s); inspect the candidate CSV and map-review links before destructive joining"
         )
+    if reference_join_aggregation_report is not None and reference_join_aggregation_report.get(
+        "junction_aggregation_status"
+    ) == "variant_created_for_review":
+        warnings.append(
+            "reference join aggregation created a separate review variant; compare it in Netedit and Google Maps "
+            "before adopting it as the clean network"
+        )
     warnings = list(dict.fromkeys(warnings))
 
     gate_status = {
         "area_confirmation": "pass",
         "road_level_scope": "pass",
         "network_build": _gate_value(build_report),
-        "tls_reality_audit": _gate_value(tls_report),
+        "tls_reality_audit": _tls_gate_value(tls_report, tls_summary),
         "connectivity": str(connectivity_quality["connectivity_gate"]),
         "netedit": _gate_value(netedit_report),
         "sumo_gui": _gate_value(sumo_gui_report),
     }
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         gate_status["reference_visual_detail"] = "pass" if reference_visual_detail_status in {"built", "same_as_vehicle_core"} else "fail"
+        gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
+        gate_status["reference_join_aggregation"] = _reference_join_aggregation_gate(reference_join_aggregation_report)
     if topology_audit_report is not None:
         gate_status["topology_audit"] = _gate_value(topology_audit_report)
     if routeability_audit_report is not None:
@@ -801,6 +954,8 @@ def run_osm_cleanup_workflow(
         and gate_status.get("topology_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("routeability_audit", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status.get("reference_visual_detail", "skipped") in {"pass", "skipped"}
+        and gate_status.get("reference_join_audit", "skipped") in {"pass", "skipped"}
+        and gate_status.get("reference_join_aggregation", "skipped") in {"pass", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
     )
@@ -864,9 +1019,47 @@ def run_osm_cleanup_workflow(
         "max_topology_cluster_node_count": 0 if topology_audit_report is None else topology_audit_report.get("max_cluster_node_count", 0),
         "topology_audit_clusters_file": "" if topology_audit_report is None else str(topology_audit_report.get("clusters_file", "")),
         **junction_aggregation_summary,
+        "reference_join_audit_status": "skipped"
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("status", "fail"),
+        "reference_join_audit_candidate_layer": reference_join_audit_candidate_layer,
+        "reference_join_audit_candidate_net_file": ""
+        if reference_join_audit_candidate_net_file is None
+        else str(reference_join_audit_candidate_net_file),
+        "reference_join_reference_case_count": 0
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("reference_case_count", 0),
+        "reference_join_matched_case_count": 0
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("matched_case_count", 0),
+        "reference_join_unmatched_case_count": 0
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("unmatched_case_count", 0),
+        "reference_join_audit_report_file": ""
+        if reference_join_audit_report is None
+        else str(reference_join_audit_report.get("summary_file", "")),
+        "reference_join_audit_cases_file": ""
+        if reference_join_audit_report is None
+        else str(reference_join_audit_report.get("cases_file", "")),
+        "reference_join_aggregation_status": "skipped"
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_status", reference_join_aggregation_report.get("status", "fail")),
+        "reference_join_aggregation_candidate_count": 0
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_candidate_count", 0),
+        "reference_join_aggregation_plan_file": ""
+        if reference_join_aggregation_report is None
+        else str(reference_join_aggregation_report.get("junction_aggregation_plan_file", "")),
+        "reference_join_aggregation_candidates_file": ""
+        if reference_join_aggregation_report is None
+        else str(reference_join_aggregation_report.get("junction_aggregation_candidates_file", "")),
+        "reference_join_aggregation_variant_file": ""
+        if reference_join_aggregation_report is None
+        else str(reference_join_aggregation_report.get("junction_aggregation_variant_file", "")),
         "routeability_probe_file": "" if routeability_report is None else str(routeability_report.get("sumocfg_file", "")),
         "missing_key_edges": [] if routeability_report is None else routeability_report.get("missing_key_edges", []),
         "routeability_probe_status": "skipped" if routeability_report is None else routeability_report.get("status", "fail"),
+        **routeability_profile,
         "routeability_audit_status": "skipped" if routeability_audit_report is None else routeability_audit_report.get("routeability_status", routeability_audit_report.get("status", "fail")),
         "routeability_audit_report_file": "" if routeability_audit_report is None else str(routeability_audit_report.get("report_file", "")),
         "netedit_status": netedit_report.get("netedit_status", "failed"),
@@ -897,6 +1090,8 @@ def run_osm_cleanup_workflow(
         "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
         "topology_audit": topology_audit_report or {},
+        "reference_join_audit": reference_join_audit_report or {},
+        "reference_join_aggregation": reference_join_aggregation_report or {},
         "routeability_audit": routeability_audit_report or {},
         "netedit": netedit_report,
         "reference_visual_detail_netedit": reference_visual_detail_netedit_report,
