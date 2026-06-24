@@ -149,6 +149,8 @@ def run_auto_workflow(
     highway_classes: str | None = None,
     traffic_layers: str | None = None,
     network_profile: str | None = None,
+    reference_net_file: Path | None = None,
+    reference_policy_report: str | Path | dict[str, Any] | None = None,
     service_passenger_policy: str | None = None,
     net_file: Path | None = None,
     osm_file: Path | None = None,
@@ -182,6 +184,8 @@ def run_auto_workflow(
             highway_classes=highway_classes,
             traffic_layers=traffic_layers,
             network_profile=network_profile,
+            reference_net_file=reference_net_file,
+            reference_policy_report=reference_policy_report,
             service_passenger_policy=service_passenger_policy,
             autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
@@ -238,6 +242,8 @@ def _run_osm_to_sumo(
     highway_classes: str | None,
     traffic_layers: str | None,
     network_profile: str | None,
+    reference_net_file: Path | None,
+    reference_policy_report: str | Path | dict[str, Any] | None,
     service_passenger_policy: str | None,
     autonomy_mode: str,
     place_resolver: Callable[[str], dict[str, Any]],
@@ -280,11 +286,19 @@ def _run_osm_to_sumo(
         highway_classes=highway_classes,
         traffic_layers=traffic_layers,
         network_profile=network_profile,
+        reference_net_file=reference_net_file,
+        reference_policy_report=reference_policy_report,
         service_passenger_policy=service_passenger_policy,
     )
     if network_plan.get("status") == "blocked":
         report.update(network_plan)
         report["execution_status"] = "needs_network_plan"
+        return report
+    if network_plan.get("status") != "pass":
+        report.update(network_plan)
+        report["status"] = "fail"
+        report["claim_status"] = "construction-invalid"
+        report["execution_status"] = "network_plan_failed"
         return report
     selected_highway_classes = set(network_plan.get("highway_classes", []))
 
@@ -300,6 +314,10 @@ def _run_osm_to_sumo(
         cleanup_kwargs["traffic_layers"] = ",".join(network_plan.get("movement_layers", []))
     if _supports_keyword(cleanup_workflow_func, "network_profile"):
         cleanup_kwargs["network_profile"] = network_plan.get("network_profile") or network_profile
+    if _supports_keyword(cleanup_workflow_func, "reference_net_file"):
+        cleanup_kwargs["reference_net_file"] = reference_net_file
+    if _supports_keyword(cleanup_workflow_func, "reference_policy_report"):
+        cleanup_kwargs["reference_policy_report"] = reference_policy_report
     if _supports_keyword(cleanup_workflow_func, "service_passenger_policy"):
         cleanup_kwargs["service_passenger_policy"] = network_plan.get("service_passenger_policy")
     if _supports_keyword(cleanup_workflow_func, "run_routeability_audit_after_build"):

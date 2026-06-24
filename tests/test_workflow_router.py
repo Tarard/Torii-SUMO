@@ -7,6 +7,23 @@ from torii_sumo.core.workflow_router import (
 )
 
 
+def _write_reference_net(path: Path) -> None:
+    path.write_text(
+        """<net>
+    <edge id="primary_a" type="highway.primary">
+        <lane id="primary_a_0" index="0" allow="passenger bus" speed="13.9" length="25.0"/>
+    </edge>
+    <edge id="service_a" type="highway.service">
+        <lane id="service_a_0" index="0" allow="delivery passenger" speed="5.0" length="25.0"/>
+    </edge>
+    <edge id="cycle_a" type="highway.cycleway">
+        <lane id="cycle_a_0" index="0" allow="bicycle" speed="5.0" length="25.0"/>
+    </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+
 def test_infer_place_name_from_one_prompt_osm_request() -> None:
     request = "Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO"
 
@@ -126,7 +143,26 @@ def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp
     assert "reference_matched" in report["network_detail_options"]
 
 
-def test_auto_workflow_infers_tum_reference_plan_without_explicit_highway_classes(tmp_path: Path) -> None:
+def test_auto_workflow_blocks_reference_match_without_reference_artifact(tmp_path: Path) -> None:
+    def fake_cleanup(**_kwargs):
+        raise AssertionError("cleanup must not run without a reference network or policy report")
+
+    report = run_auto_workflow(
+        user_request="Use Torii to build this city-center SUMO network with the same layer policy as a manually cleaned reference network",
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["execution_status"] == "needs_network_plan"
+    assert report["network_plan_status"] == "needs_reference_artifact"
+    assert report["missing_blockers"] == ["reference_network_or_policy"]
+
+
+def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "manual-reference.net.xml"
+    _write_reference_net(reference_net_file)
     captured = {}
 
     def fake_cleanup(**kwargs):
@@ -134,23 +170,27 @@ def test_auto_workflow_infers_tum_reference_plan_without_explicit_highway_classe
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
-            "network_profile": "tum_ingolstadt",
+            "network_profile": "reference_matched",
             "service_passenger_policy": "reference_match",
             "routeability_audit_status": "pass",
         }
 
     report = run_auto_workflow(
-        user_request="Use Torii to build the Ingolstadt SUMO network with the same layer policy as the TUM version",
+        user_request="Use Torii to build this city-center SUMO network with the same layer policy as a manually cleaned reference network",
         output_dir=tmp_path,
         bbox="11.413800,48.755391,11.433800,48.775391",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
         cleanup_workflow_func=fake_cleanup,
     )
 
     assert report["status"] == "pass"
     assert report["execution_status"] == "executed"
-    assert captured["network_profile"] == "tum_ingolstadt"
+    assert captured["network_profile"] == "reference_matched"
+    assert captured["reference_net_file"] == reference_net_file
     assert captured["service_passenger_policy"] == "reference_match"
     assert "service" in captured["highway_classes"]
+    assert "cycleway" not in captured["highway_classes"]
 
 
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
