@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
+from torii_sumo.core.junction_aggregation import build_junction_aggregation_variant
 from torii_sumo.core.osm_network import (
     audit_tls,
     audit_tls_multisource,
@@ -25,6 +27,17 @@ def resolve_highway_classes(value: str | None) -> set[str]:
     resolved = resolve_highway_classes_from_scope(value, default_to_recommended=True)
     assert resolved is not None
     return resolved
+
+
+def _read_json_report(path: str | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    report_path = Path(path)
+    with report_path.open("r", encoding="utf-8") as handle:
+        loaded = json.load(handle)
+    if not isinstance(loaded, dict):
+        raise ValueError(f"report file must contain a JSON object: {report_path}")
+    return loaded
 
 
 def sumo_osm_build_network(
@@ -181,6 +194,26 @@ def sumo_network_reference_join_audit(
     )
 
 
+def sumo_network_junction_aggregation_variant(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "junction_aggregation",
+    topology_audit_report_file: str | None = None,
+    reference_join_audit_report_file: str | None = None,
+    join_dist_m: float = 30.0,
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_junction_aggregation_variant(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        topology_audit_report=_read_json_report(topology_audit_report_file),
+        reference_join_audit_report=_read_json_report(reference_join_audit_report_file),
+        join_dist_m=join_dist_m,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def sumo_network_connected_core(
     net_file: str,
     output_dir: str,
@@ -236,9 +269,11 @@ def sumo_osm_cleanup_workflow(
     topology_cluster_radius_m: float = 30.0,
     topology_min_cluster_nodes: int = 3,
     run_routeability_audit_after_build: bool = True,
-    routeability_vehicle_count: int = 100,
-    routeability_initial_end: int = 300,
-    routeability_max_end: int = 2400,
+    routeability_vehicle_count: int | None = None,
+    routeability_initial_end: int | None = None,
+    routeability_max_end: int | None = None,
+    run_reference_join_audit_after_build: bool = True,
+    run_reference_join_aggregation_after_build: bool = True,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
@@ -272,5 +307,7 @@ def sumo_osm_cleanup_workflow(
         routeability_vehicle_count=routeability_vehicle_count,
         routeability_initial_end=routeability_initial_end,
         routeability_max_end=routeability_max_end,
+        run_reference_join_audit_after_build=run_reference_join_audit_after_build,
+        run_reference_join_aggregation_after_build=run_reference_join_aggregation_after_build,
         key_edge_queries=key_edge_queries,
     )

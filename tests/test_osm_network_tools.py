@@ -1138,20 +1138,22 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
         sumo_gui_func=fake_sumo_gui,
     )
 
-    assert report["status"] == "pass"
-    assert report["claim_status"] == "diagnostic-demo"
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
     assert report["area_resolution_status"] == "confirmed_by_input"
     assert report["gate_status"] == {
         "area_confirmation": "pass",
         "road_level_scope": "pass",
         "network_build": "pass",
-        "tls_reality_audit": "pass",
+        "tls_reality_audit": "blocked",
         "connectivity": "pass",
         "topology_audit": "pass",
         "netedit": "pass",
         "sumo_gui": "pass",
     }
     assert report["tls_review_complete"] == "no"
+    assert report["tls_google_maps_review_status"] == "needs_google_review"
+    assert report["tls_google_maps_review_required"] == "yes"
     assert report["tls_needs_review_count"] == 1
     assert report["connectivity_status"] == "pass"
     assert report["netedit_status"] == "opened"
@@ -1162,7 +1164,7 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
 def test_osm_cleanup_workflow_runs_routeability_audit_by_default(tmp_path: Path) -> None:
     net_file = tmp_path / "sumo" / "default-audit.net.xml"
     filtered_osm = tmp_path / "osm" / "default-audit_filtered.osm.xml.gz"
-    audited: dict[str, Path] = {}
+    audited: dict[str, object] = {}
 
     def fake_build(**kwargs):
         net_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1182,6 +1184,9 @@ def test_osm_cleanup_workflow_runs_routeability_audit_by_default(tmp_path: Path)
 
     def fake_routeability_audit(**kwargs):
         audited["net_file"] = kwargs["net_file"]
+        audited["vehicle_count"] = kwargs["vehicle_count"]
+        audited["initial_end"] = kwargs["initial_end"]
+        audited["max_end"] = kwargs["max_end"]
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -1229,8 +1234,99 @@ def test_osm_cleanup_workflow_runs_routeability_audit_by_default(tmp_path: Path)
     )
 
     assert audited["net_file"] == net_file
+    assert audited["vehicle_count"] == 50
+    assert audited["initial_end"] == 180
+    assert audited["max_end"] == 1200
+    assert report["routeability_audit_scale_basis"] == "passenger_edge_count=3"
+    assert report["routeability_audit_vehicle_count"] == 50
+    assert report["routeability_audit_initial_end"] == 180
+    assert report["routeability_audit_max_end"] == 1200
     assert report["gate_status"]["routeability_audit"] == "pass"
     assert report["routeability_audit_status"] == "pass"
+
+
+def test_osm_cleanup_workflow_enforces_scale_routeability_floor_over_small_caller_values(tmp_path: Path) -> None:
+    net_file = tmp_path / "sumo" / "medium-audit.net.xml"
+    filtered_osm = tmp_path / "osm" / "medium-audit_filtered.osm.xml.gz"
+    audited: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    def fake_routeability_audit(**kwargs):
+        audited.update(
+            {
+                "vehicle_count": kwargs["vehicle_count"],
+                "initial_end": kwargs["initial_end"],
+                "max_end": kwargs["max_end"],
+            }
+        )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "report_file": str(tmp_path / "routeability_audit.json"),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="medium-audit",
+        highway_classes={"primary"},
+        routeability_vehicle_count=50,
+        routeability_initial_end=120,
+        routeability_max_end=720,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 5200,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 5200,
+            "warnings": [],
+        },
+        routeability_audit_func=fake_routeability_audit,
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+    )
+
+    assert audited == {"vehicle_count": 100, "initial_end": 300, "max_end": 2400}
+    assert report["routeability_audit_profile"] == "medium"
+    assert report["routeability_audit_profile_status"] == "scale_floor_applied"
+    assert report["routeability_audit_scale_basis"] == "passenger_edge_count=5200"
 
 
 def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> None:
@@ -1453,7 +1549,9 @@ def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path
         key_edge_queries=[{"label": "main", "role": "arterial", "search_terms": ["Main"]}],
     )
 
-    assert report["status"] == "pass"
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["gate_status"]["tls_reality_audit"] == "blocked"
     assert report["gate_status"]["connectivity"] == "pass"
     assert report["connectivity_status"] == "pass"
     assert report["raw_connectivity_status"] == "fail"
@@ -1632,13 +1730,14 @@ def test_osm_cleanup_workflow_demotes_partial_connectivity_to_diagnostic_demo(tm
         },
     )
 
-    assert report["status"] == "pass"
-    assert report["claim_status"] == "diagnostic-demo"
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
     assert report["network_quality"] == "partial-main-component"
     assert report["experiment_readiness"] == "no"
     assert report["strict_connectivity_status"] == "fail"
     assert report["connectivity_main_component_ratio"] == 0.992
     assert report["gate_status"]["connectivity"] == "partial"
+    assert report["gate_status"]["tls_reality_audit"] == "blocked"
     assert any(
         "strict connectivity failed; largest passenger component covers 99.20%" in warning
         for warning in report["warnings"]
