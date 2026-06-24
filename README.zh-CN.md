@@ -35,7 +35,7 @@ Torii 有两层：
 | 推理层 | SUMO expert skills 负责提出正确问题、选择工作流并限定结论边界。 |
 | 执行层 | 本地安全 stdio MCP tools 负责运行有边界的 SUMO 检查，并返回结构化观察。 |
 
-当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、reference join audit、junction aggregation review variant 和 Netedit 打开证据。
+当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、TLS aggregation review variant、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、reference join audit、junction aggregation review variant 和 Netedit 打开证据。
 
 ## Example
 
@@ -51,11 +51,11 @@ Use Torii to clean the Ingolstadt city-center network from OSM, compare it with 
 
 | 证据 | 结果 |
 |---|---:|
-| Torii vehicle core | 对比 bbox 内 2,497 条 edge、3,051 条 lane、1,221 个 junction |
-| Torii reference visual-detail | 对比 bbox 内 6,130 条 edge、6,701 条 lane、2,998 个 junction |
+| Torii vehicle core | connected-core 提取后，对比 bbox 内 2,493 条 edge、3,045 条 lane、1,220 个 junction |
+| Torii reference visual-detail | 对比 bbox 内 6,126 条 edge、6,695 条 lane、2,997 个 junction |
 | TUM 人工清洗参考子集 | 同一 bbox 内 3,577 条 edge、4,955 条 lane、1,752 个 junction |
-| 信号灯 junction | Torii visual-detail 217 vs TUM 29 |
-| 剩余清洗目标 | 可复用的物理交叉口 / TLS 聚合，并先做 cluster graph audit，再用 Google Maps 默认地图复核 |
+| 信号灯 junction | Torii visual-detail raw 217；TLS aggregation review variant 34 vs TUM 29 |
+| 剩余清洗目标 | 对多出的 TLS 候选做 Google Maps 复核，并继续做可复用的物理交叉口聚合 |
 | claim status | `diagnostic-demo` |
 
 详见 [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md)。生成的 `.osm.xml`、`.net.xml`、route 和 log 文件不会提交到仓库；仓库只保留 prompt 和轻量验证摘要。

@@ -22,6 +22,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_network_topology_audit",
         "sumo_network_reference_join_audit",
         "sumo_network_junction_aggregation_variant",
+        "sumo_network_tls_aggregation_variant",
     ]
 )
 

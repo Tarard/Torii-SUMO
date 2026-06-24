@@ -35,7 +35,7 @@ Torii has two layers:
 | Reasoning layer | SUMO expert skills that ask the right questions, choose a workflow, and bound claims. |
 | Execution layer | Local safe stdio MCP tools that run bounded SUMO checks and return structured observations. |
 
-Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, connectivity checks, connected-core extraction, routeability probes, completion-aware routeability audits, reference join audits, junction aggregation review variants, and Netedit launch evidence.
+Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, TLS aggregation review variants, connectivity checks, connected-core extraction, routeability probes, completion-aware routeability audits, reference join audits, junction aggregation review variants, and Netedit launch evidence.
 
 ## Example
 
@@ -51,11 +51,11 @@ This demo now uses Ingolstadt city center to test whether a Torii OSM-cleaned ne
 
 | Evidence | Result |
 |---|---:|
-| Torii vehicle core | 2,497 edges, 3,051 lanes, 1,221 junctions in the comparison bbox |
-| Torii reference visual-detail | 6,130 edges, 6,701 lanes, 2,998 junctions in the comparison bbox |
+| Torii vehicle core | 2,493 edges, 3,045 lanes, 1,220 junctions in the comparison bbox after connected-core extraction |
+| Torii reference visual-detail | 6,126 edges, 6,695 lanes, 2,997 junctions in the comparison bbox |
 | TUM cleaned reference subset | 3,577 edges, 4,955 lanes, 1,752 junctions in the same bbox |
-| Traffic-light junctions | Torii visual-detail 217 vs TUM 29 |
-| Remaining cleanup target | reusable physical-intersection/TLS aggregation with cluster-graph audit and Google Maps map review |
+| Traffic-light junctions | Torii visual-detail raw 217; TLS aggregation review variant 34 vs TUM 29 |
+| Remaining cleanup target | Google Maps review for the extra TLS candidates and reusable physical-junction aggregation |
 | Claim status | `diagnostic-demo` |
 
 See [`examples/02_one_prompt_osm_network`](examples/02_one_prompt_osm_network/README.md). The generated `.osm.xml`, `.net.xml`, route, and log files are intentionally not committed; the repository keeps the prompt and lightweight validation summary.

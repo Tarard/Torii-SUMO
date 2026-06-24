@@ -1329,6 +1329,118 @@ def test_osm_cleanup_workflow_enforces_scale_routeability_floor_over_small_calle
     assert report["routeability_audit_scale_basis"] == "passenger_edge_count=5200"
 
 
+def test_osm_cleanup_workflow_uses_tls_aggregation_variant_for_downstream_checks(tmp_path: Path) -> None:
+    raw_net = tmp_path / "sumo" / "tls-raw.net.xml"
+    tls_net = tmp_path / "tls_aggregation" / "tls-clean.net.xml"
+    filtered_osm = tmp_path / "osm" / "tls_filtered.osm.xml.gz"
+    downstream_paths: dict[str, Path] = {}
+
+    def fake_build(**kwargs):
+        raw_net.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        raw_net.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(raw_net),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": ["primary"],
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**kwargs):
+        assert kwargs["net_file"] == raw_net
+        assert kwargs["tls_audit_report"]["tls_cluster_count"] == 2
+        tls_net.parent.mkdir(parents=True, exist_ok=True)
+        tls_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_physical_cluster_count": 2,
+            "tls_aggregation_variant_file": str(tls_net),
+            "tls_aggregated_traffic_light_junction_count": 2,
+            "tls_aggregated_tl_logic_count": 2,
+            "warnings": ["TLS aggregation variant requires Google Maps and Netedit review before adoption"],
+        }
+
+    def fake_connectivity(net_path):
+        downstream_paths["connectivity"] = net_path
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 25,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 25,
+            "warnings": [],
+        }
+
+    def fake_routeability_audit(**kwargs):
+        downstream_paths["routeability_audit"] = kwargs["net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "report_file": str(tmp_path / "routeability.json"),
+            "warnings": [],
+        }
+
+    def fake_netedit(net_path):
+        downstream_paths["netedit"] = net_path
+        return {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "netedit_network_file": str(net_path),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="13.6,50.9,13.9,51.1",
+        output_dir=tmp_path,
+        prefix="tls-clean",
+        highway_classes={"primary"},
+        run_topology_audit_after_build=False,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 3,
+            "tls_cluster_count": 2,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        tls_aggregation_func=fake_tls_aggregation,
+        connectivity_func=fake_connectivity,
+        routeability_audit_func=fake_routeability_audit,
+        netedit_func=fake_netedit,
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "sumo_gui_network_file": str(_path),
+            "warnings": [],
+        },
+    )
+
+    assert downstream_paths == {
+        "connectivity": tls_net,
+        "routeability_audit": tls_net,
+        "netedit": tls_net,
+    }
+    assert report["raw_net_file"] == str(raw_net)
+    assert report["net_file"] == str(tls_net)
+    assert report["tls_physical_cluster_count"] == 2
+    assert report["tls_aggregation_status"] == "variant_created_for_review"
+    assert report["tls_aggregation_variant_file"] == str(tls_net)
+    assert report["tls_aggregated_tl_logic_count"] == 2
+    assert report["gate_status"]["tls_reality_audit"] == "blocked"
+
+
 def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> None:
     net_file = tmp_path / "sumo" / "fragmented.net.xml"
     filtered_osm = tmp_path / "osm" / "fragmented_filtered.osm.xml.gz"

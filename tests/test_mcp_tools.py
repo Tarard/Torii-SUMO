@@ -6,6 +6,7 @@ from torii_sumo.tools.osm_tools import (
     sumo_network_junction_aggregation_variant,
     sumo_network_reference_join_audit,
     sumo_network_routeability_audit,
+    sumo_network_tls_aggregation_variant,
     sumo_network_topology_audit,
 )
 from torii_sumo.tools.run_tools import sumo_run_minimal_smoke
@@ -234,4 +235,45 @@ def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_
 
     assert report["status"] == "pass"
     assert report["junction_aggregation_candidate_count"] == 1
+    json.dumps(report)
+
+
+def test_sumo_network_tls_aggregation_variant_tool_returns_json_compatible_report(monkeypatch, tmp_path: Path) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "candidate.net.xml"
+    tls_report_file = tmp_path / "tls_audit.json"
+    net_file.write_text("<net/>", encoding="utf-8")
+    tls_report_file.write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "tls_cluster_count": 2,
+                "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_tls_aggregation(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["tls_audit_report"]["tls_cluster_count"] == 2
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_physical_cluster_count": 2,
+            "tls_aggregation_variant_file": str(tmp_path / "tls_aggregated.net.xml"),
+        }
+
+    monkeypatch.setattr(osm_tools, "build_tls_aggregation_variant", fake_tls_aggregation)
+
+    report = sumo_network_tls_aggregation_variant(
+        net_file=str(net_file),
+        tls_audit_report_file=str(tls_report_file),
+        output_dir=str(tmp_path / "tls_aggregation"),
+    )
+
+    assert report["status"] == "pass"
+    assert report["tls_physical_cluster_count"] == 2
     json.dumps(report)
