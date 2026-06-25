@@ -14,6 +14,7 @@
   ],
   "radius_m": 40.0,
   "short_edge_m": 2.0,
+  "gate_margin_m": 1.0,
   "coordinate_alignment": "reference polygon translated to candidate seed-node centroid",
   "summary_file": "C:\\Users\\huqio\\Documents\\Torii-SUMO\\examples\\02_one_prompt_osm_network\\validation\\run_2026-06-25_strategy_probe_281967823\\junction_strategy_probe.json",
   "csv_file": "C:\\Users\\huqio\\Documents\\Torii-SUMO\\examples\\02_one_prompt_osm_network\\validation\\run_2026-06-25_strategy_probe_281967823\\junction_strategy_probe.csv",
@@ -445,6 +446,93 @@
         [
           1566.35,
           1847.55
+        ]
+      ]
+    },
+    "edge_bounded_short_core": {
+      "node_count": 17,
+      "node_ids": [
+        "281967823",
+        "305519232",
+        "7009179649",
+        "7617786207",
+        "7626856596",
+        "7626856598",
+        "7626856599",
+        "7707070884",
+        "7707074285",
+        "7707074286",
+        "7707074289",
+        "8492096165",
+        "8492096166",
+        "8492096167",
+        "937878873",
+        "9602656755",
+        "9602656756"
+      ],
+      "local_metrics": {
+        "incident_edge_count": 48,
+        "inside_edge_count": 32,
+        "short_incident_edge_count": 32,
+        "modal_incident_edge_count": 27,
+        "internal_incident_edge_count": 0
+      },
+      "footprint": {
+        "area": 463.64,
+        "reference_area": 505.899,
+        "area_ratio": 0.916,
+        "perimeter": 80.913,
+        "centroid_distance_to_reference": 1.353,
+        "vertex_hausdorff_to_reference": 5.966
+      },
+      "polygon": [
+        [
+          1567.2149981253144,
+          1847.8699625400327
+        ],
+        [
+          1567.687748081406,
+          1839.3678396701168
+        ],
+        [
+          1567.9864474254068,
+          1835.9357411865783
+        ],
+        [
+          1575.8583436611436,
+          1829.2676056766798
+        ],
+        [
+          1578.2185510291172,
+          1828.5651592558067
+        ],
+        [
+          1584.868014213214,
+          1830.3983466105178
+        ],
+        [
+          1589.148421511433,
+          1832.7646891545025
+        ],
+        [
+          1589.0711198309016,
+          1838.7807208493641
+        ],
+        [
+          1588.792418965345,
+          1845.9944345881604
+        ],
+        [
+          1585.6809689763693,
+          1855.717075036
+        ],
+        [
+          1582.232106353339,
+          1856.6132788394316
+        ],
+        [
+          1578.983444183219,
+          1854.7983994388962
         ]
       ]
     }

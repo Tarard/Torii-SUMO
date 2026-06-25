@@ -86,3 +86,46 @@ def test_probe_writes_comparison_artifacts(tmp_path: Path) -> None:
     assert Path(report["png_file"]).is_file()
     assert json.loads(Path(report["summary_file"]).read_text(encoding="utf-8"))["status"] == "pass"
     assert report["strategies"]["reference_core"]["footprint"]["centroid_distance_to_reference"] < 2
+
+
+def test_edge_bounded_strategy_limits_footprint_to_incident_edge_gates(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    reference = tmp_path / "reference.net.xml"
+    candidate.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.unclassified"><lane id="ab_0" index="0" length="0.5" shape="0,0 0.5,0"/></edge>
+  <edge id="na" from="n" to="a" type="highway.unclassified"><lane id="na_0" index="0" length="4" shape="0,5 0,1"/></edge>
+  <edge id="be" from="b" to="e" type="highway.unclassified"><lane id="be_0" index="0" length="4" shape="1,0 5,0"/></edge>
+  <edge id="wb" from="w" to="a" type="highway.unclassified"><lane id="wb_0" index="0" length="4" shape="-5,0 -1,0"/></edge>
+  <edge id="bs" from="b" to="s" type="highway.unclassified"><lane id="bs_0" index="0" length="4" shape="0,-1 0,-5"/></edge>
+  <junction id="a" x="0" y="0" type="priority" shape="-10,-10 -10,10 0,10 0,-10"/>
+  <junction id="b" x="0.5" y="0" type="priority" shape="0,-10 0,10 10,10 10,-10"/>
+  <junction id="n" x="0" y="5" type="priority"/>
+  <junction id="e" x="5" y="0" type="priority"/>
+  <junction id="w" x="-5" y="0" type="priority"/>
+  <junction id="s" x="0" y="-5" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_a_b" x="0.25" y="0" type="traffic_light" shape="-1,-1 -1,1 1,1 1,-1"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = probe_junction_strategies(
+        candidate_net_file=candidate,
+        reference_net_file=reference,
+        reference_junction_id="cluster_a_b",
+        output_dir=tmp_path / "out",
+        radius_m=8,
+        short_edge_m=1,
+    )
+
+    bounded = report["strategies"]["edge_bounded_short_core"]["footprint"]["area"]
+    unbounded = report["strategies"]["short_all_core"]["footprint"]["area"]
+
+    assert bounded < unbounded / 10

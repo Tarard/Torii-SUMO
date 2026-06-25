@@ -34,6 +34,7 @@ def main() -> int:
     )
     parser.add_argument("--radius-m", type=float, default=40.0)
     parser.add_argument("--short-edge-m", type=float, default=2.0)
+    parser.add_argument("--gate-margin-m", type=float, default=1.0)
     args = parser.parse_args()
     report = probe_junction_strategies(
         candidate_net_file=args.candidate_net,
@@ -42,6 +43,7 @@ def main() -> int:
         output_dir=args.output_dir,
         radius_m=args.radius_m,
         short_edge_m=args.short_edge_m,
+        gate_margin_m=args.gate_margin_m,
     )
     print(json.dumps({key: report[key] for key in ("status", "summary_file", "csv_file", "svg_file", "png_file")}, indent=2))
     return 0 if report["status"] == "pass" else 1

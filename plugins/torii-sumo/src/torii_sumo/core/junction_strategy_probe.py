@@ -86,6 +86,7 @@ def strategy_node_sets(
             "radius_all_top_level": set(),
             "short_vehicle_core": set(),
             "short_all_core": set(),
+            "edge_bounded_short_core": set(),
         }
 
     center = _centroid([junctions[node_id]["point"] for node_id in seeds])
@@ -99,6 +100,7 @@ def strategy_node_sets(
         "radius_all_top_level": local,
         "short_vehicle_core": _short_edge_component(net, seeds, local, short_edge_m, vehicle_only=True),
         "short_all_core": _short_edge_component(net, seeds, local, short_edge_m, vehicle_only=False),
+        "edge_bounded_short_core": _short_edge_component(net, seeds, local, short_edge_m, vehicle_only=False),
     }
 
 
@@ -110,6 +112,7 @@ def probe_junction_strategies(
     output_dir: Path,
     radius_m: float = 40.0,
     short_edge_m: float = 2.0,
+    gate_margin_m: float = 1.0,
 ) -> dict[str, Any]:
     candidate = parse_net(candidate_net_file)
     reference = parse_net(reference_net_file)
@@ -124,7 +127,11 @@ def probe_junction_strategies(
 
     strategies = {}
     for name, node_ids in node_sets.items():
-        polygon = _footprint_for_nodes(candidate, node_ids)
+        polygon = (
+            _edge_bounded_footprint_for_nodes(candidate, node_ids, gate_margin_m)
+            if name == "edge_bounded_short_core"
+            else _footprint_for_nodes(candidate, node_ids)
+        )
         strategies[name] = {
             "node_count": len(node_ids),
             "node_ids": sorted(node_ids),
@@ -147,6 +154,7 @@ def probe_junction_strategies(
         "seed_node_ids": seed_ids,
         "radius_m": radius_m,
         "short_edge_m": short_edge_m,
+        "gate_margin_m": gate_margin_m,
         "coordinate_alignment": "reference polygon translated to candidate seed-node centroid",
         "summary_file": str(summary_file),
         "csv_file": str(csv_file),
@@ -204,6 +212,34 @@ def _footprint_for_nodes(net: dict[str, Any], node_ids: set[str]) -> list[Point]
         if junction:
             points.extend(junction["shape"])
     return convex_hull(points)
+
+
+def _edge_bounded_footprint_for_nodes(net: dict[str, Any], node_ids: set[str], gate_margin_m: float) -> list[Point]:
+    gates: list[Point] = []
+    for edge in net["edges"]:
+        if edge["internal"] or not edge["shape"]:
+            continue
+        from_inside = edge["from"] in node_ids
+        to_inside = edge["to"] in node_ids
+        if from_inside == to_inside:
+            continue
+        gates.append(edge["shape"][0] if from_inside else edge["shape"][-1])
+    if len(gates) < 3:
+        return _footprint_for_nodes(net, node_ids)
+    return convex_hull(_expand_points_from_centroid(gates, gate_margin_m))
+
+
+def _expand_points_from_centroid(points: list[Point], margin_m: float) -> list[Point]:
+    center = _centroid(points)
+    expanded = []
+    for point in points:
+        distance = _distance(center, point)
+        if distance == 0:
+            expanded.append(point)
+            continue
+        scale = (distance + margin_m) / distance
+        expanded.append((center[0] + (point[0] - center[0]) * scale, center[1] + (point[1] - center[1]) * scale))
+    return expanded
 
 
 def _candidate_seed_centroid(candidate: dict[str, Any], seed_ids: list[str]) -> Point:
@@ -299,6 +335,7 @@ def _write_svg(
         "radius_all_top_level": "#dc2626",
         "short_vehicle_core": "#16a34a",
         "short_all_core": "#f59e0b",
+        "edge_bounded_short_core": "#7c3aed",
     }
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.2f} {height:.2f}">',
@@ -355,6 +392,7 @@ def _write_png(
         "radius_all_top_level": (220, 38, 38, 255),
         "short_vehicle_core": (22, 163, 74, 255),
         "short_all_core": (245, 158, 11, 255),
+        "edge_bounded_short_core": (124, 58, 237, 255),
     }
     _draw_png_polygon(draw, reference_polygon, map_point, colors["reference"], 6)
     for name, report in strategies.items():
@@ -366,6 +404,7 @@ def _write_png(
         ("radius_all_top_level", "radius_all_top_level: all nearby nodes"),
         ("short_vehicle_core", "short_vehicle_core: short vehicle-edge component"),
         ("short_all_core", "short_all_core: short all-edge component"),
+        ("edge_bounded_short_core", "edge_bounded_short_core: bounded by incident edge gates"),
     ]
     y = 20
     for key, label in legend:
