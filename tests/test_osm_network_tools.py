@@ -1553,7 +1553,25 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     def fake_build(**kwargs):
         net_file.parent.mkdir(parents=True, exist_ok=True)
         filtered_osm.parent.mkdir(parents=True, exist_ok=True)
-        net_file.write_text("<net/>", encoding="utf-8")
+        net_file.write_text(
+            """<net>
+  <edge id="internal_a" from="j1" to="j2" type="highway.primary">
+    <lane id="internal_a_0" index="0" speed="13.9" length="8.0" shape="0.0,0.0 8.0,0.0"/>
+  </edge>
+  <edge id="internal_b" from="j2" to="j3" type="highway.primary">
+    <lane id="internal_b_0" index="0" speed="13.9" length="8.0" shape="8.0,0.0 16.0,0.0"/>
+  </edge>
+  <edge id="west_approach" from="west" to="j1" type="highway.primary">
+    <lane id="west_approach_0" index="0" speed="13.9" length="70.0" shape="-70.0,0.0 0.0,0.0"/>
+  </edge>
+  <junction id="west" type="priority" x="-70.0" y="0.0"/>
+  <junction id="j1" type="traffic_light" x="0.0" y="0.0"/>
+  <junction id="j2" type="traffic_light" x="8.0" y="0.0"/>
+  <junction id="j3" type="priority" x="16.0" y="0.0"/>
+</net>
+""",
+            encoding="utf-8",
+        )
         filtered_osm.write_text("<osm/>", encoding="utf-8")
         return {
             "status": "pass",
@@ -1673,8 +1691,15 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     assert report["junction_join_needs_map_review_count"] == 1
     assert report["workflow_review_html_status"] == "pass"
     assert Path(report["workflow_review_html_file"]).is_file()
+    assert Path(report["workflow_report_file"]).is_file()
+    assert Path(report["review_manifest_file"]).is_file()
+    assert Path(report["network_overview_png"]).is_file()
+    assert Path(report["problem_overlay_png"]).is_file()
+    assert report["cluster_zoom_pngs"][0]["cluster_id"] == "C001"
+    assert Path(report["cluster_zoom_pngs"][0]["image_file"]).is_file()
     html = Path(report["workflow_review_html_file"]).read_text(encoding="utf-8")
     assert "Human Review Required" in html
+    assert "Cluster Zooms" in html
     assert "topology_audit" in html
     assert "junction_aggregation" in html
     assert "construction-invalid" in html
