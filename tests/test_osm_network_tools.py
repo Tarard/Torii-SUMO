@@ -1671,6 +1671,13 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     assert report["junction_aggregation_variant_file"] == str(tmp_path / "junction_aggregated.net.xml")
     assert report["junction_join_nodes_patch_file"] == str(tmp_path / "junction_join.nod.xml")
     assert report["junction_join_needs_map_review_count"] == 1
+    assert report["workflow_review_html_status"] == "pass"
+    assert Path(report["workflow_review_html_file"]).is_file()
+    html = Path(report["workflow_review_html_file"]).read_text(encoding="utf-8")
+    assert "Human Review Required" in html
+    assert "topology_audit" in html
+    assert "junction_aggregation" in html
+    assert "construction-invalid" in html
 
 
 def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path: Path) -> None:

@@ -33,6 +33,7 @@ def test_infer_place_name_from_one_prompt_osm_request() -> None:
 def test_detect_workflow_routes_common_one_sentence_requests() -> None:
     assert detect_workflow("download the Altstadt map from OSM and open it in SUMO") == "osm_to_sumo"
     assert detect_workflow("audit the traffic lights in this SUMO network") == "tls_review"
+    assert detect_workflow("create an HTML review cockpit for this partial SUMO network") == "network_review"
     assert detect_workflow("check whether this route from station to museum is connected") == "routeability"
     assert detect_workflow("my waiting time got worse after cleanup") == "debug_bad_run"
     assert detect_workflow("compare fixed-time and max-pressure controllers") == "experiment_audit"
@@ -221,6 +222,33 @@ def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
     assert report["tool_called"] == "sumo_tls_multisource_review"
     assert calls["net_file"] == Path("network.net.xml")
     assert calls["osm_file"] == Path("network.osm.xml")
+
+
+def test_auto_workflow_can_route_partial_network_to_review_html(tmp_path: Path) -> None:
+    calls = {}
+
+    def fake_review_html(**kwargs):
+        calls.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "workflow_review_html_status": "pass",
+            "workflow_review_html_file": str(tmp_path / "partial_review.html"),
+        }
+
+    report = run_auto_workflow(
+        user_request="Create an HTML review cockpit for this partial SUMO network",
+        output_dir=tmp_path,
+        net_file=Path("partial.net.xml"),
+        review_html_func=fake_review_html,
+    )
+
+    assert report["status"] == "pass"
+    assert report["detected_workflow"] == "network_review"
+    assert report["execution_status"] == "executed"
+    assert report["tool_called"] == "sumo_network_review_html"
+    assert calls["net_file"] == Path("partial.net.xml")
+    assert calls["title"] == "SUMO Network Review"
 
 
 def test_auto_workflow_enables_routeability_audit_when_cleanup_supports_it(tmp_path: Path) -> None:

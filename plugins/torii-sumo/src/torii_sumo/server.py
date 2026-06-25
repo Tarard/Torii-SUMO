@@ -20,6 +20,7 @@ from .tools.osm_tools import (
     sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
+    sumo_network_review_html,
     sumo_network_routeability_audit,
     sumo_network_routeability_probe,
     sumo_network_scope_pruning_variant,
@@ -100,6 +101,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Create a separate TLS cleanup review variant with one real SUMO junction set as TLS per physical TLS audit cluster.")(
         sumo_network_tls_aggregation_variant
+    )
+    server.tool(description="Create an HTML human-review cockpit for a generated or partial SUMO network and available audit artifacts.")(
+        sumo_network_review_html
     )
     server.tool(description="Build sanitized source/sink, route-candidate, and route-detector-incidence manifests for detector-constrained SUMO demand reconstruction.")(
         sumo_detector_route_support

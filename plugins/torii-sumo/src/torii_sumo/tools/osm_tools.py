@@ -24,6 +24,7 @@ from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 from torii_sumo.core.reference_scope import audit_reference_scope, build_scope_pruning_variant
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
+from torii_sumo.core.workflow_review_html import build_workflow_review_html
 
 
 def resolve_highway_classes(value: str | None) -> set[str]:
@@ -288,6 +289,40 @@ def sumo_network_tls_aggregation_variant(
         output_dir=Path(output_dir),
         prefix=prefix,
         timeout_seconds=timeout_seconds,
+    )
+
+
+def sumo_network_review_html(
+    output_dir: str,
+    net_file: str | None = None,
+    title: str = "SUMO Network Review",
+    claim_status: str = "diagnostic-demo",
+    raw_net_file: str | None = None,
+    connected_core_file: str | None = None,
+    tls_review_file: str | None = None,
+    topology_audit_report_file: str | None = None,
+    junction_aggregation_report_file: str | None = None,
+    routeability_audit_report_file: str | None = None,
+) -> dict[str, Any]:
+    return build_workflow_review_html(
+        output_dir=Path(output_dir),
+        prefix="workflow_review",
+        title=title,
+        claim_status=claim_status,
+        net_file=Path(net_file) if net_file else None,
+        raw_net_file=Path(raw_net_file) if raw_net_file else None,
+        connected_core_file=Path(connected_core_file) if connected_core_file else None,
+        tls_review_file=Path(tls_review_file) if tls_review_file else None,
+        topology_audit_report=_read_json_report(topology_audit_report_file),
+        topology_audit_report_file=Path(topology_audit_report_file) if topology_audit_report_file else None,
+        junction_aggregation_report=_read_json_report(junction_aggregation_report_file),
+        junction_aggregation_report_file=Path(junction_aggregation_report_file)
+        if junction_aggregation_report_file
+        else None,
+        routeability_audit_report=_read_json_report(routeability_audit_report_file),
+        routeability_audit_report_file=Path(routeability_audit_report_file)
+        if routeability_audit_report_file
+        else None,
     )
 
 
