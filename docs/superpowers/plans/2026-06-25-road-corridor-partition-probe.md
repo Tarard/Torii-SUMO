@@ -266,6 +266,8 @@ For each suspicious cluster, run `audit_node_group(...)` over `cluster["node_ids
 - max cluster node count;
 - max cluster named corridor count;
 - max cluster intersection-cell count;
+- max cluster corridor-partition count;
+- max node count inside a single corridor partition;
 - worst cluster Google Maps URL when available.
 
 - [ ] **Step 3: Run routeability audit for built variants**
