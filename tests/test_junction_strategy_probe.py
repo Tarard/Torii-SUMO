@@ -129,3 +129,45 @@ def test_edge_bounded_strategy_limits_footprint_to_incident_edge_gates(tmp_path:
     unbounded = report["strategies"]["short_all_core"]["footprint"]["area"]
 
     assert bounded < unbounded / 10
+
+
+def test_protected_terminal_strategy_keeps_modal_exits_out_of_join_core(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    reference = tmp_path / "reference.net.xml"
+    candidate.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.unclassified"><lane id="ab_0" index="0" length="0.2" shape="0,0 0.2,0"/></edge>
+  <edge id="bs" from="b" to="s" type="highway.unclassified"><lane id="bs_0" index="0" length="0.2" shape="0.2,0 0.4,0"/></edge>
+  <edge id="bp" from="b" to="p" type="highway.footway"><lane id="bp_0" index="0" length="0.2" shape="0.2,0 0.2,0.2"/></edge>
+  <edge id="px" from="p" to="x" type="highway.footway"><lane id="px_0" index="0" length="12" shape="0.2,0.2 0.2,12"/></edge>
+  <junction id="a" x="0" y="0" type="priority"/>
+  <junction id="b" x="0.2" y="0" type="priority"/>
+  <junction id="s" x="0.4" y="0" type="priority"/>
+  <junction id="p" x="0.2" y="0.2" type="priority"/>
+  <junction id="x" x="0.2" y="12" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_a_b" x="0.1" y="0" type="traffic_light" shape="0,0 0,1 1,1 1,0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = probe_junction_strategies(
+        candidate_net_file=candidate,
+        reference_net_file=reference,
+        reference_junction_id="cluster_a_b",
+        output_dir=tmp_path / "out",
+        radius_m=5,
+        short_edge_m=1,
+    )
+
+    strategy = report["strategies"]["short_all_core_with_protected_terminals"]
+
+    assert set(strategy["node_ids"]) == {"a", "b", "s"}
+    assert strategy["protected_terminal_ids"] == ["p"]
+    assert strategy["shape_support_node_ids"] == ["a", "b", "p", "s"]
