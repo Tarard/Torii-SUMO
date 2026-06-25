@@ -35,6 +35,7 @@ def convex_hull(points: list[Point]) -> list[Point]:
 
 def parse_net(net_file: Path) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
+    location = root.find("location")
     junctions = {}
     for junction in root.findall("junction"):
         junction_id = junction.attrib.get("id", "")
@@ -68,7 +69,12 @@ def parse_net(net_file: Path) -> dict[str, Any]:
                 "internal": edge_id.startswith(":") or function in {"internal", "crossing", "walkingarea"},
             }
         )
-    return {"junctions": junctions, "edges": edges, "net_file": str(net_file)}
+    return {
+        "junctions": junctions,
+        "edges": edges,
+        "location": dict(location.attrib) if location is not None else {},
+        "net_file": str(net_file),
+    }
 
 
 def strategy_node_sets(
@@ -172,6 +178,7 @@ def probe_junction_strategies(
         "png_file": str(png_file),
         "reference_polygon_raw": reference_polygon_raw,
         "reference_polygon": reference_polygon,
+        "nearby_conflict_zone_audit": _nearby_conflict_zone_audit(reference, reference_junction_id),
         "strategies": strategies,
     }
     summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -266,6 +273,100 @@ def _has_long_modal_outside_edge(
         if other not in node_ids and edge["length"] > short_edge_m and not _is_vehicle_core_edge(edge):
             return True
     return False
+
+
+def _nearby_conflict_zone_audit(
+    reference: dict[str, Any],
+    reference_junction_id: str,
+    threshold_m: float = 50.0,
+) -> dict[str, Any]:
+    target = reference["junctions"][reference_junction_id]
+    nearby = []
+    for junction_id, junction in reference["junctions"].items():
+        if junction_id == reference_junction_id or junction["internal"] or not _is_conflict_zone_candidate(junction):
+            continue
+        distance_m = _distance(target["point"], junction["point"])
+        if distance_m <= threshold_m:
+            latlon = _xy_to_latlon(reference, junction["point"])
+            nearby.append(
+                {
+                    "junction_id": junction_id,
+                    "type": junction["type"],
+                    "distance_m": round(distance_m, 3),
+                    "lat": round(latlon[0], 8),
+                    "lon": round(latlon[1], 8),
+                    "google_maps_url": _google_maps_url(latlon),
+                    "osm_url": _osm_url(latlon),
+                }
+            )
+    nearby.sort(key=lambda item: item["distance_m"])
+    target_latlon = _xy_to_latlon(reference, target["point"])
+    status = "nearby_core_review" if nearby else "single_core_safe"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "threshold_m": threshold_m,
+        "target_junction_id": reference_junction_id,
+        "target_lat": round(target_latlon[0], 8),
+        "target_lon": round(target_latlon[1], 8),
+        "target_google_maps_url": _google_maps_url(target_latlon),
+        "target_osm_url": _osm_url(target_latlon),
+        "nearby_count": len(nearby),
+        "nearby_conflict_zones": nearby,
+    }
+
+
+def _is_conflict_zone_candidate(junction: dict[str, Any]) -> bool:
+    return junction["type"] == "traffic_light" or (
+        junction["type"] == "priority" and junction["id"].startswith("cluster_")
+    )
+
+
+def _xy_to_latlon(net: dict[str, Any], point: Point) -> tuple[float, float]:
+    converted = _xy_to_latlon_with_sumolib(net, point)
+    if converted:
+        return converted
+    return _xy_to_latlon_with_location_bounds(net, point)
+
+
+def _xy_to_latlon_with_sumolib(net: dict[str, Any], point: Point) -> tuple[float, float] | None:
+    try:
+        import sumolib
+
+        sumo_net = sumolib.net.readNet(net["net_file"])
+        lon, lat = sumo_net.convertXY2LonLat(point[0], point[1])
+        if math.isfinite(lat) and math.isfinite(lon):
+            return (lat, lon)
+    except Exception:
+        return None
+    return None
+
+
+def _xy_to_latlon_with_location_bounds(net: dict[str, Any], point: Point) -> tuple[float, float]:
+    conv = _parse_bounds(net["location"].get("convBoundary", ""))
+    orig = _parse_bounds(net["location"].get("origBoundary", ""))
+    if not conv or not orig or conv[2] == conv[0] or conv[3] == conv[1]:
+        return (0.0, 0.0)
+    x_ratio = (point[0] - conv[0]) / (conv[2] - conv[0])
+    y_ratio = (point[1] - conv[1]) / (conv[3] - conv[1])
+    lon = orig[0] + x_ratio * (orig[2] - orig[0])
+    lat = orig[1] + y_ratio * (orig[3] - orig[1])
+    return (lat, lon)
+
+
+def _parse_bounds(raw: str) -> tuple[float, float, float, float] | None:
+    parts = raw.split(",")
+    if len(parts) != 4:
+        return None
+    return (float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3]))
+
+
+def _google_maps_url(latlon: tuple[float, float]) -> str:
+    return f"https://www.google.com/maps/@{latlon[0]:.8f},{latlon[1]:.8f},19z"
+
+
+def _osm_url(latlon: tuple[float, float]) -> str:
+    return f"https://www.openstreetmap.org/#map=19/{latlon[0]:.8f}/{latlon[1]:.8f}"
 
 
 def _expand_points_from_centroid(points: list[Point], margin_m: float) -> list[Point]:
