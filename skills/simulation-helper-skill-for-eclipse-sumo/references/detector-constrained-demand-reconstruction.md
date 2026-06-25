@@ -2,6 +2,8 @@
 
 Use this reference when real detector counts are the main evidence source for building SUMO demand. The goal is to reconstruct plausible routes and departures whose simulated detector outputs match the field count windows while preserving route realism, SUMO completion, and claim boundaries.
 
+Given a SUMO network and large-scale real-world detector observations, Torii generates and audits vehicle routes whose simulated detector measurements match the real detector measurements over time. In Chinese: given a SUMO road network and many real detector observations, Torii should generate vehicles that travel through valid network routes, then verify that SUMO detector counts match the real detector counts in the declared time windows.
+
 ## Core Contract
 
 Detector counts are route constraints, not OD observations. A valid reconstruction creates vehicles that:
