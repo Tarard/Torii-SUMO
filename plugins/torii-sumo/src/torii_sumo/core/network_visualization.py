@@ -17,6 +17,7 @@ class Segment:
 @dataclass(frozen=True)
 class NetDrawing:
     segments: tuple[Segment, ...]
+    junctions: Mapping[str, tuple[float, float]]
     traffic_lights: tuple[tuple[float, float], ...]
     bounds: tuple[float, float, float, float]
 
@@ -69,6 +70,7 @@ def _expanded_bounds(points: Iterable[tuple[float, float]]) -> tuple[float, floa
 def _read_net(net_file: Path) -> NetDrawing:
     root = ET.parse(net_file).getroot()
     segments: list[Segment] = []
+    junctions: dict[str, tuple[float, float]] = {}
     tls_points: list[tuple[float, float]] = []
     all_points: list[tuple[float, float]] = []
 
@@ -86,34 +88,78 @@ def _read_net(net_file: Path) -> NetDrawing:
         segments.append(Segment(points=points, category=_edge_category(edge.get("type", ""))))
 
     for junction in root.findall("junction"):
-        if junction.get("type") != "traffic_light":
+        junction_id = junction.get("id", "")
+        if junction_id.startswith(":") or junction.get("type") == "internal":
             continue
         try:
             point = (float(junction.get("x", "0")), float(junction.get("y", "0")))
         except ValueError:
             continue
-        tls_points.append(point)
+        junctions[junction_id] = point
+        if junction.get("type") == "traffic_light":
+            tls_points.append(point)
         all_points.append(point)
 
     return NetDrawing(
         segments=tuple(segments),
+        junctions=junctions,
         traffic_lights=tuple(tls_points),
         bounds=_expanded_bounds(all_points),
     )
 
 
-def _cluster_points(report: Mapping[str, Any] | None) -> list[tuple[float, float]]:
-    points: list[tuple[float, float]] = []
+def _point_from_cluster(cluster: Mapping[str, Any], net: NetDrawing) -> tuple[float, float] | None:
+    x_value = cluster.get("centroid_x", cluster.get("centroid_lon"))
+    y_value = cluster.get("centroid_y", cluster.get("centroid_lat"))
+    try:
+        return (float(x_value), float(y_value))
+    except (TypeError, ValueError):
+        pass
+
+    node_points = [
+        net.junctions[node_id]
+        for node_id in cluster.get("node_ids", []) or []
+        if isinstance(node_id, str) and node_id in net.junctions
+    ]
+    if not node_points:
+        return None
+    return (
+        sum(point[0] for point in node_points) / len(node_points),
+        sum(point[1] for point in node_points) / len(node_points),
+    )
+
+
+def _cluster_records(report: Mapping[str, Any] | None, net: NetDrawing) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     if not report:
-        return points
-    for cluster in report.get("suspicious_clusters", []) or []:
+        return records
+    for index, cluster in enumerate(report.get("suspicious_clusters", []) or [], start=1):
         if not isinstance(cluster, Mapping):
             continue
-        x_value = cluster.get("centroid_x", cluster.get("centroid_lon"))
-        y_value = cluster.get("centroid_y", cluster.get("centroid_lat"))
+        point = _point_from_cluster(cluster, net)
+        if point is None:
+            continue
+        cluster_id = str(cluster.get("cluster_id") or f"cluster_{index:03d}")
+        records.append(
+            {
+                "cluster_id": cluster_id,
+                "x": point[0],
+                "y": point[1],
+                "node_count": cluster.get("node_count", len(cluster.get("node_ids", []) or [])),
+                "aggregation_decision": str(cluster.get("aggregation_decision", "")),
+                "aggregation_confidence": str(cluster.get("aggregation_confidence", "")),
+                "google_maps_url": str(cluster.get("google_maps_url", cluster.get("map_review_url", ""))),
+            }
+        )
+    return records
+
+
+def _cluster_points(records: Iterable[Mapping[str, Any]]) -> list[tuple[float, float]]:
+    points: list[tuple[float, float]] = []
+    for record in records:
         try:
-            points.append((float(x_value), float(y_value)))
-        except (TypeError, ValueError):
+            points.append((float(record["x"]), float(record["y"])))
+        except (KeyError, TypeError, ValueError):
             continue
     return points
 
@@ -207,6 +253,59 @@ def _write_single_panel(
     image.save(output_file)
 
 
+def _cluster_bounds(
+    center: tuple[float, float],
+    *,
+    net_bounds: tuple[float, float, float, float],
+    radius: float = 80.0,
+) -> tuple[float, float, float, float]:
+    min_x, min_y, max_x, max_y = net_bounds
+    net_width = max_x - min_x
+    net_height = max_y - min_y
+    active_radius = max(20.0, min(radius, max(net_width, net_height) * 0.35))
+    return (
+        center[0] - active_radius,
+        center[1] - active_radius,
+        center[0] + active_radius,
+        center[1] + active_radius,
+    )
+
+
+def _write_cluster_zoom(
+    *,
+    net: NetDrawing,
+    cluster: Mapping[str, Any],
+    output_file: Path,
+) -> None:
+    center = (float(cluster["x"]), float(cluster["y"]))
+    image = Image.new("RGB", (720, 560), "white")
+    draw = ImageDraw.Draw(image)
+    title = f"Cluster {cluster['cluster_id']}"
+    draw.text((28, 20), title, fill=(20, 20, 20), font=_font(22))
+    subtitle = (
+        f"decision={cluster.get('aggregation_decision', '') or 'unknown'} | "
+        f"confidence={cluster.get('aggregation_confidence', '') or 'unknown'} | "
+        f"nodes={cluster.get('node_count', '')}"
+    )
+    draw.text((28, 50), subtitle, fill=(80, 80, 80), font=_font(14))
+    _draw_net(
+        draw,
+        net,
+        origin=(42, 92),
+        size=(636, 404),
+        title="local network context",
+        bounds=_cluster_bounds(center, net_bounds=net.bounds),
+        cluster_points=[center],
+    )
+    draw.text(
+        (42, 520),
+        "Use this zoom with the linked map/source view before adopting any destructive junction join.",
+        fill=(80, 80, 80),
+        font=_font(14),
+    )
+    image.save(output_file)
+
+
 def _write_comparison_panel(
     *,
     reference: NetDrawing,
@@ -278,13 +377,25 @@ def build_network_review_visuals(
         }
 
     network = _read_net(net_path)
-    clusters = _cluster_points(topology_audit_report)
+    cluster_records = _cluster_records(topology_audit_report, network)
+    clusters = _cluster_points(cluster_records)
     overview_file = output_dir / f"{prefix}_network_overview.png"
     problem_file = output_dir / f"{prefix}_problem_overlay.png"
     comparison_file = output_dir / f"{prefix}_reference_comparison.png"
 
     _write_single_panel(net=network, output_file=overview_file, title="Network Preview")
     _write_single_panel(net=network, output_file=problem_file, title="Problem Map", cluster_points=clusters)
+
+    cluster_zoom_pngs: list[dict[str, Any]] = []
+    for index, cluster in enumerate(cluster_records[:24], start=1):
+        zoom_file = output_dir / f"{prefix}_cluster_{index:03d}_{cluster['cluster_id']}.png"
+        _write_cluster_zoom(net=network, cluster=cluster, output_file=zoom_file)
+        cluster_zoom_pngs.append(
+            {
+                **cluster,
+                "image_file": str(zoom_file),
+            }
+        )
 
     comparison_value = ""
     if reference_net_file and Path(reference_net_file).exists():
@@ -299,5 +410,6 @@ def build_network_review_visuals(
         "network_overview_png": str(overview_file),
         "problem_overlay_png": str(problem_file),
         "reference_comparison_png": comparison_value,
+        "cluster_zoom_pngs": cluster_zoom_pngs,
         "warnings": [],
     }

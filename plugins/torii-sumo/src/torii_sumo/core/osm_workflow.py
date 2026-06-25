@@ -1471,6 +1471,7 @@ def run_osm_cleanup_workflow(
         net_file=report.get("net_file"),
         raw_net_file=report.get("raw_net_file"),
         connected_core_file=report.get("connected_core_file"),
+        reference_net_file=report.get("reference_net_file"),
         tls_review_file=report.get("tls_review_file"),
         topology_audit_report=topology_audit_report,
         topology_audit_report_file=report.get("topology_audit_clusters_file"),
@@ -1485,6 +1486,12 @@ def run_osm_cleanup_workflow(
         {
             "workflow_review_html_status": workflow_review_html_report.get("workflow_review_html_status", "fail"),
             "workflow_review_html_file": workflow_review_html_report.get("workflow_review_html_file", ""),
+            "workflow_report_file": workflow_review_html_report.get("workflow_report_file", ""),
+            "review_manifest_file": workflow_review_html_report.get("review_manifest_file", ""),
+            "network_overview_png": workflow_review_html_report.get("network_overview_png", ""),
+            "problem_overlay_png": workflow_review_html_report.get("problem_overlay_png", ""),
+            "reference_comparison_png": workflow_review_html_report.get("reference_comparison_png", ""),
+            "cluster_zoom_pngs": workflow_review_html_report.get("cluster_zoom_pngs", []),
             "human_review_required_count": workflow_review_html_report.get("human_review_required_count", 0),
             "workflow_review_html": workflow_review_html_report,
         }

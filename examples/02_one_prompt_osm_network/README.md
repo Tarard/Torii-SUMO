@@ -84,6 +84,7 @@ Torii should not automatically join these nodes from geometry alone. The audit s
 - [`validation/comparison_summary.json`](validation/comparison_summary.json): compact validation record.
 - [`validation/tum_vs_torii_bbox_comparison.csv`](validation/tum_vs_torii_bbox_comparison.csv): count, topology, and routeability comparison.
 - [`validation/run_2026-06-24_5_5`](validation/run_2026-06-24_5_5): 5.5 run summaries, TLS representative tables, and TUM spatial TLS matching.
+- [`validation/run_2026-06-25_review_html/ingolstadt_workflow_review.html`](validation/run_2026-06-25_review_html/ingolstadt_workflow_review.html): committed human-review cockpit with gate status, network preview, problem overlay, reference comparison, and dense-junction cluster zooms.
 - [`assets/tum_vs_torii_5_5_tls_aggregated_overview.png`](assets/tum_vs_torii_5_5_tls_aggregated_overview.png): TUM vs Torii 5.5 TLS-aggregated overview screenshot.
 - [`assets/tum_vs_torii_5_5_tls_aggregated_detail.png`](assets/tum_vs_torii_5_5_tls_aggregated_detail.png): TUM vs Torii 5.5 intersection-detail screenshot.
 - [`assets/torii_5_5_core_vs_visual_detail.png`](assets/torii_5_5_core_vs_visual_detail.png): Torii connected-core vs visual-detail screenshot.

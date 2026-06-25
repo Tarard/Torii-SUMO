@@ -48,6 +48,8 @@ def test_network_visualization_writes_nonempty_png(tmp_path: Path) -> None:
     assert report["visualization_status"] == "pass"
     assert Path(report["network_overview_png"]).is_file()
     assert Path(report["problem_overlay_png"]).is_file()
+    assert report["cluster_zoom_pngs"][0]["cluster_id"] == "c1"
+    assert Path(report["cluster_zoom_pngs"][0]["image_file"]).is_file()
     image = Image.open(report["network_overview_png"])
     assert image.size[0] >= 400
     assert image.size[1] >= 300
@@ -67,19 +69,42 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
         summary={"status": "fail", "claim_status": "construction-invalid", "net_file": str(net_file)},
         net_file=net_file,
         gate_status={"routeability_audit": "fail", "topology_audit": "blocked"},
-        topology_audit_report={"topology_fragmentation_status": "needs_review", "suspicious_cluster_count": 1},
+        topology_audit_report={
+            "topology_fragmentation_status": "needs_review",
+            "suspicious_cluster_count": 1,
+            "suspicious_clusters": [
+                {
+                    "cluster_id": "c1",
+                    "centroid_x": 60.0,
+                    "centroid_y": 50.0,
+                    "node_count": 3,
+                    "aggregation_decision": "join",
+                    "aggregation_confidence": "medium",
+                    "google_maps_url": "https://www.google.com/maps/@48.765391,11.423800,40m",
+                }
+            ],
+        },
         routeability_audit_report={"routeability_status": "teleport-failure", "arrived": 55, "vehicle_count": 100},
     )
 
     html = Path(report["workflow_review_html_file"]).read_text(encoding="utf-8")
-    manifest = json.loads(Path(report["review_manifest_file"]).read_text(encoding="utf-8"))
+    manifest_file = Path(report["review_manifest_file"])
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     workflow_json = json.loads(Path(report["workflow_report_file"]).read_text(encoding="utf-8"))
+    manifest_dir = manifest_file.parent
 
     assert "Gate Dashboard" in html
     assert "Network Preview" in html
     assert "Problem Map" in html
+    assert "Cluster Zooms" in html
+    assert "c1" in html
+    assert "google.com/maps" in html
     assert "Review Queue" in html
     assert "<img" in html
+    assert "file:///" not in html
+    assert "visuals/workflow_network_overview.png" in html
     assert manifest["visualizations"]["network_overview_png"]
     assert manifest["visualizations"]["problem_overlay_png"]
+    assert manifest["visualizations"]["cluster_zoom_pngs"][0]["cluster_id"] == "c1"
+    assert (manifest_dir / manifest["visualizations"]["cluster_zoom_pngs"][0]["image_file"]).is_file()
     assert workflow_json["claim_status"] == "construction-invalid"

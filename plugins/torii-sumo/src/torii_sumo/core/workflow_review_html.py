@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from html import escape
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from urllib.parse import quote
 
 from .network_visualization import build_network_review_visuals
 
@@ -36,37 +38,71 @@ def _as_path(value: str | Path | None) -> Path | None:
     return Path(value)
 
 
-def _artifact_link(path: Path | None) -> str:
+def _portable_path(path: str | Path | None, base_dir: Path) -> str:
+    if not path:
+        return ""
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(base_dir.resolve()).as_posix()
+    except ValueError:
+        try:
+            return os.path.relpath(resolved, base_dir.resolve()).replace("\\", "/")
+        except ValueError:
+            return str(path)
+
+
+def _portable_href(path: Path, base_dir: Path) -> str:
+    resolved = path.resolve()
+    try:
+        relative = resolved.relative_to(base_dir.resolve()).as_posix()
+    except ValueError:
+        try:
+            relative = os.path.relpath(resolved, base_dir.resolve()).replace("\\", "/")
+        except ValueError:
+            return str(path)
+    return quote(relative)
+
+
+def _path_href(path: Path, base_dir: Path) -> str:
+    href = _portable_href(path, base_dir)
+    if href:
+        return href
+    try:
+        return path.resolve().as_uri()
+    except ValueError:
+        return str(path)
+
+
+def _artifact_link(path: Path | None, *, base_dir: Path) -> str:
     if path is None:
         return ""
-    label = escape(str(path))
-    try:
-        href = path.resolve().as_uri()
-    except ValueError:
-        href = escape(str(path))
+    label = escape(_portable_path(path, base_dir))
+    href = _path_href(path, base_dir)
     return f'<a href="{escape(href)}">{label}</a>'
 
 
-def _image_src(path: str | Path | None) -> str:
+def _image_src(path: str | Path | None, *, base_dir: Path) -> str:
     if not path:
         return ""
-    image_path = Path(path)
-    try:
-        return escape(image_path.resolve().as_uri())
-    except ValueError:
-        return escape(str(image_path))
+    return escape(_path_href(Path(path), base_dir))
 
 
-def _image_panel(title: str, path: str | Path | None) -> str:
+def _image_panel(title: str, path: str | Path | None, *, base_dir: Path) -> str:
     if not path:
         return ""
-    src = _image_src(path)
+    src = _image_src(path, base_dir=base_dir)
     return (
         '<figure class="visual-panel">'
         f"<figcaption>{escape(title)}</figcaption>"
         f'<img src="{src}" alt="{escape(title)}">'
         "</figure>"
     )
+
+
+def _link(url: str | None, label: str) -> str:
+    if not url:
+        return ""
+    return f'<a href="{escape(str(url))}">{escape(label)}</a>'
 
 
 def _gate_rows(gate_status: Mapping[str, Any] | None) -> str:
@@ -83,12 +119,12 @@ def _gate_rows(gate_status: Mapping[str, Any] | None) -> str:
     return "\n".join(rows)
 
 
-def _artifact_rows(artifacts: Mapping[str, Path | None]) -> str:
+def _artifact_rows(artifacts: Mapping[str, Path | None], *, base_dir: Path) -> str:
     rows = []
     for label, path in artifacts.items():
         if path is None:
             continue
-        rows.append(f"<tr><td>{escape(label)}</td><td>{_artifact_link(path)}</td></tr>")
+        rows.append(f"<tr><td>{escape(label)}</td><td>{_artifact_link(path, base_dir=base_dir)}</td></tr>")
     if not rows:
         return '<tr><td colspan="2">No file artifacts supplied.</td></tr>'
     return "\n".join(rows)
@@ -132,6 +168,52 @@ def _review_queue_rows(actions: Sequence[str]) -> str:
             f"<td>{priority}</td>"
             f"<td>{index}</td>"
             f"<td>{escape(action)}</td>"
+            "</tr>"
+        )
+    return "\n".join(rows)
+
+
+def _cluster_zoom_gallery(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, base_dir: Path) -> str:
+    if not cluster_zoom_pngs:
+        return "<p>No dense junction cluster zooms were generated.</p>"
+    panels = []
+    for cluster in cluster_zoom_pngs:
+        cluster_id = str(cluster.get("cluster_id", "cluster"))
+        src = _image_src(str(cluster.get("image_file", "")), base_dir=base_dir)
+        map_link = _link(str(cluster.get("google_maps_url", "")), "map review")
+        caption = (
+            f"{escape(cluster_id)} | decision="
+            f"{escape(str(cluster.get('aggregation_decision', '') or 'unknown'))} | confidence="
+            f"{escape(str(cluster.get('aggregation_confidence', '') or 'unknown'))}"
+        )
+        map_html = f"<div>{map_link}</div>" if map_link else ""
+        panels.append(
+            '<figure class="visual-panel cluster-panel">'
+            f"<figcaption>{caption}</figcaption>"
+            f'<img src="{src}" alt="Cluster zoom {escape(cluster_id)}">'
+            f"{map_html}"
+            "</figure>"
+        )
+    return "\n".join(panels)
+
+
+def _dense_cluster_rows(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, base_dir: Path) -> str:
+    if not cluster_zoom_pngs:
+        return '<tr><td colspan="7">No dense junction clusters with coordinates were available.</td></tr>'
+    rows = []
+    for cluster in cluster_zoom_pngs:
+        cluster_id = str(cluster.get("cluster_id", "cluster"))
+        image_link = _artifact_link(_as_path(str(cluster.get("image_file", ""))), base_dir=base_dir)
+        map_link = _link(str(cluster.get("google_maps_url", "")), "map")
+        rows.append(
+            "<tr>"
+            f"<td>{escape(cluster_id)}</td>"
+            f"<td>{escape(str(cluster.get('node_count', '')))}</td>"
+            f"<td>{escape(str(cluster.get('aggregation_decision', '')))}</td>"
+            f"<td>{escape(str(cluster.get('aggregation_confidence', '')))}</td>"
+            f"<td>{escape(str(round(float(cluster.get('x', 0.0)), 2)))}</td>"
+            f"<td>{escape(str(round(float(cluster.get('y', 0.0)), 2)))}</td>"
+            f"<td>{image_link} {map_link}</td>"
             "</tr>"
         )
     return "\n".join(rows)
@@ -228,20 +310,31 @@ def build_workflow_review_html(
     for key in ("network_overview_png", "problem_overlay_png", "reference_comparison_png"):
         if visualization_report.get(key):
             artifacts[key] = _as_path(visualization_report.get(key))
+    cluster_zoom_pngs = list(visualization_report.get("cluster_zoom_pngs", []) or [])
+    if cluster_zoom_pngs:
+        artifacts["cluster_zoom_dir"] = _as_path(Path(str(cluster_zoom_pngs[0]["image_file"])).parent)
+    portable_cluster_zoom_pngs = [
+        {
+            **cluster,
+            "image_file": _portable_path(cluster.get("image_file"), output_dir),
+        }
+        for cluster in cluster_zoom_pngs
+    ]
 
     manifest = {
         "status": "pass",
         "claim_status": claim_status,
-        "html_file": str(html_file),
-        "workflow_report_file": str(workflow_report_file),
+        "html_file": _portable_path(html_file, output_dir),
+        "workflow_report_file": _portable_path(workflow_report_file, output_dir),
         "human_review_required_count": len(actions),
         "gate_summary": _gate_summary(gate_status),
         "visualizations": {
-            "network_overview_png": str(visualization_report.get("network_overview_png", "")),
-            "problem_overlay_png": str(visualization_report.get("problem_overlay_png", "")),
-            "reference_comparison_png": str(visualization_report.get("reference_comparison_png", "")),
+            "network_overview_png": _portable_path(visualization_report.get("network_overview_png"), output_dir),
+            "problem_overlay_png": _portable_path(visualization_report.get("problem_overlay_png"), output_dir),
+            "reference_comparison_png": _portable_path(visualization_report.get("reference_comparison_png"), output_dir),
+            "cluster_zoom_pngs": portable_cluster_zoom_pngs,
         },
-        "artifacts": {key: str(value) for key, value in artifacts.items() if value is not None},
+        "artifacts": {key: _portable_path(value, output_dir) for key, value in artifacts.items() if value is not None},
         "review_queue": list(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
     }
@@ -254,14 +347,19 @@ def build_workflow_review_html(
     visual_panels = "\n".join(
         panel
         for panel in (
-            _image_panel("Network Preview", visualization_report.get("network_overview_png")),
-            _image_panel("Problem Map", visualization_report.get("problem_overlay_png")),
-            _image_panel("Reference Comparison", visualization_report.get("reference_comparison_png")),
+            _image_panel("Network Preview", visualization_report.get("network_overview_png"), base_dir=output_dir),
+            _image_panel("Problem Map", visualization_report.get("problem_overlay_png"), base_dir=output_dir),
+            _image_panel(
+                "Reference Comparison",
+                visualization_report.get("reference_comparison_png"),
+                base_dir=output_dir,
+            ),
         )
         if panel
     )
     if not visual_panels:
         visual_panels = "<p>No network visualization could be generated for this review.</p>"
+    cluster_zoom_panels = _cluster_zoom_gallery(cluster_zoom_pngs, base_dir=output_dir)
 
     html = f"""<!doctype html>
 <html lang="en">
@@ -284,6 +382,7 @@ def build_workflow_review_html(
     .visual-panel {{ margin: 0; border: 1px solid #cbd5e1; padding: 10px; background: #ffffff; }}
     .visual-panel figcaption {{ font-weight: 700; margin-bottom: 8px; }}
     .visual-panel img {{ max-width: 100%; height: auto; display: block; border: 1px solid #e5e7eb; }}
+    .cluster-panel figcaption {{ min-height: 44px; }}
   </style>
 </head>
 <body>
@@ -315,6 +414,19 @@ def build_workflow_review_html(
   <h2>Problem Map</h2>
   <p>The problem overlay highlights dense topology clusters and other review locations when coordinates are available.</p>
 
+  <h2>Cluster Zooms</h2>
+  <section class="visual-grid">
+    {cluster_zoom_panels}
+  </section>
+
+  <h2>Dense Junction Review Points</h2>
+  <table>
+    <thead><tr><th>cluster</th><th>nodes</th><th>decision</th><th>confidence</th><th>x</th><th>y</th><th>links</th></tr></thead>
+    <tbody>
+      {_dense_cluster_rows(cluster_zoom_pngs, base_dir=output_dir)}
+    </tbody>
+  </table>
+
   <h2>Review Queue</h2>
   <table>
     <thead><tr><th>priority</th><th>#</th><th>action</th></tr></thead>
@@ -335,7 +447,7 @@ def build_workflow_review_html(
   <table>
     <thead><tr><th>artifact</th><th>file</th></tr></thead>
     <tbody>
-      {_artifact_rows(artifacts)}
+      {_artifact_rows(artifacts, base_dir=output_dir)}
     </tbody>
   </table>
 
@@ -369,6 +481,7 @@ def build_workflow_review_html(
         "network_overview_png": str(visualization_report.get("network_overview_png", "")),
         "problem_overlay_png": str(visualization_report.get("problem_overlay_png", "")),
         "reference_comparison_png": str(visualization_report.get("reference_comparison_png", "")),
+        "cluster_zoom_pngs": cluster_zoom_pngs,
         "human_review_required_count": len(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
     }
