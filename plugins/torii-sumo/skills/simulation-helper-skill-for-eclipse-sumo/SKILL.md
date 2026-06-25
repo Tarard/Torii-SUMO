@@ -42,7 +42,7 @@ If a target/current-state/deviation cannot be inferred, switch to the intake pat
 ## Core Rules
 
 - Load the minimum reference set for the scenario; do not bulk-load every file.
-- Preserve the one-sentence workflow. Infer safe defaults, run bounded diagnostic steps, and ask only truly blocking questions; missing map/TLS reality evidence should demote claims, not block construction and routeability checks.
+- Preserve the one-sentence workflow. Infer safe defaults, run bounded diagnostic steps, and ask only truly blocking questions; missing map/TLS reality evidence should block clean/experiment-ready claims without preventing construction, routeability checks, SUMO-GUI, or Netedit review artifacts.
 - Confirm missing experiment assumptions before formal execution or comparison.
 - Prove the SUMO environment before formal experiment work when `sumo`, `duarouter`, `SUMO_HOME`, Python, `traci`, or output generation has not been verified.
 - Separate what SUMO loaded, what the controller did, what outputs were written, what warnings/failures occurred, and what claim is supportable.
