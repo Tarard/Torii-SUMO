@@ -17,6 +17,7 @@ from .tools.evidence_tools import (
 from .tools.osm_tools import (
     sumo_network_connected_core,
     sumo_network_junction_aggregation_variant,
+    sumo_network_overlapping_junction_audit,
     sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
@@ -83,6 +84,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Audit dense SUMO junction clusters, including physical cross/T approach-axis shape scoring for over-fragmented OSM topology.")(
         sumo_network_topology_audit
+    )
+    server.tool(description="Audit close overlapping top-level SUMO junctions while ignoring valid internal crossing and walkingarea layers.")(
+        sumo_network_overlapping_junction_audit
     )
     server.tool(description="Mine joined-junction cases from a reference SUMO network and match them against fragmented candidate topology clusters.")(
         sumo_network_reference_join_audit

@@ -5,6 +5,7 @@ from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_
 from torii_sumo.tools.osm_tools import (
     sumo_network_review_html,
     sumo_network_junction_aggregation_variant,
+    sumo_network_overlapping_junction_audit,
     sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
@@ -223,6 +224,45 @@ def test_sumo_network_reference_join_audit_tool_returns_json_compatible_report(m
 
     assert report["status"] == "pass"
     assert report["matched_case_count"] == 2
+    json.dumps(report)
+
+
+def test_sumo_network_overlapping_junction_audit_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    reference_join_file = tmp_path / "reference_join.json"
+    reference_join_file.write_text('{"matched_cases": []}', encoding="utf-8")
+
+    def fake_audit(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["overlap_radius_m"] == 9.0
+        assert kwargs["short_edge_length_m"] == 13.0
+        assert kwargs["min_group_nodes"] == 3
+        assert kwargs["reference_join_audit_report"] == {"matched_cases": []}
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "overlapping_junction_group_count": 1,
+            "summary_file": str(tmp_path / "summary.json"),
+        }
+
+    monkeypatch.setattr(osm_tools, "audit_overlapping_junctions", fake_audit)
+
+    report = sumo_network_overlapping_junction_audit(
+        net_file=str(net_file),
+        output_dir=str(tmp_path / "overlap"),
+        overlap_radius_m=9.0,
+        short_edge_length_m=13.0,
+        min_group_nodes=3,
+        reference_join_audit_report_file=str(reference_join_file),
+    )
+
+    assert report["status"] == "pass"
+    assert report["overlapping_junction_group_count"] == 1
     json.dumps(report)
 
 
