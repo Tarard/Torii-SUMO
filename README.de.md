@@ -91,7 +91,7 @@ Torii baut und auditiert SUMO-Artefakte, zertifiziert ein Modell aber nicht als 
 
 ## License and Notices
 
-Quelltext ist unter MIT lizenziert. Skill-Dateien, Dokumentation, Checklisten, Beispiele und Protokolltexte sind unter CC BY 4.0 lizenziert. Beide Bereiche stehen in [`LICENSE`](LICENSE).
+Quelltext ist unter PolyForm Noncommercial 1.0.0 lizenziert. Skill-Dateien, Dokumentation, Checklisten, Beispiele und Protokolltexte sind unter CC BY-NC 4.0 lizenziert. Kommerzielle Nutzung erfordert eine separate schriftliche Erlaubnis. Beide Bereiche stehen in [`LICENSE`](LICENSE).
 
 Eclipse SUMO ist eine Marke der Eclipse Foundation. Kartendaten im OSM-Demo sind © OpenStreetMap contributors und unter der Open Database License (ODbL) verfuegbar.
 

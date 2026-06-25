@@ -91,7 +91,7 @@ Torii builds and audits SUMO artifacts, but it does not certify a model as corre
 
 ## License and Notices
 
-Source code is licensed under MIT. Skill files, docs, checklists, examples, and protocol text are licensed under CC BY 4.0. Both scopes are recorded in [`LICENSE`](LICENSE).
+Source code is licensed under PolyForm Noncommercial 1.0.0. Skill files, docs, checklists, examples, and protocol text are licensed under CC BY-NC 4.0. Commercial use requires separate written permission. Both scopes are recorded in [`LICENSE`](LICENSE).
 
 Eclipse SUMO is a trademark of the Eclipse Foundation. Map data in the OSM demo is © OpenStreetMap contributors and available under the Open Database License (ODbL).
 
