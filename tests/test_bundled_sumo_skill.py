@@ -163,6 +163,8 @@ def test_skill_routes_detector_constrained_demand_reconstruction() -> None:
     assert "Tool Boundary" in reference
     assert "Public Data Boundary" in reference
     assert "Treat detector-matched routes as a plausible demand reconstruction" in reference
+    assert "large-scale real-world detector observations" in reference
+    assert "simulated detector measurements match the real detector measurements over time" in reference
 
 
 def test_detector_constrained_demand_reference_is_workflow_first() -> None:

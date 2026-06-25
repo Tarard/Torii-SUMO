@@ -92,7 +92,7 @@ def create_server() -> FastMCP:
     server.tool(description="Compare a candidate SUMO network against a reference network by OSM road-type scope and flag over-included short detail fragments for review.")(
         sumo_network_reference_scope_audit
     )
-    server.tool(description="Create a separate netconvert --junctions.join review variant from topology or reference-join audit reports without overwriting the source network.")(
+    server.tool(description="Create a separate SUMO plain-nodes junction-join patch and review variant from topology or reference-join audit reports without overwriting the source network.")(
         sumo_network_junction_aggregation_variant
     )
     server.tool(description="Create a separate reference-scope pruning review variant from a reference scope audit without overwriting the source network.")(

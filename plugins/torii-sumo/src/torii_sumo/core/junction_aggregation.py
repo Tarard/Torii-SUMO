@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .command_runner import run_command
+from .junction_join_definition import build_junction_join_definition
 
 
 def build_junction_aggregation_variant(
@@ -34,17 +35,25 @@ def build_junction_aggregation_variant(
     command_record = output_dir / f"{prefix}_netconvert.cmd.txt"
     variant_file = output_dir / f"{prefix}_junction_aggregated.net.xml"
     joined_junctions_file = output_dir / f"{prefix}_joined_junctions.xml"
+    join_definition = build_junction_join_definition(candidates, output_dir=output_dir, prefix=prefix)
 
     plan = {
         "junction_aggregation_status": "not_needed" if not candidates else "planned_for_review_variant",
         "net_file": str(net_file),
         "variant_file": str(variant_file) if candidates else "",
         "joined_junctions_file": str(joined_junctions_file) if candidates else "",
+        "nodes_patch_file": join_definition["nodes_patch_file"],
+        "join_definition_file": join_definition["definition_file"],
+        "join_definition_csv": join_definition["definition_csv"],
         "join_dist_m": join_dist_m,
+        "join_dist_policy": "recorded for legacy scoring context; precise joins are driven by the nodes patch",
         "candidate_count": len(candidates),
+        "explicit_join_count": join_definition["explicit_join_count"],
+        "join_exclude_count": join_definition["join_exclude_count"],
+        "needs_map_review_count": join_definition["needs_map_review_count"],
         "candidate_sources": sorted({candidate["source"] for candidate in candidates}),
         "review_policy": (
-            "create a separate netconvert --junctions.join variant for Netedit and Google Maps review; "
+            "create a separate netconvert nodes-patch variant for Netedit and Google Maps review; "
             "do not overwrite the source network"
         ),
         "candidates": candidates,
@@ -62,6 +71,9 @@ def build_junction_aggregation_variant(
             "junction_aggregation_candidates_file": str(candidates_file),
             "junction_aggregation_variant_file": "",
             "junction_aggregation_joined_junctions_file": "",
+            "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
+            "junction_join_definition_file": join_definition["definition_file"],
+            "junction_join_definition_csv": join_definition["definition_csv"],
             "junction_aggregation_command_record": "",
             "junction_aggregation_netconvert": {},
             "warnings": [],
@@ -71,9 +83,7 @@ def build_junction_aggregation_variant(
         "netconvert",
         "--sumo-net-file",
         str(net_file),
-        "--junctions.join",
-        "--junctions.join-dist",
-        f"{join_dist_m:g}",
+        *join_definition["netconvert_patch_args"],
         "--junctions.join-output",
         str(joined_junctions_file),
         "--output-file",
@@ -90,6 +100,9 @@ def build_junction_aggregation_variant(
             "junction_aggregation_candidates_file": str(candidates_file),
             "junction_aggregation_variant_file": str(variant_file),
             "junction_aggregation_joined_junctions_file": str(joined_junctions_file),
+            "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
+            "junction_join_definition_file": join_definition["definition_file"],
+            "junction_join_definition_csv": join_definition["definition_csv"],
             "junction_aggregation_command_record": str(command_record),
         }
 
@@ -108,6 +121,12 @@ def build_junction_aggregation_variant(
         "junction_aggregation_candidates_file": str(candidates_file),
         "junction_aggregation_variant_file": str(variant_file),
         "junction_aggregation_joined_junctions_file": str(joined_junctions_file),
+        "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
+        "junction_join_definition_file": join_definition["definition_file"],
+        "junction_join_definition_csv": join_definition["definition_csv"],
+        "junction_join_explicit_join_count": join_definition["explicit_join_count"],
+        "junction_join_exclude_count": join_definition["join_exclude_count"],
+        "junction_join_needs_map_review_count": join_definition["needs_map_review_count"],
         "junction_aggregation_command_record": str(command_record),
         "junction_aggregation_netconvert": result,
         "warnings": warnings,
