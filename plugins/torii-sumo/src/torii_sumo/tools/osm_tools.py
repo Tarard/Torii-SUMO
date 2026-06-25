@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
+from torii_sumo.core.junction_aggregation import build_junction_aggregation_variant
+from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
 from torii_sumo.core.osm_network import (
     audit_tls,
     audit_tls_multisource,
@@ -17,6 +20,9 @@ from torii_sumo.core.road_scope import (
     resolve_highway_classes as resolve_highway_classes_from_scope,
 )
 from torii_sumo.core.routeability_audit import run_routeability_audit
+from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
+from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+from torii_sumo.core.reference_scope import audit_reference_scope, build_scope_pruning_variant
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 
 
@@ -24,6 +30,17 @@ def resolve_highway_classes(value: str | None) -> set[str]:
     resolved = resolve_highway_classes_from_scope(value, default_to_recommended=True)
     assert resolved is not None
     return resolved
+
+
+def _read_json_report(path: str | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    report_path = Path(path)
+    with report_path.open("r", encoding="utf-8") as handle:
+        loaded = json.load(handle)
+    if not isinstance(loaded, dict):
+        raise ValueError(f"report file must contain a JSON object: {report_path}")
+    return loaded
 
 
 def sumo_osm_build_network(
@@ -148,6 +165,7 @@ def sumo_network_topology_audit(
     prefix: str = "topology_audit",
     cluster_radius_m: float = 30.0,
     min_cluster_nodes: int = 3,
+    osm_file: str | None = None,
 ) -> dict[str, Any]:
     return audit_topology_fragmentation(
         net_file=Path(net_file),
@@ -155,6 +173,121 @@ def sumo_network_topology_audit(
         prefix=prefix,
         cluster_radius_m=cluster_radius_m,
         min_cluster_nodes=min_cluster_nodes,
+        osm_file=Path(osm_file) if osm_file else None,
+    )
+
+
+def sumo_network_reference_join_audit(
+    reference_net_file: str,
+    candidate_net_file: str,
+    output_dir: str,
+    prefix: str = "reference_join_audit",
+    reference_cluster_prefix: str = "cluster_",
+    candidate_cluster_radius_m: float = 30.0,
+    candidate_min_cluster_nodes: int = 3,
+    match_radius_m: float = 45.0,
+) -> dict[str, Any]:
+    return audit_reference_join_patterns(
+        reference_net_file=Path(reference_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        reference_cluster_prefix=reference_cluster_prefix,
+        candidate_cluster_radius_m=candidate_cluster_radius_m,
+        candidate_min_cluster_nodes=candidate_min_cluster_nodes,
+        match_radius_m=match_radius_m,
+    )
+
+
+def sumo_network_reference_hierarchy_audit(
+    reference_net_file: str,
+    candidate_net_file: str,
+    output_dir: str,
+    prefix: str = "reference_hierarchy_audit",
+    match_distance_m: float = 35.0,
+    oversplit_length_ratio: float = 0.6,
+    min_extra_edges: int = 10,
+) -> dict[str, Any]:
+    return audit_reference_hierarchy(
+        reference_net_file=Path(reference_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        match_distance_m=match_distance_m,
+        oversplit_length_ratio=oversplit_length_ratio,
+        min_extra_edges=min_extra_edges,
+    )
+
+
+def sumo_network_junction_aggregation_variant(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "junction_aggregation",
+    topology_audit_report_file: str | None = None,
+    reference_join_audit_report_file: str | None = None,
+    join_dist_m: float = 30.0,
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_junction_aggregation_variant(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        topology_audit_report=_read_json_report(topology_audit_report_file),
+        reference_join_audit_report=_read_json_report(reference_join_audit_report_file),
+        join_dist_m=join_dist_m,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def sumo_network_reference_scope_audit(
+    reference_net_file: str,
+    candidate_net_file: str,
+    output_dir: str,
+    prefix: str = "reference_scope",
+    overrepresentation_ratio: float = 1.5,
+    min_extra_edges: int = 10,
+    max_prune_edge_length_m: float = 80.0,
+) -> dict[str, Any]:
+    return audit_reference_scope(
+        reference_net_file=Path(reference_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        overrepresentation_ratio=overrepresentation_ratio,
+        min_extra_edges=min_extra_edges,
+        max_prune_edge_length_m=max_prune_edge_length_m,
+    )
+
+
+def sumo_network_scope_pruning_variant(
+    net_file: str,
+    reference_scope_report_file: str,
+    output_dir: str,
+    prefix: str = "scope_pruning",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_scope_pruning_variant(
+        net_file=Path(net_file),
+        reference_scope_report=_read_json_report(reference_scope_report_file) or {},
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def sumo_network_tls_aggregation_variant(
+    net_file: str,
+    tls_audit_report_file: str,
+    output_dir: str,
+    prefix: str = "tls_aggregation",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_tls_aggregation_variant(
+        net_file=Path(net_file),
+        tls_audit_report=_read_json_report(tls_audit_report_file) or {},
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -213,9 +346,15 @@ def sumo_osm_cleanup_workflow(
     topology_cluster_radius_m: float = 30.0,
     topology_min_cluster_nodes: int = 3,
     run_routeability_audit_after_build: bool = True,
-    routeability_vehicle_count: int = 100,
-    routeability_initial_end: int = 300,
-    routeability_max_end: int = 2400,
+    routeability_vehicle_count: int | None = None,
+    routeability_initial_end: int | None = None,
+    routeability_max_end: int | None = None,
+    run_tls_aggregation_after_build: bool = True,
+    run_reference_join_audit_after_build: bool = True,
+    run_reference_join_aggregation_after_build: bool = True,
+    run_reference_hierarchy_audit_after_build: bool = True,
+    run_reference_scope_audit_after_build: bool = True,
+    run_scope_pruning_after_build: bool = True,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
@@ -249,5 +388,11 @@ def sumo_osm_cleanup_workflow(
         routeability_vehicle_count=routeability_vehicle_count,
         routeability_initial_end=routeability_initial_end,
         routeability_max_end=routeability_max_end,
+        run_tls_aggregation_after_build=run_tls_aggregation_after_build,
+        run_reference_join_audit_after_build=run_reference_join_audit_after_build,
+        run_reference_join_aggregation_after_build=run_reference_join_aggregation_after_build,
+        run_reference_hierarchy_audit_after_build=run_reference_hierarchy_audit_after_build,
+        run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
+        run_scope_pruning_after_build=run_scope_pruning_after_build,
         key_edge_queries=key_edge_queries,
     )

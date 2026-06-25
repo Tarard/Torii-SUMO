@@ -1,0 +1,45 @@
+{
+  "example": "one_prompt_osm_network",
+  "target": "Ingolstadt city-center OSM-to-SUMO cleanup compared with TUM-VT/sumo_ingolstadt",
+  "prompt_file": "prompt.md",
+  "center": {
+    "lat": 48.765391,
+    "lon": 11.4238,
+    "osm_url": "https://www.openstreetmap.org/#map=17/48.765391/11.423800"
+  },
+  "comparison_bbox": {
+    "min_lon": 11.4138,
+    "min_lat": 48.755391,
+    "max_lon": 11.4338,
+    "max_lat": 48.775391
+  },
+  "torii_source": {
+    "kind": "OpenStreetMap",
+    "network_profile": "reference_matched",
+    "vehicle_core_rule": "reference passenger-drivable layer",
+    "visual_detail_rule": "reference visible highway layers"
+  },
+  "reference_source": {
+    "kind": "manual SUMO network",
+    "repository": "https://github.com/TUM-VT/sumo_ingolstadt",
+    "network_file": "simulation/Ingolstadt SUMO 365/ingolstadt_net.net.xml"
+  },
+  "validation": [
+    "validation/comparison_summary.json",
+    "validation/tum_vs_torii_bbox_comparison.csv",
+    "validation/run_2026-06-24_5_5/summary.json",
+    "validation/run_2026-06-24_5_5/tls_vehicle_representatives.csv",
+    "validation/run_2026-06-24_5_5/tls_reference_visual_detail_representatives.csv",
+    "validation/run_2026-06-24_5_5/tls_spatial_match_to_tum.json",
+    "assets/tum_vs_torii_5_5_tls_aggregated_overview.png",
+    "assets/tum_vs_torii_5_5_tls_aggregated_detail.png",
+    "assets/torii_5_5_core_vs_visual_detail.png",
+    "assets/junction_fragmentation_gap.png"
+  ],
+  "committed_networks": [
+    "networks/tum_ingolstadt_center_reference.net.xml",
+    "networks/torii_5_5_connected_core_tls_aggregated.net.xml",
+    "networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml"
+  ],
+  "claim_status": "diagnostic-demo"
+}

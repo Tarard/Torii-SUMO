@@ -65,7 +65,7 @@ This reference can be used from either the standalone public skill repository or
 - README includes suggested GitHub topics:
   `sumo`, `eclipse-sumo`, `traci`, `traffic-simulation`, `traffic-signal-control`, `transportation`, `intelligent-transportation-systems`, `max-pressure-control`, `reproducibility`, `research-software`, `agent-skills`, `codex`, `claude`.
 - `examples/01_signal_control_audit/` contains `task.md`, `README.md`, and the `fixed_time/`, `max_pressure/`, and `data_informed/` subcases.
-- `examples/04_one_prompt_osm_network/` contains the Ingolstadt OSM-to-SUMO prompt plus a public TUM-reference comparison summary.
+- `examples/02_one_prompt_osm_network/` contains the Ingolstadt OSM-to-SUMO prompt plus a public TUM-reference comparison summary.
 - `docs/common-sumo-signal-control-failures.md` exists and emphasizes practical failure modes.
 - `docs/release/` contains GitHub topics, mailing-list announcement draft, LinkedIn post drafts, conference/demo positioning, and a public repository manifest.
 

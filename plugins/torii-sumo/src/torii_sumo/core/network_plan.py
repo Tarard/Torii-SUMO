@@ -164,6 +164,17 @@ def _reference_policy_plan(
         return _failed_reference_plan(reference_policy, reference_target)
 
     selected_highways = sorted(str(item) for item in reference_policy.get("selected_highway_classes", []))
+    vehicle_core_highways = sorted(
+        str(item) for item in reference_policy.get("vehicle_core_highway_classes", selected_highways)
+    )
+    visual_detail_highways = sorted(
+        str(item)
+        for item in reference_policy.get(
+            "visual_detail_highway_classes",
+            reference_policy.get("reference_visual_detail_highway_classes", vehicle_core_highways),
+        )
+    )
+    visual_detail_only_highways = sorted(set(visual_detail_highways) - set(vehicle_core_highways))
     auxiliary_layers = sorted(str(item) for item in reference_policy.get("auxiliary_modal_layers", []))
     movement_layers = sorted(str(item) for item in reference_policy.get("movement_layers", ["passenger", *auxiliary_layers]))
     if "passenger" not in movement_layers:
@@ -178,14 +189,21 @@ def _reference_policy_plan(
         "reference_net_file": str(reference_policy.get("reference_net_file", "")),
         "network_detail_target": "reference_matched",
         "primary_network_layer": str(reference_policy.get("primary_network_layer", "passenger_vehicle")),
+        "default_routeability_layer": "vehicle_core",
+        "default_netedit_comparison_layer": "reference_visual_detail",
+        "comparison_scope_mode": "vehicle_core_and_reference_visual_detail",
         "auxiliary_modal_layers": auxiliary_layers,
         "auxiliary_modal_highway_classes": dict(reference_policy.get("auxiliary_modal_highway_classes", {})),
         "movement_layers": movement_layers,
         "highway_classes": selected_highways,
+        "vehicle_core_highway_classes": vehicle_core_highways,
+        "reference_visual_detail_highway_classes": visual_detail_highways,
+        "reference_visual_detail_only_highway_classes": visual_detail_only_highways,
         "service_passenger_policy": service_passenger_policy
         or str(reference_policy.get("service_passenger_policy", "sumo_default")),
         "cleanup_policy": [
             "derive vehicle road hierarchy from the reference passenger-drivable layer",
+            "build a separate reference visual-detail layer for full-reference Netedit comparison",
             "record bicycle, pedestrian, and bus layers as auxiliary modal layers",
             "apply reference service-road passenger permissions only when the reference uses them",
         ],
@@ -193,7 +211,7 @@ def _reference_policy_plan(
             "passenger_connectivity",
             "routeability_audit",
             "topology_audit",
-            "reference_comparison",
+            "scope_matched_reference_comparison",
             "netedit_launch",
         ],
         "reference_policy": dict(reference_policy),
