@@ -91,7 +91,7 @@ Torii 可以构建和审计 SUMO artifacts，但不会认证模型一定正确�
 
 ## License and Notices
 
-源代码使用 MIT 许可证。Skill 文件、文档、检查清单、示例和协议文本使用 CC BY 4.0。两个授权范围都写在 [`LICENSE`](LICENSE)。
+源代码使用 PolyForm Noncommercial 1.0.0。Skill 文件、文档、检查清单、示例和协议文本使用 CC BY-NC 4.0。商业使用需要另行取得书面许可。两个授权范围都写在 [`LICENSE`](LICENSE)。
 
 Eclipse SUMO 是 Eclipse Foundation 的商标。OSM demo 中的地图数据 © OpenStreetMap contributors，并基于 Open Database License (ODbL) 提供。
 

@@ -2,7 +2,7 @@
 
 Use this reference when the user asks to add or compare traffic signal controllers such as max-pressure, Webster, SOTL, fixed-time, actuated control, or custom TraCI control.
 
-This reference uses `docwza/sumolights` as public implementation-pattern evidence only. Do not copy GPL-3.0 source code, TensorFlow 1.14 training code, or project-specific files into this MIT plugin.
+This reference uses `docwza/sumolights` as public implementation-pattern evidence only. Do not copy GPL-3.0 source code, TensorFlow 1.14 training code, or project-specific files into this plugin.
 
 ## Controller Application Plan
 
