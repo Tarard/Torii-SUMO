@@ -33,6 +33,216 @@ completion_summary:
 
 If one of these is manual, label the result as `diagnostic-demo` or `construction-invalid` until the manual step is documented and replayable.
 
+## Workflow Contract
+
+Workflow first, tools second. Treat detector-constrained demand reconstruction as a gated workflow with named records, not as a loose set of scripts. Python, routeSampler, SUMO, MCP tools, or manual commands are executors. The workflow status is decided by gate outputs.
+
+Every run should produce or point to these records:
+
+```text
+target_record:
+detector_manifest:
+source_sink_manifest:
+route_candidate_manifest:
+route_detector_incidence:
+time_bin_count_constraints:
+baseline_comparison:
+calibrated_comparison:
+hourly_audit:
+daily_summary:
+workflow_status:
+```
+
+Use one immutable `target_record` per declared experiment scope. If a mapping, network, route candidate set, time bin, or calibration knob changes, start a new target record or explicitly version the change.
+
+Do not call a detector-entry smoke test OD reconstruction. Detector-entry probe demand is useful only for checking detector placement and E1 observability.
+
+## Gate 0: Target Declaration
+
+Declare the reconstruction target before building vehicles:
+
+```text
+target_record:
+  time_window:
+  detector_set:
+  detector_mapping:
+  network_version:
+  route_candidate_set:
+  field_count_interval:
+  validation_interval:
+  accepted_error:
+  completion_threshold:
+  calibration_stages:
+  data_release_status:
+```
+
+Pass condition: the target record is complete, uses absolute local timestamps, and names the exact network and detector mapping files.
+
+Fail condition: the run starts from "all available data", "the whole month", or "the current network" without versioned inputs.
+
+## Gate 1: Detector Alignment
+
+Build a detector manifest before route generation. Minimum fields:
+
+```text
+detector_manifest:
+  detector_id:
+  source_system:
+  real_direction:
+  sumo_edge:
+  sumo_lane:
+  lane_position:
+  period:
+  mapping_confidence:
+  mapping_status:
+```
+
+Pass condition: active detector rows have directed SUMO edges and lanes, paired opposite-direction sensors remain separate, and same-lane conflicts are either repaired or explicitly aggregated.
+
+Fail condition: opposing directions are merged, detector ids are silently moved to convenient roads, or deleted road sensors are ignored without an out-of-scope record.
+
+## Gate 2: Route Support Coverage
+
+Route support must exist before fitting volumes. Create a source/sink manifest and route candidate manifest:
+
+```text
+source_sink_manifest:
+  source_edge:
+  sink_edge:
+  source_type:
+  sink_type:
+  reason:
+
+route_candidate_manifest:
+  route_id:
+  source_edge:
+  sink_edge:
+  edge_count:
+  route_length:
+  edges:
+
+route_detector_incidence:
+  route_id:
+  detector_id:
+  detector_edge:
+  detector_direction:
+  incidence:
+```
+
+Pass condition: each active detector edge/direction is covered by at least one route that enters from a plausible source and leaves or terminates at a plausible sink.
+
+Fail condition: a detector can only be matched by spawning directly on the detector edge, or route support uses a road closure, forbidden edge, wrong direction, or deleted connector.
+
+## Gate 3: Time-Bin Constraint Construction
+
+Convert real counts into time-bin constraints only after detector and route support gates pass:
+
+```text
+time_bin_count_constraints:
+  begin:
+  end:
+  detector_id:
+  edge_id:
+  lane_id:
+  expected_total:
+  source_rows:
+```
+
+Pass condition: bins use the declared interval, preserve direction, and keep enough resolution to test AM peak, PM peak, low-flow, and daily totals separately.
+
+Fail condition: full-day totals are used as the only target, or missing sensor minutes are treated as zero without an imputation or exclusion flag.
+
+## Gate 4: Baseline Reconstruction
+
+Run the route candidate set without residual supplements first. The baseline is not optional.
+
+Required output:
+
+```text
+baseline_comparison:
+  expected_total:
+  measured_total:
+  edge_rows:
+  MAE:
+  RMSE:
+  max_abs_error:
+  signed_bias:
+  GEH_lt5_percent:
+  top_residual_edges:
+  completion_summary:
+```
+
+Pass condition: SUMO writes readable detector output and completion summary, even if detector error is still high.
+
+Fail condition: routeSampler generates vehicles that SUMO cannot insert, route diversity collapses, or detector files are missing.
+
+## Gate 5: Residual-Correction Calibration
+
+Use residuals as controlled feedback. A calibrated stage may add named supplements or optimizer knobs, but it must reuse the same target record and baseline route support.
+
+Required output:
+
+```text
+calibrated_comparison:
+  baseline_reference:
+  calibration_knobs:
+  supplement_rules:
+  expected_total:
+  measured_total:
+  MAE:
+  RMSE:
+  GEH_lt5_percent:
+  top_residual_edges:
+  route_diversity:
+  completion_summary:
+```
+
+Pass condition: detector fit improves or the residual pattern is explained, while completion, teleports, waiting vehicles, and route diversity remain disclosed.
+
+Fail condition: overflows are hidden by deleting arbitrary through routes, underflows are patched by detector-entry vehicles, or the calibrated set gets excellent GEH by leaving many vehicles waiting.
+
+## Gate 6: Hourly And Daily Audit
+
+Aggregate only after every required time bin has a readable comparison and summary:
+
+```text
+hourly_audit:
+  stage:
+  day:
+  hour:
+  detector_abs_error_sum:
+  detector_squared_error_sum:
+  expected_total:
+  measured_total:
+  MAE:
+  RMSE:
+  GEH_lt5_percent:
+  loaded:
+  inserted:
+  arrived:
+  running_at_end:
+  waiting_for_insertion:
+  teleports:
+  collisions:
+  completion_ratio:
+
+daily_summary:
+  stage:
+  day:
+  hours_expected:
+  hours_with_comparison:
+  hours_with_summary:
+  MAE:
+  RMSE:
+  GEH_lt5_percent:
+  completion_ratio:
+  workflow_status:
+```
+
+Pass condition: daily MAE/RMSE can be recomputed from exact hourly sums, and completion is reported before any demand-quality claim.
+
+Fail condition: daily metrics average rounded hourly values, omit missing hours, or report detector fit without SUMO completion.
+
 ## Public Data Boundary
 
 Do not commit raw proprietary detector feeds, private station ids, unmasked precise sensor locations, or unpublished operational records to a public repository.
@@ -142,6 +352,31 @@ Stop and repair when:
 - teleports are nonzero in a setting where congestion is not the phenomenon under study;
 - residuals concentrate on one detector edge or one direction;
 - the calibrated route set collapses to too few distinct routes and creates insertion backlog.
+
+## Month-Long Workflow Exit Criteria
+
+For a month-scale run, keep the workflow staged:
+
+1. `diagnostic-demo`: one hour passes Gate 0 through Gate 6.
+2. `stress-diagnostic`: AM peak, PM peak, and one low-flow hour pass or produce documented failure feedback.
+3. `one-day-evidence`: all declared hours for one calendar day have baseline and calibrated records.
+4. `multi-day-evidence`: representative weekdays, weekends, holidays, roadworks, incident days, and background days are separated.
+5. `formal-evidence`: the full declared calendar set has fixed inputs, complete manifests, daily summaries, hourly audits, completion fields, and no hidden missing files.
+
+Do not skip from a good pilot hour to a month-level claim. Each stage should reuse the same target-record schema and explicitly record any versioned change.
+
+## Failure Feedback Rules
+
+Use failures to choose the next control action:
+
+| Symptom | Likely Deviation | Next Control Action |
+|---|---|---|
+| underflow concentrated on one detector | missing route support, deleted connector, wrong direction, or routeSampler coupling | inspect route support and route_detector_incidence before adding vehicles |
+| overflow concentrated on one detector | over-broad route prior, duplicate constraint, or merged opposing directions | audit detector_manifest and route candidates before deleting routes |
+| good detector fit but low completion | insertion backlog, route collapse, insufficient clearance, or unrealistic departures | report completion first, add clearance or route diversity, then rerun |
+| good daily total but bad peak hour | time-bin smoothing or wrong interval aggregation | rebuild time_bin_count_constraints at hourly or sub-hourly resolution |
+| many same-lane detector mismatches | detector mapping too fine for SUMO lane geometry | repair mapping, aggregate intentionally, or mark out of scope |
+| calibrated stage uses very few routes | route diversity collapse | keep baseline, try diversity-preserving supplements, and downgrade the claim |
 
 ## Month-Long Daily Workflow
 
@@ -273,6 +508,21 @@ The generated SUMO demand is detector-constrained and reproduces the real detect
 ```
 
 Treat detector-matched routes as a plausible demand reconstruction, not as proven true OD unless supported by additional OD priors such as travel times, trajectory data, boundary counts, surveys, or assignment evidence.
+
+## March Field Lesson
+
+The March-style workflow that should be reused is not a Dresden script name. The reusable lesson is:
+
+1. Build the detector manifest and route support once per network/mapping version.
+2. Generate one day at a time with absolute dates.
+3. Run 24 hourly bins per day, preserving AM peak, PM peak, and night periods.
+4. Keep paired baseline and calibrated stages for every day.
+5. Use baseline residuals to drive named supplements; do not hide the baseline.
+6. Save hourly comparisons and exact aggregation fields before daily summaries.
+7. Treat completion, waiting, teleports, collisions, and route diversity as part of the demand evidence.
+8. Keep large generated SUMO XML and private detector feeds local unless explicitly cleared for release.
+
+This lesson can guide future Python or MCP tooling, but the workflow contract above is the stable public interface.
 
 ## Common Mistakes
 
