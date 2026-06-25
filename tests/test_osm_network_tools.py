@@ -1588,6 +1588,26 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
             "warnings": ["topology audit found 1 suspicious dense junction cluster"],
         }
 
+    def fake_junction_aggregation(**kwargs):
+        audited["junction_aggregation_net_file"] = kwargs["net_file"]
+        audited["junction_aggregation_topology_report"] = kwargs["topology_audit_report"]
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "junction_aggregation_status": "variant_created_for_review",
+            "junction_aggregation_candidate_count": 1,
+            "junction_aggregation_plan_file": str(tmp_path / "junction_plan.json"),
+            "junction_aggregation_candidates_file": str(tmp_path / "junction_candidates.csv"),
+            "junction_aggregation_variant_file": str(tmp_path / "junction_aggregated.net.xml"),
+            "junction_join_nodes_patch_file": str(tmp_path / "junction_join.nod.xml"),
+            "junction_join_definition_file": str(tmp_path / "junction_join_definition.json"),
+            "junction_join_definition_csv": str(tmp_path / "junction_join_definition.csv"),
+            "junction_join_explicit_join_count": 0,
+            "junction_join_exclude_count": 1,
+            "junction_join_needs_map_review_count": 1,
+            "warnings": ["junction aggregation variant requires Google Maps and Netedit review before adoption"],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
@@ -1612,6 +1632,7 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
             "warnings": [],
         },
         topology_audit_func=fake_topology_audit,
+        junction_aggregation_func=fake_junction_aggregation,
         routeability_audit_func=lambda **_kwargs: {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -1633,8 +1654,11 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     )
 
     assert audited["net_file"] == net_file
+    assert audited["junction_aggregation_net_file"] == net_file
+    assert audited["junction_aggregation_topology_report"]["suspicious_cluster_count"] == 1
     assert report["status"] == "fail"
     assert report["gate_status"]["topology_audit"] == "blocked"
+    assert report["gate_status"]["junction_aggregation"] == "blocked"
     assert report["topology_fragmentation_status"] == "needs_review"
     assert report["suspicious_topology_cluster_count"] == 1
     assert report["topology_audit"]["suspicious_clusters"][0]["node_ids"] == ["j1", "j2", "j3"]
@@ -1643,6 +1667,17 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     assert report["junction_aggregation_needs_map_review_count"] == 0
     assert report["junction_aggregation_do_not_join_count"] == 0
     assert report["junction_aggregation_candidates_file"] == str(tmp_path / "topology.csv")
+    assert report["junction_aggregation_variant_status"] == "variant_created_for_review"
+    assert report["junction_aggregation_variant_file"] == str(tmp_path / "junction_aggregated.net.xml")
+    assert report["junction_join_nodes_patch_file"] == str(tmp_path / "junction_join.nod.xml")
+    assert report["junction_join_needs_map_review_count"] == 1
+    assert report["workflow_review_html_status"] == "pass"
+    assert Path(report["workflow_review_html_file"]).is_file()
+    html = Path(report["workflow_review_html_file"]).read_text(encoding="utf-8")
+    assert "Human Review Required" in html
+    assert "topology_audit" in html
+    assert "junction_aggregation" in html
+    assert "construction-invalid" in html
 
 
 def test_osm_cleanup_workflow_uses_connected_core_for_downstream_checks(tmp_path: Path) -> None:

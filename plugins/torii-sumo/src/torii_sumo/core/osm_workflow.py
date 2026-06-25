@@ -22,6 +22,7 @@ from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
 from .tls_aggregation import build_tls_aggregation_variant
 from .topology_audit import audit_topology_fragmentation
+from .workflow_review_html import build_workflow_review_html
 
 
 PARTIAL_MAIN_COMPONENT_RATIO = 0.98
@@ -432,6 +433,7 @@ def run_osm_cleanup_workflow(
     routeability_initial_end: int | None = None,
     routeability_max_end: int | None = None,
     run_tls_aggregation_after_build: bool = True,
+    run_junction_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
     run_reference_hierarchy_audit_after_build: bool = True,
@@ -446,6 +448,7 @@ def run_osm_cleanup_workflow(
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
+    junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
@@ -456,6 +459,7 @@ def run_osm_cleanup_workflow(
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
     service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
+    review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
     cleaned_place_name = (place_name or "").strip()
     place_report = None
@@ -660,6 +664,7 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_netedit_report: dict[str, Any] = {}
     reference_visual_detail_tls_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
+    junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     reference_hierarchy_audit_report: dict[str, Any] | None = None
@@ -896,6 +901,21 @@ def run_osm_cleanup_workflow(
             osm_file=osm_file,
         )
     if (
+        topology_audit_report is not None
+        and run_junction_aggregation_after_build
+        and str(network_plan.get("network_profile", "")) != "reference_matched"
+        and _junction_aggregation_summary(topology_audit_report)["junction_aggregation_candidate_count"] > 0
+    ):
+        junction_aggregation_report = junction_aggregation_func(
+            net_file=net_file,
+            output_dir=output_dir / "junction_aggregation",
+            prefix=f"{prefix}_junction_aggregation",
+            topology_audit_report=topology_audit_report,
+            reference_join_audit_report=None,
+            join_dist_m=topology_cluster_radius_m,
+            timeout_seconds=timeout_seconds,
+        )
+    if (
         str(network_plan.get("network_profile", "")) == "reference_matched"
         and reference_net_file is not None
         and run_reference_hierarchy_audit_after_build
@@ -1046,6 +1066,7 @@ def run_osm_cleanup_workflow(
         connected_core_connectivity_report or {},
         connectivity_report,
         topology_audit_report or {},
+        junction_aggregation_report or {},
         reference_hierarchy_audit_report or {},
         reference_scope_audit_report or {},
         reference_scope_pruning_report or {},
@@ -1090,6 +1111,13 @@ def run_osm_cleanup_workflow(
             f"{junction_aggregation_summary['junction_aggregation_candidate_count']} possible physical-intersection "
             "aggregation candidate(s); inspect the candidate CSV and map-review links before destructive joining"
         )
+    if junction_aggregation_report is not None and junction_aggregation_report.get(
+        "junction_aggregation_status"
+    ) == "variant_created_for_review":
+        warnings.append(
+            "junction aggregation created a separate plain-nodes join patch review variant; inspect it in Netedit "
+            "and map context before adopting any physical-intersection join"
+        )
     if reference_join_aggregation_report is not None and reference_join_aggregation_report.get(
         "junction_aggregation_status"
     ) == "variant_created_for_review":
@@ -1132,6 +1160,10 @@ def run_osm_cleanup_workflow(
         gate_status["reference_join_aggregation"] = _reference_join_aggregation_gate(reference_join_aggregation_report)
     if topology_audit_report is not None:
         gate_status["topology_audit"] = _gate_value(topology_audit_report)
+    if junction_aggregation_report is not None:
+        gate_status["junction_aggregation"] = (
+            "blocked" if junction_aggregation_report.get("status") == "pass" else _gate_value(junction_aggregation_report)
+        )
     if routeability_audit_report is not None:
         gate_status["routeability_audit"] = _gate_value(routeability_audit_report)
     workflow_ok = (
@@ -1154,7 +1186,7 @@ def run_osm_cleanup_workflow(
     provider_counts = tls_regional_map_baseline.get("regional_map_provider_counts")
     has_tls_regional_rows = not isinstance(provider_counts, dict) or any(int(count) > 0 for count in provider_counts.values())
     regional_map_baseline = tls_regional_map_baseline if tls_regional_map_baseline and has_tls_regional_rows else bbox_regional_map_baseline
-    return {
+    report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
         "area_input": cleaned_place_name or bbox,
@@ -1230,6 +1262,38 @@ def run_osm_cleanup_workflow(
         "max_topology_cluster_node_count": 0 if topology_audit_report is None else topology_audit_report.get("max_cluster_node_count", 0),
         "topology_audit_clusters_file": "" if topology_audit_report is None else str(topology_audit_report.get("clusters_file", "")),
         **junction_aggregation_summary,
+        "junction_aggregation_variant_status": "skipped"
+        if junction_aggregation_report is None
+        else junction_aggregation_report.get(
+            "junction_aggregation_status", junction_aggregation_report.get("status", "fail")
+        ),
+        "junction_aggregation_variant_file": ""
+        if junction_aggregation_report is None
+        else str(junction_aggregation_report.get("junction_aggregation_variant_file", "")),
+        "junction_aggregation_plan_file": ""
+        if junction_aggregation_report is None
+        else str(junction_aggregation_report.get("junction_aggregation_plan_file", "")),
+        "junction_aggregation_variant_candidates_file": ""
+        if junction_aggregation_report is None
+        else str(junction_aggregation_report.get("junction_aggregation_candidates_file", "")),
+        "junction_join_nodes_patch_file": ""
+        if junction_aggregation_report is None
+        else str(junction_aggregation_report.get("junction_join_nodes_patch_file", "")),
+        "junction_join_definition_file": ""
+        if junction_aggregation_report is None
+        else str(junction_aggregation_report.get("junction_join_definition_file", "")),
+        "junction_join_definition_csv": ""
+        if junction_aggregation_report is None
+        else str(junction_aggregation_report.get("junction_join_definition_csv", "")),
+        "junction_join_explicit_join_count": 0
+        if junction_aggregation_report is None
+        else junction_aggregation_report.get("junction_join_explicit_join_count", 0),
+        "junction_join_exclude_count": 0
+        if junction_aggregation_report is None
+        else junction_aggregation_report.get("junction_join_exclude_count", 0),
+        "junction_join_needs_map_review_count": 0
+        if junction_aggregation_report is None
+        else junction_aggregation_report.get("junction_join_needs_map_review_count", 0),
         "reference_join_audit_status": "skipped"
         if reference_join_audit_report is None
         else reference_join_audit_report.get("status", "fail"),
@@ -1385,6 +1449,7 @@ def run_osm_cleanup_workflow(
         "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
         "topology_audit": topology_audit_report or {},
+        "junction_aggregation": junction_aggregation_report or {},
         "reference_hierarchy_audit": reference_hierarchy_audit_report or {},
         "reference_scope_audit": reference_scope_audit_report or {},
         "reference_scope_pruning": reference_scope_pruning_report or {},
@@ -1397,3 +1462,31 @@ def run_osm_cleanup_workflow(
         "gate_status": gate_status,
         "warnings": warnings,
     }
+    workflow_review_html_report = review_html_func(
+        output_dir=output_dir / "review",
+        prefix=f"{prefix}_workflow_review",
+        title="SUMO Network Review",
+        claim_status=str(report["claim_status"]),
+        summary=report,
+        net_file=report.get("net_file"),
+        raw_net_file=report.get("raw_net_file"),
+        connected_core_file=report.get("connected_core_file"),
+        tls_review_file=report.get("tls_review_file"),
+        topology_audit_report=topology_audit_report,
+        topology_audit_report_file=report.get("topology_audit_clusters_file"),
+        junction_aggregation_report=junction_aggregation_report,
+        junction_aggregation_report_file=report.get("junction_aggregation_plan_file"),
+        routeability_audit_report=routeability_audit_report,
+        routeability_audit_report_file=report.get("routeability_audit_report_file"),
+        gate_status=gate_status,
+        warnings=warnings,
+    )
+    report.update(
+        {
+            "workflow_review_html_status": workflow_review_html_report.get("workflow_review_html_status", "fail"),
+            "workflow_review_html_file": workflow_review_html_report.get("workflow_review_html_file", ""),
+            "human_review_required_count": workflow_review_html_report.get("human_review_required_count", 0),
+            "workflow_review_html": workflow_review_html_report,
+        }
+    )
+    return report
