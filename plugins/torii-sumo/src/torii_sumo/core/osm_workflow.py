@@ -22,6 +22,7 @@ from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
 from .tls_aggregation import build_tls_aggregation_variant
 from .topology_audit import audit_topology_fragmentation
+from .workflow_review_html import build_workflow_review_html
 
 
 PARTIAL_MAIN_COMPONENT_RATIO = 0.98
@@ -458,6 +459,7 @@ def run_osm_cleanup_workflow(
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
     service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
+    review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
     cleaned_place_name = (place_name or "").strip()
     place_report = None
@@ -1184,7 +1186,7 @@ def run_osm_cleanup_workflow(
     provider_counts = tls_regional_map_baseline.get("regional_map_provider_counts")
     has_tls_regional_rows = not isinstance(provider_counts, dict) or any(int(count) > 0 for count in provider_counts.values())
     regional_map_baseline = tls_regional_map_baseline if tls_regional_map_baseline and has_tls_regional_rows else bbox_regional_map_baseline
-    return {
+    report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
         "area_input": cleaned_place_name or bbox,
@@ -1460,3 +1462,31 @@ def run_osm_cleanup_workflow(
         "gate_status": gate_status,
         "warnings": warnings,
     }
+    workflow_review_html_report = review_html_func(
+        output_dir=output_dir / "review",
+        prefix=f"{prefix}_workflow_review",
+        title="SUMO Network Review",
+        claim_status=str(report["claim_status"]),
+        summary=report,
+        net_file=report.get("net_file"),
+        raw_net_file=report.get("raw_net_file"),
+        connected_core_file=report.get("connected_core_file"),
+        tls_review_file=report.get("tls_review_file"),
+        topology_audit_report=topology_audit_report,
+        topology_audit_report_file=report.get("topology_audit_clusters_file"),
+        junction_aggregation_report=junction_aggregation_report,
+        junction_aggregation_report_file=report.get("junction_aggregation_plan_file"),
+        routeability_audit_report=routeability_audit_report,
+        routeability_audit_report_file=report.get("routeability_audit_report_file"),
+        gate_status=gate_status,
+        warnings=warnings,
+    )
+    report.update(
+        {
+            "workflow_review_html_status": workflow_review_html_report.get("workflow_review_html_status", "fail"),
+            "workflow_review_html_file": workflow_review_html_report.get("workflow_review_html_file", ""),
+            "human_review_required_count": workflow_review_html_report.get("human_review_required_count", 0),
+            "workflow_review_html": workflow_review_html_report,
+        }
+    )
+    return report

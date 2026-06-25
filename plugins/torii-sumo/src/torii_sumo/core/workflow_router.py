@@ -9,6 +9,7 @@ from .network_plan import derive_network_plan
 from .osm_area import resolve_osm_place
 from .osm_network import audit_tls_multisource
 from .osm_workflow import run_osm_cleanup_workflow
+from .workflow_review_html import build_workflow_review_html
 
 
 AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run"}
@@ -30,6 +31,10 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
     "tls_review": {
         "description": "Create a region-aware TLS review table with supporting OSM, street-level imagery, inventory, signal-plan, and field-evidence columns.",
         "tool_chain": ["sumo_tls_audit", "sumo_tls_multisource_review", "sumo_collect_evidence"],
+    },
+    "network_review": {
+        "description": "Create an HTML human-review cockpit for a generated or partial SUMO network and available audit artifacts.",
+        "tool_chain": ["sumo_network_review_html", "sumo_collect_evidence"],
     },
     "routeability": {
         "description": "Snap named route endpoints to passenger-accessible SUMO edges, generate routes, run a bounded smoke check, and report completion before claims.",
@@ -62,6 +67,11 @@ def detect_workflow(user_request: str) -> str:
         return "experiment_audit"
     if any(token in text for token in ("traffic light", "traffic lights", "tls", "signal")):
         return "tls_review"
+    if (
+        any(token in text for token in ("html", "review cockpit", "human review", "review"))
+        and any(token in text for token in ("sumo network", "partial sumo network", "network", ".net.xml", "net.xml"))
+    ):
+        return "network_review"
     if any(token in text for token in ("osm", "map", "network", "netconvert", "open it in sumo", "build a sumo")):
         return "osm_to_sumo"
     if any(token in text for token in ("route", "from ", " to ", "connected", "routeability", "reachable")):
@@ -160,6 +170,7 @@ def run_auto_workflow(
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     cleanup_workflow_func: Callable[..., dict[str, Any]] = run_osm_cleanup_workflow,
     tls_review_func: Callable[..., dict[str, Any]] = audit_tls_multisource,
+    review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
     if autonomy_mode not in AUTONOMY_MODES:
         return _invalid_mode(user_request, autonomy_mode)
@@ -201,6 +212,13 @@ def run_auto_workflow(
             signal_plan_csv=signal_plan_csv,
             field_evidence_csv=field_evidence_csv,
             tls_review_func=tls_review_func,
+        )
+    if workflow == "network_review":
+        return _run_network_review(
+            report=report,
+            output_dir=output_dir,
+            net_file=net_file,
+            review_html_func=review_html_func,
         )
     if workflow == "routeability":
         return _blocked(
@@ -380,6 +398,38 @@ def _run_tls_review(
             "claim_status": review.get("claim_status", "diagnostic-demo"),
             "execution_status": "executed",
             "tool_called": "sumo_tls_multisource_review",
+            "workflow_result": review,
+        }
+    )
+    return report
+
+
+def _run_network_review(
+    *,
+    report: dict[str, Any],
+    output_dir: Path,
+    net_file: Path | None,
+    review_html_func: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    if net_file is None:
+        return _blocked(
+            report,
+            execution_status="needs_network",
+            missing=["net_file"],
+            next_question="Which partial SUMO .net.xml should Torii use for the HTML review cockpit?",
+        )
+    review = review_html_func(
+        output_dir=output_dir,
+        net_file=net_file,
+        title="SUMO Network Review",
+        claim_status="diagnostic-demo",
+    )
+    report.update(
+        {
+            "status": review.get("status", "fail"),
+            "claim_status": review.get("claim_status", "diagnostic-demo"),
+            "execution_status": "executed",
+            "tool_called": "sumo_network_review_html",
             "workflow_result": review,
         }
     )

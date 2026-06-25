@@ -3,6 +3,7 @@ from pathlib import Path
 
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
 from torii_sumo.tools.osm_tools import (
+    sumo_network_review_html,
     sumo_network_junction_aggregation_variant,
     sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
@@ -150,6 +151,40 @@ def test_sumo_network_topology_audit_tool_returns_json_compatible_report(monkeyp
 
     assert report["status"] == "blocked"
     assert report["topology_fragmentation_status"] == "needs_review"
+    json.dumps(report)
+
+
+def test_sumo_network_review_html_tool_returns_review_artifact(tmp_path: Path) -> None:
+    net_file = tmp_path / "partial.net.xml"
+    topology_report = tmp_path / "topology.json"
+    net_file.write_text("<net/>", encoding="utf-8")
+    topology_report.write_text(
+        json.dumps(
+            {
+                "topology_fragmentation_status": "needs_review",
+                "suspicious_cluster_count": 2,
+                "clusters_file": str(tmp_path / "clusters.csv"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = sumo_network_review_html(
+        output_dir=str(tmp_path / "review"),
+        net_file=str(net_file),
+        title="Partial network review",
+        claim_status="construction-invalid",
+        topology_audit_report_file=str(topology_report),
+    )
+
+    assert report["status"] == "pass"
+    assert report["workflow_review_html_status"] == "pass"
+    html_file = Path(str(report["workflow_review_html_file"]))
+    assert html_file.is_file()
+    html = html_file.read_text(encoding="utf-8")
+    assert "Partial network review" in html
+    assert "Human Review Required" in html
+    assert "topology_fragmentation_status" in html
     json.dumps(report)
 
 
