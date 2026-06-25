@@ -23,6 +23,7 @@
 - Create output: `C:\Users\huqio\Documents\Codex\2026-06-25\ingolstadt_road_corridor_partition_probe\SUMMARY.md`
   - Human-readable evidence summary.
 - Read only: `C:\Users\huqio\Documents\Torii-SUMO\examples\02_one_prompt_osm_network\networks\torii_5_5_reference_visual_detail_tls_aggregated.net.xml`
+- Read only: `C:\Users\huqio\Documents\Codex\2026-06-24\ingolstadt_reference_visual_detail_spark53\osm\sumo_osm_cleanup_reference_visual_detail_filtered.osm.xml.gz`
 - Read only: `C:\Users\huqio\Documents\Codex\2026-06-25\ingolstadt_map_reference_probe\variants\teacher_confirmed_all\teacher_confirmed_all_join.nodes.xml`
 - Read only: `C:\Users\huqio\Documents\Codex\2026-06-25\ingolstadt_map_reference_probe\variants\teacher_confirmed_all\teacher_confirmed_all.net.xml`
 - Read only: `C:\Users\huqio\Documents\Codex\2026-06-25\ingolstadt_map_reference_probe\validation\teacher_confirmed_all\topology\teacher_confirmed_all_topology_audit.json`
@@ -53,6 +54,7 @@ CANDIDATE_NET = ROOT / "examples" / "02_one_prompt_osm_network" / "networks" / "
 MAP_REF_DIR = Path(r"C:\Users\huqio\Documents\Codex\2026-06-25\ingolstadt_map_reference_probe")
 TEACHER_JOIN_NODES = MAP_REF_DIR / "variants" / "teacher_confirmed_all" / "teacher_confirmed_all_join.nodes.xml"
 TEACHER_JOIN_DIST30_NET = MAP_REF_DIR / "variants" / "teacher_confirmed_all" / "teacher_confirmed_all.net.xml"
+OSM_FILE = Path(r"C:\Users\huqio\Documents\Codex\2026-06-24\ingolstadt_reference_visual_detail_spark53\osm\sumo_osm_cleanup_reference_visual_detail_filtered.osm.xml.gz")
 OUT_DIR = Path(r"C:\Users\huqio\Documents\Codex\2026-06-25\ingolstadt_road_corridor_partition_probe")
 NETCONVERT = Path(r"C:\Program Files (x86)\Eclipse\Sumo\bin\netconvert.exe")
 ```
@@ -74,7 +76,32 @@ Expected: exit code `0`.
 - Create output: `join_group_corridor_audit.csv`
 - Create output: `road_corridor_partition_summary.json`
 
-- [ ] **Step 1: Parse the SUMO network graph**
+- [ ] **Step 1: Parse OSM way-name context**
+
+Implement:
+
+```python
+def parse_osm_way_context(osm_file: Path) -> dict[str, Any]:
+    ...
+```
+
+The returned context must map OSM node ids to named ways:
+
+```python
+{
+    "node_way_context": {
+        "1242949438": {
+            "names": ["Harderstraße"],
+            "refs": [],
+            "highways": ["tertiary"]
+        }
+    }
+}
+```
+
+SUMO edge `name` is not a reliable source in this Ingolstadt artifact because the current candidate `.net.xml` has zero named edge attributes. OSM way tags are the required corridor source for this probe.
+
+- [ ] **Step 2: Parse the SUMO network graph**
 
 Implement:
 
@@ -93,27 +120,28 @@ The returned graph must include:
 }
 ```
 
-- [ ] **Step 2: Normalize corridor keys**
+- [ ] **Step 3: Normalize corridor keys**
 
 Implement:
 
 ```python
-def corridor_key(edge: dict[str, Any]) -> str:
+def corridor_key_from_osm(name: str, ref: str, highway: str) -> str:
     name = normalize_name(edge["name"])
-    road_type = str(edge["type"]).replace("highway.", "")
     if name:
         return f"name:{name}"
-    return f"unnamed:{road_type}"
+    if ref:
+        return f"ref:{normalize_name(ref)}"
+    return f"unnamed:{normalize_name(highway)}"
 ```
 
 This uses same road name as a corridor signal, not as an unconditional merge rule.
 
-- [ ] **Step 3: Audit one join group**
+- [ ] **Step 4: Audit one join group**
 
 Implement:
 
 ```python
-def audit_node_group(graph: dict[str, Any], node_ids: list[str], group_id: str, source: str) -> dict[str, Any]:
+def audit_node_group(graph: dict[str, Any], osm_context: dict[str, Any], node_ids: list[str], group_id: str, source: str) -> dict[str, Any]:
     ...
 ```
 
@@ -134,9 +162,9 @@ It must compute:
 }
 ```
 
-Intersection cell signatures are made from each node's incident named corridors. A node with two or more named corridors produces a signature such as `name:harderstrasse|name:esplanade`.
+Intersection cell signatures are made from each node's OSM way-name corridors. A node with two or more named corridors produces a signature such as `name:harderstrasse|name:esplanade`. For SUMO cluster ids such as `cluster_123_456`, split the source node ids and use all matching OSM node contexts.
 
-- [ ] **Step 4: Define the first corridor risk rule**
+- [ ] **Step 5: Define the first corridor risk rule**
 
 Use this deterministic diagnostic rule:
 
@@ -153,7 +181,7 @@ def corridor_decision(audit: dict[str, Any]) -> tuple[str, str]:
     return "allow", "within one local named-road cell or insufficient name evidence"
 ```
 
-- [ ] **Step 5: Run join-group audit**
+- [ ] **Step 6: Run join-group audit**
 
 Run:
 
