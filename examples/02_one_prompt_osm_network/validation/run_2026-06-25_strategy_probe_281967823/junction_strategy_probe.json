@@ -112,6 +112,28 @@
       1842.9683333333323
     ]
   ],
+  "nearby_conflict_zone_audit": {
+    "status": "nearby_core_review",
+    "claim_status": "diagnostic-demo",
+    "threshold_m": 50.0,
+    "target_junction_id": "cluster_281967823_305519232_7009179649_7626856596_7626856598_7626856599",
+    "target_lat": 48.76814898,
+    "target_lon": 11.42213868,
+    "target_google_maps_url": "https://www.google.com/maps/@48.76814898,11.42213868,19z",
+    "target_osm_url": "https://www.openstreetmap.org/#map=19/48.76814898/11.42213868",
+    "nearby_count": 1,
+    "nearby_conflict_zones": [
+      {
+        "junction_id": "cluster_1796993069_267286892_7626856595",
+        "type": "priority",
+        "distance_m": 48.038,
+        "lat": 48.76772425,
+        "lon": 11.42225788,
+        "google_maps_url": "https://www.google.com/maps/@48.76772425,11.42225788,19z",
+        "osm_url": "https://www.openstreetmap.org/#map=19/48.76772425/11.42225788"
+      }
+    ]
+  },
   "strategies": {
     "reference_core": {
       "node_count": 6,

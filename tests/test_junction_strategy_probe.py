@@ -171,3 +171,46 @@ def test_protected_terminal_strategy_keeps_modal_exits_out_of_join_core(tmp_path
     assert set(strategy["node_ids"]) == {"a", "b", "s"}
     assert strategy["protected_terminal_ids"] == ["p"]
     assert strategy["shape_support_node_ids"] == ["a", "b", "p", "s"]
+
+
+def test_nearby_conflict_zone_audit_flags_close_reference_clusters(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    reference = tmp_path / "reference.net.xml"
+    candidate.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.unclassified"><lane id="ab_0" index="0" length="0.2" shape="0,0 1,0"/></edge>
+  <junction id="a" x="0" y="0" type="priority"/>
+  <junction id="b" x="1" y="0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <location netOffset="0.00,0.00" convBoundary="0.00,0.00,100.00,100.00" origBoundary="11.000000,48.000000,11.001000,48.001000" projParameter="!"/>
+  <junction id="cluster_a_b" x="10" y="10" type="traffic_light" shape="9,9 9,11 11,11 11,9"/>
+  <junction id="plain_priority" x="10" y="20" type="priority"/>
+  <junction id="cluster_dead_end" x="10" y="25" type="dead_end"/>
+  <junction id="cluster_c_d" x="10" y="30" type="traffic_light" shape="9,29 9,31 11,31 11,29"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = probe_junction_strategies(
+        candidate_net_file=candidate,
+        reference_net_file=reference,
+        reference_junction_id="cluster_a_b",
+        output_dir=tmp_path / "out",
+        radius_m=5,
+        short_edge_m=1,
+    )
+
+    audit = report["nearby_conflict_zone_audit"]
+
+    assert audit["status"] == "nearby_core_review"
+    assert audit["nearby_count"] == 1
+    assert audit["nearby_conflict_zones"][0]["junction_id"] == "cluster_c_d"
+    assert audit["nearby_conflict_zones"][0]["distance_m"] == 20.0
+    assert audit["nearby_conflict_zones"][0]["google_maps_url"].startswith("https://www.google.com/maps/@")
+    assert audit["nearby_conflict_zones"][0]["osm_url"].startswith("https://www.openstreetmap.org/#map=19/")
