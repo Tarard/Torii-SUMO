@@ -99,7 +99,22 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Cluster Zooms" in html
     assert "c1" in html
     assert "google.com/maps" in html
+    assert "Junction Aggregation Review" in html
+    assert 'data-color-group="green"' in html
+    assert 'data-select-color="green"' in html
+    assert 'data-cluster-id="c1"' in html
+    assert 'data-aggregate-checkbox="c1"' in html
+    assert 'data-zoom-src=' in html
+    assert 'id="zoom-modal"' in html
+    assert "selectColorGroup" in html
+    assert "toggleClusterSelection" in html
+    assert "openZoom" in html
+    assert 'id="cluster-filter"' not in html
+    assert "localStorage" not in html
     assert "Review Queue" in html
+    assert "Evidence Summary" in html
+    assert "topology_fragmentation_status=needs_review" in html
+    assert "workflow_summary" not in html
     assert "<img" in html
     assert "file:///" not in html
     assert "visuals/workflow_network_overview.png" in html

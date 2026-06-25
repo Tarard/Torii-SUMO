@@ -130,6 +130,48 @@ def _artifact_rows(artifacts: Mapping[str, Path | None], *, base_dir: Path) -> s
     return "\n".join(rows)
 
 
+def _evidence_rows(
+    *,
+    topology_audit_report: Mapping[str, Any] | None,
+    junction_aggregation_report: Mapping[str, Any] | None,
+    routeability_audit_report: Mapping[str, Any] | None,
+) -> str:
+    rows = [
+        (
+            "topology_audit",
+            topology_audit_report or {},
+            ("topology_fragmentation_status", "suspicious_cluster_count", "junction_aggregation_candidate_count"),
+        ),
+        (
+            "junction_aggregation",
+            junction_aggregation_report or {},
+            (
+                "junction_aggregation_status",
+                "junction_aggregation_candidate_count",
+                "junction_join_needs_map_review_count",
+            ),
+        ),
+        (
+            "routeability_audit",
+            routeability_audit_report or {},
+            ("routeability_status", "arrived", "vehicle_count", "teleports", "collisions"),
+        ),
+    ]
+    html_rows = []
+    for label, report, keys in rows:
+        values = []
+        for key in keys:
+            if key in report:
+                values.append(f"{key}={report[key]}")
+        html_rows.append(
+            "<tr>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{escape('; '.join(values) if values else 'no compact status supplied')}</td>"
+            "</tr>"
+        )
+    return "\n".join(html_rows)
+
+
 def _nonpass_gate_actions(gate_status: Mapping[str, Any] | None) -> list[str]:
     if not gate_status:
         return []
@@ -173,24 +215,61 @@ def _review_queue_rows(actions: Sequence[str]) -> str:
     return "\n".join(rows)
 
 
+def _cluster_color_group(cluster: Mapping[str, Any]) -> tuple[str, str]:
+    decision = str(cluster.get("aggregation_decision", "")).strip()
+    if decision == "join":
+        return "green", "auto-join candidate"
+    if decision == "needs_map_review":
+        return "amber", "needs map review"
+    if decision == "do_not_join":
+        return "red", "do not aggregate"
+    return "slate", "review required"
+
+
+def _color_batch_buttons(cluster_zoom_pngs: Sequence[Mapping[str, Any]]) -> str:
+    color_order = ["green", "amber", "red", "slate"]
+    present = {_cluster_color_group(cluster)[0] for cluster in cluster_zoom_pngs}
+    buttons = [
+        f'<button type="button" class="color-action color-{color}" data-select-color="{color}" '
+        f'onclick="selectColorGroup(\'{color}\')">Select {color}</button>'
+        for color in color_order
+        if color in present
+    ]
+    buttons.append('<button type="button" class="color-action" onclick="clearAggregationSelection()">Clear</button>')
+    return "\n".join(buttons)
+
+
 def _cluster_zoom_gallery(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, base_dir: Path) -> str:
     if not cluster_zoom_pngs:
         return "<p>No dense junction cluster zooms were generated.</p>"
     panels = []
     for cluster in cluster_zoom_pngs:
         cluster_id = str(cluster.get("cluster_id", "cluster"))
+        decision = str(cluster.get("aggregation_decision", ""))
+        confidence = str(cluster.get("aggregation_confidence", ""))
+        color_group, color_label = _cluster_color_group(cluster)
+        search_text = " ".join([cluster_id, decision, confidence, str(cluster.get("node_count", ""))])
         src = _image_src(str(cluster.get("image_file", "")), base_dir=base_dir)
         map_link = _link(str(cluster.get("google_maps_url", "")), "map review")
         caption = (
             f"{escape(cluster_id)} | decision="
-            f"{escape(str(cluster.get('aggregation_decision', '') or 'unknown'))} | confidence="
-            f"{escape(str(cluster.get('aggregation_confidence', '') or 'unknown'))}"
+            f"{escape(decision or 'unknown')} | confidence="
+            f"{escape(confidence or 'unknown')}"
         )
         map_html = f"<div>{map_link}</div>" if map_link else ""
         panels.append(
-            '<figure class="visual-panel cluster-panel">'
-            f"<figcaption>{caption}</figcaption>"
-            f'<img src="{src}" alt="Cluster zoom {escape(cluster_id)}">'
+            f'<figure class="visual-panel cluster-panel review-junction color-{color_group}" '
+            f'data-cluster-id="{escape(cluster_id)}" '
+            f'data-color-group="{escape(color_group)}" '
+            f'data-decision="{escape(decision)}" '
+            f'data-confidence="{escape(confidence)}" '
+            f'data-review-text="{escape(search_text)}">'
+            f'<figcaption><span class="color-dot color-{color_group}"></span>{caption}<br><small>{escape(color_label)}</small></figcaption>'
+            '<label class="review-check" onclick="event.stopPropagation()">'
+            f'<input type="checkbox" data-aggregate-checkbox="{escape(cluster_id)}"> aggregate this junction'
+            "</label>"
+            f'<button type="button" class="zoom-button" data-zoom-src="{src}" onclick="openZoom(this); event.stopPropagation()">Zoom</button>'
+            f'<img src="{src}" alt="Cluster zoom {escape(cluster_id)}" data-zoom-src="{src}" onclick="openZoom(this); event.stopPropagation()">'
             f"{map_html}"
             "</figure>"
         )
@@ -203,17 +282,29 @@ def _dense_cluster_rows(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, base_
     rows = []
     for cluster in cluster_zoom_pngs:
         cluster_id = str(cluster.get("cluster_id", "cluster"))
+        decision = str(cluster.get("aggregation_decision", ""))
+        confidence = str(cluster.get("aggregation_confidence", ""))
+        color_group, color_label = _cluster_color_group(cluster)
+        search_text = " ".join([cluster_id, decision, confidence, str(cluster.get("node_count", ""))])
         image_link = _artifact_link(_as_path(str(cluster.get("image_file", ""))), base_dir=base_dir)
         map_link = _link(str(cluster.get("google_maps_url", "")), "map")
         rows.append(
-            "<tr>"
+            f'<tr class="review-cluster-row color-{color_group}" '
+            f'data-cluster-id="{escape(cluster_id)}" '
+            f'data-color-group="{escape(color_group)}" '
+            f'data-decision="{escape(decision)}" '
+            f'data-confidence="{escape(confidence)}" '
+            f'data-review-text="{escape(search_text)}">'
             f"<td>{escape(cluster_id)}</td>"
             f"<td>{escape(str(cluster.get('node_count', '')))}</td>"
-            f"<td>{escape(str(cluster.get('aggregation_decision', '')))}</td>"
-            f"<td>{escape(str(cluster.get('aggregation_confidence', '')))}</td>"
+            f"<td>{escape(decision)}</td>"
+            f"<td>{escape(confidence)} / {escape(color_label)}</td>"
             f"<td>{escape(str(round(float(cluster.get('x', 0.0)), 2)))}</td>"
             f"<td>{escape(str(round(float(cluster.get('y', 0.0)), 2)))}</td>"
-            f"<td>{image_link} {map_link}</td>"
+            "<td>"
+            f'<label><input type="checkbox" data-aggregate-checkbox="{escape(cluster_id)}"> aggregate</label> '
+            f"{image_link} {map_link}"
+            "</td>"
             "</tr>"
         )
     return "\n".join(rows)
@@ -360,6 +451,98 @@ def build_workflow_review_html(
     if not visual_panels:
         visual_panels = "<p>No network visualization could be generated for this review.</p>"
     cluster_zoom_panels = _cluster_zoom_gallery(cluster_zoom_pngs, base_dir=output_dir)
+    color_buttons = _color_batch_buttons(cluster_zoom_pngs)
+    review_script = """
+  <script>
+    (function () {
+      const progress = document.getElementById("aggregation-selection-count");
+      const zoomModal = document.getElementById("zoom-modal");
+      const zoomImage = document.getElementById("zoom-image");
+
+      function aggregateCheckboxes() {
+        return Array.from(document.querySelectorAll("[data-aggregate-checkbox]"));
+      }
+
+      function clusterIds() {
+        return aggregateCheckboxes()
+          .map((checkbox) => checkbox.getAttribute("data-aggregate-checkbox"))
+          .filter(Boolean)
+          .filter((value, index, values) => values.indexOf(value) === index);
+      }
+
+      function syncClusterSelection(clusterId, selected) {
+        document.querySelectorAll(`[data-aggregate-checkbox="${clusterId}"]`).forEach((checkbox) => {
+          checkbox.checked = selected;
+        });
+      }
+
+      function updateAggregationCount() {
+        const ids = clusterIds();
+        const selected = ids.filter((id) => {
+          const checkbox = document.querySelector(`[data-aggregate-checkbox="${id}"]`);
+          return checkbox && checkbox.checked;
+        }).length;
+        progress.textContent = ids.length ? `${selected}/${ids.length} selected for aggregation` : "No junctions to review";
+      }
+
+      function toggleClusterSelection(clusterId) {
+        const checkbox = document.querySelector(`[data-aggregate-checkbox="${clusterId}"]`);
+        const nextValue = !(checkbox && checkbox.checked);
+        syncClusterSelection(clusterId, nextValue);
+        updateAggregationCount();
+      }
+
+      function selectColorGroup(colorGroup) {
+        document.querySelectorAll(`[data-color-group="${colorGroup}"]`).forEach((element) => {
+          const clusterId = element.getAttribute("data-cluster-id");
+          if (clusterId) {
+            syncClusterSelection(clusterId, true);
+          }
+        });
+        updateAggregationCount();
+      }
+
+      function clearAggregationSelection() {
+        aggregateCheckboxes().forEach((checkbox) => {
+          checkbox.checked = false;
+        });
+        updateAggregationCount();
+      }
+
+      function openZoom(trigger) {
+        zoomImage.src = trigger.getAttribute("data-zoom-src");
+        zoomModal.hidden = false;
+      }
+
+      function closeZoom() {
+        zoomModal.hidden = true;
+        zoomImage.src = "";
+      }
+
+      aggregateCheckboxes().forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          syncClusterSelection(checkbox.getAttribute("data-aggregate-checkbox"), checkbox.checked);
+          updateAggregationCount();
+        });
+      });
+      document.querySelectorAll(".review-junction").forEach((card) => {
+        card.addEventListener("click", () => toggleClusterSelection(card.getAttribute("data-cluster-id")));
+      });
+      zoomModal.addEventListener("click", closeZoom);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeZoom();
+        }
+      });
+
+      window.toggleClusterSelection = toggleClusterSelection;
+      window.selectColorGroup = selectColorGroup;
+      window.clearAggregationSelection = clearAggregationSelection;
+      window.openZoom = openZoom;
+      updateAggregationCount();
+    })();
+  </script>
+"""
 
     html = f"""<!doctype html>
 <html lang="en">
@@ -383,6 +566,22 @@ def build_workflow_review_html(
     .visual-panel figcaption {{ font-weight: 700; margin-bottom: 8px; }}
     .visual-panel img {{ max-width: 100%; height: auto; display: block; border: 1px solid #e5e7eb; }}
     .cluster-panel figcaption {{ min-height: 44px; }}
+    .junction-review-toolbar {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 18px; padding: 10px; border: 1px solid #cbd5e1; background: #f8fafc; }}
+    .color-action, .zoom-button {{ padding: 6px 10px; border: 1px solid #64748b; background: #ffffff; cursor: pointer; }}
+    .color-green {{ border-left: 6px solid #15803d; }}
+    .color-amber {{ border-left: 6px solid #d97706; }}
+    .color-red {{ border-left: 6px solid #b91c1c; }}
+    .color-slate {{ border-left: 6px solid #475569; }}
+    .color-dot {{ display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 50%; vertical-align: -1px; }}
+    .color-dot.color-green {{ background: #15803d; }}
+    .color-dot.color-amber {{ background: #d97706; }}
+    .color-dot.color-red {{ background: #b91c1c; }}
+    .color-dot.color-slate {{ background: #475569; }}
+    .selection-count {{ font-weight: 700; }}
+    .review-check {{ display: block; margin: 0 0 8px; font-size: 13px; }}
+    .zoom-modal {{ position: fixed; inset: 0; display: grid; place-items: center; background: rgba(15, 23, 42, 0.82); z-index: 10; padding: 24px; }}
+    .zoom-modal[hidden] {{ display: none; }}
+    .zoom-modal img {{ max-width: 96vw; max-height: 92vh; background: #ffffff; border: 2px solid #ffffff; }}
   </style>
 </head>
 <body>
@@ -413,6 +612,12 @@ def build_workflow_review_html(
 
   <h2>Problem Map</h2>
   <p>The problem overlay highlights dense topology clusters and other review locations when coordinates are available.</p>
+
+  <h2>Junction Aggregation Review</h2>
+  <section class="junction-review-toolbar" id="junction-review-toolbar">
+    {color_buttons}
+    <span class="selection-count" id="aggregation-selection-count">0 selected for aggregation</span>
+  </section>
 
   <h2>Cluster Zooms</h2>
   <section class="visual-grid">
@@ -456,17 +661,17 @@ def build_workflow_review_html(
     {warning_items}
   </ul>
 
-  <h2>topology_audit</h2>
-  <pre>{_json_block(topology_audit_report or {})}</pre>
-
-  <h2>junction_aggregation</h2>
-  <pre>{_json_block(junction_aggregation_report or {})}</pre>
-
-  <h2>routeability_audit</h2>
-  <pre>{_json_block(routeability_audit_report or {})}</pre>
-
-  <h2>workflow_summary</h2>
-  <pre>{_json_block(workflow_summary)}</pre>
+  <h2>Evidence Summary</h2>
+  <table>
+    <thead><tr><th>evidence</th><th>compact status</th></tr></thead>
+    <tbody>
+      {_evidence_rows(topology_audit_report=topology_audit_report, junction_aggregation_report=junction_aggregation_report, routeability_audit_report=routeability_audit_report)}
+    </tbody>
+  </table>
+  <div class="zoom-modal" id="zoom-modal" hidden>
+    <img id="zoom-image" alt="Expanded junction review image">
+  </div>
+{review_script}
 </body>
 </html>
 """
