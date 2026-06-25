@@ -16,6 +16,7 @@ def build_junction_aggregation_variant(
     prefix: str = "junction_aggregation",
     topology_audit_report: Mapping[str, Any] | None = None,
     reference_join_audit_report: Mapping[str, Any] | None = None,
+    overlapping_junction_audit_report: Mapping[str, Any] | None = None,
     join_dist_m: float = 30.0,
     timeout_seconds: float = 240.0,
     command_runner: Callable[..., Any] = run_command,
@@ -24,11 +25,14 @@ def build_junction_aggregation_variant(
         return _failure("join_dist_m must be positive")
     if not net_file.exists():
         return _failure(f"net file does not exist: {net_file}")
+    net_file = net_file.resolve()
+    output_dir = output_dir.resolve()
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidates = _aggregation_candidates(
         topology_audit_report=topology_audit_report,
         reference_join_audit_report=reference_join_audit_report,
+        overlapping_junction_audit_report=overlapping_junction_audit_report,
     )
     plan_file = output_dir / f"{prefix}_plan.json"
     candidates_file = output_dir / f"{prefix}_candidates.csv"
@@ -137,6 +141,7 @@ def _aggregation_candidates(
     *,
     topology_audit_report: Mapping[str, Any] | None,
     reference_join_audit_report: Mapping[str, Any] | None,
+    overlapping_junction_audit_report: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     if reference_join_audit_report is not None:
@@ -145,13 +150,26 @@ def _aggregation_candidates(
                 {
                     "source": "reference_join_audit",
                     "candidate_id": str(case.get("reference_id", "")),
-                    "decision": "join_pattern_matched",
+                    "decision": "join",
                     "confidence": "reference_matched",
-                    "node_ids": ";".join(str(item) for item in case.get("candidate_node_ids", []) or []),
+                    "node_ids": ";".join(
+                        str(item)
+                        for item in (
+                            case.get("candidate_node_ids")
+                            or case.get("matched_candidate_node_ids")
+                            or case.get("matched_reference_source_node_ids")
+                            or []
+                        )
+                    ),
                     "reason": str(case.get("match_reason", case.get("learned_rule", ""))),
                     "google_maps_url": str(case.get("google_maps_url", "")),
                 }
             )
+    if overlapping_junction_audit_report is not None:
+        for group in overlapping_junction_audit_report.get("overlapping_junction_groups", []) or []:
+            candidate = _candidate_from_overlapping_group(group)
+            if candidate is not None:
+                candidates.append(candidate)
     if topology_audit_report is not None:
         for cluster in topology_audit_report.get("suspicious_clusters", []) or []:
             decision = str(cluster.get("aggregation_decision", "needs_map_review"))
@@ -170,7 +188,82 @@ def _aggregation_candidates(
                     "google_maps_url": str(cluster.get("google_maps_url", "")),
                 }
             )
-    return candidates
+    return _dedupe_join_candidates(candidates)
+
+
+def _candidate_from_overlapping_group(group: Mapping[str, Any]) -> dict[str, Any] | None:
+    reference_nodes = _reference_core_nodes(group)
+    if reference_nodes:
+        return {
+            "source": "overlapping_junction_audit",
+            "candidate_id": str(group.get("group_id", "")),
+            "decision": "join",
+            "confidence": "reference_matched",
+            "node_ids": ";".join(reference_nodes),
+            "reason": "reference join cluster confirms the physical-intersection core",
+            "google_maps_url": str(group.get("google_maps_url", "")),
+        }
+
+    if not _overlap_group_is_confirmed(group):
+        return None
+    return {
+        "source": "overlapping_junction_audit",
+        "candidate_id": str(group.get("group_id", "")),
+        "decision": "join",
+        "confidence": "map_confirmed",
+        "node_ids": ";".join(str(item) for item in group.get("join_node_ids") or group.get("node_ids", []) or []),
+        "reason": "human/map review confirms the overlapping top-level junction group",
+        "google_maps_url": str(group.get("google_maps_url", "")),
+    }
+
+
+def _reference_core_nodes(group: Mapping[str, Any]) -> list[str]:
+    for key in (
+        "reference_join_node_ids",
+        "reference_join_source_node_ids",
+        "matched_candidate_node_ids",
+        "matched_reference_source_node_ids",
+    ):
+        node_ids = group.get(key)
+        if isinstance(node_ids, list) and len(node_ids) >= 2:
+            return [str(item) for item in node_ids]
+
+    if str(group.get("reference_join_status", "")) != "reference_join_supported":
+        return []
+    for reference_id in group.get("reference_join_ids", []) or []:
+        raw = str(reference_id)
+        if raw.startswith("cluster_"):
+            node_ids = [item for item in raw.removeprefix("cluster_").split("_") if item]
+            if len(node_ids) >= 2:
+                return node_ids
+    return []
+
+
+def _overlap_group_is_confirmed(group: Mapping[str, Any]) -> bool:
+    tokens = {
+        str(group.get("aggregation_decision", "")).lower(),
+        str(group.get("manual_correction_status", "")).lower(),
+        str(group.get("map_review_status", "")).lower(),
+        str(group.get("review_status", "")).lower(),
+    }
+    return any(token in {"join", "confirmed", "map_confirmed", "confirmed_join"} for token in tokens)
+
+
+def _dedupe_join_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    joined_nodes: set[str] = set()
+    seen_join_sets: set[frozenset[str]] = set()
+    for candidate in candidates:
+        node_set = frozenset(item for item in str(candidate.get("node_ids", "")).split(";") if item)
+        if candidate.get("decision") == "join" and node_set:
+            if node_set in seen_join_sets or node_set & joined_nodes:
+                continue
+            seen_join_sets.add(node_set)
+            joined_nodes.update(node_set)
+        elif node_set & joined_nodes:
+            continue
+        selected.append(candidate)
+    return selected
 
 
 def _write_candidates_csv(path: Path, candidates: list[dict[str, Any]]) -> None:
