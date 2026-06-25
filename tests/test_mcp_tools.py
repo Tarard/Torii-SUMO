@@ -314,6 +314,7 @@ def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_
 
     net_file = tmp_path / "candidate.net.xml"
     topology_report_file = tmp_path / "topology.json"
+    overlap_report_file = tmp_path / "overlap.json"
     net_file.write_text("<net/>", encoding="utf-8")
     topology_report_file.write_text(
         json.dumps(
@@ -330,11 +331,16 @@ def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_
         ),
         encoding="utf-8",
     )
+    overlap_report_file.write_text(
+        json.dumps({"overlapping_junction_groups": [{"group_id": "OJ001", "node_ids": ["j1", "j2"]}]}),
+        encoding="utf-8",
+    )
 
     def fake_aggregation(**kwargs):
         assert kwargs["net_file"] == net_file
         assert kwargs["join_dist_m"] == 25.0
         assert kwargs["topology_audit_report"]["suspicious_clusters"][0]["cluster_id"] == "C001"
+        assert kwargs["overlapping_junction_audit_report"]["overlapping_junction_groups"][0]["group_id"] == "OJ001"
         return {
             "status": "pass",
             "claim_status": "blocked",
@@ -349,6 +355,7 @@ def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_
         net_file=str(net_file),
         output_dir=str(tmp_path / "aggregation"),
         topology_audit_report_file=str(topology_report_file),
+        overlapping_junction_audit_report_file=str(overlap_report_file),
         join_dist_m=25.0,
     )
 

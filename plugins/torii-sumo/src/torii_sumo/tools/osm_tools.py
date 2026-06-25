@@ -247,6 +247,7 @@ def sumo_network_junction_aggregation_variant(
     prefix: str = "junction_aggregation",
     topology_audit_report_file: str | None = None,
     reference_join_audit_report_file: str | None = None,
+    overlapping_junction_audit_report_file: str | None = None,
     join_dist_m: float = 30.0,
     timeout_seconds: float = 240.0,
 ) -> dict[str, Any]:
@@ -256,6 +257,7 @@ def sumo_network_junction_aggregation_variant(
         prefix=prefix,
         topology_audit_report=_read_json_report(topology_audit_report_file),
         reference_join_audit_report=_read_json_report(reference_join_audit_report_file),
+        overlapping_junction_audit_report=_read_json_report(overlapping_junction_audit_report_file),
         join_dist_m=join_dist_m,
         timeout_seconds=timeout_seconds,
     )
