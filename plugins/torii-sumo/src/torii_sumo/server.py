@@ -4,6 +4,11 @@ import anyio
 from mcp.server.fastmcp import FastMCP
 
 from .tools.environment_tools import sumo_get_environment, sumo_preflight
+from .tools.demand_tools import (
+    sumo_detector_count_audit,
+    sumo_detector_count_constraints,
+    sumo_detector_route_support,
+)
 from .tools.evidence_tools import (
     sumo_collect_evidence,
     sumo_compare_outputs,
@@ -95,6 +100,15 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Create a separate TLS cleanup review variant with one real SUMO junction set as TLS per physical TLS audit cluster.")(
         sumo_network_tls_aggregation_variant
+    )
+    server.tool(description="Build sanitized source/sink, route-candidate, and route-detector-incidence manifests for detector-constrained SUMO demand reconstruction.")(
+        sumo_detector_route_support
+    )
+    server.tool(description="Aggregate expected detector counts into sanitized time-bin constraints and SUMO routeSampler edgeData.")(
+        sumo_detector_count_constraints
+    )
+    server.tool(description="Compare expected detector counts against SUMO E1 detector output and report detector-fit metrics.")(
+        sumo_detector_count_audit
     )
 
     return server

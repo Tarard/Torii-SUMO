@@ -33,6 +33,37 @@ completion_summary:
 
 If one of these is manual, label the result as `diagnostic-demo` or `construction-invalid` until the manual step is documented and replayable.
 
+## Reusable Python Executors
+
+These helpers implement the generic workflow gates. The bundled code contains no project-specific detector data, proprietary sensor feed, private station table, or local absolute path. They accept caller-provided files and write generic manifests or comparisons. Public outputs require anonymized inputs because tool outputs preserve caller-provided detector ids and edge ids.
+
+Available Torii MCP tools:
+
+| Tool | Workflow Role | Output |
+|---|---|---|
+| `sumo_detector_route_support` | Gate 2 route support coverage | `source_sink_manifest`, `route_candidate_manifest`, `route_detector_incidence` |
+| `sumo_detector_count_constraints` | Gate 3 time-bin constraint construction | `time_bin_count_constraints`, routeSampler-compatible edgeData XML |
+| `sumo_detector_count_audit` | Gate 4-6 detector comparison | detector comparison CSV plus MAE, RMSE, GEH, bias, and totals |
+
+These tools reduce boilerplate; they do not prove the route volumes are calibrated by themselves. The current tool boundary is:
+
+```text
+implemented:
+  detector_manifest_reader:
+  route_candidate_manifest_builder:
+  route_detector_incidence_builder:
+  time_bin_count_constraint_builder:
+  detector_count_auditor:
+
+still_external_or_project_specific:
+  routeSampler_or_optimizer_run:
+  SUMO_detector_output_generation:
+  completion_summary_collection:
+  incident_calendar_or_event_classification:
+```
+
+Treat any run as `diagnostic-demo` until the external steps are replayable and included in the evidence package.
+
 ## Workflow Contract
 
 Workflow first, tools second. Treat detector-constrained demand reconstruction as a gated workflow with named records, not as a loose set of scripts. Python, routeSampler, SUMO, MCP tools, or manual commands are executors. The workflow status is decided by gate outputs.
@@ -511,7 +542,7 @@ Treat detector-matched routes as a plausible demand reconstruction, not as prove
 
 ## March Field Lesson
 
-The March-style workflow that should be reused is not a Dresden script name. The reusable lesson is:
+The March-style workflow that should be reused is not a project script name. The reusable lesson is:
 
 1. Build the detector manifest and route support once per network/mapping version.
 2. Generate one day at a time with absolute dates.
