@@ -205,3 +205,14 @@ def test_detector_constrained_demand_reference_is_workflow_first() -> None:
     assert "underflow" in reference
     assert "route support" in reference
     assert "Do not call a detector-entry smoke test OD reconstruction" in reference
+
+
+def test_detector_constrained_demand_reference_lists_reusable_python_executors() -> None:
+    reference = (SKILL / "references" / "detector-constrained-demand-reconstruction.md").read_text(encoding="utf-8")
+
+    assert "## Reusable Python Executors" in reference
+    assert "sumo_detector_route_support" in reference
+    assert "sumo_detector_count_constraints" in reference
+    assert "sumo_detector_count_audit" in reference
+    assert "The bundled code contains no project-specific detector data" in reference
+    assert "Public outputs require anonymized inputs" in reference
