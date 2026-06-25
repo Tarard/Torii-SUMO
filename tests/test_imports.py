@@ -10,6 +10,9 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_run_minimal_smoke",
         "sumo_compare_outputs",
         "sumo_collect_evidence",
+        "sumo_detector_count_audit",
+        "sumo_detector_count_constraints",
+        "sumo_detector_route_support",
         "torii_auto_workflow",
         "sumo_osm_resolve_place",
         "sumo_osm_cleanup_workflow",
@@ -26,6 +29,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_network_junction_aggregation_variant",
         "sumo_network_scope_pruning_variant",
         "sumo_network_tls_aggregation_variant",
+        "sumo_network_review_html",
     ]
 )
 

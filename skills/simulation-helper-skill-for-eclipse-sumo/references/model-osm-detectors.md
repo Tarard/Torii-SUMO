@@ -128,8 +128,9 @@ Hard gates:
 7. Run passenger connectivity checks before making stronger claims.
 8. If raw connectivity fails because of small disconnected passenger fragments, extract a `connected-core` network from the largest passenger component, keep the raw network and discarded-component report, then rerun strict connectivity on the core.
 9. Open the cleaned or connected-core network in SUMO-GUI and Netedit and report launch evidence.
+10. Generate an HTML human-review cockpit after construction reaches a final workflow report. The HTML must link or summarize the network artifact, gates, warnings, topology audit, junction aggregation review, and routeability evidence. When the user wants to audit a partially edited network instead of generating a new OSM network, route to `sumo_network_review_html` rather than rebuilding from OSM.
 
-If any gate is incomplete, keep the claim at `diagnostic-demo`, `construction-invalid`, or `blocked`. GUI inspection, Google Maps links, and clean SUMO loading do not prove timing, phasing, demand realism, or controller readiness.
+If any gate is incomplete, keep the claim at `diagnostic-demo`, `construction-invalid`, or `blocked`. GUI inspection, Google Maps links, HTML review navigation, and clean SUMO loading do not prove timing, phasing, demand realism, or controller readiness.
 
 ## Road-Class Ladder
 

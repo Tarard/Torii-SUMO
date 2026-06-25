@@ -4,6 +4,11 @@ import anyio
 from mcp.server.fastmcp import FastMCP
 
 from .tools.environment_tools import sumo_get_environment, sumo_preflight
+from .tools.demand_tools import (
+    sumo_detector_count_audit,
+    sumo_detector_count_constraints,
+    sumo_detector_route_support,
+)
 from .tools.evidence_tools import (
     sumo_collect_evidence,
     sumo_compare_outputs,
@@ -15,6 +20,7 @@ from .tools.osm_tools import (
     sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
+    sumo_network_review_html,
     sumo_network_routeability_audit,
     sumo_network_routeability_probe,
     sumo_network_scope_pruning_variant,
@@ -87,7 +93,7 @@ def create_server() -> FastMCP:
     server.tool(description="Compare a candidate SUMO network against a reference network by OSM road-type scope and flag over-included short detail fragments for review.")(
         sumo_network_reference_scope_audit
     )
-    server.tool(description="Create a separate netconvert --junctions.join review variant from topology or reference-join audit reports without overwriting the source network.")(
+    server.tool(description="Create a separate SUMO plain-nodes junction-join patch and review variant from topology or reference-join audit reports without overwriting the source network.")(
         sumo_network_junction_aggregation_variant
     )
     server.tool(description="Create a separate reference-scope pruning review variant from a reference scope audit without overwriting the source network.")(
@@ -95,6 +101,18 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Create a separate TLS cleanup review variant with one real SUMO junction set as TLS per physical TLS audit cluster.")(
         sumo_network_tls_aggregation_variant
+    )
+    server.tool(description="Create an HTML human-review cockpit for a generated or partial SUMO network and available audit artifacts.")(
+        sumo_network_review_html
+    )
+    server.tool(description="Build sanitized source/sink, route-candidate, and route-detector-incidence manifests for detector-constrained SUMO demand reconstruction.")(
+        sumo_detector_route_support
+    )
+    server.tool(description="Aggregate expected detector counts into sanitized time-bin constraints and SUMO routeSampler edgeData.")(
+        sumo_detector_count_constraints
+    )
+    server.tool(description="Compare expected detector counts against SUMO E1 detector output and report detector-fit metrics.")(
+        sumo_detector_count_audit
     )
 
     return server

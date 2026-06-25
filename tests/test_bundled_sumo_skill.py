@@ -163,3 +163,58 @@ def test_skill_routes_detector_constrained_demand_reconstruction() -> None:
     assert "Tool Boundary" in reference
     assert "Public Data Boundary" in reference
     assert "Treat detector-matched routes as a plausible demand reconstruction" in reference
+    assert "large-scale real-world detector observations" in reference
+    assert "simulated detector measurements match the real detector measurements over time" in reference
+
+
+def test_detector_constrained_demand_reference_is_workflow_first() -> None:
+    reference = (SKILL / "references" / "detector-constrained-demand-reconstruction.md").read_text(encoding="utf-8")
+
+    required_sections = [
+        "## Workflow Contract",
+        "## Gate 0: Target Declaration",
+        "## Gate 1: Detector Alignment",
+        "## Gate 2: Route Support Coverage",
+        "## Gate 3: Time-Bin Constraint Construction",
+        "## Gate 4: Baseline Reconstruction",
+        "## Gate 5: Residual-Correction Calibration",
+        "## Gate 6: Hourly And Daily Audit",
+        "## Month-Long Workflow Exit Criteria",
+        "## Failure Feedback Rules",
+        "## March Field Lesson",
+    ]
+
+    for section in required_sections:
+        assert section in reference
+
+    required_artifacts = [
+        "target_record",
+        "detector_manifest",
+        "route_candidate_manifest",
+        "route_detector_incidence",
+        "time_bin_count_constraints",
+        "baseline_comparison",
+        "calibrated_comparison",
+        "hourly_audit",
+        "daily_summary",
+        "workflow_status",
+    ]
+
+    for artifact in required_artifacts:
+        assert artifact in reference
+
+    assert "Workflow first, tools second" in reference
+    assert "underflow" in reference
+    assert "route support" in reference
+    assert "Do not call a detector-entry smoke test OD reconstruction" in reference
+
+
+def test_detector_constrained_demand_reference_lists_reusable_python_executors() -> None:
+    reference = (SKILL / "references" / "detector-constrained-demand-reconstruction.md").read_text(encoding="utf-8")
+
+    assert "## Reusable Python Executors" in reference
+    assert "sumo_detector_route_support" in reference
+    assert "sumo_detector_count_constraints" in reference
+    assert "sumo_detector_count_audit" in reference
+    assert "The bundled code contains no project-specific detector data" in reference
+    assert "Public outputs require anonymized inputs" in reference
