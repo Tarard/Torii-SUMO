@@ -68,6 +68,7 @@ Implemented OSM/network tools:
 - `sumo_network_routeability_probe`: generate named-road probe routes and a bounded `.sumocfg` for routeability checks.
 - `sumo_network_routeability_audit`: generate random passenger trips, run SUMO, parse `summary.xml` and `tripinfo.xml`, and extend the horizon until all generated vehicles finish or `max_end` is reached.
 - `sumo_network_topology_audit`: audit dense junction clusters and short internal edges that indicate over-fragmented OSM/netconvert topology, including a reference-free `join` / `needs_map_review` / `do_not_join` aggregation scorer.
+- `sumo_network_overlapping_junction_audit`: audit close overlapping top-level junctions without modifying the network, while ignoring valid SUMO internal crossing and walkingarea layers.
 - `sumo_network_reference_join_audit`: mine joined-junction cases from a reference `.net.xml` and match them against the candidate network by encoded source nodes first, with spatial topology clusters as a fallback.
 - `sumo_network_reference_hierarchy_audit`: compare high-hierarchy candidate roads against a reference `.net.xml`, separating over-split corridors, out-of-reference-scope high roads, hierarchy mismatches, and protected link/slip-lane cases.
 - `sumo_network_reference_scope_audit`: compare a candidate reference-visual-detail network against a reference `.net.xml` by OSM `highway.*` type counts, then flag over-included or absent-in-reference short dead-end detail fragments for review.

@@ -23,6 +23,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_network_routeability_probe",
         "sumo_network_routeability_audit",
         "sumo_network_topology_audit",
+        "sumo_network_overlapping_junction_audit",
         "sumo_network_reference_join_audit",
         "sumo_network_reference_hierarchy_audit",
         "sumo_network_reference_scope_audit",

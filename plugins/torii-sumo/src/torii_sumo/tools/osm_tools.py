@@ -23,6 +23,7 @@ from torii_sumo.core.routeability_audit import run_routeability_audit
 from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 from torii_sumo.core.reference_scope import audit_reference_scope, build_scope_pruning_variant
+from torii_sumo.core.overlapping_junction_audit import audit_overlapping_junctions
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.core.workflow_review_html import build_workflow_review_html
 
@@ -175,6 +176,26 @@ def sumo_network_topology_audit(
         cluster_radius_m=cluster_radius_m,
         min_cluster_nodes=min_cluster_nodes,
         osm_file=Path(osm_file) if osm_file else None,
+    )
+
+
+def sumo_network_overlapping_junction_audit(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "overlapping_junction_audit",
+    overlap_radius_m: float = 12.0,
+    short_edge_length_m: float = 20.0,
+    min_group_nodes: int = 2,
+    reference_join_audit_report_file: str | None = None,
+) -> dict[str, Any]:
+    return audit_overlapping_junctions(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        overlap_radius_m=overlap_radius_m,
+        short_edge_length_m=short_edge_length_m,
+        min_group_nodes=min_group_nodes,
+        reference_join_audit_report=_read_json_report(reference_join_audit_report_file),
     )
 
 

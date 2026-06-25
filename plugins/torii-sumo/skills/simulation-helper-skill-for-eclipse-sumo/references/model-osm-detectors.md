@@ -182,6 +182,8 @@ time_scope_residual_risk:
 
 When OSM/netconvert creates many close junctions or short edges around one physical intersection, do not immediately edit or join the network. First run a reusable dense-junction audit with local cluster-graph analysis and create a non-destructive correction record.
 
+Before building a correction variant, run `sumo_network_overlapping_junction_audit` when the visual issue is stacked red junction dots. It is read-only and separates suspicious co-planar top-level junctions from valid SUMO internal crossing and walkingarea layers.
+
 If no reference network is available, use the reference-free junction aggregation scorer from the topology audit. The scorer is diagnostic: it classifies each dense cluster as `join`, `needs_map_review`, or `do_not_join` from local topology, short internal edges, road-name consistency, TLS density, and risk flags. It must not destructively edit the source network by itself.
 
 Required fields for each suspicious junction cluster:
