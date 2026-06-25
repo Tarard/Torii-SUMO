@@ -87,6 +87,7 @@ def strategy_node_sets(
             "short_vehicle_core": set(),
             "short_all_core": set(),
             "edge_bounded_short_core": set(),
+            "short_all_core_with_protected_terminals": set(),
         }
 
     center = _centroid([junctions[node_id]["point"] for node_id in seeds])
@@ -95,12 +96,14 @@ def strategy_node_sets(
         for node_id, junction in junctions.items()
         if not junction["internal"] and _distance(center, junction["point"]) <= radius_m
     }
+    short_all_core = _short_edge_component(net, seeds, local, short_edge_m, vehicle_only=False)
     return {
         "reference_core": set(seeds),
         "radius_all_top_level": local,
         "short_vehicle_core": _short_edge_component(net, seeds, local, short_edge_m, vehicle_only=True),
-        "short_all_core": _short_edge_component(net, seeds, local, short_edge_m, vehicle_only=False),
-        "edge_bounded_short_core": _short_edge_component(net, seeds, local, short_edge_m, vehicle_only=False),
+        "short_all_core": short_all_core,
+        "edge_bounded_short_core": short_all_core,
+        "short_all_core_with_protected_terminals": short_all_core,
     }
 
 
@@ -127,14 +130,21 @@ def probe_junction_strategies(
 
     strategies = {}
     for name, node_ids in node_sets.items():
+        protected_terminals: set[str] = set()
+        shape_support_node_ids = set(node_ids)
+        if name == "short_all_core_with_protected_terminals":
+            node_ids, protected_terminals = _split_protected_terminals(candidate, node_ids, set(seed_ids), short_edge_m)
+            shape_support_node_ids = set(node_ids) | protected_terminals
         polygon = (
             _edge_bounded_footprint_for_nodes(candidate, node_ids, gate_margin_m)
             if name == "edge_bounded_short_core"
-            else _footprint_for_nodes(candidate, node_ids)
+            else _footprint_for_nodes(candidate, shape_support_node_ids)
         )
         strategies[name] = {
             "node_count": len(node_ids),
             "node_ids": sorted(node_ids),
+            "protected_terminal_ids": sorted(protected_terminals),
+            "shape_support_node_ids": sorted(shape_support_node_ids),
             "local_metrics": _local_metrics(candidate, node_ids, short_edge_m=short_edge_m),
             "footprint": _footprint_metrics(polygon, reference_polygon),
             "polygon": polygon,
@@ -227,6 +237,35 @@ def _edge_bounded_footprint_for_nodes(net: dict[str, Any], node_ids: set[str], g
     if len(gates) < 3:
         return _footprint_for_nodes(net, node_ids)
     return convex_hull(_expand_points_from_centroid(gates, gate_margin_m))
+
+
+def _split_protected_terminals(
+    net: dict[str, Any],
+    node_ids: set[str],
+    seed_ids: set[str],
+    short_edge_m: float,
+) -> tuple[set[str], set[str]]:
+    protected = {
+        node_id
+        for node_id in node_ids - seed_ids
+        if _has_long_modal_outside_edge(net, node_ids, node_id, short_edge_m)
+    }
+    return node_ids - protected, protected
+
+
+def _has_long_modal_outside_edge(
+    net: dict[str, Any],
+    node_ids: set[str],
+    node_id: str,
+    short_edge_m: float,
+) -> bool:
+    for edge in net["edges"]:
+        if edge["internal"] or (edge["from"] != node_id and edge["to"] != node_id):
+            continue
+        other = edge["to"] if edge["from"] == node_id else edge["from"]
+        if other not in node_ids and edge["length"] > short_edge_m and not _is_vehicle_core_edge(edge):
+            return True
+    return False
 
 
 def _expand_points_from_centroid(points: list[Point], margin_m: float) -> list[Point]:
@@ -336,6 +375,7 @@ def _write_svg(
         "short_vehicle_core": "#16a34a",
         "short_all_core": "#f59e0b",
         "edge_bounded_short_core": "#7c3aed",
+        "short_all_core_with_protected_terminals": "#0ea5e9",
     }
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.2f} {height:.2f}">',
@@ -393,6 +433,7 @@ def _write_png(
         "short_vehicle_core": (22, 163, 74, 255),
         "short_all_core": (245, 158, 11, 255),
         "edge_bounded_short_core": (124, 58, 237, 255),
+        "short_all_core_with_protected_terminals": (14, 165, 233, 255),
     }
     _draw_png_polygon(draw, reference_polygon, map_point, colors["reference"], 6)
     for name, report in strategies.items():
@@ -405,6 +446,7 @@ def _write_png(
         ("short_vehicle_core", "short_vehicle_core: short vehicle-edge component"),
         ("short_all_core", "short_all_core: short all-edge component"),
         ("edge_bounded_short_core", "edge_bounded_short_core: bounded by incident edge gates"),
+        ("short_all_core_with_protected_terminals", "short_all_core_with_protected_terminals: join core plus protected exits"),
     ]
     y = 20
     for key, label in legend:
