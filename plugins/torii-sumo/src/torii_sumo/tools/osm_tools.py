@@ -165,6 +165,7 @@ def sumo_network_topology_audit(
     prefix: str = "topology_audit",
     cluster_radius_m: float = 30.0,
     min_cluster_nodes: int = 3,
+    osm_file: str | None = None,
 ) -> dict[str, Any]:
     return audit_topology_fragmentation(
         net_file=Path(net_file),
@@ -172,6 +173,7 @@ def sumo_network_topology_audit(
         prefix=prefix,
         cluster_radius_m=cluster_radius_m,
         min_cluster_nodes=min_cluster_nodes,
+        osm_file=Path(osm_file) if osm_file else None,
     )
 
 

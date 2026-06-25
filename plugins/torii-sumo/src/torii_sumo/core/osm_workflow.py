@@ -349,6 +349,7 @@ def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | Non
             "junction_aggregation_join_candidate_count": 0,
             "junction_aggregation_needs_map_review_count": 0,
             "junction_aggregation_do_not_join_count": 0,
+            "junction_aggregation_blocked_by_corridor_count": 0,
             "junction_aggregation_candidates_file": "",
             "junction_aggregation_decision_counts": {},
         }
@@ -362,12 +363,16 @@ def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | Non
         decision = str(cluster.get("aggregation_decision", "needs_map_review"))
         if decision not in decision_counts:
             decision = "needs_map_review"
+        if cluster.get("corridor_decision") == "reject" and decision in {"join", "needs_map_review"}:
+            decision_counts["blocked_by_corridor"] = decision_counts.get("blocked_by_corridor", 0) + 1
+            continue
         decision_counts[decision] += 1
     return {
         "junction_aggregation_candidate_count": decision_counts["join"] + decision_counts["needs_map_review"],
         "junction_aggregation_join_candidate_count": decision_counts["join"],
         "junction_aggregation_needs_map_review_count": decision_counts["needs_map_review"],
         "junction_aggregation_do_not_join_count": decision_counts["do_not_join"],
+        "junction_aggregation_blocked_by_corridor_count": decision_counts.get("blocked_by_corridor", 0),
         "junction_aggregation_candidates_file": str(topology_audit_report.get("clusters_file", "")),
         "junction_aggregation_decision_counts": decision_counts,
     }
@@ -888,6 +893,7 @@ def run_osm_cleanup_workflow(
             prefix=f"{prefix}_topology_audit",
             cluster_radius_m=topology_cluster_radius_m,
             min_cluster_nodes=topology_min_cluster_nodes,
+            osm_file=osm_file,
         )
     if (
         str(network_plan.get("network_profile", "")) == "reference_matched"

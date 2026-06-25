@@ -138,6 +138,8 @@ def _aggregation_candidates(
             decision = str(cluster.get("aggregation_decision", "needs_map_review"))
             if decision not in {"join", "needs_map_review"}:
                 continue
+            if str(cluster.get("corridor_decision", "")) == "reject":
+                continue
             candidates.append(
                 {
                     "source": "topology_audit",
