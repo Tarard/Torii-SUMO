@@ -10,6 +10,11 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 from .osm_network import _net_xy_to_latlon
+from .road_corridor import (
+    enrich_clusters_with_corridor_audit,
+    graph_from_topology_inputs,
+    parse_osm_way_context,
+)
 
 
 def audit_topology_fragmentation(
@@ -19,6 +24,7 @@ def audit_topology_fragmentation(
     prefix: str = "topology_audit",
     cluster_radius_m: float = 30.0,
     min_cluster_nodes: int = 3,
+    osm_file: Path | None = None,
 ) -> dict[str, Any]:
     if cluster_radius_m <= 0:
         return _failure("cluster_radius_m must be positive")
@@ -40,17 +46,39 @@ def audit_topology_fragmentation(
         xy_to_latlon=xy_to_latlon,
         edges=edges,
     )
+    warnings = []
+    corridor_audit_status = "not_run"
+    corridor_error = ""
+    if osm_file is not None:
+        try:
+            osm_context = parse_osm_way_context(osm_file)
+            clusters = enrich_clusters_with_corridor_audit(
+                clusters,
+                graph=graph_from_topology_inputs(junctions, edges),
+                osm_context=osm_context,
+            )
+            corridor_audit_status = "pass"
+        except (OSError, ET.ParseError, KeyError, ValueError) as exc:
+            corridor_audit_status = "failed"
+            corridor_error = f"{type(exc).__name__}: {exc}"
+            warnings.append(f"corridor audit failed: {corridor_error}")
+
     output_dir.mkdir(parents=True, exist_ok=True)
     clusters_file = output_dir / f"{prefix}_dense_junction_clusters.csv"
     report_file = output_dir / f"{prefix}_topology_audit.json"
     _write_clusters_csv(clusters_file, clusters)
 
     status = "blocked" if clusters else "pass"
-    warnings = []
     if clusters:
         warnings.append(f"topology audit found {len(clusters)} suspicious dense junction cluster(s)")
 
     physical_shape_counts = dict(Counter(cluster["physical_intersection_shape"] for cluster in clusters))
+    corridor_decision_counts = dict(
+        Counter(
+            str(cluster.get("corridor_decision", "not_available"))
+            for cluster in clusters
+        )
+    )
     physical_intersection_candidate_count = sum(
         1
         for cluster in clusters
@@ -62,6 +90,7 @@ def audit_topology_fragmentation(
         "claim_status": "blocked" if clusters else "diagnostic-demo",
         "topology_fragmentation_status": "needs_review" if clusters else "pass",
         "net_file": str(net_file),
+        "osm_file": str(osm_file) if osm_file is not None else "",
         "output_dir": str(output_dir),
         "cluster_radius_m": cluster_radius_m,
         "min_cluster_nodes": min_cluster_nodes,
@@ -71,8 +100,25 @@ def audit_topology_fragmentation(
         "aggregation_decision_counts": dict(Counter(cluster["aggregation_decision"] for cluster in clusters)),
         "physical_intersection_shape_counts": physical_shape_counts,
         "physical_intersection_candidate_count": physical_intersection_candidate_count,
+        "corridor_audit_status": corridor_audit_status,
+        "corridor_audit_error": corridor_error,
+        "corridor_decision_counts": corridor_decision_counts,
+        "max_corridor_partition_count": max((cluster.get("corridor_partition_count", 0) for cluster in clusters), default=0),
+        "max_intersection_cell_count": max(
+            (cluster.get("corridor_intersection_cell_count", 0) for cluster in clusters),
+            default=0,
+        ),
         "junction_aggregation_candidate_count": sum(
-            1 for cluster in clusters if cluster["aggregation_decision"] in {"join", "needs_map_review"}
+            1
+            for cluster in clusters
+            if cluster["aggregation_decision"] in {"join", "needs_map_review"}
+            and cluster.get("corridor_decision") != "reject"
+        ),
+        "junction_aggregation_blocked_by_corridor_count": sum(
+            1
+            for cluster in clusters
+            if cluster["aggregation_decision"] in {"join", "needs_map_review"}
+            and cluster.get("corridor_decision") == "reject"
         ),
         "clusters_file": str(clusters_file),
         "report_file": str(report_file),
@@ -678,6 +724,17 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "service_or_parking_risk",
                 "bridge_tunnel_layer_risk",
                 "roundabout_or_slip_lane_risk",
+                "corridor_decision",
+                "corridor_reason",
+                "corridor_named_corridor_count",
+                "corridor_unnamed_corridor_count",
+                "corridor_intersection_cell_count",
+                "corridor_intersection_cell_signatures",
+                "corridor_partition_count",
+                "corridor_max_partition_node_count",
+                "corridor_named_corridors",
+                "corridor_unnamed_corridors",
+                "corridor_top_partitions",
                 "risk_flags",
                 "internal_edge_ids",
                 "boundary_edge_ids",
@@ -700,6 +757,10 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "connected_node_pairs",
                 "approach_axis_angles_deg",
                 "approach_axis_arm_counts",
+                "corridor_intersection_cell_signatures",
+                "corridor_named_corridors",
+                "corridor_unnamed_corridors",
+                "corridor_top_partitions",
             ):
-                row[field] = ";".join(str(item) for item in row[field])
+                row[field] = ";".join(str(item) for item in row.get(field, []) or [])
             writer.writerow(row)
