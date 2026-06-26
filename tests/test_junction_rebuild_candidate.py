@@ -1,7 +1,11 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from torii_sumo.core.junction_rebuild_candidate import build_rebuild_candidate
+from torii_sumo.core.junction_rebuild_candidate import (
+    build_rebuild_candidate,
+    write_teacher_connection_plan,
+    write_teacher_lane_patch_edges,
+)
 
 
 def test_build_rebuild_candidate_emits_only_high_confidence_vehicle_connections(tmp_path: Path) -> None:
@@ -66,3 +70,84 @@ def test_rebuild_candidate_writes_connection_signature(tmp_path: Path) -> None:
 
     assert Path(report["connection_signature"]["signature_file"]).is_file()
     assert report["connection_signature"]["status"] == "pass"
+
+
+def test_write_teacher_connection_plan_preserves_non_target_and_blocks_unlisted_targets(tmp_path: Path) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="other_in" to="other_out" fromLane="0" toLane="0"/>
+  <connection from="cand_in" to="old_out" fromLane="0" toLane="0"/>
+  <crossing node="j" edges="old_edge"/>
+</connections>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "vehicle_connections": [{"from": "teacher_in", "to": "teacher_out", "fromLane": "1", "toLane": "0"}],
+        "crossings": [{"edge_id": ":j_c0", "crossingEdges": ["teacher_out"]}],
+    }
+    candidate_model = {
+        "approaches": {
+            "incoming": [{"edge_id": "cand_in", "lane_count": 2}],
+            "outgoing": [{"edge_id": "cand_out", "lane_count": 1}, {"edge_id": "old_out", "lane_count": 1}],
+        }
+    }
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "teacher.con.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+        candidate_model=candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    root = ET.parse(report["connection_file"]).getroot()
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [
+        ("other_in", "other_out"),
+        ("cand_in", "cand_out"),
+    ]
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("delete")] == [("cand_in", "old_out")]
+    assert root.find("crossing").attrib["edges"] == "cand_out"
+    assert report["kept_non_target_children"] == 1
+    assert report["removed_target_children"] == 2
+
+
+def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacing_edge_geometry(tmp_path: Path) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand" from="a" to="j" numLanes="1" speed="13.89" shape="0,0 1,0">
+    <lane index="0" speed="13.89" shape="0,0 1,0"/>
+  </edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    teacher_edges = tmp_path / "teacher.net.xml"
+    teacher_edges.write_text(
+        """<net>
+  <edge id="teacher" from="x" to="j" numLanes="2" speed="13.89" shape="5,5 6,5">
+    <lane index="0" allow="pedestrian" width="3.00" speed="13.89" shape="5,5 6,5"/>
+    <lane index="1" disallow="pedestrian bicycle" speed="13.89" shape="5,6 6,6"/>
+  </edge>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw_edges,
+        teacher_edge_file=teacher_edges,
+        output_file=tmp_path / "patched.edg.xml",
+        edge_map={"teacher": "cand"},
+    )
+
+    edge = ET.parse(report["edge_file"]).getroot().find("edge")
+    assert edge.attrib["shape"] == "0,0 1,0"
+    assert edge.attrib["numLanes"] == "2"
+    lanes = edge.findall("lane")
+    assert [lane.attrib.get("allow", "") for lane in lanes] == ["pedestrian", ""]
+    assert [lane.attrib.get("disallow", "") for lane in lanes] == ["", "pedestrian bicycle"]
+    assert report["patched_edge_count"] == 1
