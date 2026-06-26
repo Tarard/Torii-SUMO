@@ -177,6 +177,92 @@ def test_approach_setback_strategy_uses_points_behind_intersection_core(tmp_path
     assert strategy["boundary_edge_ids"] == ["be", "bs", "na", "wa"]
 
 
+def test_approach_setback_strategy_uses_service_edges_as_shape_support(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    reference = tmp_path / "reference.net.xml"
+    candidate.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.unclassified"><lane id="ab_0" index="0" length="0.5" shape="0,0 1,0"/></edge>
+  <edge id="na" from="n" to="a" type="highway.unclassified"><lane id="na_0" index="0" length="5" shape="0,5 0,0"/></edge>
+  <edge id="be" from="b" to="e" type="highway.unclassified"><lane id="be_0" index="0" length="5" shape="1,0 6,0"/></edge>
+  <edge id="wa" from="w" to="a" type="highway.unclassified"><lane id="wa_0" index="0" length="5" shape="-5,0 0,0"/></edge>
+  <edge id="bs_service" from="b" to="service" type="highway.service"><lane id="bs_service_0" index="0" length="5" shape="1,0 1,-5"/></edge>
+  <junction id="a" x="0" y="0" type="priority"/>
+  <junction id="b" x="1" y="0" type="priority"/>
+  <junction id="n" x="0" y="5" type="priority"/>
+  <junction id="e" x="6" y="0" type="priority"/>
+  <junction id="w" x="-5" y="0" type="priority"/>
+  <junction id="service" x="1" y="-5" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_a_b" x="0.5" y="0" type="traffic_light" shape="-2,-2 -2,2 3,2 3,-2"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = probe_junction_strategies(
+        candidate_net_file=candidate,
+        reference_net_file=reference,
+        reference_junction_id="cluster_a_b",
+        output_dir=tmp_path / "out",
+        radius_m=8,
+        short_edge_m=1,
+        approach_setback_m=2,
+    )
+
+    strategy = report["strategies"]["approach_setback_core"]
+
+    assert (1.0, -2.0) in strategy["polygon"]
+    assert strategy["collapse_node_ids"] == ["a", "b"]
+    assert strategy["shape_support_edge_ids"] == ["be", "bs_service", "na", "wa"]
+
+
+def test_approach_setback_strategy_reports_sharp_corner_audit(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    reference = tmp_path / "reference.net.xml"
+    candidate.write_text(
+        """<net>
+  <edge id="an" from="a" to="n" type="highway.unclassified"><lane id="an_0" index="0" length="5" shape="0,0 0,5"/></edge>
+  <edge id="ae" from="a" to="e" type="highway.unclassified"><lane id="ae_0" index="0" length="0.5" shape="0,0 0.5,0"/></edge>
+  <edge id="aw" from="a" to="w" type="highway.unclassified"><lane id="aw_0" index="0" length="0.5" shape="0,0 -0.5,0"/></edge>
+  <junction id="a" x="0" y="0" type="priority"/>
+  <junction id="n" x="0" y="5" type="priority"/>
+  <junction id="e" x="0.5" y="0" type="priority"/>
+  <junction id="w" x="-0.5" y="0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_a" x="0" y="0" type="traffic_light" shape="-0.5,0 0.5,0 0,5"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = probe_junction_strategies(
+        candidate_net_file=candidate,
+        reference_net_file=reference,
+        reference_junction_id="cluster_a",
+        output_dir=tmp_path / "out",
+        radius_m=8,
+        short_edge_m=1,
+        approach_setback_m=5,
+    )
+
+    audit = report["strategies"]["approach_setback_core"]["footprint"]["sharp_corner_audit"]
+
+    assert audit["sharp_corner_count"] == 1
+    assert audit["min_corner_angle_deg"] < 35
+    assert audit["status"] == "needs_review"
+
+
 def test_protected_terminal_strategy_keeps_modal_exits_out_of_join_core(tmp_path: Path) -> None:
     candidate = tmp_path / "candidate.net.xml"
     reference = tmp_path / "reference.net.xml"
