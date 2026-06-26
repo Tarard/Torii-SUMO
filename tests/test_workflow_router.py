@@ -223,7 +223,7 @@ def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_pa
     assert captured["network_profile"] == "reference_matched"
     assert captured["reference_net_file"] == reference_net_file
     assert captured["service_passenger_policy"] == "reference_match"
-    assert "service" in captured["highway_classes"]
+    assert "service" not in captured["highway_classes"]
     assert "cycleway" not in captured["highway_classes"]
 
 

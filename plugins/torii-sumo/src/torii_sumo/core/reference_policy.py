@@ -102,7 +102,7 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
                 service_passenger_edge_count += 1
         if allows_passenger:
             passenger_edge_type_counts[edge_type] += 1
-            if base_class in VEHICLE_HIGHWAY_CLASSES:
+            if base_class in VEHICLE_HIGHWAY_CLASSES and base_class != "service":
                 selected_highways.add(base_class)
         if allows_bicycle:
             bicycle_edge_type_counts[edge_type] += 1
