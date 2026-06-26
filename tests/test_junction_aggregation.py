@@ -224,6 +224,113 @@ def test_junction_join_definition_skips_invalid_single_node_groups(tmp_path) -> 
     assert "C001" in report["invalid_candidates"][0]["candidate_id"]
 
 
+def test_junction_aggregation_filters_modal_support_nodes_from_reference_join(tmp_path) -> None:
+    net_file = tmp_path / "source.net.xml"
+    net_file.write_text(
+        """<net>
+    <edge id="veh_a" from="core_a" to="core_b" type="highway.residential">
+        <lane id="veh_a_0" index="0" allow="passenger" speed="13.9" length="20"/>
+    </edge>
+    <edge id="veh_b" from="outside" to="core_a" type="highway.unclassified">
+        <lane id="veh_b_0" index="0" allow="passenger" speed="13.9" length="20"/>
+    </edge>
+    <edge id="foot" from="foot_node" to="outside_foot" type="highway.footway">
+        <lane id="foot_0" index="0" allow="pedestrian" speed="1.4" length="8"/>
+    </edge>
+    <edge id="bike" from="cycle_node" to="outside_bike" type="highway.cycleway">
+        <lane id="bike_0" index="0" allow="bicycle" speed="5.0" length="8"/>
+    </edge>
+    <edge id="service" from="service_node" to="outside_service" type="highway.service">
+        <lane id="service_0" index="0" allow="passenger" speed="5.0" length="8"/>
+    </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command(command, cwd, timeout_seconds):
+        patch_file = Path(command[command.index("--node-files") + 1])
+        variant_file = Path(command[command.index("--output-file") + 1])
+        variant_file.write_text("<net/>", encoding="utf-8")
+        root = ET.parse(patch_file).getroot()
+        assert [element.attrib["nodes"] for element in root.findall("join")] == ["core_a core_b"]
+        return {"status": "pass", "stdout": "", "stderr": "", "command": command}
+
+    report = build_junction_aggregation_variant(
+        net_file=net_file,
+        output_dir=tmp_path,
+        prefix="demo",
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_core_a_core_b_foot_node_cycle_node_service_node",
+                    "candidate_node_ids": ["core_a", "core_b", "foot_node", "cycle_node", "service_node"],
+                    "match_reason": "reference_matched",
+                }
+            ]
+        },
+        command_runner=fake_command,
+    )
+
+    assert report["status"] == "pass"
+
+
+def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_core(tmp_path) -> None:
+    net_file = tmp_path / "source.net.xml"
+    net_file.write_text(
+        """<net>
+    <edge id="veh_a" from="core_a" to="core_b" type="highway.residential">
+        <lane id="veh_a_0" index="0" allow="passenger" speed="13.9" length="20"/>
+    </edge>
+    <edge id="veh_short_keep" from="core_a" to="outside_vehicle" type="highway.residential">
+        <lane id="veh_short_keep_0" index="0" allow="passenger" speed="13.9" length="5"/>
+    </edge>
+    <edge id="foot_prune" from="core_a" to="outside_foot" type="highway.footway">
+        <lane id="foot_prune_0" index="0" allow="pedestrian" speed="1.4" length="6"/>
+    </edge>
+    <edge id="bike_prune" from="core_b" to="outside_bike" type="highway.cycleway">
+        <lane id="bike_prune_0" index="0" allow="bicycle" speed="5.0" length="7"/>
+    </edge>
+    <edge id="service_prune" from="core_b" to="outside_service" type="highway.service">
+        <lane id="service_prune_0" index="0" allow="passenger" speed="5.0" length="6"/>
+    </edge>
+    <edge id="service_long_keep" from="core_b" to="outside_service_long" type="highway.service">
+        <lane id="service_long_keep_0" index="0" allow="passenger" speed="5.0" length="35"/>
+    </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command(command, cwd, timeout_seconds):
+        remove_file = Path(command[command.index("--remove-edges.input-file") + 1])
+        assert remove_file.read_text(encoding="utf-8").splitlines() == [
+            "bike_prune",
+            "foot_prune",
+            "service_prune",
+        ]
+        variant_file = Path(command[command.index("--output-file") + 1])
+        variant_file.write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "stdout": "", "stderr": "", "command": command}
+
+    report = build_junction_aggregation_variant(
+        net_file=net_file,
+        output_dir=tmp_path,
+        prefix="demo",
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_core_a_core_b",
+                    "candidate_node_ids": ["core_a", "core_b"],
+                    "match_reason": "reference_matched",
+                }
+            ]
+        },
+        command_runner=fake_command,
+    )
+
+    assert report["status"] == "pass"
+    assert report["junction_aggregation_removed_modal_support_edge_count"] == 3
+
+
 def test_unconfirmed_topology_join_candidate_stays_in_map_review(tmp_path) -> None:
     report = build_junction_join_definition(
         [
