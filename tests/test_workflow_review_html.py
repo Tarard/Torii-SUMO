@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -54,6 +55,7 @@ def test_network_visualization_writes_nonempty_png(tmp_path: Path) -> None:
     assert report["map_layers"]["bounds"]["min_x"] <= 10.0
     assert report["map_layers"]["bounds"]["max_x"] >= 120.0
     assert {edge["category"] for edge in report["map_layers"]["edges"]} == {"major", "vehicle", "soft"}
+    assert report["map_layers"]["edges"][0]["id"] == "north"
     assert report["map_layers"]["traffic_lights"] == [{"x": 60.0, "y": 50.0}]
     image = Image.open(report["network_overview_png"])
     assert image.size[0] >= 400
@@ -85,7 +87,11 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
                     "cluster_id": "c1",
                     "centroid_x": 60.0,
                     "centroid_y": 50.0,
+                    "node_ids": ["tls0"],
                     "node_count": 3,
+                    "internal_edge_ids": ["north"],
+                    "boundary_edge_ids": ["east"],
+                    "cluster_radius_m": 16.0,
                     "aggregation_decision": "join",
                     "aggregation_confidence": "medium",
                     "modal_aggregation_decision": "review_required",
@@ -110,6 +116,10 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     workflow_json = json.loads(Path(report["workflow_report_file"]).read_text(encoding="utf-8"))
     manifest_dir = manifest_file.parent
+    netedit_additional = Path(report["netedit_review_additional_file"])
+    netedit_sumocfg = Path(report["netedit_review_sumocfg_file"])
+    additional_root = ET.parse(netedit_additional).getroot()
+    sumocfg_root = ET.parse(netedit_sumocfg).getroot()
 
     assert "Gate Dashboard" in html
     assert "Torii-SUMO" in html
@@ -129,6 +139,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "toggleReviewPanel" in html
     assert "applySelectedJunctions" in html
     assert "Export review plan" in html
+    assert "Netedit overlay" in html
+    assert "workflow_netedit_review.sumocfg" in html
     assert "Aggregate selected junctions" in html
     assert "Network Preview" in html
     assert "Problem Map" in html
@@ -165,9 +177,19 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert review_data["map_layers"]["traffic_lights"] == [{"x": 60.0, "y": 50.0}]
     assert review_data["summary_cards"]["uncertain_junctions"] == 1
     assert review_data["junctions"][0]["cluster_id"] == "c1"
+    assert review_data["junctions"][0]["node_ids"] == ["tls0"]
+    assert review_data["junctions"][0]["internal_edge_ids"] == ["north"]
+    assert review_data["junctions"][0]["boundary_edge_ids"] == ["east"]
     assert review_data["junctions"][0]["modal_review_action"] == "review_vehicle_core_boundary"
     assert review_data["junctions"][0]["image_file"].startswith("visuals/")
+    assert review_data["netedit_review"]["additional_file"] == "workflow_netedit_review.add.xml"
+    assert review_data["netedit_review"]["sumocfg_file"] == "workflow_netedit_review.sumocfg"
+    assert review_data["netedit_review"]["edge_overlay_count"] == 2
+    assert review_data["netedit_review"]["junction_overlay_count"] == 1
     assert manifest["visualizations"]["network_overview_png"]
+    assert manifest["artifacts"]["netedit_review_additional_file"] == "workflow_netedit_review.add.xml"
+    assert manifest["artifacts"]["netedit_review_sumocfg_file"] == "workflow_netedit_review.sumocfg"
+    assert manifest["netedit_review"]["netedit_command"] == 'netedit --sumocfg-file "workflow_netedit_review.sumocfg"'
     assert manifest["review_app"]["map_layers"]["edges"]
     assert manifest["review_app"]["summary_cards"]["uncertain_junctions"] == 1
     assert manifest["review_app"]["junctions"][0]["cluster_id"] == "c1"
@@ -175,3 +197,13 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["visualizations"]["cluster_zoom_pngs"][0]["cluster_id"] == "c1"
     assert (manifest_dir / manifest["visualizations"]["cluster_zoom_pngs"][0]["image_file"]).is_file()
     assert workflow_json["claim_status"] == "construction-invalid"
+    assert netedit_additional.is_file()
+    assert netedit_sumocfg.is_file()
+    assert additional_root.tag == "additional"
+    assert additional_root.find("./poi[@id='torii_c1']").attrib["name"] == "c1 Auto-join"
+    assert additional_root.find("./poi[@id='torii_c1_node_1']").attrib["name"] == "c1 tls0"
+    assert additional_root.find("./poly[@id='torii_c1_review_box']").attrib["shape"].startswith("44,34")
+    assert additional_root.find("./poly[@type='torii.cluster.internal_edge_ids']").attrib["shape"] == "60,90 60,50"
+    assert additional_root.find("./poly[@type='torii.cluster.boundary_edge_ids']").attrib["shape"] == "60,50 120,50"
+    assert sumocfg_root.find("./input/net-file").attrib["value"] == "../candidate.net.xml"
+    assert sumocfg_root.find("./input/additional-files").attrib["value"] == "workflow_netedit_review.add.xml"
