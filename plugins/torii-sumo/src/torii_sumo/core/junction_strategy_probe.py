@@ -157,7 +157,10 @@ def probe_junction_strategies(
             "polygon": polygon,
         }
     approach_node_ids = node_sets["reference_core"]
-    approach_polygon = _approach_setback_footprint_for_nodes(candidate, approach_node_ids, approach_setback_m)
+    approach_support_edges = _approach_setback_support_edges(candidate, approach_node_ids)
+    approach_polygon = _approach_setback_footprint_for_edges(
+        candidate, approach_node_ids, approach_support_edges, approach_setback_m
+    )
     strategies["approach_setback_core"] = {
         "node_count": len(approach_node_ids),
         "node_ids": sorted(approach_node_ids),
@@ -166,6 +169,7 @@ def probe_junction_strategies(
         "boundary_edge_ids": _boundary_edge_ids(candidate, approach_node_ids),
         "protected_terminal_ids": [],
         "shape_support_node_ids": sorted(approach_node_ids),
+        "shape_support_edge_ids": sorted(edge["id"] for edge in approach_support_edges),
         "local_metrics": _local_metrics(candidate, approach_node_ids, short_edge_m=short_edge_m),
         "footprint": _footprint_metrics(approach_polygon, reference_polygon),
         "polygon": approach_polygon,
@@ -238,6 +242,13 @@ def _is_vehicle_core_edge(edge: dict[str, Any]) -> bool:
     return not any(token in text for token in ("footway", "cycleway", "pedestrian", "bicycle", "service"))
 
 
+def _is_footprint_support_edge(edge: dict[str, Any]) -> bool:
+    text = f"{edge['type']} {edge.get('allow', '')}".lower()
+    if any(token in text for token in ("footway", "cycleway", "pedestrian", "bicycle")):
+        return False
+    return _is_vehicle_core_edge(edge) or any(token in text for token in ("service", "access"))
+
+
 def _footprint_for_nodes(net: dict[str, Any], node_ids: set[str]) -> list[Point]:
     points: list[Point] = []
     for node_id in node_ids:
@@ -267,14 +278,31 @@ def _approach_setback_footprint_for_nodes(
     node_ids: set[str],
     approach_setback_m: float,
 ) -> list[Point]:
+    return _approach_setback_footprint_for_edges(
+        net, node_ids, _approach_setback_support_edges(net, node_ids), approach_setback_m
+    )
+
+
+def _approach_setback_support_edges(net: dict[str, Any], node_ids: set[str]) -> list[dict[str, Any]]:
+    return [
+        edge
+        for edge in net["edges"]
+        if not edge["internal"]
+        and edge["shape"]
+        and _is_footprint_support_edge(edge)
+        and ((edge["from"] in node_ids) != (edge["to"] in node_ids))
+    ]
+
+
+def _approach_setback_footprint_for_edges(
+    net: dict[str, Any],
+    node_ids: set[str],
+    edges: list[dict[str, Any]],
+    approach_setback_m: float,
+) -> list[Point]:
     gates: list[Point] = []
-    for edge in net["edges"]:
-        if edge["internal"] or not edge["shape"] or not _is_vehicle_core_edge(edge):
-            continue
+    for edge in edges:
         from_inside = edge["from"] in node_ids
-        to_inside = edge["to"] in node_ids
-        if from_inside == to_inside:
-            continue
         gates.append(
             _point_along_shape(edge["shape"], approach_setback_m)
             if from_inside
@@ -488,7 +516,56 @@ def _footprint_metrics(polygon: list[Point], reference_polygon: list[Point]) -> 
         "perimeter": round(_perimeter(polygon), 3),
         "centroid_distance_to_reference": round(_distance(_centroid(polygon), _centroid(reference_polygon)), 3),
         "vertex_hausdorff_to_reference": round(_hausdorff(polygon, reference_polygon), 3),
+        "sharp_corner_audit": _sharp_corner_audit(polygon),
     }
+
+
+def _sharp_corner_audit(
+    polygon: list[Point],
+    *,
+    angle_threshold_deg: float = 35.0,
+    min_leg_m: float = 1.0,
+) -> dict[str, Any]:
+    angles = []
+    sharp = []
+    if len(polygon) < 3:
+        return {
+            "status": "pass",
+            "angle_threshold_deg": angle_threshold_deg,
+            "min_leg_m": min_leg_m,
+            "min_corner_angle_deg": 0.0,
+            "sharp_corner_count": 0,
+            "sharp_corner_points": [],
+        }
+    for index, point in enumerate(polygon):
+        prev_point = polygon[index - 1]
+        next_point = polygon[(index + 1) % len(polygon)]
+        left = _distance(point, prev_point)
+        right = _distance(point, next_point)
+        if left == 0 or right == 0:
+            continue
+        angle = _corner_angle_deg(prev_point, point, next_point)
+        angles.append(angle)
+        if left >= min_leg_m and right >= min_leg_m and angle < angle_threshold_deg:
+            sharp.append({"x": round(point[0], 3), "y": round(point[1], 3), "angle_deg": round(angle, 3)})
+    return {
+        "status": "needs_review" if sharp else "pass",
+        "angle_threshold_deg": angle_threshold_deg,
+        "min_leg_m": min_leg_m,
+        "min_corner_angle_deg": round(min(angles), 3) if angles else 0.0,
+        "sharp_corner_count": len(sharp),
+        "sharp_corner_points": sharp,
+    }
+
+
+def _corner_angle_deg(prev_point: Point, point: Point, next_point: Point) -> float:
+    ax, ay = prev_point[0] - point[0], prev_point[1] - point[1]
+    bx, by = next_point[0] - point[0], next_point[1] - point[1]
+    denom = math.hypot(ax, ay) * math.hypot(bx, by)
+    if denom == 0:
+        return 0.0
+    cosine = max(-1.0, min(1.0, (ax * bx + ay * by) / denom))
+    return math.degrees(math.acos(cosine))
 
 
 def _write_csv(path: Path, strategies: dict[str, Any]) -> None:
@@ -509,16 +586,22 @@ def _write_csv(path: Path, strategies: dict[str, Any]) -> None:
                 "perimeter",
                 "centroid_distance_to_reference",
                 "vertex_hausdorff_to_reference",
+                "sharp_corner_count",
+                "min_corner_angle_deg",
             ],
         )
         writer.writeheader()
         for name, report in strategies.items():
+            footprint = dict(report["footprint"])
+            sharp_audit = footprint.pop("sharp_corner_audit", {})
             writer.writerow(
                 {
                     "strategy": name,
                     "node_count": report["node_count"],
                     **report["local_metrics"],
-                    **report["footprint"],
+                    **footprint,
+                    "sharp_corner_count": sharp_audit.get("sharp_corner_count", 0),
+                    "min_corner_angle_deg": sharp_audit.get("min_corner_angle_deg", 0.0),
                 }
             )
 
