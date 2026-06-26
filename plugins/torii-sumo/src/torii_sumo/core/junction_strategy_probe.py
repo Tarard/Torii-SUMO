@@ -7,6 +7,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
+from .junction_footprint import build_lane_buffered_approach_footprint
+
 Point = tuple[float, float]
 
 
@@ -57,15 +59,21 @@ def parse_net(net_file: Path) -> dict[str, Any]:
         shape = _parse_shape(lanes[0].attrib.get("shape", "")) if lanes else []
         length = _edge_length(edge, lanes, shape)
         function = edge.attrib.get("function", "")
+        lane_width = _lane_width(lanes)
         edges.append(
             {
                 "id": edge_id,
                 "from": edge.attrib.get("from", ""),
                 "to": edge.attrib.get("to", ""),
                 "type": edge.attrib.get("type", ""),
+                "allow": edge.attrib.get("allow", "") or " ".join(lane.attrib.get("allow", "") for lane in lanes),
+                "disallow": edge.attrib.get("disallow", "")
+                or " ".join(lane.attrib.get("disallow", "") for lane in lanes),
                 "function": function,
                 "length": length,
                 "shape": shape,
+                "lane_count": len(lanes) or 1,
+                "lane_width": lane_width,
                 "internal": edge_id.startswith(":") or function in {"internal", "crossing", "walkingarea"},
             }
         )
@@ -173,6 +181,26 @@ def probe_junction_strategies(
         "local_metrics": _local_metrics(candidate, approach_node_ids, short_edge_m=short_edge_m),
         "footprint": _footprint_metrics(approach_polygon, reference_polygon),
         "polygon": approach_polygon,
+    }
+    buffered = build_lane_buffered_approach_footprint(
+        candidate,
+        approach_node_ids,
+        setback_m=approach_setback_m,
+    )
+    strategies["lane_buffered_approach_setback_core"] = {
+        "node_count": len(approach_node_ids),
+        "node_ids": sorted(approach_node_ids),
+        "collapse_node_ids": sorted(approach_node_ids),
+        "inside_plain_edge_ids": _inside_plain_edge_ids(candidate, approach_node_ids),
+        "boundary_edge_ids": _boundary_edge_ids(candidate, approach_node_ids),
+        "protected_terminal_ids": [],
+        "shape_support_node_ids": sorted(approach_node_ids),
+        "shape_support_edge_ids": buffered["shape_support_edge_ids"],
+        "review_support_edge_ids": buffered["review_support_edge_ids"],
+        "buffer_point_count": buffered["buffer_point_count"],
+        "local_metrics": _local_metrics(candidate, approach_node_ids, short_edge_m=short_edge_m),
+        "footprint": _footprint_metrics(buffered["polygon"], reference_polygon),
+        "polygon": buffered["polygon"],
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -631,6 +659,7 @@ def _write_svg(
         "edge_bounded_short_core": "#7c3aed",
         "short_all_core_with_protected_terminals": "#0ea5e9",
         "approach_setback_core": "#be123c",
+        "lane_buffered_approach_setback_core": "#059669",
     }
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.2f} {height:.2f}">',
@@ -690,6 +719,7 @@ def _write_png(
         "edge_bounded_short_core": (124, 58, 237, 255),
         "short_all_core_with_protected_terminals": (14, 165, 233, 255),
         "approach_setback_core": (190, 18, 60, 255),
+        "lane_buffered_approach_setback_core": (5, 150, 105, 255),
     }
     _draw_png_polygon(draw, reference_polygon, map_point, colors["reference"], 6)
     for name, report in strategies.items():
@@ -704,6 +734,7 @@ def _write_png(
         ("edge_bounded_short_core", "edge_bounded_short_core: bounded by incident edge gates"),
         ("short_all_core_with_protected_terminals", "short_all_core_with_protected_terminals: join core plus protected exits"),
         ("approach_setback_core", "approach_setback_core: vehicle approaches set back from the core"),
+        ("lane_buffered_approach_setback_core", "lane_buffered_approach_setback_core: lane-width buffered approaches"),
     ]
     y = 20
     for key, label in legend:
@@ -751,6 +782,13 @@ def _parse_shape(raw: str) -> list[Point]:
         if len(parts) >= 2:
             points.append((float(parts[0]), float(parts[1])))
     return points
+
+
+def _lane_width(lanes: list[ET.Element]) -> float | None:
+    widths = [float(lane.attrib["width"]) for lane in lanes if lane.attrib.get("width")]
+    if not widths:
+        return None
+    return sum(widths) / len(widths)
 
 
 def _edge_length(edge: ET.Element, lanes: list[ET.Element], shape: list[Point]) -> float:
