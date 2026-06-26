@@ -72,6 +72,7 @@ def write_teacher_connection_plan(
     candidate_model: dict[str, object],
     edge_map: dict[str, str],
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
+    candidate_edge_file: Path | None = None,
 ) -> dict[str, object]:
     crossing_edge_overrides = crossing_edge_overrides or {}
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -80,6 +81,8 @@ def write_teacher_connection_plan(
     outgoing = _approach_edges(candidate_model, "outgoing")
     candidate_edges = set(incoming) | set(outgoing)
     candidate_lane_counts = _candidate_lane_counts(candidate_model)
+    if candidate_edge_file is not None:
+        candidate_lane_counts.update(_edge_file_lane_counts(candidate_edge_file))
 
     root = ET.Element("connections")
     kept = 0
@@ -97,6 +100,7 @@ def write_teacher_connection_plan(
         kept += 1
 
     emitted_connections = 0
+    emitted_uncontrolled_connections = 0
     allowed_pairs: set[tuple[str, str]] = set()
     seen_connections: set[tuple[str, str, str, str]] = set()
     lane_clamps = []
@@ -127,7 +131,11 @@ def write_teacher_connection_plan(
         if key in seen_connections:
             continue
         seen_connections.add(key)
-        ET.SubElement(root, "connection", {"from": source, "to": target, "fromLane": str(from_lane), "toLane": str(to_lane)})
+        attributes = {"from": source, "to": target, "fromLane": str(from_lane), "toLane": str(to_lane)}
+        if not str(connection.get("tl", "")):
+            attributes["uncontrolled"] = "true"
+            emitted_uncontrolled_connections += 1
+        ET.SubElement(root, "connection", attributes)
         emitted_connections += 1
 
     emitted_deletes = 0
@@ -165,6 +173,7 @@ def write_teacher_connection_plan(
         "kept_non_target_children": kept,
         "removed_target_children": removed,
         "emitted_connection_count": emitted_connections,
+        "emitted_uncontrolled_connection_count": emitted_uncontrolled_connections,
         "emitted_delete_count": emitted_deletes,
         "emitted_crossing_count": emitted_crossings,
         "skipped_crossings": skipped_crossings,
@@ -268,6 +277,20 @@ def _candidate_lane_counts(candidate_model: dict[str, object]) -> dict[str, int]
         for edge in approaches.get(direction, []) or []:
             if isinstance(edge, dict) and edge.get("edge_id"):
                 counts[str(edge["edge_id"])] = max(1, int(edge.get("lane_count", 1) or 1))
+    return counts
+
+
+def _edge_file_lane_counts(edge_file: Path) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for edge in ET.parse(edge_file).getroot().findall("edge"):
+        edge_id = edge.attrib.get("id")
+        if not edge_id:
+            continue
+        lanes = edge.findall("lane")
+        if lanes:
+            counts[edge_id] = len(lanes)
+        elif edge.attrib.get("numLanes"):
+            counts[edge_id] = max(1, int(edge.attrib["numLanes"]))
     return counts
 
 
