@@ -336,11 +336,13 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     def fake_reference_join_aggregation(**kwargs):
         calls["aggregation_candidate_net_file"] = kwargs["net_file"]
         calls["aggregation_audit_report"] = kwargs["reference_join_audit_report"]
+        aggregated_net = tmp_path / "aggregated.net.xml"
+        aggregated_net.write_text("<net/>", encoding="utf-8")
         return {
             "status": "pass",
             "claim_status": "blocked",
             "junction_aggregation_status": "variant_created_for_review",
-            "junction_aggregation_variant_file": str(tmp_path / "aggregated.net.xml"),
+            "junction_aggregation_variant_file": str(aggregated_net),
             "junction_aggregation_plan_file": str(tmp_path / "aggregation_plan.json"),
             "junction_aggregation_candidate_count": 2,
             "warnings": ["junction aggregation variant requires Google Maps review before adoption"],
@@ -408,6 +410,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_unmatched_case_count"] == 1
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"
     assert report["reference_join_aggregation_variant_file"] == str(tmp_path / "aggregated.net.xml")
+    assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:

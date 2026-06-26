@@ -996,6 +996,11 @@ def run_osm_cleanup_workflow(
                 join_dist_m=topology_cluster_radius_m,
                 timeout_seconds=timeout_seconds,
             )
+            joined_value = reference_join_aggregation_report.get("junction_aggregation_variant_file", "")
+            if reference_join_aggregation_report.get("status") == "pass" and joined_value:
+                candidate_joined_net_file = Path(str(joined_value))
+                if candidate_joined_net_file.exists():
+                    reference_visual_detail_comparison_net_file = candidate_joined_net_file
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
