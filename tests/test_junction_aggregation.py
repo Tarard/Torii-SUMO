@@ -1,7 +1,11 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from torii_sumo.core.junction_aggregation import _aggregation_candidates, build_junction_aggregation_variant
+from torii_sumo.core.junction_aggregation import (
+    _aggregation_candidates,
+    audit_join_collapse_residuals,
+    build_junction_aggregation_variant,
+)
 from torii_sumo.core.junction_join_definition import (
     build_junction_join_definition,
     netconvert_join_patch_args,
@@ -224,7 +228,7 @@ def test_junction_join_definition_skips_invalid_single_node_groups(tmp_path) -> 
     assert "C001" in report["invalid_candidates"][0]["candidate_id"]
 
 
-def test_junction_aggregation_filters_modal_support_nodes_from_reference_join(tmp_path) -> None:
+def test_junction_aggregation_preserves_reference_confirmed_modal_nodes(tmp_path) -> None:
     net_file = tmp_path / "source.net.xml"
     net_file.write_text(
         """<net>
@@ -252,7 +256,9 @@ def test_junction_aggregation_filters_modal_support_nodes_from_reference_join(tm
         variant_file = Path(command[command.index("--output-file") + 1])
         variant_file.write_text("<net/>", encoding="utf-8")
         root = ET.parse(patch_file).getroot()
-        assert [element.attrib["nodes"] for element in root.findall("join")] == ["core_a core_b"]
+        assert [element.attrib["nodes"] for element in root.findall("join")] == [
+            "core_a core_b foot_node cycle_node service_node"
+        ]
         return {"status": "pass", "stdout": "", "stderr": "", "command": command}
 
     report = build_junction_aggregation_variant(
@@ -329,6 +335,105 @@ def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_cor
 
     assert report["status"] == "pass"
     assert report["junction_aggregation_removed_modal_support_edge_count"] == 3
+
+
+def test_junction_aggregation_variant_reports_failed_collapse_audit(tmp_path) -> None:
+    net_file = tmp_path / "source.net.xml"
+    net_file.write_text(
+        """<net>
+    <edge id="veh_a" from="core_a" to="core_b" type="highway.residential">
+        <lane id="veh_a_0" index="0" allow="passenger" speed="13.9" length="20"/>
+    </edge>
+    <edge id="veh_b" from="outside" to="core_a" type="highway.residential">
+        <lane id="veh_b_0" index="0" allow="passenger" speed="13.9" length="20"/>
+    </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command(command, cwd, timeout_seconds):
+        variant_file = Path(command[command.index("--output-file") + 1])
+        variant_file.write_text(
+            """<net>
+  <edge id="veh_a" from="core_a" to="core_b" type="highway.residential">
+    <lane id="veh_a_0" index="0" length="20"/>
+  </edge>
+  <junction id="core_a" x="0" y="0" type="traffic_light"/>
+  <junction id="core_b" x="1" y="0" type="traffic_light"/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "stdout": "", "stderr": "", "command": command}
+
+    report = build_junction_aggregation_variant(
+        net_file=net_file,
+        output_dir=tmp_path,
+        prefix="demo",
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_core_a_core_b",
+                    "candidate_node_ids": ["core_a", "core_b"],
+                    "match_reason": "reference_matched",
+                }
+            ]
+        },
+        command_runner=fake_command,
+    )
+
+    assert report["status"] == "fail"
+    assert report["junction_aggregation_collapse_audit_status"] == "needs_cleanup"
+    assert Path(report["junction_aggregation_collapse_audit_file"]).is_file()
+
+
+def test_join_collapse_audit_flags_residual_nodes_edges_and_connections(tmp_path) -> None:
+    net_file = tmp_path / "not_collapsed.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.residential">
+    <lane id="ab_0" index="0" length="0.2"/>
+  </edge>
+  <edge id=":a_0" function="internal" from="a" to="b">
+    <lane id=":a_0_0" index="0" length="0.2"/>
+  </edge>
+  <junction id="a" x="0" y="0" type="traffic_light"/>
+  <junction id="b" x="1" y="0" type="traffic_light"/>
+  <connection from="ab" to="ab" via=":a_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_join_collapse_residuals(net_file, [["a", "b"]])
+
+    assert report["status"] == "needs_cleanup"
+    assert report["residual_group_count"] == 1
+    assert report["groups"][0]["remaining_core_node_ids"] == ["a", "b"]
+    assert report["groups"][0]["residual_plain_edge_ids"] == ["ab"]
+    assert report["groups"][0]["residual_internal_edge_ids"] == [":a_0"]
+    assert report["groups"][0]["residual_connection_via_ids"] == [":a_0_0"]
+
+
+def test_join_collapse_audit_passes_when_cluster_replaces_core(tmp_path) -> None:
+    net_file = tmp_path / "collapsed.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="north" from="n" to="cluster_a_b" type="highway.residential"/>
+  <edge id="east" from="cluster_a_b" to="e" type="highway.residential"/>
+  <edge id=":cluster_a_b_0" function="internal" from="cluster_a_b" to="cluster_a_b">
+    <lane id=":cluster_a_b_0_0" index="0" length="5"/>
+  </edge>
+  <junction id="cluster_a_b" x="0.5" y="0" type="traffic_light"/>
+  <junction id="n" x="0" y="10" type="priority"/>
+  <junction id="e" x="10" y="0" type="priority"/>
+  <connection from="north" to="east" via=":cluster_a_b_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_join_collapse_residuals(net_file, [["a", "b"]])
+
+    assert report["status"] == "pass"
+    assert report["residual_group_count"] == 0
 
 
 def test_unconfirmed_topology_join_candidate_stays_in_map_review(tmp_path) -> None:

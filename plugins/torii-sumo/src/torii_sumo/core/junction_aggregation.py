@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
@@ -11,6 +11,63 @@ from .junction_join_definition import build_junction_join_definition
 from .modal_aggregation_policy import classify_edge_modal_role
 
 SHORT_MODAL_SUPPORT_EDGE_MAX_LENGTH_M = 10.0
+
+
+def audit_join_collapse_residuals(net_file: Path, join_groups: Sequence[Sequence[str]]) -> dict[str, Any]:
+    if not net_file.exists():
+        return {**_failure(f"net file does not exist: {net_file}"), "residual_group_count": 0, "groups": []}
+    try:
+        root = ET.parse(net_file).getroot()
+    except ET.ParseError as exc:
+        return {**_failure(f"invalid SUMO net XML: {exc}"), "residual_group_count": 0, "groups": []}
+
+    junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in root.findall("junction")
+        if junction.attrib.get("id", "") and not junction.attrib.get("id", "").startswith(":")
+    }
+    edges = root.findall("edge")
+    groups = []
+    for raw_group in join_groups:
+        node_ids = sorted({str(node_id) for node_id in raw_group if str(node_id)})
+        if len(node_ids) < 2:
+            continue
+        node_set = set(node_ids)
+        remaining_nodes = [node_id for node_id in node_ids if node_id in junction_ids]
+        plain_edges = sorted(
+            edge.attrib.get("id", "")
+            for edge in edges
+            if _edge_is_plain(edge)
+            and edge.attrib.get("from", "") in node_set
+            and edge.attrib.get("to", "") in node_set
+        )
+        internal_edges = sorted(
+            edge.attrib.get("id", "")
+            for edge in edges
+            if not _edge_is_plain(edge) and _internal_id_uses_join_node(edge.attrib.get("id", ""), node_set)
+        )
+        connection_vias = sorted(
+            connection.attrib.get("via", "")
+            for connection in root.findall("connection")
+            if _internal_id_uses_join_node(connection.attrib.get("via", ""), node_set)
+        )
+        if remaining_nodes or plain_edges or internal_edges or connection_vias:
+            groups.append(
+                {
+                    "node_ids": node_ids,
+                    "remaining_core_node_ids": remaining_nodes,
+                    "residual_plain_edge_ids": plain_edges,
+                    "residual_internal_edge_ids": internal_edges,
+                    "residual_connection_via_ids": connection_vias,
+                }
+            )
+    return {
+        "status": "pass" if not groups else "needs_cleanup",
+        "claim_status": "diagnostic-demo",
+        "net_file": str(net_file),
+        "residual_group_count": len(groups),
+        "groups": groups,
+    }
 
 
 def build_junction_aggregation_variant(
@@ -44,6 +101,7 @@ def build_junction_aggregation_variant(
     command_record = output_dir / f"{prefix}_netconvert.cmd.txt"
     variant_file = output_dir / f"{prefix}_junction_aggregated.net.xml"
     joined_junctions_file = output_dir / f"{prefix}_joined_junctions.xml"
+    collapse_audit_file = output_dir / f"{prefix}_collapse_audit.json"
     join_definition = build_junction_join_definition(candidates, output_dir=output_dir, prefix=prefix)
     remove_edges_file = output_dir / f"{prefix}_modal_support_remove_edges.txt"
     remove_edge_ids = _short_modal_support_edges(
@@ -93,6 +151,8 @@ def build_junction_aggregation_variant(
             "junction_aggregation_candidates_file": str(candidates_file),
             "junction_aggregation_variant_file": "",
             "junction_aggregation_joined_junctions_file": "",
+            "junction_aggregation_collapse_audit_file": "",
+            "junction_aggregation_collapse_audit_status": "not_needed",
             "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
             "junction_join_definition_file": join_definition["definition_file"],
             "junction_join_definition_csv": join_definition["definition_csv"],
@@ -132,6 +192,8 @@ def build_junction_aggregation_variant(
             "junction_aggregation_candidates_file": str(candidates_file),
             "junction_aggregation_variant_file": str(variant_file),
             "junction_aggregation_joined_junctions_file": str(joined_junctions_file),
+            "junction_aggregation_collapse_audit_file": str(collapse_audit_file),
+            "junction_aggregation_collapse_audit_status": "not_run",
             "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
             "junction_join_definition_file": join_definition["definition_file"],
             "junction_join_definition_csv": join_definition["definition_csv"],
@@ -140,12 +202,20 @@ def build_junction_aggregation_variant(
             "junction_aggregation_command_record": str(command_record),
         }
 
-    status = "pass" if result.get("status") == "pass" and variant_file.exists() else "fail"
+    netconvert_ok = result.get("status") == "pass" and variant_file.exists()
+    collapse_audit = (
+        audit_join_collapse_residuals(variant_file, _explicit_join_groups(join_definition)) if netconvert_ok else {}
+    )
+    if collapse_audit:
+        collapse_audit_file.write_text(json.dumps(collapse_audit, indent=2, ensure_ascii=False), encoding="utf-8")
+    status = "pass" if netconvert_ok and collapse_audit.get("status") == "pass" else "fail"
     warnings = [
         "junction aggregation variant requires Google Maps and Netedit review before adoption",
     ]
-    if status != "pass":
+    if not netconvert_ok:
         warnings.append(f"junction aggregation variant was not created: {variant_file}")
+    elif collapse_audit.get("status") != "pass":
+        warnings.append("junction aggregation variant still contains uncollapsed core-node topology")
     return {
         "status": status,
         "claim_status": "blocked" if status == "pass" else "construction-invalid",
@@ -155,6 +225,9 @@ def build_junction_aggregation_variant(
         "junction_aggregation_candidates_file": str(candidates_file),
         "junction_aggregation_variant_file": str(variant_file),
         "junction_aggregation_joined_junctions_file": str(joined_junctions_file),
+        "junction_aggregation_collapse_audit_file": str(collapse_audit_file) if collapse_audit else "",
+        "junction_aggregation_collapse_audit_status": str(collapse_audit.get("status", "not_run")),
+        "junction_aggregation_collapse_residual_group_count": int(collapse_audit.get("residual_group_count", 0)),
         "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
         "junction_join_definition_file": join_definition["definition_file"],
         "junction_join_definition_csv": join_definition["definition_csv"],
@@ -233,6 +306,12 @@ def _filter_modal_support_join_nodes(candidates: list[dict[str, Any]], net_file:
         if str(candidate.get("decision", "")) != "join":
             filtered.append(candidate)
             continue
+        if "reference_matched" in {
+            str(candidate.get("source", "")).lower(),
+            str(candidate.get("confidence", "")).lower(),
+        }:
+            filtered.append(candidate)
+            continue
         node_ids = [item for item in str(candidate.get("node_ids", "")).replace(",", ";").split(";") if item]
         kept = [node_id for node_id in node_ids if node_id in vehicle_core_nodes]
         if len(kept) == len(node_ids):
@@ -279,6 +358,17 @@ def _explicit_join_nodes(join_definition: Mapping[str, Any]) -> set[str]:
     return nodes
 
 
+def _explicit_join_groups(join_definition: Mapping[str, Any]) -> list[list[str]]:
+    groups: list[list[str]] = []
+    for record in join_definition.get("records", []) or []:
+        if str(record.get("action", "")) != "join":
+            continue
+        node_ids = [str(node_id) for node_id in record.get("node_ids", []) or [] if str(node_id)]
+        if len(node_ids) >= 2:
+            groups.append(node_ids)
+    return groups
+
+
 def _short_modal_support_edges(net_file: Path, *, join_core_nodes: set[str], max_length_m: float) -> list[str]:
     if not join_core_nodes:
         return []
@@ -313,6 +403,18 @@ def _edge_length_m(edge: ET.Element) -> float:
         except ValueError:
             pass
     return max(lengths, default=0.0)
+
+
+def _edge_is_plain(edge: ET.Element) -> bool:
+    return not edge.attrib.get("id", "").startswith(":") and edge.attrib.get("function", "") not in {
+        "internal",
+        "crossing",
+        "walkingarea",
+    }
+
+
+def _internal_id_uses_join_node(identifier: str, node_ids: set[str]) -> bool:
+    return any(identifier.startswith(f":{node_id}_") for node_id in node_ids)
 
 
 def _candidate_from_overlapping_group(group: Mapping[str, Any]) -> dict[str, Any] | None:
