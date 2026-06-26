@@ -446,4 +446,9 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
     root = ET.parse(report["final_net_file"]).getroot()
     assert root.find("tlLogic[@id='j']").attrib["type"] == "actuated"
     assert root.find("edge[@id=':j_wExtra']") is None
+    vehicle_connection = root.find("connection[@from='cand_in'][@to='cand_out']")
+    assert vehicle_connection.attrib["tl"] == "j"
+    assert vehicle_connection.attrib["linkIndex"] == "0"
+    assert vehicle_connection.attrib["dir"] == "s"
+    assert vehicle_connection.attrib["state"] == "O"
     assert [call[0] for call in calls] == ["netconvert", "sumo"]
