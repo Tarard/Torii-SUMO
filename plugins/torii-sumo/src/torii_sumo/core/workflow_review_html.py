@@ -28,6 +28,10 @@ def _json_block(value: Any) -> str:
     return escape(json.dumps(_jsonable(value), indent=2, ensure_ascii=False, sort_keys=True))
 
 
+def _json_script(value: Any) -> str:
+    return json.dumps(_jsonable(value), ensure_ascii=False, sort_keys=True).replace("</", "<\\/")
+
+
 def _write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(_jsonable(value), indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
 
@@ -97,6 +101,16 @@ def _image_panel(title: str, path: str | Path | None, *, base_dir: Path) -> str:
         f'<img src="{src}" alt="{escape(title)}">'
         "</figure>"
     )
+
+
+def _source_clusters(topology_audit_report: Mapping[str, Any] | None) -> dict[str, Mapping[str, Any]]:
+    clusters: dict[str, Mapping[str, Any]] = {}
+    for index, cluster in enumerate((topology_audit_report or {}).get("suspicious_clusters", []) or [], start=1):
+        if not isinstance(cluster, Mapping):
+            continue
+        cluster_id = str(cluster.get("cluster_id") or f"cluster_{index:03d}")
+        clusters[cluster_id] = cluster
+    return clusters
 
 
 def _link(url: str | None, label: str) -> str:
@@ -231,6 +245,196 @@ def _cluster_color_group(cluster: Mapping[str, Any]) -> tuple[str, str]:
     if decision == "do_not_join":
         return "red", "do not aggregate"
     return "slate", "review required"
+
+
+def _review_status(color_group: str) -> str:
+    return {
+        "green": "Auto-join",
+        "amber": "Needs review",
+        "red": "Risky",
+        "slate": "Unknown",
+    }.get(color_group, "Unknown")
+
+
+def _cluster_review_records(
+    cluster_zoom_pngs: Sequence[Mapping[str, Any]],
+    *,
+    topology_audit_report: Mapping[str, Any] | None,
+    base_dir: Path,
+) -> list[dict[str, Any]]:
+    sources = _source_clusters(topology_audit_report)
+    records: list[dict[str, Any]] = []
+    for index, cluster in enumerate(cluster_zoom_pngs, start=1):
+        cluster_id = str(cluster.get("cluster_id") or f"cluster_{index:03d}")
+        merged = {**sources.get(cluster_id, {}), **cluster}
+        color_group, color_label = _cluster_color_group(merged)
+        records.append(
+            {
+                "cluster_id": cluster_id,
+                "node_count": merged.get("node_count", len(merged.get("node_ids", []) or [])),
+                "aggregation_decision": str(merged.get("aggregation_decision", "")),
+                "aggregation_confidence": str(merged.get("aggregation_confidence", "unknown")),
+                "modal_aggregation_decision": str(merged.get("modal_aggregation_decision", "review_required")),
+                "modal_review_action": str(merged.get("modal_review_action", "review_vehicle_core_boundary")),
+                "modal_reason": str(merged.get("modal_reason", "modal review required")),
+                "google_maps_url": str(merged.get("google_maps_url", merged.get("map_review_url", ""))),
+                "image_file": _portable_path(merged.get("image_file"), base_dir),
+                "x": merged.get("x", merged.get("centroid_x", "")),
+                "y": merged.get("y", merged.get("centroid_y", "")),
+                "color_group": color_group,
+                "color_label": color_label,
+                "status_label": _review_status(color_group),
+            }
+        )
+    return _position_review_records(records)
+
+
+def _position_review_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    points: list[tuple[int, float, float]] = []
+    for index, record in enumerate(records):
+        try:
+            points.append((index, float(record["x"]), float(record["y"])))
+        except (TypeError, ValueError):
+            pass
+    if not points:
+        return records
+    xs = [point[1] for point in points]
+    ys = [point[2] for point in points]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    for index, x, y in points:
+        x_pct = 50.0 if min_x == max_x else 12.0 + ((x - min_x) / (max_x - min_x) * 76.0)
+        y_pct = 50.0 if min_y == max_y else 12.0 + ((max_y - y) / (max_y - min_y) * 76.0)
+        records[index]["map_x_pct"] = round(x_pct, 2)
+        records[index]["map_y_pct"] = round(y_pct, 2)
+    return records
+
+
+def _review_app_data(
+    *,
+    title: str,
+    claim_status: str,
+    summary: Mapping[str, Any],
+    gate_status: Mapping[str, Any] | None,
+    topology_audit_report: Mapping[str, Any] | None,
+    routeability_audit_report: Mapping[str, Any] | None,
+    visualization_report: Mapping[str, Any],
+    junctions: Sequence[Mapping[str, Any]],
+    actions: Sequence[str],
+    warnings: Sequence[str],
+    output_dir: Path,
+) -> dict[str, Any]:
+    uncertain = int((topology_audit_report or {}).get("suspicious_cluster_count", len(junctions)) or 0)
+    auto_join = sum(1 for junction in junctions if junction.get("color_group") == "green")
+    manual_review = sum(1 for junction in junctions if junction.get("color_group") in {"amber", "slate"})
+    return {
+        "title": title,
+        "claim_status": claim_status,
+        "summary": dict(summary),
+        "summary_cards": {
+            "uncertain_junctions": uncertain,
+            "selected": 0,
+            "auto_join_candidates": auto_join,
+            "manual_review": manual_review,
+        },
+        "gate_status": dict(gate_status or {}),
+        "routeability": dict(routeability_audit_report or {}),
+        "navigation": [
+            {"label": "Junction Review", "active": True},
+            {"label": "Network Cleanup", "active": False},
+            {"label": "Routeability Audit", "active": False},
+            {"label": "TLS Audit", "active": False},
+            {"label": "Detector Demand", "active": False},
+            {"label": "Evidence Bundle", "active": False},
+            {"label": "Settings", "active": False},
+        ],
+        "visualizations": {
+            "network_overview_png": _portable_path(visualization_report.get("network_overview_png"), output_dir),
+            "problem_overlay_png": _portable_path(visualization_report.get("problem_overlay_png"), output_dir),
+            "reference_comparison_png": _portable_path(visualization_report.get("reference_comparison_png"), output_dir),
+        },
+        "junctions": list(junctions),
+        "review_queue": list(actions),
+        "warnings": list(warnings),
+    }
+
+
+def _review_nav_items(items: Sequence[Mapping[str, Any]]) -> str:
+    rows = []
+    for item in items:
+        active = " active" if item.get("active") else ""
+        rows.append(
+            f'<button type="button" class="nav-item{active}">'
+            f'<span class="nav-dot"></span>{escape(str(item.get("label", "")))}'
+            "</button>"
+        )
+    return "\n".join(rows)
+
+
+def _summary_cards(cards: Mapping[str, Any]) -> str:
+    labels = {
+        "uncertain_junctions": "uncertain junctions",
+        "selected": "selected",
+        "auto_join_candidates": "auto-join candidates",
+        "manual_review": "manual review",
+    }
+    return "\n".join(
+        '<article class="summary-card">'
+        f'<strong data-summary-card="{escape(key)}">{escape(str(cards.get(key, 0)))}</strong>'
+        f"<span>{escape(label)}</span>"
+        "</article>"
+        for key, label in labels.items()
+    )
+
+
+def _map_markers(junctions: Sequence[Mapping[str, Any]]) -> str:
+    markers = []
+    for junction in junctions:
+        cluster_id = str(junction.get("cluster_id", ""))
+        x_pct = float(junction.get("map_x_pct", 50.0) or 50.0)
+        y_pct = float(junction.get("map_y_pct", 50.0) or 50.0)
+        color_group = str(junction.get("color_group", "slate"))
+        markers.append(
+            f'<button type="button" class="junction-marker marker-{escape(color_group)}" '
+            f'style="left:{x_pct:.2f}%; top:{y_pct:.2f}%;" '
+            f'data-junction-id="{escape(cluster_id)}" '
+            f'aria-label="Select junction {escape(cluster_id)}"></button>'
+        )
+    return "\n".join(markers)
+
+
+def _junction_cards(junctions: Sequence[Mapping[str, Any]]) -> str:
+    if not junctions:
+        return '<p class="empty-state">No uncertain junction clusters were passed to the review page.</p>'
+    cards = []
+    for junction in junctions:
+        cluster_id = str(junction.get("cluster_id", ""))
+        status = str(junction.get("status_label", "Unknown"))
+        color_group = str(junction.get("color_group", "slate"))
+        reason = str(junction.get("modal_reason", "modal review required"))
+        confidence = str(junction.get("aggregation_confidence", "unknown"))
+        node_count = str(junction.get("node_count", ""))
+        image_file = str(junction.get("image_file", ""))
+        cards.append(
+            f'<article class="junction-card card-{escape(color_group)}" data-junction-id="{escape(cluster_id)}">'
+            '<label class="card-check">'
+            f'<input type="checkbox" data-aggregate-checkbox="{escape(cluster_id)}"> '
+            f"<strong>{escape(cluster_id)}</strong>"
+            "</label>"
+            f'<span class="status-pill">{escape(status)}</span>'
+            f"<p>{escape(reason)}</p>"
+            '<div class="card-meta">'
+            f"<span>confidence {escape(confidence)}</span>"
+            f"<span>{escape(node_count)} nodes</span>"
+            "</div>"
+            '<div class="card-actions">'
+            f'<button type="button" data-zoom-src="{escape(image_file)}">Inspect</button>'
+            "<button type=\"button\">Keep split</button>"
+            f'<a href="{escape(str(junction.get("google_maps_url", "")))}">Evidence</a>'
+            "</div>"
+            "</article>"
+        )
+    return "\n".join(cards)
 
 
 def _color_batch_buttons(cluster_zoom_pngs: Sequence[Mapping[str, Any]]) -> str:
@@ -422,6 +626,24 @@ def build_workflow_review_html(
         }
         for cluster in cluster_zoom_pngs
     ]
+    review_junctions = _cluster_review_records(
+        cluster_zoom_pngs,
+        topology_audit_report=topology_audit_report,
+        base_dir=output_dir,
+    )
+    review_app = _review_app_data(
+        title=title,
+        claim_status=claim_status,
+        summary=workflow_summary,
+        gate_status=gate_status,
+        topology_audit_report=topology_audit_report,
+        routeability_audit_report=routeability_audit_report,
+        visualization_report=visualization_report,
+        junctions=review_junctions,
+        actions=actions,
+        warnings=warning_list + list(visualization_report.get("warnings", [])),
+        output_dir=output_dir,
+    )
 
     manifest = {
         "status": "pass",
@@ -437,6 +659,7 @@ def build_workflow_review_html(
             "cluster_zoom_pngs": portable_cluster_zoom_pngs,
         },
         "artifacts": {key: _portable_path(value, output_dir) for key, value in artifacts.items() if value is not None},
+        "review_app": review_app,
         "review_queue": list(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
     }
@@ -463,12 +686,29 @@ def build_workflow_review_html(
         visual_panels = "<p>No network visualization could be generated for this review.</p>"
     cluster_zoom_panels = _cluster_zoom_gallery(cluster_zoom_pngs, base_dir=output_dir)
     color_buttons = _color_batch_buttons(cluster_zoom_pngs)
+    network_preview_src = _image_src(visualization_report.get("network_overview_png"), base_dir=output_dir)
+    problem_overlay_src = _image_src(visualization_report.get("problem_overlay_png"), base_dir=output_dir)
+    review_data_json = _json_script(review_app)
+    nav_items = _review_nav_items(review_app["navigation"])
+    summary_card_html = _summary_cards(review_app["summary_cards"])
+    map_marker_html = _map_markers(review_junctions)
+    junction_card_html = _junction_cards(review_junctions)
     review_script = """
   <script>
     (function () {
+      const reviewData = JSON.parse(document.getElementById("torii-review-data").textContent);
+      const app = document.querySelector(".torii-review-app");
       const progress = document.getElementById("aggregation-selection-count");
+      const selectedCard = document.querySelector('[data-summary-card="selected"]');
+      const output = document.getElementById("review-plan-output");
+      const mapCanvas = document.getElementById("map-canvas");
+      const mapViewport = document.getElementById("map-viewport");
       const zoomModal = document.getElementById("zoom-modal");
       const zoomImage = document.getElementById("zoom-image");
+      let mapScale = 1;
+      let mapX = 0;
+      let mapY = 0;
+      let dragStart = null;
 
       function aggregateCheckboxes() {
         return Array.from(document.querySelectorAll("[data-aggregate-checkbox]"));
@@ -481,19 +721,29 @@ def build_workflow_review_html(
           .filter((value, index, values) => values.indexOf(value) === index);
       }
 
+      function selectedIds() {
+        return clusterIds().filter((id) => {
+          const checkbox = document.querySelector(`[data-aggregate-checkbox="${id}"]`);
+          return checkbox && checkbox.checked;
+        });
+      }
+
       function syncClusterSelection(clusterId, selected) {
         document.querySelectorAll(`[data-aggregate-checkbox="${clusterId}"]`).forEach((checkbox) => {
           checkbox.checked = selected;
+        });
+        document.querySelectorAll(`[data-junction-id="${clusterId}"]`).forEach((element) => {
+          element.classList.toggle("selected", selected);
         });
       }
 
       function updateAggregationCount() {
         const ids = clusterIds();
-        const selected = ids.filter((id) => {
-          const checkbox = document.querySelector(`[data-aggregate-checkbox="${id}"]`);
-          return checkbox && checkbox.checked;
-        }).length;
+        const selected = selectedIds().length;
         progress.textContent = ids.length ? `${selected}/${ids.length} selected for aggregation` : "No junctions to review";
+        if (selectedCard) {
+          selectedCard.textContent = String(selected);
+        }
       }
 
       function toggleClusterSelection(clusterId) {
@@ -520,8 +770,67 @@ def build_workflow_review_html(
         updateAggregationCount();
       }
 
+      function selectVisibleJunctions() {
+        document.querySelectorAll(".junction-card:not([hidden])").forEach((card) => {
+          syncClusterSelection(card.getAttribute("data-junction-id"), true);
+        });
+        updateAggregationCount();
+      }
+
+      function selectedPlan() {
+        const selected = new Set(selectedIds());
+        return {
+          claim_status: reviewData.claim_status,
+          selected_junctions: reviewData.junctions.filter((junction) => selected.has(junction.cluster_id)),
+        };
+      }
+
+      function applySelectedJunctions() {
+        output.value = JSON.stringify(selectedPlan(), null, 2);
+      }
+
+      function exportReviewPlan() {
+        const blob = new Blob([JSON.stringify(selectedPlan(), null, 2)], { type: "application/json" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "torii-junction-review-plan.json";
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }
+
+      function toggleReviewPanel() {
+        app.classList.toggle("panel-collapsed");
+      }
+
+      function updateMapTransform() {
+        mapCanvas.style.transform = `translate(${mapX}px, ${mapY}px) scale(${mapScale})`;
+      }
+
+      function zoomMap(delta) {
+        mapScale = Math.min(3, Math.max(0.65, mapScale + delta));
+        updateMapTransform();
+      }
+
+      function zoomInMap() {
+        zoomMap(0.2);
+      }
+
+      function zoomOutMap() {
+        zoomMap(-0.2);
+      }
+
+      function resetMap() {
+        mapScale = 1;
+        mapX = 0;
+        mapY = 0;
+        updateMapTransform();
+      }
+
       function openZoom(trigger) {
         zoomImage.src = trigger.getAttribute("data-zoom-src");
+        if (!zoomImage.src) {
+          return;
+        }
         zoomModal.hidden = false;
       }
 
@@ -536,8 +845,46 @@ def build_workflow_review_html(
           updateAggregationCount();
         });
       });
-      document.querySelectorAll(".review-junction").forEach((card) => {
-        card.addEventListener("click", () => toggleClusterSelection(card.getAttribute("data-cluster-id")));
+      document.querySelectorAll("[data-junction-id]").forEach((element) => {
+        element.addEventListener("click", (event) => {
+          if (event.target.closest("a, button, input")) {
+            return;
+          }
+          toggleClusterSelection(element.getAttribute("data-junction-id"));
+        });
+      });
+      document.querySelectorAll(".junction-marker").forEach((marker) => {
+        marker.addEventListener("click", () => toggleClusterSelection(marker.getAttribute("data-junction-id")));
+      });
+      document.querySelectorAll("[data-zoom-src]").forEach((trigger) => {
+        trigger.addEventListener("click", () => openZoom(trigger));
+      });
+      document.querySelectorAll("[data-layer]").forEach((toggle) => {
+        toggle.addEventListener("change", () => {
+          mapViewport.classList.toggle(`hide-${toggle.getAttribute("data-layer")}`, !toggle.checked);
+        });
+      });
+      mapViewport.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        zoomMap(event.deltaY < 0 ? 0.1 : -0.1);
+      }, { passive: false });
+      mapViewport.addEventListener("pointerdown", (event) => {
+        if (event.target.closest("button, input, a")) {
+          return;
+        }
+        dragStart = { x: event.clientX, y: event.clientY, mapX, mapY };
+        mapViewport.setPointerCapture(event.pointerId);
+      });
+      mapViewport.addEventListener("pointermove", (event) => {
+        if (!dragStart) {
+          return;
+        }
+        mapX = dragStart.mapX + event.clientX - dragStart.x;
+        mapY = dragStart.mapY + event.clientY - dragStart.y;
+        updateMapTransform();
+      });
+      mapViewport.addEventListener("pointerup", () => {
+        dragStart = null;
       });
       zoomModal.addEventListener("click", closeZoom);
       document.addEventListener("keydown", (event) => {
@@ -549,8 +896,16 @@ def build_workflow_review_html(
       window.toggleClusterSelection = toggleClusterSelection;
       window.selectColorGroup = selectColorGroup;
       window.clearAggregationSelection = clearAggregationSelection;
+      window.selectVisibleJunctions = selectVisibleJunctions;
+      window.applySelectedJunctions = applySelectedJunctions;
+      window.exportReviewPlan = exportReviewPlan;
+      window.toggleReviewPanel = toggleReviewPanel;
+      window.zoomInMap = zoomInMap;
+      window.zoomOutMap = zoomOutMap;
+      window.resetMap = resetMap;
       window.openZoom = openZoom;
       updateAggregationCount();
+      resetMap();
     })();
   </script>
 """
@@ -561,125 +916,209 @@ def build_workflow_review_html(
   <meta charset="utf-8">
   <title>{escape(title)}</title>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 24px; color: #1f2933; line-height: 1.45; }}
-    h1, h2 {{ margin-bottom: 8px; }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: Arial, sans-serif; color: #102033; background: #eef4f0; line-height: 1.35; }}
+    button, input, textarea {{ font: inherit; }}
+    button, a {{ border-radius: 6px; }}
+    button {{ cursor: pointer; }}
+    a {{ color: #075f46; text-decoration: none; }}
     code {{ background: #eef2f7; padding: 1px 4px; border-radius: 3px; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 8px 0 18px; }}
-    th, td {{ border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }}
-    th {{ background: #f8fafc; }}
-    pre {{ background: #0f172a; color: #e2e8f0; padding: 12px; overflow: auto; }}
-    .status {{ font-weight: 700; }}
-    .dashboard {{ border-left: 6px solid #b91c1c; background: #fff7ed; padding: 12px 16px; margin: 12px 0 18px; }}
-    .gate-counts {{ display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }}
-    .gate-counts span {{ background: #ffffff; border: 1px solid #cbd5e1; padding: 4px 8px; }}
-    .visual-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }}
-    .visual-panel {{ margin: 0; border: 1px solid #cbd5e1; padding: 10px; background: #ffffff; }}
-    .visual-panel figcaption {{ font-weight: 700; margin-bottom: 8px; }}
-    .visual-panel img {{ max-width: 100%; height: auto; display: block; border: 1px solid #e5e7eb; }}
-    .cluster-panel figcaption {{ min-height: 44px; }}
-    .cluster-meta {{ color: #475569; font-size: 12px; margin: 0 0 8px; }}
-    .junction-review-toolbar {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 18px; padding: 10px; border: 1px solid #cbd5e1; background: #f8fafc; }}
-    .color-action, .zoom-button {{ padding: 6px 10px; border: 1px solid #64748b; background: #ffffff; cursor: pointer; }}
-    .color-green {{ border-left: 6px solid #15803d; }}
-    .color-amber {{ border-left: 6px solid #d97706; }}
-    .color-red {{ border-left: 6px solid #b91c1c; }}
-    .color-slate {{ border-left: 6px solid #475569; }}
-    .color-dot {{ display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 50%; vertical-align: -1px; }}
-    .color-dot.color-green {{ background: #15803d; }}
-    .color-dot.color-amber {{ background: #d97706; }}
-    .color-dot.color-red {{ background: #b91c1c; }}
-    .color-dot.color-slate {{ background: #475569; }}
-    .selection-count {{ font-weight: 700; }}
-    .review-check {{ display: block; margin: 0 0 8px; font-size: 13px; }}
+    .torii-review-app {{ display: grid; grid-template-columns: 240px minmax(620px, 1fr) 420px; min-height: 100vh; background: #ffffff; }}
+    .torii-sidebar {{ display: flex; flex-direction: column; border-right: 1px solid #d7e2dc; background: #ffffff; }}
+    .brand {{ display: flex; gap: 10px; align-items: center; padding: 18px 16px; border-bottom: 1px solid #e2ebe6; }}
+    .brand-mark {{ display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #9fdbc5; color: #00845f; background: #ecfbf5; border-radius: 7px; font-weight: 700; }}
+    .brand strong {{ display: block; }}
+    .brand span {{ display: block; margin-top: 3px; color: #6b7c8f; font-size: 11px; text-transform: uppercase; letter-spacing: 0; }}
+    .nav-stack {{ display: grid; gap: 6px; padding: 14px 8px; }}
+    .nav-item {{ display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 12px; border: 1px solid transparent; background: transparent; color: #334765; text-align: left; }}
+    .nav-item.active {{ border-color: #b7ead8; background: #ebfbf4; color: #007a58; font-weight: 700; }}
+    .nav-dot {{ width: 14px; height: 14px; border: 2px solid currentColor; border-radius: 50%; }}
+    .sidebar-footer {{ margin-top: auto; padding: 16px; color: #546779; font: 12px Consolas, monospace; border-top: 1px solid #e2ebe6; }}
+    .torii-map-shell {{ min-width: 0; display: grid; grid-template-rows: auto 1fr; background: #f8fbf9; }}
+    .map-topbar {{ display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #d7e2dc; background: #ffffff; }}
+    .map-topbar h1 {{ margin: 0; font-size: 18px; }}
+    .stat-pill {{ padding: 6px 10px; border: 1px solid #d7e2dc; color: #637487; background: #fbfdfc; font: 12px Consolas, monospace; }}
+    .topbar-spacer {{ flex: 1; }}
+    .tool-button {{ border: 1px solid #d7e2dc; background: #ffffff; padding: 8px 10px; color: #102033; }}
+    .map-viewport {{ position: relative; overflow: hidden; min-height: 650px; touch-action: none; background-color: #f7fbf8; background-image: linear-gradient(#e7f0eb 1px, transparent 1px), linear-gradient(90deg, #e7f0eb 1px, transparent 1px); background-size: 32px 32px; }}
+    .map-canvas {{ position: absolute; inset: 0; transform-origin: 50% 50%; transition: transform 120ms ease; }}
+    .map-image {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; transform: scale(1.18); opacity: 0.68; mix-blend-mode: multiply; }}
+    .overview-image {{ opacity: 0.28; }}
+    .map-viewport.hide-cleaned .overview-image, .map-viewport.hide-clusters .junction-marker {{ display: none; }}
+    .map-controls {{ position: absolute; left: 16px; top: 24px; display: grid; gap: 8px; z-index: 2; }}
+    .map-controls button {{ width: 40px; height: 36px; border: 1px solid #d7e2dc; background: #ffffff; font-weight: 700; }}
+    .layers {{ position: absolute; right: 18px; top: 26px; width: 220px; padding: 12px; border: 1px solid #d7e2dc; border-radius: 8px; background: #ffffff; box-shadow: 0 8px 22px rgba(16, 32, 51, 0.08); z-index: 2; }}
+    .layers strong, .legend strong {{ display: block; margin-bottom: 8px; }}
+    .layers label {{ display: flex; justify-content: space-between; gap: 12px; margin: 8px 0; color: #334765; font-size: 13px; }}
+    .legend {{ position: absolute; left: 16px; bottom: 20px; width: 260px; padding: 12px; border: 1px solid #d7e2dc; border-radius: 8px; background: #ffffff; box-shadow: 0 8px 22px rgba(16, 32, 51, 0.08); z-index: 2; }}
+    .legend button {{ display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; padding: 4px 0; color: #102033; text-align: left; }}
+    .color-dot {{ display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; }}
+    .color-green, .marker-green, .color-dot.color-green {{ background: #00946d; }}
+    .color-amber, .marker-amber, .color-dot.color-amber {{ background: #f59e0b; }}
+    .color-red, .marker-red, .color-dot.color-red {{ background: #e11d28; }}
+    .color-slate, .marker-slate, .color-dot.color-slate {{ background: #94a3b8; }}
+    .junction-marker {{ position: absolute; width: 18px; height: 18px; border: 4px solid #ffffff; border-radius: 50%; box-shadow: 0 0 0 5px rgba(0, 148, 109, 0.18), 0 6px 16px rgba(16, 32, 51, 0.18); transform: translate(-50%, -50%); z-index: 3; }}
+    .junction-marker.selected {{ box-shadow: 0 0 0 7px rgba(0, 132, 95, 0.24), 0 0 0 12px rgba(0, 132, 95, 0.12); }}
+    .torii-review-panel {{ display: grid; grid-template-rows: auto auto auto 1fr auto; min-width: 0; border-left: 1px solid #d7e2dc; background: #ffffff; }}
+    .panel-collapsed {{ grid-template-columns: 240px minmax(620px, 1fr) 44px; }}
+    .panel-collapsed .panel-body, .panel-collapsed .panel-actions, .panel-collapsed .panel-intro, .panel-collapsed .summary-grid, .panel-collapsed .panel-title h2, .panel-collapsed .panel-title p {{ display: none; }}
+    .panel-title {{ display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 18px 16px 14px; border-bottom: 1px solid #d7e2dc; }}
+    .panel-title h2 {{ margin: 0; font-size: 20px; }}
+    .panel-title p {{ margin: 8px 0 0; color: #5c6d7e; font-size: 13px; }}
+    .summary-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 14px; border-bottom: 1px solid #d7e2dc; }}
+    .summary-card {{ min-width: 0; border: 1px solid #dce6e1; border-radius: 8px; padding: 14px; background: #fbfdfc; }}
+    .summary-card strong {{ display: block; font-size: 20px; margin-bottom: 4px; }}
+    .summary-card span {{ color: #5c6d7e; font-size: 12px; }}
+    .panel-body {{ overflow: auto; padding: 12px 14px; }}
+    .filters {{ display: grid; gap: 8px; margin-bottom: 12px; }}
+    .filters summary {{ border: 1px solid #dce6e1; border-radius: 7px; padding: 9px 10px; color: #334765; background: #ffffff; cursor: pointer; }}
+    .batch-controls {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }}
+    .batch-controls button {{ border: 1px solid #d7e2dc; background: #ffffff; padding: 7px 10px; }}
+    .batch-controls .review-button {{ border-color: #b7ead8; color: #007a58; background: #eefcf6; }}
+    .selection-count {{ display: block; color: #5c6d7e; font-size: 12px; margin: 0 0 10px; }}
+    .junction-list {{ display: grid; gap: 10px; }}
+    .junction-card {{ position: relative; border: 1px solid #dce6e1; border-radius: 8px; padding: 12px; background: #ffffff; }}
+    .junction-card.selected {{ border-color: #00845f; background: #f1fcf7; }}
+    .card-green {{ border-left: 4px solid #00946d; }}
+    .card-amber {{ border-left: 4px solid #f59e0b; }}
+    .card-red {{ border-left: 4px solid #e11d28; }}
+    .card-slate {{ border-left: 4px solid #94a3b8; }}
+    .card-check {{ display: inline-flex; align-items: center; gap: 8px; }}
+    .status-pill {{ position: absolute; right: 12px; top: 12px; border: 1px solid #dce6e1; border-radius: 999px; padding: 3px 8px; color: #9a4a00; background: #fff8ed; font-size: 12px; }}
+    .junction-card p {{ margin: 12px 0; color: #334765; font-size: 13px; }}
+    .card-meta {{ display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: #5c6d7e; font: 12px Consolas, monospace; }}
+    .card-actions {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+    .card-actions button, .card-actions a {{ border: 1px solid #dce6e1; background: #ffffff; padding: 7px 10px; color: #102033; }}
+    .panel-actions {{ display: grid; gap: 10px; padding: 12px 14px 14px; border-top: 1px solid #d7e2dc; background: #ffffff; }}
+    .warning-box {{ border: 1px solid #f6c453; border-radius: 8px; padding: 10px 12px; color: #8a4d00; background: #fff8e8; font-size: 13px; }}
+    .primary-action {{ border: 0; background: #00845f; color: #ffffff; padding: 12px; font-weight: 700; }}
+    .secondary-action {{ border: 1px solid #d7e2dc; background: #ffffff; color: #334765; padding: 11px; font-weight: 700; }}
+    .review-output {{ min-height: 92px; width: 100%; resize: vertical; border: 1px solid #d7e2dc; border-radius: 8px; padding: 8px; font: 12px Consolas, monospace; }}
+    .evidence-drawer {{ display: none; }}
+    .visual-panel img {{ max-width: 100%; height: auto; }}
     .zoom-modal {{ position: fixed; inset: 0; display: grid; place-items: center; background: rgba(15, 23, 42, 0.82); z-index: 10; padding: 24px; }}
     .zoom-modal[hidden] {{ display: none; }}
     .zoom-modal img {{ max-width: 96vw; max-height: 92vh; background: #ffffff; border: 2px solid #ffffff; }}
+    @media (max-width: 1080px) {{
+      .torii-review-app {{ grid-template-columns: 1fr; }}
+      .torii-sidebar {{ display: none; }}
+      .torii-review-panel {{ min-height: 520px; border-left: 0; border-top: 1px solid #d7e2dc; }}
+    }}
   </style>
 </head>
 <body>
-  <h1>{escape(title)}</h1>
-  <p class="status">claim_status: <code>{escape(claim_status)}</code></p>
+  <script type="application/json" id="torii-review-data">{review_data_json}</script>
+  <main class="torii-review-app">
+    <aside class="torii-sidebar" aria-label="Torii navigation">
+      <div class="brand">
+        <div class="brand-mark">T</div>
+        <div><strong>Torii-SUMO</strong><span>Cleanup Review</span></div>
+      </div>
+      <nav class="nav-stack">
+        {nav_items}
+      </nav>
+      <div class="sidebar-footer">
+        OSM import · cleaned.net.xml<br>
+        claim_status · {escape(claim_status)}
+      </div>
+    </aside>
 
-  <h2>Gate Dashboard</h2>
-  <section class="dashboard">
+    <section class="torii-map-shell" aria-label="Cleaned SUMO road network">
+      <header class="map-topbar">
+        <h1>Cleaned SUMO road network</h1>
+        <span class="stat-pill">{escape(str(review_app["summary_cards"]["uncertain_junctions"]))} uncertain · gates pass {gate_counts["pass"]} / fail {gate_counts["fail"]}</span>
+        <span class="topbar-spacer"></span>
+        <button type="button" class="tool-button">Find junction</button>
+        <button type="button" class="tool-button">Display</button>
+      </header>
+      <div class="map-viewport" id="map-viewport">
+        <div class="map-controls" aria-label="Map controls">
+          <button type="button" onclick="zoomInMap()" aria-label="Zoom in">+</button>
+          <button type="button" onclick="zoomOutMap()" aria-label="Zoom out">-</button>
+          <button type="button" onclick="resetMap()" aria-label="Fit network">Fit</button>
+        </div>
+        <div class="layers">
+          <strong>Layers</strong>
+          <label>Cleaned edges <input type="checkbox" data-layer="cleaned" checked></label>
+          <label>OSM source ways <input type="checkbox" checked></label>
+          <label>Uncertainty clusters <input type="checkbox" data-layer="clusters" checked></label>
+          <label>Lane links <input type="checkbox" checked></label>
+        </div>
+        <div class="map-canvas" id="map-canvas">
+          <img class="map-image overview-image" src="{network_preview_src}" alt="Network Preview">
+          <img class="map-image problem-image" src="{problem_overlay_src}" alt="Problem Map">
+          {map_marker_html}
+        </div>
+        <div class="legend">
+          <strong>Uncertainty Legend</strong>
+          <button type="button" data-select-color="green" onclick="selectColorGroup('green')"><span class="color-dot color-green"></span>High confidence auto-aggregate</button>
+          <button type="button" data-select-color="amber" onclick="selectColorGroup('amber')"><span class="color-dot color-amber"></span>Needs review</button>
+          <button type="button" data-select-color="red" onclick="selectColorGroup('red')"><span class="color-dot color-red"></span>Risky / do not aggregate</button>
+          <button type="button" data-select-color="slate" onclick="selectColorGroup('slate')"><span class="color-dot color-slate"></span>Unknown</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="torii-review-panel" aria-label="Junction Aggregation Review">
+      <header class="panel-title">
+        <div>
+          <h2>Junction Aggregation Review</h2>
+          <p>Validate post-cleaning junction clusters before SUMO topology changes are applied.</p>
+        </div>
+        <button type="button" id="review-panel-toggle" class="tool-button" onclick="toggleReviewPanel()" aria-label="Collapse review panel">&gt;</button>
+      </header>
+      <section class="summary-grid">
+        {summary_card_html}
+      </section>
+      <section class="panel-body">
+        <h3>Filters</h3>
+        <div class="filters">
+          <details><summary>Confidence level</summary></details>
+          <details><summary>Modal review action</summary></details>
+          <details><summary>Aggregation decision</summary></details>
+          <details><summary>Cluster size</summary></details>
+        </div>
+        <div class="batch-controls">
+          <button type="button" onclick="selectVisibleJunctions()">Select visible</button>
+          <button type="button" onclick="clearAggregationSelection()">Clear</button>
+          <button type="button" class="review-button" onclick="applySelectedJunctions()">Review selected</button>
+        </div>
+        <span class="selection-count" id="aggregation-selection-count">0 selected for aggregation</span>
+        <div class="junction-list">
+          {junction_card_html}
+        </div>
+      </section>
+      <section class="panel-actions">
+        <div class="warning-box">Aggregation changes SUMO topology and lane-link behavior. Review risky clusters before applying.</div>
+        <button type="button" class="primary-action" onclick="applySelectedJunctions()">Aggregate selected junctions</button>
+        <button type="button" class="secondary-action" onclick="exportReviewPlan()">Export review plan</button>
+        <textarea class="review-output" id="review-plan-output" aria-label="Selected junction review plan"></textarea>
+      </section>
+    </aside>
+  </main>
+
+  <section class="evidence-drawer" aria-label="Evidence Summary">
+    <h2>Gate Dashboard</h2>
     <strong>{escape(dashboard_status)}</strong>
-    <div class="gate-counts">
-      <span>pass: {gate_counts["pass"]}</span>
-      <span>blocked: {gate_counts["blocked"]}</span>
-      <span>fail: {gate_counts["fail"]}</span>
-      <span>skipped: {gate_counts["skipped"]}</span>
-      <span>other: {gate_counts["other"]}</span>
-    </div>
-  </section>
-
-  <h2>Human Review Required</h2>
-  <ul>
-    {action_items}
-  </ul>
-
-  <h2>Network Preview</h2>
-  <section class="visual-grid">
+    <h2>Human Review Required</h2>
+    <ul>{action_items}</ul>
+    <h2>Network Preview</h2>
     {visual_panels}
-  </section>
-
-  <h2>Problem Map</h2>
-  <p>The problem overlay highlights dense topology clusters and other review locations when coordinates are available.</p>
-
-  <h2>Junction Aggregation Review</h2>
-  <section class="junction-review-toolbar" id="junction-review-toolbar">
-    {color_buttons}
-    <span class="selection-count" id="aggregation-selection-count">0 selected for aggregation</span>
-  </section>
-
-  <h2>Cluster Zooms</h2>
-  <section class="visual-grid">
+    <h2>Problem Map</h2>
+    <h2>Junction Aggregation Review</h2>
+    <div>{color_buttons}</div>
+    <h2>Cluster Zooms</h2>
     {cluster_zoom_panels}
+    <h2>Review Queue</h2>
+    {_review_queue_rows(actions)}
+    <h2>Warnings</h2>
+    <ul>{warning_items}</ul>
+    <h2>Evidence Summary</h2>
+    {_evidence_rows(topology_audit_report=topology_audit_report, junction_aggregation_report=junction_aggregation_report, routeability_audit_report=routeability_audit_report)}
+    {_gate_rows(gate_status)}
+    {_artifact_rows(artifacts, base_dir=output_dir)}
+    {_dense_cluster_rows(cluster_zoom_pngs, base_dir=output_dir)}
   </section>
-
-  <h2>Dense Junction Review Points</h2>
-  <table>
-    <thead><tr><th>cluster</th><th>nodes</th><th>decision</th><th>confidence</th><th>x</th><th>y</th><th>links</th></tr></thead>
-    <tbody>
-      {_dense_cluster_rows(cluster_zoom_pngs, base_dir=output_dir)}
-    </tbody>
-  </table>
-
-  <h2>Review Queue</h2>
-  <table>
-    <thead><tr><th>priority</th><th>#</th><th>action</th></tr></thead>
-    <tbody>
-      {_review_queue_rows(actions)}
-    </tbody>
-  </table>
-
-  <h2>Gate Status</h2>
-  <table>
-    <thead><tr><th>gate</th><th>status</th></tr></thead>
-    <tbody>
-      {_gate_rows(gate_status)}
-    </tbody>
-  </table>
-
-  <h2>Artifacts</h2>
-  <table>
-    <thead><tr><th>artifact</th><th>file</th></tr></thead>
-    <tbody>
-      {_artifact_rows(artifacts, base_dir=output_dir)}
-    </tbody>
-  </table>
-
-  <h2>Warnings</h2>
-  <ul>
-    {warning_items}
-  </ul>
-
-  <h2>Evidence Summary</h2>
-  <table>
-    <thead><tr><th>evidence</th><th>compact status</th></tr></thead>
-    <tbody>
-      {_evidence_rows(topology_audit_report=topology_audit_report, junction_aggregation_report=junction_aggregation_report, routeability_audit_report=routeability_audit_report)}
-    </tbody>
-  </table>
   <div class="zoom-modal" id="zoom-modal" hidden>
     <img id="zoom-image" alt="Expanded junction review image">
   </div>
