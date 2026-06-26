@@ -1,0 +1,4 @@
+interface:
+  display_name: "Experiment Prompting"
+  short_description: "Shape experiment confusion into bounded prompts"
+  default_prompt: "Use $sumo-experiment-problem-solving to turn my experiment confusion into one bounded diagnostic prompt."
