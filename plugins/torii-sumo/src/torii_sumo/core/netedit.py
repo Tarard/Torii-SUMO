@@ -38,7 +38,8 @@ def launch_netedit(
             "warnings": ["netedit binary not found"],
         }
 
-    command = [resolved_binary, "-s", str(net_file)]
+    open_mode = "sumocfg" if net_file.suffix.lower() == ".sumocfg" else "net"
+    command = [resolved_binary, "--sumocfg-file" if open_mode == "sumocfg" else "-s", str(net_file)]
     try:
         process = popen_func(
             command,
@@ -55,6 +56,8 @@ def launch_netedit(
             "netedit_process_id": None,
             "netedit_window_title": "",
             "netedit_network_file": str(net_file),
+            "netedit_input_file": str(net_file),
+            "netedit_open_mode": open_mode,
             "warnings": [f"{type(exc).__name__}: {exc}"],
         }
 
@@ -66,5 +69,7 @@ def launch_netedit(
         "netedit_process_id": process.pid,
         "netedit_window_title": "",
         "netedit_network_file": str(net_file),
+        "netedit_input_file": str(net_file),
+        "netedit_open_mode": open_mode,
         "warnings": [],
     }

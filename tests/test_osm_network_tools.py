@@ -976,6 +976,33 @@ def test_launch_netedit_starts_non_blocking_process(tmp_path: Path) -> None:
     assert calls == [["C:/SUMO/bin/netedit.exe", "-s", str(net_file)]]
 
 
+def test_launch_netedit_opens_sumo_config_with_additional_files(tmp_path: Path) -> None:
+    from torii_sumo.core.netedit import launch_netedit
+
+    class FakeProcess:
+        pid = 23456
+
+    calls: list[list[str]] = []
+
+    def fake_popen(command, **_kwargs):
+        calls.append(command)
+        return FakeProcess()
+
+    sumocfg_file = tmp_path / "review.sumocfg"
+    sumocfg_file.write_text("<configuration/>", encoding="utf-8")
+
+    report = launch_netedit(
+        sumocfg_file,
+        which_func=lambda _name: "C:/SUMO/bin/netedit.exe",
+        popen_func=fake_popen,
+    )
+
+    assert report["netedit_status"] == "opened"
+    assert report["netedit_open_mode"] == "sumocfg"
+    assert report["netedit_input_file"] == str(sumocfg_file)
+    assert calls == [["C:/SUMO/bin/netedit.exe", "--sumocfg-file", str(sumocfg_file)]]
+
+
 def test_launch_sumo_gui_writes_minimal_config_and_starts_non_blocking_process(tmp_path: Path) -> None:
     from torii_sumo.core.sumo_gui import launch_sumo_gui
 
@@ -1584,6 +1611,7 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     net_file = tmp_path / "sumo" / "fragmented.net.xml"
     filtered_osm = tmp_path / "osm" / "fragmented_filtered.osm.xml.gz"
     audited: dict[str, Path] = {}
+    review_launches: list[Path] = []
 
     def fake_build(**kwargs):
         net_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1661,6 +1689,18 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
             "warnings": ["junction aggregation variant requires Google Maps and Netedit review before adoption"],
         }
 
+    def fake_netedit_review(path: Path):
+        review_launches.append(path)
+        return {
+            "status": "pass",
+            "netedit_status": "opened",
+            "netedit_process_id": 222,
+            "netedit_input_file": str(path),
+            "netedit_open_mode": "sumocfg",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
@@ -1698,6 +1738,7 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
             "claim_status": "diagnostic-demo",
             "warnings": [],
         },
+        netedit_review_func=fake_netedit_review,
         sumo_gui_func=lambda _path, **_kwargs: {
             "status": "blocked",
             "sumo_gui_status": "skipped",
@@ -1731,6 +1772,9 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     assert Path(report["netedit_review_additional_file"]).is_file()
     assert Path(report["netedit_review_sumocfg_file"]).is_file()
     assert Path(report["netedit_review_selection_files"][0]).is_file()
+    assert review_launches == [Path(report["netedit_review_sumocfg_file"])]
+    assert report["netedit_review_launch_status"] == "opened"
+    assert report["netedit_review_launch"]["netedit_process_id"] == 222
     assert Path(report["network_overview_png"]).is_file()
     assert Path(report["problem_overlay_png"]).is_file()
     assert report["cluster_zoom_pngs"][0]["cluster_id"] == "C001"
