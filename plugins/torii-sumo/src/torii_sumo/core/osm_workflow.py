@@ -1492,6 +1492,9 @@ def run_osm_cleanup_workflow(
             "problem_overlay_png": workflow_review_html_report.get("problem_overlay_png", ""),
             "reference_comparison_png": workflow_review_html_report.get("reference_comparison_png", ""),
             "cluster_zoom_pngs": workflow_review_html_report.get("cluster_zoom_pngs", []),
+            "netedit_review_additional_file": workflow_review_html_report.get("netedit_review_additional_file", ""),
+            "netedit_review_sumocfg_file": workflow_review_html_report.get("netedit_review_sumocfg_file", ""),
+            "netedit_review_command": workflow_review_html_report.get("netedit_review_command", ""),
             "human_review_required_count": workflow_review_html_report.get("human_review_required_count", 0),
             "workflow_review_html": workflow_review_html_report,
         }
