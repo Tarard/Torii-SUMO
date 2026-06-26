@@ -83,6 +83,41 @@ def test_build_movement_graph_marks_uturn_for_review(tmp_path: Path) -> None:
     assert by_target["out:west_out"]["status"] == "needs_review"
 
 
+def test_movement_graph_does_not_emit_every_non_uturn_target(tmp_path: Path) -> None:
+    net_file = tmp_path / "cartesian.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="j" type="highway.primary" name="Main"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="east_out" from="j" to="e" type="highway.primary" name="Main"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="south_out" from="j" to="s" type="highway.secondary" name="South"><lane id="south_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="north_out" from="j" to="n" type="highway.secondary" name="North"><lane id="north_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <junction id="w" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="traffic_light"/>
+  <junction id="e" x="10" y="0" type="priority"/>
+  <junction id="s" x="0" y="-10" type="priority"/>
+  <junction id="n" x="0" y="10" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    graph = build_movement_graph(net_file, "j")
+    emitted = {
+        (movement["source_edge_id"], movement["target_edge_id"])
+        for movement in graph["movements"]
+        if movement["status"] == "emit"
+    }
+    review = {
+        (movement["source_edge_id"], movement["target_edge_id"])
+        for movement in graph["movements"]
+        if movement["status"] == "needs_review"
+    }
+
+    assert ("west_in", "east_out") in emitted
+    assert ("west_in", "south_out") in emitted
+    assert ("west_in", "north_out") in review
+
+
 def test_audit_movement_graph_flags_review_movements(tmp_path: Path) -> None:
     net_file = tmp_path / "fixture.net.xml"
     _write_fixture(net_file)

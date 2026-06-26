@@ -45,3 +45,24 @@ def test_build_rebuild_candidate_emits_only_high_confidence_vehicle_connections(
         ("west_in", "south_out"),
     ]
     assert "--connection-files" in Path(report["netconvert_command_file"]).read_text(encoding="utf-8")
+
+
+def test_rebuild_candidate_writes_connection_signature(tmp_path: Path) -> None:
+    net_file = tmp_path / "fixture.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="j" type="highway.primary" name="Main"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="east_out" from="j" to="e" type="highway.primary" name="Main"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="w" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="traffic_light"/>
+  <junction id="e" x="10" y="0" type="priority"/>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0" dir="s" state="o"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_rebuild_candidate(net_file=net_file, junction_id="j", output_dir=tmp_path / "candidate", prefix="demo")
+
+    assert Path(report["connection_signature"]["signature_file"]).is_file()
+    assert report["connection_signature"]["status"] == "pass"

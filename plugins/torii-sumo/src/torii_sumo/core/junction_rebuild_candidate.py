@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from .junction_connection_audit import build_connection_signature, write_connection_signature
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
 
 
@@ -21,6 +22,8 @@ def build_rebuild_candidate(
     graph = build_movement_graph(net_file, junction_id)
     audit = audit_movement_graph(graph)
     review = write_movement_review(graph, audit, output_dir, prefix)
+    signature = build_connection_signature(net_file, junction_id)
+    signature_report = write_connection_signature(signature, output_dir, prefix)
     connections_file = output_dir / f"{prefix}.con.xml"
     summary_file = output_dir / f"{prefix}_rebuild_candidate.json"
     command_file = output_dir / f"{prefix}_netconvert.cmd.txt"
@@ -49,6 +52,7 @@ def build_rebuild_candidate(
         "variant_file": str(variant_file),
         "netconvert_command_file": str(command_file),
         "movement_review": review,
+        "connection_signature": signature_report,
         "movement_audit_status": audit["status"],
         "emitted_connection_count": len(emitted),
         "skipped_movement_count": len(skipped),
