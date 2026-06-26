@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -94,12 +95,33 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     )
 
     html = Path(report["workflow_review_html_file"]).read_text(encoding="utf-8")
+    data_match = re.search(
+        r'<script type="application/json" id="torii-review-data">(.+?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert data_match is not None
+    review_data = json.loads(data_match.group(1))
     manifest_file = Path(report["review_manifest_file"])
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     workflow_json = json.loads(Path(report["workflow_report_file"]).read_text(encoding="utf-8"))
     manifest_dir = manifest_file.parent
 
     assert "Gate Dashboard" in html
+    assert "Torii-SUMO" in html
+    assert "Cleanup Review" in html
+    assert 'class="torii-review-app"' in html
+    assert 'class="torii-sidebar"' in html
+    assert 'class="torii-map-shell"' in html
+    assert 'class="torii-review-panel"' in html
+    assert 'id="review-panel-toggle"' in html
+    assert 'id="map-viewport"' in html
+    assert 'id="map-canvas"' in html
+    assert "zoomInMap" in html
+    assert "toggleReviewPanel" in html
+    assert "applySelectedJunctions" in html
+    assert "Export review plan" in html
+    assert "Aggregate selected junctions" in html
     assert "Network Preview" in html
     assert "Problem Map" in html
     assert "Cluster Zooms" in html
@@ -128,7 +150,16 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "<img" in html
     assert "file:///" not in html
     assert "visuals/workflow_network_overview.png" in html
+    assert review_data["claim_status"] == "construction-invalid"
+    assert review_data["navigation"][0]["label"] == "Junction Review"
+    assert review_data["visualizations"]["network_overview_png"] == "visuals/workflow_network_overview.png"
+    assert review_data["summary_cards"]["uncertain_junctions"] == 1
+    assert review_data["junctions"][0]["cluster_id"] == "c1"
+    assert review_data["junctions"][0]["modal_review_action"] == "review_vehicle_core_boundary"
+    assert review_data["junctions"][0]["image_file"].startswith("visuals/")
     assert manifest["visualizations"]["network_overview_png"]
+    assert manifest["review_app"]["summary_cards"]["uncertain_junctions"] == 1
+    assert manifest["review_app"]["junctions"][0]["cluster_id"] == "c1"
     assert manifest["visualizations"]["problem_overlay_png"]
     assert manifest["visualizations"]["cluster_zoom_pngs"][0]["cluster_id"] == "c1"
     assert (manifest_dir / manifest["visualizations"]["cluster_zoom_pngs"][0]["image_file"]).is_file()
