@@ -350,6 +350,71 @@ def write_teacher_pedestrian_ring_net(
     }
 
 
+def write_teacher_vehicle_connection_attrs_net(
+    *,
+    candidate_net_file: Path,
+    output_file: Path,
+    junction_id: str,
+    teacher_model: dict[str, object],
+    edge_map: dict[str, str],
+) -> dict[str, object]:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    tree = ET.parse(candidate_net_file)
+    root = tree.getroot()
+    lane_counts = _net_lane_counts(root)
+
+    connections_by_key: dict[tuple[str, str, str, str], list[ET.Element]] = {}
+    for connection in root.findall("connection"):
+        key = (
+            connection.attrib.get("from", ""),
+            connection.attrib.get("to", ""),
+            connection.attrib.get("fromLane", "0"),
+            connection.attrib.get("toLane", "0"),
+        )
+        connections_by_key.setdefault(key, []).append(connection)
+
+    updated = 0
+    skipped = []
+    for teacher_connection in teacher_model.get("vehicle_connections", []) or []:
+        if not isinstance(teacher_connection, dict):
+            continue
+        source = edge_map.get(str(teacher_connection.get("from", "")))
+        target = edge_map.get(str(teacher_connection.get("to", "")))
+        if not source or not target:
+            skipped.append({"reason": "unmapped_edge", "connection": teacher_connection})
+            continue
+        from_lane = min(int(teacher_connection.get("fromLane") or 0), lane_counts.get(source, 1) - 1)
+        to_lane = min(int(teacher_connection.get("toLane") or 0), lane_counts.get(target, 1) - 1)
+        matches = connections_by_key.get((source, target, str(from_lane), str(to_lane)), [])
+        if not matches:
+            skipped.append({"reason": "missing_candidate_connection", "connection": teacher_connection})
+            continue
+        for connection in matches:
+            for attr in ("dir", "state"):
+                if teacher_connection.get(attr):
+                    connection.set(attr, str(teacher_connection[attr]))
+            if teacher_connection.get("tl"):
+                connection.set("tl", junction_id)
+                connection.set("linkIndex", str(teacher_connection.get("linkIndex", "")))
+                connection.attrib.pop("uncontrolled", None)
+            else:
+                connection.attrib.pop("tl", None)
+                connection.attrib.pop("linkIndex", None)
+                connection.set("uncontrolled", "true")
+            updated += 1
+
+    ET.indent(root, space="    ")
+    tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "net_file": str(output_file),
+        "updated_vehicle_connection_count": updated,
+        "skipped_vehicle_connection_count": len(skipped),
+        "skipped_vehicle_connections": skipped,
+    }
+
+
 def write_teacher_tllogic_net(
     *,
     candidate_net_file: Path,
@@ -440,6 +505,7 @@ def build_teacher_guided_junction_variant(
     connection_file = output_dir / f"{prefix}.con.xml"
     sidewalks_net_file = output_dir / f"{prefix}_sidewalks.net.xml"
     pedring_net_file = output_dir / f"{prefix}_pedring.net.xml"
+    vehicle_attrs_net_file = output_dir / f"{prefix}_vehicle_attrs.net.xml"
     final_net_file = output_dir / f"{prefix}_teacher_guided.net.xml"
     report_file = output_dir / f"{prefix}_teacher_guided_report.json"
 
@@ -502,8 +568,15 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         crossing_edge_overrides=crossing_edge_overrides,
     )
-    tl_logic_report = write_teacher_tllogic_net(
+    vehicle_attrs_report = write_teacher_vehicle_connection_attrs_net(
         candidate_net_file=pedring_net_file,
+        output_file=vehicle_attrs_net_file,
+        junction_id=junction_id,
+        teacher_model=teacher_model,
+        edge_map=edge_map,
+    )
+    tl_logic_report = write_teacher_tllogic_net(
+        candidate_net_file=vehicle_attrs_net_file,
         output_file=final_net_file,
         junction_id=junction_id,
         teacher_model=teacher_model,
@@ -521,6 +594,7 @@ def build_teacher_guided_junction_variant(
                 "lane_patch": lane_patch_report,
                 "connection_plan": connection_report,
                 "pedestrian_ring": pedestrian_ring_report,
+                "vehicle_connection_attrs": vehicle_attrs_report,
                 "tl_logic": tl_logic_report,
             },
         )
@@ -554,11 +628,13 @@ def build_teacher_guided_junction_variant(
             "connection_file": str(connection_file),
             "sidewalks_net_file": str(sidewalks_net_file),
             "pedring_net_file": str(pedring_net_file),
+            "vehicle_attrs_net_file": str(vehicle_attrs_net_file),
             "report_file": str(report_file),
             "lane_patch": lane_patch_report,
             "connection_plan": connection_report,
             "netconvert": netconvert_report,
             "pedestrian_ring": pedestrian_ring_report,
+            "vehicle_connection_attrs": vehicle_attrs_report,
             "tl_logic": tl_logic_report,
             "sumo_load": sumo_report,
             "parity": _compare_teacher_models(teacher_model, final_model),
@@ -628,6 +704,15 @@ def _edge_file_lane_counts(edge_file: Path) -> dict[str, int]:
             counts[edge_id] = len(lanes)
         elif edge.attrib.get("numLanes"):
             counts[edge_id] = max(1, int(edge.attrib["numLanes"]))
+    return counts
+
+
+def _net_lane_counts(root: ET.Element) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id")
+        if edge_id:
+            counts[edge_id] = max(1, len(edge.findall("lane")))
     return counts
 
 
