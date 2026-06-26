@@ -77,6 +77,9 @@ def audit_topology_fragmentation(
     modal_decision_counts = dict(
         Counter(cluster.get("modal_aggregation_decision", "review_required") for cluster in clusters)
     )
+    modal_review_action_counts = dict(
+        Counter(cluster.get("modal_review_action", "review_vehicle_core_boundary") for cluster in clusters)
+    )
     corridor_decision_counts = dict(
         Counter(
             str(cluster.get("corridor_decision", "not_available"))
@@ -106,6 +109,7 @@ def audit_topology_fragmentation(
         "physical_intersection_candidate_count": physical_intersection_candidate_count,
         "modal_policy_status": "pass",
         "modal_decision_counts": modal_decision_counts,
+        "modal_review_action_counts": modal_review_action_counts,
         "corridor_audit_status": corridor_audit_status,
         "corridor_audit_error": corridor_error,
         "corridor_decision_counts": corridor_decision_counts,
@@ -734,6 +738,7 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "aggregation_reason",
                 "modal_aggregation_decision",
                 "modal_primary_role",
+                "modal_review_action",
                 "modal_reason",
                 "modal_risk_flags",
                 "modal_decision_counts",
