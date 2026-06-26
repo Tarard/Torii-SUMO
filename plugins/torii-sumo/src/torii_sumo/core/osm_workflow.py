@@ -424,6 +424,7 @@ def run_osm_cleanup_workflow(
     map_temporal_scope: str = "current",
     map_target_date: str | None = None,
     launch_netedit_after_build: bool = True,
+    launch_netedit_review_after_build: bool | None = None,
     launch_sumo_gui_after_build: bool = True,
     run_topology_audit_after_build: bool = True,
     topology_cluster_radius_m: float = 30.0,
@@ -455,6 +456,7 @@ def run_osm_cleanup_workflow(
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
+    netedit_review_func: Callable[[Path], dict[str, Any]] | None = None,
     sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
@@ -1492,6 +1494,37 @@ def run_osm_cleanup_workflow(
         gate_status=gate_status,
         warnings=warnings,
     )
+    netedit_review_sumocfg = workflow_review_html_report.get("netedit_review_sumocfg_file", "")
+    should_launch_netedit_review = (
+        launch_netedit_after_build
+        if launch_netedit_review_after_build is None
+        else launch_netedit_review_after_build
+    )
+    review_launcher = netedit_review_func
+    if review_launcher is None and netedit_func is launch_netedit:
+        review_launcher = netedit_func
+    elif review_launcher is None:
+        should_launch_netedit_review = False
+    if should_launch_netedit_review and netedit_review_sumocfg:
+        netedit_review_launch_report = review_launcher(Path(str(netedit_review_sumocfg)))
+    elif not netedit_review_sumocfg:
+        netedit_review_launch_report = {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "netedit_status": "skipped",
+            "netedit_input_file": "",
+            "netedit_open_mode": "sumocfg",
+            "warnings": ["netedit review config was not generated"],
+        }
+    else:
+        netedit_review_launch_report = {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "netedit_status": "skipped",
+            "netedit_input_file": str(netedit_review_sumocfg),
+            "netedit_open_mode": "sumocfg",
+            "warnings": ["netedit review launch disabled by caller"],
+        }
     report.update(
         {
             "workflow_review_html_status": workflow_review_html_report.get("workflow_review_html_status", "fail"),
@@ -1506,6 +1539,10 @@ def run_osm_cleanup_workflow(
             "netedit_review_sumocfg_file": workflow_review_html_report.get("netedit_review_sumocfg_file", ""),
             "netedit_review_command": workflow_review_html_report.get("netedit_review_command", ""),
             "netedit_review_selection_files": workflow_review_html_report.get("netedit_review_selection_files", []),
+            "netedit_review_launch_status": netedit_review_launch_report.get("netedit_status", "not_started"),
+            "netedit_review_launch_process_id": netedit_review_launch_report.get("netedit_process_id"),
+            "netedit_review_launch_file": netedit_review_launch_report.get("netedit_input_file", ""),
+            "netedit_review_launch": netedit_review_launch_report,
             "human_review_required_count": workflow_review_html_report.get("human_review_required_count", 0),
             "workflow_review_html": workflow_review_html_report,
         }

@@ -57,6 +57,18 @@
 python -m pytest tests/test_workflow_review_html.py tests/test_workflow_router.py tests/test_mcp_tools.py::test_sumo_network_review_html_tool_returns_review_artifact tests/test_osm_network_tools.py::test_osm_cleanup_workflow_runs_topology_audit_by_default -q
 ```
 
+### Task 5: Auto-Open Netedit Review Config
+
+**Files:**
+- Modify: `C:/Users/huqio/Documents/Torii-SUMO/plugins/torii-sumo/src/torii_sumo/core/netedit.py`
+- Modify: `C:/Users/huqio/Documents/Torii-SUMO/plugins/torii-sumo/src/torii_sumo/core/osm_workflow.py`
+- Modify: `C:/Users/huqio/Documents/Torii-SUMO/tests/test_osm_network_tools.py`
+
+- [x] Make `launch_netedit()` open `.sumocfg` files with `--sumocfg-file`.
+- [x] After review sidecars are generated, launch the Netedit review `.sumocfg`.
+- [x] Expose `netedit_review_launch_status`, process id, input file, and launch report in the workflow report.
+- [x] Run the targeted Netedit and workflow tests.
+
 ### Non-Goals
 
 - Do not fork or patch SUMO/Netedit in this pass.
