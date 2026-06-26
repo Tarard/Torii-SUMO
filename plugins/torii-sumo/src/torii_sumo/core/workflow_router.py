@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .network_plan import derive_network_plan
-from .osm_area import resolve_osm_place
+from .osm_area import osm_map_url_bbox, resolve_osm_place
 from .osm_network import audit_tls_multisource
 from .osm_workflow import run_osm_cleanup_workflow
 from .workflow_review_html import build_workflow_review_html
@@ -267,6 +267,12 @@ def _run_osm_to_sumo(
     place_resolver: Callable[[str], dict[str, Any]],
     cleanup_workflow_func: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
+    url_bbox = osm_map_url_bbox(bbox or "") or osm_map_url_bbox(place_name or "") or osm_map_url_bbox(user_request)
+    if url_bbox:
+        bbox = url_bbox
+        report["area_resolution_status"] = "osm_map_url_bbox"
+        report["candidate_bbox"] = url_bbox
+
     inferred = (place_name or "").strip() or infer_place_name(user_request)
     if inferred:
         report["inferred_place_name"] = inferred

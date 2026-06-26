@@ -55,16 +55,16 @@ def create_server() -> FastMCP:
     server.tool(description="Write a JSON and Markdown evidence bundle.")(
         sumo_collect_evidence
     )
-    server.tool(description="Route one natural-language SUMO request into a Torii workflow, ask only blocking questions, and run safe MCP steps when possible.")(
+    server.tool(description="Route one natural-language SUMO request, including OSM map URLs, into a full Torii workflow with cleanup, audits, review HTML, SUMO-GUI, and Netedit evidence.")(
         torii_auto_workflow
     )
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(
         sumo_osm_resolve_place
     )
-    server.tool(description="Run the OSM cleanup hard-gate workflow: area inference/confirmation, traffic-layer or reference-artifact network planning, OSM build, service-road passenger-permission cleanup when requested, region-aware TLS map audit, connectivity and routeability checks, SUMO-GUI launch, and Netedit launch.")(
+    server.tool(description="Run the OSM cleanup hard-gate workflow from a place name, bbox, or OSM map URL: area inference/confirmation, traffic-layer or reference-artifact planning, OSM build, TLS map audit, connectivity, routeability, review HTML, SUMO-GUI, and Netedit launch.")(
         sumo_osm_cleanup_workflow
     )
-    server.tool(description="Download or reuse OSM, filter road classes, and build a SUMO network with netconvert.")(
+    server.tool(description="Low-level helper only: download/reuse OSM for an already chosen bbox, filter road classes, and build a raw SUMO network with netconvert. Do not use this as the full user-facing workflow.")(
         sumo_osm_build_network
     )
     server.tool(description="Extract SUMO TLS audit candidates and cluster nearby physical intersections.")(
