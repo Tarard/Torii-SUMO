@@ -87,7 +87,7 @@ def build_movement_graph(net_file: Path, junction_id: str) -> dict[str, Any]:
     for source in incoming:
         for target in outgoing:
             turn_class = classify_turn_direction(tuple(source["axis"]), tuple(target["axis"]))
-            status = "needs_review" if turn_class in {"u_turn", "unknown"} else "emit"
+            status, confidence, reason = _movement_status(source, target, turn_class)
             movements.append(
                 {
                     "source_approach_id": source["id"],
@@ -95,9 +95,9 @@ def build_movement_graph(net_file: Path, junction_id: str) -> dict[str, Any]:
                     "source_edge_id": source["edge_id"],
                     "target_edge_id": target["edge_id"],
                     "turn_class": turn_class,
-                    "confidence": 0.25 if status == "needs_review" else 0.9,
+                    "confidence": confidence,
                     "status": status,
-                    "reason": _movement_reason(source, target, turn_class, status),
+                    "reason": reason,
                 }
             )
     return {
@@ -265,12 +265,14 @@ def _tokens(values: Iterable[str]) -> list[str]:
     return sorted({token for value in values for token in str(value or "").split() if token})
 
 
-def _movement_reason(source: dict[str, Any], target: dict[str, Any], turn_class: str, status: str) -> str:
-    if status == "needs_review":
-        return f"{turn_class} movement requires explicit review"
+def _movement_status(source: dict[str, Any], target: dict[str, Any], turn_class: str) -> tuple[str, float, str]:
+    if turn_class in {"u_turn", "unknown"}:
+        return "needs_review", 0.25, f"{turn_class} movement requires explicit review"
     if source["road_name"] and source["road_name"] == target["road_name"] and turn_class == "straight":
-        return "same-road continuation"
-    return f"{turn_class} vehicle movement from compatible approaches"
+        return "emit", 0.95, "same-road continuation"
+    if turn_class == "right":
+        return "emit", 0.75, "conservative right-turn candidate"
+    return "needs_review", 0.45, f"{turn_class} movement needs topology or reference evidence"
 
 
 def _issue(code: str, message: str) -> dict[str, str]:
