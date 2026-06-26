@@ -222,6 +222,69 @@ def test_approach_setback_strategy_uses_service_edges_as_shape_support(tmp_path:
     assert strategy["shape_support_edge_ids"] == ["be", "bs_service", "na", "wa"]
 
 
+def test_lane_buffered_approach_strategy_uses_lane_width_from_net_xml(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    reference = tmp_path / "reference.net.xml"
+    candidate.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.unclassified">
+    <lane id="ab_0" index="0" length="0.5" shape="0,0 1,0"/>
+  </edge>
+  <edge id="na" from="n" to="a" type="highway.unclassified">
+    <lane id="na_0" index="0" width="3.2" length="5" shape="0,5 0,0"/>
+  </edge>
+  <edge id="be" from="b" to="e" type="highway.unclassified">
+    <lane id="be_0" index="0" width="3.5" length="5" shape="1,0 6,0"/>
+    <lane id="be_1" index="1" width="3.5" length="5" shape="1,0.2 6,0.2"/>
+  </edge>
+  <edge id="wa" from="w" to="a" type="highway.unclassified">
+    <lane id="wa_0" index="0" width="3.5" length="5" shape="-5,0 0,0"/>
+    <lane id="wa_1" index="1" width="3.5" length="5" shape="-5,-0.2 0,-0.2"/>
+  </edge>
+  <edge id="bs" from="b" to="s" type="highway.service">
+    <lane id="bs_0" index="0" width="2.8" length="5" shape="1,0 1,-5"/>
+  </edge>
+  <edge id="bp" from="b" to="p" type="highway.footway">
+    <lane id="bp_0" index="0" width="1.5" length="5" shape="1,0 1,5"/>
+  </edge>
+  <junction id="a" x="0" y="0" type="priority"/>
+  <junction id="b" x="1" y="0" type="priority"/>
+  <junction id="n" x="0" y="5" type="priority"/>
+  <junction id="e" x="6" y="0" type="priority"/>
+  <junction id="w" x="-5" y="0" type="priority"/>
+  <junction id="s" x="1" y="-5" type="priority"/>
+  <junction id="p" x="1" y="5" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_a_b" x="0.5" y="0" type="traffic_light" shape="-2,-2 -2,2 3,2 3,-2"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = probe_junction_strategies(
+        candidate_net_file=candidate,
+        reference_net_file=reference,
+        reference_junction_id="cluster_a_b",
+        output_dir=tmp_path / "out",
+        radius_m=8,
+        short_edge_m=1,
+        approach_setback_m=2,
+    )
+
+    buffered = report["strategies"]["lane_buffered_approach_setback_core"]
+    centerline = report["strategies"]["approach_setback_core"]
+
+    assert buffered["shape_support_edge_ids"] == ["be", "bs", "na", "wa"]
+    assert buffered["review_support_edge_ids"] == ["bp"]
+    assert buffered["buffer_point_count"] == 8
+    assert buffered["footprint"]["area"] > centerline["footprint"]["area"]
+
+
 def test_approach_setback_strategy_reports_sharp_corner_audit(tmp_path: Path) -> None:
     candidate = tmp_path / "candidate.net.xml"
     reference = tmp_path / "reference.net.xml"
