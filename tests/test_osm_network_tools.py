@@ -134,10 +134,14 @@ def test_topology_audit_flags_dense_junction_clusters_within_radius(tmp_path: Pa
     assert cluster["google_maps_url"].startswith("https://www.google.com/maps/@")
     assert "data=!3m1!1e3" not in cluster["google_maps_url"]
     assert "data=!3m1!1e3" in cluster["optional_google_maps_satellite_url"]
+    assert cluster["modal_aggregation_decision"] in {"join_core", "review_required"}
+    assert "modal_decision_counts" in report
+    assert "junction_aggregation_blocked_by_modal_count" in report
     assert Path(report["clusters_file"]).is_file()
     csv_header = Path(report["clusters_file"]).read_text(encoding="utf-8").splitlines()[0]
     assert "google_maps_url" in csv_header
     assert "optional_google_maps_satellite_url" in csv_header
+    assert "modal_aggregation_decision" in csv_header
 
 
 def test_topology_audit_reports_local_cluster_graph_edges(tmp_path: Path) -> None:

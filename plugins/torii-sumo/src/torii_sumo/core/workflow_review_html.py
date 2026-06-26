@@ -140,7 +140,13 @@ def _evidence_rows(
         (
             "topology_audit",
             topology_audit_report or {},
-            ("topology_fragmentation_status", "suspicious_cluster_count", "junction_aggregation_candidate_count"),
+            (
+                "topology_fragmentation_status",
+                "suspicious_cluster_count",
+                "junction_aggregation_candidate_count",
+                "modal_decision_counts",
+                "junction_aggregation_blocked_by_modal_count",
+            ),
         ),
         (
             "junction_aggregation",
@@ -248,6 +254,8 @@ def _cluster_zoom_gallery(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, bas
         decision = str(cluster.get("aggregation_decision", ""))
         confidence = str(cluster.get("aggregation_confidence", ""))
         color_group, color_label = _cluster_color_group(cluster)
+        modal = str(cluster.get("modal_aggregation_decision", "review_required"))
+        reason = str(cluster.get("modal_reason", "modal review required"))
         search_text = " ".join([cluster_id, decision, confidence, str(cluster.get("node_count", ""))])
         src = _image_src(str(cluster.get("image_file", "")), base_dir=base_dir)
         map_link = _link(str(cluster.get("google_maps_url", "")), "map review")
@@ -265,6 +273,7 @@ def _cluster_zoom_gallery(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, bas
             f'data-confidence="{escape(confidence)}" '
             f'data-review-text="{escape(search_text)}">'
             f'<figcaption><span class="color-dot color-{color_group}"></span>{caption}<br><small>{escape(color_label)}</small></figcaption>'
+            f'<div class="cluster-meta">Modal: {escape(modal)} - {escape(reason)}</div>'
             '<label class="review-check" onclick="event.stopPropagation()">'
             f'<input type="checkbox" data-aggregate-checkbox="{escape(cluster_id)}"> aggregate this junction'
             "</label>"
@@ -566,6 +575,7 @@ def build_workflow_review_html(
     .visual-panel figcaption {{ font-weight: 700; margin-bottom: 8px; }}
     .visual-panel img {{ max-width: 100%; height: auto; display: block; border: 1px solid #e5e7eb; }}
     .cluster-panel figcaption {{ min-height: 44px; }}
+    .cluster-meta {{ color: #475569; font-size: 12px; margin: 0 0 8px; }}
     .junction-review-toolbar {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 18px; padding: 10px; border: 1px solid #cbd5e1; background: #f8fafc; }}
     .color-action, .zoom-button {{ padding: 6px 10px; border: 1px solid #64748b; background: #ffffff; cursor: pointer; }}
     .color-green {{ border-left: 6px solid #15803d; }}
