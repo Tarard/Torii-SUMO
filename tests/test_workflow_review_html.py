@@ -73,6 +73,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "topology_fragmentation_status": "needs_review",
             "suspicious_cluster_count": 1,
             "modal_decision_counts": {"review_required": 1},
+            "modal_review_action_counts": {"review_vehicle_core_boundary": 1},
             "junction_aggregation_blocked_by_modal_count": 1,
             "suspicious_clusters": [
                 {
@@ -83,6 +84,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
                     "aggregation_decision": "join",
                     "aggregation_confidence": "medium",
                     "modal_aggregation_decision": "review_required",
+                    "modal_review_action": "review_vehicle_core_boundary",
                     "modal_reason": "vehicle core mixed with support or terminal infrastructure",
                     "google_maps_url": "https://www.google.com/maps/@48.765391,11.423800,40m",
                 }
@@ -119,8 +121,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Evidence Summary" in html
     assert "topology_fragmentation_status=needs_review" in html
     assert "modal_decision_counts" in html
+    assert "modal_review_action_counts" in html
     assert "junction_aggregation_blocked_by_modal_count" in html
-    assert "Modal: review_required" in html
+    assert "Modal: review_vehicle_core_boundary / review_required" in html
     assert "workflow_summary" not in html
     assert "<img" in html
     assert "file:///" not in html

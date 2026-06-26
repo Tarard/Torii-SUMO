@@ -9,6 +9,7 @@ def test_ordinary_urban_vehicle_edges_are_join_core() -> None:
     role = classify_edge_modal_role(edge)
     assert role["modal_primary_role"] == "vehicle_core"
     assert role["modal_aggregation_decision"] == "join_core"
+    assert role["modal_review_action"] == "safe_vehicle_core_candidate"
 
 
 def test_service_driveway_is_protected_terminal() -> None:
@@ -16,6 +17,7 @@ def test_service_driveway_is_protected_terminal() -> None:
     role = classify_edge_modal_role(edge)
     assert role["modal_primary_role"] == "service"
     assert role["modal_aggregation_decision"] == "protected_terminal"
+    assert role["modal_review_action"] == "exclude_from_join"
 
 
 def test_railway_is_never_join() -> None:
@@ -37,6 +39,7 @@ def test_pedestrian_crossing_is_shape_support() -> None:
     role = classify_edge_modal_role(edge)
     assert role["modal_primary_role"] == "pedestrian"
     assert role["modal_aggregation_decision"] == "shape_support"
+    assert role["modal_review_action"] == "review_modal_support"
 
 
 def test_cluster_with_vehicle_core_and_service_terminal_requires_review() -> None:
@@ -48,4 +51,28 @@ def test_cluster_with_vehicle_core_and_service_terminal_requires_review() -> Non
         ],
     )
     assert policy["modal_aggregation_decision"] == "review_required"
+    assert policy["modal_review_action"] == "review_vehicle_core_boundary"
     assert "service_terminal_present" in policy["modal_risk_flags"]
+
+
+def test_cluster_never_join_primary_role_prefers_hard_blocker() -> None:
+    policy = classify_cluster_modal_policy(
+        internal_edges=[
+            {"id": "e1", "type": "highway.tertiary"},
+            {"id": "e2", "type": "highway.secondary"},
+        ],
+        boundary_edges=[{"id": "r1", "type": "railway.tram"}],
+    )
+    assert policy["modal_aggregation_decision"] == "never_join"
+    assert policy["modal_primary_role"] == "rail"
+    assert policy["modal_review_action"] == "exclude_from_join"
+
+
+def test_shape_support_cluster_gets_modal_support_action() -> None:
+    policy = classify_cluster_modal_policy(
+        internal_edges=[{"id": "c1", "function": "crossing", "type": "highway.crossing"}],
+        boundary_edges=[{"id": "w1", "type": "highway.footway"}],
+    )
+    assert policy["modal_aggregation_decision"] == "shape_support"
+    assert policy["modal_primary_role"] == "pedestrian"
+    assert policy["modal_review_action"] == "review_modal_support"

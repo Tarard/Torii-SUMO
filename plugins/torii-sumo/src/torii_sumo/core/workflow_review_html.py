@@ -145,6 +145,7 @@ def _evidence_rows(
                 "suspicious_cluster_count",
                 "junction_aggregation_candidate_count",
                 "modal_decision_counts",
+                "modal_review_action_counts",
                 "junction_aggregation_blocked_by_modal_count",
             ),
         ),
@@ -255,6 +256,7 @@ def _cluster_zoom_gallery(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, bas
         confidence = str(cluster.get("aggregation_confidence", ""))
         color_group, color_label = _cluster_color_group(cluster)
         modal = str(cluster.get("modal_aggregation_decision", "review_required"))
+        action = str(cluster.get("modal_review_action", "review_vehicle_core_boundary"))
         reason = str(cluster.get("modal_reason", "modal review required"))
         search_text = " ".join([cluster_id, decision, confidence, str(cluster.get("node_count", ""))])
         src = _image_src(str(cluster.get("image_file", "")), base_dir=base_dir)
@@ -273,7 +275,7 @@ def _cluster_zoom_gallery(cluster_zoom_pngs: Sequence[Mapping[str, Any]], *, bas
             f'data-confidence="{escape(confidence)}" '
             f'data-review-text="{escape(search_text)}">'
             f'<figcaption><span class="color-dot color-{color_group}"></span>{caption}<br><small>{escape(color_label)}</small></figcaption>'
-            f'<div class="cluster-meta">Modal: {escape(modal)} - {escape(reason)}</div>'
+            f'<div class="cluster-meta">Modal: {escape(action)} / {escape(modal)} - {escape(reason)}</div>'
             '<label class="review-check" onclick="event.stopPropagation()">'
             f'<input type="checkbox" data-aggregate-checkbox="{escape(cluster_id)}"> aggregate this junction'
             "</label>"
