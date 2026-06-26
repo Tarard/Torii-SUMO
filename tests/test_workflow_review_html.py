@@ -87,6 +87,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
                     "centroid_x": 60.0,
                     "centroid_y": 50.0,
                     "node_count": 3,
+                    "node_ids": ["n0", "tls0", "n1"],
                     "cluster_radius_m": 16.0,
                     "aggregation_decision": "join",
                     "aggregation_confidence": "medium",
@@ -114,6 +115,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     manifest_dir = manifest_file.parent
     netedit_additional = Path(report["netedit_review_additional_file"])
     netedit_sumocfg = Path(report["netedit_review_sumocfg_file"])
+    netedit_selection = Path(report["netedit_review_selection_files"][0])
     additional_root = ET.parse(netedit_additional).getroot()
     sumocfg_root = ET.parse(netedit_sumocfg).getroot()
 
@@ -137,6 +139,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Export review plan" in html
     assert "Netedit overlay" in html
     assert "workflow_netedit_review.sumocfg" in html
+    assert "workflow_netedit_review_c1_selection.txt" in html
+    assert "copyNeteditCommand" in html
     assert "Aggregate selected junctions" in html
     assert "Network Preview" in html
     assert "Problem Map" in html
@@ -180,10 +184,18 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert review_data["netedit_review"]["box_overlay_count"] == 1
     assert review_data["netedit_review"]["edge_overlay_count"] == 0
     assert review_data["netedit_review"]["junction_overlay_count"] == 0
+    assert review_data["netedit_review"]["selection_file_count"] == 1
+    assert review_data["netedit_review"]["cluster_selection_files"][0]["selection_file"] == "workflow_netedit_review_c1_selection.txt"
+    assert review_data["junctions"][0]["netedit_selection_file"] == "workflow_netedit_review_c1_selection.txt"
+    assert review_data["junctions"][0]["netedit_command"] == (
+        'netedit --sumocfg-file "workflow_netedit_review.sumocfg" '
+        '--selection-file "workflow_netedit_review_c1_selection.txt"'
+    )
     assert manifest["visualizations"]["network_overview_png"]
     assert manifest["artifacts"]["netedit_review_additional_file"] == "workflow_netedit_review.add.xml"
     assert manifest["artifacts"]["netedit_review_sumocfg_file"] == "workflow_netedit_review.sumocfg"
     assert manifest["netedit_review"]["netedit_command"] == 'netedit --sumocfg-file "workflow_netedit_review.sumocfg"'
+    assert manifest["netedit_review"]["selection_file_count"] == 1
     assert manifest["review_app"]["map_layers"]["edges"]
     assert manifest["review_app"]["summary_cards"]["uncertain_junctions"] == 1
     assert manifest["review_app"]["junctions"][0]["cluster_id"] == "c1"
@@ -193,6 +205,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert workflow_json["claim_status"] == "construction-invalid"
     assert netedit_additional.is_file()
     assert netedit_sumocfg.is_file()
+    assert netedit_selection.read_text(encoding="utf-8").splitlines() == ["junction:n0", "junction:tls0", "junction:n1"]
     assert additional_root.tag == "additional"
     assert additional_root.findall("./poi") == []
     assert len(additional_root.findall("./poly")) == 1
