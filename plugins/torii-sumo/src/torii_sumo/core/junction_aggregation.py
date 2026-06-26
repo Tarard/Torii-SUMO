@@ -4,9 +4,13 @@ import csv
 import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
+import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
 from .junction_join_definition import build_junction_join_definition
+from .modal_aggregation_policy import classify_edge_modal_role
+
+SHORT_MODAL_SUPPORT_EDGE_MAX_LENGTH_M = 10.0
 
 
 def build_junction_aggregation_variant(
@@ -34,12 +38,23 @@ def build_junction_aggregation_variant(
         reference_join_audit_report=reference_join_audit_report,
         overlapping_junction_audit_report=overlapping_junction_audit_report,
     )
+    candidates = _filter_modal_support_join_nodes(candidates, net_file)
     plan_file = output_dir / f"{prefix}_plan.json"
     candidates_file = output_dir / f"{prefix}_candidates.csv"
     command_record = output_dir / f"{prefix}_netconvert.cmd.txt"
     variant_file = output_dir / f"{prefix}_junction_aggregated.net.xml"
     joined_junctions_file = output_dir / f"{prefix}_joined_junctions.xml"
     join_definition = build_junction_join_definition(candidates, output_dir=output_dir, prefix=prefix)
+    remove_edges_file = output_dir / f"{prefix}_modal_support_remove_edges.txt"
+    remove_edge_ids = _short_modal_support_edges(
+        net_file,
+        join_core_nodes=_explicit_join_nodes(join_definition),
+        max_length_m=SHORT_MODAL_SUPPORT_EDGE_MAX_LENGTH_M,
+    )
+    remove_edges_file.write_text(
+        "\n".join(remove_edge_ids) + ("\n" if remove_edge_ids else ""),
+        encoding="utf-8",
+    )
 
     plan = {
         "junction_aggregation_status": "not_needed" if not candidates else "planned_for_review_variant",
@@ -49,6 +64,9 @@ def build_junction_aggregation_variant(
         "nodes_patch_file": join_definition["nodes_patch_file"],
         "join_definition_file": join_definition["definition_file"],
         "join_definition_csv": join_definition["definition_csv"],
+        "modal_support_remove_edges_file": str(remove_edges_file),
+        "modal_support_remove_edge_count": len(remove_edge_ids),
+        "modal_support_remove_edge_max_length_m": SHORT_MODAL_SUPPORT_EDGE_MAX_LENGTH_M,
         "join_dist_m": join_dist_m,
         "join_dist_policy": "recorded for legacy scoring context; precise joins are driven by the nodes patch",
         "candidate_count": len(candidates),
@@ -78,6 +96,8 @@ def build_junction_aggregation_variant(
             "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
             "junction_join_definition_file": join_definition["definition_file"],
             "junction_join_definition_csv": join_definition["definition_csv"],
+            "junction_aggregation_modal_support_remove_edges_file": str(remove_edges_file),
+            "junction_aggregation_removed_modal_support_edge_count": 0,
             "junction_aggregation_command_record": "",
             "junction_aggregation_netconvert": {},
             "warnings": [],
@@ -88,6 +108,14 @@ def build_junction_aggregation_variant(
         "--sumo-net-file",
         str(net_file),
         *join_definition["netconvert_patch_args"],
+        *(
+            [
+                "--remove-edges.input-file",
+                str(remove_edges_file),
+            ]
+            if remove_edge_ids
+            else []
+        ),
         "--junctions.join-output",
         str(joined_junctions_file),
         "--output-file",
@@ -107,6 +135,8 @@ def build_junction_aggregation_variant(
             "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
             "junction_join_definition_file": join_definition["definition_file"],
             "junction_join_definition_csv": join_definition["definition_csv"],
+            "junction_aggregation_modal_support_remove_edges_file": str(remove_edges_file),
+            "junction_aggregation_removed_modal_support_edge_count": len(remove_edge_ids),
             "junction_aggregation_command_record": str(command_record),
         }
 
@@ -131,6 +161,8 @@ def build_junction_aggregation_variant(
         "junction_join_explicit_join_count": join_definition["explicit_join_count"],
         "junction_join_exclude_count": join_definition["join_exclude_count"],
         "junction_join_needs_map_review_count": join_definition["needs_map_review_count"],
+        "junction_aggregation_modal_support_remove_edges_file": str(remove_edges_file),
+        "junction_aggregation_removed_modal_support_edge_count": len(remove_edge_ids),
         "junction_aggregation_command_record": str(command_record),
         "junction_aggregation_netconvert": result,
         "warnings": warnings,
@@ -189,6 +221,98 @@ def _aggregation_candidates(
                 }
             )
     return _dedupe_join_candidates(candidates)
+
+
+def _filter_modal_support_join_nodes(candidates: list[dict[str, Any]], net_file: Path) -> list[dict[str, Any]]:
+    vehicle_core_nodes = _vehicle_core_nodes(net_file)
+    if not vehicle_core_nodes:
+        return candidates
+
+    filtered: list[dict[str, Any]] = []
+    for candidate in candidates:
+        if str(candidate.get("decision", "")) != "join":
+            filtered.append(candidate)
+            continue
+        node_ids = [item for item in str(candidate.get("node_ids", "")).replace(",", ";").split(";") if item]
+        kept = [node_id for node_id in node_ids if node_id in vehicle_core_nodes]
+        if len(kept) == len(node_ids):
+            filtered.append(candidate)
+            continue
+        updated = dict(candidate)
+        updated["node_ids"] = ";".join(kept)
+        updated["reason"] = (str(candidate.get("reason", "")) + "; modal support nodes excluded from vehicle core").strip("; ")
+        filtered.append(updated)
+    return filtered
+
+
+def _vehicle_core_nodes(net_file: Path) -> set[str]:
+    try:
+        root = ET.parse(net_file).getroot()
+    except ET.ParseError:
+        return set()
+
+    nodes: set[str] = set()
+    for edge in root.findall("edge"):
+        if edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}:
+            continue
+        attrs = dict(edge.attrib)
+        attrs["allow"] = " ".join(lane.attrib.get("allow", "") for lane in edge.findall("lane"))
+        attrs["disallow"] = " ".join(lane.attrib.get("disallow", "") for lane in edge.findall("lane"))
+        if classify_edge_modal_role(attrs)["modal_aggregation_decision"] != "join_core":
+            continue
+        for key in ("from", "to"):
+            node_id = edge.attrib.get(key)
+            if node_id:
+                nodes.add(node_id)
+    return nodes
+
+
+def _explicit_join_nodes(join_definition: Mapping[str, Any]) -> set[str]:
+    nodes: set[str] = set()
+    for record in join_definition.get("records", []) or []:
+        if str(record.get("action", "")) != "join":
+            continue
+        node_ids = record.get("node_ids", []) or []
+        if len(node_ids) < 2:
+            continue
+        nodes.update(str(node_id) for node_id in node_ids if str(node_id))
+    return nodes
+
+
+def _short_modal_support_edges(net_file: Path, *, join_core_nodes: set[str], max_length_m: float) -> list[str]:
+    if not join_core_nodes:
+        return []
+    try:
+        root = ET.parse(net_file).getroot()
+    except ET.ParseError:
+        return []
+
+    remove_ids: list[str] = []
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id or edge_id.startswith(":") or edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}:
+            continue
+        if edge.attrib.get("from") not in join_core_nodes and edge.attrib.get("to") not in join_core_nodes:
+            continue
+        attrs = dict(edge.attrib)
+        attrs["allow"] = " ".join(lane.attrib.get("allow", "") for lane in edge.findall("lane"))
+        attrs["disallow"] = " ".join(lane.attrib.get("disallow", "") for lane in edge.findall("lane"))
+        role = classify_edge_modal_role(attrs)
+        if role["modal_aggregation_decision"] not in {"shape_support", "protected_terminal"}:
+            continue
+        if _edge_length_m(edge) <= max_length_m:
+            remove_ids.append(edge_id)
+    return sorted(remove_ids)
+
+
+def _edge_length_m(edge: ET.Element) -> float:
+    lengths: list[float] = []
+    for lane in edge.findall("lane"):
+        try:
+            lengths.append(float(lane.attrib.get("length", "0") or 0))
+        except ValueError:
+            pass
+    return max(lengths, default=0.0)
 
 
 def _candidate_from_overlapping_group(group: Mapping[str, Any]) -> dict[str, Any] | None:
