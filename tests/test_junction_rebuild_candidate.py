@@ -114,6 +114,89 @@ def test_write_teacher_connection_plan_preserves_non_target_and_blocks_unlisted_
     assert report["removed_target_children"] == 2
 
 
+def test_write_teacher_connection_plan_marks_teacher_uncontrolled_movements(tmp_path: Path) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_model = {
+        "vehicle_connections": [
+            {"from": "teacher_in", "to": "teacher_out", "fromLane": "0", "toLane": "0", "tl": "j"},
+            {"from": "teacher_bike", "to": "teacher_path", "fromLane": "0", "toLane": "0", "tl": ""},
+        ],
+        "crossings": [],
+    }
+    candidate_model = {
+        "approaches": {
+            "incoming": [{"edge_id": "cand_in", "lane_count": 1}, {"edge_id": "cand_bike", "lane_count": 1}],
+            "outgoing": [{"edge_id": "cand_out", "lane_count": 1}, {"edge_id": "cand_path", "lane_count": 1}],
+        }
+    }
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "teacher.con.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+        candidate_model=candidate_model,
+        edge_map={
+            "teacher_in": "cand_in",
+            "teacher_out": "cand_out",
+            "teacher_bike": "cand_bike",
+            "teacher_path": "cand_path",
+        },
+    )
+
+    connections = ET.parse(report["connection_file"]).getroot().findall("connection")
+    attrs_by_pair = {(item.attrib["from"], item.attrib["to"]): item.attrib for item in connections}
+    assert "uncontrolled" not in attrs_by_pair[("cand_in", "cand_out")]
+    assert attrs_by_pair[("cand_bike", "cand_path")]["uncontrolled"] == "true"
+    assert report["emitted_uncontrolled_connection_count"] == 1
+
+
+def test_write_teacher_connection_plan_can_use_patched_edge_lane_counts(tmp_path: Path) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j">
+    <lane index="0"/>
+    <lane index="1"/>
+  </edge>
+  <edge id="cand_out" from="j" to="b">
+    <lane index="0"/>
+    <lane index="1"/>
+  </edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "vehicle_connections": [{"from": "teacher_in", "to": "teacher_out", "fromLane": "1", "toLane": "1", "tl": "j"}],
+        "crossings": [],
+    }
+    stale_candidate_model = {
+        "approaches": {
+            "incoming": [{"edge_id": "cand_in", "lane_count": 1}],
+            "outgoing": [{"edge_id": "cand_out", "lane_count": 1}],
+        }
+    }
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "teacher.con.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+        candidate_model=stale_candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        candidate_edge_file=candidate_edges,
+    )
+
+    connection = ET.parse(report["connection_file"]).getroot().find("connection")
+    assert connection.attrib["fromLane"] == "1"
+    assert connection.attrib["toLane"] == "1"
+    assert report["lane_clamp_count"] == 0
+
+
 def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacing_edge_geometry(tmp_path: Path) -> None:
     raw_edges = tmp_path / "raw.edg.xml"
     raw_edges.write_text(
