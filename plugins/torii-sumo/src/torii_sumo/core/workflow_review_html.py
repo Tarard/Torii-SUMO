@@ -322,6 +322,26 @@ def _review_box_shape(x: float, y: float, radius: float) -> str:
     return " ".join(f"{_svg_number(px)},{_svg_number(py)}" for px, py in points)
 
 
+def _safe_file_stem(value: str) -> str:
+    safe = "".join(ch if ch.isascii() and (ch.isalnum() or ch in "-_.") else "_" for ch in value)
+    return safe.strip("._") or "cluster"
+
+
+def _netedit_selection_lines(junction: Mapping[str, Any]) -> list[str]:
+    return [f"junction:{node_id}" for node_id in _list_value(junction.get("node_ids"))]
+
+
+def _netedit_command(sumocfg_file: str | Path | None, output_dir: Path, selection_file: str | Path | None = None) -> str:
+    sumocfg = _portable_path(sumocfg_file, output_dir)
+    if not sumocfg:
+        return ""
+    command = f'netedit --sumocfg-file "{sumocfg}"'
+    selection = _portable_path(selection_file, output_dir)
+    if selection:
+        command += f' --selection-file "{selection}"'
+    return command
+
+
 def _netedit_review_radius(junction: Mapping[str, Any], bounds: tuple[float, float, float, float] | None) -> float:
     try:
         return max(float(junction.get("cluster_radius_m") or 0), 8.0)
@@ -356,6 +376,7 @@ def _write_netedit_review_files(
         },
     )
     box_count = 0
+    cluster_selection_files: list[dict[str, Any]] = []
 
     for junction in junctions:
         cluster_id = str(junction.get("cluster_id") or "")
@@ -385,6 +406,18 @@ def _write_netedit_review_files(
                 "name": f"{cluster_id} {junction.get('status_label', 'review')}",
             },
         )
+        selection_lines = _netedit_selection_lines(junction)
+        if selection_lines:
+            selection_file = output_dir / f"{prefix}_netedit_review_{_safe_file_stem(cluster_id)}_selection.txt"
+            selection_file.write_text("\n".join(selection_lines) + "\n", encoding="utf-8")
+            cluster_selection_files.append(
+                {
+                    "cluster_id": cluster_id,
+                    "selection_file": str(selection_file),
+                    "selected_junction_count": len(selection_lines),
+                    "netedit_command": f'netedit --sumocfg-file "{sumocfg_file}" --selection-file "{selection_file}"',
+                }
+            )
 
     ET.indent(root)
     ET.ElementTree(root).write(additional_file, encoding="utf-8", xml_declaration=True)
@@ -405,9 +438,38 @@ def _write_netedit_review_files(
         "netedit_command": f'netedit --sumocfg-file "{sumocfg_file}"',
         "cluster_count": len(junctions),
         "box_overlay_count": box_count,
+        "cluster_selection_files": cluster_selection_files,
+        "selection_file_count": len(cluster_selection_files),
         "edge_overlay_count": 0,
         "junction_overlay_count": 0,
     }
+
+
+def _attach_netedit_cluster_review(
+    junctions: list[dict[str, Any]],
+    netedit_review: Mapping[str, Any],
+    output_dir: Path,
+) -> list[dict[str, Any]]:
+    portable: list[dict[str, Any]] = []
+    for item in netedit_review.get("cluster_selection_files", []) or []:
+        if not isinstance(item, Mapping):
+            continue
+        selection_file = item.get("selection_file")
+        portable.append(
+            {
+                **dict(item),
+                "selection_file": _portable_path(selection_file, output_dir),
+                "netedit_command": _netedit_command(netedit_review.get("sumocfg_file"), output_dir, selection_file),
+            }
+        )
+    by_cluster = {str(item.get("cluster_id")): item for item in portable}
+    for junction in junctions:
+        item = by_cluster.get(str(junction.get("cluster_id", "")))
+        if not item:
+            continue
+        junction["netedit_selection_file"] = item["selection_file"]
+        junction["netedit_command"] = item["netedit_command"]
+    return portable
 
 
 def _network_svg(map_layers: Mapping[str, Any] | None, junctions: Sequence[Mapping[str, Any]]) -> str:
@@ -673,6 +735,18 @@ def _junction_cards(junctions: Sequence[Mapping[str, Any]]) -> str:
         confidence = str(junction.get("aggregation_confidence", "unknown"))
         node_count = str(junction.get("node_count", ""))
         image_file = str(junction.get("image_file", ""))
+        netedit_command = str(junction.get("netedit_command", ""))
+        netedit_selection_file = str(junction.get("netedit_selection_file", ""))
+        netedit_button = (
+            f'<button type="button" data-netedit-command="{escape(netedit_command)}">Netedit command</button>'
+            if netedit_command
+            else ""
+        )
+        selection_link = (
+            f'<a href="{escape(netedit_selection_file)}">Selection</a>'
+            if netedit_selection_file
+            else ""
+        )
         cards.append(
             f'<article class="junction-card card-{escape(color_group)}" data-junction-id="{escape(cluster_id)}">'
             '<label class="card-check">'
@@ -687,6 +761,8 @@ def _junction_cards(junctions: Sequence[Mapping[str, Any]]) -> str:
             "</div>"
             '<div class="card-actions">'
             f'<button type="button" data-zoom-src="{escape(image_file)}">Inspect</button>'
+            f"{netedit_button}"
+            f"{selection_link}"
             "<button type=\"button\">Keep split</button>"
             f'<a href="{escape(str(junction.get("google_maps_url", "")))}">Evidence</a>'
             "</div>"
@@ -900,6 +976,11 @@ def build_workflow_review_html(
     if netedit_review.get("status") == "pass":
         artifacts["netedit_review_additional_file"] = _as_path(netedit_review.get("additional_file"))
         artifacts["netedit_review_sumocfg_file"] = _as_path(netedit_review.get("sumocfg_file"))
+    portable_cluster_selection_files = _attach_netedit_cluster_review(
+        review_junctions,
+        netedit_review,
+        output_dir,
+    )
     review_app = _review_app_data(
         title=title,
         claim_status=claim_status,
@@ -917,11 +998,9 @@ def build_workflow_review_html(
         **netedit_review,
         "additional_file": _portable_path(netedit_review.get("additional_file"), output_dir),
         "sumocfg_file": _portable_path(netedit_review.get("sumocfg_file"), output_dir),
-        "netedit_command": (
-            f'netedit --sumocfg-file "{_portable_path(netedit_review.get("sumocfg_file"), output_dir)}"'
-            if netedit_review.get("sumocfg_file")
-            else ""
-        ),
+        "netedit_command": _netedit_command(netedit_review.get("sumocfg_file"), output_dir),
+        "cluster_selection_files": portable_cluster_selection_files,
+        "selection_file_count": len(portable_cluster_selection_files),
     }
 
     manifest = {
@@ -1081,6 +1160,17 @@ def build_workflow_review_html(
         URL.revokeObjectURL(link.href);
       }
 
+      function copyNeteditCommand(trigger) {
+        const command = trigger.getAttribute("data-netedit-command") || "";
+        if (!command) {
+          return;
+        }
+        output.value = command;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(command).catch(() => {});
+        }
+      }
+
       function toggleReviewPanel() {
         app.classList.toggle("panel-collapsed");
       }
@@ -1152,6 +1242,9 @@ def build_workflow_review_html(
       document.querySelectorAll("[data-zoom-src]").forEach((trigger) => {
         trigger.addEventListener("click", () => openZoom(trigger));
       });
+      document.querySelectorAll("[data-netedit-command]").forEach((trigger) => {
+        trigger.addEventListener("click", () => copyNeteditCommand(trigger));
+      });
       document.querySelectorAll("[data-layer]").forEach((toggle) => {
         toggle.addEventListener("change", () => {
           mapViewport.classList.toggle(`hide-${toggle.getAttribute("data-layer")}`, !toggle.checked);
@@ -1192,6 +1285,7 @@ def build_workflow_review_html(
       window.selectVisibleJunctions = selectVisibleJunctions;
       window.applySelectedJunctions = applySelectedJunctions;
       window.exportReviewPlan = exportReviewPlan;
+      window.copyNeteditCommand = copyNeteditCommand;
       window.toggleReviewPanel = toggleReviewPanel;
       window.zoomInMap = zoomInMap;
       window.zoomOutMap = zoomOutMap;
@@ -1447,6 +1541,11 @@ def build_workflow_review_html(
         "netedit_review_additional_file": str(netedit_review.get("additional_file", "")),
         "netedit_review_sumocfg_file": str(netedit_review.get("sumocfg_file", "")),
         "netedit_review_command": str(netedit_review.get("netedit_command", "")),
+        "netedit_review_selection_files": [
+            str(item.get("selection_file", ""))
+            for item in netedit_review.get("cluster_selection_files", []) or []
+            if isinstance(item, Mapping)
+        ],
         "human_review_required_count": len(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
     }

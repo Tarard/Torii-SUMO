@@ -1730,6 +1730,7 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     assert Path(report["review_manifest_file"]).is_file()
     assert Path(report["netedit_review_additional_file"]).is_file()
     assert Path(report["netedit_review_sumocfg_file"]).is_file()
+    assert Path(report["netedit_review_selection_files"][0]).is_file()
     assert Path(report["network_overview_png"]).is_file()
     assert Path(report["problem_overlay_png"]).is_file()
     assert report["cluster_zoom_pngs"][0]["cluster_id"] == "C001"

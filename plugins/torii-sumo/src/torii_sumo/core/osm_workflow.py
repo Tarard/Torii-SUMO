@@ -1505,6 +1505,7 @@ def run_osm_cleanup_workflow(
             "netedit_review_additional_file": workflow_review_html_report.get("netedit_review_additional_file", ""),
             "netedit_review_sumocfg_file": workflow_review_html_report.get("netedit_review_sumocfg_file", ""),
             "netedit_review_command": workflow_review_html_report.get("netedit_review_command", ""),
+            "netedit_review_selection_files": workflow_review_html_report.get("netedit_review_selection_files", []),
             "human_review_required_count": workflow_review_html_report.get("human_review_required_count", 0),
             "workflow_review_html": workflow_review_html_report,
         }
