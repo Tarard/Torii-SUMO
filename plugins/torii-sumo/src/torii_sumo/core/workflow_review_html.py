@@ -322,16 +322,6 @@ def _review_box_shape(x: float, y: float, radius: float) -> str:
     return " ".join(f"{_svg_number(px)},{_svg_number(py)}" for px, py in points)
 
 
-def _sumo_shape(points: Any) -> str:
-    values = []
-    for point in points or []:
-        try:
-            values.append(f"{_svg_number(float(point[0]))},{_svg_number(float(point[1]))}")
-        except (TypeError, ValueError, IndexError):
-            continue
-    return " ".join(values)
-
-
 def _netedit_review_radius(junction: Mapping[str, Any], bounds: tuple[float, float, float, float] | None) -> float:
     try:
         return max(float(junction.get("cluster_radius_m") or 0), 8.0)
@@ -358,12 +348,6 @@ def _write_netedit_review_files(
     additional_file = output_dir / f"{prefix}_netedit_review.add.xml"
     sumocfg_file = output_dir / f"{prefix}_netedit_review.sumocfg"
     bounds = _map_layer_bounds(map_layers)
-    edges = {str(edge.get("id")): edge for edge in (map_layers or {}).get("edges", []) if isinstance(edge, Mapping)}
-    nodes = {
-        str(node.get("id")): node
-        for node in (map_layers or {}).get("junctions", [])
-        if isinstance(node, Mapping)
-    }
     root = ET.Element(
         "additional",
         {
@@ -371,8 +355,7 @@ def _write_netedit_review_files(
             "xsi:noNamespaceSchemaLocation": "http://sumo.dlr.de/xsd/additional_file.xsd",
         },
     )
-    poly_index = 0
-    poi_index = 0
+    box_count = 0
 
     for junction in junctions:
         cluster_id = str(junction.get("cluster_id") or "")
@@ -387,6 +370,7 @@ def _write_netedit_review_files(
         color_group = str(junction.get("color_group", "slate"))
         color = _review_color(color_group)
         radius = _netedit_review_radius(junction, bounds)
+        box_count += 1
         ET.SubElement(
             root,
             "poly",
@@ -401,69 +385,6 @@ def _write_netedit_review_files(
                 "name": f"{cluster_id} {junction.get('status_label', 'review')}",
             },
         )
-        ET.SubElement(
-            root,
-            "poi",
-            {
-                "id": f"torii_{cluster_id}",
-                "type": f"torii.cluster.{color_group}",
-                "color": color,
-                "layer": "100.00",
-                "x": _svg_number(x),
-                "y": _svg_number(y),
-                "width": "12.00",
-                "height": "12.00",
-                "name": f"{cluster_id} {junction.get('status_label', 'review')}",
-            },
-        )
-        for edge_group, edge_color, width in (
-            ("internal_edge_ids", color, "4.00"),
-            ("boundary_edge_ids", "37,99,235", "2.50"),
-        ):
-            for edge_id in _list_value(junction.get(edge_group)):
-                shape = _sumo_shape(edges.get(edge_id, {}).get("points"))
-                if not shape:
-                    continue
-                poly_index += 1
-                ET.SubElement(
-                    root,
-                    "poly",
-                    {
-                        "id": f"torii_{cluster_id}_edge_{poly_index}",
-                        "type": f"torii.cluster.{edge_group}",
-                        "color": edge_color,
-                        "fill": "false",
-                        "layer": "98.00",
-                        "lineWidth": width,
-                        "shape": shape,
-                        "name": f"{cluster_id} {edge_group}",
-                    },
-                )
-        for node_id in _list_value(junction.get("node_ids")):
-            node = nodes.get(node_id)
-            if not node:
-                continue
-            try:
-                node_x = float(node["x"])
-                node_y = float(node["y"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            poi_index += 1
-            ET.SubElement(
-                root,
-                "poi",
-                {
-                    "id": f"torii_{cluster_id}_node_{poi_index}",
-                    "type": "torii.cluster.member_junction",
-                    "color": color,
-                    "layer": "101.00",
-                    "x": _svg_number(node_x),
-                    "y": _svg_number(node_y),
-                    "width": "5.00",
-                    "height": "5.00",
-                    "name": f"{cluster_id} {node_id}",
-                },
-            )
 
     ET.indent(root)
     ET.ElementTree(root).write(additional_file, encoding="utf-8", xml_declaration=True)
@@ -483,8 +404,9 @@ def _write_netedit_review_files(
         "sumocfg_file": str(sumocfg_file),
         "netedit_command": f'netedit --sumocfg-file "{sumocfg_file}"',
         "cluster_count": len(junctions),
-        "edge_overlay_count": poly_index,
-        "junction_overlay_count": poi_index,
+        "box_overlay_count": box_count,
+        "edge_overlay_count": 0,
+        "junction_overlay_count": 0,
     }
 
 
