@@ -51,6 +51,10 @@ def test_network_visualization_writes_nonempty_png(tmp_path: Path) -> None:
     assert Path(report["problem_overlay_png"]).is_file()
     assert report["cluster_zoom_pngs"][0]["cluster_id"] == "c1"
     assert Path(report["cluster_zoom_pngs"][0]["image_file"]).is_file()
+    assert report["map_layers"]["bounds"]["min_x"] <= 10.0
+    assert report["map_layers"]["bounds"]["max_x"] >= 120.0
+    assert {edge["category"] for edge in report["map_layers"]["edges"]} == {"major", "vehicle", "soft"}
+    assert report["map_layers"]["traffic_lights"] == [{"x": 60.0, "y": 50.0}]
     image = Image.open(report["network_overview_png"])
     assert image.size[0] >= 400
     assert image.size[1] >= 300
@@ -111,12 +115,16 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Torii-SUMO" in html
     assert "Cleanup Review" in html
     assert 'class="torii-review-app"' in html
+    assert ".torii-review-app { display: grid; grid-template-columns: 240px minmax(620px, 1fr) 420px; height: 100vh;" in html
     assert 'class="torii-sidebar"' in html
     assert 'class="torii-map-shell"' in html
     assert 'class="torii-review-panel"' in html
     assert 'id="review-panel-toggle"' in html
     assert 'id="map-viewport"' in html
     assert 'id="map-canvas"' in html
+    assert 'class="network-svg"' in html
+    assert 'class="map-edge edge-major"' in html
+    assert '<circle class="junction-marker marker-green"' in html
     assert "zoomInMap" in html
     assert "toggleReviewPanel" in html
     assert "applySelectedJunctions" in html
@@ -153,11 +161,14 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert review_data["claim_status"] == "construction-invalid"
     assert review_data["navigation"][0]["label"] == "Junction Review"
     assert review_data["visualizations"]["network_overview_png"] == "visuals/workflow_network_overview.png"
+    assert review_data["map_layers"]["bounds"]["min_x"] <= 10.0
+    assert review_data["map_layers"]["traffic_lights"] == [{"x": 60.0, "y": 50.0}]
     assert review_data["summary_cards"]["uncertain_junctions"] == 1
     assert review_data["junctions"][0]["cluster_id"] == "c1"
     assert review_data["junctions"][0]["modal_review_action"] == "review_vehicle_core_boundary"
     assert review_data["junctions"][0]["image_file"].startswith("visuals/")
     assert manifest["visualizations"]["network_overview_png"]
+    assert manifest["review_app"]["map_layers"]["edges"]
     assert manifest["review_app"]["summary_cards"]["uncertain_junctions"] == 1
     assert manifest["review_app"]["junctions"][0]["cluster_id"] == "c1"
     assert manifest["visualizations"]["problem_overlay_png"]

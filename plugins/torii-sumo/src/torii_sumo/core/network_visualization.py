@@ -164,6 +164,25 @@ def _cluster_points(records: Iterable[Mapping[str, Any]]) -> list[tuple[float, f
     return points
 
 
+def _map_layers(net: NetDrawing) -> dict[str, Any]:
+    min_x, min_y, max_x, max_y = net.bounds
+    return {
+        "bounds": {"min_x": min_x, "min_y": min_y, "max_x": max_x, "max_y": max_y},
+        "edges": [
+            {
+                "category": segment.category,
+                "points": [[x, y] for x, y in segment.points],
+            }
+            for segment in net.segments
+        ],
+        "junctions": [
+            {"id": junction_id, "x": point[0], "y": point[1]}
+            for junction_id, point in sorted(net.junctions.items())
+        ],
+        "traffic_lights": [{"x": point[0], "y": point[1]} for point in net.traffic_lights],
+    }
+
+
 def _font(size: int) -> ImageFont.ImageFont:
     try:
         return ImageFont.truetype("arial.ttf", size)
@@ -411,5 +430,6 @@ def build_network_review_visuals(
         "problem_overlay_png": str(problem_file),
         "reference_comparison_png": comparison_value,
         "cluster_zoom_pngs": cluster_zoom_pngs,
+        "map_layers": _map_layers(network),
         "warnings": [],
     }

@@ -256,11 +256,154 @@ def _review_status(color_group: str) -> str:
     }.get(color_group, "Unknown")
 
 
+def _map_layer_bounds(map_layers: Mapping[str, Any] | None) -> tuple[float, float, float, float] | None:
+    bounds = (map_layers or {}).get("bounds", {})
+    if not isinstance(bounds, Mapping):
+        return None
+    try:
+        min_x = float(bounds["min_x"])
+        min_y = float(bounds["min_y"])
+        max_x = float(bounds["max_x"])
+        max_y = float(bounds["max_y"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if min_x == max_x:
+        min_x -= 1.0
+        max_x += 1.0
+    if min_y == max_y:
+        min_y -= 1.0
+        max_y += 1.0
+    return min_x, min_y, max_x, max_y
+
+
+def _svg_number(value: float) -> str:
+    text = f"{value:.3f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _svg_points(points: Any) -> str:
+    projected = []
+    for point in points or []:
+        try:
+            x = float(point[0])
+            y = float(point[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        projected.append(f"{_svg_number(x)},{_svg_number(-y)}")
+    return " ".join(projected)
+
+
+def _network_svg(map_layers: Mapping[str, Any] | None, junctions: Sequence[Mapping[str, Any]]) -> str:
+    bounds = _map_layer_bounds(map_layers)
+    if bounds is None:
+        return '<div class="network-empty">No SUMO network geometry was available for the vector map.</div>'
+    min_x, min_y, max_x, max_y = bounds
+    width = max_x - min_x
+    height = max_y - min_y
+    view_box = f"{_svg_number(min_x)} {_svg_number(-max_y)} {_svg_number(width)} {_svg_number(height)}"
+    span = max(width, height)
+    junction_radius = max(span * 0.0028, 1.2)
+    tls_radius = max(span * 0.0045, 1.8)
+    cluster_radius = max(span * 0.009, 4.0)
+    edge_styles = {
+        "major": ("#00845f", "3.2", "1"),
+        "vehicle": ("#6d7f92", "2.2", "0.9"),
+        "soft": ("#c8d1cc", "1.25", "0.72"),
+    }
+    marker_fills = {
+        "green": "#00946d",
+        "amber": "#f59e0b",
+        "red": "#e11d28",
+        "slate": "#94a3b8",
+    }
+
+    edge_rows = []
+    for edge in (map_layers or {}).get("edges", []) or []:
+        if not isinstance(edge, Mapping):
+            continue
+        points = _svg_points(edge.get("points"))
+        if not points:
+            continue
+        category = str(edge.get("category", "soft"))
+        if category not in {"major", "vehicle", "soft"}:
+            category = "soft"
+        stroke, stroke_width, opacity = edge_styles[category]
+        edge_rows.append(
+            f'<polyline class="map-edge edge-{escape(category)}" points="{escape(points)}" '
+            f'fill="none" stroke="{stroke}" stroke-width="{stroke_width}" opacity="{opacity}" '
+            'stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>'
+        )
+
+    junction_rows = []
+    for junction in (map_layers or {}).get("junctions", []) or []:
+        if not isinstance(junction, Mapping):
+            continue
+        try:
+            x = float(junction["x"])
+            y = float(junction["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        junction_rows.append(
+            f'<circle class="map-junction" cx="{_svg_number(x)}" cy="{_svg_number(-y)}" '
+            f'r="{_svg_number(junction_radius)}" fill="#ffffff" stroke="#64748b" '
+            'stroke-width="1.2" opacity="0.62" vector-effect="non-scaling-stroke"></circle>'
+        )
+
+    tls_rows = []
+    for point in (map_layers or {}).get("traffic_lights", []) or []:
+        if not isinstance(point, Mapping):
+            continue
+        try:
+            x = float(point["x"])
+            y = float(point["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        tls_rows.append(
+            f'<circle class="map-tls" cx="{_svg_number(x)}" cy="{_svg_number(-y)}" '
+            f'r="{_svg_number(tls_radius)}" fill="#e11d28" stroke="#ffffff" '
+            'stroke-width="2.4" vector-effect="non-scaling-stroke"></circle>'
+        )
+
+    cluster_rows = []
+    for junction in junctions:
+        cluster_id = str(junction.get("cluster_id", ""))
+        if not cluster_id:
+            continue
+        try:
+            x = float(junction["x"])
+            y = float(junction["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        color_group = str(junction.get("color_group", "slate"))
+        marker_fill = marker_fills.get(color_group, marker_fills["slate"])
+        cluster_rows.append(
+            f'<circle class="junction-marker marker-{escape(color_group)}" '
+            f'cx="{_svg_number(x)}" cy="{_svg_number(-y)}" r="{_svg_number(cluster_radius)}" '
+            f'fill="{marker_fill}" stroke="#ffffff" stroke-width="4" vector-effect="non-scaling-stroke" '
+            f'data-junction-id="{escape(cluster_id)}" data-cluster-id="{escape(cluster_id)}" '
+            f'data-color-group="{escape(color_group)}" role="button" tabindex="0" '
+            f'aria-label="Select junction {escape(cluster_id)}"></circle>'
+        )
+
+    return (
+        f'<svg class="network-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" '
+        f'viewBox="{view_box}" preserveAspectRatio="xMidYMid meet" '
+        'style="position:absolute;inset:0;width:100%;height:100%;background:rgba(255,255,255,0.34)" '
+        'role="img" aria-label="SUMO network vector map">'
+        f'<g class="cleaned-edge-layer">{"".join(edge_rows)}</g>'
+        f'<g class="junction-layer">{"".join(junction_rows)}</g>'
+        f'<g class="tls-layer">{"".join(tls_rows)}</g>'
+        f'<g class="cluster-layer">{"".join(cluster_rows)}</g>'
+        "</svg>"
+    )
+
+
 def _cluster_review_records(
     cluster_zoom_pngs: Sequence[Mapping[str, Any]],
     *,
     topology_audit_report: Mapping[str, Any] | None,
     base_dir: Path,
+    map_bounds: tuple[float, float, float, float] | None = None,
 ) -> list[dict[str, Any]]:
     sources = _source_clusters(topology_audit_report)
     records: list[dict[str, Any]] = []
@@ -286,10 +429,14 @@ def _cluster_review_records(
                 "status_label": _review_status(color_group),
             }
         )
-    return _position_review_records(records)
+    return _position_review_records(records, bounds=map_bounds)
 
 
-def _position_review_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _position_review_records(
+    records: list[dict[str, Any]],
+    *,
+    bounds: tuple[float, float, float, float] | None = None,
+) -> list[dict[str, Any]]:
     points: list[tuple[int, float, float]] = []
     for index, record in enumerate(records):
         try:
@@ -298,10 +445,13 @@ def _position_review_records(records: list[dict[str, Any]]) -> list[dict[str, An
             pass
     if not points:
         return records
-    xs = [point[1] for point in points]
-    ys = [point[2] for point in points]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
+    if bounds is None:
+        xs = [point[1] for point in points]
+        ys = [point[2] for point in points]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+    else:
+        min_x, min_y, max_x, max_y = bounds
     for index, x, y in points:
         x_pct = 50.0 if min_x == max_x else 12.0 + ((x - min_x) / (max_x - min_x) * 76.0)
         y_pct = 50.0 if min_y == max_y else 12.0 + ((max_y - y) / (max_y - min_y) * 76.0)
@@ -353,6 +503,7 @@ def _review_app_data(
             "problem_overlay_png": _portable_path(visualization_report.get("problem_overlay_png"), output_dir),
             "reference_comparison_png": _portable_path(visualization_report.get("reference_comparison_png"), output_dir),
         },
+        "map_layers": dict(visualization_report.get("map_layers") or {}),
         "junctions": list(junctions),
         "review_queue": list(actions),
         "warnings": list(warnings),
@@ -385,22 +536,6 @@ def _summary_cards(cards: Mapping[str, Any]) -> str:
         "</article>"
         for key, label in labels.items()
     )
-
-
-def _map_markers(junctions: Sequence[Mapping[str, Any]]) -> str:
-    markers = []
-    for junction in junctions:
-        cluster_id = str(junction.get("cluster_id", ""))
-        x_pct = float(junction.get("map_x_pct", 50.0) or 50.0)
-        y_pct = float(junction.get("map_y_pct", 50.0) or 50.0)
-        color_group = str(junction.get("color_group", "slate"))
-        markers.append(
-            f'<button type="button" class="junction-marker marker-{escape(color_group)}" '
-            f'style="left:{x_pct:.2f}%; top:{y_pct:.2f}%;" '
-            f'data-junction-id="{escape(cluster_id)}" '
-            f'aria-label="Select junction {escape(cluster_id)}"></button>'
-        )
-    return "\n".join(markers)
 
 
 def _junction_cards(junctions: Sequence[Mapping[str, Any]]) -> str:
@@ -630,6 +765,7 @@ def build_workflow_review_html(
         cluster_zoom_pngs,
         topology_audit_report=topology_audit_report,
         base_dir=output_dir,
+        map_bounds=_map_layer_bounds(visualization_report.get("map_layers")),
     )
     review_app = _review_app_data(
         title=title,
@@ -686,13 +822,11 @@ def build_workflow_review_html(
         visual_panels = "<p>No network visualization could be generated for this review.</p>"
     cluster_zoom_panels = _cluster_zoom_gallery(cluster_zoom_pngs, base_dir=output_dir)
     color_buttons = _color_batch_buttons(cluster_zoom_pngs)
-    network_preview_src = _image_src(visualization_report.get("network_overview_png"), base_dir=output_dir)
-    problem_overlay_src = _image_src(visualization_report.get("problem_overlay_png"), base_dir=output_dir)
     review_data_json = _json_script(review_app)
     nav_items = _review_nav_items(review_app["navigation"])
     summary_card_html = _summary_cards(review_app["summary_cards"])
-    map_marker_html = _map_markers(review_junctions)
     junction_card_html = _junction_cards(review_junctions)
+    network_svg = _network_svg(review_app.get("map_layers"), review_junctions)
     review_script = """
   <script>
     (function () {
@@ -764,9 +898,7 @@ def build_workflow_review_html(
       }
 
       function clearAggregationSelection() {
-        aggregateCheckboxes().forEach((checkbox) => {
-          checkbox.checked = false;
-        });
+        clusterIds().forEach((id) => syncClusterSelection(id, false));
         updateAggregationCount();
       }
 
@@ -845,7 +977,7 @@ def build_workflow_review_html(
           updateAggregationCount();
         });
       });
-      document.querySelectorAll("[data-junction-id]").forEach((element) => {
+      document.querySelectorAll("[data-junction-id]:not(.junction-marker)").forEach((element) => {
         element.addEventListener("click", (event) => {
           if (event.target.closest("a, button, input")) {
             return;
@@ -854,7 +986,17 @@ def build_workflow_review_html(
         });
       });
       document.querySelectorAll(".junction-marker").forEach((marker) => {
-        marker.addEventListener("click", () => toggleClusterSelection(marker.getAttribute("data-junction-id")));
+        marker.addEventListener("click", (event) => {
+          event.stopPropagation();
+          toggleClusterSelection(marker.getAttribute("data-junction-id"));
+        });
+        marker.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") {
+            return;
+          }
+          event.preventDefault();
+          toggleClusterSelection(marker.getAttribute("data-junction-id"));
+        });
       });
       document.querySelectorAll("[data-zoom-src]").forEach((trigger) => {
         trigger.addEventListener("click", () => openZoom(trigger));
@@ -917,13 +1059,13 @@ def build_workflow_review_html(
   <title>{escape(title)}</title>
   <style>
     * {{ box-sizing: border-box; }}
-    body {{ margin: 0; font-family: Arial, sans-serif; color: #102033; background: #eef4f0; line-height: 1.35; }}
+    body {{ margin: 0; height: 100vh; overflow: hidden; font-family: Arial, sans-serif; color: #102033; background: #eef4f0; line-height: 1.35; }}
     button, input, textarea {{ font: inherit; }}
     button, a {{ border-radius: 6px; }}
     button {{ cursor: pointer; }}
     a {{ color: #075f46; text-decoration: none; }}
     code {{ background: #eef2f7; padding: 1px 4px; border-radius: 3px; }}
-    .torii-review-app {{ display: grid; grid-template-columns: 240px minmax(620px, 1fr) 420px; min-height: 100vh; background: #ffffff; }}
+    .torii-review-app {{ display: grid; grid-template-columns: 240px minmax(620px, 1fr) 420px; height: 100vh; min-height: 0; overflow: hidden; background: #ffffff; }}
     .torii-sidebar {{ display: flex; flex-direction: column; border-right: 1px solid #d7e2dc; background: #ffffff; }}
     .brand {{ display: flex; gap: 10px; align-items: center; padding: 18px 16px; border-bottom: 1px solid #e2ebe6; }}
     .brand-mark {{ display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #9fdbc5; color: #00845f; background: #ecfbf5; border-radius: 7px; font-weight: 700; }}
@@ -934,17 +1076,23 @@ def build_workflow_review_html(
     .nav-item.active {{ border-color: #b7ead8; background: #ebfbf4; color: #007a58; font-weight: 700; }}
     .nav-dot {{ width: 14px; height: 14px; border: 2px solid currentColor; border-radius: 50%; }}
     .sidebar-footer {{ margin-top: auto; padding: 16px; color: #546779; font: 12px Consolas, monospace; border-top: 1px solid #e2ebe6; }}
-    .torii-map-shell {{ min-width: 0; display: grid; grid-template-rows: auto 1fr; background: #f8fbf9; }}
+    .torii-map-shell {{ min-width: 0; min-height: 0; display: grid; grid-template-rows: auto 1fr; background: #f8fbf9; }}
     .map-topbar {{ display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #d7e2dc; background: #ffffff; }}
     .map-topbar h1 {{ margin: 0; font-size: 18px; }}
     .stat-pill {{ padding: 6px 10px; border: 1px solid #d7e2dc; color: #637487; background: #fbfdfc; font: 12px Consolas, monospace; }}
     .topbar-spacer {{ flex: 1; }}
     .tool-button {{ border: 1px solid #d7e2dc; background: #ffffff; padding: 8px 10px; color: #102033; }}
-    .map-viewport {{ position: relative; overflow: hidden; min-height: 650px; touch-action: none; background-color: #f7fbf8; background-image: linear-gradient(#e7f0eb 1px, transparent 1px), linear-gradient(90deg, #e7f0eb 1px, transparent 1px); background-size: 32px 32px; }}
-    .map-canvas {{ position: absolute; inset: 0; transform-origin: 50% 50%; transition: transform 120ms ease; }}
-    .map-image {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; transform: scale(1.18); opacity: 0.68; mix-blend-mode: multiply; }}
-    .overview-image {{ opacity: 0.28; }}
-    .map-viewport.hide-cleaned .overview-image, .map-viewport.hide-clusters .junction-marker {{ display: none; }}
+    .map-viewport {{ position: relative; overflow: hidden; min-height: 0; height: 100%; touch-action: none; background-color: #f7fbf8; background-image: linear-gradient(#e7f0eb 1px, transparent 1px), linear-gradient(90deg, #e7f0eb 1px, transparent 1px); background-size: 32px 32px; }}
+    .map-canvas {{ position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: 50% 50%; transition: transform 120ms ease; }}
+    .network-svg {{ position: absolute; inset: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.34); }}
+    .network-empty {{ display: grid; place-items: center; width: 100%; height: 100%; color: #5c6d7e; }}
+    .map-edge {{ fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }}
+    .edge-soft {{ stroke: #c8d1cc; stroke-width: 1.25; opacity: 0.72; }}
+    .edge-vehicle {{ stroke: #6d7f92; stroke-width: 2.2; opacity: 0.9; }}
+    .edge-major {{ stroke: #00845f; stroke-width: 3.2; }}
+    .map-junction {{ fill: #ffffff; stroke: #64748b; stroke-width: 1.2; opacity: 0.62; vector-effect: non-scaling-stroke; }}
+    .map-tls {{ fill: #e11d28; stroke: #ffffff; stroke-width: 2.4; vector-effect: non-scaling-stroke; }}
+    .map-viewport.hide-cleaned .cleaned-edge-layer, .map-viewport.hide-junctions .junction-layer, .map-viewport.hide-tls .tls-layer, .map-viewport.hide-clusters .cluster-layer {{ display: none; }}
     .map-controls {{ position: absolute; left: 16px; top: 24px; display: grid; gap: 8px; z-index: 2; }}
     .map-controls button {{ width: 40px; height: 36px; border: 1px solid #d7e2dc; background: #ffffff; font-weight: 700; }}
     .layers {{ position: absolute; right: 18px; top: 26px; width: 220px; padding: 12px; border: 1px solid #d7e2dc; border-radius: 8px; background: #ffffff; box-shadow: 0 8px 22px rgba(16, 32, 51, 0.08); z-index: 2; }}
@@ -953,13 +1101,17 @@ def build_workflow_review_html(
     .legend {{ position: absolute; left: 16px; bottom: 20px; width: 260px; padding: 12px; border: 1px solid #d7e2dc; border-radius: 8px; background: #ffffff; box-shadow: 0 8px 22px rgba(16, 32, 51, 0.08); z-index: 2; }}
     .legend button {{ display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; padding: 4px 0; color: #102033; text-align: left; }}
     .color-dot {{ display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; }}
-    .color-green, .marker-green, .color-dot.color-green {{ background: #00946d; }}
-    .color-amber, .marker-amber, .color-dot.color-amber {{ background: #f59e0b; }}
-    .color-red, .marker-red, .color-dot.color-red {{ background: #e11d28; }}
-    .color-slate, .marker-slate, .color-dot.color-slate {{ background: #94a3b8; }}
-    .junction-marker {{ position: absolute; width: 18px; height: 18px; border: 4px solid #ffffff; border-radius: 50%; box-shadow: 0 0 0 5px rgba(0, 148, 109, 0.18), 0 6px 16px rgba(16, 32, 51, 0.18); transform: translate(-50%, -50%); z-index: 3; }}
-    .junction-marker.selected {{ box-shadow: 0 0 0 7px rgba(0, 132, 95, 0.24), 0 0 0 12px rgba(0, 132, 95, 0.12); }}
-    .torii-review-panel {{ display: grid; grid-template-rows: auto auto auto 1fr auto; min-width: 0; border-left: 1px solid #d7e2dc; background: #ffffff; }}
+    .color-green, .color-dot.color-green {{ background: #00946d; }}
+    .color-amber, .color-dot.color-amber {{ background: #f59e0b; }}
+    .color-red, .color-dot.color-red {{ background: #e11d28; }}
+    .color-slate, .color-dot.color-slate {{ background: #94a3b8; }}
+    .marker-green {{ fill: #00946d; }}
+    .marker-amber {{ fill: #f59e0b; }}
+    .marker-red {{ fill: #e11d28; }}
+    .marker-slate {{ fill: #94a3b8; }}
+    .junction-marker {{ cursor: pointer; stroke: #ffffff; stroke-width: 4; vector-effect: non-scaling-stroke; filter: drop-shadow(0 4px 8px rgba(16, 32, 51, 0.24)); }}
+    .junction-marker.selected {{ stroke: #006f52; stroke-width: 6; }}
+    .torii-review-panel {{ display: grid; grid-template-rows: auto auto auto 1fr auto; min-width: 0; min-height: 0; max-height: 100vh; border-left: 1px solid #d7e2dc; background: #ffffff; }}
     .panel-collapsed {{ grid-template-columns: 240px minmax(620px, 1fr) 44px; }}
     .panel-collapsed .panel-body, .panel-collapsed .panel-actions, .panel-collapsed .panel-intro, .panel-collapsed .summary-grid, .panel-collapsed .panel-title h2, .panel-collapsed .panel-title p {{ display: none; }}
     .panel-title {{ display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 18px 16px 14px; border-bottom: 1px solid #d7e2dc; }}
@@ -969,7 +1121,7 @@ def build_workflow_review_html(
     .summary-card {{ min-width: 0; border: 1px solid #dce6e1; border-radius: 8px; padding: 14px; background: #fbfdfc; }}
     .summary-card strong {{ display: block; font-size: 20px; margin-bottom: 4px; }}
     .summary-card span {{ color: #5c6d7e; font-size: 12px; }}
-    .panel-body {{ overflow: auto; padding: 12px 14px; }}
+    .panel-body {{ min-height: 0; overflow: auto; padding: 12px 14px; }}
     .filters {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .filters summary {{ border: 1px solid #dce6e1; border-radius: 7px; padding: 9px 10px; color: #334765; background: #ffffff; cursor: pointer; }}
     .batch-controls {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }}
@@ -1000,9 +1152,13 @@ def build_workflow_review_html(
     .zoom-modal[hidden] {{ display: none; }}
     .zoom-modal img {{ max-width: 96vw; max-height: 92vh; background: #ffffff; border: 2px solid #ffffff; }}
     @media (max-width: 1080px) {{
+      body {{ height: auto; overflow: auto; }}
       .torii-review-app {{ grid-template-columns: 1fr; }}
+      .torii-review-app {{ height: auto; min-height: 100vh; overflow: visible; }}
       .torii-sidebar {{ display: none; }}
-      .torii-review-panel {{ min-height: 520px; border-left: 0; border-top: 1px solid #d7e2dc; }}
+      .torii-map-shell {{ min-height: 640px; }}
+      .map-viewport {{ min-height: 560px; }}
+      .torii-review-panel {{ min-height: 520px; max-height: none; border-left: 0; border-top: 1px solid #d7e2dc; }}
     }}
   </style>
 </head>
@@ -1040,14 +1196,12 @@ def build_workflow_review_html(
         <div class="layers">
           <strong>Layers</strong>
           <label>Cleaned edges <input type="checkbox" data-layer="cleaned" checked></label>
-          <label>OSM source ways <input type="checkbox" checked></label>
+          <label>Junction dots <input type="checkbox" data-layer="junctions" checked></label>
           <label>Uncertainty clusters <input type="checkbox" data-layer="clusters" checked></label>
-          <label>Lane links <input type="checkbox" checked></label>
+          <label>Traffic lights <input type="checkbox" data-layer="tls" checked></label>
         </div>
         <div class="map-canvas" id="map-canvas">
-          <img class="map-image overview-image" src="{network_preview_src}" alt="Network Preview">
-          <img class="map-image problem-image" src="{problem_overlay_src}" alt="Problem Map">
-          {map_marker_html}
+          {network_svg}
         </div>
         <div class="legend">
           <strong>Uncertainty Legend</strong>
