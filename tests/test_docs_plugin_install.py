@@ -39,6 +39,7 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     assert "sumo_network_routeability_probe" in doc
     assert "sumo_network_routeability_audit" in doc
     assert "sumo_network_overlapping_junction_audit" in doc
+    assert "sumo_network_teacher_guided_junction_variant" in doc
     assert "tiled Overpass" in doc
     assert "retry" in doc
     assert "deduplicate" in doc

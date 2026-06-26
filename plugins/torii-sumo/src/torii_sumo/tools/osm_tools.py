@@ -6,6 +6,7 @@ from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
 from torii_sumo.core.junction_aggregation import build_junction_aggregation_variant
+from torii_sumo.core.junction_rebuild_candidate import build_teacher_guided_junction_variant
 from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
 from torii_sumo.core.osm_network import (
     audit_tls,
@@ -311,6 +312,40 @@ def sumo_network_tls_aggregation_variant(
         tls_audit_report=_read_json_report(tls_audit_report_file) or {},
         output_dir=Path(output_dir),
         prefix=prefix,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def sumo_network_teacher_guided_junction_variant(
+    raw_node_file: str,
+    raw_edge_file: str,
+    raw_connection_file: str,
+    teacher_net_file: str,
+    candidate_net_file: str,
+    junction_id: str,
+    output_dir: str,
+    edge_map: dict[str, str],
+    prefix: str = "teacher_guided_junction",
+    raw_type_file: str | None = None,
+    crossing_edge_overrides: dict[str, str | list[str]] | None = None,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_teacher_guided_junction_variant(
+        raw_node_file=Path(raw_node_file),
+        raw_edge_file=Path(raw_edge_file),
+        raw_connection_file=Path(raw_connection_file),
+        raw_type_file=Path(raw_type_file) if raw_type_file else None,
+        teacher_net_file=Path(teacher_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        junction_id=junction_id,
+        output_dir=Path(output_dir),
+        edge_map=edge_map,
+        prefix=prefix,
+        crossing_edge_overrides=crossing_edge_overrides,
+        netconvert_binary=netconvert_binary,
+        sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
     )
 

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 import xml.etree.ElementTree as ET
 
+from .command_runner import run_command
 from .junction_connection_audit import build_connection_signature, write_connection_signature
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
+from .junction_teacher_model import extract_teacher_junction_model
 
 
 def build_rebuild_candidate(
@@ -394,6 +397,176 @@ def write_teacher_tllogic_net(
     }
 
 
+def build_teacher_guided_junction_variant(
+    *,
+    raw_node_file: Path,
+    raw_edge_file: Path,
+    raw_connection_file: Path,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    junction_id: str,
+    output_dir: Path,
+    edge_map: dict[str, str],
+    prefix: str = "teacher_guided_junction",
+    raw_type_file: Path | None = None,
+    crossing_edge_overrides: dict[str, str | list[str]] | None = None,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+    command_runner: Any = run_command,
+) -> dict[str, object]:
+    missing = [
+        str(path)
+        for path in (raw_node_file, raw_edge_file, raw_connection_file, teacher_net_file, candidate_net_file)
+        if not path.exists()
+    ]
+    if raw_type_file is not None and not raw_type_file.exists():
+        missing.append(str(raw_type_file))
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+
+    raw_node_file = raw_node_file.resolve()
+    raw_edge_file = raw_edge_file.resolve()
+    raw_connection_file = raw_connection_file.resolve()
+    teacher_net_file = teacher_net_file.resolve()
+    candidate_net_file = candidate_net_file.resolve()
+    raw_type_file = raw_type_file.resolve() if raw_type_file is not None else None
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    teacher_model = extract_teacher_junction_model(teacher_net_file, junction_id)
+    candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
+
+    patched_edge_file = output_dir / f"{prefix}_lanes.edg.xml"
+    connection_file = output_dir / f"{prefix}.con.xml"
+    sidewalks_net_file = output_dir / f"{prefix}_sidewalks.net.xml"
+    pedring_net_file = output_dir / f"{prefix}_pedring.net.xml"
+    final_net_file = output_dir / f"{prefix}_teacher_guided.net.xml"
+    report_file = output_dir / f"{prefix}_teacher_guided_report.json"
+
+    lane_patch_report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw_edge_file,
+        teacher_edge_file=teacher_net_file,
+        output_file=patched_edge_file,
+        edge_map=edge_map,
+    )
+    connection_report = write_teacher_connection_plan(
+        raw_connection_file=raw_connection_file,
+        output_file=connection_file,
+        junction_id=junction_id,
+        teacher_model=teacher_model,
+        candidate_model=candidate_model,
+        edge_map=edge_map,
+        crossing_edge_overrides=crossing_edge_overrides,
+        candidate_edge_file=patched_edge_file,
+    )
+
+    netconvert_command = [
+        netconvert_binary,
+        "--node-files",
+        str(raw_node_file),
+        "--edge-files",
+        str(patched_edge_file),
+        "--connection-files",
+        str(connection_file),
+        "--output-file",
+        str(sidewalks_net_file),
+        "--walkingareas",
+        "true",
+        "--sidewalks.guess",
+        "true",
+    ]
+    if raw_type_file is not None:
+        netconvert_command[5:5] = ["--type-files", str(raw_type_file)]
+    netconvert_result = command_runner(netconvert_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+    netconvert_report = _command_report(netconvert_result)
+    if netconvert_report.get("status") != "pass":
+        return _write_teacher_guided_report(
+            report_file,
+            {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "junction_id": junction_id,
+                "teacher_net_file": str(teacher_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "netconvert": netconvert_report,
+                "lane_patch": lane_patch_report,
+                "connection_plan": connection_report,
+            },
+        )
+
+    pedestrian_ring_report = write_teacher_pedestrian_ring_net(
+        candidate_net_file=sidewalks_net_file,
+        output_file=pedring_net_file,
+        junction_id=junction_id,
+        teacher_model=teacher_model,
+        edge_map=edge_map,
+        crossing_edge_overrides=crossing_edge_overrides,
+    )
+    tl_logic_report = write_teacher_tllogic_net(
+        candidate_net_file=pedring_net_file,
+        output_file=final_net_file,
+        junction_id=junction_id,
+        teacher_model=teacher_model,
+    )
+    if tl_logic_report.get("status") != "pass":
+        return _write_teacher_guided_report(
+            report_file,
+            {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "junction_id": junction_id,
+                "teacher_net_file": str(teacher_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "netconvert": netconvert_report,
+                "lane_patch": lane_patch_report,
+                "connection_plan": connection_report,
+                "pedestrian_ring": pedestrian_ring_report,
+                "tl_logic": tl_logic_report,
+            },
+        )
+
+    sumo_command = [
+        sumo_binary,
+        "-n",
+        str(final_net_file),
+        "--no-step-log",
+        "true",
+        "--duration-log.disable",
+        "true",
+        "--begin",
+        "0",
+        "--end",
+        "1",
+    ]
+    sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
+    final_model = extract_teacher_junction_model(final_net_file, junction_id)
+    status = "pass" if sumo_report.get("status") == "pass" else "fail"
+    return _write_teacher_guided_report(
+        report_file,
+        {
+            "status": status,
+            "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+            "junction_id": junction_id,
+            "teacher_net_file": str(teacher_net_file),
+            "candidate_net_file": str(candidate_net_file),
+            "final_net_file": str(final_net_file),
+            "patched_edge_file": str(patched_edge_file),
+            "connection_file": str(connection_file),
+            "sidewalks_net_file": str(sidewalks_net_file),
+            "pedring_net_file": str(pedring_net_file),
+            "report_file": str(report_file),
+            "lane_patch": lane_patch_report,
+            "connection_plan": connection_report,
+            "netconvert": netconvert_report,
+            "pedestrian_ring": pedestrian_ring_report,
+            "tl_logic": tl_logic_report,
+            "sumo_load": sumo_report,
+            "parity": _compare_teacher_models(teacher_model, final_model),
+            "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
+        },
+    )
+
+
 def _should_emit(movement: dict[str, object]) -> bool:
     return movement.get("status") == "emit" and float(movement.get("confidence", 0.0)) >= 0.5
 
@@ -504,6 +677,61 @@ def _map_teacher_pedestrian_endpoint(
     if edge_id.startswith(":"):
         return None
     return edge_map.get(edge_id, edge_id)
+
+
+def _command_report(result: Any) -> dict[str, object]:
+    if hasattr(result, "to_dict"):
+        payload = result.to_dict()
+    elif isinstance(result, dict):
+        payload = dict(result)
+    else:
+        payload = {
+            "status": getattr(result, "status", "fail"),
+            "returncode": getattr(result, "returncode", None),
+        }
+    if "status" not in payload:
+        payload["status"] = "pass" if payload.get("returncode") == 0 else "fail"
+    return payload
+
+
+def _compare_teacher_models(teacher_model: dict[str, Any], candidate_model: dict[str, Any]) -> dict[str, object]:
+    teacher_summary = _teacher_parity_summary(teacher_model)
+    candidate_summary = _teacher_parity_summary(candidate_model)
+    keys = sorted(set(teacher_summary) | set(candidate_summary))
+    return {
+        "teacher": teacher_summary,
+        "candidate": candidate_summary,
+        "delta": {
+            key: candidate_summary.get(key, 0) - teacher_summary.get(key, 0)
+            for key in keys
+            if isinstance(candidate_summary.get(key, 0), int) and isinstance(teacher_summary.get(key, 0), int)
+        },
+    }
+
+
+def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
+    summary = dict(model.get("summary", {}) if isinstance(model.get("summary"), dict) else {})
+    traffic_light = model.get("traffic_light", {})
+    phases = traffic_light.get("phases", []) if isinstance(traffic_light, dict) else []
+    phase_states = [str(phase.get("state", "")) for phase in phases if isinstance(phase, dict)]
+    vehicle_connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
+    pedestrian_connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
+    summary["tl_phase_state_lengths"] = sorted({len(state) for state in phase_states})
+    summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections)
+    summary["controlled_pedestrian_link_count"] = _controlled_link_count(pedestrian_connections)
+    summary["controlled_link_count"] = summary["controlled_vehicle_link_count"] + summary["controlled_pedestrian_link_count"]
+    return summary
+
+
+def _controlled_link_count(connections: list[object]) -> int:
+    return sum(1 for connection in connections if isinstance(connection, dict) and connection.get("tl") and connection.get("linkIndex"))
+
+
+def _write_teacher_guided_report(path: Path, report: dict[str, object]) -> dict[str, object]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    report["report_file"] = str(path)
+    return report
 
 
 def _failure(error: str) -> dict[str, object]:

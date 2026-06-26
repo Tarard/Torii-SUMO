@@ -27,6 +27,7 @@ Do not describe this as skills being inside MCP. The Codex plugin bundles both c
 - reference-matched scope cleanup => `sumo_network_reference_scope_audit` on the candidate `reference_visual_detail` network, then inspect type-count deltas and short detail-fragment candidates before any pruning
 - junction aggregation review variant => `sumo_network_junction_aggregation_variant`, using topology, reference-join, or overlapping-junction audit reports to produce a separate `*_junction_aggregated.net.xml` review network without overwriting the source network; overlapping groups require reference or human confirmation before join
 - scope pruning review variant => `sumo_network_scope_pruning_variant`, using a reference-scope audit report to produce a separate `*_scope_pruned.net.xml` review network without overwriting the source network
+- teacher-guided single-junction repair probe => `sumo_network_teacher_guided_junction_variant`, using a reference `.net.xml`, candidate plain `.nod/.edg/.con/.typ` files, an explicit edge map, and optional crossing overrides to produce a separate diagnostic variant; inspect parity deltas and Netedit connection mode before adoption
 - named-road connectivity check => `sumo_network_routeability_probe`, then run or inspect the generated `.sumocfg`
 - evidence handoff => `sumo_collect_evidence`
 
