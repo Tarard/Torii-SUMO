@@ -31,6 +31,7 @@ plugins/
 skills/
   simulation-helper-skill-for-eclipse-sumo/
   debugging-helper-skill-for-eclipse-sumo/
+  sumo-experiment-problem-solving/
 docs/
   index.html
   assets/
