@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 @dataclass(frozen=True)
 class Segment:
+    edge_id: str
     points: tuple[tuple[float, float], ...]
     category: str
 
@@ -85,7 +86,7 @@ def _read_net(net_file: Path) -> NetDrawing:
         if len(points) < 2:
             continue
         all_points.extend(points)
-        segments.append(Segment(points=points, category=_edge_category(edge.get("type", ""))))
+        segments.append(Segment(edge_id=edge_id, points=points, category=_edge_category(edge.get("type", ""))))
 
     for junction in root.findall("junction"):
         junction_id = junction.get("id", "")
@@ -170,6 +171,7 @@ def _map_layers(net: NetDrawing) -> dict[str, Any]:
         "bounds": {"min_x": min_x, "min_y": min_y, "max_x": max_x, "max_y": max_y},
         "edges": [
             {
+                "id": segment.edge_id,
                 "category": segment.category,
                 "points": [[x, y] for x, y in segment.points],
             }

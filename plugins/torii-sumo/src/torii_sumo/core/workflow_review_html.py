@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import xml.etree.ElementTree as ET
 from html import escape
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -293,6 +294,200 @@ def _svg_points(points: Any) -> str:
     return " ".join(projected)
 
 
+def _list_value(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [item for item in value.split(";") if item]
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        return [str(item) for item in value if str(item)]
+    return []
+
+
+def _review_color(color_group: str) -> str:
+    return {
+        "green": "0,153,112",
+        "amber": "245,158,11",
+        "red": "225,29,72",
+        "slate": "100,116,139",
+    }.get(color_group, "100,116,139")
+
+
+def _review_box_shape(x: float, y: float, radius: float) -> str:
+    points = (
+        (x - radius, y - radius),
+        (x + radius, y - radius),
+        (x + radius, y + radius),
+        (x - radius, y + radius),
+        (x - radius, y - radius),
+    )
+    return " ".join(f"{_svg_number(px)},{_svg_number(py)}" for px, py in points)
+
+
+def _sumo_shape(points: Any) -> str:
+    values = []
+    for point in points or []:
+        try:
+            values.append(f"{_svg_number(float(point[0]))},{_svg_number(float(point[1]))}")
+        except (TypeError, ValueError, IndexError):
+            continue
+    return " ".join(values)
+
+
+def _netedit_review_radius(junction: Mapping[str, Any], bounds: tuple[float, float, float, float] | None) -> float:
+    try:
+        return max(float(junction.get("cluster_radius_m") or 0), 8.0)
+    except (TypeError, ValueError):
+        pass
+    if bounds is None:
+        return 12.0
+    min_x, min_y, max_x, max_y = bounds
+    return min(max(max(max_x - min_x, max_y - min_y) * 0.008, 8.0), 40.0)
+
+
+def _write_netedit_review_files(
+    *,
+    output_dir: Path,
+    prefix: str,
+    net_file: str | Path | None,
+    map_layers: Mapping[str, Any] | None,
+    junctions: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    net_path = _as_path(net_file)
+    if net_path is None or not junctions:
+        return {"status": "skipped"}
+
+    additional_file = output_dir / f"{prefix}_netedit_review.add.xml"
+    sumocfg_file = output_dir / f"{prefix}_netedit_review.sumocfg"
+    bounds = _map_layer_bounds(map_layers)
+    edges = {str(edge.get("id")): edge for edge in (map_layers or {}).get("edges", []) if isinstance(edge, Mapping)}
+    nodes = {
+        str(node.get("id")): node
+        for node in (map_layers or {}).get("junctions", [])
+        if isinstance(node, Mapping)
+    }
+    root = ET.Element(
+        "additional",
+        {
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "xsi:noNamespaceSchemaLocation": "http://sumo.dlr.de/xsd/additional_file.xsd",
+        },
+    )
+    poly_index = 0
+    poi_index = 0
+
+    for junction in junctions:
+        cluster_id = str(junction.get("cluster_id") or "")
+        if not cluster_id:
+            continue
+        try:
+            x = float(junction["x"])
+            y = float(junction["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        color_group = str(junction.get("color_group", "slate"))
+        color = _review_color(color_group)
+        radius = _netedit_review_radius(junction, bounds)
+        ET.SubElement(
+            root,
+            "poly",
+            {
+                "id": f"torii_{cluster_id}_review_box",
+                "type": f"torii.cluster.{color_group}",
+                "color": color,
+                "fill": "false",
+                "layer": "99.00",
+                "lineWidth": "3.00",
+                "shape": _review_box_shape(x, y, radius),
+                "name": f"{cluster_id} {junction.get('status_label', 'review')}",
+            },
+        )
+        ET.SubElement(
+            root,
+            "poi",
+            {
+                "id": f"torii_{cluster_id}",
+                "type": f"torii.cluster.{color_group}",
+                "color": color,
+                "layer": "100.00",
+                "x": _svg_number(x),
+                "y": _svg_number(y),
+                "width": "12.00",
+                "height": "12.00",
+                "name": f"{cluster_id} {junction.get('status_label', 'review')}",
+            },
+        )
+        for edge_group, edge_color, width in (
+            ("internal_edge_ids", color, "4.00"),
+            ("boundary_edge_ids", "37,99,235", "2.50"),
+        ):
+            for edge_id in _list_value(junction.get(edge_group)):
+                shape = _sumo_shape(edges.get(edge_id, {}).get("points"))
+                if not shape:
+                    continue
+                poly_index += 1
+                ET.SubElement(
+                    root,
+                    "poly",
+                    {
+                        "id": f"torii_{cluster_id}_edge_{poly_index}",
+                        "type": f"torii.cluster.{edge_group}",
+                        "color": edge_color,
+                        "fill": "false",
+                        "layer": "98.00",
+                        "lineWidth": width,
+                        "shape": shape,
+                        "name": f"{cluster_id} {edge_group}",
+                    },
+                )
+        for node_id in _list_value(junction.get("node_ids")):
+            node = nodes.get(node_id)
+            if not node:
+                continue
+            try:
+                node_x = float(node["x"])
+                node_y = float(node["y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            poi_index += 1
+            ET.SubElement(
+                root,
+                "poi",
+                {
+                    "id": f"torii_{cluster_id}_node_{poi_index}",
+                    "type": "torii.cluster.member_junction",
+                    "color": color,
+                    "layer": "101.00",
+                    "x": _svg_number(node_x),
+                    "y": _svg_number(node_y),
+                    "width": "5.00",
+                    "height": "5.00",
+                    "name": f"{cluster_id} {node_id}",
+                },
+            )
+
+    ET.indent(root)
+    ET.ElementTree(root).write(additional_file, encoding="utf-8", xml_declaration=True)
+
+    config = ET.Element("configuration")
+    config_input = ET.SubElement(config, "input")
+    ET.SubElement(config_input, "net-file", {"value": _portable_path(net_path, output_dir)})
+    ET.SubElement(config_input, "additional-files", {"value": _portable_path(additional_file, output_dir)})
+    time = ET.SubElement(config, "time")
+    ET.SubElement(time, "end", {"value": "0"})
+    ET.indent(config)
+    ET.ElementTree(config).write(sumocfg_file, encoding="utf-8", xml_declaration=True)
+
+    return {
+        "status": "pass",
+        "additional_file": str(additional_file),
+        "sumocfg_file": str(sumocfg_file),
+        "netedit_command": f'netedit --sumocfg-file "{sumocfg_file}"',
+        "cluster_count": len(junctions),
+        "edge_overlay_count": poly_index,
+        "junction_overlay_count": poi_index,
+    }
+
+
 def _network_svg(map_layers: Mapping[str, Any] | None, junctions: Sequence[Mapping[str, Any]]) -> str:
     bounds = _map_layer_bounds(map_layers)
     if bounds is None:
@@ -422,6 +617,12 @@ def _cluster_review_records(
                 "modal_reason": str(merged.get("modal_reason", "modal review required")),
                 "google_maps_url": str(merged.get("google_maps_url", merged.get("map_review_url", ""))),
                 "image_file": _portable_path(merged.get("image_file"), base_dir),
+                "node_ids": _list_value(merged.get("node_ids")),
+                "internal_edge_ids": _list_value(merged.get("internal_edge_ids")),
+                "boundary_edge_ids": _list_value(merged.get("boundary_edge_ids")),
+                "external_junction_ids": _list_value(merged.get("external_junction_ids")),
+                "risk_flags": _list_value(merged.get("risk_flags")),
+                "cluster_radius_m": merged.get("cluster_radius_m", ""),
                 "x": merged.get("x", merged.get("centroid_x", "")),
                 "y": merged.get("y", merged.get("centroid_y", "")),
                 "color_group": color_group,
@@ -767,6 +968,16 @@ def build_workflow_review_html(
         base_dir=output_dir,
         map_bounds=_map_layer_bounds(visualization_report.get("map_layers")),
     )
+    netedit_review = _write_netedit_review_files(
+        output_dir=output_dir,
+        prefix=prefix,
+        net_file=net_file or connected_core_file or raw_net_file,
+        map_layers=visualization_report.get("map_layers"),
+        junctions=review_junctions,
+    )
+    if netedit_review.get("status") == "pass":
+        artifacts["netedit_review_additional_file"] = _as_path(netedit_review.get("additional_file"))
+        artifacts["netedit_review_sumocfg_file"] = _as_path(netedit_review.get("sumocfg_file"))
     review_app = _review_app_data(
         title=title,
         claim_status=claim_status,
@@ -780,6 +991,16 @@ def build_workflow_review_html(
         warnings=warning_list + list(visualization_report.get("warnings", [])),
         output_dir=output_dir,
     )
+    review_app["netedit_review"] = {
+        **netedit_review,
+        "additional_file": _portable_path(netedit_review.get("additional_file"), output_dir),
+        "sumocfg_file": _portable_path(netedit_review.get("sumocfg_file"), output_dir),
+        "netedit_command": (
+            f'netedit --sumocfg-file "{_portable_path(netedit_review.get("sumocfg_file"), output_dir)}"'
+            if netedit_review.get("sumocfg_file")
+            else ""
+        ),
+    }
 
     manifest = {
         "status": "pass",
@@ -795,6 +1016,7 @@ def build_workflow_review_html(
             "cluster_zoom_pngs": portable_cluster_zoom_pngs,
         },
         "artifacts": {key: _portable_path(value, output_dir) for key, value in artifacts.items() if value is not None},
+        "netedit_review": review_app["netedit_review"],
         "review_app": review_app,
         "review_queue": list(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
@@ -827,6 +1049,13 @@ def build_workflow_review_html(
     summary_card_html = _summary_cards(review_app["summary_cards"])
     junction_card_html = _junction_cards(review_junctions)
     network_svg = _network_svg(review_app.get("map_layers"), review_junctions)
+    netedit_review_link = ""
+    if netedit_review.get("sumocfg_file"):
+        netedit_review_link = (
+            f'<a class="tool-button" href="{escape(_path_href(Path(str(netedit_review["sumocfg_file"])), output_dir))}">'
+            "Netedit overlay"
+            "</a>"
+        )
     review_script = """
   <script>
     (function () {
@@ -1081,7 +1310,7 @@ def build_workflow_review_html(
     .map-topbar h1 {{ margin: 0; font-size: 18px; }}
     .stat-pill {{ padding: 6px 10px; border: 1px solid #d7e2dc; color: #637487; background: #fbfdfc; font: 12px Consolas, monospace; }}
     .topbar-spacer {{ flex: 1; }}
-    .tool-button {{ border: 1px solid #d7e2dc; background: #ffffff; padding: 8px 10px; color: #102033; }}
+    .tool-button {{ display: inline-flex; align-items: center; justify-content: center; border: 1px solid #d7e2dc; background: #ffffff; padding: 8px 10px; color: #102033; }}
     .map-viewport {{ position: relative; overflow: hidden; min-height: 0; height: 100%; touch-action: none; background-color: #f7fbf8; background-image: linear-gradient(#e7f0eb 1px, transparent 1px), linear-gradient(90deg, #e7f0eb 1px, transparent 1px); background-size: 32px 32px; }}
     .map-canvas {{ position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: 50% 50%; transition: transform 120ms ease; }}
     .network-svg {{ position: absolute; inset: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.34); }}
@@ -1184,6 +1413,7 @@ def build_workflow_review_html(
         <h1>Cleaned SUMO road network</h1>
         <span class="stat-pill">{escape(str(review_app["summary_cards"]["uncertain_junctions"]))} uncertain · gates pass {gate_counts["pass"]} / fail {gate_counts["fail"]}</span>
         <span class="topbar-spacer"></span>
+        {netedit_review_link}
         <button type="button" class="tool-button">Find junction</button>
         <button type="button" class="tool-button">Display</button>
       </header>
@@ -1292,6 +1522,9 @@ def build_workflow_review_html(
         "problem_overlay_png": str(visualization_report.get("problem_overlay_png", "")),
         "reference_comparison_png": str(visualization_report.get("reference_comparison_png", "")),
         "cluster_zoom_pngs": cluster_zoom_pngs,
+        "netedit_review_additional_file": str(netedit_review.get("additional_file", "")),
+        "netedit_review_sumocfg_file": str(netedit_review.get("sumocfg_file", "")),
+        "netedit_review_command": str(netedit_review.get("netedit_command", "")),
         "human_review_required_count": len(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
     }
