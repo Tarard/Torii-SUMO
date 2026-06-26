@@ -20,6 +20,11 @@ def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, An
     incoming = {edge_id for edge_id, edge in plain_edges.items() if edge.attrib.get("to") == junction_id}
     outgoing = {edge_id for edge_id, edge in plain_edges.items() if edge.attrib.get("from") == junction_id}
     internal_prefix = f":{junction_id}_"
+    target_internal_edges = [
+        edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id", "").startswith(internal_prefix)
+    ]
 
     records = []
     category_counts: Counter[str] = Counter()
@@ -56,6 +61,8 @@ def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, An
         "top_external_connection_count": len(top_external),
         "top_external_pair_count": len({(record["from"], record["to"]) for record in top_external}),
         "top_external_dir_counts": dict(Counter(record["dir"] or "blank" for record in top_external)),
+        "crossing_count": sum(1 for edge in target_internal_edges if edge.attrib.get("function") == "crossing"),
+        "walkingarea_count": sum(1 for edge in target_internal_edges if edge.attrib.get("function") == "walkingarea"),
         "connection_records": records,
     }
 
