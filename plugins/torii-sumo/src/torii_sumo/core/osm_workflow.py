@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from .osm_area import osm_preview_url, resolve_osm_place
+from .osm_area import osm_map_url_bbox, osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .junction_aggregation import build_junction_aggregation_variant
 from .netedit import launch_netedit
@@ -462,6 +462,16 @@ def run_osm_cleanup_workflow(
     review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
     cleaned_place_name = (place_name or "").strip()
+    bbox_input = (bbox or "").strip()
+    bbox_from_url = osm_map_url_bbox(bbox_input)
+    if bbox_from_url:
+        cleaned_place_name = bbox_input
+        bbox = bbox_from_url
+    else:
+        bbox_from_url = osm_map_url_bbox(cleaned_place_name)
+        if bbox_from_url:
+            bbox = bbox_from_url
+
     place_report = None
     reference_bbox_report: dict[str, Any] | None = None
     if cleaned_place_name and not bbox and source_osm_path is None:

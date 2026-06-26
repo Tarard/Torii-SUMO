@@ -22,7 +22,7 @@ from torii_sumo.core.osm_network import (
     robust_download_osm,
     split_bbox,
 )
-from torii_sumo.core.osm_area import resolve_osm_place
+from torii_sumo.core.osm_area import osm_map_url_bbox, resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network
@@ -48,6 +48,16 @@ def test_resolve_highway_classes_supports_osmnet_inspired_presets() -> None:
     assert "unclassified" in resolve_highway_classes("drive_plus_unclassified")
     assert "service" in resolve_highway_classes("full_vehicle")
     assert resolve_highway_classes("primary,residential") == {"primary", "residential"}
+
+
+def test_osm_map_url_bbox_extracts_small_area_around_center() -> None:
+    bbox = osm_map_url_bbox("https://www.openstreetmap.org/#map=18/48.768610/11.422681")
+    parsed = parse_bbox(bbox)
+
+    assert parsed.west < 11.422681 < parsed.east
+    assert parsed.south < 48.768610 < parsed.north
+    assert parsed.east - parsed.west < 0.01
+    assert parsed.north - parsed.south < 0.01
 
 
 def test_split_bbox_subdivides_large_bbox_without_losing_extent() -> None:
@@ -1071,6 +1081,24 @@ def test_osm_cleanup_workflow_blocks_until_road_level_scope_is_selected(tmp_path
     assert "reference_matched" in report["network_detail_options"]
     assert report["gate_status"]["road_level_scope"] == "blocked"
     assert report["gate_status"]["network_build"] == "not_started"
+
+
+def test_osm_cleanup_workflow_accepts_osm_map_url_as_area_input(tmp_path: Path) -> None:
+    url = "https://www.openstreetmap.org/#map=18/48.768610/11.422681"
+
+    report = run_osm_cleanup_workflow(
+        place_name=url,
+        output_dir=tmp_path,
+    )
+
+    parsed = parse_bbox(report["candidate_bbox"])
+    assert report["status"] == "blocked"
+    assert report["area_input"] == url
+    assert report["area_resolution_status"] == "confirmed_by_input"
+    assert report["road_level_scope_status"] == "needs_user_confirmation"
+    assert parsed.west < 11.422681 < parsed.east
+    assert parsed.south < 48.768610 < parsed.north
+    assert report["gate_status"]["area_confirmation"] == "pass"
 
 
 def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_path: Path) -> None:

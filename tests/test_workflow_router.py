@@ -5,6 +5,7 @@ from torii_sumo.core.workflow_router import (
     infer_place_name,
     run_auto_workflow,
 )
+from torii_sumo.core.osm_network import parse_bbox
 
 
 def _write_reference_net(path: Path) -> None:
@@ -113,6 +114,38 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     assert {"primary", "tertiary"} <= captured["highway_classes"]
     assert captured["run_routeability_audit_after_build"] is True
     assert report["area_resolution_status"] == "candidate_found"
+
+
+def test_auto_workflow_extracts_bbox_from_osm_map_url(tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "workflow_review_html_status": "pass",
+            "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
+        }
+
+    report = run_auto_workflow(
+        user_request=(
+            "Use Torii-SUMO workflow from "
+            "https://www.openstreetmap.org/#map=18/48.768610/11.422681 "
+            "to generate a SUMO network"
+        ),
+        output_dir=tmp_path,
+        highway_classes="arterial",
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    parsed = parse_bbox(captured["bbox"])
+    assert report["status"] == "pass"
+    assert report["tool_called"] == "sumo_osm_cleanup_workflow"
+    assert report["area_resolution_status"] == "osm_map_url_bbox"
+    assert parsed.west < 11.422681 < parsed.east
+    assert parsed.south < 48.768610 < parsed.north
+    assert captured["place_name"] is None
 
 
 def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp_path: Path) -> None:
