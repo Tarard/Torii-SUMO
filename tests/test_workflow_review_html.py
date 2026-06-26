@@ -72,6 +72,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
         topology_audit_report={
             "topology_fragmentation_status": "needs_review",
             "suspicious_cluster_count": 1,
+            "modal_decision_counts": {"review_required": 1},
+            "junction_aggregation_blocked_by_modal_count": 1,
             "suspicious_clusters": [
                 {
                     "cluster_id": "c1",
@@ -80,6 +82,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
                     "node_count": 3,
                     "aggregation_decision": "join",
                     "aggregation_confidence": "medium",
+                    "modal_aggregation_decision": "review_required",
+                    "modal_reason": "vehicle core mixed with support or terminal infrastructure",
                     "google_maps_url": "https://www.google.com/maps/@48.765391,11.423800,40m",
                 }
             ],
@@ -114,6 +118,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Review Queue" in html
     assert "Evidence Summary" in html
     assert "topology_fragmentation_status=needs_review" in html
+    assert "modal_decision_counts" in html
+    assert "junction_aggregation_blocked_by_modal_count" in html
+    assert "Modal: review_required" in html
     assert "workflow_summary" not in html
     assert "<img" in html
     assert "file:///" not in html

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
+from .modal_aggregation_policy import classify_cluster_modal_policy
 from .osm_network import _net_xy_to_latlon
 from .road_corridor import (
     enrich_clusters_with_corridor_audit,
@@ -73,6 +74,9 @@ def audit_topology_fragmentation(
         warnings.append(f"topology audit found {len(clusters)} suspicious dense junction cluster(s)")
 
     physical_shape_counts = dict(Counter(cluster["physical_intersection_shape"] for cluster in clusters))
+    modal_decision_counts = dict(
+        Counter(cluster.get("modal_aggregation_decision", "review_required") for cluster in clusters)
+    )
     corridor_decision_counts = dict(
         Counter(
             str(cluster.get("corridor_decision", "not_available"))
@@ -100,6 +104,8 @@ def audit_topology_fragmentation(
         "aggregation_decision_counts": dict(Counter(cluster["aggregation_decision"] for cluster in clusters)),
         "physical_intersection_shape_counts": physical_shape_counts,
         "physical_intersection_candidate_count": physical_intersection_candidate_count,
+        "modal_policy_status": "pass",
+        "modal_decision_counts": modal_decision_counts,
         "corridor_audit_status": corridor_audit_status,
         "corridor_audit_error": corridor_error,
         "corridor_decision_counts": corridor_decision_counts,
@@ -113,12 +119,19 @@ def audit_topology_fragmentation(
             for cluster in clusters
             if cluster["aggregation_decision"] in {"join", "needs_map_review"}
             and cluster.get("corridor_decision") != "reject"
+            and cluster.get("modal_aggregation_decision") not in {"never_join", "protected_terminal", "shape_support"}
         ),
         "junction_aggregation_blocked_by_corridor_count": sum(
             1
             for cluster in clusters
             if cluster["aggregation_decision"] in {"join", "needs_map_review"}
             and cluster.get("corridor_decision") == "reject"
+        ),
+        "junction_aggregation_blocked_by_modal_count": sum(
+            1
+            for cluster in clusters
+            if cluster["aggregation_decision"] in {"join", "needs_map_review"}
+            and cluster.get("modal_aggregation_decision") in {"never_join", "protected_terminal", "shape_support"}
         ),
         "clusters_file": str(clusters_file),
         "report_file": str(report_file),
@@ -171,6 +184,9 @@ def _read_network_graph(net_file: Path) -> tuple[list[dict[str, Any]], list[dict
                 "from": from_node,
                 "to": to_node,
                 "type": edge.attrib.get("type", ""),
+                "function": edge.attrib.get("function", ""),
+                "allow": edge.attrib.get("allow", ""),
+                "disallow": edge.attrib.get("disallow", ""),
                 "name": edge.attrib.get("name", ""),
                 "lane_count": len(lanes),
                 "length": _edge_length(shape, lanes),
@@ -318,6 +334,10 @@ def _cluster_graph_summary(
         overlap_pair_count=overlap_pair_count,
         physical_shape=physical_shape,
     )
+    modal_policy = classify_cluster_modal_policy(
+        internal_edges=internal_edges,
+        boundary_edges=boundary_edges,
+    )
     return {
         "internal_edge_ids": sorted(str(edge["id"]) for edge in internal_edges),
         "boundary_edge_ids": sorted(str(edge["id"]) for edge in boundary_edges),
@@ -337,7 +357,8 @@ def _cluster_graph_summary(
             approach_count=len(external_junction_ids),
         ),
         **aggregation_score,
-        "risk_flags": risk_flags,
+        **modal_policy,
+        "risk_flags": sorted(set(risk_flags) | set(modal_policy["modal_risk_flags"])),
     }
 
 
@@ -711,6 +732,12 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "aggregation_decision",
                 "aggregation_confidence",
                 "aggregation_reason",
+                "modal_aggregation_decision",
+                "modal_primary_role",
+                "modal_reason",
+                "modal_risk_flags",
+                "modal_decision_counts",
+                "modal_role_counts",
                 "short_internal_edge_score",
                 "same_road_name_score",
                 "physical_intersection_shape",
@@ -763,4 +790,6 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "corridor_top_partitions",
             ):
                 row[field] = ";".join(str(item) for item in row.get(field, []) or [])
+            for field in ("modal_decision_counts", "modal_role_counts"):
+                row[field] = json.dumps(row.get(field, {}) or {}, sort_keys=True)
             writer.writerow(row)
