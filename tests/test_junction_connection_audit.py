@@ -34,6 +34,27 @@ def test_connection_signature_separates_top_level_and_internal(tmp_path: Path) -
     assert signature["top_external_dir_counts"] == {"s": 1}
 
 
+def test_connection_signature_counts_crossings_and_walkingareas(tmp_path: Path) -> None:
+    net_file = tmp_path / "modal.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" allow="pedestrian" shape="0,-2 0,2"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="0,2 2,2"/></edge>
+  <junction id="j" x="0" y="0" type="traffic_light" incLanes="in_0 :j_w0_0" intLanes=":j_c0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    signature = build_connection_signature(net_file, "j")
+
+    assert signature["crossing_count"] == 1
+    assert signature["walkingarea_count"] == 1
+
+
 def test_write_connection_signature_outputs_review_files(tmp_path: Path) -> None:
     net_file = tmp_path / "connection.net.xml"
     net_file.write_text(
