@@ -11,6 +11,7 @@ from torii_sumo.tools.osm_tools import (
     sumo_network_reference_scope_audit,
     sumo_network_routeability_audit,
     sumo_network_scope_pruning_variant,
+    sumo_network_teacher_guided_junction_variant,
     sumo_network_tls_aggregation_variant,
     sumo_network_topology_audit,
 )
@@ -473,4 +474,55 @@ def test_sumo_network_tls_aggregation_variant_tool_returns_json_compatible_repor
 
     assert report["status"] == "pass"
     assert report["tls_physical_cluster_count"] == 2
+    json.dumps(report)
+
+
+def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    raw_node_file = tmp_path / "raw.nod.xml"
+    raw_edge_file = tmp_path / "raw.edg.xml"
+    raw_connection_file = tmp_path / "raw.con.xml"
+    teacher_net_file = tmp_path / "teacher.net.xml"
+    candidate_net_file = tmp_path / "candidate.net.xml"
+    raw_type_file = tmp_path / "raw.typ.xml"
+    for path in (raw_node_file, raw_edge_file, raw_connection_file, teacher_net_file, candidate_net_file, raw_type_file):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    def fake_builder(**kwargs):
+        assert kwargs["raw_node_file"] == raw_node_file
+        assert kwargs["raw_edge_file"] == raw_edge_file
+        assert kwargs["raw_connection_file"] == raw_connection_file
+        assert kwargs["raw_type_file"] == raw_type_file
+        assert kwargs["teacher_net_file"] == teacher_net_file
+        assert kwargs["candidate_net_file"] == candidate_net_file
+        assert kwargs["edge_map"] == {"teacher_in": "cand_in"}
+        assert kwargs["crossing_edge_overrides"] == {":j_c5": "cand_crossing"}
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "final_net_file": str(tmp_path / "teacher_guided.net.xml"),
+            "parity": {"delta": {"vehicle_connection_count": 0}},
+        }
+
+    monkeypatch.setattr(osm_tools, "build_teacher_guided_junction_variant", fake_builder)
+
+    report = sumo_network_teacher_guided_junction_variant(
+        raw_node_file=str(raw_node_file),
+        raw_edge_file=str(raw_edge_file),
+        raw_connection_file=str(raw_connection_file),
+        raw_type_file=str(raw_type_file),
+        teacher_net_file=str(teacher_net_file),
+        candidate_net_file=str(candidate_net_file),
+        junction_id="j",
+        output_dir=str(tmp_path / "teacher-guided"),
+        edge_map={"teacher_in": "cand_in"},
+        crossing_edge_overrides={":j_c5": "cand_crossing"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["parity"]["delta"]["vehicle_connection_count"] == 0
     json.dumps(report)

@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 
 from torii_sumo.core.junction_rebuild_candidate import (
     build_rebuild_candidate,
+    build_teacher_guided_junction_variant,
     write_teacher_connection_plan,
     write_teacher_lane_patch_edges,
     write_teacher_pedestrian_ring_net,
@@ -325,3 +326,124 @@ def test_write_teacher_tllogic_net_replaces_only_target_program(tmp_path: Path) 
     assert root.find("tlLogic[@id='other']").attrib["type"] == "static"
     assert report["tl_phase_count"] == 2
     assert report["controlled_link_count"] == 2
+
+
+def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j" type="highway.primary" numLanes="1">
+    <lane id="teacher_in_0" index="0" disallow="pedestrian" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="teacher_out" from="j" to="b" type="highway.primary" numLanes="1">
+    <lane id="teacher_out_0" index="0" disallow="pedestrian" shape="0,0 10,0"/>
+  </edge>
+  <edge id="teacher_ped" from="p" to="j" type="highway.footway" numLanes="1">
+    <lane id="teacher_ped_0" index="0" allow="pedestrian" shape="-2,2 0,0"/>
+  </edge>
+  <edge id=":j_c0" function="crossing" crossingEdges="teacher_in">
+    <lane id=":j_c0_0" index="0" allow="pedestrian"/>
+  </edge>
+  <edge id=":j_w0" function="walkingarea">
+    <lane id=":j_w0_0" index="0" allow="pedestrian"/>
+  </edge>
+  <junction id="j" type="traffic_light" incLanes="teacher_in_0 teacher_ped_0" intLanes=":j_c0_0 :j_w0_0"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <connection from="teacher_ped" to=":j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
+  <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
+  <connection from=":j_c0" to=":j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
+  <tlLogic id="j" type="actuated" programID="0" offset="0">
+    <phase duration="4" state="GM"/>
+  </tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="cand_ped" from="p" to="j" type="highway.footway"><lane id="cand_ped_0" index="0" allow="pedestrian" shape="-2,2 0,0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="cand_in_0 cand_ped_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j" numLanes="1"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" numLanes="1"><lane index="0"/></edge>
+  <edge id="cand_ped" from="p" to="j" numLanes="1"><lane index="0" allow="pedestrian"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        calls.append(command)
+        if command[0] == "netconvert":
+            for flag in ("--node-files", "--edge-files", "--connection-files", "--output-file"):
+                assert Path(command[command.index(flag) + 1]).is_absolute()
+            output_file = Path(command[command.index("--output-file") + 1])
+            connection_file = Path(command[command.index("--connection-files") + 1])
+            output_file.write_text(
+                """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="cand_ped" from="p" to="j" type="highway.footway"><lane id="cand_ped_0" index="0" allow="pedestrian" shape="-2,2 0,0"/></edge>
+  <edge id=":j_cA" function="crossing" crossingEdges="cand_in"><lane id=":j_cA_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_wKeep" function="walkingarea"><lane id=":j_wKeep_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_wExtra" function="walkingarea"><lane id=":j_wExtra_0" index="0" allow="pedestrian"/></edge>
+  <junction id="j" type="traffic_light" incLanes="cand_in_0 cand_ped_0 :j_wKeep_0 :j_wExtra_0" intLanes=":j_cA_0 :j_wKeep_0 :j_wExtra_0"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="rr"/></tlLogic>
+  <connection from=":j_wKeep" to=":j_cA" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
+</net>
+""",
+                encoding="utf-8",
+            )
+            net_root = ET.parse(output_file).getroot()
+            for connection in ET.parse(connection_file).getroot().findall("connection"):
+                net_root.append(connection)
+            ET.ElementTree(net_root).write(output_file, encoding="utf-8", xml_declaration=True)
+
+        class Result:
+            status = "pass"
+            returncode = 0
+
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd) if cwd else None, "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out", "teacher_ped": "cand_ped"},
+        prefix="demo",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["final_net_file"].endswith("demo_teacher_guided.net.xml")
+    assert report["parity"]["delta"]["vehicle_connection_count"] == 0
+    assert report["parity"]["delta"]["pedestrian_connection_count"] == 0
+    assert report["parity"]["delta"]["walkingarea_count"] == 0
+    assert report["parity"]["delta"]["tl_phase_count"] == 0
+    root = ET.parse(report["final_net_file"]).getroot()
+    assert root.find("tlLogic[@id='j']").attrib["type"] == "actuated"
+    assert root.find("edge[@id=':j_wExtra']") is None
+    assert [call[0] for call in calls] == ["netconvert", "sumo"]
