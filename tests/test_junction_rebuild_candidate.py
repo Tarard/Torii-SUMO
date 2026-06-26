@@ -5,6 +5,8 @@ from torii_sumo.core.junction_rebuild_candidate import (
     build_rebuild_candidate,
     write_teacher_connection_plan,
     write_teacher_lane_patch_edges,
+    write_teacher_pedestrian_ring_net,
+    write_teacher_tllogic_net,
 )
 
 
@@ -234,3 +236,92 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacin
     assert [lane.attrib.get("allow", "") for lane in lanes] == ["pedestrian", ""]
     assert [lane.attrib.get("disallow", "") for lane in lanes] == ["", "pedestrian bicycle"]
     assert report["patched_edge_count"] == 1
+
+
+def test_write_teacher_pedestrian_ring_net_replays_teacher_ring_and_removes_extra_walkingareas(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0"/></edge>
+  <edge id="cand_ped" from="p" to="j"><lane id="cand_ped_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_cA" function="crossing" crossingEdges="cand_in"><lane id=":j_cA_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_cB" function="crossing" crossingEdges="cand_out"><lane id=":j_cB_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_wKeep0" function="walkingarea"><lane id=":j_wKeep0_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_wKeep1" function="walkingarea"><lane id=":j_wKeep1_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_wExtra" function="walkingarea"><lane id=":j_wExtra_0" index="0" allow="pedestrian"/></edge>
+  <junction id="j" incLanes="cand_in_0 :j_wKeep0_0 :j_wKeep1_0 :j_wExtra_0" intLanes=":j_cA_0 :j_cB_0 :j_wKeep0_0 :j_wKeep1_0 :j_wExtra_0"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="GrG"/></tlLogic>
+  <connection from=":j_wKeep1" to=":j_cA" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
+  <connection from=":j_wKeep0" to=":j_cB" fromLane="0" toLane="0" tl="j" linkIndex="2" dir="s" state="M"/>
+  <connection from=":j_cA" to=":j_wExtra" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "crossings": [
+            {"edge_id": ":j_c0", "crossingEdges": ["teacher_in"]},
+            {"edge_id": ":j_c1", "crossingEdges": ["teacher_out"]},
+        ],
+        "pedestrian_connections": [
+            {"from": ":j_c0", "to": ":j_w0", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
+            {"from": ":j_w1", "to": ":j_c0", "fromLane": "0", "toLane": "0", "tl": "j", "linkIndex": "1", "dir": "s", "state": "M"},
+            {"from": ":j_c1", "to": ":j_w1", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
+            {"from": ":j_w0", "to": ":j_c1", "fromLane": "0", "toLane": "0", "tl": "j", "linkIndex": "2", "dir": "s", "state": "M"},
+            {"from": "teacher_ped", "to": ":j_w0", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
+        ],
+    }
+
+    report = write_teacher_pedestrian_ring_net(
+        candidate_net_file=candidate_net,
+        output_file=tmp_path / "pedring.net.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out", "teacher_ped": "cand_ped"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("edge[@id=':j_wExtra']") is None
+    assert report["kept_walkingarea_count"] == 2
+    assert report["inserted_pedestrian_connection_count"] == 5
+    assert report["skipped_pedestrian_connection_count"] == 0
+    assert all(":j_wExtra" not in " ".join(item.attrib.values()) for item in root.findall("connection"))
+    junction = root.find("junction[@id='j']")
+    assert ":j_wExtra_0" not in junction.attrib["incLanes"]
+    assert ":j_wExtra_0" not in junction.attrib["intLanes"]
+
+
+def test_write_teacher_tllogic_net_replaces_only_target_program(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="Gr"/></tlLogic>
+  <tlLogic id="other" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
+  <connection from="a" to="b" tl="j" linkIndex="0"/>
+  <connection from="c" to="d" tl="j" linkIndex="1"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "traffic_light": {
+            "attributes": {"id": "j", "type": "actuated", "programID": "0", "offset": "0"},
+            "phases": [{"duration": "3", "state": "GG"}, {"duration": "4", "state": "rr"}],
+        }
+    }
+
+    report = write_teacher_tllogic_net(
+        candidate_net_file=candidate_net,
+        output_file=tmp_path / "teacher_tls.net.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    target_tls = root.find("tlLogic[@id='j']")
+    assert target_tls.attrib["type"] == "actuated"
+    assert [phase.attrib["state"] for phase in target_tls.findall("phase")] == ["GG", "rr"]
+    assert root.find("tlLogic[@id='other']").attrib["type"] == "static"
+    assert report["tl_phase_count"] == 2
+    assert report["controlled_link_count"] == 2
