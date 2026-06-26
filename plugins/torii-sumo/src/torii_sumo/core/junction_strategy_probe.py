@@ -122,6 +122,7 @@ def probe_junction_strategies(
     radius_m: float = 40.0,
     short_edge_m: float = 2.0,
     gate_margin_m: float = 1.0,
+    approach_setback_m: float = 8.0,
 ) -> dict[str, Any]:
     candidate = parse_net(candidate_net_file)
     reference = parse_net(reference_net_file)
@@ -155,6 +156,20 @@ def probe_junction_strategies(
             "footprint": _footprint_metrics(polygon, reference_polygon),
             "polygon": polygon,
         }
+    approach_node_ids = node_sets["reference_core"]
+    approach_polygon = _approach_setback_footprint_for_nodes(candidate, approach_node_ids, approach_setback_m)
+    strategies["approach_setback_core"] = {
+        "node_count": len(approach_node_ids),
+        "node_ids": sorted(approach_node_ids),
+        "collapse_node_ids": sorted(approach_node_ids),
+        "inside_plain_edge_ids": _inside_plain_edge_ids(candidate, approach_node_ids),
+        "boundary_edge_ids": _boundary_edge_ids(candidate, approach_node_ids),
+        "protected_terminal_ids": [],
+        "shape_support_node_ids": sorted(approach_node_ids),
+        "local_metrics": _local_metrics(candidate, approach_node_ids, short_edge_m=short_edge_m),
+        "footprint": _footprint_metrics(approach_polygon, reference_polygon),
+        "polygon": approach_polygon,
+    }
 
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_file = output_dir / "junction_strategy_probe.json"
@@ -171,6 +186,7 @@ def probe_junction_strategies(
         "radius_m": radius_m,
         "short_edge_m": short_edge_m,
         "gate_margin_m": gate_margin_m,
+        "approach_setback_m": approach_setback_m,
         "coordinate_alignment": "reference polygon translated to candidate seed-node centroid",
         "summary_file": str(summary_file),
         "csv_file": str(csv_file),
@@ -244,6 +260,45 @@ def _edge_bounded_footprint_for_nodes(net: dict[str, Any], node_ids: set[str], g
     if len(gates) < 3:
         return _footprint_for_nodes(net, node_ids)
     return convex_hull(_expand_points_from_centroid(gates, gate_margin_m))
+
+
+def _approach_setback_footprint_for_nodes(
+    net: dict[str, Any],
+    node_ids: set[str],
+    approach_setback_m: float,
+) -> list[Point]:
+    gates: list[Point] = []
+    for edge in net["edges"]:
+        if edge["internal"] or not edge["shape"] or not _is_vehicle_core_edge(edge):
+            continue
+        from_inside = edge["from"] in node_ids
+        to_inside = edge["to"] in node_ids
+        if from_inside == to_inside:
+            continue
+        gates.append(
+            _point_along_shape(edge["shape"], approach_setback_m)
+            if from_inside
+            else _point_before_shape_end(edge["shape"], approach_setback_m)
+        )
+    if len(gates) < 3:
+        return _edge_bounded_footprint_for_nodes(net, node_ids, 0.0)
+    return convex_hull(gates)
+
+
+def _inside_plain_edge_ids(net: dict[str, Any], node_ids: set[str]) -> list[str]:
+    return sorted(
+        edge["id"]
+        for edge in net["edges"]
+        if not edge["internal"] and edge["from"] in node_ids and edge["to"] in node_ids
+    )
+
+
+def _boundary_edge_ids(net: dict[str, Any], node_ids: set[str]) -> list[str]:
+    return sorted(
+        edge["id"]
+        for edge in net["edges"]
+        if not edge["internal"] and ((edge["from"] in node_ids) != (edge["to"] in node_ids))
+    )
 
 
 def _split_protected_terminals(
@@ -382,6 +437,21 @@ def _expand_points_from_centroid(points: list[Point], margin_m: float) -> list[P
     return expanded
 
 
+def _point_along_shape(shape: list[Point], distance_m: float) -> Point:
+    remaining = distance_m
+    for start, end in zip(shape, shape[1:]):
+        segment_length = _distance(start, end)
+        if segment_length >= remaining:
+            ratio = remaining / segment_length if segment_length else 0.0
+            return (start[0] + (end[0] - start[0]) * ratio, start[1] + (end[1] - start[1]) * ratio)
+        remaining -= segment_length
+    return shape[-1]
+
+
+def _point_before_shape_end(shape: list[Point], distance_m: float) -> Point:
+    return _point_along_shape(list(reversed(shape)), distance_m)
+
+
 def _candidate_seed_centroid(candidate: dict[str, Any], seed_ids: list[str]) -> Point:
     points = [candidate["junctions"][node_id]["point"] for node_id in seed_ids if node_id in candidate["junctions"]]
     return _centroid(points)
@@ -477,6 +547,7 @@ def _write_svg(
         "short_all_core": "#f59e0b",
         "edge_bounded_short_core": "#7c3aed",
         "short_all_core_with_protected_terminals": "#0ea5e9",
+        "approach_setback_core": "#be123c",
     }
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.2f} {height:.2f}">',
@@ -535,6 +606,7 @@ def _write_png(
         "short_all_core": (245, 158, 11, 255),
         "edge_bounded_short_core": (124, 58, 237, 255),
         "short_all_core_with_protected_terminals": (14, 165, 233, 255),
+        "approach_setback_core": (190, 18, 60, 255),
     }
     _draw_png_polygon(draw, reference_polygon, map_point, colors["reference"], 6)
     for name, report in strategies.items():
@@ -548,6 +620,7 @@ def _write_png(
         ("short_all_core", "short_all_core: short all-edge component"),
         ("edge_bounded_short_core", "edge_bounded_short_core: bounded by incident edge gates"),
         ("short_all_core_with_protected_terminals", "short_all_core_with_protected_terminals: join core plus protected exits"),
+        ("approach_setback_core", "approach_setback_core: vehicle approaches set back from the core"),
     ]
     y = 20
     for key, label in legend:
