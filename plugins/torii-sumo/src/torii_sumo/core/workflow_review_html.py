@@ -943,6 +943,7 @@ def build_workflow_review_html(
         "reference_visual_detail_comparison_net_file",
         "reference_join_junction_teacher_delta_file",
         "reference_join_junction_pattern_comparisons_file",
+        "reference_join_junction_pattern_templates_file",
         "teacher_guided_repair_queue_file",
         "teacher_guided_repair_queue_csv_file",
         "teacher_guided_repair_run_report_file",

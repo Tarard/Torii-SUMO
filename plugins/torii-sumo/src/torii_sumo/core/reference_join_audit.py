@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
-from .junction_teacher_model import compare_junction_pattern_records, extract_junction_pattern_index
+from .junction_teacher_model import (
+    compare_junction_pattern_records,
+    extract_junction_pattern_index,
+    summarize_junction_pattern_templates,
+)
 from .osm_network import _net_xy_to_latlon
 from .topology_audit import audit_topology_fragmentation
 
@@ -63,6 +67,8 @@ def audit_reference_join_patterns(
             for field in comparison.get("mismatch_fields", [])
         )
     )
+    junction_pattern_templates = summarize_junction_pattern_templates(junction_pattern_index)
+    candidate_junction_pattern_templates = summarize_junction_pattern_templates(candidate_junction_pattern_index)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -87,10 +93,25 @@ def audit_reference_join_patterns(
 
     cases_file = output_dir / f"{prefix}_reference_join_cases.csv"
     junction_pattern_comparisons_file = output_dir / f"{prefix}_junction_pattern_comparisons.csv"
+    junction_pattern_templates_file = output_dir / f"{prefix}_junction_pattern_templates.json"
     junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
     summary_file = output_dir / f"{prefix}_reference_join_audit.json"
     _write_cases_csv(cases_file, matched_cases)
     _write_junction_pattern_comparisons_csv(junction_pattern_comparisons_file, junction_pattern_comparisons)
+    junction_pattern_templates_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "reference_net_file": str(reference_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "reference_templates": junction_pattern_templates,
+                "candidate_templates": candidate_junction_pattern_templates,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     junction_teacher_delta = {
         "schema_version": 1,
         "reference_net_file": str(reference_net_file),
@@ -102,6 +123,8 @@ def audit_reference_join_patterns(
         "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
         "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
         "junction_pattern_comparisons": junction_pattern_comparisons,
+        "junction_pattern_templates": junction_pattern_templates,
+        "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
         "matched_cases": matched,
     }
     junction_teacher_delta_file.write_text(
@@ -134,7 +157,10 @@ def audit_reference_join_patterns(
         "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
         "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
         "junction_pattern_comparisons": junction_pattern_comparisons,
+        "junction_pattern_templates": junction_pattern_templates,
+        "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
         "junction_pattern_comparisons_file": str(junction_pattern_comparisons_file),
+        "junction_pattern_templates_file": str(junction_pattern_templates_file),
         "junction_teacher_delta_file": str(junction_teacher_delta_file),
         "cases_file": str(cases_file),
         "summary_file": str(summary_file),

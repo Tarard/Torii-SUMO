@@ -197,6 +197,48 @@ def extract_junction_pattern_index(
     return records
 
 
+def summarize_junction_pattern_templates(
+    records: list[dict[str, Any]],
+    *,
+    max_examples: int = 3,
+) -> list[dict[str, Any]]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        pattern_key = str(record.get("pattern_key", ""))
+        if pattern_key:
+            groups.setdefault(pattern_key, []).append(record)
+
+    templates = []
+    for pattern_key, group in groups.items():
+        representative = group[0]
+        examples = [
+            str(record.get("junction_id", ""))
+            for record in group
+            if str(record.get("junction_id", ""))
+        ][:max(0, max_examples)]
+        templates.append(
+            {
+                "pattern_key": pattern_key,
+                "pattern_family": representative.get("pattern_family", ""),
+                "arm_count": representative.get("arm_count", 0),
+                "count": len(group),
+                "example_junction_ids": examples,
+                "control_type": representative.get("control_type", ""),
+                "has_tls": representative.get("has_tls", False),
+                "internal_function_counts": dict(representative.get("internal_function_counts", {}) or {}),
+                "dir_counts": dict(representative.get("dir_counts", {}) or {}),
+                "movement_signature_counts": dict(representative.get("movement_signature_counts", {}) or {}),
+                "request_count": representative.get("request_count", 0),
+                "request_bit_lengths_ok": representative.get("request_bit_lengths_ok", False),
+                "tl_phase_count": representative.get("tl_phase_count", 0),
+                "controlled_link_count": representative.get("controlled_link_count", 0),
+                "vehicle_connection_count": representative.get("vehicle_connection_count", 0),
+            }
+        )
+    templates.sort(key=lambda item: (-int(item["count"]), str(item["pattern_family"]), str(item["pattern_key"])))
+    return templates
+
+
 def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[str, Any]:
     model = extract_teacher_junction_model(net_file, junction_id)
     incoming = [edge["edge_id"] for edge in model.get("approaches", {}).get("incoming", [])]

@@ -9,6 +9,7 @@ from torii_sumo.core.junction_teacher_model import (
     materialize_exemplar_movement_signatures,
     match_teacher_approaches,
     slot_edge_map_from_exemplar,
+    summarize_junction_pattern_templates,
 )
 
 
@@ -196,6 +197,96 @@ def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path
             "tl_phase_count": 0,
             "controlled_link_count": 0,
         }
+    ]
+
+
+def test_summarize_junction_pattern_templates_groups_reusable_records() -> None:
+    records = [
+        {
+            "junction_id": "j1",
+            "pattern_key": "three_way|control=priority",
+            "pattern_family": "three_way",
+            "arm_count": 3,
+            "control_type": "priority",
+            "has_tls": False,
+            "internal_function_counts": {"crossing": 0, "internal": 1, "walkingarea": 0},
+            "dir_counts": {"s": 3},
+            "movement_signature_counts": {"dir=s|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 3},
+            "request_count": 3,
+            "request_bit_lengths_ok": True,
+            "tl_phase_count": 0,
+            "controlled_link_count": 0,
+            "vehicle_connection_count": 3,
+        },
+        {
+            "junction_id": "j2",
+            "pattern_key": "three_way|control=priority",
+            "pattern_family": "three_way",
+            "arm_count": 3,
+            "control_type": "priority",
+            "has_tls": False,
+            "internal_function_counts": {"crossing": 0, "internal": 1, "walkingarea": 0},
+            "dir_counts": {"s": 3},
+            "movement_signature_counts": {"dir=s|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 3},
+            "request_count": 3,
+            "request_bit_lengths_ok": True,
+            "tl_phase_count": 0,
+            "controlled_link_count": 0,
+            "vehicle_connection_count": 3,
+        },
+        {
+            "junction_id": "j3",
+            "pattern_key": "four_way|control=traffic_light",
+            "pattern_family": "four_way",
+            "arm_count": 4,
+            "control_type": "traffic_light",
+            "has_tls": True,
+            "internal_function_counts": {"crossing": 4, "internal": 8, "walkingarea": 4},
+            "dir_counts": {"l": 4, "r": 4, "s": 4},
+            "movement_signature_counts": {"dir=s|state=O|fromLane=0|toLane=0|controlled=true|via=true": 4},
+            "request_count": 12,
+            "request_bit_lengths_ok": True,
+            "tl_phase_count": 8,
+            "controlled_link_count": 12,
+            "vehicle_connection_count": 12,
+        },
+    ]
+
+    assert summarize_junction_pattern_templates(records, max_examples=1) == [
+        {
+            "pattern_key": "three_way|control=priority",
+            "pattern_family": "three_way",
+            "arm_count": 3,
+            "count": 2,
+            "example_junction_ids": ["j1"],
+            "control_type": "priority",
+            "has_tls": False,
+            "internal_function_counts": {"crossing": 0, "internal": 1, "walkingarea": 0},
+            "dir_counts": {"s": 3},
+            "movement_signature_counts": {"dir=s|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 3},
+            "request_count": 3,
+            "request_bit_lengths_ok": True,
+            "tl_phase_count": 0,
+            "controlled_link_count": 0,
+            "vehicle_connection_count": 3,
+        },
+        {
+            "pattern_key": "four_way|control=traffic_light",
+            "pattern_family": "four_way",
+            "arm_count": 4,
+            "count": 1,
+            "example_junction_ids": ["j3"],
+            "control_type": "traffic_light",
+            "has_tls": True,
+            "internal_function_counts": {"crossing": 4, "internal": 8, "walkingarea": 4},
+            "dir_counts": {"l": 4, "r": 4, "s": 4},
+            "movement_signature_counts": {"dir=s|state=O|fromLane=0|toLane=0|controlled=true|via=true": 4},
+            "request_count": 12,
+            "request_bit_lengths_ok": True,
+            "tl_phase_count": 8,
+            "controlled_link_count": 12,
+            "vehicle_connection_count": 12,
+        },
     ]
 
 

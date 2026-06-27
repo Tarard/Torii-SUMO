@@ -1541,6 +1541,9 @@ def run_osm_cleanup_workflow(
         "reference_join_junction_pattern_comparisons_file": ""
         if reference_join_audit_report is None
         else str(reference_join_audit_report.get("junction_pattern_comparisons_file", "")),
+        "reference_join_junction_pattern_templates_file": ""
+        if reference_join_audit_report is None
+        else str(reference_join_audit_report.get("junction_pattern_templates_file", "")),
         "reference_join_junction_pattern_mismatch_field_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("junction_pattern_mismatch_field_counts", {}),

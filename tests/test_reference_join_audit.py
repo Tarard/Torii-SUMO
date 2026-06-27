@@ -127,6 +127,12 @@ def test_reference_join_audit_reports_reusable_junction_patterns(tmp_path: Path)
     assert report["junction_pattern_index"][0]["junction_id"] == "cluster_a_b"
     assert report["junction_pattern_index"][0]["control_type"] == "right_before_left"
     assert report["junction_pattern_index"][0]["arm_count"] == 3
+    assert report["junction_pattern_templates"][0]["pattern_family"] == "three_way"
+    assert report["junction_pattern_templates"][0]["count"] == 1
+    assert report["junction_pattern_templates"][0]["example_junction_ids"] == ["cluster_a_b"]
+    templates = json.loads(Path(report["junction_pattern_templates_file"]).read_text(encoding="utf-8"))
+    assert templates["reference_templates"] == report["junction_pattern_templates"]
+    assert templates["candidate_templates"] == []
 
 
 def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path) -> None:
