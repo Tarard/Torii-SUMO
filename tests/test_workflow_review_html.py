@@ -98,6 +98,14 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "teacher_guided_repair_queue_file": str(repair_queue),
             "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
             "teacher_guided_repair_run_report_file": str(repair_run),
+            "teacher_guided_repair_template_contexts": [
+                {
+                    "teacher_pattern_key": "three_way|control=right_before_left",
+                    "teacher_pattern_family": "three_way",
+                    "teacher_pattern_template_count": 127,
+                    "teacher_pattern_template_examples": ["cluster_template_1"],
+                }
+            ],
         },
         net_file=net_file,
         gate_status={"routeability_audit": "fail", "topology_audit": "blocked"},
@@ -196,6 +204,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "modal_decision_counts" in html
     assert "modal_review_action_counts" in html
     assert "junction_aggregation_blocked_by_modal_count" in html
+    assert "teacher_templates" in html
+    assert "family=three_way; count=127; key=three_way|control=right_before_left" in html
     assert "Modal: review_vehicle_core_boundary / review_required" in html
     assert "workflow_summary" not in html
     assert "<img" in html
