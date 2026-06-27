@@ -125,21 +125,29 @@ def build_teacher_guided_repair_queue(
         if isinstance(case, dict)
     ]
     pattern_deltas = _junction_pattern_delta_by_id(reference_join_audit_report)
-    matched_cases.sort(key=_teacher_guided_case_sort_key)
+    pattern_records = _junction_pattern_record_by_id(reference_join_audit_report)
+    pattern_templates = _junction_pattern_template_by_key(reference_join_audit_report)
+    matched_cases.sort(
+        key=lambda case: _teacher_guided_case_sort_key(case, pattern_records, pattern_templates)
+    )
     repair_candidates = []
     ready_so_far = 0
     for case in matched_cases:
-        candidate = _attach_junction_pattern_delta(
-            _teacher_guided_repair_candidate(
-                case=case,
-                teacher_net_file=teacher_net_file,
-                candidate_net_file=candidate_net_file,
-                teacher_root=teacher_root,
-                candidate_root=candidate_root,
-                teacher_edges=teacher_edges,
-                candidate_edge_ids=candidate_edge_ids,
+        candidate = _attach_teacher_pattern_template(
+            _attach_junction_pattern_delta(
+                _teacher_guided_repair_candidate(
+                    case=case,
+                    teacher_net_file=teacher_net_file,
+                    candidate_net_file=candidate_net_file,
+                    teacher_root=teacher_root,
+                    candidate_root=candidate_root,
+                    teacher_edges=teacher_edges,
+                    candidate_edge_ids=candidate_edge_ids,
+                ),
+                pattern_deltas,
             ),
-            pattern_deltas,
+            pattern_records,
+            pattern_templates,
         )
         repair_candidates.append(candidate)
         if candidate["candidate_status"] == "ready_for_teacher_guided_variant":
@@ -166,7 +174,7 @@ def build_teacher_guided_repair_queue(
         "matched_case_count": len(matched_cases),
         "queued_case_count": len(repair_candidates),
         "queue_truncated": len(repair_candidates) < len(matched_cases),
-        "queue_order_policy": "smallest_matched_candidate_node_count_first",
+        "queue_order_policy": "highest_teacher_template_count_then_smallest_matched_candidate_node_count_first",
         "max_ready_candidates": max_ready_candidates if max_ready_candidates is not None else "",
         "repair_candidate_count": len(repair_candidates),
         "ready_candidate_count": ready_count,
@@ -1543,12 +1551,17 @@ def _should_emit(movement: dict[str, object]) -> bool:
     return movement.get("status") == "emit" and float(movement.get("confidence", 0.0)) >= 0.5
 
 
-def _teacher_guided_case_sort_key(case: dict[str, Any]) -> tuple[int, int, str]:
+def _teacher_guided_case_sort_key(
+    case: dict[str, Any],
+    pattern_records: dict[str, dict[str, Any]] | None = None,
+    pattern_templates: dict[str, dict[str, Any]] | None = None,
+) -> tuple[int, int, int, str]:
+    template_count = _teacher_template_count_for_case(case, pattern_records or {}, pattern_templates or {})
     candidate_nodes = case.get("matched_candidate_node_ids")
     candidate_node_count = len(candidate_nodes) if isinstance(candidate_nodes, list) else 1_000_000
     reference_id = str(case.get("reference_id", ""))
     reference_node_count = len(reference_id.removeprefix("cluster_").split("_")) if reference_id else 1_000_000
-    return (candidate_node_count, reference_node_count, reference_id)
+    return (-template_count, candidate_node_count, reference_node_count, reference_id)
 
 
 def _queue_path(value: object, base_dir: Path | None) -> Path:
@@ -1571,6 +1584,40 @@ def _valid_edge_map(value: object) -> dict[str, str]:
     return result
 
 
+def _junction_pattern_record_by_id(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    records = {}
+    for record in report.get("junction_pattern_index", []) or []:
+        if not isinstance(record, dict):
+            continue
+        junction_id = str(record.get("junction_id", ""))
+        if junction_id:
+            records[junction_id] = record
+    return records
+
+
+def _junction_pattern_template_by_key(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    templates = {}
+    for template in report.get("junction_pattern_templates", []) or []:
+        if not isinstance(template, dict):
+            continue
+        pattern_key = str(template.get("pattern_key", ""))
+        if pattern_key:
+            templates[pattern_key] = template
+    return templates
+
+
+def _teacher_template_count_for_case(
+    case: dict[str, Any],
+    pattern_records: dict[str, dict[str, Any]],
+    pattern_templates: dict[str, dict[str, Any]],
+) -> int:
+    reference_id = str(case.get("reference_id", ""))
+    pattern_key = str(pattern_records.get(reference_id, {}).get("pattern_key", ""))
+    if not pattern_key:
+        return 0
+    return int(pattern_templates.get(pattern_key, {}).get("count", 0) or 0)
+
+
 def _junction_pattern_delta_by_id(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
     deltas = {}
     for comparison in report.get("junction_pattern_comparisons", []) or []:
@@ -1587,6 +1634,36 @@ def _junction_pattern_delta_by_id(report: dict[str, Any]) -> dict[str, dict[str,
             "candidate": comparison.get("candidate", {}) if isinstance(comparison.get("candidate"), dict) else {},
         }
     return deltas
+
+
+def _attach_teacher_pattern_template(
+    candidate: dict[str, object],
+    pattern_records: dict[str, dict[str, Any]],
+    pattern_templates: dict[str, dict[str, Any]],
+) -> dict[str, object]:
+    reference_id = str(candidate.get("reference_id", ""))
+    record = pattern_records.get(reference_id, {})
+    movement_exemplar = candidate.get("movement_exemplar", {})
+    exemplar_pattern_key = (
+        str(movement_exemplar.get("pattern_key", ""))
+        if isinstance(movement_exemplar, dict)
+        else ""
+    )
+    pattern_key = str(record.get("pattern_key", "")) or exemplar_pattern_key
+    if not pattern_key:
+        return candidate
+    template = pattern_templates.get(pattern_key, {})
+    return {
+        **candidate,
+        "teacher_pattern_key": pattern_key,
+        "teacher_pattern_family": str(
+            template.get("pattern_family", record.get("pattern_family", ""))
+        ),
+        "teacher_pattern_template_count": int(template.get("count", 0) or 0),
+        "teacher_pattern_template_examples": [
+            str(item) for item in template.get("example_junction_ids", []) or []
+        ],
+    }
 
 
 def _attach_junction_pattern_delta(
@@ -1927,6 +2004,8 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                 "junction_pattern_mismatch_fields",
                 "netedit_review_actions",
                 "review_priority",
+                "teacher_pattern_key",
+                "teacher_pattern_template_count",
                 "edge_map_size",
                 "missing_teacher_edge_ids",
                 "copyable_missing_teacher_edge_ids",
@@ -1952,6 +2031,8 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                         str(item) for item in row.get("netedit_review_actions", []) or []
                     ),
                     "review_priority": row.get("review_priority", ""),
+                    "teacher_pattern_key": row.get("teacher_pattern_key", ""),
+                    "teacher_pattern_template_count": row.get("teacher_pattern_template_count", 0),
                     "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
                     "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
                     "copyable_missing_teacher_edge_ids": ";".join(
