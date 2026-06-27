@@ -492,7 +492,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["reference_join_candidate_net_file"] == visual_detail_net_file
     assert calls["aggregation_candidate_net_file"] == visual_detail_net_file
     assert calls["teacher_guided_candidate_net_file"] == tmp_path / "aggregated.net.xml"
-    assert calls["teacher_guided_queue_max_ready_candidates"] == 20
+    assert calls["teacher_guided_queue_max_ready_candidates"] == 30
     assert calls["teacher_guided_plain_net_file"] == tmp_path / "aggregated.net.xml"
     assert calls["teacher_guided_plain_netconvert_binary"] == "netconvert-test"
     assert calls["teacher_guided_run_queue_report"]["ready_candidate_count"] == 1
@@ -500,7 +500,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["teacher_guided_run_replay_target_internal_subgraph"] is True
     assert calls["teacher_guided_run_netconvert_binary"] == "netconvert-test"
     assert calls["teacher_guided_run_sumo_binary"] == "sumo-test"
-    assert calls["teacher_guided_run_max_ready_candidates"] == 20
+    assert calls["teacher_guided_run_max_ready_candidates"] == 30
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
     assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
