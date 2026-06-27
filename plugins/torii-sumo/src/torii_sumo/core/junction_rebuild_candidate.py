@@ -2359,7 +2359,8 @@ def _vehicle_connection_signature(
         f"state={connection.get('state', '')}|via={via}|pass={connection.get('pass', '')}|"
         f"uncontrolled={connection.get('uncontrolled', '')}|allow={connection.get('allow', '')}|"
         f"disallow={connection.get('disallow', '')}|keepClear={connection.get('keepClear', '')}|"
-        f"contPos={connection.get('contPos', '')}|linkIndex2={connection.get('linkIndex2', '')}"
+        f"contPos={connection.get('contPos', '')}|linkIndex2={connection.get('linkIndex2', '')}|"
+        f"shape={connection.get('shape', '')}"
     )
 
 
