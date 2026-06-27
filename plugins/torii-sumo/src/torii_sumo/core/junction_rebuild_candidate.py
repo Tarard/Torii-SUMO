@@ -365,7 +365,7 @@ def write_teacher_lane_patch_edges(
                 edge.set(attr, teacher_edge.attrib[attr])
         for lane in teacher_lanes:
             lane_attrs = {"index": lane.attrib.get("index", "0")}
-            for attr in ("allow", "disallow", "width", "speed"):
+            for attr in ("allow", "disallow", "width", "speed", "shape"):
                 if lane.attrib.get(attr):
                     lane_attrs[attr] = lane.attrib[attr]
             ET.SubElement(edge, "lane", lane_attrs)
@@ -2441,6 +2441,7 @@ def _crossing_geometry_signatures(
     target_junction_id: str = "",
 ) -> dict[str, str]:
     crossings = model.get("crossings", []) if isinstance(model.get("crossings"), list) else []
+    origin_x, origin_y = _model_junction_origin(model)
     signatures: dict[str, str] = {}
     for edge in crossings:
         if not isinstance(edge, dict):
@@ -2448,7 +2449,7 @@ def _crossing_geometry_signatures(
         edge_id = _mapped_internal_ref(str(edge.get("edge_id", "")), source_junction_id, target_junction_id)
         if not edge_id:
             continue
-        signatures[edge_id] = _internal_edge_signature(edge)
+        signatures[edge_id] = _internal_edge_signature(edge, origin_x=origin_x, origin_y=origin_y)
     return signatures
 
 
@@ -2459,6 +2460,7 @@ def _internal_edge_signatures(
     target_junction_id: str = "",
 ) -> dict[str, str]:
     internal_edges = model.get("internal_edges", []) if isinstance(model.get("internal_edges"), list) else []
+    origin_x, origin_y = _model_junction_origin(model)
     signatures: dict[str, str] = {}
     for edge in internal_edges:
         if not isinstance(edge, dict):
@@ -2466,7 +2468,7 @@ def _internal_edge_signatures(
         edge_id = _mapped_internal_ref(str(edge.get("edge_id", "")), source_junction_id, target_junction_id)
         if not edge_id:
             continue
-        signatures[edge_id] = _internal_edge_signature(edge)
+        signatures[edge_id] = _internal_edge_signature(edge, origin_x=origin_x, origin_y=origin_y)
     return signatures
 
 
@@ -2477,6 +2479,7 @@ def _walking_area_signatures(
     target_junction_id: str = "",
 ) -> dict[str, str]:
     walking_areas = model.get("walking_areas", []) if isinstance(model.get("walking_areas"), list) else []
+    origin_x, origin_y = _model_junction_origin(model)
     signatures: dict[str, str] = {}
     for edge in walking_areas:
         if not isinstance(edge, dict):
@@ -2484,20 +2487,26 @@ def _walking_area_signatures(
         edge_id = _mapped_internal_ref(str(edge.get("edge_id", "")), source_junction_id, target_junction_id)
         if not edge_id:
             continue
-        signatures[edge_id] = _internal_edge_signature(edge)
+        signatures[edge_id] = _internal_edge_signature(edge, origin_x=origin_x, origin_y=origin_y)
     return signatures
 
 
-def _internal_edge_signature(edge: dict[str, Any]) -> str:
+def _internal_edge_signature(edge: dict[str, Any], *, origin_x: str = "", origin_y: str = "") -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
         f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:"
         f"{lane.get('speed', '')}:{lane.get('length', '')}:{lane.get('width', '')}:"
-        f"{lane.get('shape', '')}:{lane.get('outlineShape', '')}"
+        f"{_relative_shape(str(lane.get('shape', '')), origin_x, origin_y)}:"
+        f"{_relative_shape(str(lane.get('outlineShape', '')), origin_x, origin_y)}"
         for lane in lanes
         if isinstance(lane, dict)
     ]
     return f"function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
+
+
+def _model_junction_origin(model: dict[str, Any]) -> tuple[str, str]:
+    junction = model.get("junction", {}) if isinstance(model.get("junction"), dict) else {}
+    return str(junction.get("x", "")), str(junction.get("y", ""))
 
 
 def _internal_junction_signatures(
@@ -2508,6 +2517,7 @@ def _internal_junction_signatures(
     target_junction_id: str = "",
 ) -> dict[str, str]:
     junctions = model.get("internal_junctions", []) if isinstance(model.get("internal_junctions"), list) else []
+    origin_x, origin_y = _model_junction_origin(model)
     signatures: dict[str, str] = {}
     for junction in junctions:
         if not isinstance(junction, dict):
@@ -2517,9 +2527,11 @@ def _internal_junction_signatures(
             continue
         inc_lanes = _mapped_lane_refs(str(junction.get("incLanes", "")), edge_map, source_junction_id, target_junction_id)
         int_lanes = _mapped_lane_refs(str(junction.get("intLanes", "")), edge_map, source_junction_id, target_junction_id)
+        shape = _relative_shape(str(junction.get("shape", "")), origin_x, origin_y)
+        custom_shape = _relative_shape(str(junction.get("customShape", "")), origin_x, origin_y)
         signatures[junction_id] = (
             f"type={junction.get('type', '')}|incLanes={inc_lanes}|"
-            f"intLanes={int_lanes}|shape={junction.get('shape', '')}|customShape={junction.get('customShape', '')}"
+            f"intLanes={int_lanes}|shape={shape}|customShape={custom_shape}"
         )
     return signatures
 
