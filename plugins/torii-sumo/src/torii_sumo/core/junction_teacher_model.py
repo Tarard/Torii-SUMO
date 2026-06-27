@@ -469,6 +469,9 @@ def _connection_record(connection: ET.Element) -> dict[str, str]:
         "uncontrolled": connection.attrib.get("uncontrolled", ""),
         "allow": connection.attrib.get("allow", ""),
         "disallow": connection.attrib.get("disallow", ""),
+        "keepClear": connection.attrib.get("keepClear", ""),
+        "contPos": connection.attrib.get("contPos", ""),
+        "linkIndex2": connection.attrib.get("linkIndex2", ""),
     }
 
 
