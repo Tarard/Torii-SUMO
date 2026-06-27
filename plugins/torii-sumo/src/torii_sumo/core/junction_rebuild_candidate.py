@@ -563,7 +563,10 @@ def write_teacher_vehicle_connection_attrs_net(
             if teacher_connection.get("tl"):
                 connection.set("tl", junction_id)
                 connection.set("linkIndex", str(teacher_connection.get("linkIndex", "")))
-                connection.attrib.pop("uncontrolled", None)
+                if teacher_connection.get("uncontrolled"):
+                    connection.set("uncontrolled", str(teacher_connection["uncontrolled"]))
+                else:
+                    connection.attrib.pop("uncontrolled", None)
             else:
                 connection.attrib.pop("tl", None)
                 connection.attrib.pop("linkIndex", None)
