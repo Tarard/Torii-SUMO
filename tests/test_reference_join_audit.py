@@ -240,6 +240,43 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "request_bit_vector_pattern_count": 1,
         "tls_pattern_count": 1,
     }
+    assert report["reference_network_structural_summary"] == {
+        "plain_edge_count": 6,
+        "internal_edge_count": 1,
+        "crossing_edge_count": 1,
+        "walkingarea_edge_count": 1,
+        "connection_count": 1,
+        "request_count": 2,
+        "tl_logic_count": 1,
+        "traffic_light_junction_count": 1,
+        "tls_controlled_connection_count": 1,
+        "tl_connection_missing_linkindex_count": 0,
+        "junction_type_counts": {"traffic_light": 1},
+        "edge_function_counts": {"crossing": 1, "internal": 1, "plain": 6, "walkingarea": 1},
+    }
+    assert report["candidate_network_structural_summary"] == {
+        "plain_edge_count": 6,
+        "internal_edge_count": 1,
+        "crossing_edge_count": 0,
+        "walkingarea_edge_count": 0,
+        "connection_count": 1,
+        "request_count": 2,
+        "tl_logic_count": 0,
+        "traffic_light_junction_count": 0,
+        "tls_controlled_connection_count": 0,
+        "tl_connection_missing_linkindex_count": 0,
+        "junction_type_counts": {"priority": 1},
+        "edge_function_counts": {"internal": 1, "plain": 6},
+    }
+    assert report["network_structural_delta_status"] == "fail"
+    assert report["network_structural_missing_counts"] == {
+        "crossing_edge_count": 1,
+        "tl_logic_count": 1,
+        "traffic_light_junction_count": 1,
+        "tls_controlled_connection_count": 1,
+        "walkingarea_edge_count": 1,
+    }
+    assert report["network_structural_junction_type_missing_counts"] == {"traffic_light": 1}
     comparison = report["junction_pattern_comparisons"][0]
     assert comparison["junction_id"] == "cluster_a_b"
     assert comparison["status"] == "fail"
@@ -274,6 +311,8 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
     assert delta["junction_pattern_mismatch_field_counts"] == report["junction_pattern_mismatch_field_counts"]
     assert delta["junction_structural_signature_status"] == "fail"
     assert delta["junction_structural_signature_missing_counts"] == report["junction_structural_signature_missing_counts"]
+    assert delta["network_structural_delta_status"] == "fail"
+    assert delta["network_structural_missing_counts"] == report["network_structural_missing_counts"]
     assert delta["junction_pattern_comparisons"][0]["teacher"]["control_type"] == "traffic_light"
 
 

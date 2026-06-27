@@ -75,6 +75,12 @@ def audit_reference_join_patterns(
         reference_structural_signature_summary,
         candidate_structural_signature_summary,
     )
+    reference_network_structural_summary = _net_structural_summary(reference_net_file)
+    candidate_network_structural_summary = _net_structural_summary(candidate_net_file)
+    network_structural_delta = _network_structural_delta(
+        reference_network_structural_summary,
+        candidate_network_structural_summary,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -132,6 +138,11 @@ def audit_reference_join_patterns(
         "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
         "reference_structural_signature_summary": reference_structural_signature_summary,
         "candidate_structural_signature_summary": candidate_structural_signature_summary,
+        "network_structural_delta_status": network_structural_delta["status"],
+        "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "reference_network_structural_summary": reference_network_structural_summary,
+        "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
         "junction_pattern_templates": junction_pattern_templates,
         "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
@@ -170,6 +181,11 @@ def audit_reference_join_patterns(
         "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
         "reference_structural_signature_summary": reference_structural_signature_summary,
         "candidate_structural_signature_summary": candidate_structural_signature_summary,
+        "network_structural_delta_status": network_structural_delta["status"],
+        "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "reference_network_structural_summary": reference_network_structural_summary,
+        "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
         "junction_pattern_templates": junction_pattern_templates,
         "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
@@ -425,6 +441,74 @@ def _structural_signature_delta(reference: dict[str, int], candidate: dict[str, 
         if key != "pattern_count" and reference[key] > candidate.get(key, 0)
     }
     return {"status": "fail" if missing else "pass", "missing_counts": missing}
+
+
+def _net_structural_summary(net_file: Path) -> dict[str, Any]:
+    root = ET.parse(net_file).getroot()
+    edge_function_counts = Counter(_edge_function(edge) for edge in root.findall("edge"))
+    junction_type_counts = Counter(
+        junction.attrib.get("type", "") or "blank"
+        for junction in root.findall("junction")
+        if not junction.attrib.get("id", "").startswith(":") and junction.attrib.get("type") != "internal"
+    )
+    connections = root.findall("connection")
+    return {
+        "plain_edge_count": edge_function_counts.get("plain", 0),
+        "internal_edge_count": edge_function_counts.get("internal", 0),
+        "crossing_edge_count": edge_function_counts.get("crossing", 0),
+        "walkingarea_edge_count": edge_function_counts.get("walkingarea", 0),
+        "connection_count": len(connections),
+        "request_count": sum(len(junction.findall("request")) for junction in root.findall("junction")),
+        "tl_logic_count": len(root.findall("tlLogic")),
+        "traffic_light_junction_count": junction_type_counts.get("traffic_light", 0),
+        "tls_controlled_connection_count": sum(
+            1 for connection in connections if connection.attrib.get("tl") and connection.attrib.get("linkIndex")
+        ),
+        "tl_connection_missing_linkindex_count": sum(
+            1 for connection in connections if connection.attrib.get("tl") and not connection.attrib.get("linkIndex")
+        ),
+        "junction_type_counts": dict(sorted(junction_type_counts.items())),
+        "edge_function_counts": dict(sorted(edge_function_counts.items())),
+    }
+
+
+def _edge_function(edge: ET.Element) -> str:
+    function = edge.attrib.get("function", "")
+    if function in {"crossing", "walkingarea"}:
+        return function
+    if edge.attrib.get("id", "").startswith(":") or function == "internal":
+        return "internal"
+    return "plain"
+
+
+def _network_structural_delta(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    scalar_keys = [
+        "crossing_edge_count",
+        "walkingarea_edge_count",
+        "internal_edge_count",
+        "connection_count",
+        "request_count",
+        "tl_logic_count",
+        "traffic_light_junction_count",
+        "tls_controlled_connection_count",
+    ]
+    missing_counts = {
+        key: int(reference.get(key, 0)) - int(candidate.get(key, 0))
+        for key in scalar_keys
+        if int(reference.get(key, 0)) > int(candidate.get(key, 0))
+    }
+    reference_types = reference.get("junction_type_counts", {}) if isinstance(reference.get("junction_type_counts"), dict) else {}
+    candidate_types = candidate.get("junction_type_counts", {}) if isinstance(candidate.get("junction_type_counts"), dict) else {}
+    junction_type_missing_counts = {
+        key: int(value) - int(candidate_types.get(key, 0))
+        for key, value in reference_types.items()
+        if int(value) > int(candidate_types.get(key, 0))
+    }
+    return {
+        "status": "fail" if missing_counts or junction_type_missing_counts else "pass",
+        "missing_counts": dict(sorted(missing_counts.items())),
+        "junction_type_missing_counts": dict(sorted(junction_type_missing_counts.items())),
+    }
 
 
 def _compare_same_id_patterns(
