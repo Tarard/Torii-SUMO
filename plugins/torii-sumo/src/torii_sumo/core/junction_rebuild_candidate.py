@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
 from .junction_connection_audit import build_connection_signature, write_connection_signature
+from .junction_join_definition import build_junction_join_definition
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
 from .junction_teacher_model import (
     _extract_teacher_junction_model,
@@ -1434,6 +1435,26 @@ def write_expanded_scope_plain_inputs(
     node_root = ET.Element("nodes")
     for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
         node_root.append(copy.deepcopy(raw_nodes[node_id]))
+    join_node_ids = sorted(node_id for node_id in seed_node_ids if node_id in raw_nodes)
+    if len(join_node_ids) >= 2:
+        join_definition = build_junction_join_definition(
+            [
+                {
+                    "source": "teacher_guided_expanded_scope",
+                    "candidate_id": str(scope.get("core_junction_id", "")),
+                    "decision": "join",
+                    "confidence": "reference_matched",
+                    "node_ids": join_node_ids,
+                    "reason": "teacher-guided expanded scope needs a joined candidate junction for semantic replay",
+                }
+            ],
+            output_dir=output_dir,
+            prefix="expanded_scope",
+        )
+        joined_scope_junction_id = _sumo_joined_cluster_id(join_node_ids)
+    else:
+        join_definition = {}
+        joined_scope_junction_id = ""
 
     connection_root = ET.Element("connections")
     selected_edge_endpoints = {
@@ -1465,7 +1486,10 @@ def write_expanded_scope_plain_inputs(
     command = [
         netconvert_binary,
         "--node-files",
-        node_file.name,
+        ",".join(
+            [node_file.name]
+            + ([Path(str(join_definition["nodes_patch_file"])).name] if join_definition.get("nodes_patch_file") else [])
+        ),
         "--edge-files",
         edge_file.name,
         "--connection-files",
@@ -1506,6 +1530,11 @@ def write_expanded_scope_plain_inputs(
         "sumo_command": sumo_command,
         "netconvert": netconvert_report,
         "sumo_load": sumo_report,
+        "join_nodes_patch_file": str(join_definition.get("nodes_patch_file", "")),
+        "join_definition_file": str(join_definition.get("definition_file", "")),
+        "join_definition_csv": str(join_definition.get("definition_csv", "")),
+        "join_explicit_join_count": join_definition.get("explicit_join_count", 0),
+        "joined_scope_junction_id": joined_scope_junction_id,
         "seed_node_ids": sorted(seed_node_ids),
         "blocked_edge_ids": sorted(blocked_edge_ids),
         "missing_node_ids": missing_node_ids,
