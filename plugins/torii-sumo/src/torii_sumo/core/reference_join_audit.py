@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
+from .junction_teacher_model import extract_junction_pattern_index
 from .osm_network import _net_xy_to_latlon
 from .topology_audit import audit_topology_fragmentation
 
@@ -36,6 +37,13 @@ def audit_reference_join_patterns(
         candidate_graph = _candidate_graph(candidate_net_file)
     except (OSError, ET.ParseError, KeyError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
+
+    pattern_warnings = []
+    try:
+        junction_pattern_index = extract_junction_pattern_index(reference_net_file)
+    except (KeyError, TypeError, ValueError) as exc:
+        junction_pattern_index = []
+        pattern_warnings.append(f"junction pattern extraction failed: {type(exc).__name__}: {exc}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -79,12 +87,13 @@ def audit_reference_join_patterns(
         "reference_type_counts": dict(Counter(case["reference_type"] for case in reference_cases)),
         "learned_rule_counts": dict(Counter(case["learned_rule"] for case in matched_cases)),
         "pattern_stats": _pattern_stats(reference_cases, matched),
+        "junction_pattern_index": junction_pattern_index,
         "cases_file": str(cases_file),
         "summary_file": str(summary_file),
         "candidate_topology_audit_file": str(candidate_audit.get("report_file", "")),
         "matched_cases": matched,
         "all_cases": matched_cases,
-        "warnings": _warnings(reference_cases, matched_cases),
+        "warnings": _warnings(reference_cases, matched_cases) + pattern_warnings,
     }
     summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report

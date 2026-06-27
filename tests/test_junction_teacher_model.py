@@ -160,6 +160,37 @@ def test_extract_junction_pattern_index_counts_non_matching_tls_id(tmp_path: Pat
     assert records[0]["tl_phase_count"] == 1
 
 
+def test_extract_junction_pattern_index_parses_net_once(tmp_path: Path, monkeypatch) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a_in" from="a" to="j"><lane id="a_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="b_in" from="b" to="j"><lane id="b_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="c_in" from="c" to="j"><lane id="c_in_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="a_out" from="j" to="a2"><lane id="a_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="b_out" from="j" to="b2"><lane id="b_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="c_out" from="j" to="c2"><lane id="c_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="right_before_left" x="0" y="0" incLanes="a_in_0 b_in_0 c_in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    from torii_sumo.core import junction_teacher_model
+
+    parse_calls = 0
+    original_parse = junction_teacher_model.ET.parse
+
+    def counted_parse(path):
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse(path)
+
+    monkeypatch.setattr(junction_teacher_model.ET, "parse", counted_parse)
+
+    extract_junction_pattern_index(net_file)
+
+    assert parse_calls == 1
+
+
 def test_extract_junction_pattern_exemplar_uses_slots_not_edge_ids(tmp_path: Path) -> None:
     net_file = tmp_path / "teacher.net.xml"
     net_file.write_text(
