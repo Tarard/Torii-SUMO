@@ -424,6 +424,101 @@ def write_teacher_vehicle_connection_attrs_net(
     }
 
 
+def write_teacher_target_internal_replay_net(
+    *,
+    candidate_net_file: Path,
+    teacher_net_file: Path,
+    output_file: Path,
+    junction_id: str,
+    edge_map: dict[str, str],
+) -> dict[str, object]:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    internal_prefix = f":{junction_id}_"
+
+    candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
+    teacher_junction = teacher_root.find(f"junction[@id='{junction_id}']")
+    if candidate_junction is None:
+        return _failure(f"candidate junction not found: {junction_id}")
+    if teacher_junction is None:
+        return _failure(f"teacher junction not found: {junction_id}")
+
+    dx = float(candidate_junction.attrib.get("x", "0") or 0) - float(teacher_junction.attrib.get("x", "0") or 0)
+    dy = float(candidate_junction.attrib.get("y", "0") or 0) - float(teacher_junction.attrib.get("y", "0") or 0)
+
+    removed_internal_edges = []
+    insert_index = None
+    for child in list(candidate_root):
+        if child.tag == "edge" and child.attrib.get("id", "").startswith(internal_prefix):
+            if insert_index is None:
+                insert_index = list(candidate_root).index(child)
+            removed_internal_edges.append(child.attrib.get("id", ""))
+            candidate_root.remove(child)
+    if insert_index is None:
+        insert_index = list(candidate_root).index(candidate_junction)
+
+    teacher_internal_edges = [
+        edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id", "").startswith(internal_prefix)
+    ]
+    for offset, edge in enumerate(teacher_internal_edges):
+        candidate_root.insert(insert_index + offset, _clone_transformed_net_element(edge, dx, dy, edge_map))
+
+    candidate_junction.attrib.clear()
+    candidate_junction.attrib.update(_mapped_junction_attrs(teacher_junction, dx, dy, edge_map, internal_prefix))
+    for child in list(candidate_junction):
+        candidate_junction.remove(child)
+    for request in teacher_junction.findall("request"):
+        candidate_junction.append(ET.Element("request", dict(request.attrib)))
+
+    removed_connections = 0
+    for connection in list(candidate_root.findall("connection")):
+        if _touches_target_internal_subgraph(connection, internal_prefix, junction_id):
+            candidate_root.remove(connection)
+            removed_connections += 1
+
+    copied_connections = 0
+    skipped_connections = []
+    for connection in teacher_root.findall("connection"):
+        if not _touches_target_internal_subgraph(connection, internal_prefix, junction_id):
+            continue
+        mapped = _mapped_connection_attrs(connection, edge_map, internal_prefix, junction_id)
+        if mapped is None:
+            skipped_connections.append(dict(connection.attrib))
+            continue
+        candidate_root.append(ET.Element("connection", mapped))
+        copied_connections += 1
+
+    teacher_tllogic = teacher_root.find(f"tlLogic[@id='{junction_id}']")
+    if teacher_tllogic is not None:
+        target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
+        target_index = list(candidate_root).index(target_tllogic) if target_tllogic is not None else len(list(candidate_root))
+        if target_tllogic is not None:
+            candidate_root.remove(target_tllogic)
+        candidate_root.insert(target_index, _clone_transformed_net_element(teacher_tllogic, dx, dy, edge_map))
+
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "net_file": str(output_file),
+        "dx": round(dx, 6),
+        "dy": round(dy, 6),
+        "removed_internal_edge_count": len(removed_internal_edges),
+        "copied_internal_edge_count": len(teacher_internal_edges),
+        "removed_connection_count": removed_connections,
+        "copied_connection_count": copied_connections,
+        "skipped_connection_count": len(skipped_connections),
+        "skipped_connections": skipped_connections,
+        "copied_request_count": len(teacher_junction.findall("request")),
+    }
+
+
 def write_teacher_tllogic_net(
     *,
     candidate_net_file: Path,
@@ -484,6 +579,7 @@ def build_teacher_guided_junction_variant(
     prefix: str = "teacher_guided_junction",
     raw_type_file: Path | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
+    replay_target_internal_subgraph: bool = False,
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
@@ -515,6 +611,9 @@ def build_teacher_guided_junction_variant(
     sidewalks_net_file = output_dir / f"{prefix}_sidewalks.net.xml"
     pedring_net_file = output_dir / f"{prefix}_pedring.net.xml"
     vehicle_attrs_net_file = output_dir / f"{prefix}_vehicle_attrs.net.xml"
+    target_internal_replay_file = output_dir / f"{prefix}_target_internal_replay.net.xml"
+    target_internal_normalized_net_file = output_dir / f"{prefix}_target_internal_normalized.net.xml"
+    target_internal_vehicle_attrs_net_file = output_dir / f"{prefix}_target_internal_vehicle_attrs.net.xml"
     final_net_file = output_dir / f"{prefix}_teacher_guided.net.xml"
     report_file = output_dir / f"{prefix}_teacher_guided_report.json"
 
@@ -584,8 +683,74 @@ def build_teacher_guided_junction_variant(
         teacher_model=teacher_model,
         edge_map=edge_map,
     )
+    target_internal_replay_report = None
+    target_internal_normalize_report = None
+    target_internal_vehicle_attrs_report = None
+    tl_logic_input_file = vehicle_attrs_net_file
+    if replay_target_internal_subgraph:
+        target_internal_replay_report = write_teacher_target_internal_replay_net(
+            candidate_net_file=vehicle_attrs_net_file,
+            teacher_net_file=teacher_net_file,
+            output_file=target_internal_replay_file,
+            junction_id=junction_id,
+            edge_map=edge_map,
+        )
+        if target_internal_replay_report.get("status") != "pass":
+            return _write_teacher_guided_report(
+                report_file,
+                {
+                    "status": "fail",
+                    "claim_status": "construction-invalid",
+                    "junction_id": junction_id,
+                    "teacher_net_file": str(teacher_net_file),
+                    "candidate_net_file": str(candidate_net_file),
+                    "netconvert": netconvert_report,
+                    "lane_patch": lane_patch_report,
+                    "connection_plan": connection_report,
+                    "pedestrian_ring": pedestrian_ring_report,
+                    "vehicle_connection_attrs": vehicle_attrs_report,
+                    "target_internal_replay": target_internal_replay_report,
+                },
+            )
+        normalize_command = [
+            netconvert_binary,
+            "--sumo-net-file",
+            str(target_internal_replay_file),
+            "--output-file",
+            str(target_internal_normalized_net_file),
+        ]
+        target_internal_normalize_report = _command_report(
+            command_runner(normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+        )
+        if target_internal_normalize_report.get("status") != "pass":
+            return _write_teacher_guided_report(
+                report_file,
+                {
+                    "status": "fail",
+                    "claim_status": "construction-invalid",
+                    "junction_id": junction_id,
+                    "teacher_net_file": str(teacher_net_file),
+                    "candidate_net_file": str(candidate_net_file),
+                    "netconvert": netconvert_report,
+                    "lane_patch": lane_patch_report,
+                    "connection_plan": connection_report,
+                    "pedestrian_ring": pedestrian_ring_report,
+                    "vehicle_connection_attrs": vehicle_attrs_report,
+                    "target_internal_replay": target_internal_replay_report,
+                    "target_internal_normalize": target_internal_normalize_report,
+                },
+            )
+        target_internal_vehicle_attrs_report = write_teacher_vehicle_connection_attrs_net(
+            candidate_net_file=target_internal_normalized_net_file,
+            output_file=target_internal_vehicle_attrs_net_file,
+            junction_id=junction_id,
+            teacher_model=teacher_model,
+            edge_map=edge_map,
+        )
+        tl_logic_input_file = target_internal_vehicle_attrs_net_file
+
     tl_logic_report = write_teacher_tllogic_net(
-        candidate_net_file=vehicle_attrs_net_file,
+        candidate_net_file=tl_logic_input_file,
         output_file=final_net_file,
         junction_id=junction_id,
         teacher_model=teacher_model,
@@ -604,6 +769,9 @@ def build_teacher_guided_junction_variant(
                 "connection_plan": connection_report,
                 "pedestrian_ring": pedestrian_ring_report,
                 "vehicle_connection_attrs": vehicle_attrs_report,
+                "target_internal_replay": target_internal_replay_report,
+                "target_internal_normalize": target_internal_normalize_report,
+                "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
                 "tl_logic": tl_logic_report,
             },
         )
@@ -638,12 +806,22 @@ def build_teacher_guided_junction_variant(
             "sidewalks_net_file": str(sidewalks_net_file),
             "pedring_net_file": str(pedring_net_file),
             "vehicle_attrs_net_file": str(vehicle_attrs_net_file),
+            "target_internal_replay_file": str(target_internal_replay_file) if replay_target_internal_subgraph else "",
+            "target_internal_normalized_net_file": str(target_internal_normalized_net_file)
+            if replay_target_internal_subgraph
+            else "",
+            "target_internal_vehicle_attrs_net_file": str(target_internal_vehicle_attrs_net_file)
+            if replay_target_internal_subgraph
+            else "",
             "report_file": str(report_file),
             "lane_patch": lane_patch_report,
             "connection_plan": connection_report,
             "netconvert": netconvert_report,
             "pedestrian_ring": pedestrian_ring_report,
             "vehicle_connection_attrs": vehicle_attrs_report,
+            "target_internal_replay": target_internal_replay_report,
+            "target_internal_normalize": target_internal_normalize_report,
+            "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
             "tl_logic": tl_logic_report,
             "sumo_load": sumo_report,
             "parity": _compare_teacher_models(teacher_model, final_model),
@@ -723,6 +901,109 @@ def _net_lane_counts(root: ET.Element) -> dict[str, int]:
         if edge_id:
             counts[edge_id] = max(1, len(edge.findall("lane")))
     return counts
+
+
+def _clone_transformed_net_element(element: ET.Element, dx: float, dy: float, edge_map: dict[str, str]) -> ET.Element:
+    clone = ET.Element(element.tag, _mapped_spatial_attrs(element.attrib, dx, dy, edge_map))
+    clone.text = element.text
+    clone.tail = element.tail
+    for child in list(element):
+        clone.append(_clone_transformed_net_element(child, dx, dy, edge_map))
+    return clone
+
+
+def _mapped_spatial_attrs(attrs: dict[str, str], dx: float, dy: float, edge_map: dict[str, str]) -> dict[str, str]:
+    mapped = dict(attrs)
+    if "x" in mapped:
+        mapped["x"] = _format_xy(float(mapped["x"]) + dx)
+    if "y" in mapped:
+        mapped["y"] = _format_xy(float(mapped["y"]) + dy)
+    if "shape" in mapped:
+        mapped["shape"] = _translate_shape(mapped["shape"], dx, dy)
+    if "crossingEdges" in mapped:
+        mapped_edges = [edge_map.get(edge, edge if edge.startswith(":") else "") for edge in _split(mapped["crossingEdges"])]
+        mapped["crossingEdges"] = " ".join(edge for edge in mapped_edges if edge)
+    return mapped
+
+
+def _mapped_junction_attrs(
+    teacher_junction: ET.Element,
+    dx: float,
+    dy: float,
+    edge_map: dict[str, str],
+    internal_prefix: str,
+) -> dict[str, str]:
+    attrs = _mapped_spatial_attrs(teacher_junction.attrib, dx, dy, edge_map)
+    if "incLanes" in attrs:
+        attrs["incLanes"] = " ".join(
+            lane for lane in (_map_lane_ref(lane, edge_map, internal_prefix) for lane in _split(attrs["incLanes"])) if lane
+        )
+    if "intLanes" in attrs:
+        attrs["intLanes"] = " ".join(
+            lane for lane in (_map_lane_ref(lane, edge_map, internal_prefix) for lane in _split(attrs["intLanes"])) if lane
+        )
+    return attrs
+
+
+def _map_lane_ref(lane_id: str, edge_map: dict[str, str], internal_prefix: str) -> str:
+    if lane_id.startswith(internal_prefix):
+        return lane_id
+    if "_" not in lane_id:
+        return ""
+    edge_id, lane_index = lane_id.rsplit("_", 1)
+    mapped_edge = edge_map.get(edge_id)
+    return f"{mapped_edge}_{lane_index}" if mapped_edge else ""
+
+
+def _mapped_connection_attrs(
+    connection: ET.Element,
+    edge_map: dict[str, str],
+    internal_prefix: str,
+    junction_id: str,
+) -> dict[str, str] | None:
+    mapped = dict(connection.attrib)
+    for attr in ("from", "to"):
+        endpoint = _map_connection_endpoint(mapped.get(attr, ""), edge_map, internal_prefix)
+        if not endpoint:
+            return None
+        mapped[attr] = endpoint
+    if mapped.get("tl") == junction_id:
+        mapped["tl"] = junction_id
+    if mapped.get("via") and not mapped["via"].startswith(internal_prefix):
+        return None
+    return mapped
+
+
+def _map_connection_endpoint(value: str, edge_map: dict[str, str], internal_prefix: str) -> str:
+    if value.startswith(internal_prefix):
+        return value
+    return edge_map.get(value, "")
+
+
+def _touches_target_internal_subgraph(connection: ET.Element, internal_prefix: str, junction_id: str) -> bool:
+    return (
+        connection.attrib.get("from", "").startswith(internal_prefix)
+        or connection.attrib.get("to", "").startswith(internal_prefix)
+        or connection.attrib.get("via", "").startswith(internal_prefix)
+        or connection.attrib.get("tl", "") == junction_id
+    )
+
+
+def _translate_shape(shape: str, dx: float, dy: float) -> str:
+    translated = []
+    for point in _split(shape):
+        coords = point.split(",")
+        if len(coords) < 2:
+            translated.append(point)
+            continue
+        coords[0] = _format_xy(float(coords[0]) + dx)
+        coords[1] = _format_xy(float(coords[1]) + dy)
+        translated.append(",".join(coords))
+    return " ".join(translated)
+
+
+def _format_xy(value: float) -> str:
+    return f"{value:.2f}"
 
 
 def _pedestrian_tl_pairs_from_records(records: object, junction_id: str) -> dict[str, tuple[str, str]]:
