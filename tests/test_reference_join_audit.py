@@ -127,14 +127,83 @@ def test_reference_join_audit_reports_reusable_junction_patterns(tmp_path: Path)
     assert report["junction_pattern_index"][0]["arm_count"] == 3
 
 
+def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="cluster_a_b"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="south_in" from="s" to="cluster_a_b"><lane id="south_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="north_in" from="n" to="cluster_a_b"><lane id="north_in_0" index="0" allow="passenger" shape="0,10 0,0"/></edge>
+  <edge id="east_out" from="cluster_a_b" to="e"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="south_out" from="cluster_a_b" to="so"><lane id="south_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="north_out" from="cluster_a_b" to="no"><lane id="north_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0" allow="passenger" shape="0,0 1,1"/></edge>
+  <edge id=":cluster_a_b_c0" function="crossing"><lane id=":cluster_a_b_c0_0" index="0" allow="pedestrian" shape="0,-1 0,1"/></edge>
+  <edge id=":cluster_a_b_w0" function="walkingarea"><lane id=":cluster_a_b_w0_0" index="0" allow="pedestrian" shape="1,1 2,1"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0" incLanes="west_in_0 south_in_0 north_in_0" intLanes=":cluster_a_b_0_0 :cluster_a_b_c0_0">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="1"/>
+  </junction>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0" tl="cluster_a_b" linkIndex="0" dir="s"/>
+  <tlLogic id="cluster_a_b" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="cluster_a_b"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="south_in" from="s" to="cluster_a_b"><lane id="south_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="north_in" from="n" to="cluster_a_b"><lane id="north_in_0" index="0" allow="passenger" shape="0,10 0,0"/></edge>
+  <edge id="east_out" from="cluster_a_b" to="e"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="south_out" from="cluster_a_b" to="so"><lane id="south_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="north_out" from="cluster_a_b" to="no"><lane id="north_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0" allow="passenger" shape="0,0 1,1"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="west_in_0 south_in_0 north_in_0" intLanes=":cluster_a_b_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+    <request index="1" response="00" foes="00" cont="00"/>
+  </junction>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        reference_cluster_prefix="cluster_",
+        candidate_cluster_radius_m=20,
+        match_radius_m=20,
+    )
+
+    assert report["candidate_junction_pattern_index"][0]["junction_id"] == "cluster_a_b"
+    assert report["junction_pattern_comparison_status"] == "fail"
+    assert report["junction_pattern_mismatch_count"] == 1
+    assert report["junction_pattern_comparisons"] == [
+        {
+            "junction_id": "cluster_a_b",
+            "status": "fail",
+            "mismatch_fields": [
+                "control_type",
+                "has_tls",
+                "internal_function_counts",
+                "request_bit_lengths_ok",
+            ],
+        }
+    ]
+
+
 def test_reference_join_audit_keeps_audit_when_pattern_extraction_fails(tmp_path: Path) -> None:
     reference = tmp_path / "reference.net.xml"
     candidate = tmp_path / "candidate.net.xml"
     reference.write_text(
         """<net>
   <edge id="west_in" from="w" to="cluster_a_b"><lane id="west_in_0" index="0" allow="passenger" shape="bad,0 0,0"/></edge>
+  <edge id="south_in" from="s" to="cluster_a_b"><lane id="south_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="north_in" from="n" to="cluster_a_b"><lane id="north_in_0" index="0" allow="passenger" shape="0,10 0,0"/></edge>
   <edge id="east_out" from="cluster_a_b" to="e"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
-  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="west_in_0" intLanes=""/>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="west_in_0 south_in_0 north_in_0" intLanes=""/>
   <connection from="west_in" to="east_out" fromLane="0" toLane="0" dir="s"/>
 </net>""",
         encoding="utf-8",
