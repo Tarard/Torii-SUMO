@@ -21,6 +21,8 @@ def build_tls_aggregation_variant(
 ) -> dict[str, Any]:
     if not net_file.exists():
         return _failure(f"net file does not exist: {net_file}")
+    net_file = net_file.resolve()
+    output_dir = output_dir.resolve()
 
     cluster_count = _int_field(tls_audit_report, "tls_cluster_count")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -103,7 +105,7 @@ def build_tls_aggregation_variant(
         "--tls.set",
         ",".join(representative_node_ids),
         "--output-file",
-        str(variant_file),
+        _command_path(variant_file, output_dir),
     ]
     command_record.write_text(" ".join(command) + "\n", encoding="utf-8")
     try:
@@ -141,6 +143,13 @@ def build_tls_aggregation_variant(
 def _read_clusters(path: Path) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def _command_path(path: Path, cwd: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(cwd))
+    except ValueError:
+        return str(path)
 
 
 def _representatives_for_clusters(

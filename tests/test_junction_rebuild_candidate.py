@@ -113,6 +113,8 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     )
 
     assert report["status"] == "pass"
+    assert report["teacher_net_file"] == str(teacher_net.resolve())
+    assert report["candidate_net_file"] == str(candidate_net.resolve())
     assert report["repair_candidate_count"] == 1
     assert report["ready_candidate_count"] == 1
     candidate = report["repair_candidates"][0]

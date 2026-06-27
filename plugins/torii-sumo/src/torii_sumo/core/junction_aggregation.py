@@ -167,19 +167,20 @@ def build_junction_aggregation_variant(
         "netconvert",
         "--sumo-net-file",
         str(net_file),
-        *join_definition["netconvert_patch_args"],
+        "--node-files",
+        _command_path(Path(str(join_definition["nodes_patch_file"])), output_dir),
         *(
             [
-                "--remove-edges.input-file",
-                str(remove_edges_file),
+                "--remove-edges.explicit",
+                ",".join(remove_edge_ids),
             ]
             if remove_edge_ids
             else []
         ),
         "--junctions.join-output",
-        str(joined_junctions_file),
+        _command_path(joined_junctions_file, output_dir),
         "--output-file",
-        str(variant_file),
+        _command_path(variant_file, output_dir),
     ]
     command_record.write_text(" ".join(command) + "\n", encoding="utf-8")
     try:
@@ -294,6 +295,13 @@ def _aggregation_candidates(
                 }
             )
     return _dedupe_join_candidates(candidates)
+
+
+def _command_path(path: Path, cwd: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(cwd))
+    except ValueError:
+        return str(path)
 
 
 def _filter_modal_support_join_nodes(candidates: list[dict[str, Any]], net_file: Path) -> list[dict[str, Any]]:
