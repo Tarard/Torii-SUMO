@@ -1715,7 +1715,7 @@ def run_osm_cleanup_workflow(
         title="SUMO Network Review",
         claim_status=str(report["claim_status"]),
         summary=report,
-        net_file=report.get("net_file"),
+        net_file=reference_visual_detail_comparison_net_file or report.get("net_file"),
         raw_net_file=report.get("raw_net_file"),
         connected_core_file=report.get("connected_core_file"),
         reference_net_file=report.get("reference_net_file"),

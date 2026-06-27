@@ -442,6 +442,19 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "warnings": [],
         }
 
+    def fake_review_html(**kwargs):
+        calls["workflow_review_net_file"] = kwargs["net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "workflow_review_html_status": "pass",
+            "workflow_review_html_file": str(tmp_path / "review.html"),
+            "workflow_report_file": str(tmp_path / "workflow_report.json"),
+            "review_manifest_file": str(tmp_path / "review_manifest.json"),
+            "netedit_review_sumocfg_file": str(tmp_path / "review.sumocfg"),
+            "warnings": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
         output_dir=tmp_path,
@@ -497,6 +510,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
         teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
         teacher_guided_repair_run_func=fake_teacher_guided_repair_run,
+        review_html_func=fake_review_html,
     )
 
     visual_detail_net_file = tmp_path / "sumo" / "reference-join_reference_visual_detail.net.xml"
@@ -512,6 +526,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["teacher_guided_run_netconvert_binary"] == "netconvert-test"
     assert calls["teacher_guided_run_sumo_binary"] == "sumo-test"
     assert calls["teacher_guided_run_max_ready_candidates"] == 80
+    assert Path(calls["workflow_review_net_file"]) == tmp_path / "teacher_guided_best.net.xml"
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
     assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
