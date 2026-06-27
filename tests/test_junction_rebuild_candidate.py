@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -262,7 +263,29 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
         teacher_net_file=teacher_net,
         candidate_net_file=candidate_net,
         reference_join_audit_report={
-            "matched_cases": [{"reference_id": "cluster_a_b", "learned_rule": "tum_like_join_candidate"}]
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "learned_rule": "tum_like_join_candidate",
+                    "reference_joined_source_nodes": ["a", "b"],
+                }
+            ],
+            "junction_pattern_comparisons": [
+                {
+                    "junction_id": "a",
+                    "status": "fail",
+                    "mismatch_fields": ["internal_function_counts", "has_tls"],
+                    "teacher": {
+                        "has_tls": True,
+                        "internal_function_counts": {"crossing": 1, "internal": 3, "walkingarea": 1},
+                    },
+                    "candidate": {
+                        "has_tls": False,
+                        "internal_function_counts": {"crossing": 0, "internal": 1, "walkingarea": 0},
+                    },
+                }
+            ],
+            "junction_pattern_mismatch_field_counts": {"internal_function_counts": 1, "has_tls": 1},
         },
         output_dir=tmp_path / "queue",
         prefix="demo",
@@ -276,6 +299,11 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     candidate = report["repair_candidates"][0]
     assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
     assert candidate["junction_id"] == "cluster_a_b"
+    assert candidate["junction_pattern_mismatch_fields"] == ["internal_function_counts", "has_tls"]
+    assert candidate["junction_pattern_delta_count"] == 1
+    assert candidate["junction_pattern_deltas"][0]["junction_id"] == "a"
+    assert candidate["junction_pattern_deltas"][0]["teacher"]["has_tls"] is True
+    assert candidate["junction_pattern_deltas"][0]["candidate"]["has_tls"] is False
     assert candidate["edge_map"] == {"teacher_in": "cand_in", "teacher_out": "cand_out"}
     assert candidate["slot_edge_map"] == {"slot_0": "cand_in", "slot_1": "cand_out"}
     assert candidate["movement_exemplar"]["movement_signatures"] == [
@@ -292,7 +320,10 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
         }
     ]
     assert Path(report["queue_file"]).is_file()
-    assert Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()[0].startswith("reference_id")
+    assert report["junction_pattern_mismatch_field_counts"] == {"internal_function_counts": 1, "has_tls": 1}
+    rows = list(csv.DictReader(Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()))
+    assert rows[0]["junction_pattern_delta_count"] == "1"
+    assert rows[0]["junction_pattern_mismatch_fields"] == "internal_function_counts;has_tls"
 
 
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
