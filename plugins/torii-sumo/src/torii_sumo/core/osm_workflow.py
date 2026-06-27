@@ -820,6 +820,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_plain_export_report: dict[str, Any] | None = None
     teacher_guided_repair_run_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
+    teacher_guided_repair_best_expanded_scope_net_file: Path | None = None
     reference_hierarchy_audit_report: dict[str, Any] | None = None
     reference_hierarchy_audit_candidate_layer = "not_applicable"
     reference_hierarchy_audit_candidate_net_file: Path | None = None
@@ -1150,7 +1151,10 @@ def run_osm_cleanup_workflow(
             prefix=f"{prefix}_teacher_guided_repair",
             max_ready_candidates=teacher_guided_repair_max_ready_candidates,
         )
-        if _int_field(teacher_guided_repair_queue_report, "ready_candidate_count") > 0:
+        if (
+            _int_field(teacher_guided_repair_queue_report, "ready_candidate_count") > 0
+            or _int_field(teacher_guided_repair_queue_report, "expanded_scope_candidate_count") > 0
+        ):
             teacher_guided_plain_export_report = teacher_guided_plain_export_func(
                 net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
                 output_dir=output_dir / "teacher_guided_repair_plain",
@@ -1179,6 +1183,11 @@ def run_osm_cleanup_workflow(
                 teacher_guided_repair_best_variant_file = _teacher_guided_best_variant_file(
                     teacher_guided_repair_run_report
                 )
+                expanded_scope_value = str(teacher_guided_repair_run_report.get("best_expanded_scope_net_file", ""))
+                if expanded_scope_value:
+                    expanded_scope_file = Path(expanded_scope_value)
+                    if expanded_scope_file.exists():
+                        teacher_guided_repair_best_expanded_scope_net_file = expanded_scope_file
                 if teacher_guided_repair_best_variant_file is not None:
                     reference_visual_detail_comparison_net_file = teacher_guided_repair_best_variant_file
     routeability_report = None
@@ -1550,6 +1559,12 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_ready_candidate_count": 0
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("ready_candidate_count", 0),
+        "teacher_guided_repair_expanded_scope_candidate_count": 0
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("expanded_scope_candidate_count", 0),
+        "teacher_guided_repair_expanded_scope_pass_candidate_count": 0
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("expanded_scope_pass_candidate_count", 0),
         "teacher_guided_repair_exemplar_ready_candidate_count": teacher_guided_exemplar_ready_candidate_count,
         "teacher_guided_repair_exemplar_movement_signature_count": teacher_guided_exemplar_movement_signature_count,
         "teacher_guided_repair_queued_case_count": 0
@@ -1603,6 +1618,9 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_best_variant_file": ""
         if teacher_guided_repair_best_variant_file is None
         else str(teacher_guided_repair_best_variant_file),
+        "teacher_guided_repair_best_expanded_scope_net_file": ""
+        if teacher_guided_repair_best_expanded_scope_net_file is None
+        else str(teacher_guided_repair_best_expanded_scope_net_file),
         "reference_hierarchy_status": "skipped"
         if reference_hierarchy_audit_report is None
         else reference_hierarchy_audit_report.get(

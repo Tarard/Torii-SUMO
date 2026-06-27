@@ -394,13 +394,14 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "repair_candidate_count": 1,
-            "ready_candidate_count": 1,
+            "ready_candidate_count": 0,
+            "expanded_scope_candidate_count": 1,
             "queue_file": str(tmp_path / "teacher_guided_queue.json"),
             "queue_csv_file": str(tmp_path / "teacher_guided_queue.csv"),
             "repair_candidates": [
                 {
                     "reference_id": "cluster_a_b",
-                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "candidate_status": "needs_expanded_rebuild_scope",
                     "slot_edge_map": {"slot_0": "cand_in", "slot_1": "cand_out"},
                     "movement_exemplar": {
                         "movement_signatures": [
@@ -433,23 +434,19 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         calls["teacher_guided_run_netconvert_binary"] = kwargs["netconvert_binary"]
         calls["teacher_guided_run_sumo_binary"] = kwargs["sumo_binary"]
         calls["teacher_guided_run_max_ready_candidates"] = kwargs["max_ready_candidates"]
-        best_variant = tmp_path / "teacher_guided_best.net.xml"
-        best_variant.write_text("<net/>", encoding="utf-8")
+        best_expanded = tmp_path / "expanded_scope.net.xml"
+        best_expanded.write_text("<net/>", encoding="utf-8")
         return {
-            "status": "pass",
-            "claim_status": "diagnostic-demo",
-            "parity_gate_status": "pass",
-            "attempted_candidate_count": 1,
-            "pass_candidate_count": 1,
-            "semantic_failure_counts": {"parity:crossing_count": 2},
-            "variant_reports": [
-                {
-                    "status": "pass",
-                    "parity_gate_status": "pass",
-                    "final_net_file": str(best_variant),
-                    "sumo_load": {"status": "pass"},
-                }
-            ],
+            "status": "blocked",
+            "claim_status": "blocked",
+            "parity_gate_status": "blocked",
+            "attempted_candidate_count": 0,
+            "pass_candidate_count": 0,
+            "expanded_scope_candidate_count": 1,
+            "expanded_scope_pass_candidate_count": 1,
+            "best_expanded_scope_net_file": str(best_expanded),
+            "semantic_failure_counts": {},
+            "variant_reports": [],
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "warnings": [],
         }
@@ -533,13 +530,14 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["teacher_guided_queue_max_ready_candidates"] == 80
     assert calls["teacher_guided_plain_net_file"] == tmp_path / "aggregated.net.xml"
     assert calls["teacher_guided_plain_netconvert_binary"] == "netconvert-test"
-    assert calls["teacher_guided_run_queue_report"]["ready_candidate_count"] == 1
+    assert calls["teacher_guided_run_queue_report"]["ready_candidate_count"] == 0
+    assert calls["teacher_guided_run_queue_report"]["expanded_scope_candidate_count"] == 1
     assert calls["teacher_guided_run_raw_node_file"] == tmp_path / "plain.nod.xml"
     assert calls["teacher_guided_run_replay_target_internal_subgraph"] is True
     assert calls["teacher_guided_run_netconvert_binary"] == "netconvert-test"
     assert calls["teacher_guided_run_sumo_binary"] == "sumo-test"
     assert calls["teacher_guided_run_max_ready_candidates"] == 80
-    assert Path(calls["workflow_review_net_file"]) == tmp_path / "teacher_guided_best.net.xml"
+    assert Path(calls["workflow_review_net_file"]) == tmp_path / "aggregated.net.xml"
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
     assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
@@ -548,26 +546,29 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_unmatched_case_count"] == 1
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"
     assert report["reference_join_aggregation_variant_file"] == str(tmp_path / "aggregated.net.xml")
-    assert report["teacher_guided_repair_best_variant_file"] == str(tmp_path / "teacher_guided_best.net.xml")
-    assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "teacher_guided_best.net.xml")
+    assert report["teacher_guided_repair_best_variant_file"] == ""
+    assert report["teacher_guided_repair_best_expanded_scope_net_file"] == str(tmp_path / "expanded_scope.net.xml")
+    assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["teacher_guided_repair_queue_status"] == "pass"
-    assert report["teacher_guided_repair_ready_candidate_count"] == 1
-    assert report["teacher_guided_repair_exemplar_ready_candidate_count"] == 1
-    assert report["teacher_guided_repair_exemplar_movement_signature_count"] == 2
+    assert report["teacher_guided_repair_ready_candidate_count"] == 0
+    assert report["teacher_guided_repair_expanded_scope_candidate_count"] == 1
+    assert report["teacher_guided_repair_expanded_scope_pass_candidate_count"] == 1
+    assert report["teacher_guided_repair_exemplar_ready_candidate_count"] == 0
+    assert report["teacher_guided_repair_exemplar_movement_signature_count"] == 0
     assert report["teacher_guided_repair_queue_file"] == str(tmp_path / "teacher_guided_queue.json")
     assert report["teacher_guided_repair_plain_export_status"] == "pass"
     assert report["teacher_guided_repair_raw_node_file"] == str(tmp_path / "plain.nod.xml")
-    assert report["teacher_guided_repair_run_status"] == "pass"
-    assert report["teacher_guided_repair_parity_gate_status"] == "pass"
-    assert report["teacher_guided_repair_semantic_failure_counts"] == {"parity:crossing_count": 2}
+    assert report["teacher_guided_repair_run_status"] == "blocked"
+    assert report["teacher_guided_repair_parity_gate_status"] == "blocked"
+    assert report["teacher_guided_repair_semantic_failure_counts"] == {}
     assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
-    assert report["workflow_review_net_file"] == str(tmp_path / "teacher_guided_best.net.xml")
+    assert report["workflow_review_net_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
     assert report["gate_status"]["connection_semantics_parity"] == "blocked"
     assert report["gate_status"]["tls_semantics_parity"] == "blocked"
     assert report["gate_status"]["internal_junction_parity"] == "blocked"
     assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
-    assert report["gate_status"]["teacher_guided_junction_parity"] == "pass"
+    assert report["gate_status"]["teacher_guided_junction_parity"] == "blocked"
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:

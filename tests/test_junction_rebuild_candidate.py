@@ -750,6 +750,15 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     def fail_if_called(**_kwargs):
         raise AssertionError("variant builder must not run for expanded-scope candidates")
 
+    commands: list[list[str]] = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        commands.append(command)
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text("<net/>\n", encoding="utf-8")
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
     report = run_teacher_guided_repair_queue(
         queue_report={
             "teacher_net_file": str(teacher_net),
@@ -785,6 +794,9 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
         raw_edge_file=raw_edges,
         raw_connection_file=raw_connections,
         output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
         variant_builder=fail_if_called,
     )
 
@@ -796,7 +808,11 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert scope_report["edge_count"] == 3
     assert scope_report["connection_count"] == 1
     assert scope_report["rewritten_endpoint_count"] == 1
+    assert scope_report["netconvert"]["status"] == "pass"
+    assert scope_report["sumo_load"]["status"] == "pass"
     assert scope_report["netconvert_command"][-2:] == ["--output-file", "expanded_scope.net.xml"]
+    assert report["expanded_scope_pass_candidate_count"] == 1
+    assert Path(report["best_expanded_scope_net_file"]).name == "expanded_scope.net.xml"
     scope_nodes = ET.parse(scope_report["node_file"]).getroot()
     scope_edges = ET.parse(scope_report["edge_file"]).getroot()
     scope_connections = ET.parse(scope_report["connection_file"]).getroot()
@@ -804,6 +820,7 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert [edge.attrib["id"] for edge in scope_edges] == ["approach_in", "teacher_out", "old_downstream"]
     assert scope_edges.find("edge[@id='teacher_out']").attrib["to"] == "e"
     assert [connection.attrib["from"] for connection in scope_connections] == ["approach_in"]
+    assert [command[0] for command in commands] == ["netconvert-test", "sumo-test"]
 
 
 def test_run_teacher_guided_repair_queue_fails_when_parity_fails(tmp_path: Path) -> None:
