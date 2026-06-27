@@ -452,6 +452,7 @@ def _lane_record(lane: ET.Element) -> dict[str, str]:
         "allow": lane.attrib.get("allow", ""),
         "disallow": lane.attrib.get("disallow", ""),
         "speed": lane.attrib.get("speed", ""),
+        "length": lane.attrib.get("length", ""),
         "width": lane.attrib.get("width", ""),
         "shape": lane.attrib.get("shape", ""),
         "outlineShape": lane.attrib.get("outlineShape", ""),
