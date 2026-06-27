@@ -489,7 +489,7 @@ def sumo_osm_cleanup_workflow(
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = True,
-    teacher_guided_repair_max_ready_candidates: int | None = 5,
+    teacher_guided_repair_max_ready_candidates: int | None = 20,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
