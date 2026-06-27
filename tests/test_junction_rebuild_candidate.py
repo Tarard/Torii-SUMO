@@ -61,6 +61,57 @@ def test_build_rebuild_candidate_emits_only_high_confidence_vehicle_connections(
     assert "--connection-files" in Path(report["netconvert_command_file"]).read_text(encoding="utf-8")
 
 
+def test_build_rebuild_candidate_can_filter_with_exemplar_movement_signatures(tmp_path: Path) -> None:
+    net_file = tmp_path / "fixture.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="j" type="highway.primary" name="Main Street">
+    <lane id="west_in_0" index="0" allow="passenger" length="10" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="east_out" from="j" to="e" type="highway.primary" name="Main Street">
+    <lane id="east_out_0" index="0" allow="passenger" length="10" shape="0,0 10,0"/>
+  </edge>
+  <edge id="south_out" from="j" to="s" type="highway.secondary" name="South Road">
+    <lane id="south_out_0" index="0" allow="passenger" length="10" shape="0,0 0,-10"/>
+  </edge>
+  <junction id="w" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="traffic_light"/>
+  <junction id="e" x="10" y="0" type="priority"/>
+  <junction id="s" x="0" y="-10" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_rebuild_candidate(
+        net_file=net_file,
+        junction_id="j",
+        output_dir=tmp_path / "candidate",
+        prefix="demo",
+        movement_exemplar={
+            "movement_signatures": [
+                {
+                    "from_slot": "slot_0",
+                    "to_slot": "slot_1",
+                    "fromLane": "0",
+                    "toLane": "0",
+                    "dir": "s",
+                    "state": "O",
+                }
+            ]
+        },
+        slot_edge_map={"slot_0": "west_in", "slot_1": "east_out"},
+    )
+
+    root = ET.parse(report["connections_file"]).getroot()
+    assert report["movement_source"] == "exemplar_signatures"
+    assert report["emitted_connection_count"] == 1
+    assert report["skipped_movement_count"] == 1
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [
+        ("west_in", "east_out"),
+    ]
+
+
 def test_rebuild_candidate_writes_connection_signature(tmp_path: Path) -> None:
     net_file = tmp_path / "fixture.net.xml"
     net_file.write_text(
