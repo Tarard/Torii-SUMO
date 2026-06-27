@@ -1093,7 +1093,16 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert replay_node_file == Path(scope_report["replay_node_file"])
     replay_nodes = ET.parse(replay_node_file).getroot()
     assert [join.attrib["nodes"] for join in replay_nodes.findall("join")] == ["c e j"]
-    assert variant_calls[0]["raw_edge_file"] == Path(scope_report["edge_file"])
+    replay_edge_file = variant_calls[0]["raw_edge_file"]
+    assert replay_edge_file != Path(scope_report["edge_file"])
+    assert replay_edge_file == Path(scope_report["replay_edge_file"])
+    replay_edges = ET.parse(replay_edge_file).getroot()
+    assert replay_edges.find("edge[@id='approach_in']").attrib["to"] == "cluster_c_e_j"
+    assert replay_edges.find("edge[@id='teacher_out']") is None
+    assert replay_edges.find("edge[@id='old_downstream']") is None
+    assert scope_report["replay_edge_endpoint_rewrite_count"] == 1
+    assert scope_report["replay_self_loop_edge_drop_count"] == 2
+    assert scope_report["replay_dropped_self_loop_edges"] == ["teacher_out", "old_downstream"]
     assert variant_calls[0]["raw_connection_file"] == Path(scope_report["connection_file"])
     assert variant_calls[0]["candidate_net_file"] == Path(scope_report["net_file"])
     assert variant_calls[0]["junction_id"] == "cluster_c_e_j"
@@ -1217,7 +1226,7 @@ def test_target_internal_replay_preserves_replaced_boundary_edge_order(tmp_path:
     assert children.index(("edge", "teacher_out")) < children.index(("junction", "b"))
 
 
-def test_run_teacher_guided_repair_queue_derives_edge_map_from_joined_expanded_scope(tmp_path: Path) -> None:
+def test_run_teacher_guided_repair_queue_skips_review_expanded_scope(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
         """<nodes>
@@ -1266,9 +1275,8 @@ def test_run_teacher_guided_repair_queue_derives_edge_map_from_joined_expanded_s
             )
         return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
 
-    def fake_variant(**kwargs):
-        variant_calls.append(kwargs)
-        return {"status": "pass", "claim_status": "diagnostic-demo", "parity_gate_status": "pass"}
+    def fake_variant(**_kwargs):
+        raise AssertionError("variant builder must not run for review-only expanded scopes")
 
     report = run_teacher_guided_repair_queue(
         queue_report={
@@ -1300,13 +1308,11 @@ def test_run_teacher_guided_repair_queue_derives_edge_map_from_joined_expanded_s
         variant_builder=fake_variant,
     )
 
-    assert report["status"] == "pass"
+    assert report["status"] == "blocked"
     assert report["expanded_scope_reports"][0]["status"] == "review"
-    assert report["attempted_candidate_count"] == 1
-    assert variant_calls[0]["junction_id"] == "cluster_c_e"
-    assert variant_calls[0]["teacher_junction_id"] == "teacher_j"
-    assert variant_calls[0]["candidate_net_file"] == Path(report["expanded_scope_reports"][0]["net_file"])
-    assert variant_calls[0]["edge_map"] == {"teacher_in": "cand_in", "teacher_out": "cand_out"}
+    assert report["attempted_candidate_count"] == 0
+    assert report["skipped_candidate_count"] == 1
+    assert report["skipped_candidates"][0]["candidate_status"] == "needs_expanded_rebuild_scope"
 
 
 def test_run_teacher_guided_repair_queue_fails_when_parity_fails(tmp_path: Path) -> None:
