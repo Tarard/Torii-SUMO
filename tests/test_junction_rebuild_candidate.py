@@ -694,7 +694,7 @@ def test_build_teacher_guided_repair_queue_limits_ready_candidates(tmp_path: Pat
     assert report["matched_case_count"] == 2
     assert report["queued_case_count"] == 1
     assert report["queue_truncated"] is True
-    assert report["queue_order_policy"] == "highest_teacher_template_count_then_smallest_matched_candidate_node_count_first"
+    assert report["queue_order_policy"] == "largest_vehicle_movement_gap_then_highest_teacher_template_count"
     assert report["ready_candidate_count"] == 1
     assert report["max_ready_candidates"] == 1
     assert report["repair_candidates"][0]["matched_candidate_node_ids"] == ["a"]
@@ -746,13 +746,69 @@ def test_build_teacher_guided_repair_queue_prioritizes_reusable_teacher_template
     )
 
     candidate = report["repair_candidates"][0]
-    assert report["queue_order_policy"] == "highest_teacher_template_count_then_smallest_matched_candidate_node_count_first"
+    assert report["queue_order_policy"] == "largest_vehicle_movement_gap_then_highest_teacher_template_count"
     assert candidate["reference_id"] == "cluster_z_high"
     assert candidate["teacher_pattern_key"] == "high_template"
     assert candidate["teacher_pattern_template_count"] == 127
     rows = list(csv.DictReader(Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()))
     assert rows[0]["teacher_pattern_template_count"] == "127"
     assert rows[0]["teacher_pattern_key"] == "high_template"
+
+
+def test_build_teacher_guided_repair_queue_prioritizes_movement_gap_when_limited(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="low_in" from="a" to="cluster_a_low"><lane id="low_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="low_out" from="cluster_a_low" to="b"><lane id="low_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_low" type="priority" x="0" y="0" incLanes="low_in_0" intLanes=""/>
+  <connection from="low_in" to="low_out" fromLane="0" toLane="0"/>
+  <edge id="high_w_in" from="w" to="cluster_z_high"><lane id="high_w_in_0" index="0" allow="passenger" shape="-10,10 0,10"/></edge>
+  <edge id="high_s_in" from="s" to="cluster_z_high"><lane id="high_s_in_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <edge id="high_e_out" from="cluster_z_high" to="e"><lane id="high_e_out_0" index="0" allow="passenger" shape="0,10 10,10"/></edge>
+  <edge id="high_n_out" from="cluster_z_high" to="n"><lane id="high_n_out_0" index="0" allow="passenger" shape="0,10 0,20"/></edge>
+  <junction id="cluster_z_high" type="priority" x="0" y="10" incLanes="high_w_in_0 high_s_in_0" intLanes=""/>
+  <connection from="high_w_in" to="high_e_out" fromLane="0" toLane="0"/>
+  <connection from="high_w_in" to="high_n_out" fromLane="0" toLane="0"/>
+  <connection from="high_s_in" to="high_e_out" fromLane="0" toLane="0"/>
+  <connection from="high_s_in" to="high_n_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="low_in" from="a" to="cluster_a_low"><lane id="low_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="low_out" from="cluster_a_low" to="b"><lane id="low_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_low" type="priority" x="0" y="0" incLanes="low_in_0" intLanes=""/>
+  <connection from="low_in" to="low_out" fromLane="0" toLane="0"/>
+  <edge id="high_w_in" from="w" to="cluster_z_high"><lane id="high_w_in_0" index="0" allow="passenger" shape="-10,10 0,10"/></edge>
+  <edge id="high_s_in" from="s" to="cluster_z_high"><lane id="high_s_in_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <edge id="high_e_out" from="cluster_z_high" to="e"><lane id="high_e_out_0" index="0" allow="passenger" shape="0,10 10,10"/></edge>
+  <edge id="high_n_out" from="cluster_z_high" to="n"><lane id="high_n_out_0" index="0" allow="passenger" shape="0,10 0,20"/></edge>
+  <junction id="cluster_z_high" type="priority" x="0" y="10" incLanes="high_w_in_0 high_s_in_0" intLanes=""/>
+  <connection from="high_w_in" to="high_e_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {"reference_id": "cluster_a_low", "learned_rule": "tum_like_join_candidate"},
+                {"reference_id": "cluster_z_high", "learned_rule": "tum_like_join_candidate"},
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+        max_ready_candidates=1,
+    )
+
+    assert report["queued_case_count"] == 1
+    assert report["repair_candidates"][0]["reference_id"] == "cluster_z_high"
+    assert report["repair_candidates"][0]["vehicle_movement_matrix_missing_count"] == 3
 
 
 def test_build_teacher_guided_repair_queue_resolves_sumo_short_joined_candidate_id(tmp_path: Path) -> None:
