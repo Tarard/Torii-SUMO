@@ -1258,6 +1258,36 @@ def test_teacher_parity_fails_on_tls_phase_state_mismatch() -> None:
     ]
 
 
+def test_teacher_parity_fails_on_request_matrix_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {"request_count": 1},
+        "requests": [{"index": "0", "response": "0", "foes": "10", "cont": "0"}],
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "actuated"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "summary": {"request_count": 1},
+        "requests": [{"index": "0", "response": "0", "foes": "01", "cont": "0"}],
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "actuated"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(teacher_model, candidate_model)
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["request_signatures"] == ["index=0|response=0|foes=10|cont=0"]
+    assert parity["candidate"]["request_signatures"] == ["index=0|response=0|foes=01|cont=0"]
+    assert parity["delta"]["request_signatures_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "request_signatures_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_parity_fails_on_mapped_controlled_link_signature_mismatch() -> None:
     teacher_model = {
         "junction_id": "teacher_j",
