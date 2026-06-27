@@ -150,6 +150,9 @@ def extract_junction_pattern_index(
         ]
         controlled_tl_ids = {connection["tl"] for connection in controlled_connections}
         dir_counts = dict(summary["vehicle_connection_dirs"])
+        movement_signature_counts = dict(
+            Counter(_movement_signature_key(connection) for connection in vehicle_connections)
+        )
         records.append(
             {
                 "junction_id": junction_id,
@@ -159,6 +162,7 @@ def extract_junction_pattern_index(
                 "out_edge_count": out_edge_count,
                 "vehicle_connection_count": int(summary["vehicle_connection_count"]),
                 "dir_counts": dict(sorted(dir_counts.items())),
+                "movement_signature_counts": dict(sorted(movement_signature_counts.items())),
                 "crossing_count": int(summary["crossing_count"]),
                 "walkingarea_count": int(summary["walkingarea_count"]),
                 "request_count": len(junction.findall("request")),
@@ -183,6 +187,7 @@ def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[
         slots.append({"slot_id": slot_id, "members": [edge_id]})
 
     vehicle_connections = []
+    movement_signatures = []
     for connection in model.get("vehicle_connections", []):
         if not isinstance(connection, dict):
             continue
@@ -190,17 +195,29 @@ def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[
         target_slot = edge_to_slot.get(str(connection.get("to", "")))
         if not source_slot or not target_slot:
             continue
-        vehicle_connections.append(
+        record = {
+            "from_slot": source_slot,
+            "to_slot": target_slot,
+            "fromLane": str(connection.get("fromLane", "")),
+            "toLane": str(connection.get("toLane", "")),
+            "via": str(connection.get("via", "")),
+            "tl": str(connection.get("tl", "")),
+            "linkIndex": str(connection.get("linkIndex", "")),
+            "dir": str(connection.get("dir", "")),
+            "state": str(connection.get("state", "")),
+        }
+        vehicle_connections.append(record)
+        movement_signatures.append(
             {
                 "from_slot": source_slot,
                 "to_slot": target_slot,
-                "fromLane": str(connection.get("fromLane", "")),
-                "toLane": str(connection.get("toLane", "")),
-                "via": str(connection.get("via", "")),
-                "tl": str(connection.get("tl", "")),
-                "linkIndex": str(connection.get("linkIndex", "")),
-                "dir": str(connection.get("dir", "")),
-                "state": str(connection.get("state", "")),
+                "fromLane": record["fromLane"],
+                "toLane": record["toLane"],
+                "dir": record["dir"],
+                "state": record["state"],
+                "controlled": bool(record["tl"] and record["linkIndex"]),
+                "linkIndex": record["linkIndex"],
+                "has_internal_via": bool(record["via"]),
             }
         )
 
@@ -212,10 +229,41 @@ def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[
         "junction_id": junction_id,
         "approach_slots": slots,
         "vehicle_connections": vehicle_connections,
+        "movement_signatures": movement_signatures,
         "traffic_light": model.get("traffic_light", {}),
         "requests": requests,
         "summary": model.get("summary", {}),
     }
+
+
+def materialize_exemplar_movement_signatures(
+    exemplar: dict[str, Any],
+    slot_edge_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    movements = []
+    for signature in exemplar.get("movement_signatures", []) or []:
+        if not isinstance(signature, dict):
+            continue
+        source_edge = slot_edge_map.get(str(signature.get("from_slot", "")))
+        target_edge = slot_edge_map.get(str(signature.get("to_slot", "")))
+        if not source_edge or not target_edge:
+            continue
+        movements.append(
+            {
+                "from_edge_id": source_edge,
+                "to_edge_id": target_edge,
+                "from_slot": str(signature.get("from_slot", "")),
+                "to_slot": str(signature.get("to_slot", "")),
+                "fromLane": str(signature.get("fromLane", "")),
+                "toLane": str(signature.get("toLane", "")),
+                "dir": str(signature.get("dir", "")),
+                "state": str(signature.get("state", "")),
+                "controlled": bool(signature.get("controlled", False)),
+                "linkIndex": str(signature.get("linkIndex", "")),
+                "has_internal_via": bool(signature.get("has_internal_via", False)),
+            }
+        )
+    return movements
 
 
 def evaluate_netedit_semantics_gate(summary: dict[str, Any]) -> dict[str, Any]:
@@ -325,6 +373,16 @@ def _connection_record(connection: ET.Element) -> dict[str, str]:
         "dir": connection.attrib.get("dir", ""),
         "state": connection.attrib.get("state", ""),
     }
+
+
+def _movement_signature_key(connection: dict[str, str]) -> str:
+    controlled = str(bool(connection.get("tl") and connection.get("linkIndex"))).lower()
+    via = str(bool(connection.get("via"))).lower()
+    return (
+        f"dir={connection.get('dir') or 'blank'}|state={connection.get('state') or 'blank'}|"
+        f"fromLane={connection.get('fromLane') or 'blank'}|toLane={connection.get('toLane') or 'blank'}|"
+        f"controlled={controlled}|via={via}"
+    )
 
 
 def _is_pedestrian_connection(
