@@ -1352,6 +1352,7 @@ def run_teacher_guided_repair_queue(
         "expanded_scope_reports": expanded_scope_reports,
         "run_report_file": str(run_report_file),
         "variant_reports": variant_reports,
+        "teacher_pattern_contexts": _teacher_pattern_contexts(variant_reports),
         "skipped_candidates": skipped_candidates,
         "review_policy": "queue execution only; inspect each final net in NetEdit connection mode before adoption",
     }
@@ -1548,6 +1549,32 @@ def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[s
             if key != ":":
                 counts[key] = counts.get(key, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def _teacher_pattern_contexts(variant_reports: list[dict[str, object]]) -> list[dict[str, object]]:
+    contexts = []
+    seen_keys = set()
+    for report in variant_reports:
+        pattern_key = str(report.get("teacher_pattern_key", ""))
+        if not pattern_key or pattern_key in seen_keys:
+            continue
+        seen_keys.add(pattern_key)
+        try:
+            template_count = int(report.get("teacher_pattern_template_count", 0) or 0)
+        except (TypeError, ValueError):
+            template_count = 0
+        examples = report.get("teacher_pattern_template_examples", [])
+        contexts.append(
+            {
+                "teacher_pattern_key": pattern_key,
+                "teacher_pattern_family": str(report.get("teacher_pattern_family", "")),
+                "teacher_pattern_template_count": template_count,
+                "teacher_pattern_template_examples": [str(item) for item in examples]
+                if isinstance(examples, list)
+                else [],
+            }
+        )
+    return contexts
 
 
 def _attach_candidate_template_context(

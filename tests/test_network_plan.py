@@ -450,6 +450,14 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "expanded_scope_pass_candidate_count": 1,
             "best_expanded_scope_net_file": str(best_expanded),
             "semantic_failure_counts": {},
+            "teacher_pattern_contexts": [
+                {
+                    "teacher_pattern_key": "three_way|control=right_before_left",
+                    "teacher_pattern_family": "three_way",
+                    "teacher_pattern_template_count": 127,
+                    "teacher_pattern_template_examples": ["cluster_template_1"],
+                }
+            ],
             "variant_reports": [],
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "warnings": [],
@@ -569,6 +577,14 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_run_status"] == "blocked"
     assert report["teacher_guided_repair_parity_gate_status"] == "blocked"
     assert report["teacher_guided_repair_semantic_failure_counts"] == {}
+    assert report["teacher_guided_repair_template_contexts"] == [
+        {
+            "teacher_pattern_key": "three_way|control=right_before_left",
+            "teacher_pattern_family": "three_way",
+            "teacher_pattern_template_count": 127,
+            "teacher_pattern_template_examples": ["cluster_template_1"],
+        }
+    ]
     assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["workflow_review_net_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["gate_status"]["junction_pattern_index"] == "pass"

@@ -740,6 +740,14 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     assert report["variant_reports"][0]["teacher_pattern_family"] == "three_way"
     assert report["variant_reports"][0]["teacher_pattern_template_count"] == 127
     assert report["variant_reports"][0]["teacher_pattern_template_examples"] == ["cluster_template_1"]
+    assert report["teacher_pattern_contexts"] == [
+        {
+            "teacher_pattern_key": "three_way|control=right_before_left",
+            "teacher_pattern_family": "three_way",
+            "teacher_pattern_template_count": 127,
+            "teacher_pattern_template_examples": ["cluster_template_1"],
+        }
+    ]
     variant_report = json.loads(Path(report["variant_reports"][0]["report_file"]).read_text(encoding="utf-8"))
     assert variant_report["teacher_pattern_key"] == "three_way|control=right_before_left"
     assert variant_report["teacher_pattern_template_count"] == 127
