@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.junction_rebuild_candidate import (
     _stage_file,
     build_rebuild_candidate,
+    build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
     write_teacher_target_internal_replay_net,
     write_teacher_connection_plan,
@@ -11,6 +12,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_pedestrian_ring_net,
     write_teacher_tllogic_net,
 )
+from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 
 
 def test_build_rebuild_candidate_emits_only_high_confidence_vehicle_connections(tmp_path: Path) -> None:
@@ -75,6 +77,101 @@ def test_rebuild_candidate_writes_connection_signature(tmp_path: Path) -> None:
 
     assert Path(report["connection_signature"]["signature_file"]).is_file()
     assert report["connection_signature"]["status"] == "pass"
+
+
+def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="cluster_a_b" type="highway.primary"><lane id="teacher_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="cluster_a_b" to="b" type="highway.primary"><lane id="teacher_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="cluster_a_b" linkIndex="0" dir="s"/>
+  <tlLogic id="cluster_a_b" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="cluster_a_b" type="highway.primary"><lane id="cand_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="cand_out" from="cluster_a_b" to="b" type="highway.primary"><lane id="cand_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [{"reference_id": "cluster_a_b", "learned_rule": "tum_like_join_candidate"}]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["status"] == "pass"
+    assert report["repair_candidate_count"] == 1
+    assert report["ready_candidate_count"] == 1
+    candidate = report["repair_candidates"][0]
+    assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+    assert candidate["junction_id"] == "cluster_a_b"
+    assert candidate["edge_map"] == {"teacher_in": "cand_in", "teacher_out": "cand_out"}
+    assert Path(report["queue_file"]).is_file()
+    assert Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()[0].startswith("reference_id")
+
+
+def test_teacher_guided_repair_queue_uses_real_reference_join_case_after_joined_candidate(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    reference_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="w" to="cluster_a_b" type="highway.primary"><lane id="teacher_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="cluster_a_b" to="e" type="highway.primary"><lane id="teacher_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="cluster_a_b" linkIndex="0" dir="s"/>
+  <tlLogic id="cluster_a_b" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    pre_join_candidate = tmp_path / "pre_join.net.xml"
+    pre_join_candidate.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.residential"><lane id="ab_0" index="0" length="5" shape="-1,0 1,0"/></edge>
+  <junction id="a" x="-1" y="0" type="traffic_light"/>
+  <junction id="b" x="1" y="0" type="traffic_light"/>
+</net>""",
+        encoding="utf-8",
+    )
+    joined_candidate = tmp_path / "joined_candidate.net.xml"
+    joined_candidate.write_text(
+        """<net>
+  <edge id="cand_in" from="w" to="cluster_a_b" type="highway.primary"><lane id="cand_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="cand_out" from="cluster_a_b" to="e" type="highway.primary"><lane id="cand_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    reference_join = audit_reference_join_patterns(
+        reference_net_file=reference_net,
+        candidate_net_file=pre_join_candidate,
+        output_dir=tmp_path / "reference_join",
+        candidate_cluster_radius_m=5,
+        candidate_min_cluster_nodes=2,
+    )
+    queue = build_teacher_guided_repair_queue(
+        teacher_net_file=reference_net,
+        candidate_net_file=joined_candidate,
+        reference_join_audit_report=reference_join,
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert reference_join["matched_case_count"] == 1
+    assert reference_join["matched_cases"][0]["learned_rule"] == "tum_like_join_candidate"
+    assert queue["ready_candidate_count"] == 1
+    assert queue["repair_candidates"][0]["edge_map"] == {"teacher_in": "cand_in", "teacher_out": "cand_out"}
 
 
 def test_write_teacher_connection_plan_preserves_non_target_and_blocks_unlisted_targets(tmp_path: Path) -> None:

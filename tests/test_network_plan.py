@@ -356,6 +356,19 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "warnings": ["junction aggregation variant requires Google Maps review before adoption"],
         }
 
+    def fake_teacher_guided_repair_queue(**kwargs):
+        calls["teacher_guided_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "repair_candidate_count": 1,
+            "ready_candidate_count": 1,
+            "queue_file": str(tmp_path / "teacher_guided_queue.json"),
+            "queue_csv_file": str(tmp_path / "teacher_guided_queue.csv"),
+            "repair_candidates": [{"reference_id": "cluster_a_b", "candidate_status": "ready_for_teacher_guided_variant"}],
+            "warnings": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
         output_dir=tmp_path,
@@ -406,11 +419,13 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         },
         reference_join_audit_func=fake_reference_join_audit,
         reference_join_aggregation_func=fake_reference_join_aggregation,
+        teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
     )
 
     visual_detail_net_file = tmp_path / "sumo" / "reference-join_reference_visual_detail.net.xml"
     assert calls["reference_join_candidate_net_file"] == visual_detail_net_file
     assert calls["aggregation_candidate_net_file"] == visual_detail_net_file
+    assert calls["teacher_guided_candidate_net_file"] == tmp_path / "aggregated.net.xml"
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
     assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
@@ -420,6 +435,9 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"
     assert report["reference_join_aggregation_variant_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
+    assert report["teacher_guided_repair_queue_status"] == "pass"
+    assert report["teacher_guided_repair_ready_candidate_count"] == 1
+    assert report["teacher_guided_repair_queue_file"] == str(tmp_path / "teacher_guided_queue.json")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
     assert report["gate_status"]["connection_semantics_parity"] == "blocked"
     assert report["gate_status"]["tls_semantics_parity"] == "blocked"
