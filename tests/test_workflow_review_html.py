@@ -68,6 +68,16 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     net_file.write_text(TINY_SUMO_NET, encoding="utf-8")
     best_variant = tmp_path / "teacher_guided_best.net.xml"
     best_variant.write_text(TINY_SUMO_NET, encoding="utf-8")
+    teacher_delta = tmp_path / "junction_teacher_delta.json"
+    teacher_delta.write_text('{"schema_version": 1}', encoding="utf-8")
+    pattern_comparisons = tmp_path / "junction_pattern_comparisons.csv"
+    pattern_comparisons.write_text("junction_id,mismatch_fields\nj,internal_function_counts\n", encoding="utf-8")
+    repair_queue = tmp_path / "teacher_guided_queue.json"
+    repair_queue.write_text('{"repair_candidates": []}', encoding="utf-8")
+    repair_queue_csv = tmp_path / "teacher_guided_queue.csv"
+    repair_queue_csv.write_text("reference_id,junction_pattern_mismatch_fields\ncluster_j,has_tls\n", encoding="utf-8")
+    repair_run = tmp_path / "teacher_guided_run.json"
+    repair_run.write_text('{"status": "blocked"}', encoding="utf-8")
 
     report = build_workflow_review_html(
         output_dir=tmp_path / "review",
@@ -80,6 +90,11 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "net_file": str(net_file),
             "teacher_guided_repair_best_variant_file": str(best_variant),
             "reference_visual_detail_comparison_net_file": str(best_variant),
+            "reference_join_junction_teacher_delta_file": str(teacher_delta),
+            "reference_join_junction_pattern_comparisons_file": str(pattern_comparisons),
+            "teacher_guided_repair_queue_file": str(repair_queue),
+            "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
+            "teacher_guided_repair_run_report_file": str(repair_run),
         },
         net_file=net_file,
         gate_status={"routeability_audit": "fail", "topology_audit": "blocked"},
@@ -149,6 +164,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "workflow_netedit_review.sumocfg" in html
     assert "workflow_netedit_review_c1_selection.txt" in html
     assert "teacher_guided_best.net.xml" in html
+    assert "junction_teacher_delta.json" in html
+    assert "junction_pattern_comparisons.csv" in html
+    assert "teacher_guided_queue.json" in html
     assert "copyNeteditCommand" in html
     assert "Aggregate selected junctions" in html
     assert "Network Preview" in html
@@ -205,6 +223,11 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["artifacts"]["netedit_review_sumocfg_file"] == "workflow_netedit_review.sumocfg"
     assert manifest["artifacts"]["teacher_guided_repair_best_variant_file"] == "../teacher_guided_best.net.xml"
     assert manifest["artifacts"]["reference_visual_detail_comparison_net_file"] == "../teacher_guided_best.net.xml"
+    assert manifest["artifacts"]["reference_join_junction_teacher_delta_file"] == "../junction_teacher_delta.json"
+    assert manifest["artifacts"]["reference_join_junction_pattern_comparisons_file"] == "../junction_pattern_comparisons.csv"
+    assert manifest["artifacts"]["teacher_guided_repair_queue_file"] == "../teacher_guided_queue.json"
+    assert manifest["artifacts"]["teacher_guided_repair_queue_csv_file"] == "../teacher_guided_queue.csv"
+    assert manifest["artifacts"]["teacher_guided_repair_run_report_file"] == "../teacher_guided_run.json"
     assert manifest["netedit_review"]["netedit_command"] == 'netedit --sumocfg-file "workflow_netedit_review.sumocfg"'
     assert manifest["netedit_review"]["selection_file_count"] == 1
     assert manifest["review_app"]["map_layers"]["edges"]
