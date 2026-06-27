@@ -995,16 +995,23 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert scope_report["rewritten_endpoint_count"] == 1
     assert scope_report["netconvert"]["status"] == "pass"
     assert scope_report["sumo_load"]["status"] == "pass"
+    assert scope_report["joined_scope_junction_id"] == "cluster_c_e_j"
+    assert Path(scope_report["join_nodes_patch_file"]).is_file()
+    assert commands[0][commands[0].index("--node-files") + 1] == (
+        "expanded_scope.nod.xml,expanded_scope_junction_join.nod.xml"
+    )
     assert scope_report["netconvert_command"][-2:] == ["--output-file", "expanded_scope.net.xml"]
     assert report["expanded_scope_pass_candidate_count"] == 1
     assert Path(report["best_expanded_scope_net_file"]).name == "expanded_scope.net.xml"
     scope_nodes = ET.parse(scope_report["node_file"]).getroot()
     scope_edges = ET.parse(scope_report["edge_file"]).getroot()
     scope_connections = ET.parse(scope_report["connection_file"]).getroot()
+    scope_join_patch = ET.parse(scope_report["join_nodes_patch_file"]).getroot()
     assert [node.attrib["id"] for node in scope_nodes] == ["a", "c", "e", "j"]
     assert [edge.attrib["id"] for edge in scope_edges] == ["approach_in", "teacher_out", "old_downstream"]
     assert scope_edges.find("edge[@id='teacher_out']").attrib["to"] == "e"
     assert [connection.attrib["from"] for connection in scope_connections] == ["approach_in"]
+    assert [join.attrib["nodes"] for join in scope_join_patch.findall("join")] == ["c e j"]
     assert [command[0] for command in commands] == ["netconvert-test", "sumo-test"]
 
 
