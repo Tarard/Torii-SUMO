@@ -421,6 +421,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         calls["teacher_guided_run_netconvert_binary"] = kwargs["netconvert_binary"]
         calls["teacher_guided_run_sumo_binary"] = kwargs["sumo_binary"]
         calls["teacher_guided_run_max_ready_candidates"] = kwargs["max_ready_candidates"]
+        best_variant = tmp_path / "teacher_guided_best.net.xml"
+        best_variant.write_text("<net/>", encoding="utf-8")
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -428,6 +430,14 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "attempted_candidate_count": 1,
             "pass_candidate_count": 1,
             "semantic_failure_counts": {"parity:crossing_count": 2},
+            "variant_reports": [
+                {
+                    "status": "pass",
+                    "parity_gate_status": "pass",
+                    "final_net_file": str(best_variant),
+                    "sumo_load": {"status": "pass"},
+                }
+            ],
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "warnings": [],
         }
@@ -510,7 +520,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_unmatched_case_count"] == 1
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"
     assert report["reference_join_aggregation_variant_file"] == str(tmp_path / "aggregated.net.xml")
-    assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
+    assert report["teacher_guided_repair_best_variant_file"] == str(tmp_path / "teacher_guided_best.net.xml")
+    assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "teacher_guided_best.net.xml")
     assert report["teacher_guided_repair_queue_status"] == "pass"
     assert report["teacher_guided_repair_ready_candidate_count"] == 1
     assert report["teacher_guided_repair_queue_file"] == str(tmp_path / "teacher_guided_queue.json")

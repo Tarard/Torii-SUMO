@@ -323,6 +323,23 @@ def _teacher_guided_parity_gate(report: Mapping[str, Any] | None) -> str:
     return "blocked"
 
 
+def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
+    if report is None or report.get("status") != "pass" or report.get("parity_gate_status") != "pass":
+        return None
+    for variant in report.get("variant_reports", []) or []:
+        if not isinstance(variant, Mapping):
+            continue
+        if variant.get("status") != "pass" or variant.get("parity_gate_status") != "pass":
+            continue
+        sumo_load = variant.get("sumo_load", {})
+        if isinstance(sumo_load, Mapping) and sumo_load.get("status") != "pass":
+            continue
+        final_net_file = str(variant.get("final_net_file", ""))
+        if final_net_file and Path(final_net_file).exists():
+            return Path(final_net_file)
+    return None
+
+
 def export_plain_net_for_teacher_guided_repair(
     *,
     net_file: Path,
@@ -780,6 +797,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
     teacher_guided_repair_run_report: dict[str, Any] | None = None
+    teacher_guided_repair_best_variant_file: Path | None = None
     reference_hierarchy_audit_report: dict[str, Any] | None = None
     reference_hierarchy_audit_candidate_layer = "not_applicable"
     reference_hierarchy_audit_candidate_net_file: Path | None = None
@@ -1136,6 +1154,11 @@ def run_osm_cleanup_workflow(
                     sumo_binary=sumo_binary,
                     timeout_seconds=timeout_seconds,
                 )
+                teacher_guided_repair_best_variant_file = _teacher_guided_best_variant_file(
+                    teacher_guided_repair_run_report
+                )
+                if teacher_guided_repair_best_variant_file is not None:
+                    reference_visual_detail_comparison_net_file = teacher_guided_repair_best_variant_file
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -1549,6 +1572,9 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_run_report_file": ""
         if teacher_guided_repair_run_report is None
         else str(teacher_guided_repair_run_report.get("run_report_file", "")),
+        "teacher_guided_repair_best_variant_file": ""
+        if teacher_guided_repair_best_variant_file is None
+        else str(teacher_guided_repair_best_variant_file),
         "reference_hierarchy_status": "skipped"
         if reference_hierarchy_audit_report is None
         else reference_hierarchy_audit_report.get(
