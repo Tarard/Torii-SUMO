@@ -25,6 +25,16 @@ NETWORK_PLAN_QUESTION = (
 REFERENCE_PLAN_QUESTION = (
     "Which reference SUMO .net.xml or reference policy report should Torii use to infer the matched road layers?"
 )
+REFERENCE_MATCHED_VALIDATION_GATES = (
+    "reference_join_audit",
+    "reference_join_aggregation",
+    "junction_pattern_index",
+    "connection_semantics_parity",
+    "tls_semantics_parity",
+    "internal_junction_parity",
+    "netedit_connection_mode_review",
+    "teacher_guided_junction_parity",
+)
 
 _BICYCLE_HIGHWAYS = {"cycleway", "path"}
 _PEDESTRIAN_HIGHWAYS = {"footway", "pedestrian", "path", "steps"}
@@ -212,6 +222,7 @@ def _reference_policy_plan(
             "routeability_audit",
             "topology_audit",
             "scope_matched_reference_comparison",
+            *REFERENCE_MATCHED_VALIDATION_GATES,
             "netedit_launch",
         ],
         "reference_policy": dict(reference_policy),
