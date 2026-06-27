@@ -1981,6 +1981,19 @@ def _compare_teacher_models(
         candidate_summary["crossing_signatures"] = candidate_crossing_signatures
         if crossing_mismatch_count:
             delta["crossing_signature_mismatch_count"] = crossing_mismatch_count
+        teacher_crossing_geometry_signatures = _crossing_geometry_signatures(
+            teacher_model,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_crossing_geometry_signatures = _crossing_geometry_signatures(candidate_model)
+        crossing_geometry_mismatch_count = _dict_mismatch_count(
+            teacher_crossing_geometry_signatures, candidate_crossing_geometry_signatures
+        )
+        teacher_summary["crossing_geometry_signatures"] = teacher_crossing_geometry_signatures
+        candidate_summary["crossing_geometry_signatures"] = candidate_crossing_geometry_signatures
+        if crossing_geometry_mismatch_count:
+            delta["crossing_geometry_signature_mismatch_count"] = crossing_geometry_mismatch_count
         teacher_walking_area_signatures = _walking_area_signatures(
             teacher_model,
             source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
@@ -2263,6 +2276,24 @@ def _crossing_signatures(
             continue
         edges = sorted(_mapped_endpoint(str(edge), edge_map) for edge in crossing.get("crossingEdges", []) or [])
         signatures[crossing_id] = f"edges={' '.join(edges)}"
+    return signatures
+
+
+def _crossing_geometry_signatures(
+    model: dict[str, Any],
+    *,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    crossings = model.get("crossings", []) if isinstance(model.get("crossings"), list) else []
+    signatures: dict[str, str] = {}
+    for edge in crossings:
+        if not isinstance(edge, dict):
+            continue
+        edge_id = _mapped_internal_ref(str(edge.get("edge_id", "")), source_junction_id, target_junction_id)
+        if not edge_id:
+            continue
+        signatures[edge_id] = _internal_edge_signature(edge)
     return signatures
 
 
