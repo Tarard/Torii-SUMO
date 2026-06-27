@@ -12,6 +12,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
     run_teacher_guided_repair_queue,
+    write_expanded_scope_plain_inputs,
     write_teacher_target_internal_replay_net,
     write_teacher_connection_plan,
     write_teacher_lane_patch_edges,
@@ -1000,7 +1001,12 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
         commands.append(command)
         if command[0] == "netconvert-test":
             output_file = Path(cwd) / command[command.index("--output-file") + 1]
-            output_file.write_text("<net/>\n", encoding="utf-8")
+            output_file.write_text(
+                """<net>
+  <junction id="cluster_c_e_j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
         return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
 
     report = run_teacher_guided_repair_queue(
@@ -1138,7 +1144,12 @@ def test_run_teacher_guided_repair_queue_replays_existing_joined_expanded_scope(
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         if command[0] == "netconvert-test":
             output_file = Path(cwd) / command[command.index("--output-file") + 1]
-            output_file.write_text("<net/>\n", encoding="utf-8")
+            output_file.write_text(
+                """<net>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
         return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
 
     def fake_variant(**kwargs):
@@ -1315,6 +1326,60 @@ def test_run_teacher_guided_repair_queue_skips_review_expanded_scope(tmp_path: P
     assert report["skipped_candidates"][0]["candidate_status"] == "needs_expanded_rebuild_scope"
 
 
+def test_expanded_scope_reviews_when_joined_junction_missing_from_probe_net(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="cluster_a_b" x="0" y="0"/>
+  <node id="x" x="-10" y="0"/>
+  <node id="y" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="blocked" from="x" to="y"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <junction id="x" type="priority" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="y" type="priority" x="10" y="0" incLanes="blocked_0" intLanes=""/>
+  <edge id="blocked" from="x" to="y"><lane id="blocked_0" index="0"/></edge>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    report = write_expanded_scope_plain_inputs(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "scope",
+        expanded_rebuild_scope={
+            "core_junction_id": "cluster_a_b",
+            "junction_ids": ["a", "b"],
+            "blocked_teacher_edge_ids": ["blocked"],
+        },
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+    )
+
+    assert report["joined_scope_junction_id"] == "cluster_a_b"
+    assert report["status"] == "review"
+    assert report["joined_scope_junction_missing_from_net"] is True
+    assert report["blocking_missing_joined_scope_junction_ids"] == ["cluster_a_b"]
+
+
 def test_run_teacher_guided_repair_queue_records_expanded_variant_exception(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
@@ -1343,7 +1408,12 @@ def test_run_teacher_guided_repair_queue_records_expanded_variant_exception(tmp_
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         if command[0] == "netconvert-test":
             output_file = Path(cwd) / command[command.index("--output-file") + 1]
-            output_file.write_text("<net/>\n", encoding="utf-8")
+            output_file.write_text(
+                """<net>
+  <junction id="cluster_c_j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
         return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
 
     def fake_variant(**_kwargs):
@@ -1423,7 +1493,7 @@ def test_run_teacher_guided_repair_queue_fails_when_parity_fails(tmp_path: Path)
     )
 
     assert report["status"] == "fail"
-    assert report["claim_status"] == "construction-invalid"
+    assert report["claim_status"] == "diagnostic-demo"
     assert report["parity_gate_status"] == "fail"
 
 
