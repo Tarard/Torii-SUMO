@@ -1018,6 +1018,7 @@ def build_teacher_guided_junction_variant(
         parity,
         pedestrian_ring=pedestrian_ring_report,
         vehicle_connection_attrs=vehicle_attrs_report,
+        target_internal_replay=target_internal_replay_report,
         target_internal_pedestrian_ring=target_internal_pedestrian_ring_report,
         target_internal_vehicle_connection_attrs=target_internal_vehicle_attrs_report,
     )
@@ -1871,10 +1872,22 @@ def _teacher_guided_semantics_gate(parity: dict[str, Any], **reports: dict[str, 
         if isinstance(count, int) and count != 0:
             failures.append({"report": "parity", "field": str(field), "count": count})
 
+    target_internal_replay = reports.get("target_internal_replay")
+    internal_replay_complete = (
+        isinstance(target_internal_replay, dict)
+        and target_internal_replay.get("status") == "pass"
+        and int(target_internal_replay.get("skipped_connection_count", 0) or 0) == 0
+    )
     for report_name, report in reports.items():
         if not isinstance(report, dict):
             continue
-        for field in ("skipped_pedestrian_connection_count", "skipped_vehicle_connection_count"):
+        for field in (
+            "skipped_pedestrian_connection_count",
+            "skipped_vehicle_connection_count",
+            "skipped_connection_count",
+        ):
+            if internal_replay_complete and report_name in {"pedestrian_ring", "vehicle_connection_attrs"}:
+                continue
             count = int(report.get(field, 0) or 0)
             if count:
                 failures.append({"report": report_name, "field": field, "count": count})
