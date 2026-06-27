@@ -23,6 +23,14 @@ from .junction_teacher_model import (
 )
 
 
+APPROACH_INTEGRITY_FAILURE_FIELDS = {
+    "approach_edge_signature_mismatch_count",
+    "approach_endpoint_signature_mismatch_count",
+    "incoming_vehicle_edge_count",
+    "outgoing_vehicle_edge_count",
+}
+
+
 def build_rebuild_candidate(
     *,
     net_file: Path,
@@ -1457,6 +1465,7 @@ def run_teacher_guided_repair_queue(
     failed_count = attempted_count - pass_count
     parity_pass_count = sum(1 for report in variant_reports if report.get("parity_gate_status") == "pass")
     semantic_failure_counts = _semantic_failure_counts(variant_reports)
+    approach_integrity_failure_counts = _approach_integrity_failure_counts(semantic_failure_counts)
     expanded_scope_pass_count = sum(1 for report in expanded_scope_reports if report.get("status") == "pass")
     best_expanded_scope_net_file = ""
     for expanded_report in expanded_scope_reports:
@@ -1494,6 +1503,13 @@ def run_teacher_guided_repair_queue(
         "failed_candidate_count": failed_count,
         "parity_pass_candidate_count": parity_pass_count,
         "semantic_failure_counts": semantic_failure_counts,
+        "approach_integrity_status": _approach_integrity_status(
+            parity_gate_status=parity_gate_status,
+            attempted_count=attempted_count,
+            semantic_failure_counts=semantic_failure_counts,
+            approach_failure_counts=approach_integrity_failure_counts,
+        ),
+        "approach_integrity_failure_counts": approach_integrity_failure_counts,
         "expanded_scope_candidate_count": len(expanded_scope_reports),
         "expanded_scope_pass_candidate_count": expanded_scope_pass_count,
         "best_expanded_scope_net_file": best_expanded_scope_net_file,
@@ -1812,6 +1828,31 @@ def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[s
             if key != ":":
                 counts[key] = counts.get(key, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def _approach_integrity_failure_counts(semantic_failure_counts: dict[str, int]) -> dict[str, int]:
+    counts = {
+        key: value
+        for key, value in semantic_failure_counts.items()
+        if key.split(":", 1)[-1] in APPROACH_INTEGRITY_FAILURE_FIELDS
+    }
+    return dict(sorted(counts.items()))
+
+
+def _approach_integrity_status(
+    *,
+    parity_gate_status: str,
+    attempted_count: int,
+    semantic_failure_counts: dict[str, int],
+    approach_failure_counts: dict[str, int],
+) -> str:
+    if approach_failure_counts:
+        return "fail"
+    if attempted_count == 0 or parity_gate_status == "blocked":
+        return "blocked"
+    if semantic_failure_counts or parity_gate_status == "pass":
+        return "pass"
+    return "blocked"
 
 
 def _teacher_pattern_contexts(variant_reports: list[dict[str, object]]) -> list[dict[str, object]]:

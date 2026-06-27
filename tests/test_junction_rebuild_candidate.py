@@ -1637,6 +1637,7 @@ def test_run_teacher_guided_repair_queue_summarizes_semantic_failures(tmp_path: 
             "semantic_replay_gate": {
                 "status": "fail",
                 "failures": [
+                    {"report": "parity", "field": "approach_endpoint_signature_mismatch_count", "count": 1},
                     {"report": "parity", "field": "crossing_count", "count": -4},
                     {"report": "parity", "field": "tl_type_mismatch_count", "count": 1},
                 ],
@@ -1668,8 +1669,13 @@ def test_run_teacher_guided_repair_queue_summarizes_semantic_failures(tmp_path: 
     )
 
     assert report["semantic_failure_counts"] == {
+        "parity:approach_endpoint_signature_mismatch_count": 2,
         "parity:crossing_count": 2,
         "parity:tl_type_mismatch_count": 2,
+    }
+    assert report["approach_integrity_status"] == "fail"
+    assert report["approach_integrity_failure_counts"] == {
+        "parity:approach_endpoint_signature_mismatch_count": 2,
     }
 
 
