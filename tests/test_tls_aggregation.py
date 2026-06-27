@@ -11,7 +11,14 @@ def _command_path(command: list[str], option: str, cwd: Path) -> Path:
 def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tmp_path: Path) -> None:
     net_file = tmp_path / "candidate.net.xml"
     clusters_file = tmp_path / "tls_clusters.csv"
-    net_file.write_text("<net/>", encoding="utf-8")
+    net_file.write_text(
+        """<net>
+  <tlLogic id="tlA" type="actuated" programID="0">
+    <phase duration="30" minDur="10" maxDur="60" state="G"/>
+  </tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
     clusters_file.write_text(
         "\n".join(
             [
@@ -59,6 +66,12 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     assert report["claim_status"] == "blocked"
     assert report["tls_aggregation_status"] == "variant_created_for_review"
     assert report["tls_physical_cluster_count"] == 2
+    assert report["source_tl_logic_count"] == 1
+    assert report["source_actuated_tl_logic_count"] == 1
+    assert report["source_tls_phase_count"] == 1
+    assert report["source_tls_phase_with_minmax_count"] == 1
+    assert report["tls_program_policy"] == "discard_loaded_programs_rebuild_tls_set"
+    assert any("discards loaded tlLogic" in warning for warning in report["warnings"])
     assert report["tls_aggregated_tl_logic_count"] == 2
     assert report["tls_aggregated_traffic_light_junction_count"] == 2
     assert Path(report["tls_aggregation_variant_file"]).is_file()

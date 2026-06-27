@@ -30,10 +30,19 @@ def build_tls_aggregation_variant(
     candidates_file = output_dir / f"{prefix}_representatives.csv"
     variant_file = output_dir / f"{prefix}_tls_aggregated.net.xml"
     command_record = output_dir / f"{prefix}_netconvert.cmd.txt"
+    source_tls_counts = _source_tls_program_counts(net_file)
 
     if cluster_count == 0:
         plan_file.write_text(
-            json.dumps({"tls_aggregation_status": "not_needed", "tls_physical_cluster_count": 0}, indent=2),
+            json.dumps(
+                {
+                    "tls_aggregation_status": "not_needed",
+                    "tls_physical_cluster_count": 0,
+                    "tls_program_policy": "not_applicable_no_tls_clusters",
+                    **source_tls_counts,
+                },
+                indent=2,
+            ),
             encoding="utf-8",
         )
         _write_representatives_csv(candidates_file, [])
@@ -47,6 +56,8 @@ def build_tls_aggregation_variant(
             "tls_aggregation_variant_file": "",
             "tls_aggregation_command_record": "",
             "tls_aggregation_netconvert": {},
+            "tls_program_policy": "not_applicable_no_tls_clusters",
+            **source_tls_counts,
             "warnings": [],
         }
 
@@ -80,6 +91,8 @@ def build_tls_aggregation_variant(
         "variant_file": str(variant_file),
         "tls_physical_cluster_count": len(clusters),
         "representative_count": len(representatives),
+        "tls_program_policy": "discard_loaded_programs_rebuild_tls_set",
+        **source_tls_counts,
         "review_policy": (
             "create a separate network with one real SUMO junction set as TLS per physical TLS cluster; "
             "do not overwrite the source network or treat the variant as map-confirmed"
@@ -122,6 +135,11 @@ def build_tls_aggregation_variant(
     status = "pass" if result.get("status") == "pass" and variant_file.exists() else "fail"
     counts = _tls_counts(variant_file) if variant_file.exists() else {}
     warnings = ["TLS aggregation variant requires Google Maps and Netedit review before adoption"]
+    if source_tls_counts["source_tl_logic_count"]:
+        warnings.append(
+            "TLS aggregation discards loaded tlLogic programs via --tls.discard-loaded; "
+            "actuated/minDur/maxDur semantics are not preserved"
+        )
     if status != "pass":
         warnings.append(f"TLS aggregation variant was not created: {variant_file}")
     return {
@@ -135,6 +153,8 @@ def build_tls_aggregation_variant(
         "tls_aggregation_variant_file": str(variant_file),
         "tls_aggregation_command_record": str(command_record),
         "tls_aggregation_netconvert": result,
+        "tls_program_policy": "discard_loaded_programs_rebuild_tls_set",
+        **source_tls_counts,
         **counts,
         "warnings": warnings,
     }
@@ -222,6 +242,20 @@ def _tls_counts(net_file: Path) -> dict[str, int]:
             1 for junction in root.findall("junction") if junction.attrib.get("type") == "traffic_light"
         ),
         "tls_aggregated_tl_logic_count": len(root.findall("tlLogic")),
+    }
+
+
+def _source_tls_program_counts(net_file: Path) -> dict[str, int]:
+    root = ET.parse(net_file).getroot()
+    tl_logics = root.findall("tlLogic")
+    phases = [phase for tl_logic in tl_logics for phase in tl_logic.findall("phase")]
+    return {
+        "source_tl_logic_count": len(tl_logics),
+        "source_actuated_tl_logic_count": sum(1 for tl_logic in tl_logics if tl_logic.attrib.get("type") == "actuated"),
+        "source_tls_phase_count": len(phases),
+        "source_tls_phase_with_minmax_count": sum(
+            1 for phase in phases if phase.attrib.get("minDur") or phase.attrib.get("maxDur")
+        ),
     }
 
 
