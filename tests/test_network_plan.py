@@ -449,6 +449,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "claim_status": "diagnostic-demo",
             "workflow_review_html_status": "pass",
             "workflow_review_html_file": str(tmp_path / "review.html"),
+            "workflow_review_net_file": str(kwargs["net_file"]),
             "workflow_report_file": str(tmp_path / "workflow_report.json"),
             "review_manifest_file": str(tmp_path / "review_manifest.json"),
             "netedit_review_sumocfg_file": str(tmp_path / "review.sumocfg"),
@@ -546,6 +547,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_parity_gate_status"] == "pass"
     assert report["teacher_guided_repair_semantic_failure_counts"] == {"parity:crossing_count": 2}
     assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
+    assert report["workflow_review_net_file"] == str(tmp_path / "teacher_guided_best.net.xml")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
     assert report["gate_status"]["connection_semantics_parity"] == "blocked"
     assert report["gate_status"]["tls_semantics_parity"] == "blocked"

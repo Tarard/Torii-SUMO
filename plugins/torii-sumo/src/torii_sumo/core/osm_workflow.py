@@ -1764,6 +1764,7 @@ def run_osm_cleanup_workflow(
         {
             "workflow_review_html_status": workflow_review_html_report.get("workflow_review_html_status", "fail"),
             "workflow_review_html_file": workflow_review_html_report.get("workflow_review_html_file", ""),
+            "workflow_review_net_file": workflow_review_html_report.get("workflow_review_net_file", ""),
             "workflow_report_file": workflow_review_html_report.get("workflow_report_file", ""),
             "review_manifest_file": workflow_review_html_report.get("review_manifest_file", ""),
             "network_overview_png": workflow_review_html_report.get("network_overview_png", ""),

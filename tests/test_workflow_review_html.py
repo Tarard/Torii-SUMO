@@ -210,6 +210,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["review_app"]["map_layers"]["edges"]
     assert manifest["review_app"]["summary_cards"]["uncertain_junctions"] == 1
     assert manifest["review_app"]["junctions"][0]["cluster_id"] == "c1"
+    assert report["workflow_review_net_file"] == str(net_file)
     assert manifest["visualizations"]["problem_overlay_png"]
     assert manifest["visualizations"]["cluster_zoom_pngs"][0]["cluster_id"] == "c1"
     assert (manifest_dir / manifest["visualizations"]["cluster_zoom_pngs"][0]["image_file"]).is_file()
