@@ -126,6 +126,45 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     assert Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()[0].startswith("reference_id")
 
 
+def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="cluster_a_b"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_missing" from="cluster_a_b" to="p"><lane id="teacher_missing_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0" shape="0,0 1,0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=":cluster_a_b_0_0"/>
+  <connection from="teacher_in" to="teacher_missing" via=":cluster_a_b_0_0" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="cluster_a_b"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [{"reference_id": "cluster_a_b", "learned_rule": "tum_like_join_candidate"}]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert report["ready_candidate_count"] == 1
+    assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+    assert candidate["missing_teacher_edge_ids"] == ["teacher_missing"]
+    assert candidate["copyable_missing_teacher_edge_ids"] == ["teacher_missing"]
+    assert candidate["uncopyable_missing_teacher_edge_ids"] == []
+
+
 def test_build_teacher_guided_repair_queue_limits_ready_candidates(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -307,6 +346,9 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
                     "junction_id": "cluster_a_b",
                     "candidate_status": "ready_for_teacher_guided_variant",
                     "edge_map": {"teacher_in": "cand_in"},
+                    "missing_teacher_edge_ids": ["teacher_copyable"],
+                    "copyable_missing_teacher_edge_ids": ["teacher_copyable"],
+                    "uncopyable_missing_teacher_edge_ids": [],
                 },
                 {
                     "junction_id": "cluster_c_d",
@@ -1073,7 +1115,7 @@ def test_write_teacher_target_internal_replay_net_copies_missing_boundary_edge(t
         """<net>
   <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,20 10,20"/></edge>
   <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0" shape="10,20 20,20"/></edge>
-  <edge id=":j_old" function="walkingarea"><lane id=":j_old_0" index="0" allow="pedestrian" shape="8,18 9,19"/></edge>
+  <junction id="p" type="dead_end" x="10" y="-155" incLanes="" intLanes=""/>
   <junction id="j" type="priority" x="10" y="20" shape="9,19 11,19" incLanes="cand_in_0" intLanes=":j_old_0"/>
 </net>
 """,
@@ -1096,6 +1138,8 @@ def test_write_teacher_target_internal_replay_net_copies_missing_boundary_edge(t
     assert copied_edge.find("lane").attrib["shape"] == "10.00,-160.00 10.00,-155.00"
     assert root.find("connection[@from=':j_w0'][@to='foot_missing']") is not None
     assert "foot_missing_0" in root.find("junction[@id='p']").attrib["incLanes"]
+    children = list(root)
+    assert children.index(copied_edge) < children.index(root.find("junction[@id='p']"))
     assert report["copied_boundary_edge_count"] == 1
     assert report["copied_boundary_edges"] == ["foot_missing"]
     assert report["skipped_connection_count"] == 0

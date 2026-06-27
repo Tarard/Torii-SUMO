@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from .command_runner import run_command
 from .junction_connection_audit import build_connection_signature, write_connection_signature
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
-from .junction_teacher_model import extract_teacher_junction_model, match_teacher_approaches
+from .junction_teacher_model import _extract_teacher_junction_model, extract_teacher_junction_model, match_teacher_approaches
 
 
 def build_rebuild_candidate(
@@ -86,6 +86,10 @@ def build_teacher_guided_repair_queue(
     output_dir = output_dir.resolve()
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_edges = {edge.attrib["id"]: edge for edge in teacher_root.findall("edge") if edge.attrib.get("id")}
+    candidate_edge_ids = {edge.attrib["id"] for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
     matched_cases = [
         case
         for case in reference_join_audit_report.get("matched_cases", []) or []
@@ -99,6 +103,10 @@ def build_teacher_guided_repair_queue(
             case=case,
             teacher_net_file=teacher_net_file,
             candidate_net_file=candidate_net_file,
+            teacher_root=teacher_root,
+            candidate_root=candidate_root,
+            teacher_edges=teacher_edges,
+            candidate_edge_ids=candidate_edge_ids,
         )
         repair_candidates.append(candidate)
         if candidate["candidate_status"] == "ready_for_teacher_guided_variant":
@@ -567,7 +575,7 @@ def write_teacher_target_internal_replay_net(
             removed_internal_edges.append(child.attrib.get("id", ""))
             candidate_root.remove(child)
     if insert_index is None:
-        insert_index = list(candidate_root).index(candidate_junction)
+        insert_index = _first_junction_index(candidate_root)
 
     teacher_internal_edges = [
         edge
@@ -1124,11 +1132,6 @@ def run_teacher_guided_repair_queue(
                 {"index": index, "junction_id": junction_id, "candidate_status": "invalid_edge_map"}
             )
             continue
-        if candidate.get("missing_teacher_edge_ids"):
-            skipped_candidates.append(
-                {"index": index, "junction_id": junction_id, "candidate_status": "edge_map_incomplete"}
-            )
-            continue
         if max_ready_candidates is not None and max_ready_candidates > 0 and attempted_ready_count >= max_ready_candidates:
             skipped_candidates.append(
                 {"index": index, "junction_id": junction_id, "candidate_status": "max_ready_candidates_reached"}
@@ -1296,6 +1299,10 @@ def _teacher_guided_repair_candidate(
     case: dict[str, Any],
     teacher_net_file: Path,
     candidate_net_file: Path,
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    teacher_edges: dict[str, ET.Element],
+    candidate_edge_ids: set[str],
 ) -> dict[str, object]:
     reference_id = str(case.get("reference_id", ""))
     candidate_node_ids = [str(item) for item in case.get("matched_candidate_node_ids") or case.get("candidate_node_ids") or []]
@@ -1310,7 +1317,7 @@ def _teacher_guided_repair_candidate(
         return {**base, "candidate_status": "invalid_reference_id", "edge_map": {}, "missing_teacher_edge_ids": []}
 
     try:
-        teacher_model = extract_teacher_junction_model(teacher_net_file, reference_id)
+        teacher_model = _extract_teacher_junction_model(teacher_root, teacher_net_file, reference_id)
     except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
         return {
             **base,
@@ -1324,7 +1331,7 @@ def _teacher_guided_repair_candidate(
     candidate_junction_id = ""
     for candidate_id in candidate_junction_ids:
         try:
-            candidate_model = extract_teacher_junction_model(candidate_net_file, candidate_id)
+            candidate_model = _extract_teacher_junction_model(candidate_root, candidate_net_file, candidate_id)
             candidate_junction_id = candidate_id
             break
         except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
@@ -1340,12 +1347,23 @@ def _teacher_guided_repair_candidate(
 
     edge_map = _teacher_candidate_edge_map(teacher_model, candidate_model)
     missing = [edge_id for edge_id in _teacher_approach_edge_ids(teacher_model) if edge_id not in edge_map]
+    copyable_missing = _copyable_missing_teacher_edge_ids(
+        teacher_root.findall("connection"),
+        teacher_edges,
+        candidate_edge_ids,
+        teacher_junction_id=reference_id,
+        candidate_junction_id=candidate_junction_id,
+        edge_map=edge_map,
+    )
+    uncopyable_missing = [edge_id for edge_id in missing if edge_id not in set(copyable_missing)]
     return {
         **base,
         "junction_id": candidate_junction_id,
-        "candidate_status": "ready_for_teacher_guided_variant" if not missing else "edge_map_incomplete",
+        "candidate_status": "ready_for_teacher_guided_variant" if not uncopyable_missing else "edge_map_incomplete",
         "edge_map": edge_map,
         "missing_teacher_edge_ids": missing,
+        "copyable_missing_teacher_edge_ids": copyable_missing,
+        "uncopyable_missing_teacher_edge_ids": uncopyable_missing,
         "teacher_incoming_edge_count": len(_approach_edges(teacher_model, "incoming")),
         "teacher_outgoing_edge_count": len(_approach_edges(teacher_model, "outgoing")),
         "candidate_incoming_edge_count": len(_approach_edges(candidate_model, "incoming")),
@@ -1381,6 +1399,26 @@ def _teacher_approach_edge_ids(teacher_model: dict[str, object]) -> list[str]:
     return sorted(dict.fromkeys(_approach_edges(teacher_model, "incoming") + _approach_edges(teacher_model, "outgoing")))
 
 
+def _copyable_missing_teacher_edge_ids(
+    teacher_connections: list[ET.Element],
+    teacher_edges: dict[str, ET.Element],
+    candidate_edge_ids: set[str],
+    *,
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+    edge_map: dict[str, str],
+) -> list[str]:
+    return _needed_unmapped_teacher_boundary_edges(
+        teacher_connections,
+        teacher_edges,
+        edge_map,
+        candidate_edge_ids,
+        f":{teacher_junction_id}_",
+        teacher_junction_id,
+        candidate_junction_id,
+    )
+
+
 def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
@@ -1391,6 +1429,8 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                 "candidate_status",
                 "edge_map_size",
                 "missing_teacher_edge_ids",
+                "copyable_missing_teacher_edge_ids",
+                "uncopyable_missing_teacher_edge_ids",
                 "matched_candidate_node_ids",
                 "learned_rule",
                 "error",
@@ -1406,6 +1446,12 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                     "candidate_status": row.get("candidate_status", ""),
                     "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
                     "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
+                    "copyable_missing_teacher_edge_ids": ";".join(
+                        str(item) for item in row.get("copyable_missing_teacher_edge_ids", []) or []
+                    ),
+                    "uncopyable_missing_teacher_edge_ids": ";".join(
+                        str(item) for item in row.get("uncopyable_missing_teacher_edge_ids", []) or []
+                    ),
                     "matched_candidate_node_ids": ";".join(str(item) for item in row.get("matched_candidate_node_ids", []) or []),
                     "learned_rule": row.get("learned_rule", ""),
                     "error": row.get("error", ""),
@@ -1676,6 +1722,13 @@ def _append_edge_lanes_to_destination_junction(root: ET.Element, edge: ET.Elemen
         if lane not in inc_lanes:
             inc_lanes.append(lane)
     junction.set("incLanes", " ".join(inc_lanes))
+
+
+def _first_junction_index(root: ET.Element) -> int:
+    for index, child in enumerate(list(root)):
+        if child.tag == "junction":
+            return index
+    return len(list(root))
 
 
 def _map_connection_endpoint(
