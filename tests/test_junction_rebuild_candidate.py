@@ -1292,6 +1292,66 @@ def test_teacher_parity_fails_on_mapped_controlled_link_signature_mismatch() -> 
     ]
 
 
+def test_teacher_parity_fails_on_mapped_pedestrian_link_signature_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [
+            {
+                "from": ":teacher_j_w0",
+                "to": ":teacher_j_c0",
+                "fromLane": "0",
+                "toLane": "0",
+                "tl": "teacher_j",
+                "linkIndex": "7",
+                "dir": "s",
+                "state": "M",
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "teacher_j", "type": "actuated"}, "phases": [{"state": "G"}]},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [
+            {
+                "from": ":candidate_j_w0",
+                "to": ":candidate_j_c_wrong",
+                "fromLane": "0",
+                "toLane": "0",
+                "tl": "candidate_j",
+                "linkIndex": "7",
+                "dir": "s",
+                "state": "M",
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "candidate_j", "type": "actuated"}, "phases": [{"state": "G"}]},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["controlled_pedestrian_link_signatures"] == {
+        "7": "from=:candidate_j_w0|to=:candidate_j_c0|fromLane=0|toLane=0|dir=s|state=M|via="
+    }
+    assert parity["candidate"]["controlled_pedestrian_link_signatures"] == {
+        "7": "from=:candidate_j_w0|to=:candidate_j_c_wrong|fromLane=0|toLane=0|dir=s|state=M|via="
+    }
+    assert parity["delta"]["controlled_pedestrian_link_signature_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "controlled_pedestrian_link_signature_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_guided_semantics_gate_fails_on_skipped_pedestrian_connections() -> None:
     gate = _teacher_guided_semantics_gate(
         {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},

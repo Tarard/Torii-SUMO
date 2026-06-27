@@ -1942,6 +1942,18 @@ def _compare_teacher_models(
         candidate_summary["controlled_vehicle_link_signatures"] = candidate_signatures
         if mismatch_count:
             delta["controlled_vehicle_link_signature_mismatch_count"] = mismatch_count
+        teacher_pedestrian_signatures = _controlled_pedestrian_link_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_pedestrian_signatures = _controlled_pedestrian_link_signatures(candidate_model)
+        pedestrian_mismatch_count = _dict_mismatch_count(teacher_pedestrian_signatures, candidate_pedestrian_signatures)
+        teacher_summary["controlled_pedestrian_link_signatures"] = teacher_pedestrian_signatures
+        candidate_summary["controlled_pedestrian_link_signatures"] = candidate_pedestrian_signatures
+        if pedestrian_mismatch_count:
+            delta["controlled_pedestrian_link_signature_mismatch_count"] = pedestrian_mismatch_count
     return {
         "teacher": teacher_summary,
         "candidate": candidate_summary,
@@ -2010,10 +2022,43 @@ def _controlled_vehicle_link_signatures(
     source_junction_id: str = "",
     target_junction_id: str = "",
 ) -> dict[str, str]:
+    return _controlled_link_signatures(
+        model,
+        "vehicle_connections",
+        edge_map=edge_map,
+        source_junction_id=source_junction_id,
+        target_junction_id=target_junction_id,
+    )
+
+
+def _controlled_pedestrian_link_signatures(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    return _controlled_link_signatures(
+        model,
+        "pedestrian_connections",
+        edge_map=edge_map,
+        source_junction_id=source_junction_id,
+        target_junction_id=target_junction_id,
+    )
+
+
+def _controlled_link_signatures(
+    model: dict[str, Any],
+    connection_key: str,
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
     traffic_light = model.get("traffic_light", {})
     attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
     tls_id = str(attributes.get("id", "") or model.get("junction_id", "")) if isinstance(attributes, dict) else ""
-    connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
+    connections = model.get(connection_key, []) if isinstance(model.get(connection_key), list) else []
     signatures: dict[str, str] = {}
     for connection in connections:
         if not isinstance(connection, dict) or connection.get("tl") != tls_id or not connection.get("linkIndex"):
@@ -2035,8 +2080,12 @@ def _vehicle_connection_signature(
     source_junction_id: str,
     target_junction_id: str,
 ) -> str:
-    source = _mapped_endpoint(str(connection.get("from", "")), edge_map)
-    target = _mapped_endpoint(str(connection.get("to", "")), edge_map)
+    source = _mapped_internal_ref(
+        _mapped_endpoint(str(connection.get("from", "")), edge_map), source_junction_id, target_junction_id
+    )
+    target = _mapped_internal_ref(
+        _mapped_endpoint(str(connection.get("to", "")), edge_map), source_junction_id, target_junction_id
+    )
     via = _mapped_internal_ref(str(connection.get("via", "")), source_junction_id, target_junction_id)
     return (
         f"from={source}|to={target}|fromLane={connection.get('fromLane', '')}|"
