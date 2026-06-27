@@ -195,6 +195,19 @@ def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[
     }
 
 
+def evaluate_netedit_semantics_gate(summary: dict[str, Any]) -> dict[str, Any]:
+    failed_tables = []
+    for table, counts in summary.get("status_counts", {}).items():
+        if not isinstance(counts, dict):
+            failed_tables.append(str(table))
+            continue
+        if any(key != "same" and int(value) != 0 for key, value in counts.items()):
+            failed_tables.append(str(table))
+    if failed_tables:
+        return {"status": "fail", "failed_tables": failed_tables, "reason": "non_same_rows_present"}
+    return {"status": "pass", "failed_tables": [], "reason": ""}
+
+
 def match_teacher_approaches(
     teacher_approaches: list[dict[str, Any]],
     candidate_approaches: list[dict[str, Any]],
