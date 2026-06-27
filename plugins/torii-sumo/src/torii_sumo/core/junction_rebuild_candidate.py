@@ -2353,7 +2353,7 @@ def _approach_edge_signature(edge: dict[str, Any], *, source_junction_id: str = 
     lane_signatures = [
         f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:"
         f"{lane.get('speed', '')}:{lane.get('length', '')}:{lane.get('width', '')}:"
-        f"{lane.get('shape', '')}:{lane.get('outlineShape', '')}"
+        f"{_shape_signature(str(lane.get('shape', '')))}:{_shape_signature(str(lane.get('outlineShape', '')))}"
         for lane in lanes
         if isinstance(lane, dict)
     ]
@@ -2369,6 +2369,10 @@ def _mapped_junction_ref(value: str, source_junction_id: str, target_junction_id
     if source_junction_id and target_junction_id and value == source_junction_id:
         return target_junction_id
     return value
+
+
+def _shape_signature(shape: str) -> str:
+    return _relative_shape(shape, "0", "0")
 
 
 def _relative_shape(shape: str, x: str, y: str) -> str:
