@@ -90,7 +90,7 @@ def test_teacher_model_keeps_junction_requests_internal_connections_and_referenc
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0" intLanes=":j_0_0">
     <request index="0" response="0" foes="0" cont="0"/>
   </junction>
-  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="cluster_tls" linkIndex="0" dir="s" pass="true" uncontrolled="true"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="cluster_tls" linkIndex="0" dir="s" pass="true" uncontrolled="true" allow="bicycle" disallow="truck"/>
   <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
   <tlLogic id="cluster_tls" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
 </net>""",
@@ -103,6 +103,8 @@ def test_teacher_model_keeps_junction_requests_internal_connections_and_referenc
     assert model["requests"] == [{"index": "0", "response": "0", "foes": "0", "cont": "0"}]
     assert model["vehicle_connections"][0]["pass"] == "true"
     assert model["vehicle_connections"][0]["uncontrolled"] == "true"
+    assert model["vehicle_connections"][0]["allow"] == "bicycle"
+    assert model["vehicle_connections"][0]["disallow"] == "truck"
     assert model["internal_connections"] == [
         {
             "from": ":j_0",
@@ -116,6 +118,8 @@ def test_teacher_model_keeps_junction_requests_internal_connections_and_referenc
             "state": "",
             "pass": "",
             "uncontrolled": "",
+            "allow": "",
+            "disallow": "",
         }
     ]
     assert model["traffic_light"]["attributes"]["id"] == "cluster_tls"
