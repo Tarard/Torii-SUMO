@@ -1478,7 +1478,7 @@ def run_teacher_guided_repair_queue(
         parity_gate_status = "blocked"
     else:
         status = "pass" if failed_count == 0 and parity_pass_count == attempted_count else "fail"
-        claim_status = "diagnostic-demo" if status == "pass" else "construction-invalid"
+        claim_status = "construction-invalid" if failed_count else "diagnostic-demo"
         parity_gate_status = "pass" if parity_pass_count == attempted_count else "fail"
 
     run_report_file = output_dir / f"{prefix}_run_report.json"
@@ -1676,9 +1676,20 @@ def write_expanded_scope_plain_inputs(
         sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
     else:
         sumo_report = {"status": "skipped", "reason": "netconvert_failed"}
+    joined_scope_junction_missing_from_net = False
+    if netconvert_report.get("status") == "pass" and joined_scope_junction_id:
+        try:
+            joined_scope_junction_missing_from_net = joined_scope_junction_id not in _net_junction_ids(net_file)
+        except (ET.ParseError, OSError):
+            joined_scope_junction_missing_from_net = True
+    blocking_missing_joined_scope_junction_ids = (
+        [joined_scope_junction_id] if joined_scope_junction_missing_from_net else []
+    )
     probe_status = "pass" if netconvert_report.get("status") == "pass" and sumo_report.get("status") == "pass" else "fail"
     return {
-        "status": "review" if blocking_missing_node_ids or missing_blocked_edge_ids else probe_status,
+        "status": "review"
+        if blocking_missing_node_ids or missing_blocked_edge_ids or blocking_missing_joined_scope_junction_ids
+        else probe_status,
         "claim_status": "diagnostic-demo",
         "recommended_action": "run_netconvert_scope_probe",
         "node_file": str(node_file),
@@ -1699,6 +1710,8 @@ def write_expanded_scope_plain_inputs(
         "missing_node_ids": missing_node_ids,
         "blocking_missing_node_ids": blocking_missing_node_ids,
         "missing_blocked_edge_ids": missing_blocked_edge_ids,
+        "joined_scope_junction_missing_from_net": joined_scope_junction_missing_from_net,
+        "blocking_missing_joined_scope_junction_ids": blocking_missing_joined_scope_junction_ids,
         "rewritten_endpoint_count": rewritten_endpoint_count,
         "skipped_endpoint_rewrites": skipped_endpoint_rewrites,
         "dropped_connection_count": dropped_connection_count,
