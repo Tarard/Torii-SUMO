@@ -69,6 +69,12 @@ def audit_reference_join_patterns(
     )
     junction_pattern_templates = summarize_junction_pattern_templates(junction_pattern_index)
     candidate_junction_pattern_templates = summarize_junction_pattern_templates(candidate_junction_pattern_index)
+    reference_structural_signature_summary = _structural_signature_summary(junction_pattern_index)
+    candidate_structural_signature_summary = _structural_signature_summary(candidate_junction_pattern_index)
+    junction_structural_signature_delta = _structural_signature_delta(
+        reference_structural_signature_summary,
+        candidate_structural_signature_summary,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -122,6 +128,10 @@ def audit_reference_join_patterns(
         else ("pass" if junction_pattern_comparisons else "skipped"),
         "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
         "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+        "junction_structural_signature_status": junction_structural_signature_delta["status"],
+        "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
+        "reference_structural_signature_summary": reference_structural_signature_summary,
+        "candidate_structural_signature_summary": candidate_structural_signature_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
         "junction_pattern_templates": junction_pattern_templates,
         "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
@@ -156,6 +166,10 @@ def audit_reference_join_patterns(
         else ("pass" if junction_pattern_comparisons else "skipped"),
         "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
         "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+        "junction_structural_signature_status": junction_structural_signature_delta["status"],
+        "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
+        "reference_structural_signature_summary": reference_structural_signature_summary,
+        "candidate_structural_signature_summary": candidate_structural_signature_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
         "junction_pattern_templates": junction_pattern_templates,
         "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
@@ -382,6 +396,35 @@ def _pattern_stats(reference_cases: list[dict[str, Any]], matched_cases: list[di
         "matched_reference_type_counts": _count_field(matched_cases, "reference_type"),
         "learned_rule_basis_counts": _count_field(matched_cases, "learned_rule_basis"),
     }
+
+
+def _structural_signature_summary(patterns: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        "pattern_count": len(patterns),
+        "internal_bundle_pattern_count": sum(1 for pattern in patterns if int(pattern.get("internal_edge_count", 0)) > 0),
+        "movement_signature_pattern_count": sum(1 for pattern in patterns if pattern.get("movement_signature_counts")),
+        "pedestrian_separation_pattern_count": sum(
+            1
+            for pattern in patterns
+            if int((pattern.get("internal_function_counts", {}) or {}).get("crossing", 0)) > 0
+            or int((pattern.get("internal_function_counts", {}) or {}).get("walkingarea", 0)) > 0
+        ),
+        "request_bit_vector_pattern_count": sum(
+            1
+            for pattern in patterns
+            if int(pattern.get("request_count", 0)) > 0 and bool(pattern.get("request_bit_lengths_ok", False))
+        ),
+        "tls_pattern_count": sum(1 for pattern in patterns if bool(pattern.get("has_tls", False))),
+    }
+
+
+def _structural_signature_delta(reference: dict[str, int], candidate: dict[str, int]) -> dict[str, Any]:
+    missing = {
+        key: reference[key] - candidate.get(key, 0)
+        for key in reference
+        if key != "pattern_count" and reference[key] > candidate.get(key, 0)
+    }
+    return {"status": "fail" if missing else "pass", "missing_counts": missing}
 
 
 def _compare_same_id_patterns(
