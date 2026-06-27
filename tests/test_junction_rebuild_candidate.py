@@ -1416,6 +1416,58 @@ def test_teacher_parity_fails_on_mapped_crossing_edge_set_mismatch() -> None:
     ]
 
 
+def test_teacher_parity_fails_on_mapped_internal_edge_signature_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "internal_edges": [
+            {
+                "edge_id": ":teacher_j_0",
+                "function": "internal",
+                "lanes": [{"index": "0", "allow": "passenger", "width": "", "shape": "0,0 1,1"}],
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "internal_edges": [
+            {
+                "edge_id": ":candidate_j_0",
+                "function": "internal",
+                "lanes": [{"index": "0", "allow": "passenger", "width": "", "shape": "0,0 2,2"}],
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["internal_edge_signatures"] == {
+        ":candidate_j_0": "function=internal|lanes=0:passenger::0,0 1,1"
+    }
+    assert parity["candidate"]["internal_edge_signatures"] == {
+        ":candidate_j_0": "function=internal|lanes=0:passenger::0,0 2,2"
+    }
+    assert parity["delta"]["internal_edge_signature_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "internal_edge_signature_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_parity_fails_on_uncontrolled_pedestrian_ring_signature_mismatch() -> None:
     teacher_model = {
         "junction_id": "teacher_j",
