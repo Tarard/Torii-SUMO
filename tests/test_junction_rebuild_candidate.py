@@ -1165,6 +1165,7 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
         """<net>
   <edge id="cand_in"><lane id="cand_in_0" index="0"/></edge>
   <edge id="cand_out"><lane id="cand_out_0" index="0"/></edge>
+  <junction id="candidate_tls" x="10" y="20"/>
   <connection from="cand_in" to="cand_out" fromLane="0" toLane="0"/>
 </net>
 """,
@@ -1187,8 +1188,10 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
                 "disallow": "truck",
                 "keepClear": "0",
                 "contPos": "43.00",
+                "shape": "100,200 101,201",
             }
-        ]
+        ],
+        "junction": {"x": "100", "y": "200"},
     }
 
     report = write_teacher_vehicle_connection_attrs_net(
@@ -1210,6 +1213,7 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
     assert connection.attrib["disallow"] == "truck"
     assert connection.attrib["keepClear"] == "0"
     assert connection.attrib["contPos"] == "43.00"
+    assert connection.attrib["shape"] == "10.00,20.00 11.00,21.00"
 
 
 def test_teacher_parity_counts_only_target_tls_controlled_links() -> None:

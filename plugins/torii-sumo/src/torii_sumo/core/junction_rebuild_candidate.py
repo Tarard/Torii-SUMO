@@ -511,6 +511,17 @@ def write_teacher_vehicle_connection_attrs_net(
     tree = ET.parse(candidate_net_file)
     root = tree.getroot()
     lane_counts = _net_lane_counts(root)
+    shape_delta = None
+    teacher_junction = teacher_model.get("junction", {}) if isinstance(teacher_model.get("junction"), dict) else {}
+    candidate_junction = next((item for item in root.findall("junction") if item.attrib.get("id") == junction_id), None)
+    if candidate_junction is not None:
+        try:
+            shape_delta = (
+                float(candidate_junction.attrib.get("x", "")) - float(teacher_junction.get("x", "")),
+                float(candidate_junction.attrib.get("y", "")) - float(teacher_junction.get("y", "")),
+            )
+        except (TypeError, ValueError):
+            shape_delta = None
 
     connections_by_key: dict[tuple[str, str, str, str], list[ET.Element]] = {}
     for connection in root.findall("connection"):
@@ -547,6 +558,8 @@ def write_teacher_vehicle_connection_attrs_net(
                     connection.set(attr, str(teacher_connection[attr]))
                 else:
                     connection.attrib.pop(attr, None)
+            if teacher_connection.get("shape") and shape_delta is not None:
+                connection.set("shape", _translate_shape(str(teacher_connection["shape"]), shape_delta[0], shape_delta[1]))
             if teacher_connection.get("tl"):
                 connection.set("tl", junction_id)
                 connection.set("linkIndex", str(teacher_connection.get("linkIndex", "")))
