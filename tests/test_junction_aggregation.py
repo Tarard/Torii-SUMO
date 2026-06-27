@@ -309,7 +309,7 @@ def test_junction_aggregation_preserves_reference_confirmed_modal_nodes(tmp_path
     assert report["status"] == "pass"
 
 
-def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_core(tmp_path) -> None:
+def test_junction_aggregation_prunes_only_internal_short_modal_support_edges(tmp_path) -> None:
     net_file = tmp_path / "source.net.xml"
     net_file.write_text(
         """<net>
@@ -319,14 +319,20 @@ def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_cor
     <edge id="veh_short_keep" from="core_a" to="outside_vehicle" type="highway.residential">
         <lane id="veh_short_keep_0" index="0" allow="passenger" speed="13.9" length="5"/>
     </edge>
-    <edge id="foot_prune" from="core_a" to="outside_foot" type="highway.footway">
-        <lane id="foot_prune_0" index="0" allow="pedestrian" speed="1.4" length="6"/>
+    <edge id="foot_internal_prune" from="core_a" to="core_b" type="highway.footway">
+        <lane id="foot_internal_prune_0" index="0" allow="pedestrian" speed="1.4" length="6"/>
     </edge>
-    <edge id="bike_prune" from="core_b" to="outside_bike" type="highway.cycleway">
-        <lane id="bike_prune_0" index="0" allow="bicycle" speed="5.0" length="7"/>
+    <edge id="bike_internal_prune" from="core_b" to="core_a" type="highway.cycleway">
+        <lane id="bike_internal_prune_0" index="0" allow="bicycle" speed="5.0" length="7"/>
     </edge>
-    <edge id="service_prune" from="core_b" to="outside_service" type="highway.service">
-        <lane id="service_prune_0" index="0" allow="passenger" speed="5.0" length="6"/>
+    <edge id="foot_external_keep" from="core_a" to="outside_foot" type="highway.footway">
+        <lane id="foot_external_keep_0" index="0" allow="pedestrian" speed="1.4" length="6"/>
+    </edge>
+    <edge id="bike_external_keep" from="core_b" to="outside_bike" type="highway.cycleway">
+        <lane id="bike_external_keep_0" index="0" allow="bicycle" speed="5.0" length="7"/>
+    </edge>
+    <edge id="service_external_keep" from="core_b" to="outside_service" type="highway.service">
+        <lane id="service_external_keep_0" index="0" allow="passenger" speed="5.0" length="6"/>
     </edge>
     <edge id="service_long_keep" from="core_b" to="outside_service_long" type="highway.service">
         <lane id="service_long_keep_0" index="0" allow="passenger" speed="5.0" length="35"/>
@@ -337,12 +343,11 @@ def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_cor
 
     def fake_command(command, cwd, timeout_seconds):
         assert "--remove-edges.input-file" not in command
-        assert command[command.index("--remove-edges.explicit") + 1] == "bike_prune,foot_prune,service_prune"
+        assert command[command.index("--remove-edges.explicit") + 1] == "bike_internal_prune,foot_internal_prune"
         remove_file = tmp_path / "demo_modal_support_remove_edges.txt"
         assert remove_file.read_text(encoding="utf-8").splitlines() == [
-            "bike_prune",
-            "foot_prune",
-            "service_prune",
+            "bike_internal_prune",
+            "foot_internal_prune",
         ]
         variant_file = _command_path(command, "--output-file", cwd)
         variant_file.write_text('<net><junction id="cluster_core_a_core_b" x="0" y="0"/></net>', encoding="utf-8")
@@ -365,7 +370,7 @@ def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_cor
     )
 
     assert report["status"] == "pass"
-    assert report["junction_aggregation_removed_modal_support_edge_count"] == 3
+    assert report["junction_aggregation_removed_modal_support_edge_count"] == 2
 
 
 def test_junction_aggregation_variant_reports_failed_collapse_audit(tmp_path) -> None:

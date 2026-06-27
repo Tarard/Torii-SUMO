@@ -450,7 +450,7 @@ def _short_modal_support_edges(net_file: Path, *, join_core_nodes: set[str], max
         edge_id = edge.attrib.get("id", "")
         if not edge_id or edge_id.startswith(":") or edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}:
             continue
-        if edge.attrib.get("from") not in join_core_nodes and edge.attrib.get("to") not in join_core_nodes:
+        if edge.attrib.get("from") not in join_core_nodes or edge.attrib.get("to") not in join_core_nodes:
             continue
         attrs = dict(edge.attrib)
         attrs["allow"] = " ".join(lane.attrib.get("allow", "") for lane in edge.findall("lane"))
