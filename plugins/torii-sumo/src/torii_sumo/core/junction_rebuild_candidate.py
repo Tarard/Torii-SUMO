@@ -1014,7 +1014,14 @@ def build_teacher_guided_junction_variant(
     sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
     final_model = extract_teacher_junction_model(final_net_file, junction_id)
     parity = _compare_teacher_models(teacher_model, final_model)
-    parity_gate_status = "pass" if all(value == 0 for value in parity["delta"].values()) else "fail"
+    semantic_gate = _teacher_guided_semantics_gate(
+        parity,
+        pedestrian_ring=pedestrian_ring_report,
+        vehicle_connection_attrs=vehicle_attrs_report,
+        target_internal_pedestrian_ring=target_internal_pedestrian_ring_report,
+        target_internal_vehicle_connection_attrs=target_internal_vehicle_attrs_report,
+    )
+    parity_gate_status = semantic_gate["status"]
     status = "pass" if sumo_report.get("status") == "pass" else "fail"
     return _write_teacher_guided_report(
         report_file,
@@ -1054,6 +1061,7 @@ def build_teacher_guided_junction_variant(
             "tl_logic": tl_logic_report,
             "sumo_load": sumo_report,
             "parity": parity,
+            "semantic_replay_gate": semantic_gate,
             "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
         },
     )
@@ -1842,25 +1850,48 @@ def _compare_teacher_models(teacher_model: dict[str, Any], candidate_model: dict
     teacher_summary = _teacher_parity_summary(teacher_model)
     candidate_summary = _teacher_parity_summary(candidate_model)
     keys = sorted(set(teacher_summary) | set(candidate_summary))
+    delta: dict[str, int] = {}
+    for key in keys:
+        candidate_value = candidate_summary.get(key, 0)
+        teacher_value = teacher_summary.get(key, 0)
+        if isinstance(candidate_value, int) and isinstance(teacher_value, int):
+            delta[key] = candidate_value - teacher_value
+        elif candidate_value != teacher_value:
+            delta[f"{key}_mismatch_count"] = 1
     return {
         "teacher": teacher_summary,
         "candidate": candidate_summary,
-        "delta": {
-            key: candidate_summary.get(key, 0) - teacher_summary.get(key, 0)
-            for key in keys
-            if isinstance(candidate_summary.get(key, 0), int) and isinstance(teacher_summary.get(key, 0), int)
-        },
+        "delta": delta,
     }
+
+
+def _teacher_guided_semantics_gate(parity: dict[str, Any], **reports: dict[str, Any] | None) -> dict[str, object]:
+    failures: list[dict[str, object]] = []
+    for field, count in (parity.get("delta", {}) if isinstance(parity.get("delta"), dict) else {}).items():
+        if isinstance(count, int) and count != 0:
+            failures.append({"report": "parity", "field": str(field), "count": count})
+
+    for report_name, report in reports.items():
+        if not isinstance(report, dict):
+            continue
+        for field in ("skipped_pedestrian_connection_count", "skipped_vehicle_connection_count"):
+            count = int(report.get(field, 0) or 0)
+            if count:
+                failures.append({"report": report_name, "field": field, "count": count})
+
+    return {"status": "fail" if failures else "pass", "failures": failures}
 
 
 def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     summary = dict(model.get("summary", {}) if isinstance(model.get("summary"), dict) else {})
     traffic_light = model.get("traffic_light", {})
+    attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
     phases = traffic_light.get("phases", []) if isinstance(traffic_light, dict) else []
     phase_states = [str(phase.get("state", "")) for phase in phases if isinstance(phase, dict)]
     vehicle_connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
     pedestrian_connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
     target_tls_id = str(model.get("junction_id", ""))
+    summary["tl_type"] = str(attributes.get("type", "")) if isinstance(attributes, dict) else ""
     summary["tl_phase_state_lengths"] = sorted({len(state) for state in phase_states})
     summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections, target_tls_id)
     summary["controlled_pedestrian_link_count"] = _controlled_link_count(pedestrian_connections, target_tls_id)

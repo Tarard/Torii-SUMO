@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 
 from torii_sumo.core.junction_rebuild_candidate import (
     _compare_teacher_models,
+    _teacher_guided_semantics_gate,
     _stage_file,
     build_rebuild_candidate,
     build_teacher_guided_repair_queue,
@@ -1016,6 +1017,46 @@ def test_teacher_parity_counts_only_target_tls_controlled_links() -> None:
     assert parity["teacher"]["controlled_vehicle_link_count"] == 1
     assert parity["candidate"]["controlled_vehicle_link_count"] == 1
     assert parity["delta"]["controlled_vehicle_link_count"] == 0
+
+
+def test_teacher_parity_fails_on_tls_type_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "actuated"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "static"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(teacher_model, candidate_model)
+
+    assert parity["teacher"]["tl_type"] == "actuated"
+    assert parity["candidate"]["tl_type"] == "static"
+    assert parity["delta"]["tl_type_mismatch_count"] == 1
+
+
+def test_teacher_guided_semantics_gate_fails_on_skipped_pedestrian_connections() -> None:
+    gate = _teacher_guided_semantics_gate(
+        {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
+        pedestrian_ring={"skipped_pedestrian_connection_count": 1},
+        vehicle_connection_attrs={"skipped_vehicle_connection_count": 0},
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {
+            "report": "pedestrian_ring",
+            "field": "skipped_pedestrian_connection_count",
+            "count": 1,
+        }
+    ]
 
 
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:
