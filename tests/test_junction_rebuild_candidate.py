@@ -1230,6 +1230,38 @@ def test_teacher_parity_fails_on_tls_type_mismatch() -> None:
     assert parity["delta"]["tl_type_mismatch_count"] == 1
 
 
+def test_teacher_parity_fails_on_tls_program_and_offset_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "actuated", "programID": "0", "offset": "0"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "actuated", "programID": "1", "offset": "5"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(teacher_model, candidate_model)
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["tl_programID"] == "0"
+    assert parity["candidate"]["tl_programID"] == "1"
+    assert parity["teacher"]["tl_offset"] == "0"
+    assert parity["candidate"]["tl_offset"] == "5"
+    assert parity["delta"]["tl_programID_mismatch_count"] == 1
+    assert parity["delta"]["tl_offset_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "tl_offset_mismatch_count", "count": 1},
+        {"report": "parity", "field": "tl_programID_mismatch_count", "count": 1},
+    ]
+
+
 def test_teacher_parity_fails_on_tls_phase_state_mismatch() -> None:
     teacher_model = {
         "junction_id": "j",
