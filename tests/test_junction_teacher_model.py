@@ -72,6 +72,8 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
     assert model["summary"]["tl_phase_count"] == 1
     assert model["approaches"]["incoming"][0]["bearing"] == 0.0
     assert model["vehicle_connections"][0]["linkIndex"] == "0"
+    assert model["internal_edges"][0]["edge_id"] == ":j_0"
+    assert model["internal_edges"][0]["lanes"][0]["shape"] == "0,0 5,0"
     assert model["crossings"][0]["crossingEdges"] == ["in", "out"]
 
 

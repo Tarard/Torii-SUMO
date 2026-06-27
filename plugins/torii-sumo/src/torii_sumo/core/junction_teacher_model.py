@@ -60,12 +60,12 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
         for edge in edges.values()
         if edge.attrib.get("id", "").startswith(internal_prefix) and edge.attrib.get("function") == "walkingarea"
     ]
-    internal_edge_count = sum(
-        1
+    internal_edges = [
+        _internal_edge_record(edge)
         for edge in edges.values()
         if edge.attrib.get("id", "").startswith(internal_prefix)
         and edge.attrib.get("function") not in {"crossing", "walkingarea"}
-    )
+    ]
     outgoing_edges_sorted = sorted(outgoing_edges)
 
     vehicle_connections = []
@@ -105,6 +105,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
         },
         "vehicle_connections": vehicle_connections,
         "internal_connections": internal_connections,
+        "internal_edges": internal_edges,
         "crossings": crossings,
         "walking_areas": walking_areas,
         "pedestrian_connections": pedestrian_connections,
@@ -114,7 +115,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
             "incoming_vehicle_edge_count": len(incoming_edges),
             "outgoing_vehicle_edge_count": len(outgoing_edges_sorted),
             "vehicle_connection_count": len(vehicle_connections),
-            "internal_edge_count": internal_edge_count,
+            "internal_edge_count": len(internal_edges),
             "internal_connection_count": len(internal_connections),
             "pedestrian_connection_count": len(pedestrian_connections),
             "crossing_count": len(crossings),
