@@ -947,7 +947,9 @@ def test_write_teacher_connection_plan_ignores_edges_missing_from_patched_edge_f
     assert report["removed_target_children"] == 2
 
 
-def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacing_edge_geometry(tmp_path: Path) -> None:
+def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_without_replacing_edge_geometry(
+    tmp_path: Path,
+) -> None:
     raw_edges = tmp_path / "raw.edg.xml"
     raw_edges.write_text(
         """<edges>
@@ -962,8 +964,8 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacin
     teacher_edges.write_text(
         """<net>
   <edge id="teacher" from="x" to="j" numLanes="2" speed="13.89" shape="5,5 6,5">
-    <lane index="0" allow="pedestrian" width="3.00" speed="13.89" shape="5,5 6,5"/>
-    <lane index="1" disallow="pedestrian bicycle" speed="13.89" shape="5,6 6,6"/>
+    <lane index="0" allow="pedestrian" width="3.00" speed="13.89" length="1.00" shape="5,5 6,5"/>
+    <lane index="1" disallow="pedestrian bicycle" speed="13.89" length="1.50" shape="5,6 6,6" outlineShape="5,5.5 6,5.5"/>
   </edge>
 </net>
 """,
@@ -983,6 +985,9 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacin
     lanes = edge.findall("lane")
     assert [lane.attrib.get("allow", "") for lane in lanes] == ["pedestrian", ""]
     assert [lane.attrib.get("disallow", "") for lane in lanes] == ["", "pedestrian bicycle"]
+    assert [lane.attrib.get("shape", "") for lane in lanes] == ["5,5 6,5", "5,6 6,6"]
+    assert "length" not in lanes[0].attrib
+    assert "outlineShape" not in lanes[1].attrib
     assert report["patched_edge_count"] == 1
 
 
@@ -1925,6 +1930,100 @@ def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -
     assert gate["failures"] == [
         {"report": "parity", "field": "crossing_geometry_signature_mismatch_count", "count": 1}
     ]
+
+
+def test_teacher_parity_normalizes_internal_pedestrian_geometry_by_junction_origin() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "junction": {"id": "teacher_j", "x": "100", "y": "200"},
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "internal_edges": [
+            {
+                "edge_id": ":teacher_j_0",
+                "function": "internal",
+                "lanes": [{"index": "0", "shape": "101,200 102,201"}],
+            }
+        ],
+        "crossings": [
+            {
+                "edge_id": ":teacher_j_c0",
+                "function": "crossing",
+                "lanes": [{"index": "0", "allow": "pedestrian", "shape": "99,199 101,199"}],
+            }
+        ],
+        "walking_areas": [
+            {
+                "edge_id": ":teacher_j_w0",
+                "function": "walkingarea",
+                "lanes": [{"index": "0", "allow": "pedestrian", "outlineShape": "99,199 101,199 101,201"}],
+            }
+        ],
+        "internal_junctions": [
+            {
+                "junction_id": ":teacher_j_0_0",
+                "type": "internal",
+                "incLanes": "",
+                "intLanes": "",
+                "shape": "101,200 102,201",
+                "customShape": "99,199 101,199 101,201",
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "junction": {"id": "candidate_j", "x": "10", "y": "20"},
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "internal_edges": [
+            {
+                "edge_id": ":candidate_j_0",
+                "function": "internal",
+                "lanes": [{"index": "0", "shape": "11,20 12,21"}],
+            }
+        ],
+        "crossings": [
+            {
+                "edge_id": ":candidate_j_c0",
+                "function": "crossing",
+                "lanes": [{"index": "0", "allow": "pedestrian", "shape": "9,19 11,19"}],
+            }
+        ],
+        "walking_areas": [
+            {
+                "edge_id": ":candidate_j_w0",
+                "function": "walkingarea",
+                "lanes": [{"index": "0", "allow": "pedestrian", "outlineShape": "9,19 11,19 11,21"}],
+            }
+        ],
+        "internal_junctions": [
+            {
+                "junction_id": ":candidate_j_0_0",
+                "type": "internal",
+                "incLanes": "",
+                "intLanes": "",
+                "shape": "11,20 12,21",
+                "customShape": "9,19 11,19 11,21",
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+
+    assert "internal_edge_signature_mismatch_count" not in parity["delta"]
+    assert "crossing_geometry_signature_mismatch_count" not in parity["delta"]
+    assert "walking_area_signature_mismatch_count" not in parity["delta"]
+    assert "internal_junction_signature_mismatch_count" not in parity["delta"]
 
 
 def test_teacher_parity_fails_on_mapped_internal_edge_signature_mismatch() -> None:
