@@ -1994,6 +1994,20 @@ def _compare_teacher_models(
         candidate_summary["internal_edge_signatures"] = candidate_internal_edge_signatures
         if internal_edge_mismatch_count:
             delta["internal_edge_signature_mismatch_count"] = internal_edge_mismatch_count
+        teacher_internal_connection_signatures = _internal_connection_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_internal_connection_signatures = _internal_connection_signatures(candidate_model)
+        internal_connection_mismatch_count = _dict_mismatch_count(
+            teacher_internal_connection_signatures, candidate_internal_connection_signatures
+        )
+        teacher_summary["internal_connection_signatures"] = teacher_internal_connection_signatures
+        candidate_summary["internal_connection_signatures"] = candidate_internal_connection_signatures
+        if internal_connection_mismatch_count:
+            delta["internal_connection_signature_mismatch_count"] = internal_connection_mismatch_count
     return {
         "teacher": teacher_summary,
         "candidate": candidate_summary,
@@ -2147,6 +2161,27 @@ def _uncontrolled_pedestrian_connection_signatures(
                 )
             ]
         )
+    return {signature: str(counts[signature]) for signature in sorted(counts)}
+
+
+def _internal_connection_signatures(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    connections = model.get("internal_connections", []) if isinstance(model.get("internal_connections"), list) else []
+    counts: Counter[str] = Counter(
+        _vehicle_connection_signature(
+            connection,
+            edge_map=edge_map,
+            source_junction_id=source_junction_id,
+            target_junction_id=target_junction_id,
+        )
+        for connection in connections
+        if isinstance(connection, dict)
+    )
     return {signature: str(counts[signature]) for signature in sorted(counts)}
 
 
