@@ -1661,6 +1661,12 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_semantic_failure_counts": {}
         if teacher_guided_repair_run_report is None
         else teacher_guided_repair_run_report.get("semantic_failure_counts", {}),
+        "teacher_guided_repair_approach_integrity_status": "skipped"
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("approach_integrity_status", "blocked"),
+        "teacher_guided_repair_approach_integrity_failure_counts": {}
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("approach_integrity_failure_counts", {}),
         "teacher_guided_repair_template_contexts": []
         if teacher_guided_repair_run_report is None
         else teacher_guided_repair_run_report.get("teacher_pattern_contexts", []),

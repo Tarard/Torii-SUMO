@@ -462,6 +462,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "expanded_scope_pass_candidate_count": 1,
             "best_expanded_scope_net_file": str(best_expanded),
             "semantic_failure_counts": {},
+            "approach_integrity_status": "blocked",
+            "approach_integrity_failure_counts": {},
             "teacher_pattern_contexts": [
                 {
                     "teacher_pattern_key": "three_way|control=right_before_left",
@@ -610,6 +612,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_run_status"] == "blocked"
     assert report["teacher_guided_repair_parity_gate_status"] == "blocked"
     assert report["teacher_guided_repair_semantic_failure_counts"] == {}
+    assert report["teacher_guided_repair_approach_integrity_status"] == "blocked"
+    assert report["teacher_guided_repair_approach_integrity_failure_counts"] == {}
     assert report["teacher_guided_repair_template_contexts"] == [
         {
             "teacher_pattern_key": "three_way|control=right_before_left",
