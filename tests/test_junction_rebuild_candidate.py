@@ -2102,7 +2102,7 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
   </junction>
   <junction id=":j_0_0" type="internal" x="100" y="200" incLanes="teacher_in_0" intLanes=":j_0_0" customShape="99,199 101,201"/>
   <junction id=":j_w0_0" type="internal" x="98" y="198" incLanes="teacher_in_0" intLanes=":j_c0_0"/>
-  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O" shape="100,200 101,201"/>
   <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
   <connection from=":j_w0" to="foot_same" fromLane="0" toLane="0" dir="s" state="M"/>
   <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="GM"/></tlLogic>
@@ -2160,6 +2160,7 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert walkingarea_junction.attrib["y"] == "18.00"
     vehicle_connection = root.find("connection[@from='cand_in'][@to='cand_out']")
     assert vehicle_connection.attrib["via"] == ":j_0_0"
+    assert vehicle_connection.attrib["shape"] == "10.00,20.00 11.00,21.00"
     assert root.find("connection[@from=':j_w0'][@to=':j_c0']").attrib["tl"] == "j"
     assert root.find("connection[@from=':j_w0'][@to='foot_same']") is not None
     assert report["removed_internal_edge_count"] == 1

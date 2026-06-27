@@ -731,6 +731,8 @@ def write_teacher_target_internal_replay_net(
             internal_prefix,
             junction_id,
             candidate_edge_ids,
+            dx,
+            dy,
         )
         if mapped is None:
             skipped_connections.append(dict(connection.attrib))
@@ -1730,6 +1732,8 @@ def _mapped_connection_attrs(
     candidate_internal_prefix: str,
     candidate_junction_id: str,
     candidate_edge_ids: set[str],
+    dx: float,
+    dy: float,
 ) -> dict[str, str] | None:
     mapped = dict(connection.attrib)
     for attr in ("from", "to"):
@@ -1745,6 +1749,8 @@ def _mapped_connection_attrs(
         mapped["via"] = _map_internal_ref(mapped["via"], teacher_internal_prefix, candidate_internal_prefix)
         if not mapped["via"].startswith(candidate_internal_prefix):
             return None
+    if mapped.get("shape"):
+        mapped["shape"] = _translate_shape(mapped["shape"], dx, dy)
     return mapped
 
 
