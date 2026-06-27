@@ -705,16 +705,27 @@ def write_teacher_target_internal_replay_net(
         candidate_root.append(ET.Element("connection", mapped))
         copied_connections += 1
 
+    teacher_tls_ids = [
+        connection.attrib.get("tl", "")
+        for connection in teacher_root.findall("connection")
+        if _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id)
+        and connection.attrib.get("tl")
+        and connection.attrib.get("linkIndex")
+    ]
     teacher_tllogic = teacher_root.find(f"tlLogic[@id='{teacher_junction_id}']")
+    if teacher_tllogic is None:
+        teacher_tllogic = next(
+            (tl for tl in teacher_root.findall("tlLogic") if tl.attrib.get("id") in teacher_tls_ids),
+            None,
+        )
     if teacher_tllogic is not None:
         target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
         target_index = list(candidate_root).index(target_tllogic) if target_tllogic is not None else len(list(candidate_root))
         if target_tllogic is not None:
             candidate_root.remove(target_tllogic)
-        candidate_root.insert(
-            target_index,
-            _clone_transformed_net_element(teacher_tllogic, dx, dy, replay_edge_map, teacher_junction_id, junction_id),
-        )
+        copied_tllogic = _clone_transformed_net_element(teacher_tllogic, dx, dy, replay_edge_map, teacher_junction_id, junction_id)
+        copied_tllogic.set("id", junction_id)
+        candidate_root.insert(target_index, copied_tllogic)
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -1685,7 +1696,7 @@ def _mapped_connection_attrs(
         if not endpoint:
             return None
         mapped[attr] = endpoint
-    if mapped.get("tl") == teacher_junction_id:
+    if mapped.get("tl") and mapped.get("linkIndex"):
         mapped["tl"] = candidate_junction_id
     if mapped.get("via"):
         mapped["via"] = _map_internal_ref(mapped["via"], teacher_internal_prefix, candidate_internal_prefix)
