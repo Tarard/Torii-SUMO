@@ -177,6 +177,29 @@ def _teacher_guided_exemplar_ready_stats(report: Mapping[str, Any] | None) -> tu
     return ready_count, signature_count
 
 
+def _teacher_guided_movement_gap_stats(report: Mapping[str, Any] | None) -> tuple[int, int, list[dict[str, Any]]]:
+    if report is None:
+        return 0, 0, []
+    gaps = []
+    for candidate in report.get("repair_candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        gap = _int_field(candidate, "vehicle_movement_matrix_missing_count")
+        if gap <= 0:
+            continue
+        gaps.append(
+            {
+                "reference_id": str(candidate.get("reference_id", "")),
+                "junction_id": str(candidate.get("junction_id", "")),
+                "candidate_status": str(candidate.get("candidate_status", "")),
+                "vehicle_movement_matrix_missing_count": gap,
+                "netedit_review_actions": [str(item) for item in candidate.get("netedit_review_actions", []) or []],
+            }
+        )
+    gaps.sort(key=lambda item: (-int(item["vehicle_movement_matrix_missing_count"]), item["reference_id"]))
+    return len(gaps), int(gaps[0]["vehicle_movement_matrix_missing_count"]) if gaps else 0, gaps[:5]
+
+
 def _class_set(value: Any) -> set[str]:
     if value is None:
         return set()
@@ -1405,6 +1428,11 @@ def run_osm_cleanup_workflow(
         teacher_guided_exemplar_ready_candidate_count,
         teacher_guided_exemplar_movement_signature_count,
     ) = _teacher_guided_exemplar_ready_stats(teacher_guided_repair_queue_report)
+    (
+        teacher_guided_movement_gap_candidate_count,
+        teacher_guided_max_vehicle_movement_matrix_missing_count,
+        teacher_guided_top_movement_gaps,
+    ) = _teacher_guided_movement_gap_stats(teacher_guided_repair_queue_report)
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -1579,6 +1607,9 @@ def run_osm_cleanup_workflow(
         else teacher_guided_repair_run_report.get("expanded_scope_pass_candidate_count", 0),
         "teacher_guided_repair_exemplar_ready_candidate_count": teacher_guided_exemplar_ready_candidate_count,
         "teacher_guided_repair_exemplar_movement_signature_count": teacher_guided_exemplar_movement_signature_count,
+        "teacher_guided_repair_movement_gap_candidate_count": teacher_guided_movement_gap_candidate_count,
+        "teacher_guided_repair_max_vehicle_movement_matrix_missing_count": teacher_guided_max_vehicle_movement_matrix_missing_count,
+        "teacher_guided_repair_top_movement_gaps": teacher_guided_top_movement_gaps,
         "teacher_guided_repair_queued_case_count": 0
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("queued_case_count", 0),

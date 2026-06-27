@@ -406,6 +406,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
                 {
                     "reference_id": "cluster_a_b",
                     "candidate_status": "needs_expanded_rebuild_scope",
+                    "vehicle_movement_matrix_missing_count": 12,
+                    "netedit_review_actions": ["rebuild_vehicle_movement_matrix"],
                     "slot_edge_map": {"slot_0": "cand_in", "slot_1": "cand_out"},
                     "movement_exemplar": {
                         "movement_signatures": [
@@ -571,6 +573,17 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_expanded_scope_pass_candidate_count"] == 1
     assert report["teacher_guided_repair_exemplar_ready_candidate_count"] == 0
     assert report["teacher_guided_repair_exemplar_movement_signature_count"] == 0
+    assert report["teacher_guided_repair_movement_gap_candidate_count"] == 1
+    assert report["teacher_guided_repair_max_vehicle_movement_matrix_missing_count"] == 12
+    assert report["teacher_guided_repair_top_movement_gaps"] == [
+        {
+            "reference_id": "cluster_a_b",
+            "junction_id": "",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "vehicle_movement_matrix_missing_count": 12,
+            "netedit_review_actions": ["rebuild_vehicle_movement_matrix"],
+        }
+    ]
     assert report["teacher_guided_repair_queue_file"] == str(tmp_path / "teacher_guided_queue.json")
     assert report["teacher_guided_repair_plain_export_status"] == "pass"
     assert report["teacher_guided_repair_raw_node_file"] == str(tmp_path / "plain.nod.xml")
