@@ -218,6 +218,28 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "movement_signature_counts": 1,
         "request_bit_lengths_ok": 1,
     }
+    assert report["reference_structural_signature_summary"] == {
+        "pattern_count": 1,
+        "internal_bundle_pattern_count": 1,
+        "movement_signature_pattern_count": 1,
+        "pedestrian_separation_pattern_count": 1,
+        "request_bit_vector_pattern_count": 1,
+        "tls_pattern_count": 1,
+    }
+    assert report["candidate_structural_signature_summary"] == {
+        "pattern_count": 1,
+        "internal_bundle_pattern_count": 1,
+        "movement_signature_pattern_count": 1,
+        "pedestrian_separation_pattern_count": 0,
+        "request_bit_vector_pattern_count": 0,
+        "tls_pattern_count": 0,
+    }
+    assert report["junction_structural_signature_status"] == "fail"
+    assert report["junction_structural_signature_missing_counts"] == {
+        "pedestrian_separation_pattern_count": 1,
+        "request_bit_vector_pattern_count": 1,
+        "tls_pattern_count": 1,
+    }
     comparison = report["junction_pattern_comparisons"][0]
     assert comparison["junction_id"] == "cluster_a_b"
     assert comparison["status"] == "fail"
@@ -250,6 +272,8 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
     assert delta["reference_net_file"] == str(reference)
     assert delta["candidate_net_file"] == str(candidate)
     assert delta["junction_pattern_mismatch_field_counts"] == report["junction_pattern_mismatch_field_counts"]
+    assert delta["junction_structural_signature_status"] == "fail"
+    assert delta["junction_structural_signature_missing_counts"] == report["junction_structural_signature_missing_counts"]
     assert delta["junction_pattern_comparisons"][0]["teacher"]["control_type"] == "traffic_light"
 
 
