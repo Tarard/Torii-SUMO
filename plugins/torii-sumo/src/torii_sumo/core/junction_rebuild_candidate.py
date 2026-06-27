@@ -1176,6 +1176,7 @@ def run_teacher_guided_repair_queue(
     pass_count = sum(1 for report in variant_reports if report.get("status") == "pass")
     failed_count = attempted_count - pass_count
     parity_pass_count = sum(1 for report in variant_reports if report.get("parity_gate_status") == "pass")
+    semantic_failure_counts = _semantic_failure_counts(variant_reports)
     if attempted_count == 0:
         status = "blocked"
         claim_status = "blocked"
@@ -1203,6 +1204,7 @@ def run_teacher_guided_repair_queue(
         "pass_candidate_count": pass_count,
         "failed_candidate_count": failed_count,
         "parity_pass_candidate_count": parity_pass_count,
+        "semantic_failure_counts": semantic_failure_counts,
         "run_report_file": str(run_report_file),
         "variant_reports": variant_reports,
         "skipped_candidates": skipped_candidates,
@@ -1210,6 +1212,20 @@ def run_teacher_guided_repair_queue(
     }
     run_report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
+
+
+def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for report in variant_reports:
+        gate = report.get("semantic_replay_gate")
+        failures = gate.get("failures", []) if isinstance(gate, dict) else []
+        for failure in failures:
+            if not isinstance(failure, dict):
+                continue
+            key = f"{failure.get('report', '')}:{failure.get('field', '')}"
+            if key != ":":
+                counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _should_emit(movement: dict[str, object]) -> bool:
