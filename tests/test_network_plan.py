@@ -398,6 +398,13 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "junction_aggregation_variant_file": str(aggregated_net),
             "junction_aggregation_plan_file": str(tmp_path / "aggregation_plan.json"),
             "junction_aggregation_candidate_count": 2,
+            "junction_aggregation_preservation_status": "review",
+            "junction_aggregation_preservation_audit_file": str(tmp_path / "aggregation_preservation.json"),
+            "junction_aggregation_removed_normal_edge_count": 5,
+            "junction_aggregation_removed_normal_edge_type_counts": {"highway.service": 3, "highway.primary": 2},
+            "junction_aggregation_removed_normal_edge_mode_counts": {"passenger": 4, "bicycle": 1},
+            "junction_aggregation_lost_shared_connection_count": 2,
+            "junction_aggregation_new_dangling_shared_normal_edge_count": 1,
             "warnings": ["junction aggregation variant requires Google Maps review before adoption"],
         }
 
@@ -586,6 +593,19 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_unmatched_case_count"] == 1
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"
     assert report["reference_join_aggregation_variant_file"] == str(tmp_path / "aggregated.net.xml")
+    assert report["reference_join_aggregation_preservation_status"] == "review"
+    assert report["reference_join_aggregation_removed_normal_edge_count"] == 5
+    assert report["reference_join_aggregation_removed_normal_edge_type_counts"] == {
+        "highway.service": 3,
+        "highway.primary": 2,
+    }
+    assert report["reference_join_aggregation_removed_normal_edge_mode_counts"] == {
+        "passenger": 4,
+        "bicycle": 1,
+    }
+    assert report["reference_join_aggregation_lost_shared_connection_count"] == 2
+    assert report["reference_join_aggregation_new_dangling_shared_normal_edge_count"] == 1
+    assert report["reference_join_aggregation_preservation_audit_file"] == str(tmp_path / "aggregation_preservation.json")
     assert report["teacher_guided_repair_best_variant_file"] == ""
     assert report["teacher_guided_repair_best_expanded_scope_net_file"] == str(tmp_path / "expanded_scope.net.xml")
     assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
