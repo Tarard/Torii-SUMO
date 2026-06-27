@@ -1358,6 +1358,7 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
                             "allow": "passenger",
                             "disallow": "pedestrian bicycle",
                             "speed": "13.89",
+                            "length": "10.50",
                             "width": "3.20",
                             "shape": "0,0 1,1",
                         }
@@ -1385,6 +1386,7 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
                             "allow": "passenger",
                             "disallow": "pedestrian",
                             "speed": "8.33",
+                            "length": "8.50",
                             "width": "3.20",
                             "shape": "0,0 1,1",
                         }
@@ -1408,10 +1410,10 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:3.20:0,0 1,1:"
+        "incoming:cand_in": "type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0,0 1,1:"
     }
     assert parity["candidate"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:3.20:0,0 1,1:"
+        "incoming:cand_in": "type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0,0 1,1:"
     }
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
@@ -1792,10 +1794,10 @@ def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["crossing_geometry_signatures"] == {
-        ":candidate_j_c0": "function=crossing|lanes=0:pedestrian:::4.00:0,0 1,1:0,0 1,0"
+        ":candidate_j_c0": "function=crossing|lanes=0:pedestrian::::4.00:0,0 1,1:0,0 1,0"
     }
     assert parity["candidate"]["crossing_geometry_signatures"] == {
-        ":candidate_j_c0": "function=crossing|lanes=0:pedestrian:::2.00:0,0 2,2:0,0 2,0"
+        ":candidate_j_c0": "function=crossing|lanes=0:pedestrian::::2.00:0,0 2,2:0,0 2,0"
     }
     assert parity["delta"]["crossing_geometry_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
@@ -1820,6 +1822,7 @@ def test_teacher_parity_fails_on_mapped_internal_edge_signature_mismatch() -> No
                         "allow": "passenger",
                         "disallow": "pedestrian",
                         "speed": "13.89",
+                        "length": "10.50",
                         "width": "",
                         "shape": "0,0 1,1",
                     }
@@ -1843,6 +1846,7 @@ def test_teacher_parity_fails_on_mapped_internal_edge_signature_mismatch() -> No
                         "allow": "passenger",
                         "disallow": "",
                         "speed": "8.33",
+                        "length": "8.50",
                         "width": "",
                         "shape": "0,0 1,1",
                     }
@@ -1862,10 +1866,10 @@ def test_teacher_parity_fails_on_mapped_internal_edge_signature_mismatch() -> No
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["internal_edge_signatures"] == {
-        ":candidate_j_0": "function=internal|lanes=0:passenger:pedestrian:13.89::0,0 1,1:"
+        ":candidate_j_0": "function=internal|lanes=0:passenger:pedestrian:13.89:10.50::0,0 1,1:"
     }
     assert parity["candidate"]["internal_edge_signatures"] == {
-        ":candidate_j_0": "function=internal|lanes=0:passenger::8.33::0,0 1,1:"
+        ":candidate_j_0": "function=internal|lanes=0:passenger::8.33:8.50::0,0 1,1:"
     }
     assert parity["delta"]["internal_edge_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
@@ -1976,10 +1980,10 @@ def test_teacher_parity_fails_on_mapped_walking_area_signature_mismatch() -> Non
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["walking_area_signatures"] == {
-        ":candidate_j_w0": "function=walkingarea|lanes=0:pedestrian:::4.00:0,0 1,1:0,0 1,0"
+        ":candidate_j_w0": "function=walkingarea|lanes=0:pedestrian::::4.00:0,0 1,1:0,0 1,0"
     }
     assert parity["candidate"]["walking_area_signatures"] == {
-        ":candidate_j_w0": "function=walkingarea|lanes=0:pedestrian:::2.00:0,0 2,2:0,0 2,0"
+        ":candidate_j_w0": "function=walkingarea|lanes=0:pedestrian::::2.00:0,0 2,2:0,0 2,0"
     }
     assert parity["delta"]["walking_area_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
