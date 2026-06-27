@@ -606,17 +606,17 @@ def build_teacher_guided_junction_variant(
     teacher_model = extract_teacher_junction_model(teacher_net_file, junction_id)
     candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
 
-    patched_edge_file = output_dir / f"{prefix}_lanes.edg.xml"
-    connection_file = output_dir / f"{prefix}.con.xml"
-    sidewalks_net_file = output_dir / f"{prefix}_sidewalks.net.xml"
-    pedring_net_file = output_dir / f"{prefix}_pedring.net.xml"
-    vehicle_attrs_net_file = output_dir / f"{prefix}_vehicle_attrs.net.xml"
-    target_internal_replay_file = output_dir / f"{prefix}_target_internal_replay.net.xml"
-    target_internal_normalized_net_file = output_dir / f"{prefix}_target_internal_normalized.net.xml"
-    target_internal_pedring_net_file = output_dir / f"{prefix}_target_internal_pedring.net.xml"
-    target_internal_vehicle_attrs_net_file = output_dir / f"{prefix}_target_internal_vehicle_attrs.net.xml"
-    final_net_file = output_dir / f"{prefix}_teacher_guided.net.xml"
-    report_file = output_dir / f"{prefix}_teacher_guided_report.json"
+    patched_edge_file = _stage_file(output_dir, prefix, "lanes.edg.xml")
+    connection_file = _stage_file(output_dir, prefix, "connections.con.xml")
+    sidewalks_net_file = _stage_file(output_dir, prefix, "sidewalks.net.xml")
+    pedring_net_file = _stage_file(output_dir, prefix, "pedring.net.xml")
+    vehicle_attrs_net_file = _stage_file(output_dir, prefix, "vehicle_attrs.net.xml")
+    target_internal_replay_file = _stage_file(output_dir, prefix, "target_internal_replay.net.xml")
+    target_internal_normalized_net_file = _stage_file(output_dir, prefix, "target_internal_normalized.net.xml")
+    target_internal_pedring_net_file = _stage_file(output_dir, prefix, "target_internal_pedring.net.xml")
+    target_internal_vehicle_attrs_net_file = _stage_file(output_dir, prefix, "target_internal_vehicle_attrs.net.xml")
+    final_net_file = _stage_file(output_dir, prefix, "teacher_guided.net.xml")
+    report_file = _stage_file(output_dir, prefix, "teacher_guided_report.json")
 
     lane_patch_report = write_teacher_lane_patch_edges(
         raw_edge_file=raw_edge_file,
@@ -638,20 +638,20 @@ def build_teacher_guided_junction_variant(
     netconvert_command = [
         netconvert_binary,
         "--node-files",
-        str(raw_node_file),
+        _command_path(raw_node_file, output_dir),
         "--edge-files",
-        str(patched_edge_file),
+        _command_path(patched_edge_file, output_dir),
         "--connection-files",
-        str(connection_file),
+        _command_path(connection_file, output_dir),
         "--output-file",
-        str(sidewalks_net_file),
+        _command_path(sidewalks_net_file, output_dir),
         "--walkingareas",
         "true",
         "--sidewalks.guess",
         "true",
     ]
     if raw_type_file is not None:
-        netconvert_command[5:5] = ["--type-files", str(raw_type_file)]
+        netconvert_command[5:5] = ["--type-files", _command_path(raw_type_file, output_dir)]
     netconvert_result = command_runner(netconvert_command, cwd=output_dir, timeout_seconds=timeout_seconds)
     netconvert_report = _command_report(netconvert_result)
     if netconvert_report.get("status") != "pass":
@@ -717,9 +717,9 @@ def build_teacher_guided_junction_variant(
         normalize_command = [
             netconvert_binary,
             "--sumo-net-file",
-            str(target_internal_replay_file),
+            _command_path(target_internal_replay_file, output_dir),
             "--output-file",
-            str(target_internal_normalized_net_file),
+            _command_path(target_internal_normalized_net_file, output_dir),
         ]
         target_internal_normalize_report = _command_report(
             command_runner(normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
@@ -790,7 +790,7 @@ def build_teacher_guided_junction_variant(
     sumo_command = [
         sumo_binary,
         "-n",
-        str(final_net_file),
+        _command_path(final_net_file, output_dir),
         "--no-step-log",
         "true",
         "--duration-log.disable",
@@ -916,6 +916,21 @@ def _net_lane_counts(root: ET.Element) -> dict[str, int]:
         if edge_id:
             counts[edge_id] = max(1, len(edge.findall("lane")))
     return counts
+
+
+def _command_path(path: Path, cwd: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(cwd.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _stage_file(output_dir: Path, prefix: str, suffix: str) -> Path:
+    path = output_dir / f"{prefix}_{suffix}"
+    if len(str(path.resolve())) < 240:
+        return path
+    short_prefix = (prefix[:16].strip("_") or "tg")
+    return output_dir / f"{short_prefix}_{suffix}"
 
 
 def _clone_transformed_net_element(element: ET.Element, dx: float, dy: float, edge_map: dict[str, str]) -> ET.Element:
