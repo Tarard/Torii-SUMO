@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from torii_sumo.core.junction_teacher_model import (
+    compare_junction_pattern_records,
     evaluate_netedit_semantics_gate,
     extract_junction_pattern_exemplar,
     extract_junction_pattern_index,
@@ -154,9 +155,9 @@ def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path
   <edge id="c_out" from="j" to="c2"><lane id="c_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
   <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="0,0 1,1"/></edge>
   <junction id="j" type="right_before_left" x="0" y="0" incLanes="a_in_0 b_in_0 c_in_0" intLanes=":j_0_0">
-    <request index="0" response="0" foes="0" cont="0"/>
-    <request index="1" response="0" foes="0" cont="0"/>
-    <request index="2" response="0" foes="0" cont="0"/>
+    <request index="0" response="000" foes="000" cont="0"/>
+    <request index="1" response="000" foes="000" cont="0"/>
+    <request index="2" response="000" foes="000" cont="0"/>
   </junction>
   <connection from="a_in" to="a_out" fromLane="0" toLane="0" dir="t"/>
   <connection from="a_in" to="b_out" fromLane="0" toLane="0" dir="r"/>
@@ -174,11 +175,14 @@ def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path
             "pattern_key": "three_way|control=right_before_left|dir=l:1,r:1,t:1|veh=3|tls=0/0|ped=0/0|internal=1/0|requests=3",
             "arm_count": 3,
             "control_type": "right_before_left",
+            "has_tls": False,
+            "approach_edge_ids": ["a_in", "b_in", "c_in"],
             "in_edge_count": 3,
             "out_edge_count": 3,
             "vehicle_connection_count": 3,
             "internal_edge_count": 1,
             "internal_connection_count": 0,
+            "internal_function_counts": {"crossing": 0, "internal": 1, "walkingarea": 0},
             "dir_counts": {"l": 1, "r": 1, "t": 1},
             "movement_signature_counts": {
                 "dir=l|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 1,
@@ -188,9 +192,69 @@ def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path
             "crossing_count": 0,
             "walkingarea_count": 0,
             "request_count": 3,
+            "request_bit_lengths_ok": True,
             "tl_phase_count": 0,
             "controlled_link_count": 0,
         }
+    ]
+
+
+def test_compare_junction_pattern_records_catches_tum_template_fields(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a_in" from="a" to="j"><lane id="a_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="b_in" from="b" to="j"><lane id="b_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="c_in" from="c" to="j"><lane id="c_in_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="a_out" from="j" to="a2"><lane id="a_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="b_out" from="j" to="b2"><lane id="b_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="c_out" from="j" to="c2"><lane id="c_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="passenger" shape="0,0 1,1"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" allow="pedestrian" shape="0,-1 0,1"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="1,1 2,1"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="a_in_0 b_in_0 c_in_0" intLanes=":j_0_0 :j_c0_0">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="1"/>
+  </junction>
+  <connection from="a_in" to="a_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s"/>
+  <tlLogic id="j" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="a_in" from="a" to="j"><lane id="a_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="b_in" from="b" to="j"><lane id="b_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="d_in" from="d" to="j"><lane id="d_in_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="a_out" from="j" to="a2"><lane id="a_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="b_out" from="j" to="b2"><lane id="b_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="d_out" from="j" to="d2"><lane id="d_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="passenger" shape="0,0 1,1"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="a_in_0 b_in_0 d_in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+    <request index="1" response="00" foes="00" cont="00"/>
+  </junction>
+  <connection from="a_in" to="a_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    teacher = extract_junction_pattern_index(teacher_net)[0]
+    candidate = extract_junction_pattern_index(candidate_net)[0]
+    comparison = compare_junction_pattern_records(teacher, candidate)
+
+    assert teacher["has_tls"] is True
+    assert teacher["approach_edge_ids"] == ["a_in", "b_in", "c_in"]
+    assert teacher["internal_function_counts"] == {"crossing": 1, "internal": 1, "walkingarea": 1}
+    assert teacher["request_bit_lengths_ok"] is True
+    assert comparison["status"] == "fail"
+    assert comparison["mismatch_fields"] == [
+        "approach_edge_ids",
+        "control_type",
+        "has_tls",
+        "internal_function_counts",
+        "request_bit_lengths_ok",
     ]
 
 
@@ -267,6 +331,46 @@ def test_extract_junction_pattern_index_parses_net_once(tmp_path: Path, monkeypa
     extract_junction_pattern_index(net_file)
 
     assert parse_calls == 1
+
+
+def test_extract_junction_pattern_index_skips_low_approach_junctions_before_model_extraction(
+    tmp_path: Path, monkeypatch
+) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="two_a" from="a" to="two"><lane id="two_a_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="two_b" from="b" to="two"><lane id="two_b_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="three_a" from="a" to="three"><lane id="three_a_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="three_b" from="b" to="three"><lane id="three_b_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="three_c" from="c" to="three"><lane id="three_c_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="three_out" from="three" to="out"><lane id="three_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="five_a" from="a" to="five"><lane id="five_a_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="five_b" from="b" to="five"><lane id="five_b_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="five_c" from="c" to="five"><lane id="five_c_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="five_d" from="d" to="five"><lane id="five_d_0" index="0" allow="passenger" shape="0,10 0,0"/></edge>
+  <edge id="five_e" from="e" to="five"><lane id="five_e_0" index="0" allow="passenger" shape="1,10 0,0"/></edge>
+  <junction id="two" type="priority" x="0" y="0" incLanes="two_a_0 two_b_0" intLanes=""/>
+  <junction id="three" type="priority" x="0" y="0" incLanes="three_a_0 three_b_0 three_c_0" intLanes=""/>
+  <junction id="five" type="priority" x="0" y="0" incLanes="five_a_0 five_b_0 five_c_0 five_d_0 five_e_0" intLanes=""/>
+  <connection from="three_a" to="three_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    from torii_sumo.core import junction_teacher_model
+
+    calls: list[str] = []
+    original_extract = junction_teacher_model._extract_teacher_junction_model
+
+    def counted_extract(root, net_file, junction_id):
+        calls.append(junction_id)
+        return original_extract(root, net_file, junction_id)
+
+    monkeypatch.setattr(junction_teacher_model, "_extract_teacher_junction_model", counted_extract)
+
+    extract_junction_pattern_index(net_file, min_approaches=3, max_approaches=4)
+
+    assert calls == ["three"]
 
 
 def test_extract_junction_pattern_exemplar_uses_slots_not_edge_ids(tmp_path: Path) -> None:

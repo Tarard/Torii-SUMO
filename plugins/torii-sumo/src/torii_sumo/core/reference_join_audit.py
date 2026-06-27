@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
-from .junction_teacher_model import extract_junction_pattern_index
+from .junction_teacher_model import compare_junction_pattern_records, extract_junction_pattern_index
 from .osm_network import _net_xy_to_latlon
 from .topology_audit import audit_topology_fragmentation
 
@@ -44,6 +44,18 @@ def audit_reference_join_patterns(
     except (KeyError, TypeError, ValueError) as exc:
         junction_pattern_index = []
         pattern_warnings.append(f"junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    try:
+        candidate_junction_pattern_index = extract_junction_pattern_index(candidate_net_file)
+    except (KeyError, TypeError, ValueError) as exc:
+        candidate_junction_pattern_index = []
+        pattern_warnings.append(f"candidate junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    junction_pattern_comparisons = _compare_same_id_patterns(
+        junction_pattern_index,
+        candidate_junction_pattern_index,
+    )
+    junction_pattern_mismatch_count = sum(
+        1 for comparison in junction_pattern_comparisons if comparison["status"] != "pass"
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -88,6 +100,12 @@ def audit_reference_join_patterns(
         "learned_rule_counts": dict(Counter(case["learned_rule"] for case in matched_cases)),
         "pattern_stats": _pattern_stats(reference_cases, matched),
         "junction_pattern_index": junction_pattern_index,
+        "candidate_junction_pattern_index": candidate_junction_pattern_index,
+        "junction_pattern_comparison_status": "fail"
+        if junction_pattern_mismatch_count
+        else ("pass" if junction_pattern_comparisons else "skipped"),
+        "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+        "junction_pattern_comparisons": junction_pattern_comparisons,
         "cases_file": str(cases_file),
         "summary_file": str(summary_file),
         "candidate_topology_audit_file": str(candidate_audit.get("report_file", "")),
@@ -308,6 +326,28 @@ def _pattern_stats(reference_cases: list[dict[str, Any]], matched_cases: list[di
         "matched_reference_type_counts": _count_field(matched_cases, "reference_type"),
         "learned_rule_basis_counts": _count_field(matched_cases, "learned_rule_basis"),
     }
+
+
+def _compare_same_id_patterns(
+    reference_patterns: list[dict[str, Any]],
+    candidate_patterns: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    candidates_by_id = {str(pattern.get("junction_id", "")): pattern for pattern in candidate_patterns}
+    comparisons = []
+    for reference in reference_patterns:
+        junction_id = str(reference.get("junction_id", ""))
+        candidate = candidates_by_id.get(junction_id)
+        if not junction_id or candidate is None:
+            continue
+        comparison = compare_junction_pattern_records(reference, candidate)
+        comparisons.append(
+            {
+                "junction_id": junction_id,
+                "status": comparison["status"],
+                "mismatch_fields": comparison["mismatch_fields"],
+            }
+        )
+    return comparisons
 
 
 def _count_field(cases: list[dict[str, Any]], field: str) -> dict[str, int]:

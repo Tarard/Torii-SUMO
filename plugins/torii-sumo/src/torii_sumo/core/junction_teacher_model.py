@@ -143,10 +143,24 @@ def extract_junction_pattern_index(
 ) -> list[dict[str, Any]]:
     root = ET.parse(net_file).getroot()
     tl_by_id = {tl.attrib["id"]: tl for tl in root.findall("tlLogic") if tl.attrib.get("id")}
+    lane_to_edge_id = {
+        lane.attrib["id"]: edge.attrib["id"]
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
     records: list[dict[str, Any]] = []
     for junction in root.findall("junction"):
         junction_id = junction.attrib.get("id", "")
         if not junction_id or junction_id.startswith(":") or junction.attrib.get("type") == "internal":
+            continue
+        incoming_edge_ids = {
+            edge_id
+            for lane_id in _split(junction.attrib.get("incLanes", ""))
+            if (edge_id := lane_to_edge_id.get(lane_id)) and not edge_id.startswith(":")
+        }
+        if not (min_approaches <= len(incoming_edge_ids) <= max_approaches):
             continue
 
         model = _extract_teacher_junction_model(root, net_file, junction_id)
@@ -358,23 +372,55 @@ def _pattern_fields(model: dict[str, Any]) -> dict[str, Any]:
         if isinstance(connection, dict)
     ]
     controlled_link_count = sum(1 for connection in all_connections if connection.get("tl") and connection.get("linkIndex"))
+    approach_edge_ids = sorted(
+        str(edge.get("edge_id", ""))
+        for edge in model.get("approaches", {}).get("incoming", [])
+        if isinstance(edge, dict) and edge.get("edge_id")
+    )
+    internal_function_counts = {
+        "crossing": int(summary["crossing_count"]),
+        "internal": int(summary.get("internal_edge_count", 0)),
+        "walkingarea": int(summary["walkingarea_count"]),
+    }
+    request_bit_lengths_ok = _request_bit_lengths_ok(model.get("requests", []), int(summary["request_count"]))
     fields = {
         "pattern_family": _pattern_family(arm_count),
         "arm_count": arm_count,
         "control_type": summary.get("junction_type", ""),
+        "has_tls": bool(controlled_link_count or int(summary["tl_phase_count"])),
+        "approach_edge_ids": approach_edge_ids,
         "in_edge_count": in_edge_count,
         "out_edge_count": out_edge_count,
         "vehicle_connection_count": int(summary["vehicle_connection_count"]),
         "internal_edge_count": int(summary.get("internal_edge_count", 0)),
         "internal_connection_count": int(summary["internal_connection_count"]),
+        "internal_function_counts": internal_function_counts,
         "dir_counts": dir_counts,
         "crossing_count": int(summary["crossing_count"]),
         "walkingarea_count": int(summary["walkingarea_count"]),
         "request_count": int(summary["request_count"]),
+        "request_bit_lengths_ok": request_bit_lengths_ok,
         "tl_phase_count": int(summary["tl_phase_count"]),
         "controlled_link_count": controlled_link_count,
     }
     return {"pattern_key": _pattern_key(fields), **fields}
+
+
+def compare_junction_pattern_records(teacher: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    fields = [
+        "approach_edge_ids",
+        "control_type",
+        "has_tls",
+        "internal_function_counts",
+        "request_bit_lengths_ok",
+    ]
+    mismatches = [field for field in fields if teacher.get(field) != candidate.get(field)]
+    return {
+        "status": "fail" if mismatches else "pass",
+        "mismatch_fields": mismatches,
+        "teacher": {field: teacher.get(field) for field in fields},
+        "candidate": {field: candidate.get(field) for field in fields},
+    }
 
 
 def _pattern_family(arm_count: int) -> str:
@@ -395,6 +441,22 @@ def _pattern_key(fields: dict[str, Any]) -> str:
         f"internal={fields['internal_edge_count']}/{fields['internal_connection_count']}|"
         f"requests={fields['request_count']}"
     )
+
+
+def _request_bit_lengths_ok(requests: Any, request_count: int) -> bool:
+    if not isinstance(requests, list):
+        return False
+    for request in requests:
+        if not isinstance(request, dict):
+            return False
+        for key in ("response", "foes"):
+            value = str(request.get(key, ""))
+            if value and len(value) != request_count:
+                return False
+        cont = str(request.get("cont", ""))
+        if cont and len(cont) != 1:
+            return False
+    return True
 
 
 def _split(value: str) -> list[str]:
