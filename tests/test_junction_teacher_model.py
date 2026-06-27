@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from torii_sumo.core.junction_teacher_model import (
+    extract_junction_pattern_exemplar,
     extract_junction_pattern_index,
     extract_teacher_junction_model,
     match_teacher_approaches,
@@ -122,6 +123,44 @@ def test_extract_junction_pattern_index_counts_non_matching_tls_id(tmp_path: Pat
 
     assert records[0]["controlled_link_count"] == 1
     assert records[0]["tl_phase_count"] == 1
+
+
+def test_extract_junction_pattern_exemplar_uses_slots_not_edge_ids(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="north_in" from="n" to="j"><lane id="north_in_0" index="0" allow="passenger" speed="13.89" shape="0,10 0,0"/></edge>
+  <edge id="east_out" from="j" to="e"><lane id="east_out_0" index="0" allow="passenger" speed="13.89" shape="0,0 10,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" speed="10.0" shape="0,0 2,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="north_in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <tlLogic id="j" type="actuated" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="north_in" to="east_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="r" state="O"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    exemplar = extract_junction_pattern_exemplar(net_file, "j")
+
+    assert exemplar["junction_id"] == "j"
+    assert exemplar["approach_slots"][0]["slot_id"] == "slot_0"
+    assert exemplar["approach_slots"][0]["members"] == ["north_in"]
+    assert exemplar["vehicle_connections"] == [
+        {
+            "from_slot": "slot_0",
+            "to_slot": "slot_1",
+            "fromLane": "0",
+            "toLane": "0",
+            "via": ":j_0_0",
+            "tl": "j",
+            "linkIndex": "0",
+            "dir": "r",
+            "state": "O",
+        }
+    ]
+    assert exemplar["traffic_light"]["phases"][0]["state"] == "G"
+    assert exemplar["requests"][0]["foes"] == "0"
 
 
 def test_match_teacher_edges_by_bearing_and_lane_count() -> None:
