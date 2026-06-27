@@ -1954,6 +1954,18 @@ def _compare_teacher_models(
         candidate_summary["controlled_pedestrian_link_signatures"] = candidate_pedestrian_signatures
         if pedestrian_mismatch_count:
             delta["controlled_pedestrian_link_signature_mismatch_count"] = pedestrian_mismatch_count
+        teacher_crossing_signatures = _crossing_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_crossing_signatures = _crossing_signatures(candidate_model)
+        crossing_mismatch_count = _dict_mismatch_count(teacher_crossing_signatures, candidate_crossing_signatures)
+        teacher_summary["crossing_signatures"] = teacher_crossing_signatures
+        candidate_summary["crossing_signatures"] = candidate_crossing_signatures
+        if crossing_mismatch_count:
+            delta["crossing_signature_mismatch_count"] = crossing_mismatch_count
     return {
         "teacher": teacher_summary,
         "candidate": candidate_summary,
@@ -2092,6 +2104,26 @@ def _vehicle_connection_signature(
         f"toLane={connection.get('toLane', '')}|dir={connection.get('dir', '')}|"
         f"state={connection.get('state', '')}|via={via}"
     )
+
+
+def _crossing_signatures(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    crossings = model.get("crossings", []) if isinstance(model.get("crossings"), list) else []
+    signatures: dict[str, str] = {}
+    for crossing in crossings:
+        if not isinstance(crossing, dict):
+            continue
+        crossing_id = _mapped_internal_ref(str(crossing.get("edge_id", "")), source_junction_id, target_junction_id)
+        if not crossing_id:
+            continue
+        edges = sorted(_mapped_endpoint(str(edge), edge_map) for edge in crossing.get("crossingEdges", []) or [])
+        signatures[crossing_id] = f"edges={' '.join(edges)}"
+    return signatures
 
 
 def _mapped_endpoint(edge_id: str, edge_map: dict[str, str] | None) -> str:
