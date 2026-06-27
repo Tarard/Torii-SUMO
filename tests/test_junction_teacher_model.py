@@ -1,11 +1,46 @@
 from pathlib import Path
 
 from torii_sumo.core.junction_teacher_model import (
+    evaluate_netedit_semantics_gate,
     extract_junction_pattern_exemplar,
     extract_junction_pattern_index,
     extract_teacher_junction_model,
     match_teacher_approaches,
 )
+
+
+def test_netedit_semantics_gate_fails_on_non_same_statuses() -> None:
+    summary = {
+        "status_counts": {
+            "tls_linkIndex_diff": {"same": 23},
+            "phase_diff": {"same": 10},
+            "request_diff": {"same": 41},
+            "internal_lane_diff": {"same": 59},
+            "crossing_walkingarea_diff": {"same": 10},
+            "junction_attrs_diff": {"same": 8},
+            "connection_exact_diff": {"same": 108, "candidate_extra": 1},
+        }
+    }
+
+    result = evaluate_netedit_semantics_gate(summary)
+
+    assert result == {
+        "status": "fail",
+        "failed_tables": ["connection_exact_diff"],
+        "reason": "non_same_rows_present",
+    }
+
+
+def test_netedit_semantics_gate_passes_when_all_tables_are_same() -> None:
+    summary = {
+        "status_counts": {
+            "tls_linkIndex_diff": {"same": 23},
+            "phase_diff": {"same": 10},
+            "request_diff": {"same": 41},
+        }
+    }
+
+    assert evaluate_netedit_semantics_gate(summary) == {"status": "pass", "failed_tables": [], "reason": ""}
 
 
 def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
