@@ -41,7 +41,7 @@ def test_connection_signature_records_tls_link_indices(tmp_path: Path) -> None:
   <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
   <junction id="j" x="0" y="0" type="traffic_light"/>
-  <connection from="in" to="out" fromLane="0" toLane="0" tl="j" linkIndex="7" dir="s" state="O"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="j" linkIndex="7" linkIndex2="12" dir="s" state="O" pass="true" uncontrolled="true" allow="bicycle" disallow="truck" keepClear="0" contPos="43.00" shape="0,0 1,1"/>
 </net>
 """,
         encoding="utf-8",
@@ -50,8 +50,17 @@ def test_connection_signature_records_tls_link_indices(tmp_path: Path) -> None:
     signature = build_connection_signature(net_file, "j")
 
     assert signature["controlled_link_count"] == 1
-    assert signature["connection_records"][0]["tl"] == "j"
-    assert signature["connection_records"][0]["linkIndex"] == "7"
+    record = signature["connection_records"][0]
+    assert record["tl"] == "j"
+    assert record["linkIndex"] == "7"
+    assert record["linkIndex2"] == "12"
+    assert record["pass"] == "true"
+    assert record["uncontrolled"] == "true"
+    assert record["allow"] == "bicycle"
+    assert record["disallow"] == "truck"
+    assert record["keepClear"] == "0"
+    assert record["contPos"] == "43.00"
+    assert record["shape"] == "0,0 1,1"
 
 
 def test_connection_signature_counts_crossings_and_walkingareas(tmp_path: Path) -> None:
@@ -84,7 +93,7 @@ def test_write_connection_signature_outputs_review_files(tmp_path: Path) -> None
   <junction id="a" x="-10" y="0" type="priority"/>
   <junction id="j" x="0" y="0" type="traffic_light"/>
   <junction id="b" x="10" y="0" type="priority"/>
-  <connection from="in" to="out" fromLane="0" toLane="0" dir="s" state="o"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s" state="o" keepClear="0" shape="0,0 1,1"/>
 </net>
 """,
         encoding="utf-8",
@@ -94,5 +103,8 @@ def test_write_connection_signature_outputs_review_files(tmp_path: Path) -> None
     report = write_connection_signature(signature, tmp_path / "review", "demo")
 
     assert Path(report["signature_file"]).is_file()
-    assert Path(report["records_file"]).read_text(encoding="utf-8").splitlines()[0].startswith("category,from,to")
-    assert Path(report["top_external_file"]).read_text(encoding="utf-8").splitlines()[0].startswith("from,to")
+    records_header = Path(report["records_file"]).read_text(encoding="utf-8").splitlines()[0]
+    top_external_header = Path(report["top_external_file"]).read_text(encoding="utf-8").splitlines()[0]
+    for field in ("linkIndex2", "pass", "uncontrolled", "allow", "disallow", "keepClear", "contPos", "shape"):
+        assert field in records_header
+        assert field in top_external_header
