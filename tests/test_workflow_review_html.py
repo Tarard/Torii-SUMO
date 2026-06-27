@@ -66,13 +66,21 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
 
     net_file = tmp_path / "candidate.net.xml"
     net_file.write_text(TINY_SUMO_NET, encoding="utf-8")
+    best_variant = tmp_path / "teacher_guided_best.net.xml"
+    best_variant.write_text(TINY_SUMO_NET, encoding="utf-8")
 
     report = build_workflow_review_html(
         output_dir=tmp_path / "review",
         prefix="workflow",
         title="SUMO Network Review",
         claim_status="construction-invalid",
-        summary={"status": "fail", "claim_status": "construction-invalid", "net_file": str(net_file)},
+        summary={
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "net_file": str(net_file),
+            "teacher_guided_repair_best_variant_file": str(best_variant),
+            "reference_visual_detail_comparison_net_file": str(best_variant),
+        },
         net_file=net_file,
         gate_status={"routeability_audit": "fail", "topology_audit": "blocked"},
         topology_audit_report={
@@ -140,6 +148,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Netedit overlay" in html
     assert "workflow_netedit_review.sumocfg" in html
     assert "workflow_netedit_review_c1_selection.txt" in html
+    assert "teacher_guided_best.net.xml" in html
     assert "copyNeteditCommand" in html
     assert "Aggregate selected junctions" in html
     assert "Network Preview" in html
@@ -194,6 +203,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["visualizations"]["network_overview_png"]
     assert manifest["artifacts"]["netedit_review_additional_file"] == "workflow_netedit_review.add.xml"
     assert manifest["artifacts"]["netedit_review_sumocfg_file"] == "workflow_netedit_review.sumocfg"
+    assert manifest["artifacts"]["teacher_guided_repair_best_variant_file"] == "../teacher_guided_best.net.xml"
+    assert manifest["artifacts"]["reference_visual_detail_comparison_net_file"] == "../teacher_guided_best.net.xml"
     assert manifest["netedit_review"]["netedit_command"] == 'netedit --sumocfg-file "workflow_netedit_review.sumocfg"'
     assert manifest["netedit_review"]["selection_file_count"] == 1
     assert manifest["review_app"]["map_layers"]["edges"]

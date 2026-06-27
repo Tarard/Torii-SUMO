@@ -152,14 +152,23 @@ def _base_report(
     }
 
 
-def _annotate_reference_matched_semantics(report: dict[str, Any]) -> None:
+def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_report: Mapping[str, Any] | None = None) -> None:
     for tool_name in REFERENCE_MATCHED_TOOL_CHAIN:
         if tool_name not in report["tool_chain"]:
             report["tool_chain"].append(tool_name)
-    report["reference_matched_semantics_workflow"] = {
+    semantics = {
         **REFERENCE_MATCHED_SEMANTICS_WORKFLOW,
         "tool_chain": list(REFERENCE_MATCHED_TOOL_CHAIN),
     }
+    if workflow_report is not None:
+        semantics.update(
+            {
+                "best_variant_file": str(workflow_report.get("teacher_guided_repair_best_variant_file", "")),
+                "comparison_net_file": str(workflow_report.get("reference_visual_detail_comparison_net_file", "")),
+                "run_report_file": str(workflow_report.get("teacher_guided_repair_run_report_file", "")),
+            }
+        )
+    report["reference_matched_semantics_workflow"] = semantics
 
 
 def _invalid_mode(user_request: str, autonomy_mode: str) -> dict[str, Any]:
@@ -410,6 +419,8 @@ def _run_osm_to_sumo(
             "workflow_result": workflow_report,
         }
     )
+    if network_plan.get("network_profile") == "reference_matched":
+        _annotate_reference_matched_semantics(report, workflow_report)
     return report
 
 
