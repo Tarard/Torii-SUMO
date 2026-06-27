@@ -977,6 +977,7 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
         teacher_edge_file=teacher_edges,
         output_file=tmp_path / "patched.edg.xml",
         edge_map={"teacher": "cand"},
+        lane_shape_delta=(-5.0, -5.0),
     )
 
     edge = ET.parse(report["edge_file"]).getroot().find("edge")
@@ -985,10 +986,11 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     lanes = edge.findall("lane")
     assert [lane.attrib.get("allow", "") for lane in lanes] == ["pedestrian", ""]
     assert [lane.attrib.get("disallow", "") for lane in lanes] == ["", "pedestrian bicycle"]
-    assert [lane.attrib.get("shape", "") for lane in lanes] == ["5,5 6,5", "5,6 6,6"]
+    assert [lane.attrib.get("shape", "") for lane in lanes] == ["0.00,0.00 1.00,0.00", "0.00,1.00 1.00,1.00"]
     assert "length" not in lanes[0].attrib
     assert "outlineShape" not in lanes[1].attrib
     assert report["patched_edge_count"] == 1
+    assert report["lane_shape_translation_applied"] is True
 
 
 def test_write_teacher_lane_patch_edges_prunes_unmapped_target_boundary_edges(tmp_path: Path) -> None:

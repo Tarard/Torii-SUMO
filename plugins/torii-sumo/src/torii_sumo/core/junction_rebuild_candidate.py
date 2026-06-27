@@ -319,6 +319,7 @@ def write_teacher_lane_patch_edges(
     edge_map: dict[str, str],
     junction_id: str | None = None,
     prune_unmapped_boundary_edges: bool = False,
+    lane_shape_delta: tuple[float, float] | None = None,
 ) -> dict[str, object]:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     teacher_edges = {
@@ -365,9 +366,11 @@ def write_teacher_lane_patch_edges(
                 edge.set(attr, teacher_edge.attrib[attr])
         for lane in teacher_lanes:
             lane_attrs = {"index": lane.attrib.get("index", "0")}
-            for attr in ("allow", "disallow", "width", "speed", "shape"):
+            for attr in ("allow", "disallow", "width", "speed"):
                 if lane.attrib.get(attr):
                     lane_attrs[attr] = lane.attrib[attr]
+            if lane_shape_delta is not None and lane.attrib.get("shape"):
+                lane_attrs["shape"] = _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
             ET.SubElement(edge, "lane", lane_attrs)
         patched.append({"candidate_edge_id": edge.attrib.get("id", ""), "teacher_edge_id": teacher_edge.attrib.get("id", ""), "lane_count": len(teacher_lanes)})
 
@@ -381,6 +384,7 @@ def write_teacher_lane_patch_edges(
         "patched_edges": patched,
         "pruned_boundary_edge_count": len(pruned_boundary_edges),
         "pruned_boundary_edges": pruned_boundary_edges,
+        "lane_shape_translation_applied": lane_shape_delta is not None,
     }
 
 
@@ -938,6 +942,7 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         junction_id=junction_id,
         prune_unmapped_boundary_edges=True,
+        lane_shape_delta=_model_shape_delta(teacher_model, candidate_model),
     )
     connection_report = write_teacher_connection_plan(
         raw_connection_file=raw_connection_file,
@@ -2507,6 +2512,15 @@ def _internal_edge_signature(edge: dict[str, Any], *, origin_x: str = "", origin
 def _model_junction_origin(model: dict[str, Any]) -> tuple[str, str]:
     junction = model.get("junction", {}) if isinstance(model.get("junction"), dict) else {}
     return str(junction.get("x", "")), str(junction.get("y", ""))
+
+
+def _model_shape_delta(teacher_model: dict[str, Any], candidate_model: dict[str, Any]) -> tuple[float, float] | None:
+    teacher_x, teacher_y = _model_junction_origin(teacher_model)
+    candidate_x, candidate_y = _model_junction_origin(candidate_model)
+    try:
+        return float(candidate_x) - float(teacher_x), float(candidate_y) - float(teacher_y)
+    except ValueError:
+        return None
 
 
 def _internal_junction_signatures(
