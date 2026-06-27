@@ -150,6 +150,7 @@ def _evidence_rows(
     topology_audit_report: Mapping[str, Any] | None,
     junction_aggregation_report: Mapping[str, Any] | None,
     routeability_audit_report: Mapping[str, Any] | None,
+    workflow_summary: Mapping[str, Any] | None = None,
 ) -> str:
     rows = [
         (
@@ -191,6 +192,25 @@ def _evidence_rows(
             f"<td>{escape('; '.join(values) if values else 'no compact status supplied')}</td>"
             "</tr>"
         )
+    template_contexts = (workflow_summary or {}).get("teacher_guided_repair_template_contexts", []) or []
+    template_values = []
+    if isinstance(template_contexts, list):
+        for context in template_contexts:
+            if not isinstance(context, Mapping):
+                continue
+            template_values.append(
+                "family={family}; count={count}; key={key}".format(
+                    family=context.get("teacher_pattern_family", ""),
+                    count=context.get("teacher_pattern_template_count", 0),
+                    key=context.get("teacher_pattern_key", ""),
+                )
+            )
+    html_rows.append(
+        "<tr>"
+        "<td>teacher_templates</td>"
+        f"<td>{escape(' | '.join(template_values) if template_values else 'no teacher template context supplied')}</td>"
+        "</tr>"
+    )
     return "\n".join(html_rows)
 
 
@@ -1527,7 +1547,7 @@ def build_workflow_review_html(
     <h2>Warnings</h2>
     <ul>{warning_items}</ul>
     <h2>Evidence Summary</h2>
-    {_evidence_rows(topology_audit_report=topology_audit_report, junction_aggregation_report=junction_aggregation_report, routeability_audit_report=routeability_audit_report)}
+    {_evidence_rows(topology_audit_report=topology_audit_report, junction_aggregation_report=junction_aggregation_report, routeability_audit_report=routeability_audit_report, workflow_summary=workflow_summary)}
     {_gate_rows(gate_status)}
     {_artifact_rows(artifacts, base_dir=output_dir)}
     {_dense_cluster_rows(cluster_zoom_pngs, base_dir=output_dir)}
