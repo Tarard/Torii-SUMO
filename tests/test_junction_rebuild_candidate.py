@@ -2,6 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.junction_rebuild_candidate import (
+    _stage_file,
     build_rebuild_candidate,
     build_teacher_guided_junction_variant,
     write_teacher_target_internal_replay_net,
@@ -433,6 +434,14 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert report["copied_connection_count"] == 2
 
 
+def test_stage_file_shortens_long_output_names(tmp_path: Path) -> None:
+    output_dir = tmp_path / ("x" * 120)
+    output_dir.mkdir()
+    path = _stage_file(output_dir, "very_long_teacher_guided_prefix", "target_internal_normalized.net.xml")
+
+    assert path.name == "very_long_teache_target_internal_normalized.net.xml"
+
+
 def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     teacher_net = Path("teacher.net.xml")
@@ -495,10 +504,16 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         calls.append(command)
         if command[0] == "netconvert":
-            for flag in ("--node-files", "--edge-files", "--connection-files", "--output-file"):
-                assert Path(command[command.index(flag) + 1]).is_absolute()
-            output_file = Path(command[command.index("--output-file") + 1])
-            connection_file = Path(command[command.index("--connection-files") + 1])
+            assert Path(command[command.index("--node-files") + 1]).is_absolute()
+            for flag in ("--edge-files", "--connection-files", "--output-file"):
+                assert not Path(command[command.index(flag) + 1]).is_absolute()
+
+            def command_path(flag: str) -> Path:
+                value = Path(command[command.index(flag) + 1])
+                return value if value.is_absolute() else Path(cwd) / value
+
+            output_file = command_path("--output-file")
+            connection_file = command_path("--connection-files")
             output_file.write_text(
                 """<net>
   <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
@@ -625,8 +640,16 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         calls.append(command)
         if command[0] == "netconvert" and "--node-files" in command:
-            output_file = Path(command[command.index("--output-file") + 1])
-            connection_file = Path(command[command.index("--connection-files") + 1])
+            assert Path(command[command.index("--node-files") + 1]).is_absolute()
+            for flag in ("--edge-files", "--connection-files", "--output-file"):
+                assert not Path(command[command.index(flag) + 1]).is_absolute()
+
+            def command_path(flag: str) -> Path:
+                value = Path(command[command.index(flag) + 1])
+                return value if value.is_absolute() else Path(cwd) / value
+
+            output_file = command_path("--output-file")
+            connection_file = command_path("--connection-files")
             output_file.write_text(
                 """<net>
   <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
@@ -646,8 +669,15 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
                 net_root.append(connection)
             ET.ElementTree(net_root).write(output_file, encoding="utf-8", xml_declaration=True)
         elif command[0] == "netconvert" and "--sumo-net-file" in command:
-            input_file = Path(command[command.index("--sumo-net-file") + 1])
-            output_file = Path(command[command.index("--output-file") + 1])
+            assert not Path(command[command.index("--sumo-net-file") + 1]).is_absolute()
+            assert not Path(command[command.index("--output-file") + 1]).is_absolute()
+
+            def command_path(flag: str) -> Path:
+                value = Path(command[command.index(flag) + 1])
+                return value if value.is_absolute() else Path(cwd) / value
+
+            input_file = command_path("--sumo-net-file")
+            output_file = command_path("--output-file")
             output_file.write_text(input_file.read_text(encoding="utf-8"), encoding="utf-8")
 
         class Result:
