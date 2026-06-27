@@ -3958,3 +3958,98 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     root = ET.parse(report["final_net_file"]).getroot()
     assert root.find("edge[@id=':j_c0']") is not None
     assert [call[0] for call in calls] == ["netconvert", "sumo"]
+
+
+def test_build_teacher_guided_junction_variant_falls_back_when_target_internal_replay_fails_load(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j" type="highway.primary"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="j" to="b" type="highway.primary"><lane id="teacher_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            connection_file = Path(cwd) / command[command.index("--connection-files") + 1]
+            output_file.write_text(
+                """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>
+""",
+                encoding="utf-8",
+            )
+            root = ET.parse(output_file).getroot()
+            for connection in ET.parse(connection_file).getroot().findall("connection"):
+                root.append(connection)
+            ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+
+        class Result:
+            status = "pass"
+            returncode = 0
+
+            def to_dict(self):
+                net_file = command[command.index("-n") + 1] if command[0] == "sumo" else ""
+                status = "fail" if net_file.endswith("teacher_guided.net.xml") else "pass"
+                return {
+                    "command": command,
+                    "cwd": str(cwd) if cwd else None,
+                    "status": status,
+                    "returncode": 1 if status == "fail" else 0,
+                    "stderr": "final replay load failed" if status == "fail" else "",
+                }
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        prefix="demo",
+        replay_target_internal_subgraph=True,
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["target_internal_replay_fallback"] is True
+    assert report["target_internal_replay_fallback_sumo"]["status"] == "pass"
+    assert report["final_net_file"].endswith("demo_teacher_guided_fallback.net.xml")
+    assert report["tl_logic"]["net_file"] == report["final_net_file"]

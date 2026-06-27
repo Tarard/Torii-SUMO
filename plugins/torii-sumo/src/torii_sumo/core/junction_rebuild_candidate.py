@@ -986,6 +986,7 @@ def build_teacher_guided_junction_variant(
     target_internal_pedring_net_file = _stage_file(output_dir, prefix, "target_internal_pedring.net.xml")
     target_internal_vehicle_attrs_net_file = _stage_file(output_dir, prefix, "target_internal_vehicle_attrs.net.xml")
     final_net_file = _stage_file(output_dir, prefix, "teacher_guided.net.xml")
+    fallback_net_file = _stage_file(output_dir, prefix, "teacher_guided_fallback.net.xml")
     report_file = _stage_file(output_dir, prefix, "teacher_guided_report.json")
 
     lane_patch_report = write_teacher_lane_patch_edges(
@@ -1060,6 +1061,9 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
     )
     target_internal_replay_report = None
+    target_internal_replay_fallback = False
+    target_internal_replay_fallback_tl_logic_report = None
+    target_internal_replay_fallback_sumo_report = None
     target_internal_normalize_report = None
     target_internal_pedestrian_ring_report = None
     target_internal_vehicle_attrs_report = None
@@ -1088,6 +1092,7 @@ def build_teacher_guided_junction_variant(
                     "pedestrian_ring": pedestrian_ring_report,
                     "vehicle_connection_attrs": vehicle_attrs_report,
                     "target_internal_replay": target_internal_replay_report,
+                    "target_internal_replay_fallback": target_internal_replay_fallback,
                 },
             )
         tl_logic_input_file = target_internal_replay_file
@@ -1113,6 +1118,7 @@ def build_teacher_guided_junction_variant(
                 "pedestrian_ring": pedestrian_ring_report,
                 "vehicle_connection_attrs": vehicle_attrs_report,
                 "target_internal_replay": target_internal_replay_report,
+                "target_internal_replay_fallback": target_internal_replay_fallback,
                 "target_internal_normalize": target_internal_normalize_report,
                 "target_internal_pedestrian_ring": target_internal_pedestrian_ring_report,
                 "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
@@ -1134,6 +1140,40 @@ def build_teacher_guided_junction_variant(
         "1",
     ]
     sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
+    if (
+        sumo_report.get("status") != "pass"
+        and replay_target_internal_subgraph
+        and isinstance(target_internal_replay_report, dict)
+        and target_internal_replay_report.get("status") == "pass"
+    ):
+        target_internal_replay_fallback_tl_logic_report = write_teacher_tllogic_net(
+            candidate_net_file=vehicle_attrs_net_file,
+            output_file=fallback_net_file,
+            junction_id=junction_id,
+            teacher_model=teacher_model,
+        )
+        if target_internal_replay_fallback_tl_logic_report.get("status") == "pass":
+            fallback_sumo_command = [
+                sumo_binary,
+                "-n",
+                _command_path(fallback_net_file, output_dir),
+                "--no-step-log",
+                "true",
+                "--duration-log.disable",
+                "true",
+                "--begin",
+                "0",
+                "--end",
+                "1",
+            ]
+            target_internal_replay_fallback_sumo_report = _command_report(
+                command_runner(fallback_sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+            )
+            if target_internal_replay_fallback_sumo_report.get("status") == "pass":
+                target_internal_replay_fallback = True
+                final_net_file = fallback_net_file
+                tl_logic_report = target_internal_replay_fallback_tl_logic_report
+                sumo_report = target_internal_replay_fallback_sumo_report
     final_model = extract_teacher_junction_model(final_net_file, junction_id)
     parity = _compare_teacher_models(
         teacher_model,
@@ -1142,6 +1182,7 @@ def build_teacher_guided_junction_variant(
         teacher_junction_id=teacher_junction_id,
         candidate_junction_id=junction_id,
     )
+    target_internal_replay_gate_report = None if target_internal_replay_fallback else target_internal_replay_report
     approach_endpoint_rebuild_plan = _approach_endpoint_rebuild_plan(
         teacher_model,
         final_model,
@@ -1154,7 +1195,7 @@ def build_teacher_guided_junction_variant(
         parity,
         pedestrian_ring=pedestrian_ring_report,
         vehicle_connection_attrs=vehicle_attrs_report,
-        target_internal_replay=target_internal_replay_report,
+        target_internal_replay=target_internal_replay_gate_report,
         target_internal_pedestrian_ring=target_internal_pedestrian_ring_report,
         target_internal_vehicle_connection_attrs=target_internal_vehicle_attrs_report,
     )
@@ -1176,6 +1217,8 @@ def build_teacher_guided_junction_variant(
             "pedring_net_file": str(pedring_net_file),
             "vehicle_attrs_net_file": str(vehicle_attrs_net_file),
             "target_internal_replay_file": str(target_internal_replay_file) if replay_target_internal_subgraph else "",
+            "target_internal_replay_fallback": target_internal_replay_fallback,
+            "target_internal_replay_fallback_net_file": str(fallback_net_file) if target_internal_replay_fallback else "",
             "target_internal_normalized_net_file": str(target_internal_normalized_net_file)
             if target_internal_normalize_report
             else "",
@@ -1192,6 +1235,8 @@ def build_teacher_guided_junction_variant(
             "pedestrian_ring": pedestrian_ring_report,
             "vehicle_connection_attrs": vehicle_attrs_report,
             "target_internal_replay": target_internal_replay_report,
+            "target_internal_replay_fallback_tl_logic": target_internal_replay_fallback_tl_logic_report,
+            "target_internal_replay_fallback_sumo": target_internal_replay_fallback_sumo_report,
             "target_internal_normalize": target_internal_normalize_report,
             "target_internal_pedestrian_ring": target_internal_pedestrian_ring_report,
             "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
