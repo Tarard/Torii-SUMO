@@ -499,6 +499,7 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         assert kwargs["raw_type_file"] == raw_type_file
         assert kwargs["teacher_net_file"] == teacher_net_file
         assert kwargs["candidate_net_file"] == candidate_net_file
+        assert kwargs["teacher_junction_id"] == "teacher_j"
         assert kwargs["edge_map"] == {"teacher_in": "cand_in"}
         assert kwargs["crossing_edge_overrides"] == {":j_c5": "cand_crossing"}
         assert kwargs["replay_target_internal_subgraph"] is True
@@ -519,6 +520,7 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         teacher_net_file=str(teacher_net_file),
         candidate_net_file=str(candidate_net_file),
         junction_id="j",
+        teacher_junction_id="teacher_j",
         output_dir=str(tmp_path / "teacher-guided"),
         edge_map={"teacher_in": "cand_in"},
         crossing_edge_overrides={":j_c5": "cand_crossing"},

@@ -272,7 +272,7 @@ def write_teacher_lane_patch_edges(
     tree = ET.parse(raw_edge_file)
     patched = []
     pruned_boundary_edges = []
-    allowed_boundary_edges = set(edge_map.values())
+    allowed_boundary_edges = set(edge_map.values()) | (set(teacher_edges) - set(edge_map))
     for edge in tree.getroot().findall("edge"):
         edge_id = edge.attrib.get("id", "")
         if (
@@ -327,8 +327,10 @@ def write_teacher_pedestrian_ring_net(
     junction_id: str,
     teacher_model: dict[str, object],
     edge_map: dict[str, str],
+    teacher_junction_id: str | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
 ) -> dict[str, object]:
+    teacher_junction_id = teacher_junction_id or junction_id
     crossing_edge_overrides = crossing_edge_overrides or {}
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -355,7 +357,7 @@ def write_teacher_pedestrian_ring_net(
         if candidate_crossing_id:
             crossing_map[teacher_crossing_id] = candidate_crossing_id
 
-    teacher_link_pairs = _pedestrian_tl_pairs_from_records(teacher_model.get("pedestrian_connections", []) or [], junction_id)
+    teacher_link_pairs = _pedestrian_tl_pairs_from_records(teacher_model.get("pedestrian_connections", []) or [], teacher_junction_id)
     candidate_link_pairs = _pedestrian_tl_pairs_from_connections(root.findall("connection"), junction_id)
     walkingarea_map: dict[str, str] = {}
     for link_index, (teacher_walkingarea, teacher_crossing) in teacher_link_pairs.items():
@@ -505,16 +507,20 @@ def write_teacher_target_internal_replay_net(
     output_file: Path,
     junction_id: str,
     edge_map: dict[str, str],
+    teacher_junction_id: str | None = None,
 ) -> dict[str, object]:
+    teacher_junction_id = teacher_junction_id or junction_id
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     candidate_tree = ET.parse(candidate_net_file)
     candidate_root = candidate_tree.getroot()
     teacher_root = ET.parse(teacher_net_file).getroot()
     internal_prefix = f":{junction_id}_"
+    teacher_internal_prefix = f":{teacher_junction_id}_"
+    candidate_edge_ids = {edge.attrib["id"] for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
 
     candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
-    teacher_junction = teacher_root.find(f"junction[@id='{junction_id}']")
+    teacher_junction = teacher_root.find(f"junction[@id='{teacher_junction_id}']")
     if candidate_junction is None:
         return _failure(f"candidate junction not found: {junction_id}")
     if teacher_junction is None:
@@ -537,10 +543,13 @@ def write_teacher_target_internal_replay_net(
     teacher_internal_edges = [
         edge
         for edge in teacher_root.findall("edge")
-        if edge.attrib.get("id", "").startswith(internal_prefix)
+        if edge.attrib.get("id", "").startswith(teacher_internal_prefix)
     ]
     for offset, edge in enumerate(teacher_internal_edges):
-        candidate_root.insert(insert_index + offset, _clone_transformed_net_element(edge, dx, dy, edge_map))
+        candidate_root.insert(
+            insert_index + offset,
+            _clone_transformed_net_element(edge, dx, dy, edge_map, teacher_junction_id, junction_id),
+        )
 
     removed_internal_junctions = []
     junction_insert_index = None
@@ -556,16 +565,18 @@ def write_teacher_target_internal_replay_net(
     teacher_internal_junctions = [
         junction
         for junction in teacher_root.findall("junction")
-        if junction.attrib.get("id", "").startswith(internal_prefix)
+        if junction.attrib.get("id", "").startswith(teacher_internal_prefix)
     ]
     for offset, junction in enumerate(teacher_internal_junctions):
         candidate_root.insert(
             junction_insert_index + offset,
-            _clone_transformed_junction(junction, dx, dy, edge_map, internal_prefix),
+            _clone_transformed_junction(junction, dx, dy, edge_map, teacher_internal_prefix, internal_prefix),
         )
 
     candidate_junction.attrib.clear()
-    candidate_junction.attrib.update(_mapped_junction_attrs(teacher_junction, dx, dy, edge_map, internal_prefix))
+    candidate_junction.attrib.update(
+        _mapped_junction_attrs(teacher_junction, dx, dy, edge_map, teacher_internal_prefix, internal_prefix)
+    )
     for child in list(candidate_junction):
         candidate_junction.remove(child)
     for request in teacher_junction.findall("request"):
@@ -580,22 +591,33 @@ def write_teacher_target_internal_replay_net(
     copied_connections = 0
     skipped_connections = []
     for connection in teacher_root.findall("connection"):
-        if not _touches_target_internal_subgraph(connection, internal_prefix, junction_id):
+        if not _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id):
             continue
-        mapped = _mapped_connection_attrs(connection, edge_map, internal_prefix, junction_id)
+        mapped = _mapped_connection_attrs(
+            connection,
+            edge_map,
+            teacher_internal_prefix,
+            teacher_junction_id,
+            internal_prefix,
+            junction_id,
+            candidate_edge_ids,
+        )
         if mapped is None:
             skipped_connections.append(dict(connection.attrib))
             continue
         candidate_root.append(ET.Element("connection", mapped))
         copied_connections += 1
 
-    teacher_tllogic = teacher_root.find(f"tlLogic[@id='{junction_id}']")
+    teacher_tllogic = teacher_root.find(f"tlLogic[@id='{teacher_junction_id}']")
     if teacher_tllogic is not None:
         target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
         target_index = list(candidate_root).index(target_tllogic) if target_tllogic is not None else len(list(candidate_root))
         if target_tllogic is not None:
             candidate_root.remove(target_tllogic)
-        candidate_root.insert(target_index, _clone_transformed_net_element(teacher_tllogic, dx, dy, edge_map))
+        candidate_root.insert(
+            target_index,
+            _clone_transformed_net_element(teacher_tllogic, dx, dy, edge_map, teacher_junction_id, junction_id),
+        )
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -642,6 +664,7 @@ def write_teacher_tllogic_net(
     index = list(root).index(target_tl)
     root.remove(target_tl)
     replacement = ET.Element("tlLogic", {str(key): str(value) for key, value in attributes.items()})
+    replacement.set("id", junction_id)
     for phase in phases:
         if isinstance(phase, dict):
             ET.SubElement(replacement, "phase", {str(key): str(value) for key, value in phase.items()})
@@ -675,6 +698,7 @@ def build_teacher_guided_junction_variant(
     output_dir: Path,
     edge_map: dict[str, str],
     prefix: str = "teacher_guided_junction",
+    teacher_junction_id: str | None = None,
     raw_type_file: Path | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     replay_target_internal_subgraph: bool = False,
@@ -683,6 +707,7 @@ def build_teacher_guided_junction_variant(
     timeout_seconds: float = 240.0,
     command_runner: Any = run_command,
 ) -> dict[str, object]:
+    teacher_junction_id = teacher_junction_id or junction_id
     missing = [
         str(path)
         for path in (raw_node_file, raw_edge_file, raw_connection_file, teacher_net_file, candidate_net_file)
@@ -701,7 +726,7 @@ def build_teacher_guided_junction_variant(
     raw_type_file = raw_type_file.resolve() if raw_type_file is not None else None
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    teacher_model = extract_teacher_junction_model(teacher_net_file, junction_id)
+    teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
     candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
 
     patched_edge_file = _stage_file(output_dir, prefix, "lanes.edg.xml")
@@ -775,6 +800,7 @@ def build_teacher_guided_junction_variant(
         junction_id=junction_id,
         teacher_model=teacher_model,
         edge_map=edge_map,
+        teacher_junction_id=teacher_junction_id,
         crossing_edge_overrides=crossing_edge_overrides,
     )
     vehicle_attrs_report = write_teacher_vehicle_connection_attrs_net(
@@ -796,6 +822,7 @@ def build_teacher_guided_junction_variant(
             output_file=target_internal_replay_file,
             junction_id=junction_id,
             edge_map=edge_map,
+            teacher_junction_id=teacher_junction_id,
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(
@@ -960,6 +987,7 @@ def run_teacher_guided_repair_queue(
             skipped_candidates.append({"index": index, "candidate_status": "invalid_candidate"})
             continue
         junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
+        teacher_junction_id = str(candidate.get("reference_id") or junction_id)
         edge_map = _valid_edge_map(candidate.get("edge_map", {}))
         if candidate.get("candidate_status") != "ready_for_teacher_guided_variant" or not junction_id:
             skipped_candidates.append(
@@ -995,7 +1023,9 @@ def run_teacher_guided_repair_queue(
                 output_dir=output_dir / safe_junction_id,
                 edge_map=edge_map,
                 prefix=variant_prefix,
-                crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id),
+                teacher_junction_id=teacher_junction_id,
+                crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id)
+                or crossing_edge_overrides_by_junction.get(teacher_junction_id),
                 replay_target_internal_subgraph=replay_target_internal_subgraph,
                 netconvert_binary=netconvert_binary,
                 sumo_binary=sumo_binary,
@@ -1131,18 +1161,20 @@ def _teacher_guided_repair_candidate(
     teacher_net_file: Path,
     candidate_net_file: Path,
 ) -> dict[str, object]:
-    junction_id = str(case.get("reference_id", ""))
+    reference_id = str(case.get("reference_id", ""))
+    candidate_node_ids = [str(item) for item in case.get("matched_candidate_node_ids") or case.get("candidate_node_ids") or []]
+    candidate_junction_ids = _candidate_junction_id_candidates(reference_id, candidate_node_ids)
     base = {
-        "reference_id": junction_id,
-        "junction_id": junction_id,
-        "matched_candidate_node_ids": list(case.get("matched_candidate_node_ids") or case.get("candidate_node_ids") or []),
+        "reference_id": reference_id,
+        "junction_id": candidate_junction_ids[0] if candidate_junction_ids else reference_id,
+        "matched_candidate_node_ids": candidate_node_ids,
         "learned_rule": str(case.get("learned_rule", "")),
     }
-    if not junction_id:
+    if not reference_id:
         return {**base, "candidate_status": "invalid_reference_id", "edge_map": {}, "missing_teacher_edge_ids": []}
 
     try:
-        teacher_model = extract_teacher_junction_model(teacher_net_file, junction_id)
+        teacher_model = extract_teacher_junction_model(teacher_net_file, reference_id)
     except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
         return {
             **base,
@@ -1151,21 +1183,30 @@ def _teacher_guided_repair_candidate(
             "missing_teacher_edge_ids": [],
             "error": f"{type(exc).__name__}: {exc}",
         }
-    try:
-        candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
-    except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
+    candidate_model = None
+    candidate_error = None
+    candidate_junction_id = ""
+    for candidate_id in candidate_junction_ids:
+        try:
+            candidate_model = extract_teacher_junction_model(candidate_net_file, candidate_id)
+            candidate_junction_id = candidate_id
+            break
+        except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
+            candidate_error = exc
+    if candidate_model is None:
         return {
             **base,
             "candidate_status": "needs_joined_candidate_junction",
             "edge_map": {},
             "missing_teacher_edge_ids": _teacher_approach_edge_ids(teacher_model),
-            "error": f"{type(exc).__name__}: {exc}",
+            "error": f"{type(candidate_error).__name__}: {candidate_error}",
         }
 
     edge_map = _teacher_candidate_edge_map(teacher_model, candidate_model)
     missing = [edge_id for edge_id in _teacher_approach_edge_ids(teacher_model) if edge_id not in edge_map]
     return {
         **base,
+        "junction_id": candidate_junction_id,
         "candidate_status": "ready_for_teacher_guided_variant" if not missing else "edge_map_incomplete",
         "edge_map": edge_map,
         "missing_teacher_edge_ids": missing,
@@ -1174,6 +1215,23 @@ def _teacher_guided_repair_candidate(
         "candidate_incoming_edge_count": len(_approach_edges(candidate_model, "incoming")),
         "candidate_outgoing_edge_count": len(_approach_edges(candidate_model, "outgoing")),
     }
+
+
+def _candidate_junction_id_candidates(reference_id: str, node_ids: list[str]) -> list[str]:
+    candidates = [reference_id] if reference_id else []
+    joined_id = _sumo_joined_cluster_id(node_ids)
+    if joined_id and joined_id not in candidates:
+        candidates.append(joined_id)
+    return candidates
+
+
+def _sumo_joined_cluster_id(node_ids: list[str]) -> str:
+    ids = sorted(dict.fromkeys(node_id for node_id in node_ids if node_id))
+    if not ids:
+        return ""
+    head = "_".join(ids[:4])
+    suffix = "" if len(ids) <= 4 else f"_#{len(ids) - 4}more"
+    return f"cluster_{head}{suffix}"
 
 
 def _teacher_candidate_edge_map(teacher_model: dict[str, object], candidate_model: dict[str, object]) -> dict[str, str]:
@@ -1269,12 +1327,24 @@ def _stage_file(output_dir: Path, prefix: str, suffix: str) -> Path:
     return output_dir / f"{short_prefix}_{suffix}"
 
 
-def _clone_transformed_net_element(element: ET.Element, dx: float, dy: float, edge_map: dict[str, str]) -> ET.Element:
-    clone = ET.Element(element.tag, _mapped_spatial_attrs(element.attrib, dx, dy, edge_map))
+def _clone_transformed_net_element(
+    element: ET.Element,
+    dx: float,
+    dy: float,
+    edge_map: dict[str, str],
+    teacher_junction_id: str | None = None,
+    candidate_junction_id: str | None = None,
+) -> ET.Element:
+    clone = ET.Element(
+        element.tag,
+        _mapped_spatial_attrs(element.attrib, dx, dy, edge_map, teacher_junction_id, candidate_junction_id),
+    )
     clone.text = element.text
     clone.tail = element.tail
     for child in list(element):
-        clone.append(_clone_transformed_net_element(child, dx, dy, edge_map))
+        clone.append(
+            _clone_transformed_net_element(child, dx, dy, edge_map, teacher_junction_id, candidate_junction_id)
+        )
     return clone
 
 
@@ -1283,9 +1353,13 @@ def _clone_transformed_junction(
     dx: float,
     dy: float,
     edge_map: dict[str, str],
-    internal_prefix: str,
+    teacher_internal_prefix: str,
+    candidate_internal_prefix: str,
 ) -> ET.Element:
-    clone = ET.Element("junction", _mapped_junction_attrs(junction, dx, dy, edge_map, internal_prefix))
+    clone = ET.Element(
+        "junction",
+        _mapped_junction_attrs(junction, dx, dy, edge_map, teacher_internal_prefix, candidate_internal_prefix),
+    )
     clone.text = junction.text
     clone.tail = junction.tail
     for child in list(junction):
@@ -1293,8 +1367,24 @@ def _clone_transformed_junction(
     return clone
 
 
-def _mapped_spatial_attrs(attrs: dict[str, str], dx: float, dy: float, edge_map: dict[str, str]) -> dict[str, str]:
+def _mapped_spatial_attrs(
+    attrs: dict[str, str],
+    dx: float,
+    dy: float,
+    edge_map: dict[str, str],
+    teacher_junction_id: str | None = None,
+    candidate_junction_id: str | None = None,
+) -> dict[str, str]:
     mapped = dict(attrs)
+    teacher_internal_prefix = f":{teacher_junction_id}_" if teacher_junction_id else ""
+    candidate_internal_prefix = f":{candidate_junction_id}_" if candidate_junction_id else ""
+    for attr in ("id", "from", "to", "via"):
+        if attr in mapped:
+            mapped[attr] = _map_internal_ref(mapped[attr], teacher_internal_prefix, candidate_internal_prefix)
+    if teacher_junction_id and candidate_junction_id:
+        for attr in ("id", "from", "to", "tl"):
+            if mapped.get(attr) == teacher_junction_id:
+                mapped[attr] = candidate_junction_id
     if "x" in mapped:
         mapped["x"] = _format_xy(float(mapped["x"]) + dx)
     if "y" in mapped:
@@ -1302,7 +1392,10 @@ def _mapped_spatial_attrs(attrs: dict[str, str], dx: float, dy: float, edge_map:
     if "shape" in mapped:
         mapped["shape"] = _translate_shape(mapped["shape"], dx, dy)
     if "crossingEdges" in mapped:
-        mapped_edges = [edge_map.get(edge, edge if edge.startswith(":") else "") for edge in _split(mapped["crossingEdges"])]
+        mapped_edges = [
+            edge_map.get(edge, _map_internal_ref(edge, teacher_internal_prefix, candidate_internal_prefix) if edge.startswith(":") else "")
+            for edge in _split(mapped["crossingEdges"])
+        ]
         mapped["crossingEdges"] = " ".join(edge for edge in mapped_edges if edge)
     return mapped
 
@@ -1312,23 +1405,41 @@ def _mapped_junction_attrs(
     dx: float,
     dy: float,
     edge_map: dict[str, str],
-    internal_prefix: str,
+    teacher_internal_prefix: str,
+    candidate_internal_prefix: str,
 ) -> dict[str, str]:
-    attrs = _mapped_spatial_attrs(teacher_junction.attrib, dx, dy, edge_map)
+    teacher_junction_id = teacher_internal_prefix[1:-1] if teacher_internal_prefix.startswith(":") else None
+    candidate_junction_id = candidate_internal_prefix[1:-1] if candidate_internal_prefix.startswith(":") else None
+    attrs = _mapped_spatial_attrs(teacher_junction.attrib, dx, dy, edge_map, teacher_junction_id, candidate_junction_id)
     if "incLanes" in attrs:
         attrs["incLanes"] = " ".join(
-            lane for lane in (_map_lane_ref(lane, edge_map, internal_prefix) for lane in _split(attrs["incLanes"])) if lane
+            lane
+            for lane in (
+                _map_lane_ref(lane, edge_map, teacher_internal_prefix, candidate_internal_prefix)
+                for lane in _split(attrs["incLanes"])
+            )
+            if lane
         )
     if "intLanes" in attrs:
         attrs["intLanes"] = " ".join(
-            lane for lane in (_map_lane_ref(lane, edge_map, internal_prefix) for lane in _split(attrs["intLanes"])) if lane
+            lane
+            for lane in (
+                _map_lane_ref(lane, edge_map, teacher_internal_prefix, candidate_internal_prefix)
+                for lane in _split(attrs["intLanes"])
+            )
+            if lane
         )
     return attrs
 
 
-def _map_lane_ref(lane_id: str, edge_map: dict[str, str], internal_prefix: str) -> str:
-    if lane_id.startswith(internal_prefix):
-        return lane_id
+def _map_lane_ref(
+    lane_id: str,
+    edge_map: dict[str, str],
+    teacher_internal_prefix: str,
+    candidate_internal_prefix: str,
+) -> str:
+    if lane_id.startswith(teacher_internal_prefix):
+        return _map_internal_ref(lane_id, teacher_internal_prefix, candidate_internal_prefix)
     if "_" not in lane_id:
         return ""
     edge_id, lane_index = lane_id.rsplit("_", 1)
@@ -1339,26 +1450,45 @@ def _map_lane_ref(lane_id: str, edge_map: dict[str, str], internal_prefix: str) 
 def _mapped_connection_attrs(
     connection: ET.Element,
     edge_map: dict[str, str],
-    internal_prefix: str,
-    junction_id: str,
+    teacher_internal_prefix: str,
+    teacher_junction_id: str,
+    candidate_internal_prefix: str,
+    candidate_junction_id: str,
+    candidate_edge_ids: set[str],
 ) -> dict[str, str] | None:
     mapped = dict(connection.attrib)
     for attr in ("from", "to"):
-        endpoint = _map_connection_endpoint(mapped.get(attr, ""), edge_map, internal_prefix)
+        endpoint = _map_connection_endpoint(
+            mapped.get(attr, ""), edge_map, teacher_internal_prefix, candidate_internal_prefix, candidate_edge_ids
+        )
         if not endpoint:
             return None
         mapped[attr] = endpoint
-    if mapped.get("tl") == junction_id:
-        mapped["tl"] = junction_id
-    if mapped.get("via") and not mapped["via"].startswith(internal_prefix):
-        return None
+    if mapped.get("tl") == teacher_junction_id:
+        mapped["tl"] = candidate_junction_id
+    if mapped.get("via"):
+        mapped["via"] = _map_internal_ref(mapped["via"], teacher_internal_prefix, candidate_internal_prefix)
+        if not mapped["via"].startswith(candidate_internal_prefix):
+            return None
     return mapped
 
 
-def _map_connection_endpoint(value: str, edge_map: dict[str, str], internal_prefix: str) -> str:
-    if value.startswith(internal_prefix):
-        return value
-    return edge_map.get(value, "")
+def _map_connection_endpoint(
+    value: str,
+    edge_map: dict[str, str],
+    teacher_internal_prefix: str,
+    candidate_internal_prefix: str,
+    candidate_edge_ids: set[str],
+) -> str:
+    if value.startswith(teacher_internal_prefix):
+        return _map_internal_ref(value, teacher_internal_prefix, candidate_internal_prefix)
+    return edge_map.get(value, value if value in candidate_edge_ids else "")
+
+
+def _map_internal_ref(value: str, teacher_internal_prefix: str, candidate_internal_prefix: str) -> str:
+    if teacher_internal_prefix and candidate_internal_prefix and value.startswith(teacher_internal_prefix):
+        return f"{candidate_internal_prefix}{value[len(teacher_internal_prefix):]}"
+    return value
 
 
 def _touches_target_internal_subgraph(connection: ET.Element, internal_prefix: str, junction_id: str) -> bool:
