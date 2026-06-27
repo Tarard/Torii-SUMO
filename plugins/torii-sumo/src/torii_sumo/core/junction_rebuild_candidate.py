@@ -15,6 +15,7 @@ from .junction_teacher_model import (
     extract_teacher_junction_model,
     match_teacher_approaches,
     materialize_exemplar_movement_signatures,
+    slot_edge_map_from_exemplar,
 )
 
 
@@ -26,6 +27,7 @@ def build_rebuild_candidate(
     prefix: str = "junction_movement_rebuild",
     movement_exemplar: dict[str, Any] | None = None,
     slot_edge_map: dict[str, str] | None = None,
+    teacher_edge_map: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if not net_file.exists():
         return _failure(f"net file does not exist: {net_file}")
@@ -41,6 +43,8 @@ def build_rebuild_candidate(
     command_file = output_dir / f"{prefix}_netconvert.cmd.txt"
     variant_file = output_dir / f"{prefix}_rebuilt.net.xml"
 
+    if movement_exemplar is not None and slot_edge_map is None and teacher_edge_map is not None:
+        slot_edge_map = slot_edge_map_from_exemplar(movement_exemplar, teacher_edge_map)
     if movement_exemplar is not None and slot_edge_map is not None:
         emitted = materialize_exemplar_movement_signatures(movement_exemplar, slot_edge_map)
         emitted_pairs = {
@@ -80,6 +84,7 @@ def build_rebuild_candidate(
         "connection_signature": signature_report,
         "movement_audit_status": audit["status"],
         "movement_source": movement_source,
+        "slot_edge_map": slot_edge_map or {},
         "emitted_connection_count": len(emitted),
         "skipped_movement_count": len(skipped),
         "review_policy": "run netconvert and inspect NetEdit connection mode before adoption",

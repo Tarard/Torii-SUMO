@@ -7,6 +7,7 @@ from torii_sumo.core.junction_teacher_model import (
     extract_teacher_junction_model,
     materialize_exemplar_movement_signatures,
     match_teacher_approaches,
+    slot_edge_map_from_exemplar,
 )
 
 
@@ -317,6 +318,23 @@ def test_materialize_exemplar_movement_signatures_filters_four_way_cross_product
     ]
     assert {movement["dir"] for movement in movements} == {"s", "r"}
     assert len(movements) == 2
+
+
+def test_slot_edge_map_from_exemplar_uses_teacher_edge_map() -> None:
+    exemplar = {
+        "approach_slots": [
+            {"slot_id": "slot_0", "members": ["teacher_in"]},
+            {"slot_id": "slot_1", "members": ["teacher_out", "teacher_out_alt"]},
+            {"slot_id": "slot_2", "members": ["unmatched"]},
+        ]
+    }
+
+    slot_edge_map = slot_edge_map_from_exemplar(
+        exemplar,
+        {"teacher_in": "cand_in", "teacher_out_alt": "cand_out"},
+    )
+
+    assert slot_edge_map == {"slot_0": "cand_in", "slot_1": "cand_out"}
 
 
 def test_match_teacher_edges_by_bearing_and_lane_count() -> None:
