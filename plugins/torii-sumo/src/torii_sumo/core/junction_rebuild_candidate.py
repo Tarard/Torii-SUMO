@@ -2055,6 +2055,8 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     pedestrian_connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
     target_tls_id = str(attributes.get("id", "") or model.get("junction_id", ""))
     summary["tl_type"] = str(attributes.get("type", "")) if isinstance(attributes, dict) else ""
+    summary["tl_programID"] = str(attributes.get("programID", "")) if isinstance(attributes, dict) else ""
+    summary["tl_offset"] = str(attributes.get("offset", "")) if isinstance(attributes, dict) else ""
     summary["tl_phase_state_lengths"] = sorted({len(state) for state in phase_states})
     summary["tl_phase_signatures"] = _tl_phase_signatures(phases)
     summary["request_signatures"] = _request_signatures(requests)
