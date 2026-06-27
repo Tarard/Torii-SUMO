@@ -2067,10 +2067,10 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "from=shared_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0.00,0.00 1.00,1.00:"
+        "incoming:cand_in": "from=shared_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89::3.20:0.00,0.00 1.00,1.00:"
     }
     assert parity["candidate"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "from=shared_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0.00,0.00 1.00,1.00:"
+        "incoming:cand_in": "from=shared_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33::3.20:0.00,0.00 1.00,1.00:"
     }
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
     assert "approach_endpoint_signature_mismatch_count" not in parity["delta"]
@@ -2134,6 +2134,77 @@ def test_teacher_parity_normalizes_mapped_approach_shape_by_junction_origin() ->
 
     assert "approach_edge_signature_mismatch_count" not in parity["delta"]
     assert parity["teacher"]["approach_edge_signatures"] == parity["candidate"]["approach_edge_signatures"]
+
+
+def test_teacher_parity_ignores_approach_lane_length_rounding_when_shape_matches() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "approaches": {
+            "incoming": [
+                {
+                    "edge_id": "teacher_in",
+                    "from": "shared_source",
+                    "to": "teacher_j",
+                    "type": "highway.primary",
+                    "function": "",
+                    "lanes": [
+                        {
+                            "index": "0",
+                            "allow": "passenger",
+                            "speed": "13.89",
+                            "length": "80.05",
+                            "width": "3.20",
+                            "shape": "0,0 80,0",
+                        }
+                    ],
+                }
+            ],
+            "outgoing": [],
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "approaches": {
+            "incoming": [
+                {
+                    "edge_id": "cand_in",
+                    "from": "shared_source",
+                    "to": "candidate_j",
+                    "type": "highway.primary",
+                    "function": "",
+                    "lanes": [
+                        {
+                            "index": "0",
+                            "allow": "passenger",
+                            "speed": "13.89",
+                            "length": "80.06",
+                            "width": "3.20",
+                            "shape": "0,0 80,0",
+                        }
+                    ],
+                }
+            ],
+            "outgoing": [],
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"teacher_in": "cand_in"},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+
+    assert "approach_edge_signature_mismatch_count" not in parity["delta"]
 
 
 def test_teacher_parity_fails_on_mapped_approach_endpoint_mismatch() -> None:
