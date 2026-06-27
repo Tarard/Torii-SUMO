@@ -387,6 +387,8 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
   <junction id="j" type="traffic_light" x="100" y="200" shape="99,199 101,199 101,201 99,201" incLanes="teacher_in_0" intLanes=":j_0_0 :j_c0_0 :j_w0_0">
     <request index="0" response="0" foes="0" cont="0"/>
   </junction>
+  <junction id=":j_0_0" type="internal" x="100" y="200" incLanes="teacher_in_0" intLanes=":j_0_0"/>
+  <junction id=":j_w0_0" type="internal" x="98" y="198" incLanes="teacher_in_0" intLanes=":j_c0_0"/>
   <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
   <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
   <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="GM"/></tlLogic>
@@ -401,6 +403,7 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
   <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0" shape="10,20 20,20"/></edge>
   <edge id=":j_old" function="internal"><lane id=":j_old_0" index="0" shape="10,20 11,20"/></edge>
   <junction id="j" type="traffic_light" x="10" y="20" shape="9,19 11,19 11,21 9,21" incLanes="cand_in_0" intLanes=":j_old_0"/>
+  <junction id=":j_old_0" type="internal" x="10" y="20" incLanes="cand_in_0" intLanes=":j_old_0"/>
   <connection from="cand_in" to="cand_out" fromLane="0" toLane="0" via=":j_old_0"/>
   <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
 </net>
@@ -418,6 +421,7 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
 
     root = ET.parse(report["net_file"]).getroot()
     assert root.find("edge[@id=':j_old']") is None
+    assert root.find("junction[@id=':j_old_0']") is None
     assert root.find("edge[@id=':j_0']/lane").attrib["shape"] == "10.00,20.00 11.00,21.00"
     assert root.find("edge[@id=':j_c0']").attrib["crossingEdges"] == "cand_in"
     junction = root.find("junction[@id='j']")
@@ -426,11 +430,21 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert junction.attrib["shape"] == "9.00,19.00 11.00,19.00 11.00,21.00 9.00,21.00"
     assert junction.attrib["incLanes"] == "cand_in_0"
     assert junction.attrib["intLanes"] == ":j_0_0 :j_c0_0 :j_w0_0"
+    internal_junction = root.find("junction[@id=':j_0_0']")
+    assert internal_junction.attrib["x"] == "10.00"
+    assert internal_junction.attrib["y"] == "20.00"
+    assert internal_junction.attrib["incLanes"] == "cand_in_0"
+    assert internal_junction.attrib["intLanes"] == ":j_0_0"
+    walkingarea_junction = root.find("junction[@id=':j_w0_0']")
+    assert walkingarea_junction.attrib["x"] == "8.00"
+    assert walkingarea_junction.attrib["y"] == "18.00"
     vehicle_connection = root.find("connection[@from='cand_in'][@to='cand_out']")
     assert vehicle_connection.attrib["via"] == ":j_0_0"
     assert root.find("connection[@from=':j_w0'][@to=':j_c0']").attrib["tl"] == "j"
     assert report["removed_internal_edge_count"] == 1
+    assert report["removed_internal_junction_count"] == 1
     assert report["copied_internal_edge_count"] == 3
+    assert report["copied_internal_junction_count"] == 2
     assert report["copied_connection_count"] == 2
 
 
@@ -705,11 +719,11 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
 
     assert report["status"] == "pass"
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
-    assert report["target_internal_normalize"]["status"] == "pass"
-    assert report["target_internal_pedestrian_ring"]["status"] == "pass"
+    assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
+    assert report["target_internal_normalize"] is None
+    assert report["target_internal_pedestrian_ring"] is None
     assert report["parity"]["delta"]["vehicle_connection_count"] == 0
     assert report["parity"]["delta"]["pedestrian_connection_count"] == 0
     root = ET.parse(report["final_net_file"]).getroot()
-    assert root.find("edge[@id=':j_cA']") is None
     assert root.find("edge[@id=':j_c0']") is not None
-    assert [call[0] for call in calls] == ["netconvert", "netconvert", "sumo"]
+    assert [call[0] for call in calls] == ["netconvert", "sumo"]

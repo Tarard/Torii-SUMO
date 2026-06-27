@@ -468,6 +468,28 @@ def write_teacher_target_internal_replay_net(
     for offset, edge in enumerate(teacher_internal_edges):
         candidate_root.insert(insert_index + offset, _clone_transformed_net_element(edge, dx, dy, edge_map))
 
+    removed_internal_junctions = []
+    junction_insert_index = None
+    for child in list(candidate_root):
+        if child.tag == "junction" and child.attrib.get("id", "").startswith(internal_prefix):
+            if junction_insert_index is None:
+                junction_insert_index = list(candidate_root).index(child)
+            removed_internal_junctions.append(child.attrib.get("id", ""))
+            candidate_root.remove(child)
+    if junction_insert_index is None:
+        junction_insert_index = list(candidate_root).index(candidate_junction) + 1
+
+    teacher_internal_junctions = [
+        junction
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id", "").startswith(internal_prefix)
+    ]
+    for offset, junction in enumerate(teacher_internal_junctions):
+        candidate_root.insert(
+            junction_insert_index + offset,
+            _clone_transformed_junction(junction, dx, dy, edge_map, internal_prefix),
+        )
+
     candidate_junction.attrib.clear()
     candidate_junction.attrib.update(_mapped_junction_attrs(teacher_junction, dx, dy, edge_map, internal_prefix))
     for child in list(candidate_junction):
@@ -511,6 +533,8 @@ def write_teacher_target_internal_replay_net(
         "dy": round(dy, 6),
         "removed_internal_edge_count": len(removed_internal_edges),
         "copied_internal_edge_count": len(teacher_internal_edges),
+        "removed_internal_junction_count": len(removed_internal_junctions),
+        "copied_internal_junction_count": len(teacher_internal_junctions),
         "removed_connection_count": removed_connections,
         "copied_connection_count": copied_connections,
         "skipped_connection_count": len(skipped_connections),
@@ -714,50 +738,7 @@ def build_teacher_guided_junction_variant(
                     "target_internal_replay": target_internal_replay_report,
                 },
             )
-        normalize_command = [
-            netconvert_binary,
-            "--sumo-net-file",
-            _command_path(target_internal_replay_file, output_dir),
-            "--output-file",
-            _command_path(target_internal_normalized_net_file, output_dir),
-        ]
-        target_internal_normalize_report = _command_report(
-            command_runner(normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
-        )
-        if target_internal_normalize_report.get("status") != "pass":
-            return _write_teacher_guided_report(
-                report_file,
-                {
-                    "status": "fail",
-                    "claim_status": "construction-invalid",
-                    "junction_id": junction_id,
-                    "teacher_net_file": str(teacher_net_file),
-                    "candidate_net_file": str(candidate_net_file),
-                    "netconvert": netconvert_report,
-                    "lane_patch": lane_patch_report,
-                    "connection_plan": connection_report,
-                    "pedestrian_ring": pedestrian_ring_report,
-                    "vehicle_connection_attrs": vehicle_attrs_report,
-                    "target_internal_replay": target_internal_replay_report,
-                    "target_internal_normalize": target_internal_normalize_report,
-                },
-            )
-        target_internal_pedestrian_ring_report = write_teacher_pedestrian_ring_net(
-            candidate_net_file=target_internal_normalized_net_file,
-            output_file=target_internal_pedring_net_file,
-            junction_id=junction_id,
-            teacher_model=teacher_model,
-            edge_map=edge_map,
-            crossing_edge_overrides=crossing_edge_overrides,
-        )
-        target_internal_vehicle_attrs_report = write_teacher_vehicle_connection_attrs_net(
-            candidate_net_file=target_internal_pedring_net_file,
-            output_file=target_internal_vehicle_attrs_net_file,
-            junction_id=junction_id,
-            teacher_model=teacher_model,
-            edge_map=edge_map,
-        )
-        tl_logic_input_file = target_internal_vehicle_attrs_net_file
+        tl_logic_input_file = target_internal_replay_file
 
     tl_logic_report = write_teacher_tllogic_net(
         candidate_net_file=tl_logic_input_file,
@@ -819,13 +800,13 @@ def build_teacher_guided_junction_variant(
             "vehicle_attrs_net_file": str(vehicle_attrs_net_file),
             "target_internal_replay_file": str(target_internal_replay_file) if replay_target_internal_subgraph else "",
             "target_internal_normalized_net_file": str(target_internal_normalized_net_file)
-            if replay_target_internal_subgraph
+            if target_internal_normalize_report
             else "",
             "target_internal_pedring_net_file": str(target_internal_pedring_net_file)
-            if replay_target_internal_subgraph
+            if target_internal_pedestrian_ring_report
             else "",
             "target_internal_vehicle_attrs_net_file": str(target_internal_vehicle_attrs_net_file)
-            if replay_target_internal_subgraph
+            if target_internal_vehicle_attrs_report
             else "",
             "report_file": str(report_file),
             "lane_patch": lane_patch_report,
@@ -939,6 +920,21 @@ def _clone_transformed_net_element(element: ET.Element, dx: float, dy: float, ed
     clone.tail = element.tail
     for child in list(element):
         clone.append(_clone_transformed_net_element(child, dx, dy, edge_map))
+    return clone
+
+
+def _clone_transformed_junction(
+    junction: ET.Element,
+    dx: float,
+    dy: float,
+    edge_map: dict[str, str],
+    internal_prefix: str,
+) -> ET.Element:
+    clone = ET.Element("junction", _mapped_junction_attrs(junction, dx, dy, edge_map, internal_prefix))
+    clone.text = junction.text
+    clone.tail = junction.tail
+    for child in list(junction):
+        clone.append(ET.Element(child.tag, dict(child.attrib)))
     return clone
 
 
