@@ -2041,6 +2041,7 @@ def _netedit_review_actions(mismatch_fields: list[str]) -> list[str]:
         "approach_edge_ids": "verify_approach_membership",
         "control_type": "inspect_tls_control",
         "has_tls": "inspect_tls_control",
+        "movement_signature_counts": "rebuild_vehicle_movement_matrix",
         "request_bit_lengths_ok": "inspect_request_foes_response",
     }
     return list(
