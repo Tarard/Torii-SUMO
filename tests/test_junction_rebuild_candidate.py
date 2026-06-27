@@ -1059,6 +1059,17 @@ def test_teacher_guided_semantics_gate_fails_on_skipped_pedestrian_connections()
     ]
 
 
+def test_teacher_guided_semantics_gate_ignores_interim_pedestrian_skips_after_internal_replay() -> None:
+    gate = _teacher_guided_semantics_gate(
+        {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
+        pedestrian_ring={"skipped_pedestrian_connection_count": 21},
+        vehicle_connection_attrs={"skipped_vehicle_connection_count": 0},
+        target_internal_replay={"status": "pass", "skipped_connection_count": 0},
+    )
+
+    assert gate == {"status": "pass", "failures": []}
+
+
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
