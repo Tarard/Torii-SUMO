@@ -1613,6 +1613,88 @@ def test_teacher_parity_fails_on_mapped_controlled_link_signature_mismatch() -> 
     ]
 
 
+def test_teacher_parity_fails_on_duplicate_controlled_link_signature_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "vehicle_connections": [
+            {
+                "from": "teacher_in",
+                "to": "teacher_out",
+                "fromLane": "0",
+                "toLane": "0",
+                "via": ":teacher_j_0_0",
+                "tl": "teacher_j",
+                "linkIndex": "5",
+                "dir": "s",
+                "state": "O",
+            },
+            {
+                "from": "teacher_in",
+                "to": "teacher_right",
+                "fromLane": "1",
+                "toLane": "0",
+                "via": ":teacher_j_1_0",
+                "tl": "teacher_j",
+                "linkIndex": "5",
+                "dir": "r",
+                "state": "O",
+            },
+        ],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "teacher_j", "type": "actuated"}, "phases": [{"state": "G"}]},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "vehicle_connections": [
+            {
+                "from": "cand_in",
+                "to": "cand_wrong",
+                "fromLane": "0",
+                "toLane": "0",
+                "via": ":candidate_j_0_0",
+                "tl": "candidate_j",
+                "linkIndex": "5",
+                "dir": "s",
+                "state": "O",
+            },
+            {
+                "from": "cand_in",
+                "to": "cand_right",
+                "fromLane": "1",
+                "toLane": "0",
+                "via": ":candidate_j_1_0",
+                "tl": "candidate_j",
+                "linkIndex": "5",
+                "dir": "r",
+                "state": "O",
+            },
+        ],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "candidate_j", "type": "actuated"}, "phases": [{"state": "G"}]},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out", "teacher_right": "cand_right"},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["delta"]["controlled_vehicle_link_count"] == 0
+    assert parity["teacher"]["controlled_link_count"] == 2
+    assert parity["teacher"]["controlled_link_index_count"] == 1
+    assert parity["teacher"]["controlled_duplicate_link_index_count"] == 1
+    assert parity["delta"]["controlled_vehicle_link_signature_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "controlled_vehicle_link_signature_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_parity_fails_on_mapped_controlled_link_attribute_mismatch() -> None:
     teacher_model = {
         "junction_id": "teacher_j",
