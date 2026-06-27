@@ -1298,7 +1298,8 @@ def run_teacher_guided_repair_queue(
                 except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
                     replay_edge_map = {}
             if (
-                (scope_report.get("netconvert") or {}).get("status") == "pass"
+                scope_report.get("status") == "pass"
+                and (scope_report.get("netconvert") or {}).get("status") == "pass"
                 and (scope_report.get("sumo_load") or {}).get("status") == "pass"
                 and joined_scope_junction_id
                 and replay_edge_map
@@ -1314,13 +1315,27 @@ def run_teacher_guided_repair_queue(
                     Path(str(scope_report.get("join_nodes_patch_file", ""))),
                     output_dir / safe_junction_id / "expanded_scope_replay.nod.xml",
                 )
+                (
+                    replay_edge_file,
+                    replay_edge_endpoint_rewrite_count,
+                    replay_dropped_self_loop_edges,
+                ) = _write_joined_endpoint_edge_file(
+                    Path(str(scope_report.get("edge_file", ""))),
+                    Path(str(scope_report.get("join_nodes_patch_file", ""))),
+                    joined_scope_junction_id,
+                    output_dir / safe_junction_id / "expanded_scope_replay.edg.xml",
+                )
                 scope_report["replay_node_file"] = str(replay_node_file)
+                scope_report["replay_edge_file"] = str(replay_edge_file)
+                scope_report["replay_edge_endpoint_rewrite_count"] = replay_edge_endpoint_rewrite_count
+                scope_report["replay_self_loop_edge_drop_count"] = len(replay_dropped_self_loop_edges)
+                scope_report["replay_dropped_self_loop_edges"] = replay_dropped_self_loop_edges
                 attempted_ready_count += 1
                 variant_reports.append(
                     _attach_candidate_template_context(
                         variant_builder(
                             raw_node_file=replay_node_file,
-                            raw_edge_file=Path(str(scope_report.get("edge_file", ""))),
+                            raw_edge_file=replay_edge_file,
                             raw_connection_file=Path(str(scope_report.get("connection_file", ""))),
                             raw_type_file=raw_type_file,
                             teacher_net_file=teacher_net_file,
@@ -1668,6 +1683,43 @@ def _write_replay_node_file(node_file: Path, join_patch_file: Path, output_file:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(node_root).write(output_file, encoding="utf-8", xml_declaration=True)
     return output_file
+
+
+def _write_joined_endpoint_edge_file(
+    edge_file: Path,
+    join_patch_file: Path,
+    joined_junction_id: str,
+    output_file: Path,
+) -> tuple[Path, int, list[str]]:
+    if not join_patch_file.is_file() or not joined_junction_id:
+        return edge_file, 0, []
+    source_node_ids = _joined_source_node_ids(join_patch_file, joined_junction_id)
+    if not source_node_ids:
+        return edge_file, 0, []
+
+    edge_root = ET.parse(edge_file).getroot()
+    rewrite_count = 0
+    dropped_self_loop_edges = []
+    for edge in list(edge_root.findall("edge")):
+        from_is_join_source = edge.attrib.get("from", "") in source_node_ids
+        to_is_join_source = edge.attrib.get("to", "") in source_node_ids
+        if from_is_join_source and to_is_join_source:
+            dropped_self_loop_edges.append(edge.attrib.get("id", ""))
+            edge_root.remove(edge)
+            continue
+        if from_is_join_source:
+            edge.set("from", joined_junction_id)
+            rewrite_count += 1
+        if to_is_join_source:
+            edge.set("to", joined_junction_id)
+            rewrite_count += 1
+    if rewrite_count == 0 and not dropped_self_loop_edges:
+        return edge_file, 0, []
+
+    ET.indent(edge_root, space="    ")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(edge_root).write(output_file, encoding="utf-8", xml_declaration=True)
+    return output_file, rewrite_count, dropped_self_loop_edges
 
 
 def _joined_source_node_ids(node_file: Path, junction_id: str) -> set[str]:
