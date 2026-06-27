@@ -1230,6 +1230,64 @@ def test_teacher_parity_fails_on_tls_type_mismatch() -> None:
     assert parity["delta"]["tl_type_mismatch_count"] == 1
 
 
+def test_teacher_parity_fails_on_main_junction_signature_mismatch_after_translation() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "junction": {
+            "id": "teacher_j",
+            "type": "traffic_light",
+            "x": "100",
+            "y": "200",
+            "incLanes": "teacher_in_0 :teacher_j_0_0",
+            "intLanes": ":teacher_j_0_0",
+            "shape": "99,199 101,199",
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "junction": {
+            "id": "candidate_j",
+            "type": "traffic_light",
+            "x": "10",
+            "y": "20",
+            "incLanes": "cand_in_0 :candidate_j_0_0",
+            "intLanes": ":candidate_j_0_0",
+            "shape": "8,18 12,18",
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"teacher_in": "cand_in"},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["junction_signature"] == (
+        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|"
+        "intLanes=:candidate_j_0_0|shape=-1.00,-1.00 1.00,-1.00"
+    )
+    assert parity["candidate"]["junction_signature"] == (
+        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|"
+        "intLanes=:candidate_j_0_0|shape=-2.00,-2.00 2.00,-2.00"
+    )
+    assert parity["delta"]["junction_signature_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "junction_signature_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_parity_fails_on_tls_program_and_offset_mismatch() -> None:
     teacher_model = {
         "junction_id": "j",
