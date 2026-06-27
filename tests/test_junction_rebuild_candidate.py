@@ -1460,10 +1460,10 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "from=teacher_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0,0 1,1:"
+        "incoming:cand_in": "from=teacher_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0.00,0.00 1.00,1.00:"
     }
     assert parity["candidate"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "from=candidate_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0,0 1,1:"
+        "incoming:cand_in": "from=candidate_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0.00,0.00 1.00,1.00:"
     }
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
