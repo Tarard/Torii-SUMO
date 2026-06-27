@@ -1599,12 +1599,30 @@ def _attach_junction_pattern_delta(
     mismatch_fields = list(
         dict.fromkeys(field for delta in matches for field in delta.get("mismatch_fields", []))
     )
+    review_actions = _netedit_review_actions(mismatch_fields)
     return {
         **candidate,
         "junction_pattern_delta_count": len(matches),
         "junction_pattern_deltas": matches,
         "junction_pattern_mismatch_fields": mismatch_fields,
+        "netedit_review_actions": review_actions,
+        "review_priority": "high" if review_actions else "normal",
     }
+
+
+def _netedit_review_actions(mismatch_fields: list[str]) -> list[str]:
+    action_by_field = {
+        "internal_function_counts": "inspect_internal_edges_crossings_walkingareas",
+        "approach_edge_ids": "verify_approach_membership",
+        "control_type": "inspect_tls_control",
+        "has_tls": "inspect_tls_control",
+        "request_bit_lengths_ok": "inspect_request_foes_response",
+    }
+    return list(
+        dict.fromkeys(
+            action_by_field.get(field, "inspect_junction_pattern_delta") for field in mismatch_fields
+        )
+    )
 
 
 def _junction_pattern_delta_keys(candidate: dict[str, object]) -> list[str]:
@@ -1907,6 +1925,8 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                 "candidate_status",
                 "junction_pattern_delta_count",
                 "junction_pattern_mismatch_fields",
+                "netedit_review_actions",
+                "review_priority",
                 "edge_map_size",
                 "missing_teacher_edge_ids",
                 "copyable_missing_teacher_edge_ids",
@@ -1928,6 +1948,10 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                     "junction_pattern_mismatch_fields": ";".join(
                         str(item) for item in row.get("junction_pattern_mismatch_fields", []) or []
                     ),
+                    "netedit_review_actions": ";".join(
+                        str(item) for item in row.get("netedit_review_actions", []) or []
+                    ),
+                    "review_priority": row.get("review_priority", ""),
                     "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
                     "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
                     "copyable_missing_teacher_edge_ids": ";".join(
