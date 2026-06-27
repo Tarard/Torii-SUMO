@@ -938,7 +938,15 @@ def build_workflow_review_html(
     workflow_summary = dict(summary or {})
     workflow_summary.setdefault("claim_status", claim_status)
     workflow_summary.setdefault("warnings", warning_list)
-    for key in ("teacher_guided_repair_best_variant_file", "reference_visual_detail_comparison_net_file"):
+    for key in (
+        "teacher_guided_repair_best_variant_file",
+        "reference_visual_detail_comparison_net_file",
+        "reference_join_junction_teacher_delta_file",
+        "reference_join_junction_pattern_comparisons_file",
+        "teacher_guided_repair_queue_file",
+        "teacher_guided_repair_queue_csv_file",
+        "teacher_guided_repair_run_report_file",
+    ):
         if workflow_summary.get(key):
             artifacts[key] = _as_path(workflow_summary.get(key))
     _write_json(workflow_report_file, workflow_summary)
