@@ -2004,14 +2004,19 @@ def _attach_junction_pattern_delta(
     mismatch_fields = list(
         dict.fromkeys(field for delta in matches for field in delta.get("mismatch_fields", []))
     )
-    review_actions = _netedit_review_actions(mismatch_fields)
+    review_actions = list(
+        dict.fromkeys(
+            [str(item) for item in candidate.get("netedit_review_actions", []) or []]
+            + _netedit_review_actions(mismatch_fields)
+        )
+    )
     return {
         **candidate,
         "junction_pattern_delta_count": len(matches),
         "junction_pattern_deltas": matches,
         "junction_pattern_mismatch_fields": mismatch_fields,
         "netedit_review_actions": review_actions,
-        "review_priority": "high" if review_actions else "normal",
+        "review_priority": "high" if review_actions else str(candidate.get("review_priority", "normal") or "normal"),
     }
 
 
@@ -2220,6 +2225,14 @@ def _teacher_guided_repair_candidate(
             if expanded_rebuild_scope["status"] == "review"
             else "edge_map_incomplete"
         )
+    teacher_parity = _teacher_parity_summary(teacher_model)
+    candidate_parity = _teacher_parity_summary(candidate_model)
+    movement_matrix_missing_count = max(
+        0,
+        int(candidate_parity.get("vehicle_movement_matrix_missing_count", 0) or 0)
+        - int(teacher_parity.get("vehicle_movement_matrix_missing_count", 0) or 0),
+    )
+    review_actions = ["rebuild_vehicle_movement_matrix"] if movement_matrix_missing_count else []
     return {
         **base,
         "junction_id": candidate_junction_id,
@@ -2232,6 +2245,9 @@ def _teacher_guided_repair_candidate(
         "missing_teacher_edge_ids": missing,
         "copyable_missing_teacher_edge_ids": copyable_missing,
         "uncopyable_missing_teacher_edge_ids": uncopyable_missing,
+        "vehicle_movement_matrix_missing_count": movement_matrix_missing_count,
+        "netedit_review_actions": review_actions,
+        "review_priority": "high" if review_actions else "normal",
         "teacher_incoming_edge_count": len(_approach_edges(teacher_model, "incoming")),
         "teacher_outgoing_edge_count": len(_approach_edges(teacher_model, "outgoing")),
         "candidate_incoming_edge_count": len(_approach_edges(candidate_model, "incoming")),
@@ -2381,6 +2397,7 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                 "review_priority",
                 "teacher_pattern_key",
                 "teacher_pattern_template_count",
+                "vehicle_movement_matrix_missing_count",
                 "edge_map_size",
                 "missing_teacher_edge_ids",
                 "copyable_missing_teacher_edge_ids",
@@ -2408,6 +2425,7 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                     "review_priority": row.get("review_priority", ""),
                     "teacher_pattern_key": row.get("teacher_pattern_key", ""),
                     "teacher_pattern_template_count": row.get("teacher_pattern_template_count", 0),
+                    "vehicle_movement_matrix_missing_count": row.get("vehicle_movement_matrix_missing_count", 0),
                     "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
                     "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
                     "copyable_missing_teacher_edge_ids": ";".join(

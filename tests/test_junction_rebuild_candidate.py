@@ -303,9 +303,11 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     assert candidate["junction_id"] == "cluster_a_b"
     assert candidate["junction_pattern_mismatch_fields"] == ["internal_function_counts", "has_tls"]
     assert candidate["netedit_review_actions"] == [
+        "rebuild_vehicle_movement_matrix",
         "inspect_internal_edges_crossings_walkingareas",
         "inspect_tls_control",
     ]
+    assert candidate["vehicle_movement_matrix_missing_count"] == 1
     assert candidate["review_priority"] == "high"
     assert candidate["junction_pattern_delta_count"] == 1
     assert candidate["junction_pattern_deltas"][0]["junction_id"] == "a"
@@ -331,8 +333,67 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     rows = list(csv.DictReader(Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()))
     assert rows[0]["junction_pattern_delta_count"] == "1"
     assert rows[0]["junction_pattern_mismatch_fields"] == "internal_function_counts;has_tls"
-    assert rows[0]["netedit_review_actions"] == "inspect_internal_edges_crossings_walkingareas;inspect_tls_control"
+    assert (
+        rows[0]["netedit_review_actions"]
+        == "rebuild_vehicle_movement_matrix;inspect_internal_edges_crossings_walkingareas;inspect_tls_control"
+    )
+    assert rows[0]["vehicle_movement_matrix_missing_count"] == "1"
     assert rows[0]["review_priority"] == "high"
+
+
+def test_build_teacher_guided_repair_queue_flags_vehicle_movement_matrix_gap(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_w_in" from="w" to="cluster_j" type="highway.primary"><lane id="teacher_w_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_s_in" from="s" to="cluster_j" type="highway.primary"><lane id="teacher_s_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="teacher_e_out" from="cluster_j" to="e" type="highway.primary"><lane id="teacher_e_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="teacher_n_out" from="cluster_j" to="n" type="highway.primary"><lane id="teacher_n_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <junction id="cluster_j" type="priority" x="0" y="0" incLanes="teacher_w_in_0 teacher_s_in_0" intLanes=""/>
+  <connection from="teacher_w_in" to="teacher_e_out" fromLane="0" toLane="0"/>
+  <connection from="teacher_w_in" to="teacher_n_out" fromLane="0" toLane="0"/>
+  <connection from="teacher_s_in" to="teacher_e_out" fromLane="0" toLane="0"/>
+  <connection from="teacher_s_in" to="teacher_n_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="teacher_w_in" from="w" to="cluster_j" type="highway.primary"><lane id="teacher_w_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_s_in" from="s" to="cluster_j" type="highway.primary"><lane id="teacher_s_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="teacher_e_out" from="cluster_j" to="e" type="highway.primary"><lane id="teacher_e_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="teacher_n_out" from="cluster_j" to="n" type="highway.primary"><lane id="teacher_n_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <junction id="cluster_j" type="priority" x="0" y="0" incLanes="teacher_w_in_0 teacher_s_in_0" intLanes=""/>
+  <connection from="teacher_w_in" to="teacher_e_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_j",
+                    "learned_rule": "tum_like_join_candidate",
+                    "reference_joined_source_nodes": ["w", "s"],
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+    assert candidate["vehicle_movement_matrix_missing_count"] == 3
+    assert candidate["netedit_review_actions"] == ["rebuild_vehicle_movement_matrix"]
+    assert candidate["review_priority"] == "high"
+    rows = list(csv.DictReader(Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()))
+    assert rows[0]["vehicle_movement_matrix_missing_count"] == "3"
+    assert rows[0]["netedit_review_actions"] == "rebuild_vehicle_movement_matrix"
 
 
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
