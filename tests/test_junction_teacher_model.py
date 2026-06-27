@@ -55,6 +55,7 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
   <edge id=":j_c0" function="crossing" crossingEdges="in out"><lane id=":j_c0_0" index="0" allow="pedestrian" width="4.00" shape="0,-2 0,2"/></edge>
   <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" width="4.00" shape="0,2 2,2"/></edge>
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0 :j_w0_0" intLanes=":j_0_0 :j_c0_0"/>
+  <junction id=":j_0_0" type="internal" x="1" y="1" incLanes=":j_0_0" intLanes="" shape="0,0 1,1"/>
   <tlLogic id="j" type="actuated" programID="0"><phase duration="30" state="Gr"/></tlLogic>
   <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s"/>
   <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s"/>
@@ -74,6 +75,8 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
     assert model["vehicle_connections"][0]["linkIndex"] == "0"
     assert model["internal_edges"][0]["edge_id"] == ":j_0"
     assert model["internal_edges"][0]["lanes"][0]["shape"] == "0,0 5,0"
+    assert model["internal_junctions"][0]["junction_id"] == ":j_0_0"
+    assert model["internal_junctions"][0]["shape"] == "0,0 1,1"
     assert model["crossings"][0]["crossingEdges"] == ["in", "out"]
 
 

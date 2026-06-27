@@ -1994,6 +1994,20 @@ def _compare_teacher_models(
         candidate_summary["internal_edge_signatures"] = candidate_internal_edge_signatures
         if internal_edge_mismatch_count:
             delta["internal_edge_signature_mismatch_count"] = internal_edge_mismatch_count
+        teacher_internal_junction_signatures = _internal_junction_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_internal_junction_signatures = _internal_junction_signatures(candidate_model)
+        internal_junction_mismatch_count = _dict_mismatch_count(
+            teacher_internal_junction_signatures, candidate_internal_junction_signatures
+        )
+        teacher_summary["internal_junction_signatures"] = teacher_internal_junction_signatures
+        candidate_summary["internal_junction_signatures"] = candidate_internal_junction_signatures
+        if internal_junction_mismatch_count:
+            delta["internal_junction_signature_mismatch_count"] = internal_junction_mismatch_count
         teacher_internal_connection_signatures = _internal_connection_signatures(
             teacher_model,
             edge_map=edge_map,
@@ -2261,6 +2275,56 @@ def _internal_edge_signatures(
         ]
         signatures[edge_id] = f"function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
     return signatures
+
+
+def _internal_junction_signatures(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    junctions = model.get("internal_junctions", []) if isinstance(model.get("internal_junctions"), list) else []
+    signatures: dict[str, str] = {}
+    for junction in junctions:
+        if not isinstance(junction, dict):
+            continue
+        junction_id = _mapped_internal_ref(str(junction.get("junction_id", "")), source_junction_id, target_junction_id)
+        if not junction_id:
+            continue
+        inc_lanes = _mapped_lane_refs(str(junction.get("incLanes", "")), edge_map, source_junction_id, target_junction_id)
+        int_lanes = _mapped_lane_refs(str(junction.get("intLanes", "")), edge_map, source_junction_id, target_junction_id)
+        signatures[junction_id] = (
+            f"type={junction.get('type', '')}|incLanes={inc_lanes}|"
+            f"intLanes={int_lanes}|shape={junction.get('shape', '')}"
+        )
+    return signatures
+
+
+def _mapped_lane_refs(
+    value: str,
+    edge_map: dict[str, str] | None,
+    source_junction_id: str,
+    target_junction_id: str,
+) -> str:
+    return " ".join(
+        _mapped_lane_ref(lane, edge_map, source_junction_id, target_junction_id)
+        for lane in value.split()
+    )
+
+
+def _mapped_lane_ref(
+    lane_id: str,
+    edge_map: dict[str, str] | None,
+    source_junction_id: str,
+    target_junction_id: str,
+) -> str:
+    mapped = _mapped_internal_ref(lane_id, source_junction_id, target_junction_id)
+    if mapped != lane_id or "_" not in lane_id:
+        return mapped
+    edge_id, lane_index = lane_id.rsplit("_", 1)
+    mapped_edge = _mapped_endpoint(edge_id, edge_map)
+    return f"{mapped_edge}_{lane_index}"
 
 
 def _mapped_endpoint(edge_id: str, edge_map: dict[str, str] | None) -> str:
