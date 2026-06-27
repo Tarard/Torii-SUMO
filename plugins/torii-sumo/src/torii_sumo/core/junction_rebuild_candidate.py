@@ -1874,11 +1874,32 @@ def _teacher_guided_repair_candidate(
         except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
             candidate_error = exc
     if candidate_model is None:
+        missing_teacher_edge_ids = _teacher_approach_edge_ids(teacher_model)
+        if candidate_node_ids:
+            return {
+                **base,
+                "candidate_status": "needs_expanded_rebuild_scope",
+                "edge_map": {},
+                "missing_teacher_edge_ids": missing_teacher_edge_ids,
+                "copyable_missing_teacher_edge_ids": [],
+                "uncopyable_missing_teacher_edge_ids": missing_teacher_edge_ids,
+                "approach_endpoint_rebuild_plan": {"status": "review", "edge_rebuilds": []},
+                "expanded_rebuild_scope": {
+                    "status": "review",
+                    "recommended_action": "rebuild_plain_xml_scope",
+                    "core_junction_id": base["junction_id"],
+                    "junction_ids": sorted(dict.fromkeys(candidate_node_ids)),
+                    "blocked_teacher_edge_ids": missing_teacher_edge_ids,
+                    "missing_desired_endpoint_ids": [],
+                    "reason": "candidate joined junction not found; rebuild from matched candidate source nodes",
+                },
+                "error": f"{type(candidate_error).__name__}: {candidate_error}",
+            }
         return {
             **base,
             "candidate_status": "needs_joined_candidate_junction",
             "edge_map": {},
-            "missing_teacher_edge_ids": _teacher_approach_edge_ids(teacher_model),
+            "missing_teacher_edge_ids": missing_teacher_edge_ids,
             "error": f"{type(candidate_error).__name__}: {candidate_error}",
         }
 
