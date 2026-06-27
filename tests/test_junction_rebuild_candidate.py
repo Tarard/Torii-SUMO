@@ -123,6 +123,59 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     assert Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()[0].startswith("reference_id")
 
 
+def test_build_teacher_guided_repair_queue_limits_ready_candidates(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="cluster_a_b" type="highway.primary"><lane id="teacher_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="cluster_a_b" to="b" type="highway.primary"><lane id="teacher_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="cluster_a_b" linkIndex="0" dir="s"/>
+  <tlLogic id="cluster_a_b" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="cluster_a_b" type="highway.primary"><lane id="cand_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="cand_out" from="cluster_a_b" to="b" type="highway.primary"><lane id="cand_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "matched_candidate_node_ids": ["a", "b", "c"],
+                    "learned_rule": "tum_like_join_candidate",
+                },
+                {
+                    "reference_id": "cluster_a_b",
+                    "matched_candidate_node_ids": ["a"],
+                    "learned_rule": "tum_like_join_candidate",
+                },
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+        max_ready_candidates=1,
+    )
+
+    assert report["matched_case_count"] == 2
+    assert report["queued_case_count"] == 1
+    assert report["queue_truncated"] is True
+    assert report["queue_order_policy"] == "smallest_matched_candidate_node_count_first"
+    assert report["ready_candidate_count"] == 1
+    assert report["max_ready_candidates"] == 1
+    assert report["repair_candidates"][0]["matched_candidate_node_ids"] == ["a"]
+
+
 def test_build_teacher_guided_repair_queue_resolves_sumo_short_joined_candidate_id(tmp_path: Path) -> None:
     reference_id = "cluster_a_b_c_d_e_f"
     candidate_id = "cluster_a_b_c_d_#2more"
@@ -252,6 +305,11 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
                     "candidate_status": "ready_for_teacher_guided_variant",
                     "edge_map": {"teacher_in": "cand_in"},
                 },
+                {
+                    "junction_id": "cluster_c_d",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                },
                 {"junction_id": "cluster_c_d", "candidate_status": "needs_joined_candidate_junction", "edge_map": {}},
             ],
         },
@@ -259,12 +317,14 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
         raw_edge_file=raw_edges,
         raw_connection_file=raw_connections,
         output_dir=tmp_path / "run",
+        max_ready_candidates=1,
         variant_builder=fake_variant,
     )
 
     assert report["status"] == "pass"
     assert report["attempted_candidate_count"] == 1
-    assert report["skipped_candidate_count"] == 1
+    assert report["skipped_candidate_count"] == 2
+    assert report["max_ready_candidates"] == 1
     assert calls[0]["junction_id"] == "cluster_a_b"
     assert calls[0]["teacher_junction_id"] == "cluster_a_b"
 
@@ -844,6 +904,39 @@ def test_write_teacher_tllogic_net_replaces_only_target_program(tmp_path: Path) 
     assert root.find("tlLogic[@id='other']").attrib["type"] == "static"
     assert report["tl_phase_count"] == 2
     assert report["controlled_link_count"] == 2
+
+
+def test_write_teacher_tllogic_net_allows_no_teacher_program(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="Gr"/></tlLogic>
+  <tlLogic id="other" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
+  <connection from="a" to="b" tl="j" linkIndex="0"/>
+  <connection from="c" to="d" tl="other" linkIndex="1"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_tllogic_net(
+        candidate_net_file=candidate_net,
+        output_file=tmp_path / "teacher_no_tls.net.xml",
+        junction_id="j",
+        teacher_model={"traffic_light": {"attributes": {}, "phases": []}},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    target_connection = root.find("connection[@from='a']")
+    assert report["status"] == "pass"
+    assert report["tls_replay_status"] == "not_applicable_no_teacher_tllogic"
+    assert root.find("tlLogic[@id='j']") is None
+    assert root.find("tlLogic[@id='other']").attrib["type"] == "static"
+    assert "tl" not in target_connection.attrib
+    assert "linkIndex" not in target_connection.attrib
+    assert target_connection.attrib["uncontrolled"] == "true"
+    assert report["tl_phase_count"] == 0
+    assert report["controlled_link_count"] == 0
 
 
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:

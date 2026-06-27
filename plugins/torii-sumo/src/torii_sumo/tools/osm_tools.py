@@ -366,6 +366,7 @@ def sumo_network_teacher_guided_repair_queue(
     prefix: str = "teacher_guided_repair",
     raw_type_file: str | None = None,
     replay_target_internal_subgraph: bool = False,
+    max_ready_candidates: int | None = None,
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
@@ -381,6 +382,7 @@ def sumo_network_teacher_guided_repair_queue(
         prefix=prefix,
         queue_base_dir=queue_report_path.resolve().parent,
         replay_target_internal_subgraph=replay_target_internal_subgraph,
+        max_ready_candidates=max_ready_candidates,
         netconvert_binary=netconvert_binary,
         sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
@@ -465,6 +467,8 @@ def sumo_osm_cleanup_workflow(
     historical_date: str | None = None,
     overpass_url: str = "https://overpass-api.de/api/interpreter",
     timeout_seconds: float = 240.0,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
     max_tile_area_km2: float = 2500.0,
     max_retries: int = 2,
     retry_pause_seconds: float = 5.0,
@@ -485,6 +489,7 @@ def sumo_osm_cleanup_workflow(
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = True,
+    teacher_guided_repair_max_ready_candidates: int | None = 1,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
@@ -504,6 +509,8 @@ def sumo_osm_cleanup_workflow(
         historical_date=historical_date,
         overpass_url=overpass_url,
         timeout_seconds=timeout_seconds,
+        netconvert_binary=netconvert_binary,
+        sumo_binary=sumo_binary,
         max_tile_area_km2=max_tile_area_km2,
         max_retries=max_retries,
         retry_pause_seconds=retry_pause_seconds,
@@ -524,5 +531,6 @@ def sumo_osm_cleanup_workflow(
         run_reference_hierarchy_audit_after_build=run_reference_hierarchy_audit_after_build,
         run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
         run_scope_pruning_after_build=run_scope_pruning_after_build,
+        teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
         key_edge_queries=key_edge_queries,
     )

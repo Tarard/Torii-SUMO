@@ -5,8 +5,9 @@ from typing import Any, Callable, Mapping
 
 from .osm_area import osm_map_url_bbox, osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
+from .command_runner import run_command
 from .junction_aggregation import build_junction_aggregation_variant
-from .junction_rebuild_candidate import build_teacher_guided_repair_queue
+from .junction_rebuild_candidate import build_teacher_guided_repair_queue, run_teacher_guided_repair_queue
 from .netedit import launch_netedit
 from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
@@ -315,9 +316,77 @@ def _teacher_guided_parity_gate(report: Mapping[str, Any] | None) -> str:
         return "skipped"
     if report.get("status") != "pass":
         return _gate_value(report)
+    if report.get("parity_gate_status") == "pass":
+        return "pass"
     if _int_field(report, "repair_candidate_count") == 0:
         return "skipped"
     return "blocked"
+
+
+def export_plain_net_for_teacher_guided_repair(
+    *,
+    net_file: Path,
+    output_dir: Path,
+    prefix: str,
+    netconvert_binary: str = "netconvert",
+    timeout_seconds: float = 240.0,
+    command_runner: Callable[..., Any] = run_command,
+) -> dict[str, Any]:
+    net_file = net_file.resolve()
+    output_dir = output_dir.resolve()
+    if not net_file.exists():
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "error": f"net file does not exist: {net_file}",
+        }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plain_prefix = output_dir / prefix
+    command = [
+        netconvert_binary,
+        "--sumo-net-file",
+        str(net_file),
+        "--plain-output-prefix",
+        str(plain_prefix),
+    ]
+    result = command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds)
+    if hasattr(result, "to_dict"):
+        netconvert_report = result.to_dict()
+    elif isinstance(result, dict):
+        netconvert_report = dict(result)
+    else:
+        netconvert_report = {
+            "status": getattr(result, "status", "fail"),
+            "returncode": getattr(result, "returncode", None),
+        }
+    if "status" not in netconvert_report:
+        netconvert_report["status"] = "pass" if netconvert_report.get("returncode") == 0 else "fail"
+
+    raw_node_file = Path(f"{plain_prefix}.nod.xml")
+    raw_edge_file = Path(f"{plain_prefix}.edg.xml")
+    raw_connection_file = Path(f"{plain_prefix}.con.xml")
+    raw_type_file = Path(f"{plain_prefix}.typ.xml")
+    raw_tllogic_file = Path(f"{plain_prefix}.tll.xml")
+    missing_required = [
+        str(path)
+        for path in (raw_node_file, raw_edge_file, raw_connection_file)
+        if not path.exists()
+    ]
+    status = "pass" if netconvert_report.get("status") == "pass" and not missing_required else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "net_file": str(net_file),
+        "plain_output_prefix": str(plain_prefix),
+        "raw_node_file": str(raw_node_file),
+        "raw_edge_file": str(raw_edge_file),
+        "raw_connection_file": str(raw_connection_file),
+        "raw_type_file": str(raw_type_file) if raw_type_file.exists() else "",
+        "raw_tllogic_file": str(raw_tllogic_file) if raw_tllogic_file.exists() else "",
+        "missing_required_plain_files": missing_required,
+        "netconvert": netconvert_report,
+    }
 
 
 def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
@@ -441,6 +510,8 @@ def run_osm_cleanup_workflow(
     historical_date: str | None = None,
     overpass_url: str = "https://overpass-api.de/api/interpreter",
     timeout_seconds: float = 240.0,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
     max_tile_area_km2: float = 2500.0,
     max_retries: int = 2,
     retry_pause_seconds: float = 5.0,
@@ -463,6 +534,7 @@ def run_osm_cleanup_workflow(
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = True,
+    teacher_guided_repair_max_ready_candidates: int | None = 1,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
@@ -477,6 +549,8 @@ def run_osm_cleanup_workflow(
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
+    teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
+    teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
@@ -704,6 +778,8 @@ def run_osm_cleanup_workflow(
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
+    teacher_guided_plain_export_report: dict[str, Any] | None = None
+    teacher_guided_repair_run_report: dict[str, Any] | None = None
     reference_hierarchy_audit_report: dict[str, Any] | None = None
     reference_hierarchy_audit_candidate_layer = "not_applicable"
     reference_hierarchy_audit_candidate_net_file: Path | None = None
@@ -1032,7 +1108,34 @@ def run_osm_cleanup_workflow(
             reference_join_audit_report=reference_join_audit_report,
             output_dir=output_dir / "teacher_guided_repair_queue",
             prefix=f"{prefix}_teacher_guided_repair",
+            max_ready_candidates=teacher_guided_repair_max_ready_candidates,
         )
+        if _int_field(teacher_guided_repair_queue_report, "ready_candidate_count") > 0:
+            teacher_guided_plain_export_report = teacher_guided_plain_export_func(
+                net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
+                output_dir=output_dir / "teacher_guided_repair_plain",
+                prefix=f"{prefix}_teacher_guided_repair",
+                netconvert_binary=netconvert_binary,
+                timeout_seconds=timeout_seconds,
+            )
+            if teacher_guided_plain_export_report.get("status") == "pass":
+                raw_type_value = str(teacher_guided_plain_export_report.get("raw_type_file", ""))
+                queue_file_value = str(teacher_guided_repair_queue_report.get("queue_file", ""))
+                teacher_guided_repair_run_report = teacher_guided_repair_run_func(
+                    queue_report=teacher_guided_repair_queue_report,
+                    raw_node_file=Path(str(teacher_guided_plain_export_report["raw_node_file"])),
+                    raw_edge_file=Path(str(teacher_guided_plain_export_report["raw_edge_file"])),
+                    raw_connection_file=Path(str(teacher_guided_plain_export_report["raw_connection_file"])),
+                    raw_type_file=Path(raw_type_value) if raw_type_value else None,
+                    output_dir=output_dir / "teacher_guided_repair_execution",
+                    prefix=f"{prefix}_teacher_guided_repair",
+                    queue_base_dir=Path(queue_file_value).resolve().parent if queue_file_value else None,
+                    replay_target_internal_subgraph=True,
+                    max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                    netconvert_binary=netconvert_binary,
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                )
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -1212,7 +1315,9 @@ def run_osm_cleanup_workflow(
         gate_status["tls_semantics_parity"] = "blocked"
         gate_status["internal_junction_parity"] = "blocked"
         gate_status["netedit_connection_mode_review"] = "blocked"
-        gate_status["teacher_guided_junction_parity"] = _teacher_guided_parity_gate(teacher_guided_repair_queue_report)
+        gate_status["teacher_guided_junction_parity"] = _teacher_guided_parity_gate(
+            teacher_guided_repair_run_report or teacher_guided_plain_export_report or teacher_guided_repair_queue_report
+        )
     if topology_audit_report is not None:
         gate_status["topology_audit"] = _gate_value(topology_audit_report)
     if junction_aggregation_report is not None:
@@ -1233,6 +1338,7 @@ def run_osm_cleanup_workflow(
         and gate_status.get("reference_scope_pruning", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_aggregation", "skipped") in {"pass", "skipped"}
+        and gate_status.get("teacher_guided_junction_parity", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
     )
@@ -1395,12 +1501,51 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_ready_candidate_count": 0
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("ready_candidate_count", 0),
+        "teacher_guided_repair_queued_case_count": 0
+        if teacher_guided_repair_queue_report is None
+        else teacher_guided_repair_queue_report.get("queued_case_count", 0),
+        "teacher_guided_repair_queue_truncated": False
+        if teacher_guided_repair_queue_report is None
+        else bool(teacher_guided_repair_queue_report.get("queue_truncated", False)),
+        "teacher_guided_repair_max_ready_candidates": ""
+        if teacher_guided_repair_queue_report is None
+        else teacher_guided_repair_queue_report.get("max_ready_candidates", ""),
         "teacher_guided_repair_queue_file": ""
         if teacher_guided_repair_queue_report is None
         else str(teacher_guided_repair_queue_report.get("queue_file", "")),
         "teacher_guided_repair_queue_csv_file": ""
         if teacher_guided_repair_queue_report is None
         else str(teacher_guided_repair_queue_report.get("queue_csv_file", "")),
+        "teacher_guided_repair_plain_export_status": "skipped"
+        if teacher_guided_plain_export_report is None
+        else teacher_guided_plain_export_report.get("status", "fail"),
+        "teacher_guided_repair_raw_node_file": ""
+        if teacher_guided_plain_export_report is None
+        else str(teacher_guided_plain_export_report.get("raw_node_file", "")),
+        "teacher_guided_repair_raw_edge_file": ""
+        if teacher_guided_plain_export_report is None
+        else str(teacher_guided_plain_export_report.get("raw_edge_file", "")),
+        "teacher_guided_repair_raw_connection_file": ""
+        if teacher_guided_plain_export_report is None
+        else str(teacher_guided_plain_export_report.get("raw_connection_file", "")),
+        "teacher_guided_repair_raw_type_file": ""
+        if teacher_guided_plain_export_report is None
+        else str(teacher_guided_plain_export_report.get("raw_type_file", "")),
+        "teacher_guided_repair_run_status": "skipped"
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("status", "fail"),
+        "teacher_guided_repair_parity_gate_status": "skipped"
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("parity_gate_status", "fail"),
+        "teacher_guided_repair_attempted_candidate_count": 0
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("attempted_candidate_count", 0),
+        "teacher_guided_repair_pass_candidate_count": 0
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("pass_candidate_count", 0),
+        "teacher_guided_repair_run_report_file": ""
+        if teacher_guided_repair_run_report is None
+        else str(teacher_guided_repair_run_report.get("run_report_file", "")),
         "reference_hierarchy_status": "skipped"
         if reference_hierarchy_audit_report is None
         else reference_hierarchy_audit_report.get(
@@ -1526,6 +1671,8 @@ def run_osm_cleanup_workflow(
         "reference_join_audit": reference_join_audit_report or {},
         "reference_join_aggregation": reference_join_aggregation_report or {},
         "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
+        "teacher_guided_repair_plain_export": teacher_guided_plain_export_report or {},
+        "teacher_guided_repair_run": teacher_guided_repair_run_report or {},
         "routeability_audit": routeability_audit_report or {},
         "netedit": netedit_report,
         "reference_visual_detail_netedit": reference_visual_detail_netedit_report,

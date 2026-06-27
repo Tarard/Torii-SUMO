@@ -75,6 +75,7 @@ def build_teacher_guided_repair_queue(
     reference_join_audit_report: dict[str, Any],
     output_dir: Path,
     prefix: str = "teacher_guided_repair",
+    max_ready_candidates: int | None = None,
 ) -> dict[str, object]:
     if not teacher_net_file.exists():
         return _failure(f"teacher net file does not exist: {teacher_net_file}")
@@ -82,15 +83,29 @@ def build_teacher_guided_repair_queue(
         return _failure(f"candidate net file does not exist: {candidate_net_file}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    repair_candidates = [
-        _teacher_guided_repair_candidate(
+    matched_cases = [
+        case
+        for case in reference_join_audit_report.get("matched_cases", []) or []
+        if isinstance(case, dict)
+    ]
+    matched_cases.sort(key=_teacher_guided_case_sort_key)
+    repair_candidates = []
+    ready_so_far = 0
+    for case in matched_cases:
+        candidate = _teacher_guided_repair_candidate(
             case=case,
             teacher_net_file=teacher_net_file,
             candidate_net_file=candidate_net_file,
         )
-        for case in reference_join_audit_report.get("matched_cases", []) or []
-        if isinstance(case, dict)
-    ]
+        repair_candidates.append(candidate)
+        if candidate["candidate_status"] == "ready_for_teacher_guided_variant":
+            ready_so_far += 1
+        if (
+            max_ready_candidates is not None
+            and max_ready_candidates > 0
+            and ready_so_far >= max_ready_candidates
+        ):
+            break
     ready_count = sum(
         1 for candidate in repair_candidates if candidate["candidate_status"] == "ready_for_teacher_guided_variant"
     )
@@ -101,6 +116,11 @@ def build_teacher_guided_repair_queue(
         "claim_status": "diagnostic-demo",
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
+        "matched_case_count": len(matched_cases),
+        "queued_case_count": len(repair_candidates),
+        "queue_truncated": len(repair_candidates) < len(matched_cases),
+        "queue_order_policy": "smallest_matched_candidate_node_count_first",
+        "max_ready_candidates": max_ready_candidates if max_ready_candidates is not None else "",
         "repair_candidate_count": len(repair_candidates),
         "ready_candidate_count": ready_count,
         "blocked_candidate_count": len(repair_candidates) - ready_count,
@@ -649,10 +669,6 @@ def write_teacher_tllogic_net(
     output_file.parent.mkdir(parents=True, exist_ok=True)
     tree = ET.parse(candidate_net_file)
     root = tree.getroot()
-    target_tl = next((tl for tl in root.findall("tlLogic") if tl.attrib.get("id") == junction_id), None)
-    if target_tl is None:
-        return _failure(f"tlLogic not found: {junction_id}")
-
     traffic_light = teacher_model.get("traffic_light", {})
     if not isinstance(traffic_light, dict):
         return _failure("teacher_model.traffic_light is missing")
@@ -660,6 +676,31 @@ def write_teacher_tllogic_net(
     phases = traffic_light.get("phases", [])
     if not isinstance(attributes, dict) or not isinstance(phases, list):
         return _failure("teacher_model.traffic_light is invalid")
+    target_tl = next((tl for tl in root.findall("tlLogic") if tl.attrib.get("id") == junction_id), None)
+    if not attributes and not phases:
+        if target_tl is not None:
+            root.remove(target_tl)
+        uncontrolled_count = 0
+        for connection in root.findall("connection"):
+            if connection.attrib.get("tl") == junction_id:
+                connection.attrib.pop("tl", None)
+                connection.attrib.pop("linkIndex", None)
+                connection.set("uncontrolled", "true")
+                uncontrolled_count += 1
+        ET.indent(root, space="    ")
+        tree.write(output_file, encoding="utf-8", xml_declaration=True)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "net_file": str(output_file),
+            "tl_phase_count": 0,
+            "tl_phase_state_lengths": [],
+            "controlled_link_count": 0,
+            "removed_controlled_link_count": uncontrolled_count,
+            "tls_replay_status": "not_applicable_no_teacher_tllogic",
+        }
+    if target_tl is None:
+        return _failure(f"tlLogic not found: {junction_id}")
 
     index = list(root).index(target_tl)
     root.remove(target_tl)
@@ -944,6 +985,7 @@ def run_teacher_guided_repair_queue(
     raw_type_file: Path | None = None,
     crossing_edge_overrides_by_junction: dict[str, dict[str, str | list[str]]] | None = None,
     replay_target_internal_subgraph: bool = False,
+    max_ready_candidates: int | None = None,
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
@@ -982,6 +1024,7 @@ def run_teacher_guided_repair_queue(
     crossing_edge_overrides_by_junction = crossing_edge_overrides_by_junction or {}
     variant_reports = []
     skipped_candidates = []
+    attempted_ready_count = 0
     for index, candidate in enumerate(candidates):
         if not isinstance(candidate, dict):
             skipped_candidates.append({"index": index, "candidate_status": "invalid_candidate"})
@@ -1008,9 +1051,15 @@ def run_teacher_guided_repair_queue(
                 {"index": index, "junction_id": junction_id, "candidate_status": "edge_map_incomplete"}
             )
             continue
+        if max_ready_candidates is not None and max_ready_candidates > 0 and attempted_ready_count >= max_ready_candidates:
+            skipped_candidates.append(
+                {"index": index, "junction_id": junction_id, "candidate_status": "max_ready_candidates_reached"}
+            )
+            continue
 
         safe_junction_id = _queue_candidate_dir(index, junction_id)
         variant_prefix = f"{_safe_stage_name(prefix, max_len=12)}_{index + 1:03d}"
+        attempted_ready_count += 1
         variant_reports.append(
             variant_builder(
                 raw_node_file=raw_node_file,
@@ -1058,6 +1107,7 @@ def run_teacher_guided_repair_queue(
         "raw_connection_file": str(raw_connection_file),
         "raw_type_file": str(raw_type_file) if raw_type_file is not None else "",
         "candidate_count": len(candidates),
+        "max_ready_candidates": max_ready_candidates if max_ready_candidates is not None else "",
         "attempted_candidate_count": attempted_count,
         "skipped_candidate_count": len(skipped_candidates),
         "pass_candidate_count": pass_count,
@@ -1074,6 +1124,14 @@ def run_teacher_guided_repair_queue(
 
 def _should_emit(movement: dict[str, object]) -> bool:
     return movement.get("status") == "emit" and float(movement.get("confidence", 0.0)) >= 0.5
+
+
+def _teacher_guided_case_sort_key(case: dict[str, Any]) -> tuple[int, int, str]:
+    candidate_nodes = case.get("matched_candidate_node_ids")
+    candidate_node_count = len(candidate_nodes) if isinstance(candidate_nodes, list) else 1_000_000
+    reference_id = str(case.get("reference_id", ""))
+    reference_node_count = len(reference_id.removeprefix("cluster_").split("_")) if reference_id else 1_000_000
+    return (candidate_node_count, reference_node_count, reference_id)
 
 
 def _queue_path(value: object, base_dir: Path | None) -> Path:
