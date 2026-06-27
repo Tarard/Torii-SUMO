@@ -711,6 +711,85 @@ def test_run_teacher_guided_repair_queue_blocks_without_ready_candidates(tmp_pat
     assert Path(report["run_report_file"]).is_file()
 
 
+def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-10" y="0"/>
+  <node id="j" x="0" y="0"/>
+  <node id="c" x="10" y="0"/>
+  <node id="e" x="12" y="0"/>
+  <node id="x" x="99" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="approach_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="teacher_out" from="j" to="c"><lane index="0"/></edge>
+  <edge id="outside" from="x" to="a"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="approach_in" to="teacher_out" fromLane="0" toLane="0"/>
+  <connection from="outside" to="approach_in" fromLane="0" toLane="0"/>
+</connections>""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (teacher_net, candidate_net):
+        path.write_text("<net/>", encoding="utf-8")
+
+    def fail_if_called(**_kwargs):
+        raise AssertionError("variant builder must not run for expanded-scope candidates")
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "j",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {"teacher_in": "approach_in"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "recommended_action": "rebuild_plain_xml_scope",
+                        "core_junction_id": "j",
+                        "junction_ids": ["c", "e", "j"],
+                        "blocked_teacher_edge_ids": ["teacher_out"],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fail_if_called,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["expanded_scope_candidate_count"] == 1
+    scope_report = report["expanded_scope_reports"][0]
+    assert scope_report["status"] == "pass"
+    assert scope_report["node_count"] == 4
+    assert scope_report["edge_count"] == 2
+    assert scope_report["connection_count"] == 1
+    assert scope_report["netconvert_command"][-2:] == ["--output-file", "expanded_scope.net.xml"]
+    scope_nodes = ET.parse(scope_report["node_file"]).getroot()
+    scope_edges = ET.parse(scope_report["edge_file"]).getroot()
+    scope_connections = ET.parse(scope_report["connection_file"]).getroot()
+    assert [node.attrib["id"] for node in scope_nodes] == ["a", "c", "e", "j"]
+    assert [edge.attrib["id"] for edge in scope_edges] == ["approach_in", "teacher_out"]
+    assert [connection.attrib["from"] for connection in scope_connections] == ["approach_in"]
+
+
 def test_run_teacher_guided_repair_queue_fails_when_parity_fails(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
