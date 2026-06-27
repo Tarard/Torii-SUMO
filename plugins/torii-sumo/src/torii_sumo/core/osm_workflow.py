@@ -155,6 +155,28 @@ def _int_field(report: Mapping[str, Any], key: str) -> int:
         return 0
 
 
+def _teacher_guided_exemplar_ready_stats(report: Mapping[str, Any] | None) -> tuple[int, int]:
+    if report is None:
+        return 0, 0
+    ready_count = 0
+    signature_count = 0
+    for candidate in report.get("repair_candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        movement_exemplar = candidate.get("movement_exemplar", {})
+        signatures = movement_exemplar.get("movement_signatures", []) if isinstance(movement_exemplar, Mapping) else []
+        if (
+            candidate.get("candidate_status") != "ready_for_teacher_guided_variant"
+            or not candidate.get("slot_edge_map")
+            or not isinstance(signatures, list)
+            or not signatures
+        ):
+            continue
+        ready_count += 1
+        signature_count += len(signatures)
+    return ready_count, signature_count
+
+
 def _class_set(value: Any) -> set[str]:
     if value is None:
         return set()
@@ -1370,6 +1392,10 @@ def run_osm_cleanup_workflow(
     provider_counts = tls_regional_map_baseline.get("regional_map_provider_counts")
     has_tls_regional_rows = not isinstance(provider_counts, dict) or any(int(count) > 0 for count in provider_counts.values())
     regional_map_baseline = tls_regional_map_baseline if tls_regional_map_baseline and has_tls_regional_rows else bbox_regional_map_baseline
+    (
+        teacher_guided_exemplar_ready_candidate_count,
+        teacher_guided_exemplar_movement_signature_count,
+    ) = _teacher_guided_exemplar_ready_stats(teacher_guided_repair_queue_report)
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -1524,6 +1550,8 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_ready_candidate_count": 0
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("ready_candidate_count", 0),
+        "teacher_guided_repair_exemplar_ready_candidate_count": teacher_guided_exemplar_ready_candidate_count,
+        "teacher_guided_repair_exemplar_movement_signature_count": teacher_guided_exemplar_movement_signature_count,
         "teacher_guided_repair_queued_case_count": 0
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("queued_case_count", 0),

@@ -397,7 +397,19 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "ready_candidate_count": 1,
             "queue_file": str(tmp_path / "teacher_guided_queue.json"),
             "queue_csv_file": str(tmp_path / "teacher_guided_queue.csv"),
-            "repair_candidates": [{"reference_id": "cluster_a_b", "candidate_status": "ready_for_teacher_guided_variant"}],
+            "repair_candidates": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "slot_edge_map": {"slot_0": "cand_in", "slot_1": "cand_out"},
+                    "movement_exemplar": {
+                        "movement_signatures": [
+                            {"from_slot": "slot_0", "to_slot": "slot_1"},
+                            {"from_slot": "slot_0", "to_slot": "slot_2"},
+                        ]
+                    },
+                }
+            ],
             "warnings": [],
         }
 
@@ -540,6 +552,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "teacher_guided_best.net.xml")
     assert report["teacher_guided_repair_queue_status"] == "pass"
     assert report["teacher_guided_repair_ready_candidate_count"] == 1
+    assert report["teacher_guided_repair_exemplar_ready_candidate_count"] == 1
+    assert report["teacher_guided_repair_exemplar_movement_signature_count"] == 2
     assert report["teacher_guided_repair_queue_file"] == str(tmp_path / "teacher_guided_queue.json")
     assert report["teacher_guided_repair_plain_export_status"] == "pass"
     assert report["teacher_guided_repair_raw_node_file"] == str(tmp_path / "plain.nod.xml")
