@@ -847,11 +847,12 @@ def write_teacher_tllogic_net(
             "removed_controlled_link_count": uncontrolled_count,
             "tls_replay_status": "not_applicable_no_teacher_tllogic",
         }
+    root_children = list(root)
     if target_tl is None:
-        return _failure(f"tlLogic not found: {junction_id}")
-
-    index = list(root).index(target_tl)
-    root.remove(target_tl)
+        index = next((idx for idx, child in enumerate(root_children) if child.tag == "tlLogic"), len(root_children))
+    else:
+        index = root_children.index(target_tl)
+        root.remove(target_tl)
     replacement = ET.Element("tlLogic", {str(key): str(value) for key, value in attributes.items()})
     replacement.set("id", junction_id)
     for phase in phases:

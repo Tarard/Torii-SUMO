@@ -1119,6 +1119,39 @@ def test_write_teacher_tllogic_net_replaces_only_target_program(tmp_path: Path) 
     assert report["controlled_link_count"] == 2
 
 
+def test_write_teacher_tllogic_net_inserts_missing_target_program(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <tlLogic id="other" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
+  <connection from="a" to="b" tl="j" linkIndex="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "traffic_light": {
+            "attributes": {"id": "teacher_j", "type": "actuated", "programID": "0", "offset": "5"},
+            "phases": [{"duration": "30", "minDur": "10", "maxDur": "60", "state": "G"}],
+        }
+    }
+
+    report = write_teacher_tllogic_net(
+        candidate_net_file=candidate_net,
+        output_file=tmp_path / "teacher_tls.net.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    target_tls = root.find("tlLogic[@id='j']")
+    assert report["status"] == "pass"
+    assert target_tls.attrib == {"id": "j", "type": "actuated", "programID": "0", "offset": "5"}
+    assert target_tls.find("phase").attrib == {"duration": "30", "minDur": "10", "maxDur": "60", "state": "G"}
+    assert root.find("tlLogic[@id='other']").attrib["type"] == "static"
+    assert report["controlled_link_count"] == 1
+
+
 def test_write_teacher_tllogic_net_allows_no_teacher_program(tmp_path: Path) -> None:
     candidate_net = tmp_path / "candidate.net.xml"
     candidate_net.write_text(
