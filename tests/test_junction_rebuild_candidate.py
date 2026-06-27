@@ -300,6 +300,11 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
     assert candidate["junction_id"] == "cluster_a_b"
     assert candidate["junction_pattern_mismatch_fields"] == ["internal_function_counts", "has_tls"]
+    assert candidate["netedit_review_actions"] == [
+        "inspect_internal_edges_crossings_walkingareas",
+        "inspect_tls_control",
+    ]
+    assert candidate["review_priority"] == "high"
     assert candidate["junction_pattern_delta_count"] == 1
     assert candidate["junction_pattern_deltas"][0]["junction_id"] == "a"
     assert candidate["junction_pattern_deltas"][0]["teacher"]["has_tls"] is True
@@ -324,6 +329,8 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     rows = list(csv.DictReader(Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()))
     assert rows[0]["junction_pattern_delta_count"] == "1"
     assert rows[0]["junction_pattern_mismatch_fields"] == "internal_function_counts;has_tls"
+    assert rows[0]["netedit_review_actions"] == "inspect_internal_edges_crossings_walkingareas;inspect_tls_control"
+    assert rows[0]["review_priority"] == "high"
 
 
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
