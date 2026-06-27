@@ -1088,6 +1088,14 @@ def build_teacher_guided_junction_variant(
         teacher_junction_id=teacher_junction_id,
         candidate_junction_id=junction_id,
     )
+    approach_endpoint_rebuild_plan = _approach_endpoint_rebuild_plan(
+        teacher_model,
+        final_model,
+        edge_map=edge_map,
+        teacher_junction_id=teacher_junction_id,
+        candidate_junction_id=junction_id,
+        candidate_junction_ids=_net_junction_ids(final_net_file),
+    )
     semantic_gate = _teacher_guided_semantics_gate(
         parity,
         pedestrian_ring=pedestrian_ring_report,
@@ -1136,6 +1144,7 @@ def build_teacher_guided_junction_variant(
             "tl_logic": tl_logic_report,
             "sumo_load": sumo_report,
             "parity": parity,
+            "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
             "semantic_replay_gate": semantic_gate,
             "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
         },
@@ -1444,7 +1453,25 @@ def _teacher_guided_repair_candidate(
             "error": f"{type(candidate_error).__name__}: {candidate_error}",
         }
 
-    edge_map = _teacher_candidate_edge_map(teacher_model, candidate_model)
+    provisional_edge_map = _teacher_candidate_edge_map(teacher_model, candidate_model, drop_endpoint_mismatches=False)
+    approach_endpoint_rebuild_plan = _approach_endpoint_rebuild_plan(
+        teacher_model,
+        candidate_model,
+        edge_map=provisional_edge_map,
+        teacher_junction_id=reference_id,
+        candidate_junction_id=candidate_junction_id,
+        candidate_junction_ids={
+            junction.attrib["id"]
+            for junction in candidate_root.findall("junction")
+            if junction.attrib.get("id")
+        },
+    )
+    edge_map = _teacher_candidate_edge_map(
+        teacher_model,
+        candidate_model,
+        teacher_junction_id=reference_id,
+        candidate_junction_id=candidate_junction_id,
+    )
     missing = [edge_id for edge_id in _teacher_approach_edge_ids(teacher_model) if edge_id not in edge_map]
     copyable_missing = _copyable_missing_teacher_edge_ids(
         teacher_root.findall("connection"),
@@ -1463,6 +1490,7 @@ def _teacher_guided_repair_candidate(
         "edge_map": edge_map,
         "slot_edge_map": slot_edge_map_from_exemplar(movement_exemplar, edge_map),
         "movement_exemplar": movement_exemplar,
+        "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
         "missing_teacher_edge_ids": missing,
         "copyable_missing_teacher_edge_ids": copyable_missing,
         "uncopyable_missing_teacher_edge_ids": uncopyable_missing,
@@ -1490,11 +1518,50 @@ def _sumo_joined_cluster_id(node_ids: list[str]) -> str:
     return f"cluster_{head}{suffix}"
 
 
-def _teacher_candidate_edge_map(teacher_model: dict[str, object], candidate_model: dict[str, object]) -> dict[str, str]:
+def _teacher_candidate_edge_map(
+    teacher_model: dict[str, object],
+    candidate_model: dict[str, object],
+    *,
+    teacher_junction_id: str = "",
+    candidate_junction_id: str = "",
+    drop_endpoint_mismatches: bool = True,
+) -> dict[str, str]:
     edge_map: dict[str, str] = {}
     for direction in ("incoming", "outgoing"):
         edge_map.update(match_teacher_approaches(_approaches(teacher_model, direction), _approaches(candidate_model, direction)))
+    if drop_endpoint_mismatches and teacher_junction_id and candidate_junction_id:
+        edge_map = _drop_endpoint_mismatched_edge_map_entries(
+            teacher_model,
+            candidate_model,
+            edge_map,
+            teacher_junction_id=teacher_junction_id,
+            candidate_junction_id=candidate_junction_id,
+        )
     return dict(sorted((source, target) for source, target in edge_map.items() if source and target))
+
+
+def _drop_endpoint_mismatched_edge_map_entries(
+    teacher_model: dict[str, object],
+    candidate_model: dict[str, object],
+    edge_map: dict[str, str],
+    *,
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+) -> dict[str, str]:
+    teacher_signatures = _approach_endpoint_signatures(
+        teacher_model,
+        edge_map=edge_map,
+        source_junction_id=teacher_junction_id,
+        target_junction_id=candidate_junction_id,
+    )
+    candidate_signatures = _approach_endpoint_signatures(candidate_model)
+    keep: dict[str, str] = {}
+    for teacher_edge_id, candidate_edge_id in edge_map.items():
+        keys = [key for key in teacher_signatures if key.endswith(f":{candidate_edge_id}")]
+        if keys and any(teacher_signatures[key] != candidate_signatures.get(key) for key in keys):
+            continue
+        keep[teacher_edge_id] = candidate_edge_id
+    return keep
 
 
 def _teacher_approach_edge_ids(teacher_model: dict[str, object]) -> list[str]:
@@ -2384,6 +2451,68 @@ def _approach_endpoint_signatures(
     return signatures
 
 
+def _approach_endpoint_rebuild_plan(
+    teacher_model: dict[str, Any],
+    candidate_model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    teacher_junction_id: str = "",
+    candidate_junction_id: str = "",
+    candidate_junction_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    candidate_junction_ids = candidate_junction_ids or set()
+    edge_rebuilds = []
+    for direction in ("incoming", "outgoing"):
+        candidate_by_edge = {str(edge.get("edge_id", "")): edge for edge in _approaches(candidate_model, direction)}
+        for teacher_edge in _approaches(teacher_model, direction):
+            mapped_edge_id = _mapped_endpoint(str(teacher_edge.get("edge_id", "")), edge_map)
+            candidate_edge = candidate_by_edge.get(mapped_edge_id)
+            if not mapped_edge_id or candidate_edge is None:
+                continue
+            candidate_from = str(candidate_edge.get("from", ""))
+            candidate_to = str(candidate_edge.get("to", ""))
+            desired_from = _mapped_junction_ref(
+                str(teacher_edge.get("from", "")), teacher_junction_id, candidate_junction_id
+            )
+            desired_to = _mapped_junction_ref(str(teacher_edge.get("to", "")), teacher_junction_id, candidate_junction_id)
+            if (candidate_from, candidate_to) == (desired_from, desired_to):
+                continue
+            desired_external = {
+                endpoint for endpoint in (desired_from, desired_to) if endpoint and endpoint != candidate_junction_id
+            }
+            candidate_external = {
+                endpoint for endpoint in (candidate_from, candidate_to) if endpoint and endpoint != candidate_junction_id
+            }
+            missing_desired = sorted(endpoint for endpoint in desired_external if endpoint not in candidate_junction_ids)
+            edge_rebuilds.append(
+                {
+                    "approach_key": f"{direction}:{mapped_edge_id}",
+                    "edge_id": mapped_edge_id,
+                    "direction": direction,
+                    "candidate_from": candidate_from,
+                    "candidate_to": candidate_to,
+                    "desired_from": desired_from,
+                    "desired_to": desired_to,
+                    "affected_neighbor_junction_ids": sorted(candidate_external | desired_external),
+                    "missing_desired_endpoint_ids": missing_desired,
+                    "unsafe_direct_rewrite": True,
+                    "reason": "endpoint change affects neighboring junction connections and tlLogic; rebuild expanded scope",
+                }
+            )
+
+    affected = sorted({junction for item in edge_rebuilds for junction in item["affected_neighbor_junction_ids"]})
+    missing = sorted({junction for item in edge_rebuilds for junction in item["missing_desired_endpoint_ids"]})
+    return {
+        "status": "review" if edge_rebuilds else "pass",
+        "claim_status": "diagnostic-demo",
+        "recommended_action": "expand_rebuild_scope" if edge_rebuilds else "none",
+        "mismatch_count": len(edge_rebuilds),
+        "affected_neighbor_junction_ids": affected,
+        "missing_desired_endpoint_ids": missing,
+        "edge_rebuilds": edge_rebuilds,
+    }
+
+
 def _approach_edge_signature(edge: dict[str, Any], *, source_junction_id: str = "", target_junction_id: str = "") -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
@@ -2640,6 +2769,14 @@ def _mapped_lane_ref(
 
 def _mapped_endpoint(edge_id: str, edge_map: dict[str, str] | None) -> str:
     return edge_map.get(edge_id, edge_id) if edge_map is not None else edge_id
+
+
+def _net_junction_ids(net_file: Path) -> set[str]:
+    return {
+        junction.attrib["id"]
+        for junction in ET.parse(net_file).getroot().findall("junction")
+        if junction.attrib.get("id")
+    }
 
 
 def _mapped_internal_ref(value: str, source_junction_id: str, target_junction_id: str) -> str:
