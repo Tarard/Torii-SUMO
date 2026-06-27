@@ -943,10 +943,11 @@ def build_workflow_review_html(
             artifacts[key] = _as_path(workflow_summary.get(key))
     _write_json(workflow_report_file, workflow_summary)
 
+    review_net_file = net_file or connected_core_file or raw_net_file
     visualization_report = build_network_review_visuals(
         output_dir=output_dir / "visuals",
         prefix=prefix,
-        net_file=net_file or connected_core_file or raw_net_file,
+        net_file=review_net_file,
         reference_net_file=reference_net_file,
         topology_audit_report=topology_audit_report,
     )
@@ -972,7 +973,7 @@ def build_workflow_review_html(
     netedit_review = _write_netedit_review_files(
         output_dir=output_dir,
         prefix=prefix,
-        net_file=net_file or connected_core_file or raw_net_file,
+        net_file=review_net_file,
         map_layers=visualization_report.get("map_layers"),
         junctions=review_junctions,
     )
@@ -1535,6 +1536,7 @@ def build_workflow_review_html(
         "claim_status": claim_status,
         "workflow_review_html_status": "pass",
         "workflow_review_html_file": str(html_file),
+        "workflow_review_net_file": str(review_net_file or ""),
         "workflow_report_file": str(workflow_report_file),
         "review_manifest_file": str(review_manifest_file),
         "network_overview_png": str(visualization_report.get("network_overview_png", "")),
