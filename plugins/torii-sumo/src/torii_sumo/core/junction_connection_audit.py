@@ -46,10 +46,13 @@ def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, An
                 "dir": connection.attrib.get("dir", ""),
                 "state": connection.attrib.get("state", ""),
                 "via": via,
+                "tl": connection.attrib.get("tl", ""),
+                "linkIndex": connection.attrib.get("linkIndex", ""),
             }
         )
 
     top_external = [record for record in records if record["category"] == "top_external"]
+    controlled_links = [record for record in records if record["tl"] and record["linkIndex"]]
     return {
         "status": "pass",
         "claim_status": "diagnostic-demo",
@@ -61,6 +64,7 @@ def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, An
         "top_external_connection_count": len(top_external),
         "top_external_pair_count": len({(record["from"], record["to"]) for record in top_external}),
         "top_external_dir_counts": dict(Counter(record["dir"] or "blank" for record in top_external)),
+        "controlled_link_count": len(controlled_links),
         "crossing_count": sum(1 for edge in target_internal_edges if edge.attrib.get("function") == "crossing"),
         "walkingarea_count": sum(1 for edge in target_internal_edges if edge.attrib.get("function") == "walkingarea"),
         "connection_records": records,
@@ -77,12 +81,12 @@ def write_connection_signature(signature: dict[str, Any], output_dir: Path, pref
     signature_file.write_text(json.dumps(signature, indent=2, ensure_ascii=False), encoding="utf-8")
     _write_csv(
         records_file,
-        ["category", "from", "to", "fromLane", "toLane", "dir", "state", "via"],
+        ["category", "from", "to", "fromLane", "toLane", "dir", "state", "via", "tl", "linkIndex"],
         records,
     )
     _write_csv(
         top_external_file,
-        ["from", "to", "fromLane", "toLane", "dir", "state", "via"],
+        ["from", "to", "fromLane", "toLane", "dir", "state", "via", "tl", "linkIndex"],
         [record for record in records if record.get("category") == "top_external"],
     )
     return {

@@ -34,6 +34,26 @@ def test_connection_signature_separates_top_level_and_internal(tmp_path: Path) -
     assert signature["top_external_dir_counts"] == {"s": 1}
 
 
+def test_connection_signature_records_tls_link_indices(tmp_path: Path) -> None:
+    net_file = tmp_path / "tls.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" x="0" y="0" type="traffic_light"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="j" linkIndex="7" dir="s" state="O"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    signature = build_connection_signature(net_file, "j")
+
+    assert signature["controlled_link_count"] == 1
+    assert signature["connection_records"][0]["tl"] == "j"
+    assert signature["connection_records"][0]["linkIndex"] == "7"
+
+
 def test_connection_signature_counts_crossings_and_walkingareas(tmp_path: Path) -> None:
     net_file = tmp_path / "modal.net.xml"
     net_file.write_text(
