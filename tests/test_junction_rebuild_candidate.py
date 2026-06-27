@@ -1396,7 +1396,7 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
             "incoming": [
                     {
                         "edge_id": "teacher_in",
-                        "from": "teacher_source",
+                        "from": "shared_source",
                         "to": "teacher_j",
                         "type": "highway.primary",
                         "function": "",
@@ -1426,7 +1426,7 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
             "incoming": [
                     {
                         "edge_id": "cand_in",
-                        "from": "candidate_source",
+                        "from": "shared_source",
                         "to": "candidate_j",
                         "type": "highway.primary",
                         "function": "",
@@ -1460,12 +1460,13 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "from=teacher_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0.00,0.00 1.00,1.00:"
+        "incoming:cand_in": "from=shared_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0.00,0.00 1.00,1.00:"
     }
     assert parity["candidate"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "from=candidate_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0.00,0.00 1.00,1.00:"
+        "incoming:cand_in": "from=shared_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0.00,0.00 1.00,1.00:"
     }
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
+    assert "approach_endpoint_signature_mismatch_count" not in parity["delta"]
     assert gate["status"] == "fail"
     assert gate["failures"] == [
         {"report": "parity", "field": "approach_edge_signature_mismatch_count", "count": 1}
@@ -1524,6 +1525,9 @@ def test_teacher_parity_fails_on_mapped_approach_endpoint_mismatch() -> None:
     assert parity["candidate"]["approach_edge_signatures"]["incoming:cand_in"].startswith(
         "from=candidate_boundary|to=candidate_j|"
     )
+    assert parity["teacher"]["approach_endpoint_signatures"] == {"incoming:cand_in": "from=teacher_boundary|to=candidate_j"}
+    assert parity["candidate"]["approach_endpoint_signatures"] == {"incoming:cand_in": "from=candidate_boundary|to=candidate_j"}
+    assert parity["delta"]["approach_endpoint_signature_mismatch_count"] == 1
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
 
 
