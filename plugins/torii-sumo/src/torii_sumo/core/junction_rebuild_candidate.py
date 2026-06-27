@@ -133,7 +133,6 @@ def build_teacher_guided_repair_queue(
         key=lambda case: _teacher_guided_case_sort_key(case, pattern_records, pattern_templates)
     )
     repair_candidates = []
-    ready_so_far = 0
     for case in matched_cases:
         candidate = _attach_teacher_pattern_template(
             _attach_junction_pattern_delta(
@@ -153,14 +152,9 @@ def build_teacher_guided_repair_queue(
             pattern_templates,
         )
         repair_candidates.append(candidate)
-        if candidate["candidate_status"] == "ready_for_teacher_guided_variant":
-            ready_so_far += 1
-        if (
-            max_ready_candidates is not None
-            and max_ready_candidates > 0
-            and ready_so_far >= max_ready_candidates
-        ):
-            break
+    repair_candidates.sort(key=_teacher_guided_candidate_sort_key)
+    if max_ready_candidates is not None and max_ready_candidates > 0:
+        repair_candidates = _limit_ready_repair_candidates(repair_candidates, max_ready_candidates)
     ready_count = sum(
         1 for candidate in repair_candidates if candidate["candidate_status"] == "ready_for_teacher_guided_variant"
     )
@@ -177,7 +171,7 @@ def build_teacher_guided_repair_queue(
         "matched_case_count": len(matched_cases),
         "queued_case_count": len(repair_candidates),
         "queue_truncated": len(repair_candidates) < len(matched_cases),
-        "queue_order_policy": "highest_teacher_template_count_then_smallest_matched_candidate_node_count_first",
+        "queue_order_policy": "largest_vehicle_movement_gap_then_highest_teacher_template_count",
         "max_ready_candidates": max_ready_candidates if max_ready_candidates is not None else "",
         "repair_candidate_count": len(repair_candidates),
         "ready_candidate_count": ready_count,
@@ -1890,6 +1884,27 @@ def _teacher_guided_case_sort_key(
     reference_id = str(case.get("reference_id", ""))
     reference_node_count = len(reference_id.removeprefix("cluster_").split("_")) if reference_id else 1_000_000
     return (-template_count, candidate_node_count, reference_node_count, reference_id)
+
+
+def _teacher_guided_candidate_sort_key(candidate: dict[str, object]) -> tuple[int, int, int, int, str]:
+    movement_gap = int(candidate.get("vehicle_movement_matrix_missing_count", 0) or 0)
+    template_count = int(candidate.get("teacher_pattern_template_count", 0) or 0)
+    candidate_nodes = candidate.get("matched_candidate_node_ids")
+    candidate_node_count = len(candidate_nodes) if isinstance(candidate_nodes, list) else 1_000_000
+    status_rank = 0 if candidate.get("candidate_status") in {"ready_for_teacher_guided_variant", "needs_expanded_rebuild_scope"} else 1
+    return (-movement_gap, status_rank, -template_count, candidate_node_count, str(candidate.get("reference_id", "")))
+
+
+def _limit_ready_repair_candidates(candidates: list[dict[str, object]], max_ready_candidates: int) -> list[dict[str, object]]:
+    selected = []
+    ready_count = 0
+    for candidate in candidates:
+        selected.append(candidate)
+        if candidate.get("candidate_status") == "ready_for_teacher_guided_variant":
+            ready_count += 1
+        if ready_count >= max_ready_candidates:
+            break
+    return selected
 
 
 def _queue_path(value: object, base_dir: Path | None) -> Path:
