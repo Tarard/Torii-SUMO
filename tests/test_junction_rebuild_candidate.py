@@ -1352,6 +1352,42 @@ def test_teacher_parity_fails_on_mapped_pedestrian_link_signature_mismatch() -> 
     ]
 
 
+def test_teacher_parity_fails_on_mapped_crossing_edge_set_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "crossings": [{"edge_id": ":teacher_j_c0", "crossingEdges": ["teacher_in", "teacher_out"]}],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "crossings": [{"edge_id": ":candidate_j_c0", "crossingEdges": ["cand_in", "cand_wrong"]}],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["crossing_signatures"] == {":candidate_j_c0": "edges=cand_in cand_out"}
+    assert parity["candidate"]["crossing_signatures"] == {":candidate_j_c0": "edges=cand_in cand_wrong"}
+    assert parity["delta"]["crossing_signature_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "crossing_signature_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_guided_semantics_gate_fails_on_skipped_pedestrian_connections() -> None:
     gate = _teacher_guided_semantics_gate(
         {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
