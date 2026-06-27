@@ -200,6 +200,36 @@ def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path
     ]
 
 
+def test_extract_junction_pattern_index_groups_parallel_edges_into_physical_arms(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="west_in_a" from="wa" to="j"><lane id="west_in_a_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="west_in_b" from="wb" to="j"><lane id="west_in_b_0" index="0" allow="passenger" shape="-10,1 0,1"/></edge>
+  <edge id="south_in" from="s" to="j"><lane id="south_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="east_in" from="e" to="j"><lane id="east_in_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="north_in" from="n" to="j"><lane id="north_in_0" index="0" allow="passenger" shape="0,10 0,0"/></edge>
+  <edge id="east_out_a" from="j" to="ea"><lane id="east_out_a_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="east_out_b" from="j" to="eb"><lane id="east_out_b_0" index="0" allow="passenger" shape="0,1 10,1"/></edge>
+  <edge id="south_out" from="j" to="so"><lane id="south_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="west_out" from="j" to="wo"><lane id="west_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="north_out" from="j" to="no"><lane id="north_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="west_in_a_0 west_in_b_0 south_in_0 east_in_0 north_in_0" intLanes=""/>
+  <connection from="west_in_a" to="east_out_a" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s"/>
+  <tlLogic id="j" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    records = extract_junction_pattern_index(net_file, min_approaches=3, max_approaches=4)
+
+    assert len(records) == 1
+    assert records[0]["in_edge_count"] == 5
+    assert records[0]["out_edge_count"] == 5
+    assert records[0]["arm_count"] == 4
+    assert records[0]["pattern_family"] == "four_way"
+
+
 def test_summarize_junction_pattern_templates_groups_reusable_records() -> None:
     records = [
         {
@@ -345,8 +375,34 @@ def test_compare_junction_pattern_records_catches_tum_template_fields(tmp_path: 
         "control_type",
         "has_tls",
         "internal_function_counts",
+        "movement_signature_counts",
         "request_bit_lengths_ok",
     ]
+
+
+def test_compare_junction_pattern_records_flags_movement_signature_template_delta() -> None:
+    teacher = {
+        "approach_edge_ids": ["west_in", "south_in", "east_in"],
+        "control_type": "traffic_light",
+        "has_tls": True,
+        "internal_function_counts": {"crossing": 0, "internal": 3, "walkingarea": 0},
+        "request_bit_lengths_ok": True,
+        "movement_signature_counts": {
+            "dir=s|state=O|fromLane=0|toLane=0|controlled=true|via=true": 3,
+        },
+    }
+    candidate = {
+        **teacher,
+        "movement_signature_counts": {
+            "dir=s|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 3,
+        },
+    }
+
+    comparison = compare_junction_pattern_records(teacher, candidate)
+
+    assert comparison["status"] == "fail"
+    assert comparison["mismatch_fields"] == ["movement_signature_counts"]
+    assert comparison["teacher"]["movement_signature_counts"] != comparison["candidate"]["movement_signature_counts"]
 
 
 def test_extract_junction_pattern_index_keeps_blank_connection_dir(tmp_path: Path) -> None:
@@ -461,7 +517,7 @@ def test_extract_junction_pattern_index_skips_low_approach_junctions_before_mode
 
     extract_junction_pattern_index(net_file, min_approaches=3, max_approaches=4)
 
-    assert calls == ["three"]
+    assert calls == ["three", "five"]
 
 
 def test_extract_junction_pattern_exemplar_uses_slots_not_edge_ids(tmp_path: Path) -> None:

@@ -215,6 +215,7 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "control_type": 1,
         "has_tls": 1,
         "internal_function_counts": 1,
+        "movement_signature_counts": 1,
         "request_bit_lengths_ok": 1,
     }
     comparison = report["junction_pattern_comparisons"][0]
@@ -224,6 +225,7 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "control_type",
         "has_tls",
         "internal_function_counts",
+        "movement_signature_counts",
         "request_bit_lengths_ok",
     ]
     assert comparison["teacher"]["control_type"] == "traffic_light"
@@ -234,7 +236,10 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
     delta_file = Path(report["junction_pattern_comparisons_file"])
     rows = list(csv.DictReader(delta_file.read_text(encoding="utf-8").splitlines()))
     assert rows[0]["junction_id"] == "cluster_a_b"
-    assert rows[0]["mismatch_fields"] == "control_type;has_tls;internal_function_counts;request_bit_lengths_ok"
+    assert (
+        rows[0]["mismatch_fields"]
+        == "control_type;has_tls;internal_function_counts;movement_signature_counts;request_bit_lengths_ok"
+    )
     assert rows[0]["teacher_control_type"] == "traffic_light"
     assert rows[0]["candidate_control_type"] == "priority"
     assert json.loads(rows[0]["teacher_internal_function_counts"]) == {"crossing": 1, "internal": 1, "walkingarea": 1}

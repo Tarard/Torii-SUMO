@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _compare_teacher_models,
+    _netedit_review_actions,
     _teacher_guided_semantics_gate,
     _stage_file,
     build_rebuild_candidate,
@@ -21,6 +22,10 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_vehicle_connection_attrs_net,
 )
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+
+
+def test_netedit_review_actions_routes_movement_signature_delta_to_vehicle_matrix_rebuild() -> None:
+    assert _netedit_review_actions(["movement_signature_counts"]) == ["rebuild_vehicle_movement_matrix"]
 
 
 def test_approach_endpoint_rebuild_plan_requires_neighbor_scope_for_endpoint_mismatch() -> None:

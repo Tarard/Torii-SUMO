@@ -160,14 +160,14 @@ def extract_junction_pattern_index(
             for lane_id in _split(junction.attrib.get("incLanes", ""))
             if (edge_id := lane_to_edge_id.get(lane_id)) and not edge_id.startswith(":")
         }
-        if not (min_approaches <= len(incoming_edge_ids) <= max_approaches):
+        if len(incoming_edge_ids) < min_approaches:
             continue
 
         model = _extract_teacher_junction_model(root, net_file, junction_id)
         summary = model["summary"]
         in_edge_count = int(summary["incoming_vehicle_edge_count"])
         out_edge_count = int(summary["outgoing_vehicle_edge_count"])
-        arm_count = min(in_edge_count, out_edge_count)
+        arm_count = _approach_arm_count(model)
         if arm_count < min_approaches or arm_count > max_approaches:
             continue
 
@@ -406,7 +406,7 @@ def _pattern_fields(model: dict[str, Any]) -> dict[str, Any]:
     summary = model["summary"]
     in_edge_count = int(summary["incoming_vehicle_edge_count"])
     out_edge_count = int(summary["outgoing_vehicle_edge_count"])
-    arm_count = min(in_edge_count, out_edge_count)
+    arm_count = _approach_arm_count(model)
     dir_counts = dict(sorted(dict(summary["vehicle_connection_dirs"]).items()))
     all_connections = [
         connection
@@ -448,12 +448,39 @@ def _pattern_fields(model: dict[str, Any]) -> dict[str, Any]:
     return {"pattern_key": _pattern_key(fields), **fields}
 
 
+def _approach_arm_count(model: dict[str, Any]) -> int:
+    approaches = model.get("approaches", {}) if isinstance(model.get("approaches"), dict) else {}
+    incoming = _bearing_group_count(approaches.get("incoming", []) or [])
+    outgoing = _bearing_group_count(approaches.get("outgoing", []) or [])
+    if incoming and outgoing:
+        return min(incoming, outgoing)
+    return incoming or outgoing
+
+
+def _bearing_group_count(edges: list[dict[str, Any]], max_delta: float = 20.0) -> int:
+    groups: list[float] = []
+    unknown = 0
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        try:
+            bearing = float(edge["bearing"])
+        except (KeyError, TypeError, ValueError):
+            unknown += 1
+            continue
+        if any(_bearing_delta(bearing, group) <= max_delta for group in groups):
+            continue
+        groups.append(bearing)
+    return len(groups) + unknown
+
+
 def compare_junction_pattern_records(teacher: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     fields = [
         "approach_edge_ids",
         "control_type",
         "has_tls",
         "internal_function_counts",
+        "movement_signature_counts",
         "request_bit_lengths_ok",
     ]
     mismatches = [field for field in fields if teacher.get(field) != candidate.get(field)]
