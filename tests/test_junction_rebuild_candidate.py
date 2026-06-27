@@ -718,6 +718,9 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     )
 
     assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["parity_gate_status"] == "pass"
+    assert report["review_policy"].startswith("diagnostic")
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
     assert report["target_internal_normalize"] is None

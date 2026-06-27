@@ -783,12 +783,15 @@ def build_teacher_guided_junction_variant(
     ]
     sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
     final_model = extract_teacher_junction_model(final_net_file, junction_id)
+    parity = _compare_teacher_models(teacher_model, final_model)
+    parity_gate_status = "pass" if all(value == 0 for value in parity["delta"].values()) else "fail"
     status = "pass" if sumo_report.get("status") == "pass" else "fail"
     return _write_teacher_guided_report(
         report_file,
         {
             "status": status,
             "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+            "parity_gate_status": parity_gate_status,
             "junction_id": junction_id,
             "teacher_net_file": str(teacher_net_file),
             "candidate_net_file": str(candidate_net_file),
@@ -820,7 +823,7 @@ def build_teacher_guided_junction_variant(
             "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
             "tl_logic": tl_logic_report,
             "sumo_load": sumo_report,
-            "parity": _compare_teacher_models(teacher_model, final_model),
+            "parity": parity,
             "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
         },
     )
