@@ -6,6 +6,7 @@ from typing import Any, Callable, Mapping
 from .osm_area import osm_map_url_bbox, osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .junction_aggregation import build_junction_aggregation_variant
+from .junction_rebuild_candidate import build_teacher_guided_repair_queue
 from .netedit import launch_netedit
 from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
@@ -309,6 +310,16 @@ def _junction_pattern_index_gate(report: Mapping[str, Any] | None) -> str:
     return "blocked"
 
 
+def _teacher_guided_parity_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    if report.get("status") != "pass":
+        return _gate_value(report)
+    if _int_field(report, "repair_candidate_count") == 0:
+        return "skipped"
+    return "blocked"
+
+
 def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
     if report is None:
         return "skipped"
@@ -465,6 +476,7 @@ def run_osm_cleanup_workflow(
     reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
+    teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
@@ -691,6 +703,7 @@ def run_osm_cleanup_workflow(
     junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
+    teacher_guided_repair_queue_report: dict[str, Any] | None = None
     reference_hierarchy_audit_report: dict[str, Any] | None = None
     reference_hierarchy_audit_candidate_layer = "not_applicable"
     reference_hierarchy_audit_candidate_net_file: Path | None = None
@@ -1013,6 +1026,13 @@ def run_osm_cleanup_workflow(
                 candidate_joined_net_file = Path(str(joined_value))
                 if candidate_joined_net_file.exists():
                     reference_visual_detail_comparison_net_file = candidate_joined_net_file
+        teacher_guided_repair_queue_report = teacher_guided_repair_queue_func(
+            teacher_net_file=reference_net_file,
+            candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
+            reference_join_audit_report=reference_join_audit_report,
+            output_dir=output_dir / "teacher_guided_repair_queue",
+            prefix=f"{prefix}_teacher_guided_repair",
+        )
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -1192,7 +1212,7 @@ def run_osm_cleanup_workflow(
         gate_status["tls_semantics_parity"] = "blocked"
         gate_status["internal_junction_parity"] = "blocked"
         gate_status["netedit_connection_mode_review"] = "blocked"
-        gate_status["teacher_guided_junction_parity"] = "blocked"
+        gate_status["teacher_guided_junction_parity"] = _teacher_guided_parity_gate(teacher_guided_repair_queue_report)
     if topology_audit_report is not None:
         gate_status["topology_audit"] = _gate_value(topology_audit_report)
     if junction_aggregation_report is not None:
@@ -1366,6 +1386,21 @@ def run_osm_cleanup_workflow(
         "reference_join_aggregation_variant_file": ""
         if reference_join_aggregation_report is None
         else str(reference_join_aggregation_report.get("junction_aggregation_variant_file", "")),
+        "teacher_guided_repair_queue_status": "skipped"
+        if teacher_guided_repair_queue_report is None
+        else teacher_guided_repair_queue_report.get("status", "fail"),
+        "teacher_guided_repair_candidate_count": 0
+        if teacher_guided_repair_queue_report is None
+        else teacher_guided_repair_queue_report.get("repair_candidate_count", 0),
+        "teacher_guided_repair_ready_candidate_count": 0
+        if teacher_guided_repair_queue_report is None
+        else teacher_guided_repair_queue_report.get("ready_candidate_count", 0),
+        "teacher_guided_repair_queue_file": ""
+        if teacher_guided_repair_queue_report is None
+        else str(teacher_guided_repair_queue_report.get("queue_file", "")),
+        "teacher_guided_repair_queue_csv_file": ""
+        if teacher_guided_repair_queue_report is None
+        else str(teacher_guided_repair_queue_report.get("queue_csv_file", "")),
         "reference_hierarchy_status": "skipped"
         if reference_hierarchy_audit_report is None
         else reference_hierarchy_audit_report.get(
@@ -1490,6 +1525,7 @@ def run_osm_cleanup_workflow(
         "reference_scope_pruning": reference_scope_pruning_report or {},
         "reference_join_audit": reference_join_audit_report or {},
         "reference_join_aggregation": reference_join_aggregation_report or {},
+        "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
         "routeability_audit": routeability_audit_report or {},
         "netedit": netedit_report,
         "reference_visual_detail_netedit": reference_visual_detail_netedit_report,

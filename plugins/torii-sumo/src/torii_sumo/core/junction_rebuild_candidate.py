@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,7 @@ import xml.etree.ElementTree as ET
 from .command_runner import run_command
 from .junction_connection_audit import build_connection_signature, write_connection_signature
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
-from .junction_teacher_model import extract_teacher_junction_model
+from .junction_teacher_model import extract_teacher_junction_model, match_teacher_approaches
 
 
 def build_rebuild_candidate(
@@ -63,6 +64,52 @@ def build_rebuild_candidate(
     }
     summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     report["summary_file"] = str(summary_file)
+    return report
+
+
+def build_teacher_guided_repair_queue(
+    *,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    reference_join_audit_report: dict[str, Any],
+    output_dir: Path,
+    prefix: str = "teacher_guided_repair",
+) -> dict[str, object]:
+    if not teacher_net_file.exists():
+        return _failure(f"teacher net file does not exist: {teacher_net_file}")
+    if not candidate_net_file.exists():
+        return _failure(f"candidate net file does not exist: {candidate_net_file}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    repair_candidates = [
+        _teacher_guided_repair_candidate(
+            case=case,
+            teacher_net_file=teacher_net_file,
+            candidate_net_file=candidate_net_file,
+        )
+        for case in reference_join_audit_report.get("matched_cases", []) or []
+        if isinstance(case, dict)
+    ]
+    ready_count = sum(
+        1 for candidate in repair_candidates if candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+    )
+    queue_file = output_dir / f"{prefix}_queue.json"
+    queue_csv_file = output_dir / f"{prefix}_queue.csv"
+    report = {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "repair_candidate_count": len(repair_candidates),
+        "ready_candidate_count": ready_count,
+        "blocked_candidate_count": len(repair_candidates) - ready_count,
+        "queue_file": str(queue_file),
+        "queue_csv_file": str(queue_csv_file),
+        "repair_candidates": repair_candidates,
+        "review_policy": "queue only; run teacher-guided variants and inspect NetEdit connection mode before adoption",
+    }
+    queue_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    _write_teacher_guided_queue_csv(queue_csv_file, repair_candidates)
     return report
 
 
@@ -865,6 +912,107 @@ def _approach_edges(candidate_model: dict[str, object], direction: str) -> list[
         for edge in approaches.get(direction, []) or []
         if isinstance(edge, dict) and edge.get("edge_id")
     ]
+
+
+def _approaches(model: dict[str, object], direction: str) -> list[dict[str, Any]]:
+    approaches = model.get("approaches", {})
+    if not isinstance(approaches, dict):
+        return []
+    return [edge for edge in approaches.get(direction, []) or [] if isinstance(edge, dict)]
+
+
+def _teacher_guided_repair_candidate(
+    *,
+    case: dict[str, Any],
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+) -> dict[str, object]:
+    junction_id = str(case.get("reference_id", ""))
+    base = {
+        "reference_id": junction_id,
+        "junction_id": junction_id,
+        "matched_candidate_node_ids": list(case.get("matched_candidate_node_ids") or case.get("candidate_node_ids") or []),
+        "learned_rule": str(case.get("learned_rule", "")),
+    }
+    if not junction_id:
+        return {**base, "candidate_status": "invalid_reference_id", "edge_map": {}, "missing_teacher_edge_ids": []}
+
+    try:
+        teacher_model = extract_teacher_junction_model(teacher_net_file, junction_id)
+    except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
+        return {
+            **base,
+            "candidate_status": "teacher_model_failed",
+            "edge_map": {},
+            "missing_teacher_edge_ids": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    try:
+        candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
+    except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
+        return {
+            **base,
+            "candidate_status": "needs_joined_candidate_junction",
+            "edge_map": {},
+            "missing_teacher_edge_ids": _teacher_approach_edge_ids(teacher_model),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    edge_map = _teacher_candidate_edge_map(teacher_model, candidate_model)
+    missing = [edge_id for edge_id in _teacher_approach_edge_ids(teacher_model) if edge_id not in edge_map]
+    return {
+        **base,
+        "candidate_status": "ready_for_teacher_guided_variant" if not missing else "edge_map_incomplete",
+        "edge_map": edge_map,
+        "missing_teacher_edge_ids": missing,
+        "teacher_incoming_edge_count": len(_approach_edges(teacher_model, "incoming")),
+        "teacher_outgoing_edge_count": len(_approach_edges(teacher_model, "outgoing")),
+        "candidate_incoming_edge_count": len(_approach_edges(candidate_model, "incoming")),
+        "candidate_outgoing_edge_count": len(_approach_edges(candidate_model, "outgoing")),
+    }
+
+
+def _teacher_candidate_edge_map(teacher_model: dict[str, object], candidate_model: dict[str, object]) -> dict[str, str]:
+    edge_map: dict[str, str] = {}
+    for direction in ("incoming", "outgoing"):
+        edge_map.update(match_teacher_approaches(_approaches(teacher_model, direction), _approaches(candidate_model, direction)))
+    return dict(sorted((source, target) for source, target in edge_map.items() if source and target))
+
+
+def _teacher_approach_edge_ids(teacher_model: dict[str, object]) -> list[str]:
+    return sorted(dict.fromkeys(_approach_edges(teacher_model, "incoming") + _approach_edges(teacher_model, "outgoing")))
+
+
+def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "reference_id",
+                "junction_id",
+                "candidate_status",
+                "edge_map_size",
+                "missing_teacher_edge_ids",
+                "matched_candidate_node_ids",
+                "learned_rule",
+                "error",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            edge_map = row.get("edge_map", {})
+            writer.writerow(
+                {
+                    "reference_id": row.get("reference_id", ""),
+                    "junction_id": row.get("junction_id", ""),
+                    "candidate_status": row.get("candidate_status", ""),
+                    "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
+                    "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
+                    "matched_candidate_node_ids": ";".join(str(item) for item in row.get("matched_candidate_node_ids", []) or []),
+                    "learned_rule": row.get("learned_rule", ""),
+                    "error": row.get("error", ""),
+                }
+            )
 
 
 def _candidate_lane_counts(candidate_model: dict[str, object]) -> dict[str, int]:
