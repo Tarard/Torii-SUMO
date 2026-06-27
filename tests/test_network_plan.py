@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 
 from torii_sumo.core.network_permissions import apply_service_passenger_permissions
 from torii_sumo.core.network_plan import derive_network_plan
-from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.osm_workflow import export_plain_net_for_teacher_guided_repair, run_osm_cleanup_workflow
 from torii_sumo.core.reference_bbox import derive_reference_net_bbox
 
 
@@ -175,6 +175,37 @@ def test_apply_service_passenger_permissions_adds_passenger_to_service_lanes(tmp
     assert report["changed_lane_count"] == 1
     assert "passenger" in service_lane.attrib["allow"].split()
     assert residential_lane.attrib["allow"] == "passenger"
+
+
+def test_export_plain_net_for_teacher_guided_repair_resolves_relative_output_dir(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    def fake_command(command, **kwargs):
+        calls["command"] = command
+        calls["cwd"] = kwargs["cwd"]
+        plain_prefix = Path(command[-1])
+        for suffix in (".nod.xml", ".edg.xml", ".con.xml"):
+            Path(f"{plain_prefix}{suffix}").write_text("<xml/>", encoding="utf-8")
+        return {"status": "pass", "returncode": 0}
+
+    report = export_plain_net_for_teacher_guided_repair(
+        net_file=Path("candidate.net.xml"),
+        output_dir=Path("plain"),
+        prefix="demo",
+        command_runner=fake_command,
+    )
+
+    expected_prefix = tmp_path / "plain" / "demo"
+    assert report["status"] == "pass"
+    assert calls["command"][-1] == str(expected_prefix)
+    assert calls["cwd"] == tmp_path / "plain"
+    assert report["raw_node_file"] == str(expected_prefix) + ".nod.xml"
 
 
 def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_path: Path) -> None:
@@ -358,6 +389,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
 
     def fake_teacher_guided_repair_queue(**kwargs):
         calls["teacher_guided_candidate_net_file"] = kwargs["candidate_net_file"]
+        calls["teacher_guided_queue_max_ready_candidates"] = kwargs["max_ready_candidates"]
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -369,12 +401,44 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "warnings": [],
         }
 
+    def fake_teacher_guided_plain_export(**kwargs):
+        calls["teacher_guided_plain_net_file"] = kwargs["net_file"]
+        calls["teacher_guided_plain_netconvert_binary"] = kwargs["netconvert_binary"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "raw_node_file": str(tmp_path / "plain.nod.xml"),
+            "raw_edge_file": str(tmp_path / "plain.edg.xml"),
+            "raw_connection_file": str(tmp_path / "plain.con.xml"),
+            "raw_type_file": str(tmp_path / "plain.typ.xml"),
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_repair_run(**kwargs):
+        calls["teacher_guided_run_queue_report"] = kwargs["queue_report"]
+        calls["teacher_guided_run_raw_node_file"] = kwargs["raw_node_file"]
+        calls["teacher_guided_run_replay_target_internal_subgraph"] = kwargs["replay_target_internal_subgraph"]
+        calls["teacher_guided_run_netconvert_binary"] = kwargs["netconvert_binary"]
+        calls["teacher_guided_run_sumo_binary"] = kwargs["sumo_binary"]
+        calls["teacher_guided_run_max_ready_candidates"] = kwargs["max_ready_candidates"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "parity_gate_status": "pass",
+            "attempted_candidate_count": 1,
+            "pass_candidate_count": 1,
+            "run_report_file": str(tmp_path / "teacher_guided_run.json"),
+            "warnings": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
         output_dir=tmp_path,
         prefix="reference-join",
         network_profile="reference_matched",
         reference_net_file=reference_net_file,
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {
             "status": "pass",
@@ -420,12 +484,23 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         reference_join_audit_func=fake_reference_join_audit,
         reference_join_aggregation_func=fake_reference_join_aggregation,
         teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
+        teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
+        teacher_guided_repair_run_func=fake_teacher_guided_repair_run,
     )
 
     visual_detail_net_file = tmp_path / "sumo" / "reference-join_reference_visual_detail.net.xml"
     assert calls["reference_join_candidate_net_file"] == visual_detail_net_file
     assert calls["aggregation_candidate_net_file"] == visual_detail_net_file
     assert calls["teacher_guided_candidate_net_file"] == tmp_path / "aggregated.net.xml"
+    assert calls["teacher_guided_queue_max_ready_candidates"] == 1
+    assert calls["teacher_guided_plain_net_file"] == tmp_path / "aggregated.net.xml"
+    assert calls["teacher_guided_plain_netconvert_binary"] == "netconvert-test"
+    assert calls["teacher_guided_run_queue_report"]["ready_candidate_count"] == 1
+    assert calls["teacher_guided_run_raw_node_file"] == tmp_path / "plain.nod.xml"
+    assert calls["teacher_guided_run_replay_target_internal_subgraph"] is True
+    assert calls["teacher_guided_run_netconvert_binary"] == "netconvert-test"
+    assert calls["teacher_guided_run_sumo_binary"] == "sumo-test"
+    assert calls["teacher_guided_run_max_ready_candidates"] == 1
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
     assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
@@ -438,12 +513,17 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_queue_status"] == "pass"
     assert report["teacher_guided_repair_ready_candidate_count"] == 1
     assert report["teacher_guided_repair_queue_file"] == str(tmp_path / "teacher_guided_queue.json")
+    assert report["teacher_guided_repair_plain_export_status"] == "pass"
+    assert report["teacher_guided_repair_raw_node_file"] == str(tmp_path / "plain.nod.xml")
+    assert report["teacher_guided_repair_run_status"] == "pass"
+    assert report["teacher_guided_repair_parity_gate_status"] == "pass"
+    assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
     assert report["gate_status"]["connection_semantics_parity"] == "blocked"
     assert report["gate_status"]["tls_semantics_parity"] == "blocked"
     assert report["gate_status"]["internal_junction_parity"] == "blocked"
     assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
-    assert report["gate_status"]["teacher_guided_junction_parity"] == "blocked"
+    assert report["gate_status"]["teacher_guided_junction_parity"] == "pass"
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
