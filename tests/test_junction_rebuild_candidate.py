@@ -939,6 +939,10 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
                     "junction_id": "j",
                     "candidate_status": "needs_expanded_rebuild_scope",
                     "edge_map": {"teacher_in": "approach_in"},
+                    "teacher_pattern_key": "three_way|control=right_before_left",
+                    "teacher_pattern_family": "three_way",
+                    "teacher_pattern_template_count": 127,
+                    "teacher_pattern_template_examples": ["cluster_template_1"],
                     "expanded_rebuild_scope": {
                         "status": "review",
                         "recommended_action": "rebuild_plain_xml_scope",
@@ -975,6 +979,16 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert report["expanded_scope_candidate_count"] == 1
     scope_report = report["expanded_scope_reports"][0]
     assert scope_report["status"] == "pass"
+    assert scope_report["teacher_pattern_key"] == "three_way|control=right_before_left"
+    assert scope_report["teacher_pattern_template_count"] == 127
+    assert report["teacher_pattern_contexts"] == [
+        {
+            "teacher_pattern_key": "three_way|control=right_before_left",
+            "teacher_pattern_family": "three_way",
+            "teacher_pattern_template_count": 127,
+            "teacher_pattern_template_examples": ["cluster_template_1"],
+        }
+    ]
     assert scope_report["node_count"] == 4
     assert scope_report["edge_count"] == 3
     assert scope_report["connection_count"] == 1
