@@ -2286,7 +2286,8 @@ def _approach_edge_signatures(
 def _approach_edge_signature(edge: dict[str, Any]) -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
-        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:{lane.get('width', '')}:"
+        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:"
+        f"{lane.get('speed', '')}:{lane.get('width', '')}:"
         f"{lane.get('shape', '')}:{lane.get('outlineShape', '')}"
         for lane in lanes
         if isinstance(lane, dict)
@@ -2441,7 +2442,8 @@ def _walking_area_signatures(
 def _internal_edge_signature(edge: dict[str, Any]) -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
-        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:{lane.get('width', '')}:"
+        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:"
+        f"{lane.get('speed', '')}:{lane.get('width', '')}:"
         f"{lane.get('shape', '')}:{lane.get('outlineShape', '')}"
         for lane in lanes
         if isinstance(lane, dict)
