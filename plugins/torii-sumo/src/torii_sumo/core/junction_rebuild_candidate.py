@@ -1483,14 +1483,27 @@ def _teacher_guided_repair_candidate(
     )
     uncopyable_missing = [edge_id for edge_id in missing if edge_id not in set(copyable_missing)]
     movement_exemplar = extract_junction_pattern_exemplar(teacher_net_file, reference_id)
+    expanded_rebuild_scope = _expanded_rebuild_scope(
+        candidate_junction_id,
+        approach_endpoint_rebuild_plan,
+        blocked_teacher_edge_ids=uncopyable_missing,
+    )
+    candidate_status = "ready_for_teacher_guided_variant"
+    if uncopyable_missing:
+        candidate_status = (
+            "needs_expanded_rebuild_scope"
+            if expanded_rebuild_scope["status"] == "review"
+            else "edge_map_incomplete"
+        )
     return {
         **base,
         "junction_id": candidate_junction_id,
-        "candidate_status": "ready_for_teacher_guided_variant" if not uncopyable_missing else "edge_map_incomplete",
+        "candidate_status": candidate_status,
         "edge_map": edge_map,
         "slot_edge_map": slot_edge_map_from_exemplar(movement_exemplar, edge_map),
         "movement_exemplar": movement_exemplar,
         "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
+        "expanded_rebuild_scope": expanded_rebuild_scope,
         "missing_teacher_edge_ids": missing,
         "copyable_missing_teacher_edge_ids": copyable_missing,
         "uncopyable_missing_teacher_edge_ids": uncopyable_missing,
@@ -1516,6 +1529,27 @@ def _sumo_joined_cluster_id(node_ids: list[str]) -> str:
     head = "_".join(ids[:4])
     suffix = "" if len(ids) <= 4 else f"_#{len(ids) - 4}more"
     return f"cluster_{head}{suffix}"
+
+
+def _expanded_rebuild_scope(
+    core_junction_id: str,
+    approach_endpoint_rebuild_plan: dict[str, Any],
+    *,
+    blocked_teacher_edge_ids: list[str],
+) -> dict[str, Any]:
+    if not blocked_teacher_edge_ids or approach_endpoint_rebuild_plan.get("status") != "review":
+        return {"status": "pass", "recommended_action": "none", "junction_ids": []}
+    neighbor_ids = [str(item) for item in approach_endpoint_rebuild_plan.get("affected_neighbor_junction_ids", []) or []]
+    missing_ids = [str(item) for item in approach_endpoint_rebuild_plan.get("missing_desired_endpoint_ids", []) or []]
+    return {
+        "status": "review",
+        "recommended_action": "rebuild_plain_xml_scope",
+        "core_junction_id": core_junction_id,
+        "junction_ids": sorted({core_junction_id, *neighbor_ids, *missing_ids}),
+        "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
+        "missing_desired_endpoint_ids": missing_ids,
+        "reason": "approach endpoints differ and at least one missing teacher edge cannot be copied safely",
+    }
 
 
 def _teacher_candidate_edge_map(
