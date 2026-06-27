@@ -1980,6 +1980,13 @@ def _compare_teacher_models(
         candidate_summary["junction_signature"] = candidate_junction_signature
         if teacher_junction_signature != candidate_junction_signature:
             delta["junction_signature_mismatch_count"] = 1
+        teacher_approach_signatures = _approach_edge_signatures(teacher_model, edge_map=edge_map)
+        candidate_approach_signatures = _approach_edge_signatures(candidate_model)
+        approach_mismatch_count = _dict_mismatch_count(teacher_approach_signatures, candidate_approach_signatures)
+        teacher_summary["approach_edge_signatures"] = teacher_approach_signatures
+        candidate_summary["approach_edge_signatures"] = candidate_approach_signatures
+        if approach_mismatch_count:
+            delta["approach_edge_signature_mismatch_count"] = approach_mismatch_count
         teacher_crossing_signatures = _crossing_signatures(
             teacher_model,
             edge_map=edge_map,
@@ -2244,6 +2251,34 @@ def _junction_signature(
         str(junction.get("y", "")),
     )
     return f"type={junction.get('type', '')}|incLanes={inc_lanes}|intLanes={int_lanes}|shape={shape}"
+
+
+def _approach_edge_signatures(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+) -> dict[str, str]:
+    approaches = model.get("approaches", {}) if isinstance(model.get("approaches"), dict) else {}
+    signatures: dict[str, str] = {}
+    for direction in ("incoming", "outgoing"):
+        for edge in approaches.get(direction, []) or []:
+            if not isinstance(edge, dict):
+                continue
+            edge_id = _mapped_endpoint(str(edge.get("edge_id", "")), edge_map)
+            if not edge_id:
+                continue
+            signatures[f"{direction}:{edge_id}"] = _approach_edge_signature(edge)
+    return signatures
+
+
+def _approach_edge_signature(edge: dict[str, Any]) -> str:
+    lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
+    lane_signatures = [
+        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('width', '')}:{lane.get('shape', '')}"
+        for lane in lanes
+        if isinstance(lane, dict)
+    ]
+    return f"type={edge.get('type', '')}|function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
 
 
 def _relative_shape(shape: str, x: str, y: str) -> str:
