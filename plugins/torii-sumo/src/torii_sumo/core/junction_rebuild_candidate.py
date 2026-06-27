@@ -2344,7 +2344,8 @@ def _vehicle_connection_signature(
         f"from={source}|to={target}|fromLane={connection.get('fromLane', '')}|"
         f"toLane={connection.get('toLane', '')}|dir={connection.get('dir', '')}|"
         f"state={connection.get('state', '')}|via={via}|pass={connection.get('pass', '')}|"
-        f"uncontrolled={connection.get('uncontrolled', '')}"
+        f"uncontrolled={connection.get('uncontrolled', '')}|allow={connection.get('allow', '')}|"
+        f"disallow={connection.get('disallow', '')}"
     )
 
 

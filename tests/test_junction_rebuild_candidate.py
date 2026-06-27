@@ -1488,10 +1488,10 @@ def test_teacher_parity_fails_on_mapped_controlled_link_signature_mismatch() -> 
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["controlled_vehicle_link_signatures"] == {
-        "3": "from=cand_in|to=cand_out|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=|uncontrolled="
+        "3": "from=cand_in|to=cand_out|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=|uncontrolled=|allow=|disallow="
     }
     assert parity["candidate"]["controlled_vehicle_link_signatures"] == {
-        "3": "from=cand_in|to=cand_left|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=|uncontrolled="
+        "3": "from=cand_in|to=cand_left|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=|uncontrolled=|allow=|disallow="
     }
     assert parity["delta"]["controlled_vehicle_link_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
@@ -1517,6 +1517,8 @@ def test_teacher_parity_fails_on_mapped_controlled_link_attribute_mismatch() -> 
                 "state": "O",
                 "pass": "true",
                 "uncontrolled": "",
+                "allow": "bicycle",
+                "disallow": "",
             }
         ],
         "pedestrian_connections": [],
@@ -1538,6 +1540,8 @@ def test_teacher_parity_fails_on_mapped_controlled_link_attribute_mismatch() -> 
                 "state": "O",
                 "pass": "",
                 "uncontrolled": "",
+                "allow": "",
+                "disallow": "",
             }
         ],
         "pedestrian_connections": [],
@@ -1554,10 +1558,10 @@ def test_teacher_parity_fails_on_mapped_controlled_link_attribute_mismatch() -> 
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["controlled_vehicle_link_signatures"] == {
-        "3": "from=cand_in|to=cand_out|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=true|uncontrolled="
+        "3": "from=cand_in|to=cand_out|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=true|uncontrolled=|allow=bicycle|disallow="
     }
     assert parity["candidate"]["controlled_vehicle_link_signatures"] == {
-        "3": "from=cand_in|to=cand_out|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=|uncontrolled="
+        "3": "from=cand_in|to=cand_out|fromLane=0|toLane=0|dir=s|state=O|via=:candidate_j_0_0|pass=|uncontrolled=|allow=|disallow="
     }
     assert parity["delta"]["controlled_vehicle_link_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
@@ -1614,10 +1618,10 @@ def test_teacher_parity_fails_on_mapped_pedestrian_link_signature_mismatch() -> 
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["controlled_pedestrian_link_signatures"] == {
-        "7": "from=:candidate_j_w0|to=:candidate_j_c0|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled="
+        "7": "from=:candidate_j_w0|to=:candidate_j_c0|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled=|allow=|disallow="
     }
     assert parity["candidate"]["controlled_pedestrian_link_signatures"] == {
-        "7": "from=:candidate_j_w0|to=:candidate_j_c_wrong|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled="
+        "7": "from=:candidate_j_w0|to=:candidate_j_c_wrong|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled=|allow=|disallow="
     }
     assert parity["delta"]["controlled_pedestrian_link_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
@@ -1924,10 +1928,10 @@ def test_teacher_parity_fails_on_mapped_internal_connection_signature_mismatch()
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["internal_connection_signatures"] == {
-        "from=:candidate_j_0|to=cand_out|fromLane=0|toLane=1|dir=s|state=M|via=|pass=|uncontrolled=": "1"
+        "from=:candidate_j_0|to=cand_out|fromLane=0|toLane=1|dir=s|state=M|via=|pass=|uncontrolled=|allow=|disallow=": "1"
     }
     assert parity["candidate"]["internal_connection_signatures"] == {
-        "from=:candidate_j_0|to=cand_wrong|fromLane=0|toLane=1|dir=s|state=M|via=|pass=|uncontrolled=": "1"
+        "from=:candidate_j_0|to=cand_wrong|fromLane=0|toLane=1|dir=s|state=M|via=|pass=|uncontrolled=|allow=|disallow=": "1"
     }
     assert parity["delta"]["internal_connection_signature_mismatch_count"] == 2
     assert gate["status"] == "fail"
@@ -1973,10 +1977,10 @@ def test_teacher_parity_fails_on_uncontrolled_pedestrian_ring_signature_mismatch
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["uncontrolled_pedestrian_connection_signatures"] == {
-        "from=:candidate_j_w0|to=:candidate_j_w1|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled=": "1"
+        "from=:candidate_j_w0|to=:candidate_j_w1|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled=|allow=|disallow=": "1"
     }
     assert parity["candidate"]["uncontrolled_pedestrian_connection_signatures"] == {
-        "from=:candidate_j_w0|to=:candidate_j_w_wrong|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled=": "1"
+        "from=:candidate_j_w0|to=:candidate_j_w_wrong|fromLane=0|toLane=0|dir=s|state=M|via=|pass=|uncontrolled=|allow=|disallow=": "1"
     }
     assert parity["delta"]["uncontrolled_pedestrian_connection_signature_mismatch_count"] == 2
     assert gate["status"] == "fail"
