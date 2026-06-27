@@ -701,6 +701,10 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
                     "junction_id": "cluster_a_b",
                     "candidate_status": "ready_for_teacher_guided_variant",
                     "edge_map": {"teacher_in": "cand_in"},
+                    "teacher_pattern_key": "three_way|control=right_before_left",
+                    "teacher_pattern_family": "three_way",
+                    "teacher_pattern_template_count": 127,
+                    "teacher_pattern_template_examples": ["cluster_template_1"],
                     "missing_teacher_edge_ids": ["teacher_copyable"],
                     "copyable_missing_teacher_edge_ids": ["teacher_copyable"],
                     "uncopyable_missing_teacher_edge_ids": [],
@@ -727,6 +731,10 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     assert report["max_ready_candidates"] == 1
     assert calls[0]["junction_id"] == "cluster_a_b"
     assert calls[0]["teacher_junction_id"] == "cluster_a_b"
+    assert report["variant_reports"][0]["teacher_pattern_key"] == "three_way|control=right_before_left"
+    assert report["variant_reports"][0]["teacher_pattern_family"] == "three_way"
+    assert report["variant_reports"][0]["teacher_pattern_template_count"] == 127
+    assert report["variant_reports"][0]["teacher_pattern_template_examples"] == ["cluster_template_1"]
 
 
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:

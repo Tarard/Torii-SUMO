@@ -1280,24 +1280,27 @@ def run_teacher_guided_repair_queue(
         variant_prefix = f"{_safe_stage_name(prefix, max_len=12)}_{index + 1:03d}"
         attempted_ready_count += 1
         variant_reports.append(
-            variant_builder(
-                raw_node_file=raw_node_file,
-                raw_edge_file=raw_edge_file,
-                raw_connection_file=raw_connection_file,
-                raw_type_file=raw_type_file,
-                teacher_net_file=teacher_net_file,
-                candidate_net_file=candidate_net_file,
-                junction_id=junction_id,
-                output_dir=output_dir / safe_junction_id,
-                edge_map=edge_map,
-                prefix=variant_prefix,
-                teacher_junction_id=teacher_junction_id,
-                crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id)
-                or crossing_edge_overrides_by_junction.get(teacher_junction_id),
-                replay_target_internal_subgraph=replay_target_internal_subgraph,
-                netconvert_binary=netconvert_binary,
-                sumo_binary=sumo_binary,
-                timeout_seconds=timeout_seconds,
+            _attach_candidate_template_context(
+                variant_builder(
+                    raw_node_file=raw_node_file,
+                    raw_edge_file=raw_edge_file,
+                    raw_connection_file=raw_connection_file,
+                    raw_type_file=raw_type_file,
+                    teacher_net_file=teacher_net_file,
+                    candidate_net_file=candidate_net_file,
+                    junction_id=junction_id,
+                    output_dir=output_dir / safe_junction_id,
+                    edge_map=edge_map,
+                    prefix=variant_prefix,
+                    teacher_junction_id=teacher_junction_id,
+                    crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id)
+                    or crossing_edge_overrides_by_junction.get(teacher_junction_id),
+                    replay_target_internal_subgraph=replay_target_internal_subgraph,
+                    netconvert_binary=netconvert_binary,
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                ),
+                candidate,
             )
         )
 
@@ -1545,6 +1548,23 @@ def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[s
             if key != ":":
                 counts[key] = counts.get(key, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def _attach_candidate_template_context(
+    report: dict[str, object],
+    candidate: dict[str, Any],
+) -> dict[str, object]:
+    context = {
+        key: candidate[key]
+        for key in (
+            "teacher_pattern_key",
+            "teacher_pattern_family",
+            "teacher_pattern_template_count",
+            "teacher_pattern_template_examples",
+        )
+        if key in candidate
+    }
+    return {**report, **context} if context else report
 
 
 def _should_emit(movement: dict[str, object]) -> bool:
