@@ -97,6 +97,57 @@ def extract_teacher_junction_model(net_file: Path, junction_id: str) -> dict[str
     }
 
 
+def extract_junction_pattern_index(
+    net_file: Path,
+    *,
+    min_approaches: int = 3,
+    max_approaches: int = 4,
+) -> list[dict[str, Any]]:
+    root = ET.parse(net_file).getroot()
+    tl_by_id = {tl.attrib["id"]: tl for tl in root.findall("tlLogic") if tl.attrib.get("id")}
+    records: list[dict[str, Any]] = []
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if not junction_id or junction_id.startswith(":") or junction.attrib.get("type") == "internal":
+            continue
+
+        model = extract_teacher_junction_model(net_file, junction_id)
+        summary = model["summary"]
+        in_edge_count = int(summary["incoming_vehicle_edge_count"])
+        out_edge_count = int(summary["outgoing_vehicle_edge_count"])
+        arm_count = min(in_edge_count, out_edge_count)
+        if arm_count < min_approaches or arm_count > max_approaches:
+            continue
+
+        vehicle_connections = model["vehicle_connections"]
+        pedestrian_connections = model["pedestrian_connections"]
+        all_connections = vehicle_connections + pedestrian_connections
+        controlled_connections = [
+            connection for connection in all_connections if connection["tl"] and connection["linkIndex"]
+        ]
+        controlled_tl_ids = {connection["tl"] for connection in controlled_connections}
+        dir_counts = dict(summary["vehicle_connection_dirs"])
+        records.append(
+            {
+                "junction_id": junction_id,
+                "arm_count": arm_count,
+                "control_type": junction.attrib.get("type", ""),
+                "in_edge_count": in_edge_count,
+                "out_edge_count": out_edge_count,
+                "vehicle_connection_count": int(summary["vehicle_connection_count"]),
+                "dir_counts": dict(sorted(dir_counts.items())),
+                "crossing_count": int(summary["crossing_count"]),
+                "walkingarea_count": int(summary["walkingarea_count"]),
+                "request_count": len(junction.findall("request")),
+                "tl_phase_count": sum(
+                    len(tl_by_id[tl_id].findall("phase")) for tl_id in controlled_tl_ids if tl_id in tl_by_id
+                ),
+                "controlled_link_count": len(controlled_connections),
+            }
+        )
+    return records
+
+
 def match_teacher_approaches(
     teacher_approaches: list[dict[str, Any]],
     candidate_approaches: list[dict[str, Any]],

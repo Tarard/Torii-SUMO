@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from torii_sumo.core.junction_teacher_model import extract_teacher_junction_model, match_teacher_approaches
+from torii_sumo.core.junction_teacher_model import (
+    extract_junction_pattern_index,
+    extract_teacher_junction_model,
+    match_teacher_approaches,
+)
 
 
 def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
@@ -31,6 +35,93 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
     assert model["approaches"]["incoming"][0]["bearing"] == 0.0
     assert model["vehicle_connections"][0]["linkIndex"] == "0"
     assert model["crossings"][0]["crossingEdges"] == ["in", "out"]
+
+
+def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a_in" from="a" to="j"><lane id="a_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="b_in" from="b" to="j"><lane id="b_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="c_in" from="c" to="j"><lane id="c_in_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="a_out" from="j" to="a2"><lane id="a_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="b_out" from="j" to="b2"><lane id="b_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="c_out" from="j" to="c2"><lane id="c_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="0,0 1,1"/></edge>
+  <junction id="j" type="right_before_left" x="0" y="0" incLanes="a_in_0 b_in_0 c_in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+    <request index="1" response="0" foes="0" cont="0"/>
+    <request index="2" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="a_in" to="a_out" fromLane="0" toLane="0" dir="t"/>
+  <connection from="a_in" to="b_out" fromLane="0" toLane="0" dir="r"/>
+  <connection from="a_in" to="c_out" fromLane="0" toLane="0" dir="l"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    records = extract_junction_pattern_index(net_file, min_approaches=3, max_approaches=4)
+
+    assert records == [
+        {
+            "junction_id": "j",
+            "arm_count": 3,
+            "control_type": "right_before_left",
+            "in_edge_count": 3,
+            "out_edge_count": 3,
+            "vehicle_connection_count": 3,
+            "dir_counts": {"l": 1, "r": 1, "t": 1},
+            "crossing_count": 0,
+            "walkingarea_count": 0,
+            "request_count": 3,
+            "tl_phase_count": 0,
+            "controlled_link_count": 0,
+        }
+    ]
+
+
+def test_extract_junction_pattern_index_keeps_blank_connection_dir(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a_in" from="a" to="j"><lane id="a_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="b_in" from="b" to="j"><lane id="b_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="c_in" from="c" to="j"><lane id="c_in_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="a_out" from="j" to="a2"><lane id="a_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="b_out" from="j" to="b2"><lane id="b_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="c_out" from="j" to="c2"><lane id="c_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="right_before_left" x="0" y="0" incLanes="a_in_0 b_in_0 c_in_0" intLanes=""/>
+  <connection from="a_in" to="a_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    records = extract_junction_pattern_index(net_file)
+
+    assert records[0]["dir_counts"] == {"blank": 1}
+
+
+def test_extract_junction_pattern_index_counts_non_matching_tls_id(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a_in" from="a" to="j"><lane id="a_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="b_in" from="b" to="j"><lane id="b_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="c_in" from="c" to="j"><lane id="c_in_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="a_out" from="j" to="a2"><lane id="a_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="b_out" from="j" to="b2"><lane id="b_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="c_out" from="j" to="c2"><lane id="c_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="a_in_0 b_in_0 c_in_0" intLanes=""/>
+  <connection from="a_in" to="a_out" fromLane="0" toLane="0" tl="cluster_tls" linkIndex="0" dir="s"/>
+  <tlLogic id="cluster_tls" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    records = extract_junction_pattern_index(net_file)
+
+    assert records[0]["controlled_link_count"] == 1
+    assert records[0]["tl_phase_count"] == 1
 
 
 def test_match_teacher_edges_by_bearing_and_lane_count() -> None:
