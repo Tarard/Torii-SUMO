@@ -328,6 +328,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "reference_case_count": 3,
             "matched_case_count": 2,
             "unmatched_case_count": 1,
+            "junction_pattern_index": [{"junction_id": "cluster_a_b"}],
             "summary_file": str(tmp_path / "reference_join_audit.json"),
             "cases_file": str(tmp_path / "reference_join_cases.csv"),
             "warnings": [],
@@ -406,6 +407,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
     assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
+    assert report["reference_join_audit"]["junction_pattern_index"] == [{"junction_id": "cluster_a_b"}]
     assert report["reference_join_matched_case_count"] == 2
     assert report["reference_join_unmatched_case_count"] == 1
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"

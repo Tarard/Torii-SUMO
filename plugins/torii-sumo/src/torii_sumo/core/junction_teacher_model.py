@@ -9,6 +9,10 @@ import xml.etree.ElementTree as ET
 
 def extract_teacher_junction_model(net_file: Path, junction_id: str) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
+    return _extract_teacher_junction_model(root, net_file, junction_id)
+
+
+def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_id: str) -> dict[str, Any]:
     junction = next((node for node in root.findall("junction") if node.attrib.get("id") == junction_id), None)
     if junction is None:
         raise ValueError(f"junction not found: {junction_id}")
@@ -111,7 +115,7 @@ def extract_junction_pattern_index(
         if not junction_id or junction_id.startswith(":") or junction.attrib.get("type") == "internal":
             continue
 
-        model = extract_teacher_junction_model(net_file, junction_id)
+        model = _extract_teacher_junction_model(root, net_file, junction_id)
         summary = model["summary"]
         in_edge_count = int(summary["incoming_vehicle_edge_count"])
         out_edge_count = int(summary["outgoing_vehicle_edge_count"])
