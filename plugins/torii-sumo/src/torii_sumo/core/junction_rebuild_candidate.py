@@ -149,6 +149,9 @@ def build_teacher_guided_repair_queue(
     ready_count = sum(
         1 for candidate in repair_candidates if candidate["candidate_status"] == "ready_for_teacher_guided_variant"
     )
+    expanded_scope_count = sum(
+        1 for candidate in repair_candidates if candidate["candidate_status"] == "needs_expanded_rebuild_scope"
+    )
     queue_file = output_dir / f"{prefix}_queue.json"
     queue_csv_file = output_dir / f"{prefix}_queue.csv"
     report = {
@@ -163,6 +166,7 @@ def build_teacher_guided_repair_queue(
         "max_ready_candidates": max_ready_candidates if max_ready_candidates is not None else "",
         "repair_candidate_count": len(repair_candidates),
         "ready_candidate_count": ready_count,
+        "expanded_scope_candidate_count": expanded_scope_count,
         "blocked_candidate_count": len(repair_candidates) - ready_count,
         "queue_file": str(queue_file),
         "queue_csv_file": str(queue_csv_file),
@@ -1168,6 +1172,7 @@ def run_teacher_guided_repair_queue(
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
+    command_runner: Any = run_command,
     variant_builder: Any = build_teacher_guided_junction_variant,
 ) -> dict[str, object]:
     teacher_net_value = queue_report.get("teacher_net_file")
@@ -1223,6 +1228,9 @@ def run_teacher_guided_repair_queue(
                     expanded_rebuild_scope=candidate.get("expanded_rebuild_scope", {}),
                     approach_endpoint_rebuild_plan=candidate.get("approach_endpoint_rebuild_plan", {}),
                     netconvert_binary=netconvert_binary,
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
                 )
             )
             skipped_candidates.append(
@@ -1283,6 +1291,15 @@ def run_teacher_guided_repair_queue(
     failed_count = attempted_count - pass_count
     parity_pass_count = sum(1 for report in variant_reports if report.get("parity_gate_status") == "pass")
     semantic_failure_counts = _semantic_failure_counts(variant_reports)
+    expanded_scope_pass_count = sum(1 for report in expanded_scope_reports if report.get("status") == "pass")
+    best_expanded_scope_net_file = ""
+    for expanded_report in expanded_scope_reports:
+        if expanded_report.get("status") != "pass":
+            continue
+        net_file = Path(str(expanded_report.get("net_file", "")))
+        if net_file.exists():
+            best_expanded_scope_net_file = str(net_file)
+            break
     if attempted_count == 0:
         status = "blocked"
         claim_status = "blocked"
@@ -1312,6 +1329,8 @@ def run_teacher_guided_repair_queue(
         "parity_pass_candidate_count": parity_pass_count,
         "semantic_failure_counts": semantic_failure_counts,
         "expanded_scope_candidate_count": len(expanded_scope_reports),
+        "expanded_scope_pass_candidate_count": expanded_scope_pass_count,
+        "best_expanded_scope_net_file": best_expanded_scope_net_file,
         "expanded_scope_reports": expanded_scope_reports,
         "run_report_file": str(run_report_file),
         "variant_reports": variant_reports,
@@ -1331,6 +1350,9 @@ def write_expanded_scope_plain_inputs(
     expanded_rebuild_scope: object,
     approach_endpoint_rebuild_plan: object | None = None,
     netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+    command_runner: Any = run_command,
 ) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
     node_file = output_dir / "expanded_scope.nod.xml"
@@ -1431,8 +1453,27 @@ def write_expanded_scope_plain_inputs(
     ]
     missing_node_ids = sorted(node_id for node_id in selected_node_ids if node_id not in raw_nodes)
     missing_blocked_edge_ids = sorted(edge_id for edge_id in blocked_edge_ids if edge_id not in selected_edge_ids)
+    netconvert_report = _command_report(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
+    sumo_command = [
+        sumo_binary,
+        "-n",
+        net_file.name,
+        "--no-step-log",
+        "true",
+        "--duration-log.disable",
+        "true",
+        "--begin",
+        "0",
+        "--end",
+        "1",
+    ]
+    if netconvert_report.get("status") == "pass":
+        sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
+    else:
+        sumo_report = {"status": "skipped", "reason": "netconvert_failed"}
+    probe_status = "pass" if netconvert_report.get("status") == "pass" and sumo_report.get("status") == "pass" else "fail"
     return {
-        "status": "review" if missing_node_ids or missing_blocked_edge_ids else "pass",
+        "status": "review" if missing_node_ids or missing_blocked_edge_ids else probe_status,
         "claim_status": "diagnostic-demo",
         "recommended_action": "run_netconvert_scope_probe",
         "node_file": str(node_file),
@@ -1440,6 +1481,9 @@ def write_expanded_scope_plain_inputs(
         "connection_file": str(connection_file),
         "net_file": str(net_file),
         "netconvert_command": command,
+        "sumo_command": sumo_command,
+        "netconvert": netconvert_report,
+        "sumo_load": sumo_report,
         "seed_node_ids": sorted(seed_node_ids),
         "blocked_edge_ids": sorted(blocked_edge_ids),
         "missing_node_ids": missing_node_ids,
