@@ -295,7 +295,12 @@ def write_teacher_lane_patch_edges(
     tree = ET.parse(raw_edge_file)
     patched = []
     pruned_boundary_edges = []
-    allowed_boundary_edges = set(edge_map.values()) | (set(teacher_edges) - set(edge_map))
+    teacher_same_junction_edges = {
+        edge_id
+        for edge_id, edge in teacher_edges.items()
+        if junction_id and junction_id in (edge.attrib.get("from"), edge.attrib.get("to"))
+    }
+    allowed_boundary_edges = set(edge_map.values()) | teacher_same_junction_edges
     for edge in tree.getroot().findall("edge"):
         edge_id = edge.attrib.get("id", "")
         if (
@@ -541,6 +546,7 @@ def write_teacher_target_internal_replay_net(
     internal_prefix = f":{junction_id}_"
     teacher_internal_prefix = f":{teacher_junction_id}_"
     candidate_edge_ids = {edge.attrib["id"] for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
+    replay_edge_map = dict(edge_map)
 
     candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
     teacher_junction = teacher_root.find(f"junction[@id='{teacher_junction_id}']")
@@ -568,10 +574,70 @@ def write_teacher_target_internal_replay_net(
         for edge in teacher_root.findall("edge")
         if edge.attrib.get("id", "").startswith(teacher_internal_prefix)
     ]
+    copied_boundary_edges = []
+    skipped_boundary_edges = []
+    boundary_insert_offset = 0
+    teacher_edges = {edge.attrib["id"]: edge for edge in teacher_root.findall("edge") if edge.attrib.get("id")}
+    teacher_junctions = {
+        junction.attrib["id"]: junction
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    candidate_junction_ids = {
+        junction.attrib["id"] for junction in candidate_root.findall("junction") if junction.attrib.get("id")
+    }
+    copied_boundary_junctions = []
+    for edge_id in _needed_unmapped_teacher_boundary_edges(
+        teacher_root.findall("connection"),
+        teacher_edges,
+        replay_edge_map,
+        candidate_edge_ids,
+        teacher_internal_prefix,
+        teacher_junction_id,
+        junction_id,
+    ):
+        teacher_edge = teacher_edges[edge_id]
+        mapped_from = junction_id if teacher_edge.attrib.get("from") == teacher_junction_id else teacher_edge.attrib.get("from", "")
+        mapped_to = junction_id if teacher_edge.attrib.get("to") == teacher_junction_id else teacher_edge.attrib.get("to", "")
+        for teacher_endpoint, mapped_endpoint in (
+            (teacher_edge.attrib.get("from", ""), mapped_from),
+            (teacher_edge.attrib.get("to", ""), mapped_to),
+        ):
+            if mapped_endpoint in candidate_junction_ids:
+                continue
+            teacher_endpoint_junction = teacher_junctions.get(teacher_endpoint)
+            if teacher_endpoint_junction is None:
+                continue
+            copied_junction = _clone_transformed_boundary_junction(
+                teacher_endpoint_junction,
+                dx,
+                dy,
+                replay_edge_map,
+                teacher_junction_id,
+                junction_id,
+            )
+            candidate_root.insert(list(candidate_root).index(candidate_junction), copied_junction)
+            candidate_junction_ids.add(mapped_endpoint)
+            copied_boundary_junctions.append(mapped_endpoint)
+        if mapped_from not in candidate_junction_ids or mapped_to not in candidate_junction_ids:
+            skipped_boundary_edges.append(edge_id)
+            continue
+        copied_edge = _clone_transformed_net_element(teacher_edge, dx, dy, replay_edge_map, teacher_junction_id, junction_id)
+        copied_edge_id = copied_edge.attrib.get("id", "")
+        if not copied_edge_id or copied_edge_id in candidate_edge_ids:
+            skipped_boundary_edges.append(edge_id)
+            continue
+        candidate_root.insert(insert_index + boundary_insert_offset, copied_edge)
+        boundary_insert_offset += 1
+        candidate_edge_ids.add(copied_edge_id)
+        replay_edge_map[edge_id] = copied_edge_id
+        _append_edge_lanes_to_destination_junction(candidate_root, copied_edge)
+        copied_boundary_edges.append(edge_id)
+
     for offset, edge in enumerate(teacher_internal_edges):
         candidate_root.insert(
-            insert_index + offset,
-            _clone_transformed_net_element(edge, dx, dy, edge_map, teacher_junction_id, junction_id),
+            insert_index + boundary_insert_offset + offset,
+            _clone_transformed_net_element(edge, dx, dy, replay_edge_map, teacher_junction_id, junction_id),
         )
 
     removed_internal_junctions = []
@@ -593,12 +659,12 @@ def write_teacher_target_internal_replay_net(
     for offset, junction in enumerate(teacher_internal_junctions):
         candidate_root.insert(
             junction_insert_index + offset,
-            _clone_transformed_junction(junction, dx, dy, edge_map, teacher_internal_prefix, internal_prefix),
+            _clone_transformed_junction(junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix),
         )
 
     candidate_junction.attrib.clear()
     candidate_junction.attrib.update(
-        _mapped_junction_attrs(teacher_junction, dx, dy, edge_map, teacher_internal_prefix, internal_prefix)
+        _mapped_junction_attrs(teacher_junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix)
     )
     for child in list(candidate_junction):
         candidate_junction.remove(child)
@@ -618,7 +684,7 @@ def write_teacher_target_internal_replay_net(
             continue
         mapped = _mapped_connection_attrs(
             connection,
-            edge_map,
+            replay_edge_map,
             teacher_internal_prefix,
             teacher_junction_id,
             internal_prefix,
@@ -639,7 +705,7 @@ def write_teacher_target_internal_replay_net(
             candidate_root.remove(target_tllogic)
         candidate_root.insert(
             target_index,
-            _clone_transformed_net_element(teacher_tllogic, dx, dy, edge_map, teacher_junction_id, junction_id),
+            _clone_transformed_net_element(teacher_tllogic, dx, dy, replay_edge_map, teacher_junction_id, junction_id),
         )
 
     ET.indent(candidate_root, space="    ")
@@ -652,6 +718,12 @@ def write_teacher_target_internal_replay_net(
         "dy": round(dy, 6),
         "removed_internal_edge_count": len(removed_internal_edges),
         "copied_internal_edge_count": len(teacher_internal_edges),
+        "copied_boundary_edge_count": len(copied_boundary_edges),
+        "copied_boundary_edges": copied_boundary_edges,
+        "copied_boundary_junction_count": len(copied_boundary_junctions),
+        "copied_boundary_junctions": copied_boundary_junctions,
+        "skipped_boundary_edge_count": len(skipped_boundary_edges),
+        "skipped_boundary_edges": skipped_boundary_edges,
         "removed_internal_junction_count": len(removed_internal_junctions),
         "copied_internal_junction_count": len(teacher_internal_junctions),
         "removed_connection_count": removed_connections,
@@ -1428,6 +1500,20 @@ def _clone_transformed_junction(
     return clone
 
 
+def _clone_transformed_boundary_junction(
+    junction: ET.Element,
+    dx: float,
+    dy: float,
+    edge_map: dict[str, str],
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+) -> ET.Element:
+    attrs = _mapped_spatial_attrs(junction.attrib, dx, dy, edge_map, teacher_junction_id, candidate_junction_id)
+    attrs["incLanes"] = ""
+    attrs["intLanes"] = ""
+    return ET.Element("junction", attrs)
+
+
 def _mapped_spatial_attrs(
     attrs: dict[str, str],
     dx: float,
@@ -1532,6 +1618,61 @@ def _mapped_connection_attrs(
         if not mapped["via"].startswith(candidate_internal_prefix):
             return None
     return mapped
+
+
+def _needed_unmapped_teacher_boundary_edges(
+    connections: list[ET.Element],
+    teacher_edges: dict[str, ET.Element],
+    edge_map: dict[str, str],
+    candidate_edge_ids: set[str],
+    teacher_internal_prefix: str,
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+) -> list[str]:
+    needed = []
+    seen = set()
+    for connection in connections:
+        if not _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id):
+            continue
+        for attr in ("from", "to"):
+            edge_id = connection.attrib.get(attr, "")
+            if (
+                not edge_id
+                or edge_id.startswith(teacher_internal_prefix)
+                or edge_map.get(edge_id)
+                or edge_id in candidate_edge_ids
+                or edge_id in seen
+            ):
+                continue
+            teacher_edge = teacher_edges.get(edge_id)
+            if teacher_edge is None:
+                continue
+            if teacher_junction_id not in (teacher_edge.attrib.get("from"), teacher_edge.attrib.get("to")):
+                continue
+            mapped_from = candidate_junction_id if teacher_edge.attrib.get("from") == teacher_junction_id else teacher_edge.attrib.get("from", "")
+            mapped_to = candidate_junction_id if teacher_edge.attrib.get("to") == teacher_junction_id else teacher_edge.attrib.get("to", "")
+            if not mapped_from or not mapped_to:
+                continue
+            seen.add(edge_id)
+            needed.append(edge_id)
+    return needed
+
+
+def _append_edge_lanes_to_destination_junction(root: ET.Element, edge: ET.Element) -> None:
+    destination = edge.attrib.get("to", "")
+    if not destination:
+        return
+    junction = next((item for item in root.findall("junction") if item.attrib.get("id") == destination), None)
+    if junction is None:
+        return
+    lanes = [lane.attrib["id"] for lane in edge.findall("lane") if lane.attrib.get("id")]
+    if not lanes:
+        return
+    inc_lanes = _split(junction.attrib.get("incLanes", ""))
+    for lane in lanes:
+        if lane not in inc_lanes:
+            inc_lanes.append(lane)
+    junction.set("incLanes", " ".join(inc_lanes))
 
 
 def _map_connection_endpoint(

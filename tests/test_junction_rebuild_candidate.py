@@ -797,6 +797,7 @@ def test_write_teacher_lane_patch_edges_prunes_unmapped_target_boundary_edges(tm
     <lane index="1" speed="13.89"/>
   </edge>
   <edge id="same_support" from="j" to="p" numLanes="1"><lane index="0"/></edge>
+  <edge id="extra_out" from="q" to="r" numLanes="1"><lane index="0"/></edge>
 </net>
 """,
         encoding="utf-8",
@@ -1016,6 +1017,54 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert report["copied_internal_edge_count"] == 3
     assert report["copied_internal_junction_count"] == 2
     assert report["copied_connection_count"] == 3
+
+
+def test_write_teacher_target_internal_replay_net_copies_missing_boundary_edge(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0" shape="90,20 100,20"/></edge>
+  <edge id="teacher_out" from="j" to="b"><lane id="teacher_out_0" index="0" shape="100,20 110,20"/></edge>
+  <edge id="foot_missing" from="j" to="p"><lane id="foot_missing_0" index="0" allow="pedestrian" shape="100,20 100,25"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="98,198 99,199"/></edge>
+  <junction id="j" type="priority" x="100" y="200" shape="99,199 101,199" incLanes="teacher_in_0" intLanes=":j_w0_0"/>
+  <junction id="p" type="dead_end" x="100" y="25" incLanes="foot_missing_0" intLanes=""/>
+  <connection from=":j_w0" to="foot_missing" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,20 10,20"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0" shape="10,20 20,20"/></edge>
+  <edge id=":j_old" function="walkingarea"><lane id=":j_old_0" index="0" allow="pedestrian" shape="8,18 9,19"/></edge>
+  <junction id="j" type="priority" x="10" y="20" shape="9,19 11,19" incLanes="cand_in_0" intLanes=":j_old_0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    copied_edge = root.find("edge[@id='foot_missing']")
+    assert copied_edge is not None
+    assert copied_edge.attrib["from"] == "j"
+    assert copied_edge.attrib["to"] == "p"
+    assert copied_edge.find("lane").attrib["shape"] == "10.00,-160.00 10.00,-155.00"
+    assert root.find("connection[@from=':j_w0'][@to='foot_missing']") is not None
+    assert "foot_missing_0" in root.find("junction[@id='p']").attrib["incLanes"]
+    assert report["copied_boundary_edge_count"] == 1
+    assert report["copied_boundary_edges"] == ["foot_missing"]
+    assert report["skipped_connection_count"] == 0
 
 
 def test_stage_file_shortens_long_output_names(tmp_path: Path) -> None:
