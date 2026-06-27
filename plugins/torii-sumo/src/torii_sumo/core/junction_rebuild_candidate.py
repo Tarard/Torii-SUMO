@@ -82,17 +82,22 @@ def write_teacher_connection_plan(
 
     incoming = _approach_edges(candidate_model, "incoming")
     outgoing = _approach_edges(candidate_model, "outgoing")
-    candidate_edges = set(incoming) | set(outgoing)
+    candidate_edges_for_cleanup = set(incoming) | set(outgoing)
     candidate_lane_counts = _candidate_lane_counts(candidate_model)
+    present_candidate_edges: set[str] | None = None
     if candidate_edge_file is not None:
-        candidate_lane_counts.update(_edge_file_lane_counts(candidate_edge_file))
+        patched_lane_counts = _edge_file_lane_counts(candidate_edge_file)
+        candidate_lane_counts.update(patched_lane_counts)
+        present_candidate_edges = set(patched_lane_counts)
+        incoming = [edge for edge in incoming if edge in present_candidate_edges]
+        outgoing = [edge for edge in outgoing if edge in present_candidate_edges]
 
     root = ET.Element("connections")
     kept = 0
     removed = 0
     for child in ET.parse(raw_connection_file).getroot():
         if child.tag == "connection" and (
-            child.attrib.get("from", "") in candidate_edges or child.attrib.get("to", "") in candidate_edges
+            child.attrib.get("from", "") in candidate_edges_for_cleanup or child.attrib.get("to", "") in candidate_edges_for_cleanup
         ):
             removed += 1
             continue
@@ -113,6 +118,8 @@ def write_teacher_connection_plan(
         source = edge_map.get(str(connection.get("from", "")))
         target = edge_map.get(str(connection.get("to", "")))
         if not source or not target:
+            continue
+        if present_candidate_edges is not None and (source not in present_candidate_edges or target not in present_candidate_edges):
             continue
         original_from_lane = int(connection.get("fromLane") or 0)
         original_to_lane = int(connection.get("toLane") or 0)
@@ -161,6 +168,8 @@ def write_teacher_connection_plan(
         if isinstance(crossing_edges, str):
             crossing_edges = [crossing_edges]
         crossing_edges = [edge for edge in crossing_edges if edge]
+        if present_candidate_edges is not None:
+            crossing_edges = [edge for edge in crossing_edges if edge in present_candidate_edges]
         if not crossing_edges:
             skipped_crossings.append(crossing_id)
             continue
