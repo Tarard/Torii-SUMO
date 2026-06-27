@@ -1903,7 +1903,7 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     phase_states = [str(phase.get("state", "")) for phase in phases if isinstance(phase, dict)]
     vehicle_connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
     pedestrian_connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
-    target_tls_id = str(model.get("junction_id", ""))
+    target_tls_id = str(attributes.get("id", "") or model.get("junction_id", ""))
     summary["tl_type"] = str(attributes.get("type", "")) if isinstance(attributes, dict) else ""
     summary["tl_phase_state_lengths"] = sorted({len(state) for state in phase_states})
     summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections, target_tls_id)
