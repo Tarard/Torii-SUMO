@@ -1969,6 +1969,17 @@ def _compare_teacher_models(
         candidate_summary["uncontrolled_pedestrian_connection_signatures"] = candidate_pedestrian_ring_signatures
         if pedestrian_ring_mismatch_count:
             delta["uncontrolled_pedestrian_connection_signature_mismatch_count"] = pedestrian_ring_mismatch_count
+        teacher_junction_signature = _junction_signature(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_junction_signature = _junction_signature(candidate_model)
+        teacher_summary["junction_signature"] = teacher_junction_signature
+        candidate_summary["junction_signature"] = candidate_junction_signature
+        if teacher_junction_signature != candidate_junction_signature:
+            delta["junction_signature_mismatch_count"] = 1
         teacher_crossing_signatures = _crossing_signatures(
             teacher_model,
             edge_map=edge_map,
@@ -2215,6 +2226,48 @@ def _uncontrolled_pedestrian_connection_signatures(
             ]
         )
     return {signature: str(counts[signature]) for signature in sorted(counts)}
+
+
+def _junction_signature(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> str:
+    junction = model.get("junction", {}) if isinstance(model.get("junction"), dict) else {}
+    inc_lanes = _mapped_lane_refs(str(junction.get("incLanes", "")), edge_map, source_junction_id, target_junction_id)
+    int_lanes = _mapped_lane_refs(str(junction.get("intLanes", "")), edge_map, source_junction_id, target_junction_id)
+    shape = _relative_shape(
+        str(junction.get("shape", "")),
+        str(junction.get("x", "")),
+        str(junction.get("y", "")),
+    )
+    return f"type={junction.get('type', '')}|incLanes={inc_lanes}|intLanes={int_lanes}|shape={shape}"
+
+
+def _relative_shape(shape: str, x: str, y: str) -> str:
+    if not shape or not x or not y:
+        return shape
+    try:
+        origin_x = float(x)
+        origin_y = float(y)
+    except ValueError:
+        return shape
+    translated = []
+    for point in shape.split():
+        coords = point.split(",")
+        if len(coords) < 2:
+            translated.append(point)
+            continue
+        try:
+            coords[0] = _format_xy(float(coords[0]) - origin_x)
+            coords[1] = _format_xy(float(coords[1]) - origin_y)
+        except ValueError:
+            translated.append(point)
+            continue
+        translated.append(",".join(coords))
+    return " ".join(translated)
 
 
 def _internal_connection_signatures(
