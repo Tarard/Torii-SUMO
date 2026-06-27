@@ -81,6 +81,9 @@ def build_teacher_guided_repair_queue(
         return _failure(f"teacher net file does not exist: {teacher_net_file}")
     if not candidate_net_file.exists():
         return _failure(f"candidate net file does not exist: {candidate_net_file}")
+    teacher_net_file = teacher_net_file.resolve()
+    candidate_net_file = candidate_net_file.resolve()
+    output_dir = output_dir.resolve()
 
     output_dir.mkdir(parents=True, exist_ok=True)
     matched_cases = [

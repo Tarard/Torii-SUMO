@@ -13,6 +13,11 @@ from torii_sumo.core.junction_join_definition import (
 from torii_sumo.core.osm_workflow import _junction_aggregation_summary
 
 
+def _command_path(command: list[str], option: str, cwd: Path) -> Path:
+    path = Path(command[command.index(option) + 1])
+    return path if path.is_absolute() else cwd / path
+
+
 def test_corridor_rejected_topology_clusters_do_not_become_join_candidates() -> None:
     topology_report = {
         "clusters_file": "clusters.csv",
@@ -252,8 +257,8 @@ def test_junction_aggregation_preserves_reference_confirmed_modal_nodes(tmp_path
     )
 
     def fake_command(command, cwd, timeout_seconds):
-        patch_file = Path(command[command.index("--node-files") + 1])
-        variant_file = Path(command[command.index("--output-file") + 1])
+        patch_file = _command_path(command, "--node-files", cwd)
+        variant_file = _command_path(command, "--output-file", cwd)
         variant_file.write_text("<net/>", encoding="utf-8")
         root = ET.parse(patch_file).getroot()
         assert [element.attrib["nodes"] for element in root.findall("join")] == [
@@ -307,13 +312,15 @@ def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_cor
     )
 
     def fake_command(command, cwd, timeout_seconds):
-        remove_file = Path(command[command.index("--remove-edges.input-file") + 1])
+        assert "--remove-edges.input-file" not in command
+        assert command[command.index("--remove-edges.explicit") + 1] == "bike_prune,foot_prune,service_prune"
+        remove_file = tmp_path / "demo_modal_support_remove_edges.txt"
         assert remove_file.read_text(encoding="utf-8").splitlines() == [
             "bike_prune",
             "foot_prune",
             "service_prune",
         ]
-        variant_file = Path(command[command.index("--output-file") + 1])
+        variant_file = _command_path(command, "--output-file", cwd)
         variant_file.write_text("<net/>", encoding="utf-8")
         return {"status": "pass", "stdout": "", "stderr": "", "command": command}
 
@@ -352,7 +359,7 @@ def test_junction_aggregation_variant_reports_failed_collapse_audit(tmp_path) ->
     )
 
     def fake_command(command, cwd, timeout_seconds):
-        variant_file = Path(command[command.index("--output-file") + 1])
+        variant_file = _command_path(command, "--output-file", cwd)
         variant_file.write_text(
             """<net>
   <edge id="veh_a" from="core_a" to="core_b" type="highway.residential">
@@ -458,16 +465,16 @@ def test_unconfirmed_topology_join_candidate_stays_in_map_review(tmp_path) -> No
     assert report["records"][0]["decision"] == "needs_map_review"
 
 
-def test_junction_aggregation_variant_runs_netconvert_with_absolute_paths(tmp_path, monkeypatch) -> None:
+def test_junction_aggregation_variant_runs_netconvert_with_cwd_relative_outputs(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     Path("candidate.net.xml").write_text("<net/>", encoding="utf-8")
 
     def fake_command(command, **kwargs):
         assert kwargs["cwd"] == Path("out").resolve()
         assert Path(command[2]).is_absolute()
-        assert Path(command[command.index("--node-files") + 1]).is_absolute()
-        output_file = Path(command[command.index("--output-file") + 1])
-        assert output_file.is_absolute()
+        assert command[command.index("--node-files") + 1] == "junction_aggregation_junction_join.nod.xml"
+        output_file = _command_path(command, "--output-file", kwargs["cwd"])
+        assert command[command.index("--output-file") + 1] == "junction_aggregation_junction_aggregated.net.xml"
         output_file.write_text("<net/>", encoding="utf-8")
         return {"status": "pass", "returncode": 0}
 

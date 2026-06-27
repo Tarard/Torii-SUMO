@@ -3,6 +3,11 @@ from pathlib import Path
 from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
 
 
+def _command_path(command: list[str], option: str, cwd: Path) -> Path:
+    path = Path(command[command.index(option) + 1])
+    return path if path.is_absolute() else cwd / path
+
+
 def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tmp_path: Path) -> None:
     net_file = tmp_path / "candidate.net.xml"
     clusters_file = tmp_path / "tls_clusters.csv"
@@ -19,9 +24,9 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     )
     calls: list[list[str]] = []
 
-    def fake_command_runner(command, **_kwargs):
+    def fake_command_runner(command, **kwargs):
         calls.append(command)
-        output_file = Path(command[command.index("--output-file") + 1])
+        output_file = _command_path(command, "--output-file", kwargs["cwd"])
         output_file.write_text(
             """<net>
   <junction id="n1" type="traffic_light"/>
@@ -61,7 +66,37 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     command = calls[0]
     assert "--tls.discard-loaded" in command
     assert command[command.index("--tls.set") + 1] == "n1,n3"
-    assert command[command.index("--sumo-net-file") + 1] == str(net_file)
+    assert command[command.index("--sumo-net-file") + 1] == str(net_file.resolve())
+    assert command[command.index("--output-file") + 1] == "demo_tls_tls_aggregated.net.xml"
+
+
+def test_build_tls_aggregation_variant_resolves_relative_paths(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    Path("candidate.net.xml").write_text("<net/>", encoding="utf-8")
+    Path("clusters.csv").write_text(
+        "\n".join(["cluster_id,tls_ids,tls_count,google_maps_url", "G001,tlA,1,https://maps.example/g1"]),
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_command_runner(command, **kwargs):
+        calls.append(command)
+        assert kwargs["cwd"] == tmp_path / "tls_aggregation"
+        _command_path(command, "--output-file", kwargs["cwd"]).write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "returncode": 0}
+
+    report = build_tls_aggregation_variant(
+        net_file=Path("candidate.net.xml"),
+        tls_audit_report={"status": "pass", "tls_cluster_count": 1, "clusters_file": "clusters.csv"},
+        output_dir=Path("tls_aggregation"),
+        prefix="demo_tls",
+        command_runner=fake_command_runner,
+        controlled_nodes_by_tls_func=lambda _net_file: {"tlA": ["n1"]},
+    )
+
+    assert report["status"] == "pass"
+    assert calls[0][calls[0].index("--sumo-net-file") + 1] == str(tmp_path / "candidate.net.xml")
+    assert calls[0][calls[0].index("--output-file") + 1] == "demo_tls_tls_aggregated.net.xml"
 
 
 def test_build_tls_aggregation_variant_skips_when_no_tls_clusters(tmp_path: Path) -> None:
