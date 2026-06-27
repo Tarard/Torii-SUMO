@@ -371,6 +371,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "cases_file": str(tmp_path / "reference_join_cases.csv"),
             "junction_teacher_delta_file": str(tmp_path / "junction_teacher_delta.json"),
             "junction_pattern_comparisons_file": str(tmp_path / "junction_pattern_comparisons.csv"),
+            "junction_pattern_templates_file": str(tmp_path / "junction_pattern_templates.json"),
             "junction_pattern_mismatch_field_counts": {"internal_function_counts": 2},
             "warnings": [],
         }
@@ -547,6 +548,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_audit"]["junction_pattern_index"] == [{"junction_id": "cluster_a_b"}]
     assert report["reference_join_junction_teacher_delta_file"] == str(tmp_path / "junction_teacher_delta.json")
     assert report["reference_join_junction_pattern_comparisons_file"] == str(tmp_path / "junction_pattern_comparisons.csv")
+    assert report["reference_join_junction_pattern_templates_file"] == str(tmp_path / "junction_pattern_templates.json")
     assert report["reference_join_junction_pattern_mismatch_field_counts"] == {"internal_function_counts": 2}
     assert report["reference_join_matched_case_count"] == 2
     assert report["reference_join_unmatched_case_count"] == 1

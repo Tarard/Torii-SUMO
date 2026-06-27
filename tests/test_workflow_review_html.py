@@ -72,6 +72,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     teacher_delta.write_text('{"schema_version": 1}', encoding="utf-8")
     pattern_comparisons = tmp_path / "junction_pattern_comparisons.csv"
     pattern_comparisons.write_text("junction_id,mismatch_fields\nj,internal_function_counts\n", encoding="utf-8")
+    pattern_templates = tmp_path / "junction_pattern_templates.json"
+    pattern_templates.write_text('{"reference_templates": []}', encoding="utf-8")
     repair_queue = tmp_path / "teacher_guided_queue.json"
     repair_queue.write_text('{"repair_candidates": []}', encoding="utf-8")
     repair_queue_csv = tmp_path / "teacher_guided_queue.csv"
@@ -92,6 +94,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "reference_visual_detail_comparison_net_file": str(best_variant),
             "reference_join_junction_teacher_delta_file": str(teacher_delta),
             "reference_join_junction_pattern_comparisons_file": str(pattern_comparisons),
+            "reference_join_junction_pattern_templates_file": str(pattern_templates),
             "teacher_guided_repair_queue_file": str(repair_queue),
             "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
             "teacher_guided_repair_run_report_file": str(repair_run),
@@ -166,6 +169,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "teacher_guided_best.net.xml" in html
     assert "junction_teacher_delta.json" in html
     assert "junction_pattern_comparisons.csv" in html
+    assert "junction_pattern_templates.json" in html
     assert "teacher_guided_queue.json" in html
     assert "copyNeteditCommand" in html
     assert "Aggregate selected junctions" in html
@@ -225,6 +229,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["artifacts"]["reference_visual_detail_comparison_net_file"] == "../teacher_guided_best.net.xml"
     assert manifest["artifacts"]["reference_join_junction_teacher_delta_file"] == "../junction_teacher_delta.json"
     assert manifest["artifacts"]["reference_join_junction_pattern_comparisons_file"] == "../junction_pattern_comparisons.csv"
+    assert manifest["artifacts"]["reference_join_junction_pattern_templates_file"] == "../junction_pattern_templates.json"
     assert manifest["artifacts"]["teacher_guided_repair_queue_file"] == "../teacher_guided_queue.json"
     assert manifest["artifacts"]["teacher_guided_repair_queue_csv_file"] == "../teacher_guided_queue.csv"
     assert manifest["artifacts"]["teacher_guided_repair_run_report_file"] == "../teacher_guided_run.json"
