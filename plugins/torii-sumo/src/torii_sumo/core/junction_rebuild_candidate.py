@@ -182,7 +182,7 @@ def build_teacher_guided_repair_queue(
         "repair_candidate_count": len(repair_candidates),
         "ready_candidate_count": ready_count,
         "expanded_scope_candidate_count": expanded_scope_count,
-        "blocked_candidate_count": len(repair_candidates) - ready_count,
+        "blocked_candidate_count": len(repair_candidates) - ready_count - expanded_scope_count,
         "junction_pattern_mismatch_field_counts": reference_join_audit_report.get(
             "junction_pattern_mismatch_field_counts", {}
         ),
@@ -733,12 +733,15 @@ def write_teacher_target_internal_replay_net(
             skipped_boundary_edges.append(edge_id)
             continue
         replaced_edge = candidate_edges_by_id.get(copied_edge_id)
+        insert_at = insert_index + boundary_insert_offset
         if replaced_edge is not None:
+            insert_at = list(candidate_root).index(replaced_edge)
             _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
             candidate_root.remove(replaced_edge)
             candidate_edge_ids.remove(copied_edge_id)
-        candidate_root.insert(insert_index + boundary_insert_offset, copied_edge)
-        boundary_insert_offset += 1
+        candidate_root.insert(insert_at, copied_edge)
+        if replaced_edge is None:
+            boundary_insert_offset += 1
         candidate_edge_ids.add(copied_edge_id)
         candidate_edges_by_id[copied_edge_id] = copied_edge
         replay_edge_map[edge_id] = copied_edge_id
@@ -1523,12 +1526,13 @@ def write_expanded_scope_plain_inputs(
     for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
         node_root.append(copy.deepcopy(raw_nodes[node_id]))
     join_node_ids = sorted(node_id for node_id in seed_node_ids if node_id in raw_nodes)
+    core_junction_id = str(scope.get("core_junction_id", ""))
     if len(join_node_ids) >= 2:
         join_definition = build_junction_join_definition(
             [
                 {
                     "source": "teacher_guided_expanded_scope",
-                    "candidate_id": str(scope.get("core_junction_id", "")),
+                    "candidate_id": core_junction_id,
                     "decision": "join",
                     "confidence": "reference_matched",
                     "node_ids": join_node_ids,
@@ -1539,6 +1543,9 @@ def write_expanded_scope_plain_inputs(
             prefix="expanded_scope",
         )
         joined_scope_junction_id = _sumo_joined_cluster_id(join_node_ids)
+    elif core_junction_id in raw_nodes:
+        join_definition = {}
+        joined_scope_junction_id = core_junction_id
     else:
         join_definition = {}
         joined_scope_junction_id = ""
@@ -1586,6 +1593,11 @@ def write_expanded_scope_plain_inputs(
     ]
     missing_node_ids = sorted(node_id for node_id in selected_node_ids if node_id not in raw_nodes)
     missing_blocked_edge_ids = sorted(edge_id for edge_id in blocked_edge_ids if edge_id not in selected_edge_ids)
+    blocking_missing_node_ids = sorted(
+        node_id
+        for node_id in missing_node_ids
+        if not (joined_scope_junction_id == core_junction_id and node_id in seed_node_ids)
+    )
     netconvert_report = _command_report(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
     sumo_command = [
         sumo_binary,
@@ -1606,7 +1618,7 @@ def write_expanded_scope_plain_inputs(
         sumo_report = {"status": "skipped", "reason": "netconvert_failed"}
     probe_status = "pass" if netconvert_report.get("status") == "pass" and sumo_report.get("status") == "pass" else "fail"
     return {
-        "status": "review" if missing_node_ids or missing_blocked_edge_ids else probe_status,
+        "status": "review" if blocking_missing_node_ids or missing_blocked_edge_ids else probe_status,
         "claim_status": "diagnostic-demo",
         "recommended_action": "run_netconvert_scope_probe",
         "node_file": str(node_file),
@@ -1625,6 +1637,7 @@ def write_expanded_scope_plain_inputs(
         "seed_node_ids": sorted(seed_node_ids),
         "blocked_edge_ids": sorted(blocked_edge_ids),
         "missing_node_ids": missing_node_ids,
+        "blocking_missing_node_ids": blocking_missing_node_ids,
         "missing_blocked_edge_ids": missing_blocked_edge_ids,
         "rewritten_endpoint_count": rewritten_endpoint_count,
         "skipped_endpoint_rewrites": skipped_endpoint_rewrites,
@@ -2088,6 +2101,7 @@ def _teacher_guided_repair_candidate(
         candidate_junction_id,
         approach_endpoint_rebuild_plan,
         blocked_teacher_edge_ids=uncopyable_missing,
+        fallback_junction_ids=scope_node_ids,
     )
     candidate_status = "ready_for_teacher_guided_variant"
     if uncopyable_missing:
@@ -2137,19 +2151,35 @@ def _expanded_rebuild_scope(
     approach_endpoint_rebuild_plan: dict[str, Any],
     *,
     blocked_teacher_edge_ids: list[str],
+    fallback_junction_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    if not blocked_teacher_edge_ids or approach_endpoint_rebuild_plan.get("status") != "review":
+    if not blocked_teacher_edge_ids:
         return {"status": "pass", "recommended_action": "none", "junction_ids": []}
-    neighbor_ids = [str(item) for item in approach_endpoint_rebuild_plan.get("affected_neighbor_junction_ids", []) or []]
-    missing_ids = [str(item) for item in approach_endpoint_rebuild_plan.get("missing_desired_endpoint_ids", []) or []]
+    if approach_endpoint_rebuild_plan.get("status") == "review":
+        neighbor_ids = [
+            str(item) for item in approach_endpoint_rebuild_plan.get("affected_neighbor_junction_ids", []) or []
+        ]
+        missing_ids = [str(item) for item in approach_endpoint_rebuild_plan.get("missing_desired_endpoint_ids", []) or []]
+        return {
+            "status": "review",
+            "recommended_action": "rebuild_plain_xml_scope",
+            "core_junction_id": core_junction_id,
+            "junction_ids": sorted({core_junction_id, *neighbor_ids, *missing_ids}),
+            "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
+            "missing_desired_endpoint_ids": missing_ids,
+            "reason": "approach endpoints differ and at least one missing teacher edge cannot be copied safely",
+        }
+    fallback_ids = sorted({str(item) for item in fallback_junction_ids or [] if str(item)})
+    if len(fallback_ids) < 2:
+        return {"status": "pass", "recommended_action": "none", "junction_ids": []}
     return {
         "status": "review",
         "recommended_action": "rebuild_plain_xml_scope",
         "core_junction_id": core_junction_id,
-        "junction_ids": sorted({core_junction_id, *neighbor_ids, *missing_ids}),
+        "junction_ids": fallback_ids,
         "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
-        "missing_desired_endpoint_ids": missing_ids,
-        "reason": "approach endpoints differ and at least one missing teacher edge cannot be copied safely",
+        "missing_desired_endpoint_ids": [],
+        "reason": "missing teacher approach edge cannot be copied safely; rebuild from matched candidate source nodes",
     }
 
 
