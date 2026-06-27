@@ -148,6 +148,53 @@ def extract_junction_pattern_index(
     return records
 
 
+def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[str, Any]:
+    model = extract_teacher_junction_model(net_file, junction_id)
+    incoming = [edge["edge_id"] for edge in model.get("approaches", {}).get("incoming", [])]
+    outgoing = [edge["edge_id"] for edge in model.get("approaches", {}).get("outgoing", [])]
+    slots = []
+    edge_to_slot: dict[str, str] = {}
+    for index, edge_id in enumerate(dict.fromkeys(incoming + outgoing)):
+        slot_id = f"slot_{index}"
+        edge_to_slot[edge_id] = slot_id
+        slots.append({"slot_id": slot_id, "members": [edge_id]})
+
+    vehicle_connections = []
+    for connection in model.get("vehicle_connections", []):
+        if not isinstance(connection, dict):
+            continue
+        source_slot = edge_to_slot.get(str(connection.get("from", "")))
+        target_slot = edge_to_slot.get(str(connection.get("to", "")))
+        if not source_slot or not target_slot:
+            continue
+        vehicle_connections.append(
+            {
+                "from_slot": source_slot,
+                "to_slot": target_slot,
+                "fromLane": str(connection.get("fromLane", "")),
+                "toLane": str(connection.get("toLane", "")),
+                "via": str(connection.get("via", "")),
+                "tl": str(connection.get("tl", "")),
+                "linkIndex": str(connection.get("linkIndex", "")),
+                "dir": str(connection.get("dir", "")),
+                "state": str(connection.get("state", "")),
+            }
+        )
+
+    root = ET.parse(net_file).getroot()
+    junction = next((node for node in root.findall("junction") if node.attrib.get("id") == junction_id), None)
+    requests = [dict(request.attrib) for request in junction.findall("request")] if junction is not None else []
+    return {
+        "schema_version": 1,
+        "junction_id": junction_id,
+        "approach_slots": slots,
+        "vehicle_connections": vehicle_connections,
+        "traffic_light": model.get("traffic_light", {}),
+        "requests": requests,
+        "summary": model.get("summary", {}),
+    }
+
+
 def match_teacher_approaches(
     teacher_approaches: list[dict[str, Any]],
     candidate_approaches: list[dict[str, Any]],
