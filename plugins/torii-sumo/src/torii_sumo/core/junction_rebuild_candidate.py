@@ -2150,6 +2150,7 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections, target_tls_id)
     summary["controlled_pedestrian_link_count"] = _controlled_link_count(pedestrian_connections, target_tls_id)
     summary["controlled_link_count"] = summary["controlled_vehicle_link_count"] + summary["controlled_pedestrian_link_count"]
+    summary.update(_controlled_link_index_stats(vehicle_connections + pedestrian_connections, target_tls_id))
     return summary
 
 
@@ -2159,6 +2160,25 @@ def _controlled_link_count(connections: list[object], tls_id: str) -> int:
         for connection in connections
         if isinstance(connection, dict) and connection.get("tl") == tls_id and connection.get("linkIndex")
     )
+
+
+def _controlled_link_index_stats(connections: list[object], tls_id: str) -> dict[str, int]:
+    link_indexes = Counter(
+        str(connection["linkIndex"])
+        for connection in connections
+        if isinstance(connection, dict) and connection.get("tl") == tls_id and connection.get("linkIndex")
+    )
+    numeric_indexes = []
+    for link_index in link_indexes:
+        try:
+            numeric_indexes.append(int(link_index))
+        except ValueError:
+            continue
+    return {
+        "controlled_link_index_count": len(link_indexes),
+        "controlled_link_index_span": max(numeric_indexes) + 1 if numeric_indexes else 0,
+        "controlled_duplicate_link_index_count": sum(1 for count in link_indexes.values() if count > 1),
+    }
 
 
 def _tl_phase_signatures(phases: list[object]) -> list[str]:
@@ -2223,18 +2243,30 @@ def _controlled_link_signatures(
     attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
     tls_id = str(attributes.get("id", "") or model.get("junction_id", "")) if isinstance(attributes, dict) else ""
     connections = model.get(connection_key, []) if isinstance(model.get(connection_key), list) else []
-    signatures: dict[str, str] = {}
+    signatures_by_link_index: dict[str, list[str]] = {}
     for connection in connections:
         if not isinstance(connection, dict) or connection.get("tl") != tls_id or not connection.get("linkIndex"):
             continue
         link_index = str(connection["linkIndex"])
-        signatures[link_index] = _vehicle_connection_signature(
-            connection,
-            edge_map=edge_map,
-            source_junction_id=source_junction_id,
-            target_junction_id=target_junction_id,
+        signatures_by_link_index.setdefault(link_index, []).append(
+            _vehicle_connection_signature(
+                connection,
+                edge_map=edge_map,
+                source_junction_id=source_junction_id,
+                target_junction_id=target_junction_id,
+            )
         )
-    return signatures
+    return {
+        link_index: _controlled_link_signature_group(signatures)
+        for link_index, signatures in sorted(signatures_by_link_index.items())
+    }
+
+
+def _controlled_link_signature_group(signatures: list[str]) -> str:
+    if len(signatures) == 1:
+        return signatures[0]
+    counts = Counter(signatures)
+    return " || ".join(f"{counts[signature]}x {signature}" for signature in sorted(counts))
 
 
 def _uncontrolled_pedestrian_connection_signatures(
