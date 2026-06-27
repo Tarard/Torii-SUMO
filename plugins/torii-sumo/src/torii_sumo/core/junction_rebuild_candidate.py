@@ -119,7 +119,8 @@ def build_teacher_guided_repair_queue(
     teacher_root = ET.parse(teacher_net_file).getroot()
     candidate_root = ET.parse(candidate_net_file).getroot()
     teacher_edges = {edge.attrib["id"]: edge for edge in teacher_root.findall("edge") if edge.attrib.get("id")}
-    candidate_edge_ids = {edge.attrib["id"] for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
+    candidate_edges_by_id = {edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
+    candidate_edge_ids = set(candidate_edges_by_id)
     matched_cases = [
         case
         for case in reference_join_audit_report.get("matched_cases", []) or []
@@ -143,6 +144,7 @@ def build_teacher_guided_repair_queue(
                     teacher_root=teacher_root,
                     candidate_root=candidate_root,
                     teacher_edges=teacher_edges,
+                    candidate_edges_by_id=candidate_edges_by_id,
                     candidate_edge_ids=candidate_edge_ids,
                 ),
                 pattern_deltas,
@@ -636,7 +638,8 @@ def write_teacher_target_internal_replay_net(
     teacher_root = ET.parse(teacher_net_file).getroot()
     internal_prefix = f":{junction_id}_"
     teacher_internal_prefix = f":{teacher_junction_id}_"
-    candidate_edge_ids = {edge.attrib["id"] for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
+    candidate_edges_by_id = {edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
+    candidate_edge_ids = set(candidate_edges_by_id)
     replay_edge_map = dict(edge_map)
 
     candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
@@ -682,10 +685,12 @@ def write_teacher_target_internal_replay_net(
         teacher_root.findall("connection"),
         teacher_edges,
         replay_edge_map,
-        candidate_edge_ids,
+        candidate_edges_by_id,
         teacher_internal_prefix,
         teacher_junction_id,
         junction_id,
+        dx,
+        dy,
     ):
         teacher_edge = teacher_edges[edge_id]
         mapped_from = junction_id if teacher_edge.attrib.get("from") == teacher_junction_id else teacher_edge.attrib.get("from", "")
@@ -713,14 +718,29 @@ def write_teacher_target_internal_replay_net(
         if mapped_from not in candidate_junction_ids or mapped_to not in candidate_junction_ids:
             skipped_boundary_edges.append(edge_id)
             continue
-        copied_edge = _clone_transformed_net_element(teacher_edge, dx, dy, replay_edge_map, teacher_junction_id, junction_id)
+        copied_edge_id = replay_edge_map.get(edge_id, edge_id)
+        copied_edge = _clone_transformed_boundary_edge(
+            teacher_edge,
+            copied_edge_id,
+            dx,
+            dy,
+            replay_edge_map,
+            teacher_junction_id,
+            junction_id,
+        )
         copied_edge_id = copied_edge.attrib.get("id", "")
-        if not copied_edge_id or copied_edge_id in candidate_edge_ids:
+        if not copied_edge_id:
             skipped_boundary_edges.append(edge_id)
             continue
+        replaced_edge = candidate_edges_by_id.get(copied_edge_id)
+        if replaced_edge is not None:
+            _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
+            candidate_root.remove(replaced_edge)
+            candidate_edge_ids.remove(copied_edge_id)
         candidate_root.insert(insert_index + boundary_insert_offset, copied_edge)
         boundary_insert_offset += 1
         candidate_edge_ids.add(copied_edge_id)
+        candidate_edges_by_id[copied_edge_id] = copied_edge
         replay_edge_map[edge_id] = copied_edge_id
         _append_edge_lanes_to_destination_junction(candidate_root, copied_edge)
         copied_boundary_edges.append(edge_id)
@@ -1961,6 +1981,7 @@ def _teacher_guided_repair_candidate(
     teacher_root: ET.Element,
     candidate_root: ET.Element,
     teacher_edges: dict[str, ET.Element],
+    candidate_edges_by_id: dict[str, ET.Element],
     candidate_edge_ids: set[str],
 ) -> dict[str, object]:
     reference_id = str(case.get("reference_id", ""))
@@ -2056,7 +2077,7 @@ def _teacher_guided_repair_candidate(
     copyable_missing = _copyable_missing_teacher_edge_ids(
         teacher_root.findall("connection"),
         teacher_edges,
-        candidate_edge_ids,
+        candidate_edges_by_id,
         teacher_junction_id=reference_id,
         candidate_junction_id=candidate_junction_id,
         edge_map=edge_map,
@@ -2185,7 +2206,7 @@ def _teacher_approach_edge_ids(teacher_model: dict[str, object]) -> list[str]:
 def _copyable_missing_teacher_edge_ids(
     teacher_connections: list[ET.Element],
     teacher_edges: dict[str, ET.Element],
-    candidate_edge_ids: set[str],
+    candidate_edges_by_id: dict[str, ET.Element],
     *,
     teacher_junction_id: str,
     candidate_junction_id: str,
@@ -2195,10 +2216,14 @@ def _copyable_missing_teacher_edge_ids(
         teacher_connections,
         teacher_edges,
         edge_map,
-        candidate_edge_ids,
+        candidate_edges_by_id,
         f":{teacher_junction_id}_",
         teacher_junction_id,
         candidate_junction_id,
+        0.0,
+        0.0,
+        compare_lane_shapes=False,
+        replay_existing_edges=False,
     )
 
 
@@ -2326,6 +2351,30 @@ def _clone_transformed_net_element(
         clone.append(
             _clone_transformed_net_element(child, dx, dy, edge_map, teacher_junction_id, candidate_junction_id)
         )
+    return clone
+
+
+def _clone_transformed_boundary_edge(
+    edge: ET.Element,
+    edge_id: str,
+    dx: float,
+    dy: float,
+    edge_map: dict[str, str],
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+) -> ET.Element:
+    clone = _clone_transformed_net_element(edge, dx, dy, edge_map, teacher_junction_id, candidate_junction_id)
+    teacher_edge_id = edge.attrib.get("id", "")
+    if edge_id and edge_id != teacher_edge_id:
+        clone.set("id", edge_id)
+        teacher_prefix = f"{teacher_edge_id}_"
+        candidate_prefix = f"{edge_id}_"
+        for lane in clone.findall("lane"):
+            lane_id = lane.attrib.get("id", "")
+            if lane_id.startswith(teacher_prefix):
+                lane.set("id", f"{candidate_prefix}{lane_id[len(teacher_prefix):]}")
+            elif lane.attrib.get("index"):
+                lane.set("id", f"{candidate_prefix}{lane.attrib['index']}")
     return clone
 
 
@@ -2477,10 +2526,15 @@ def _needed_unmapped_teacher_boundary_edges(
     connections: list[ET.Element],
     teacher_edges: dict[str, ET.Element],
     edge_map: dict[str, str],
-    candidate_edge_ids: set[str],
+    candidate_edges_by_id: dict[str, ET.Element],
     teacher_internal_prefix: str,
     teacher_junction_id: str,
     candidate_junction_id: str,
+    dx: float,
+    dy: float,
+    *,
+    compare_lane_shapes: bool = True,
+    replay_existing_edges: bool = True,
 ) -> list[str]:
     needed = []
     seen = set()
@@ -2492,8 +2546,6 @@ def _needed_unmapped_teacher_boundary_edges(
             if (
                 not edge_id
                 or edge_id.startswith(teacher_internal_prefix)
-                or edge_map.get(edge_id)
-                or edge_id in candidate_edge_ids
                 or edge_id in seen
             ):
                 continue
@@ -2506,9 +2558,31 @@ def _needed_unmapped_teacher_boundary_edges(
             mapped_to = candidate_junction_id if teacher_edge.attrib.get("to") == teacher_junction_id else teacher_edge.attrib.get("to", "")
             if not mapped_from or not mapped_to:
                 continue
+            candidate_edge = candidate_edges_by_id.get(edge_map.get(edge_id, edge_id))
+            if candidate_edge is not None and not replay_existing_edges:
+                continue
+            if (
+                candidate_edge is not None
+                and candidate_edge.attrib.get("from") == mapped_from
+                and candidate_edge.attrib.get("to") == mapped_to
+                and (
+                    not compare_lane_shapes
+                    or _edge_lane_shapes(candidate_edge) == _translated_edge_lane_shapes(teacher_edge, dx, dy)
+                )
+            ):
+                continue
             seen.add(edge_id)
             needed.append(edge_id)
     return needed
+
+
+def _edge_lane_shapes(edge: ET.Element) -> list[str]:
+    shapes = (lane.attrib.get("shape", "") for lane in edge.findall("lane"))
+    return [_translate_shape(shape, 0.0, 0.0) if shape else "" for shape in shapes]
+
+
+def _translated_edge_lane_shapes(edge: ET.Element, dx: float, dy: float) -> list[str]:
+    return [_translate_shape(shape, dx, dy) if shape else "" for shape in _edge_lane_shapes(edge)]
 
 
 def _append_edge_lanes_to_destination_junction(root: ET.Element, edge: ET.Element) -> None:
@@ -2525,6 +2599,20 @@ def _append_edge_lanes_to_destination_junction(root: ET.Element, edge: ET.Elemen
     for lane in lanes:
         if lane not in inc_lanes:
             inc_lanes.append(lane)
+    junction.set("incLanes", " ".join(inc_lanes))
+
+
+def _remove_edge_lanes_from_destination_junction(root: ET.Element, edge: ET.Element) -> None:
+    destination = edge.attrib.get("to", "")
+    if not destination:
+        return
+    junction = next((item for item in root.findall("junction") if item.attrib.get("id") == destination), None)
+    if junction is None:
+        return
+    lanes = {lane.attrib["id"] for lane in edge.findall("lane") if lane.attrib.get("id")}
+    if not lanes:
+        return
+    inc_lanes = [lane for lane in _split(junction.attrib.get("incLanes", "")) if lane not in lanes]
     junction.set("incLanes", " ".join(inc_lanes))
 
 
