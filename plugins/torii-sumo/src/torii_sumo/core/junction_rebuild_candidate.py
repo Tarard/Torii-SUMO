@@ -1366,6 +1366,7 @@ def run_teacher_guided_repair_queue(
                     replay_edge_file,
                     replay_edge_endpoint_rewrite_count,
                     replay_dropped_self_loop_edges,
+                    replay_blocking_self_loop_edge_drops,
                 ) = _write_joined_endpoint_edge_file(
                     Path(str(scope_report.get("edge_file", ""))),
                     Path(str(scope_report.get("join_nodes_patch_file", ""))),
@@ -1377,6 +1378,18 @@ def run_teacher_guided_repair_queue(
                 scope_report["replay_edge_endpoint_rewrite_count"] = replay_edge_endpoint_rewrite_count
                 scope_report["replay_self_loop_edge_drop_count"] = len(replay_dropped_self_loop_edges)
                 scope_report["replay_dropped_self_loop_edges"] = replay_dropped_self_loop_edges
+                scope_report["replay_blocking_self_loop_edge_drops"] = replay_blocking_self_loop_edge_drops
+                if replay_blocking_self_loop_edge_drops:
+                    scope_report["status"] = "review"
+                    skipped_candidates.append(
+                        {
+                            "index": index,
+                            "junction_id": junction_id,
+                            "candidate_status": "unsafe_replay_self_loop_edge_drop",
+                            "replay_blocking_self_loop_edge_drops": replay_blocking_self_loop_edge_drops,
+                        }
+                    )
+                    continue
                 attempted_ready_count += 1
                 try:
                     variant_report = variant_builder(
@@ -1758,21 +1771,25 @@ def _write_joined_endpoint_edge_file(
     join_patch_file: Path,
     joined_junction_id: str,
     output_file: Path,
-) -> tuple[Path, int, list[str]]:
+) -> tuple[Path, int, list[str], list[str]]:
     if not join_patch_file.is_file() or not joined_junction_id:
-        return edge_file, 0, []
+        return edge_file, 0, [], []
     source_node_ids = _joined_source_node_ids(join_patch_file, joined_junction_id)
     if not source_node_ids:
-        return edge_file, 0, []
+        return edge_file, 0, [], []
 
     edge_root = ET.parse(edge_file).getroot()
     rewrite_count = 0
     dropped_self_loop_edges = []
+    blocking_self_loop_edge_drops = []
     for edge in list(edge_root.findall("edge")):
         from_is_join_source = edge.attrib.get("from", "") in source_node_ids
         to_is_join_source = edge.attrib.get("to", "") in source_node_ids
         if from_is_join_source and to_is_join_source:
-            dropped_self_loop_edges.append(edge.attrib.get("id", ""))
+            edge_id = edge.attrib.get("id", "")
+            dropped_self_loop_edges.append(edge_id)
+            if _edge_drop_requires_review(edge):
+                blocking_self_loop_edge_drops.append(edge_id)
             edge_root.remove(edge)
             continue
         if from_is_join_source:
@@ -1782,12 +1799,37 @@ def _write_joined_endpoint_edge_file(
             edge.set("to", joined_junction_id)
             rewrite_count += 1
     if rewrite_count == 0 and not dropped_self_loop_edges:
-        return edge_file, 0, []
+        return edge_file, 0, [], []
 
     ET.indent(edge_root, space="    ")
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(edge_root).write(output_file, encoding="utf-8", xml_declaration=True)
-    return output_file, rewrite_count, dropped_self_loop_edges
+    return output_file, rewrite_count, dropped_self_loop_edges, blocking_self_loop_edge_drops
+
+
+def _edge_drop_requires_review(edge: ET.Element) -> bool:
+    edge_id = edge.attrib.get("id", "")
+    if edge_id.startswith(":") or edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}:
+        return False
+    if edge.attrib.get("type", "").startswith("highway."):
+        return True
+    vehicle_classes = {
+        "passenger",
+        "private",
+        "bus",
+        "coach",
+        "truck",
+        "trailer",
+        "motorcycle",
+        "moped",
+        "taxi",
+        "delivery",
+        "emergency",
+    }
+    for lane in edge.findall("lane"):
+        if set(lane.attrib.get("allow", "").split()) & vehicle_classes:
+            return True
+    return False
 
 
 def _joined_source_node_ids(node_file: Path, junction_id: str) -> set[str]:
