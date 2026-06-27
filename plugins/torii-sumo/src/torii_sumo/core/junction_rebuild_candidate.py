@@ -1564,7 +1564,19 @@ def _attach_candidate_template_context(
         )
         if key in candidate
     }
-    return {**report, **context} if context else report
+    if not context:
+        return report
+    merged = {**report, **context}
+    report_file = str(report.get("report_file", ""))
+    if report_file:
+        try:
+            path = Path(report_file)
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(existing, dict):
+                path.write_text(json.dumps({**existing, **context}, indent=2, ensure_ascii=False), encoding="utf-8")
+        except (OSError, json.JSONDecodeError):
+            pass
+    return merged
 
 
 def _should_emit(movement: dict[str, object]) -> bool:

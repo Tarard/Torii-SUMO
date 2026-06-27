@@ -1,4 +1,5 @@
 import csv
+import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -684,12 +685,16 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
 
     def fake_variant(**kwargs):
         calls.append(kwargs)
+        variant_report = kwargs["output_dir"] / "variant_report.json"
+        variant_report.parent.mkdir(parents=True, exist_ok=True)
+        variant_report.write_text('{"status": "pass"}', encoding="utf-8")
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "junction_id": kwargs["junction_id"],
             "final_net_file": str(kwargs["output_dir"] / "final.net.xml"),
             "parity_gate_status": "pass",
+            "report_file": str(variant_report),
         }
 
     report = run_teacher_guided_repair_queue(
@@ -735,6 +740,9 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     assert report["variant_reports"][0]["teacher_pattern_family"] == "three_way"
     assert report["variant_reports"][0]["teacher_pattern_template_count"] == 127
     assert report["variant_reports"][0]["teacher_pattern_template_examples"] == ["cluster_template_1"]
+    variant_report = json.loads(Path(report["variant_reports"][0]["report_file"]).read_text(encoding="utf-8"))
+    assert variant_report["teacher_pattern_key"] == "three_way|control=right_before_left"
+    assert variant_report["teacher_pattern_template_count"] == 127
 
 
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:
