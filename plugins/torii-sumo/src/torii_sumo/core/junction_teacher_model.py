@@ -474,6 +474,7 @@ def _connection_record(connection: ET.Element) -> dict[str, str]:
         "keepClear": connection.attrib.get("keepClear", ""),
         "contPos": connection.attrib.get("contPos", ""),
         "linkIndex2": connection.attrib.get("linkIndex2", ""),
+        "shape": connection.attrib.get("shape", ""),
     }
 
 
