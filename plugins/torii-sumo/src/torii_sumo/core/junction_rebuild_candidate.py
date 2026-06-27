@@ -1663,8 +1663,9 @@ def _mapped_spatial_attrs(
         mapped["x"] = _format_xy(float(mapped["x"]) + dx)
     if "y" in mapped:
         mapped["y"] = _format_xy(float(mapped["y"]) + dy)
-    if "shape" in mapped:
-        mapped["shape"] = _translate_shape(mapped["shape"], dx, dy)
+    for attr in ("shape", "outlineShape", "customShape"):
+        if attr in mapped:
+            mapped[attr] = _translate_shape(mapped[attr], dx, dy)
     if "crossingEdges" in mapped:
         mapped_edges = [
             edge_map.get(edge, _map_internal_ref(edge, teacher_internal_prefix, candidate_internal_prefix) if edge.startswith(":") else "")

@@ -2094,13 +2094,13 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
   <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0" shape="90,20 100,20"/></edge>
   <edge id="teacher_out" from="j" to="b"><lane id="teacher_out_0" index="0" shape="100,20 110,20"/></edge>
   <edge id="foot_same" from="j" to="p"><lane id="foot_same_0" index="0" allow="pedestrian" shape="100,20 100,25"/></edge>
-  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="100,200 101,201"/></edge>
-  <edge id=":j_c0" function="crossing" crossingEdges="teacher_in"><lane id=":j_c0_0" index="0" allow="pedestrian" shape="99,199 101,199"/></edge>
-  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="98,198 99,199"/></edge>
-  <junction id="j" type="traffic_light" x="100" y="200" shape="99,199 101,199 101,201 99,201" incLanes="teacher_in_0" intLanes=":j_0_0 :j_c0_0 :j_w0_0">
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="100,200 101,201" outlineShape="99,199 102,202"/></edge>
+  <edge id=":j_c0" function="crossing" crossingEdges="teacher_in"><lane id=":j_c0_0" index="0" allow="pedestrian" shape="99,199 101,199" outlineShape="98,198 102,200"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="98,198 99,199" outlineShape="97,197 100,200"/></edge>
+  <junction id="j" type="traffic_light" x="100" y="200" shape="99,199 101,199 101,201 99,201" customShape="98,198 102,198 102,202 98,202" incLanes="teacher_in_0" intLanes=":j_0_0 :j_c0_0 :j_w0_0">
     <request index="0" response="0" foes="0" cont="0"/>
   </junction>
-  <junction id=":j_0_0" type="internal" x="100" y="200" incLanes="teacher_in_0" intLanes=":j_0_0"/>
+  <junction id=":j_0_0" type="internal" x="100" y="200" incLanes="teacher_in_0" intLanes=":j_0_0" customShape="99,199 101,201"/>
   <junction id=":j_w0_0" type="internal" x="98" y="198" incLanes="teacher_in_0" intLanes=":j_c0_0"/>
   <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
   <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s" state="M"/>
@@ -2138,11 +2138,15 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert root.find("edge[@id=':j_old']") is None
     assert root.find("junction[@id=':j_old_0']") is None
     assert root.find("edge[@id=':j_0']/lane").attrib["shape"] == "10.00,20.00 11.00,21.00"
+    assert root.find("edge[@id=':j_0']/lane").attrib["outlineShape"] == "9.00,19.00 12.00,22.00"
+    assert root.find("edge[@id=':j_c0']/lane").attrib["outlineShape"] == "8.00,18.00 12.00,20.00"
+    assert root.find("edge[@id=':j_w0']/lane").attrib["outlineShape"] == "7.00,17.00 10.00,20.00"
     assert root.find("edge[@id=':j_c0']").attrib["crossingEdges"] == "cand_in"
     junction = root.find("junction[@id='j']")
     assert junction.attrib["x"] == "10.00"
     assert junction.attrib["y"] == "20.00"
     assert junction.attrib["shape"] == "9.00,19.00 11.00,19.00 11.00,21.00 9.00,21.00"
+    assert junction.attrib["customShape"] == "8.00,18.00 12.00,18.00 12.00,22.00 8.00,22.00"
     assert junction.attrib["incLanes"] == "cand_in_0"
     assert junction.attrib["intLanes"] == ":j_0_0 :j_c0_0 :j_w0_0"
     internal_junction = root.find("junction[@id=':j_0_0']")
@@ -2150,6 +2154,7 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert internal_junction.attrib["y"] == "20.00"
     assert internal_junction.attrib["incLanes"] == "cand_in_0"
     assert internal_junction.attrib["intLanes"] == ":j_0_0"
+    assert internal_junction.attrib["customShape"] == "9.00,19.00 11.00,21.00"
     walkingarea_junction = root.find("junction[@id=':j_w0_0']")
     assert walkingarea_junction.attrib["x"] == "8.00"
     assert walkingarea_junction.attrib["y"] == "18.00"
