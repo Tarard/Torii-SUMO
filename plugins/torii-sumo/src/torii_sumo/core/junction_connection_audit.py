@@ -8,6 +8,28 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 
+CONNECTION_RECORD_FIELDS = [
+    "category",
+    "from",
+    "to",
+    "fromLane",
+    "toLane",
+    "dir",
+    "state",
+    "via",
+    "tl",
+    "linkIndex",
+    "linkIndex2",
+    "pass",
+    "uncontrolled",
+    "allow",
+    "disallow",
+    "keepClear",
+    "contPos",
+    "shape",
+]
+
+
 def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
     plain_edges = {
@@ -36,20 +58,21 @@ def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, An
             continue
         category = _connection_category(source, target, incoming, outgoing, internal_prefix)
         category_counts[category] += 1
-        records.append(
-            {
-                "category": category,
-                "from": source,
-                "to": target,
-                "fromLane": connection.attrib.get("fromLane", ""),
-                "toLane": connection.attrib.get("toLane", ""),
-                "dir": connection.attrib.get("dir", ""),
-                "state": connection.attrib.get("state", ""),
-                "via": via,
-                "tl": connection.attrib.get("tl", ""),
-                "linkIndex": connection.attrib.get("linkIndex", ""),
-            }
-        )
+        record = {
+            "category": category,
+            "from": source,
+            "to": target,
+            "fromLane": connection.attrib.get("fromLane", ""),
+            "toLane": connection.attrib.get("toLane", ""),
+            "dir": connection.attrib.get("dir", ""),
+            "state": connection.attrib.get("state", ""),
+            "via": via,
+            "tl": connection.attrib.get("tl", ""),
+            "linkIndex": connection.attrib.get("linkIndex", ""),
+        }
+        for attr in CONNECTION_RECORD_FIELDS:
+            record.setdefault(attr, connection.attrib.get(attr, ""))
+        records.append(record)
 
     top_external = [record for record in records if record["category"] == "top_external"]
     controlled_links = [record for record in records if record["tl"] and record["linkIndex"]]
@@ -81,12 +104,12 @@ def write_connection_signature(signature: dict[str, Any], output_dir: Path, pref
     signature_file.write_text(json.dumps(signature, indent=2, ensure_ascii=False), encoding="utf-8")
     _write_csv(
         records_file,
-        ["category", "from", "to", "fromLane", "toLane", "dir", "state", "via", "tl", "linkIndex"],
+        CONNECTION_RECORD_FIELDS,
         records,
     )
     _write_csv(
         top_external_file,
-        ["from", "to", "fromLane", "toLane", "dir", "state", "via", "tl", "linkIndex"],
+        [field for field in CONNECTION_RECORD_FIELDS if field != "category"],
         [record for record in records if record.get("category") == "top_external"],
     )
     return {
