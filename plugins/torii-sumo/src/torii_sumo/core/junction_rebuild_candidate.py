@@ -1981,6 +1981,19 @@ def _compare_teacher_models(
         candidate_summary["crossing_signatures"] = candidate_crossing_signatures
         if crossing_mismatch_count:
             delta["crossing_signature_mismatch_count"] = crossing_mismatch_count
+        teacher_walking_area_signatures = _walking_area_signatures(
+            teacher_model,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_walking_area_signatures = _walking_area_signatures(candidate_model)
+        walking_area_mismatch_count = _dict_mismatch_count(
+            teacher_walking_area_signatures, candidate_walking_area_signatures
+        )
+        teacher_summary["walking_area_signatures"] = teacher_walking_area_signatures
+        candidate_summary["walking_area_signatures"] = candidate_walking_area_signatures
+        if walking_area_mismatch_count:
+            delta["walking_area_signature_mismatch_count"] = walking_area_mismatch_count
         teacher_internal_edge_signatures = _internal_edge_signatures(
             teacher_model,
             source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
@@ -2267,14 +2280,36 @@ def _internal_edge_signatures(
         edge_id = _mapped_internal_ref(str(edge.get("edge_id", "")), source_junction_id, target_junction_id)
         if not edge_id:
             continue
-        lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
-        lane_signatures = [
-            f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('width', '')}:{lane.get('shape', '')}"
-            for lane in lanes
-            if isinstance(lane, dict)
-        ]
-        signatures[edge_id] = f"function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
+        signatures[edge_id] = _internal_edge_signature(edge)
     return signatures
+
+
+def _walking_area_signatures(
+    model: dict[str, Any],
+    *,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    walking_areas = model.get("walking_areas", []) if isinstance(model.get("walking_areas"), list) else []
+    signatures: dict[str, str] = {}
+    for edge in walking_areas:
+        if not isinstance(edge, dict):
+            continue
+        edge_id = _mapped_internal_ref(str(edge.get("edge_id", "")), source_junction_id, target_junction_id)
+        if not edge_id:
+            continue
+        signatures[edge_id] = _internal_edge_signature(edge)
+    return signatures
+
+
+def _internal_edge_signature(edge: dict[str, Any]) -> str:
+    lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
+    lane_signatures = [
+        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('width', '')}:{lane.get('shape', '')}"
+        for lane in lanes
+        if isinstance(lane, dict)
+    ]
+    return f"function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
 
 
 def _internal_junction_signatures(

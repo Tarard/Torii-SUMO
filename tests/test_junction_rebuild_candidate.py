@@ -1586,6 +1586,58 @@ def test_teacher_parity_fails_on_mapped_internal_junction_signature_mismatch() -
     ]
 
 
+def test_teacher_parity_fails_on_mapped_walking_area_signature_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "walking_areas": [
+            {
+                "edge_id": ":teacher_j_w0",
+                "function": "walkingarea",
+                "lanes": [{"index": "0", "allow": "pedestrian", "width": "4.00", "shape": "0,0 1,1"}],
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "walking_areas": [
+            {
+                "edge_id": ":candidate_j_w0",
+                "function": "walkingarea",
+                "lanes": [{"index": "0", "allow": "pedestrian", "width": "2.00", "shape": "0,0 2,2"}],
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["walking_area_signatures"] == {
+        ":candidate_j_w0": "function=walkingarea|lanes=0:pedestrian:4.00:0,0 1,1"
+    }
+    assert parity["candidate"]["walking_area_signatures"] == {
+        ":candidate_j_w0": "function=walkingarea|lanes=0:pedestrian:2.00:0,0 2,2"
+    }
+    assert parity["delta"]["walking_area_signature_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "walking_area_signature_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_parity_fails_on_mapped_internal_connection_signature_mismatch() -> None:
     teacher_model = {
         "junction_id": "teacher_j",
