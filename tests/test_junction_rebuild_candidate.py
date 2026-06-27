@@ -339,6 +339,48 @@ def test_run_teacher_guided_repair_queue_resolves_relative_queue_paths(tmp_path:
     assert calls[0]["candidate_net_file"] == candidate_net
 
 
+def test_run_teacher_guided_repair_queue_uses_short_output_names_for_long_junction_ids(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    long_junction_id = "cluster_" + "_".join(str(1000000000 + index) for index in range(20))
+    calls = []
+
+    def fake_variant(**kwargs):
+        calls.append(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo", "parity_gate_status": "pass"}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": long_junction_id,
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        prefix="probe",
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    assert calls[0]["junction_id"] == long_junction_id
+    assert len(calls[0]["output_dir"].name) <= 24
+    assert len(calls[0]["prefix"]) <= 16
+    assert long_junction_id not in calls[0]["prefix"]
+
+
 def test_run_teacher_guided_repair_queue_skips_invalid_edge_map(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
@@ -504,6 +546,7 @@ def test_write_teacher_connection_plan_ignores_edges_missing_from_patched_edge_f
     raw_connections.write_text(
         """<connections>
   <connection from="stale_in" to="stale_out" fromLane="0" toLane="0"/>
+  <connection from="ghost" to="other" fromLane="0" toLane="0"/>
 </connections>
 """,
         encoding="utf-8",
@@ -513,6 +556,7 @@ def test_write_teacher_connection_plan_ignores_edges_missing_from_patched_edge_f
         """<edges>
   <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
   <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+  <edge id="other" from="x" to="y"><lane index="0"/></edge>
 </edges>
 """,
         encoding="utf-8",
@@ -541,7 +585,7 @@ def test_write_teacher_connection_plan_ignores_edges_missing_from_patched_edge_f
     root = ET.parse(report["connection_file"]).getroot()
     assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [("cand_in", "cand_out")]
     assert root.findall("delete") == []
-    assert report["removed_target_children"] == 1
+    assert report["removed_target_children"] == 2
 
 
 def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacing_edge_geometry(tmp_path: Path) -> None:
@@ -581,6 +625,47 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacin
     assert [lane.attrib.get("allow", "") for lane in lanes] == ["pedestrian", ""]
     assert [lane.attrib.get("disallow", "") for lane in lanes] == ["", "pedestrian bicycle"]
     assert report["patched_edge_count"] == 1
+
+
+def test_write_teacher_lane_patch_edges_prunes_unmapped_target_boundary_edges(tmp_path: Path) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j" numLanes="1"><lane index="0"/></edge>
+  <edge id="extra_in" from="x" to="j" numLanes="1"><lane index="0"/></edge>
+  <edge id="extra_out" from="j" to="y" numLanes="1"><lane index="0"/></edge>
+  <edge id="other" from="x" to="y" numLanes="1"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    teacher_edges = tmp_path / "teacher.net.xml"
+    teacher_edges.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j" numLanes="2">
+    <lane index="0" speed="13.89"/>
+    <lane index="1" speed="13.89"/>
+  </edge>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw_edges,
+        teacher_edge_file=teacher_edges,
+        output_file=tmp_path / "patched.edg.xml",
+        edge_map={"teacher_in": "cand_in"},
+        junction_id="j",
+        prune_unmapped_boundary_edges=True,
+    )
+
+    root = ET.parse(report["edge_file"]).getroot()
+    edge_ids = [edge.attrib["id"] for edge in root.findall("edge")]
+    assert edge_ids == ["cand_in", "other"]
+    assert root.find("edge[@id='cand_in']").attrib["numLanes"] == "2"
+    assert report["patched_edge_count"] == 1
+    assert report["pruned_boundary_edges"] == ["extra_in", "extra_out"]
 
 
 def test_write_teacher_pedestrian_ring_net_replays_teacher_ring_and_removes_extra_walkingareas(tmp_path: Path) -> None:
@@ -1022,6 +1107,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
     assert report["target_internal_normalize"] is None
     assert report["target_internal_pedestrian_ring"] is None
+    assert report["target_internal_vehicle_connection_attrs"] is None
     assert report["parity"]["delta"]["vehicle_connection_count"] == 0
     assert report["parity"]["delta"]["pedestrian_connection_count"] == 0
     root = ET.parse(report["final_net_file"]).getroot()
