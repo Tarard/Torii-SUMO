@@ -49,7 +49,7 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
     net_file = tmp_path / "teacher.net.xml"
     net_file.write_text(
         """<net>
-  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" disallow="pedestrian bicycle" shape="-10,0 0,0"/></edge>
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
   <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="passenger" shape="0,0 5,0"/></edge>
   <edge id=":j_c0" function="crossing" crossingEdges="in out"><lane id=":j_c0_0" index="0" allow="pedestrian" width="4.00" shape="0,-2 0,2" outlineShape="0,-3 0,3"/></edge>
@@ -72,6 +72,7 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
     assert model["summary"]["pedestrian_connection_count"] == 1
     assert model["summary"]["tl_phase_count"] == 1
     assert model["approaches"]["incoming"][0]["bearing"] == 0.0
+    assert model["approaches"]["incoming"][0]["lanes"][0]["disallow"] == "pedestrian bicycle"
     assert model["vehicle_connections"][0]["linkIndex"] == "0"
     assert model["internal_edges"][0]["edge_id"] == ":j_0"
     assert model["internal_edges"][0]["lanes"][0]["shape"] == "0,0 5,0"
