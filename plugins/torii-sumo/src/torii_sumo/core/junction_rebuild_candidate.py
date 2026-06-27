@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
@@ -1954,6 +1955,20 @@ def _compare_teacher_models(
         candidate_summary["controlled_pedestrian_link_signatures"] = candidate_pedestrian_signatures
         if pedestrian_mismatch_count:
             delta["controlled_pedestrian_link_signature_mismatch_count"] = pedestrian_mismatch_count
+        teacher_pedestrian_ring_signatures = _uncontrolled_pedestrian_connection_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_pedestrian_ring_signatures = _uncontrolled_pedestrian_connection_signatures(candidate_model)
+        pedestrian_ring_mismatch_count = _dict_mismatch_count(
+            teacher_pedestrian_ring_signatures, candidate_pedestrian_ring_signatures
+        )
+        teacher_summary["uncontrolled_pedestrian_connection_signatures"] = teacher_pedestrian_ring_signatures
+        candidate_summary["uncontrolled_pedestrian_connection_signatures"] = candidate_pedestrian_ring_signatures
+        if pedestrian_ring_mismatch_count:
+            delta["uncontrolled_pedestrian_connection_signature_mismatch_count"] = pedestrian_ring_mismatch_count
         teacher_crossing_signatures = _crossing_signatures(
             teacher_model,
             edge_map=edge_map,
@@ -2083,6 +2098,33 @@ def _controlled_link_signatures(
             target_junction_id=target_junction_id,
         )
     return signatures
+
+
+def _uncontrolled_pedestrian_connection_signatures(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
+    counts: Counter[str] = Counter()
+    for connection in connections:
+        if not isinstance(connection, dict):
+            continue
+        if connection.get("tl") and connection.get("linkIndex"):
+            continue
+        counts.update(
+            [
+                _vehicle_connection_signature(
+                    connection,
+                    edge_map=edge_map,
+                    source_junction_id=source_junction_id,
+                    target_junction_id=target_junction_id,
+                )
+            ]
+        )
+    return {signature: str(counts[signature]) for signature in sorted(counts)}
 
 
 def _vehicle_connection_signature(

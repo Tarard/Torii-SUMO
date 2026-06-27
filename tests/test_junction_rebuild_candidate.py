@@ -1388,6 +1388,55 @@ def test_teacher_parity_fails_on_mapped_crossing_edge_set_mismatch() -> None:
     ]
 
 
+def test_teacher_parity_fails_on_uncontrolled_pedestrian_ring_signature_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [
+            {"from": ":teacher_j_w0", "to": ":teacher_j_w1", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"}
+        ],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [
+            {
+                "from": ":candidate_j_w0",
+                "to": ":candidate_j_w_wrong",
+                "fromLane": "0",
+                "toLane": "0",
+                "dir": "s",
+                "state": "M",
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["uncontrolled_pedestrian_connection_signatures"] == {
+        "from=:candidate_j_w0|to=:candidate_j_w1|fromLane=0|toLane=0|dir=s|state=M|via=": "1"
+    }
+    assert parity["candidate"]["uncontrolled_pedestrian_connection_signatures"] == {
+        "from=:candidate_j_w0|to=:candidate_j_w_wrong|fromLane=0|toLane=0|dir=s|state=M|via=": "1"
+    }
+    assert parity["delta"]["uncontrolled_pedestrian_connection_signature_mismatch_count"] == 2
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "uncontrolled_pedestrian_connection_signature_mismatch_count", "count": 2}
+    ]
+
+
 def test_teacher_guided_semantics_gate_fails_on_skipped_pedestrian_connections() -> None:
     gate = _teacher_guided_semantics_gate(
         {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
