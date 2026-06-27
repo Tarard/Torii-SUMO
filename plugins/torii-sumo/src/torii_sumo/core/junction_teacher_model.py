@@ -266,6 +266,25 @@ def materialize_exemplar_movement_signatures(
     return movements
 
 
+def slot_edge_map_from_exemplar(
+    exemplar: dict[str, Any],
+    teacher_edge_map: dict[str, str],
+) -> dict[str, str]:
+    slot_edge_map = {}
+    for slot in exemplar.get("approach_slots", []) or []:
+        if not isinstance(slot, dict):
+            continue
+        slot_id = str(slot.get("slot_id", ""))
+        if not slot_id:
+            continue
+        for member in slot.get("members", []) or []:
+            candidate_edge = teacher_edge_map.get(str(member))
+            if candidate_edge:
+                slot_edge_map[slot_id] = candidate_edge
+                break
+    return slot_edge_map
+
+
 def evaluate_netedit_semantics_gate(summary: dict[str, Any]) -> dict[str, Any]:
     failed_tables = []
     for table, counts in summary.get("status_counts", {}).items():
