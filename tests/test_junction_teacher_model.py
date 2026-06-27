@@ -73,6 +73,36 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
     assert model["crossings"][0]["crossingEdges"] == ["in", "out"]
 
 
+def test_teacher_model_keeps_junction_requests_internal_connections_and_referenced_tls(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="passenger" shape="0,0 5,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="cluster_tls" linkIndex="0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+  <tlLogic id="cluster_tls" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    model = extract_teacher_junction_model(net_file, "j")
+
+    assert model["junction"]["type"] == "traffic_light"
+    assert model["requests"] == [{"index": "0", "response": "0", "foes": "0", "cont": "0"}]
+    assert model["internal_connections"] == [
+        {"from": ":j_0", "to": "out", "fromLane": "0", "toLane": "0", "via": "", "tl": "", "linkIndex": "", "dir": "s", "state": ""}
+    ]
+    assert model["traffic_light"]["attributes"]["id"] == "cluster_tls"
+    assert model["summary"]["junction_type"] == "traffic_light"
+    assert model["summary"]["internal_connection_count"] == 1
+    assert model["summary"]["tl_phase_count"] == 1
+
+
 def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path) -> None:
     net_file = tmp_path / "teacher.net.xml"
     net_file.write_text(

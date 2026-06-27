@@ -64,6 +64,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
 
     vehicle_connections = []
     pedestrian_connections = []
+    internal_connections = []
     for connection in root.findall("connection"):
         source = connection.attrib.get("from", "")
         target = connection.attrib.get("to", "")
@@ -71,29 +72,47 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
             vehicle_connections.append(_connection_record(connection))
         elif _is_pedestrian_connection(connection, edges, internal_prefix):
             pedestrian_connections.append(_connection_record(connection))
+        elif source.startswith(internal_prefix) or target.startswith(internal_prefix):
+            internal_connections.append(_connection_record(connection))
 
+    controlled_tl_ids = sorted(
+        {
+            connection["tl"]
+            for connection in vehicle_connections + pedestrian_connections
+            if connection.get("tl") and connection.get("linkIndex")
+        }
+    )
     tl_logic = next((tl for tl in root.findall("tlLogic") if tl.attrib.get("id") == junction_id), None)
+    if tl_logic is None and controlled_tl_ids:
+        tl_logic = next((tl for tl in root.findall("tlLogic") if tl.attrib.get("id") == controlled_tl_ids[0]), None)
     phases = [dict(phase.attrib) for phase in tl_logic.findall("phase")] if tl_logic is not None else []
+    requests = [dict(request.attrib) for request in junction.findall("request")]
 
     return {
         "net_file": str(net_file),
         "junction_id": junction_id,
+        "junction": dict(junction.attrib),
+        "requests": requests,
         "approaches": {
             "incoming": [_edge_record(edges[edge_id]) for edge_id in incoming_edges],
             "outgoing": [_edge_record(edges[edge_id]) for edge_id in outgoing_edges_sorted],
         },
         "vehicle_connections": vehicle_connections,
+        "internal_connections": internal_connections,
         "crossings": crossings,
         "walking_areas": walking_areas,
         "pedestrian_connections": pedestrian_connections,
         "traffic_light": {"attributes": dict(tl_logic.attrib) if tl_logic is not None else {}, "phases": phases},
         "summary": {
+            "junction_type": junction.attrib.get("type", ""),
             "incoming_vehicle_edge_count": len(incoming_edges),
             "outgoing_vehicle_edge_count": len(outgoing_edges_sorted),
             "vehicle_connection_count": len(vehicle_connections),
+            "internal_connection_count": len(internal_connections),
             "pedestrian_connection_count": len(pedestrian_connections),
             "crossing_count": len(crossings),
             "walkingarea_count": len(walking_areas),
+            "request_count": len(requests),
             "tl_phase_count": len(phases),
             "vehicle_connection_dirs": dict(Counter(record["dir"] or "blank" for record in vehicle_connections)),
             "internal_mode_counts": _internal_mode_counts(edges.values(), internal_prefix),
