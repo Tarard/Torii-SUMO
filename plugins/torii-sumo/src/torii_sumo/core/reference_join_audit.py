@@ -14,7 +14,7 @@ from .junction_teacher_model import (
     extract_junction_pattern_index,
     summarize_junction_pattern_templates,
 )
-from .osm_network import _net_xy_to_latlon
+from .osm_network import _net_xy_to_latlon, _parse_utm_zone, _utm_to_latlon
 from .topology_audit import audit_topology_fragmentation
 
 
@@ -183,7 +183,7 @@ def _failure(error: str) -> dict[str, Any]:
 
 def _reference_join_cases(net_file: Path, cluster_prefix: str) -> list[dict[str, Any]]:
     root = ET.parse(net_file).getroot()
-    xy_to_latlon = _coordinate_converter(net_file)
+    xy_to_latlon = _coordinate_converter(root, net_file)
     cases = []
     for junction in root.findall("junction"):
         junction_id = junction.attrib.get("id", "")
@@ -458,7 +458,15 @@ def _parse_shape(shape_text: str) -> list[tuple[float, float]]:
     return points
 
 
-def _coordinate_converter(net_file: Path) -> Callable[[float, float], tuple[float, float]] | None:
+def _coordinate_converter(root: ET.Element, net_file: Path) -> Callable[[float, float], tuple[float, float]] | None:
+    location = root.find("location")
+    if location is not None:
+        try:
+            offset_x, offset_y = (float(value) for value in location.attrib["netOffset"].split(",", 1))
+            zone = _parse_utm_zone(location.attrib["projParameter"])
+            return lambda x, y: _utm_to_latlon(x - offset_x, y - offset_y, zone=zone, northern=True)
+        except (KeyError, TypeError, ValueError):
+            pass
     try:
         import sumolib  # type: ignore
 

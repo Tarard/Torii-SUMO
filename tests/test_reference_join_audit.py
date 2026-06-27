@@ -1,8 +1,10 @@
 import csv
 import json
+import sys
+import types
 from pathlib import Path
 
-from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+from torii_sumo.core.reference_join_audit import _reference_join_cases, audit_reference_join_patterns
 
 
 def test_reference_join_audit_matches_tum_cluster_to_torii_fragment(tmp_path: Path) -> None:
@@ -82,6 +84,27 @@ def test_reference_join_audit_matches_tum_cluster_to_torii_fragment(tmp_path: Pa
     assert Path(report["cases_file"]).is_file()
     assert Path(report["summary_file"]).is_file()
     assert "matched_candidate_internal_edge_count" in Path(report["cases_file"]).read_text(encoding="utf-8").splitlines()[0]
+
+
+def test_reference_join_cases_use_location_projection_without_sumolib_readnet(monkeypatch, tmp_path: Path) -> None:
+    fake_sumolib = types.SimpleNamespace(
+        net=types.SimpleNamespace(readNet=lambda _path: (_ for _ in ()).throw(RuntimeError("readNet should not run")))
+    )
+    monkeypatch.setitem(sys.modules, "sumolib", fake_sumolib)
+    reference_net = tmp_path / "reference.net.xml"
+    reference_net.write_text(
+        """<net>
+  <location netOffset="-500000.00,-5400000.00" convBoundary="0.00,0.00,1.00,1.00" origBoundary="9.00,48.00,9.01,48.01" projParameter="+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"/>
+  <junction id="cluster_a_b" x="0" y="0" type="priority" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    cases = _reference_join_cases(reference_net, "cluster_")
+
+    assert cases[0]["reference_coordinate_status"] == "wgs84_from_sumo_projection"
+    assert 48.6 < cases[0]["reference_lat"] < 48.9
+    assert 8.9 < cases[0]["reference_lon"] < 9.1
 
 
 def test_reference_join_audit_reports_reusable_junction_patterns(tmp_path: Path) -> None:
