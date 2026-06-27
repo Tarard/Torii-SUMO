@@ -512,10 +512,65 @@ def test_build_teacher_guided_repair_queue_limits_ready_candidates(tmp_path: Pat
     assert report["matched_case_count"] == 2
     assert report["queued_case_count"] == 1
     assert report["queue_truncated"] is True
-    assert report["queue_order_policy"] == "smallest_matched_candidate_node_count_first"
+    assert report["queue_order_policy"] == "highest_teacher_template_count_then_smallest_matched_candidate_node_count_first"
     assert report["ready_candidate_count"] == 1
     assert report["max_ready_candidates"] == 1
     assert report["repair_candidates"][0]["matched_candidate_node_ids"] == ["a"]
+
+
+def test_build_teacher_guided_repair_queue_prioritizes_reusable_teacher_templates(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="low_in" from="a" to="cluster_a_low"><lane id="low_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="low_out" from="cluster_a_low" to="b"><lane id="low_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="high_in" from="c" to="cluster_z_high"><lane id="high_in_0" index="0" allow="passenger" shape="-10,10 0,10"/></edge>
+  <edge id="high_out" from="cluster_z_high" to="d"><lane id="high_out_0" index="0" allow="passenger" shape="0,10 10,10"/></edge>
+  <junction id="cluster_a_low" type="priority" x="0" y="0" incLanes="low_in_0" intLanes=""/>
+  <junction id="cluster_z_high" type="priority" x="0" y="10" incLanes="high_in_0" intLanes=""/>
+  <connection from="low_in" to="low_out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="high_in" to="high_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(teacher_net.read_text(encoding="utf-8"), encoding="utf-8")
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {"reference_id": "cluster_a_low", "learned_rule": "tum_like_join_candidate"},
+                {"reference_id": "cluster_z_high", "learned_rule": "tum_like_join_candidate"},
+            ],
+            "junction_pattern_index": [
+                {"junction_id": "cluster_a_low", "pattern_key": "low_template"},
+                {"junction_id": "cluster_z_high", "pattern_key": "high_template"},
+            ],
+            "junction_pattern_templates": [
+                {"pattern_key": "low_template", "pattern_family": "one_arm", "count": 1},
+                {
+                    "pattern_key": "high_template",
+                    "pattern_family": "one_arm",
+                    "count": 127,
+                    "example_junction_ids": ["cluster_z_high"],
+                },
+            ],
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+        max_ready_candidates=1,
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert report["queue_order_policy"] == "highest_teacher_template_count_then_smallest_matched_candidate_node_count_first"
+    assert candidate["reference_id"] == "cluster_z_high"
+    assert candidate["teacher_pattern_key"] == "high_template"
+    assert candidate["teacher_pattern_template_count"] == 127
+    rows = list(csv.DictReader(Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()))
+    assert rows[0]["teacher_pattern_template_count"] == "127"
+    assert rows[0]["teacher_pattern_key"] == "high_template"
 
 
 def test_build_teacher_guided_repair_queue_resolves_sumo_short_joined_candidate_id(tmp_path: Path) -> None:
