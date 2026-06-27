@@ -1331,30 +1331,31 @@ def run_teacher_guided_repair_queue(
                 scope_report["replay_self_loop_edge_drop_count"] = len(replay_dropped_self_loop_edges)
                 scope_report["replay_dropped_self_loop_edges"] = replay_dropped_self_loop_edges
                 attempted_ready_count += 1
+                try:
+                    variant_report = variant_builder(
+                        raw_node_file=replay_node_file,
+                        raw_edge_file=replay_edge_file,
+                        raw_connection_file=Path(str(scope_report.get("connection_file", ""))),
+                        raw_type_file=raw_type_file,
+                        teacher_net_file=teacher_net_file,
+                        candidate_net_file=Path(str(scope_report.get("net_file", ""))),
+                        junction_id=joined_scope_junction_id,
+                        output_dir=output_dir / safe_junction_id / "teacher_replay",
+                        edge_map=replay_edge_map,
+                        prefix=variant_prefix,
+                        teacher_junction_id=teacher_junction_id,
+                        crossing_edge_overrides=crossing_edge_overrides_by_junction.get(joined_scope_junction_id)
+                        or crossing_edge_overrides_by_junction.get(junction_id)
+                        or crossing_edge_overrides_by_junction.get(teacher_junction_id),
+                        replay_target_internal_subgraph=replay_target_internal_subgraph,
+                        netconvert_binary=netconvert_binary,
+                        sumo_binary=sumo_binary,
+                        timeout_seconds=timeout_seconds,
+                    )
+                except Exception as exc:
+                    variant_report = _variant_exception_report(exc, joined_scope_junction_id)
                 variant_reports.append(
-                    _attach_candidate_template_context(
-                        variant_builder(
-                            raw_node_file=replay_node_file,
-                            raw_edge_file=replay_edge_file,
-                            raw_connection_file=Path(str(scope_report.get("connection_file", ""))),
-                            raw_type_file=raw_type_file,
-                            teacher_net_file=teacher_net_file,
-                            candidate_net_file=Path(str(scope_report.get("net_file", ""))),
-                            junction_id=joined_scope_junction_id,
-                            output_dir=output_dir / safe_junction_id / "teacher_replay",
-                            edge_map=replay_edge_map,
-                            prefix=variant_prefix,
-                            teacher_junction_id=teacher_junction_id,
-                            crossing_edge_overrides=crossing_edge_overrides_by_junction.get(joined_scope_junction_id)
-                            or crossing_edge_overrides_by_junction.get(junction_id)
-                            or crossing_edge_overrides_by_junction.get(teacher_junction_id),
-                            replay_target_internal_subgraph=replay_target_internal_subgraph,
-                            netconvert_binary=netconvert_binary,
-                            sumo_binary=sumo_binary,
-                            timeout_seconds=timeout_seconds,
-                        ),
-                        candidate,
-                    ),
+                    _attach_candidate_template_context(variant_report, candidate),
                 )
             else:
                 skipped_candidates.append(
@@ -1388,30 +1389,29 @@ def run_teacher_guided_repair_queue(
         safe_junction_id = _queue_candidate_dir(index, junction_id)
         variant_prefix = f"{_safe_stage_name(prefix, max_len=12)}_{index + 1:03d}"
         attempted_ready_count += 1
-        variant_reports.append(
-            _attach_candidate_template_context(
-                variant_builder(
-                    raw_node_file=raw_node_file,
-                    raw_edge_file=raw_edge_file,
-                    raw_connection_file=raw_connection_file,
-                    raw_type_file=raw_type_file,
-                    teacher_net_file=teacher_net_file,
-                    candidate_net_file=candidate_net_file,
-                    junction_id=junction_id,
-                    output_dir=output_dir / safe_junction_id,
-                    edge_map=edge_map,
-                    prefix=variant_prefix,
-                    teacher_junction_id=teacher_junction_id,
-                    crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id)
-                    or crossing_edge_overrides_by_junction.get(teacher_junction_id),
-                    replay_target_internal_subgraph=replay_target_internal_subgraph,
-                    netconvert_binary=netconvert_binary,
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                ),
-                candidate,
+        try:
+            variant_report = variant_builder(
+                raw_node_file=raw_node_file,
+                raw_edge_file=raw_edge_file,
+                raw_connection_file=raw_connection_file,
+                raw_type_file=raw_type_file,
+                teacher_net_file=teacher_net_file,
+                candidate_net_file=candidate_net_file,
+                junction_id=junction_id,
+                output_dir=output_dir / safe_junction_id,
+                edge_map=edge_map,
+                prefix=variant_prefix,
+                teacher_junction_id=teacher_junction_id,
+                crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id)
+                or crossing_edge_overrides_by_junction.get(teacher_junction_id),
+                replay_target_internal_subgraph=replay_target_internal_subgraph,
+                netconvert_binary=netconvert_binary,
+                sumo_binary=sumo_binary,
+                timeout_seconds=timeout_seconds,
             )
-        )
+        except Exception as exc:
+            variant_report = _variant_exception_report(exc, junction_id)
+        variant_reports.append(_attach_candidate_template_context(variant_report, candidate))
 
     attempted_count = len(variant_reports)
     pass_count = sum(1 for report in variant_reports if report.get("status") == "pass")
@@ -3618,4 +3618,15 @@ def _failure(error: str) -> dict[str, object]:
         "status": "fail",
         "claim_status": "construction-invalid",
         "error": error,
+    }
+
+
+def _variant_exception_report(exc: Exception, junction_id: str) -> dict[str, object]:
+    return {
+        "status": "fail",
+        "claim_status": "construction-invalid",
+        "junction_id": junction_id,
+        "reason": str(exc),
+        "error": str(exc),
+        "exception_type": type(exc).__name__,
     }
