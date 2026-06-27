@@ -1478,6 +1478,60 @@ def test_teacher_parity_fails_on_mapped_crossing_edge_set_mismatch() -> None:
     ]
 
 
+def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "crossings": [
+            {
+                "edge_id": ":teacher_j_c0",
+                "function": "crossing",
+                "crossingEdges": ["teacher_in", "teacher_out"],
+                "lanes": [{"index": "0", "allow": "pedestrian", "width": "4.00", "shape": "0,0 1,1"}],
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "crossings": [
+            {
+                "edge_id": ":candidate_j_c0",
+                "function": "crossing",
+                "crossingEdges": ["cand_in", "cand_out"],
+                "lanes": [{"index": "0", "allow": "pedestrian", "width": "2.00", "shape": "0,0 2,2"}],
+            }
+        ],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["crossing_geometry_signatures"] == {
+        ":candidate_j_c0": "function=crossing|lanes=0:pedestrian:4.00:0,0 1,1"
+    }
+    assert parity["candidate"]["crossing_geometry_signatures"] == {
+        ":candidate_j_c0": "function=crossing|lanes=0:pedestrian:2.00:0,0 2,2"
+    }
+    assert parity["delta"]["crossing_geometry_signature_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "crossing_geometry_signature_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_parity_fails_on_mapped_internal_edge_signature_mismatch() -> None:
     teacher_model = {
         "junction_id": "teacher_j",
