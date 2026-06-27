@@ -500,6 +500,7 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         assert kwargs["candidate_net_file"] == candidate_net_file
         assert kwargs["edge_map"] == {"teacher_in": "cand_in"}
         assert kwargs["crossing_edge_overrides"] == {":j_c5": "cand_crossing"}
+        assert kwargs["replay_target_internal_subgraph"] is True
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -520,6 +521,7 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         output_dir=str(tmp_path / "teacher-guided"),
         edge_map={"teacher_in": "cand_in"},
         crossing_edge_overrides={":j_c5": "cand_crossing"},
+        replay_target_internal_subgraph=True,
     )
 
     assert report["status"] == "pass"
