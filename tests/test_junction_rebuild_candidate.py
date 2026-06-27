@@ -200,6 +200,51 @@ def test_write_teacher_connection_plan_can_use_patched_edge_lane_counts(tmp_path
     assert report["lane_clamp_count"] == 0
 
 
+def test_write_teacher_connection_plan_ignores_edges_missing_from_patched_edge_file(tmp_path: Path) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="stale_in" to="stale_out" fromLane="0" toLane="0"/>
+</connections>
+""",
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "vehicle_connections": [{"from": "teacher_in", "to": "teacher_out", "fromLane": "0", "toLane": "0"}],
+        "crossings": [],
+    }
+    stale_candidate_model = {
+        "approaches": {
+            "incoming": [{"edge_id": "cand_in", "lane_count": 1}, {"edge_id": "stale_in", "lane_count": 1}],
+            "outgoing": [{"edge_id": "cand_out", "lane_count": 1}, {"edge_id": "stale_out", "lane_count": 1}],
+        }
+    }
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "teacher.con.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+        candidate_model=stale_candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        candidate_edge_file=candidate_edges,
+    )
+
+    root = ET.parse(report["connection_file"]).getroot()
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [("cand_in", "cand_out")]
+    assert root.findall("delete") == []
+    assert report["removed_target_children"] == 1
+
+
 def test_write_teacher_lane_patch_edges_copies_lane_permissions_without_replacing_edge_geometry(tmp_path: Path) -> None:
     raw_edges = tmp_path / "raw.edg.xml"
     raw_edges.write_text(
