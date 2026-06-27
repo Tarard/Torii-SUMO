@@ -1230,6 +1230,34 @@ def test_teacher_parity_fails_on_tls_type_mismatch() -> None:
     assert parity["delta"]["tl_type_mismatch_count"] == 1
 
 
+def test_teacher_parity_fails_on_tls_phase_state_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "actuated"}, "phases": [{"duration": "30", "state": "Gr"}]},
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"type": "actuated"}, "phases": [{"duration": "30", "state": "rG"}]},
+    }
+
+    parity = _compare_teacher_models(teacher_model, candidate_model)
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["tl_phase_signatures"] == ["state=Gr|duration=30|minDur=|maxDur=|next="]
+    assert parity["candidate"]["tl_phase_signatures"] == ["state=rG|duration=30|minDur=|maxDur=|next="]
+    assert parity["delta"]["tl_phase_signatures_mismatch_count"] == 1
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {"report": "parity", "field": "tl_phase_signatures_mismatch_count", "count": 1}
+    ]
+
+
 def test_teacher_parity_fails_on_mapped_controlled_link_signature_mismatch() -> None:
     teacher_model = {
         "junction_id": "teacher_j",

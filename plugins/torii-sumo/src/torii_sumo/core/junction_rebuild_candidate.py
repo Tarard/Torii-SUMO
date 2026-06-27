@@ -2028,6 +2028,7 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     target_tls_id = str(attributes.get("id", "") or model.get("junction_id", ""))
     summary["tl_type"] = str(attributes.get("type", "")) if isinstance(attributes, dict) else ""
     summary["tl_phase_state_lengths"] = sorted({len(state) for state in phase_states})
+    summary["tl_phase_signatures"] = _tl_phase_signatures(phases)
     summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections, target_tls_id)
     summary["controlled_pedestrian_link_count"] = _controlled_link_count(pedestrian_connections, target_tls_id)
     summary["controlled_link_count"] = summary["controlled_vehicle_link_count"] + summary["controlled_pedestrian_link_count"]
@@ -2040,6 +2041,15 @@ def _controlled_link_count(connections: list[object], tls_id: str) -> int:
         for connection in connections
         if isinstance(connection, dict) and connection.get("tl") == tls_id and connection.get("linkIndex")
     )
+
+
+def _tl_phase_signatures(phases: list[object]) -> list[str]:
+    fields = ("state", "duration", "minDur", "maxDur", "next")
+    return [
+        "|".join(f"{field}={phase.get(field, '')}" for field in fields)
+        for phase in phases
+        if isinstance(phase, dict)
+    ]
 
 
 def _controlled_vehicle_link_signatures(
