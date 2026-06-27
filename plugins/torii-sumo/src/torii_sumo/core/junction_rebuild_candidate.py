@@ -10,7 +10,12 @@ import xml.etree.ElementTree as ET
 from .command_runner import run_command
 from .junction_connection_audit import build_connection_signature, write_connection_signature
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
-from .junction_teacher_model import _extract_teacher_junction_model, extract_teacher_junction_model, match_teacher_approaches
+from .junction_teacher_model import (
+    _extract_teacher_junction_model,
+    extract_teacher_junction_model,
+    match_teacher_approaches,
+    materialize_exemplar_movement_signatures,
+)
 
 
 def build_rebuild_candidate(
@@ -19,6 +24,8 @@ def build_rebuild_candidate(
     junction_id: str,
     output_dir: Path,
     prefix: str = "junction_movement_rebuild",
+    movement_exemplar: dict[str, Any] | None = None,
+    slot_edge_map: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if not net_file.exists():
         return _failure(f"net file does not exist: {net_file}")
@@ -34,8 +41,21 @@ def build_rebuild_candidate(
     command_file = output_dir / f"{prefix}_netconvert.cmd.txt"
     variant_file = output_dir / f"{prefix}_rebuilt.net.xml"
 
-    emitted = [movement for movement in graph.get("movements", []) or [] if _should_emit(movement)]
-    skipped = [movement for movement in graph.get("movements", []) or [] if not _should_emit(movement)]
+    if movement_exemplar is not None and slot_edge_map is not None:
+        emitted = materialize_exemplar_movement_signatures(movement_exemplar, slot_edge_map)
+        emitted_pairs = {
+            (str(movement.get("from_edge_id", "")), str(movement.get("to_edge_id", ""))) for movement in emitted
+        }
+        skipped = [
+            movement
+            for movement in graph.get("movements", []) or []
+            if (str(movement.get("source_edge_id", "")), str(movement.get("target_edge_id", ""))) not in emitted_pairs
+        ]
+        movement_source = "exemplar_signatures"
+    else:
+        emitted = [movement for movement in graph.get("movements", []) or [] if _should_emit(movement)]
+        skipped = [movement for movement in graph.get("movements", []) or [] if not _should_emit(movement)]
+        movement_source = "movement_graph"
     _write_connections(connections_file, emitted)
     command = [
         "netconvert",
@@ -59,6 +79,7 @@ def build_rebuild_candidate(
         "movement_review": review,
         "connection_signature": signature_report,
         "movement_audit_status": audit["status"],
+        "movement_source": movement_source,
         "emitted_connection_count": len(emitted),
         "skipped_movement_count": len(skipped),
         "review_policy": "run netconvert and inspect NetEdit connection mode before adoption",
@@ -1303,10 +1324,10 @@ def _write_connections(
             root,
             "connection",
             {
-                "from": str(movement.get("source_edge_id", "")),
-                "to": str(movement.get("target_edge_id", "")),
-                "fromLane": "0",
-                "toLane": "0",
+                "from": str(movement.get("source_edge_id") or movement.get("from_edge_id") or ""),
+                "to": str(movement.get("target_edge_id") or movement.get("to_edge_id") or ""),
+                "fromLane": str(movement.get("fromLane", "0") or "0"),
+                "toLane": str(movement.get("toLane", "0") or "0"),
             },
         )
     ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
