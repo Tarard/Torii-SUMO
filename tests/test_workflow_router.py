@@ -238,6 +238,9 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "network_profile": "reference_matched",
+            "reference_visual_detail_comparison_net_file": str(tmp_path / "teacher_guided_best.net.xml"),
+            "teacher_guided_repair_best_variant_file": str(tmp_path / "teacher_guided_best.net.xml"),
+            "teacher_guided_repair_run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "reference_join_audit": {"junction_pattern_index": [{"junction_id": "cluster_a_b"}]},
             "gate_status": {
                 "reference_join_audit": "pass",
@@ -263,6 +266,9 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["reference_matched_semantics_workflow"]["claim_status"] == "diagnostic-demo"
     assert report["reference_matched_semantics_workflow"]["batch_repair_tool"] == "sumo_network_teacher_guided_repair_queue"
     assert report["reference_matched_semantics_workflow"]["per_junction_repair_tool"] == "sumo_network_teacher_guided_junction_variant"
+    assert report["reference_matched_semantics_workflow"]["best_variant_file"] == str(tmp_path / "teacher_guided_best.net.xml")
+    assert report["reference_matched_semantics_workflow"]["comparison_net_file"] == str(tmp_path / "teacher_guided_best.net.xml")
+    assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]
