@@ -124,18 +124,22 @@ def build_teacher_guided_repair_queue(
         for case in reference_join_audit_report.get("matched_cases", []) or []
         if isinstance(case, dict)
     ]
+    pattern_deltas = _junction_pattern_delta_by_id(reference_join_audit_report)
     matched_cases.sort(key=_teacher_guided_case_sort_key)
     repair_candidates = []
     ready_so_far = 0
     for case in matched_cases:
-        candidate = _teacher_guided_repair_candidate(
-            case=case,
-            teacher_net_file=teacher_net_file,
-            candidate_net_file=candidate_net_file,
-            teacher_root=teacher_root,
-            candidate_root=candidate_root,
-            teacher_edges=teacher_edges,
-            candidate_edge_ids=candidate_edge_ids,
+        candidate = _attach_junction_pattern_delta(
+            _teacher_guided_repair_candidate(
+                case=case,
+                teacher_net_file=teacher_net_file,
+                candidate_net_file=candidate_net_file,
+                teacher_root=teacher_root,
+                candidate_root=candidate_root,
+                teacher_edges=teacher_edges,
+                candidate_edge_ids=candidate_edge_ids,
+            ),
+            pattern_deltas,
         )
         repair_candidates.append(candidate)
         if candidate["candidate_status"] == "ready_for_teacher_guided_variant":
@@ -168,6 +172,9 @@ def build_teacher_guided_repair_queue(
         "ready_candidate_count": ready_count,
         "expanded_scope_candidate_count": expanded_scope_count,
         "blocked_candidate_count": len(repair_candidates) - ready_count,
+        "junction_pattern_mismatch_field_counts": reference_join_audit_report.get(
+            "junction_pattern_mismatch_field_counts", {}
+        ),
         "queue_file": str(queue_file),
         "queue_csv_file": str(queue_csv_file),
         "repair_candidates": repair_candidates,
@@ -1564,6 +1571,49 @@ def _valid_edge_map(value: object) -> dict[str, str]:
     return result
 
 
+def _junction_pattern_delta_by_id(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    deltas = {}
+    for comparison in report.get("junction_pattern_comparisons", []) or []:
+        if not isinstance(comparison, dict):
+            continue
+        junction_id = str(comparison.get("junction_id", ""))
+        if not junction_id:
+            continue
+        deltas[junction_id] = {
+            "junction_id": junction_id,
+            "status": str(comparison.get("status", "")),
+            "mismatch_fields": [str(field) for field in comparison.get("mismatch_fields", []) or []],
+            "teacher": comparison.get("teacher", {}) if isinstance(comparison.get("teacher"), dict) else {},
+            "candidate": comparison.get("candidate", {}) if isinstance(comparison.get("candidate"), dict) else {},
+        }
+    return deltas
+
+
+def _attach_junction_pattern_delta(
+    candidate: dict[str, object],
+    deltas: dict[str, dict[str, Any]],
+) -> dict[str, object]:
+    matches = [deltas[key] for key in _junction_pattern_delta_keys(candidate) if key in deltas]
+    if not matches:
+        return candidate
+    mismatch_fields = list(
+        dict.fromkeys(field for delta in matches for field in delta.get("mismatch_fields", []))
+    )
+    return {
+        **candidate,
+        "junction_pattern_delta_count": len(matches),
+        "junction_pattern_deltas": matches,
+        "junction_pattern_mismatch_fields": mismatch_fields,
+    }
+
+
+def _junction_pattern_delta_keys(candidate: dict[str, object]) -> list[str]:
+    keys = [str(candidate.get("reference_id", "")), str(candidate.get("junction_id", ""))]
+    for field in ("reference_joined_source_nodes", "matched_reference_source_node_ids", "matched_candidate_node_ids"):
+        keys.extend(str(item) for item in candidate.get(field, []) or [])
+    return [key for key in dict.fromkeys(keys) if key]
+
+
 def _queue_candidate_dir(index: int, junction_id: str) -> str:
     return f"candidate_{index + 1:03d}_{_stable_digest(junction_id)}"
 
@@ -1634,11 +1684,15 @@ def _teacher_guided_repair_candidate(
     candidate_edge_ids: set[str],
 ) -> dict[str, object]:
     reference_id = str(case.get("reference_id", ""))
+    reference_source_node_ids = [str(item) for item in case.get("reference_joined_source_nodes") or []]
+    matched_reference_source_node_ids = [str(item) for item in case.get("matched_reference_source_node_ids") or []]
     candidate_node_ids = [str(item) for item in case.get("matched_candidate_node_ids") or case.get("candidate_node_ids") or []]
     candidate_junction_ids = _candidate_junction_id_candidates(reference_id, candidate_node_ids)
     base = {
         "reference_id": reference_id,
         "junction_id": candidate_junction_ids[0] if candidate_junction_ids else reference_id,
+        "reference_joined_source_nodes": reference_source_node_ids,
+        "matched_reference_source_node_ids": matched_reference_source_node_ids,
         "matched_candidate_node_ids": candidate_node_ids,
         "learned_rule": str(case.get("learned_rule", "")),
     }
@@ -1851,6 +1905,8 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                 "reference_id",
                 "junction_id",
                 "candidate_status",
+                "junction_pattern_delta_count",
+                "junction_pattern_mismatch_fields",
                 "edge_map_size",
                 "missing_teacher_edge_ids",
                 "copyable_missing_teacher_edge_ids",
@@ -1868,6 +1924,10 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                     "reference_id": row.get("reference_id", ""),
                     "junction_id": row.get("junction_id", ""),
                     "candidate_status": row.get("candidate_status", ""),
+                    "junction_pattern_delta_count": row.get("junction_pattern_delta_count", 0),
+                    "junction_pattern_mismatch_fields": ";".join(
+                        str(item) for item in row.get("junction_pattern_mismatch_fields", []) or []
+                    ),
                     "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
                     "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
                     "copyable_missing_teacher_edge_ids": ";".join(
