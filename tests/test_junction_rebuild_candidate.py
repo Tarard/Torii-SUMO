@@ -220,6 +220,20 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
     assert candidate["junction_id"] == "cluster_a_b"
     assert candidate["edge_map"] == {"teacher_in": "cand_in", "teacher_out": "cand_out"}
+    assert candidate["slot_edge_map"] == {"slot_0": "cand_in", "slot_1": "cand_out"}
+    assert candidate["movement_exemplar"]["movement_signatures"] == [
+        {
+            "from_slot": "slot_0",
+            "to_slot": "slot_1",
+            "fromLane": "0",
+            "toLane": "0",
+            "dir": "s",
+            "state": "",
+            "controlled": True,
+            "linkIndex": "0",
+            "has_internal_via": False,
+        }
+    ]
     assert Path(report["queue_file"]).is_file()
     assert Path(report["queue_csv_file"]).read_text(encoding="utf-8").splitlines()[0].startswith("reference_id")
 

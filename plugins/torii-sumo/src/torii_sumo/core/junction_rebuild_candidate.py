@@ -12,6 +12,7 @@ from .junction_connection_audit import build_connection_signature, write_connect
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
 from .junction_teacher_model import (
     _extract_teacher_junction_model,
+    extract_junction_pattern_exemplar,
     extract_teacher_junction_model,
     match_teacher_approaches,
     materialize_exemplar_movement_signatures,
@@ -1418,11 +1419,14 @@ def _teacher_guided_repair_candidate(
         edge_map=edge_map,
     )
     uncopyable_missing = [edge_id for edge_id in missing if edge_id not in set(copyable_missing)]
+    movement_exemplar = extract_junction_pattern_exemplar(teacher_net_file, reference_id)
     return {
         **base,
         "junction_id": candidate_junction_id,
         "candidate_status": "ready_for_teacher_guided_variant" if not uncopyable_missing else "edge_map_incomplete",
         "edge_map": edge_map,
+        "slot_edge_map": slot_edge_map_from_exemplar(movement_exemplar, edge_map),
+        "movement_exemplar": movement_exemplar,
         "missing_teacher_edge_ids": missing,
         "copyable_missing_teacher_edge_ids": copyable_missing,
         "uncopyable_missing_teacher_edge_ids": uncopyable_missing,
