@@ -1587,6 +1587,21 @@ def run_osm_cleanup_workflow(
         "reference_join_candidate_structural_signature_summary": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("candidate_structural_signature_summary", {}),
+        "reference_join_network_structural_delta_status": "skipped"
+        if reference_join_audit_report is None
+        else str(reference_join_audit_report.get("network_structural_delta_status", "skipped")),
+        "reference_join_network_structural_missing_counts": {}
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("network_structural_missing_counts", {}),
+        "reference_join_network_structural_junction_type_missing_counts": {}
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("network_structural_junction_type_missing_counts", {}),
+        "reference_join_reference_network_structural_summary": {}
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("reference_network_structural_summary", {}),
+        "reference_join_candidate_network_structural_summary": {}
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("candidate_network_structural_summary", {}),
         "reference_join_aggregation_status": "skipped"
         if reference_join_aggregation_report is None
         else reference_join_aggregation_report.get("junction_aggregation_status", reference_join_aggregation_report.get("status", "fail")),

@@ -383,6 +383,17 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
                 "pattern_count": 2,
                 "tls_pattern_count": 0,
             },
+            "network_structural_delta_status": "fail",
+            "network_structural_missing_counts": {"crossing_edge_count": 620, "walkingarea_edge_count": 1648},
+            "network_structural_junction_type_missing_counts": {"traffic_light": 1},
+            "reference_network_structural_summary": {
+                "crossing_edge_count": 620,
+                "walkingarea_edge_count": 1648,
+            },
+            "candidate_network_structural_summary": {
+                "crossing_edge_count": 0,
+                "walkingarea_edge_count": 0,
+            },
             "warnings": [],
         }
 
@@ -588,6 +599,20 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_candidate_structural_signature_summary"] == {
         "pattern_count": 2,
         "tls_pattern_count": 0,
+    }
+    assert report["reference_join_network_structural_delta_status"] == "fail"
+    assert report["reference_join_network_structural_missing_counts"] == {
+        "crossing_edge_count": 620,
+        "walkingarea_edge_count": 1648,
+    }
+    assert report["reference_join_network_structural_junction_type_missing_counts"] == {"traffic_light": 1}
+    assert report["reference_join_reference_network_structural_summary"] == {
+        "crossing_edge_count": 620,
+        "walkingarea_edge_count": 1648,
+    }
+    assert report["reference_join_candidate_network_structural_summary"] == {
+        "crossing_edge_count": 0,
+        "walkingarea_edge_count": 0,
     }
     assert report["reference_join_matched_case_count"] == 2
     assert report["reference_join_unmatched_case_count"] == 1
