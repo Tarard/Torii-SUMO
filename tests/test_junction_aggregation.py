@@ -112,6 +112,27 @@ def test_reference_join_audit_uses_matched_candidate_node_ids() -> None:
     assert candidates[0]["node_ids"] == "a;b;c"
 
 
+def test_reference_source_join_uses_matched_reference_source_nodes_before_spatial_cluster() -> None:
+    reference_join_report = {
+        "matched_cases": [
+            {
+                "reference_id": "cluster_a_b",
+                "learned_rule_basis": "reference_source_nodes",
+                "matched_reference_source_node_ids": ["a", "b"],
+                "matched_candidate_node_ids": ["a", "b", "nearby_c", "nearby_d"],
+                "learned_rule": "tum_like_join_candidate",
+            }
+        ]
+    }
+
+    candidates = _aggregation_candidates(
+        topology_audit_report=None,
+        reference_join_audit_report=reference_join_report,
+    )
+
+    assert candidates[0]["node_ids"] == "a;b"
+
+
 def test_duplicate_overlapping_join_candidates_are_collapsed() -> None:
     overlap_report = {
         "overlapping_junction_groups": [
@@ -259,7 +280,10 @@ def test_junction_aggregation_preserves_reference_confirmed_modal_nodes(tmp_path
     def fake_command(command, cwd, timeout_seconds):
         patch_file = _command_path(command, "--node-files", cwd)
         variant_file = _command_path(command, "--output-file", cwd)
-        variant_file.write_text("<net/>", encoding="utf-8")
+        variant_file.write_text(
+            '<net><junction id="cluster_core_a_core_b_cycle_node_foot_node_#1more" x="0" y="0"/></net>',
+            encoding="utf-8",
+        )
         root = ET.parse(patch_file).getroot()
         assert [element.attrib["nodes"] for element in root.findall("join")] == [
             "core_a core_b foot_node cycle_node service_node"
@@ -321,7 +345,7 @@ def test_junction_aggregation_prunes_short_modal_support_edges_touching_join_cor
             "service_prune",
         ]
         variant_file = _command_path(command, "--output-file", cwd)
-        variant_file.write_text("<net/>", encoding="utf-8")
+        variant_file.write_text('<net><junction id="cluster_core_a_core_b" x="0" y="0"/></net>', encoding="utf-8")
         return {"status": "pass", "stdout": "", "stderr": "", "command": command}
 
     report = build_junction_aggregation_variant(
@@ -391,6 +415,45 @@ def test_junction_aggregation_variant_reports_failed_collapse_audit(tmp_path) ->
     assert report["status"] == "fail"
     assert report["junction_aggregation_collapse_audit_status"] == "needs_cleanup"
     assert Path(report["junction_aggregation_collapse_audit_file"]).is_file()
+
+
+def test_junction_aggregation_variant_fails_when_planned_join_is_missing_from_output(tmp_path) -> None:
+    net_file = tmp_path / "source.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b" type="highway.residential">
+    <lane id="ab_0" index="0" length="5"/>
+  </edge>
+  <junction id="a" x="0" y="0" type="traffic_light"/>
+  <junction id="b" x="1" y="0" type="traffic_light"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command(command, cwd, timeout_seconds):
+        variant_file = _command_path(command, "--output-file", cwd)
+        variant_file.write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "stdout": "", "stderr": "", "command": command}
+
+    report = build_junction_aggregation_variant(
+        net_file=net_file,
+        output_dir=tmp_path,
+        prefix="demo",
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "candidate_node_ids": ["a", "b"],
+                    "match_reason": "reference_matched",
+                }
+            ]
+        },
+        command_runner=fake_command,
+    )
+
+    assert report["status"] == "fail"
+    assert report["junction_aggregation_join_output_audit_status"] == "missing_joined_junctions"
+    assert report["junction_aggregation_missing_joined_junction_count"] == 1
 
 
 def test_join_collapse_audit_flags_residual_nodes_edges_and_connections(tmp_path) -> None:
@@ -475,7 +538,7 @@ def test_junction_aggregation_variant_runs_netconvert_with_cwd_relative_outputs(
         assert command[command.index("--node-files") + 1] == "junction_aggregation_junction_join.nod.xml"
         output_file = _command_path(command, "--output-file", kwargs["cwd"])
         assert command[command.index("--output-file") + 1] == "junction_aggregation_junction_aggregated.net.xml"
-        output_file.write_text("<net/>", encoding="utf-8")
+        output_file.write_text('<net><junction id="cluster_a_b" x="0" y="0"/></net>', encoding="utf-8")
         return {"status": "pass", "returncode": 0}
 
     report = build_junction_aggregation_variant(
