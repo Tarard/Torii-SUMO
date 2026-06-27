@@ -2050,12 +2050,14 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
     phases = traffic_light.get("phases", []) if isinstance(traffic_light, dict) else []
     phase_states = [str(phase.get("state", "")) for phase in phases if isinstance(phase, dict)]
+    requests = model.get("requests", []) if isinstance(model.get("requests"), list) else []
     vehicle_connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
     pedestrian_connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
     target_tls_id = str(attributes.get("id", "") or model.get("junction_id", ""))
     summary["tl_type"] = str(attributes.get("type", "")) if isinstance(attributes, dict) else ""
     summary["tl_phase_state_lengths"] = sorted({len(state) for state in phase_states})
     summary["tl_phase_signatures"] = _tl_phase_signatures(phases)
+    summary["request_signatures"] = _request_signatures(requests)
     summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections, target_tls_id)
     summary["controlled_pedestrian_link_count"] = _controlled_link_count(pedestrian_connections, target_tls_id)
     summary["controlled_link_count"] = summary["controlled_vehicle_link_count"] + summary["controlled_pedestrian_link_count"]
@@ -2076,6 +2078,15 @@ def _tl_phase_signatures(phases: list[object]) -> list[str]:
         "|".join(f"{field}={phase.get(field, '')}" for field in fields)
         for phase in phases
         if isinstance(phase, dict)
+    ]
+
+
+def _request_signatures(requests: list[object]) -> list[str]:
+    fields = ("index", "response", "foes", "cont")
+    return [
+        "|".join(f"{field}={request.get(field, '')}" for field in fields)
+        for request in requests
+        if isinstance(request, dict)
     ]
 
 
