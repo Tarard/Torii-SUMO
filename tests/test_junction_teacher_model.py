@@ -5,6 +5,7 @@ from torii_sumo.core.junction_teacher_model import (
     extract_junction_pattern_exemplar,
     extract_junction_pattern_index,
     extract_teacher_junction_model,
+    materialize_exemplar_movement_signatures,
     match_teacher_approaches,
 )
 
@@ -137,6 +138,11 @@ def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path
             "out_edge_count": 3,
             "vehicle_connection_count": 3,
             "dir_counts": {"l": 1, "r": 1, "t": 1},
+            "movement_signature_counts": {
+                "dir=l|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 1,
+                "dir=r|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 1,
+                "dir=t|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 1,
+            },
             "crossing_count": 0,
             "walkingarea_count": 0,
             "request_count": 3,
@@ -255,8 +261,62 @@ def test_extract_junction_pattern_exemplar_uses_slots_not_edge_ids(tmp_path: Pat
             "state": "O",
         }
     ]
+    assert exemplar["movement_signatures"] == [
+        {
+            "from_slot": "slot_0",
+            "to_slot": "slot_1",
+            "fromLane": "0",
+            "toLane": "0",
+            "dir": "r",
+            "state": "O",
+            "controlled": True,
+            "linkIndex": "0",
+            "has_internal_via": True,
+        }
+    ]
     assert exemplar["traffic_light"]["phases"][0]["state"] == "G"
     assert exemplar["requests"][0]["foes"] == "0"
+
+
+def test_materialize_exemplar_movement_signatures_filters_four_way_cross_product() -> None:
+    exemplar = {
+        "movement_signatures": [
+            {
+                "from_slot": "slot_0",
+                "to_slot": "slot_2",
+                "fromLane": "0",
+                "toLane": "0",
+                "dir": "s",
+                "state": "O",
+                "controlled": True,
+                "linkIndex": "0",
+                "has_internal_via": True,
+            },
+            {
+                "from_slot": "slot_1",
+                "to_slot": "slot_3",
+                "fromLane": "0",
+                "toLane": "0",
+                "dir": "r",
+                "state": "o",
+                "controlled": True,
+                "linkIndex": "1",
+                "has_internal_via": True,
+            },
+        ]
+    }
+
+    movements = materialize_exemplar_movement_signatures(
+        exemplar,
+        {"slot_0": "west_in", "slot_1": "south_in", "slot_2": "east_out", "slot_3": "west_out"},
+    )
+
+    assert [(movement["from_edge_id"], movement["to_edge_id"]) for movement in movements] == [
+        ("west_in", "east_out"),
+        ("south_in", "west_out"),
+    ]
+    assert {movement["dir"] for movement in movements} == {"s", "r"}
+    assert len(movements) == 2
 
 
 def test_match_teacher_edges_by_bearing_and_lane_count() -> None:
