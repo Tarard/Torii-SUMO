@@ -1,4 +1,5 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
 
@@ -81,6 +82,54 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     assert command[command.index("--tls.set") + 1] == "n1,n3"
     assert command[command.index("--sumo-net-file") + 1] == str(net_file.resolve())
     assert command[command.index("--output-file") + 1] == "demo_tls_tls_aggregated.net.xml"
+
+
+def test_build_tls_aggregation_variant_preserves_compatible_actuated_program(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    clusters_file = tmp_path / "tls_clusters.csv"
+    net_file.write_text(
+        """<net>
+  <tlLogic id="tlA" type="actuated" programID="0" offset="5">
+    <phase duration="30" minDur="10" maxDur="60" state="G"/>
+  </tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    clusters_file.write_text(
+        "\n".join(["cluster_id,tls_ids,tls_count,google_maps_url", "G001,tlA,1,https://maps.example/g1"]),
+        encoding="utf-8",
+    )
+
+    def fake_command_runner(command, **kwargs):
+        output_file = _command_path(command, "--output-file", kwargs["cwd"])
+        output_file.write_text(
+            """<net>
+  <junction id="n1" type="traffic_light"/>
+  <tlLogic id="n1" type="static" programID="0" offset="0">
+    <phase duration="1" state="r"/>
+  </tlLogic>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = build_tls_aggregation_variant(
+        net_file=net_file,
+        tls_audit_report={"status": "pass", "tls_cluster_count": 1, "clusters_file": str(clusters_file)},
+        output_dir=tmp_path / "tls_aggregation",
+        prefix="demo_tls",
+        command_runner=fake_command_runner,
+        controlled_nodes_by_tls_func=lambda _net_file: {"tlA": ["n1"]},
+    )
+
+    root = ET.parse(report["tls_aggregation_variant_file"]).getroot()
+    target_tls = root.find("tlLogic[@id='n1']")
+    phase = target_tls.find("phase")
+    assert report["tls_program_preserved_count"] == 1
+    assert report["tls_program_skipped_count"] == 0
+    assert target_tls.attrib["type"] == "actuated"
+    assert target_tls.attrib["offset"] == "5"
+    assert phase.attrib == {"duration": "30", "minDur": "10", "maxDur": "60", "state": "G"}
 
 
 def test_build_tls_aggregation_variant_resolves_relative_paths(tmp_path: Path, monkeypatch) -> None:

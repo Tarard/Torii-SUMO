@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import csv
 import json
 from pathlib import Path
@@ -133,13 +134,18 @@ def build_tls_aggregation_variant(
         }
 
     status = "pass" if result.get("status") == "pass" and variant_file.exists() else "fail"
+    tls_program_preservation = (
+        _preserve_compatible_tls_programs(net_file, variant_file, representatives) if status == "pass" else _empty_preservation()
+    )
     counts = _tls_counts(variant_file) if variant_file.exists() else {}
     warnings = ["TLS aggregation variant requires Google Maps and Netedit review before adoption"]
-    if source_tls_counts["source_tl_logic_count"]:
+    if source_tls_counts["source_tl_logic_count"] and not tls_program_preservation["tls_program_preserved_count"]:
         warnings.append(
             "TLS aggregation discards loaded tlLogic programs via --tls.discard-loaded; "
             "actuated/minDur/maxDur semantics are not preserved"
         )
+    elif tls_program_preservation["tls_program_skipped_count"]:
+        warnings.append("Some source tlLogic programs were not compatible with the rebuilt TLS link state length")
     if status != "pass":
         warnings.append(f"TLS aggregation variant was not created: {variant_file}")
     return {
@@ -155,6 +161,7 @@ def build_tls_aggregation_variant(
         "tls_aggregation_netconvert": result,
         "tls_program_policy": "discard_loaded_programs_rebuild_tls_set",
         **source_tls_counts,
+        **tls_program_preservation,
         **counts,
         "warnings": warnings,
     }
@@ -243,6 +250,63 @@ def _tls_counts(net_file: Path) -> dict[str, int]:
         ),
         "tls_aggregated_tl_logic_count": len(root.findall("tlLogic")),
     }
+
+
+def _preserve_compatible_tls_programs(
+    source_net_file: Path,
+    variant_file: Path,
+    representatives: list[Mapping[str, str]],
+) -> dict[str, Any]:
+    source_root = ET.parse(source_net_file).getroot()
+    target_tree = ET.parse(variant_file)
+    target_root = target_tree.getroot()
+    source_by_id = {tl.attrib["id"]: tl for tl in source_root.findall("tlLogic") if tl.attrib.get("id")}
+    target_by_id = {tl.attrib["id"]: tl for tl in target_root.findall("tlLogic") if tl.attrib.get("id")}
+    preserved = 0
+    skipped: list[dict[str, str]] = []
+    for row in representatives:
+        target_id = str(row.get("representative_node_id", ""))
+        target = target_by_id.get(target_id)
+        if target is None:
+            skipped.append({"representative_node_id": target_id, "reason": "missing_target_tllogic"})
+            continue
+        source = next(
+            (
+                source_by_id[tls_id]
+                for tls_id in _split_tls_ids(str(row.get("tls_ids", "")))
+                if tls_id in source_by_id and _tls_program_compatible(source_by_id[tls_id], target)
+            ),
+            None,
+        )
+        if source is None:
+            skipped.append({"representative_node_id": target_id, "reason": "no_compatible_source_tllogic"})
+            continue
+        replacement = ET.Element("tlLogic", dict(source.attrib))
+        replacement.set("id", target_id)
+        for child in source:
+            replacement.append(copy.deepcopy(child))
+        index = list(target_root).index(target)
+        target_root.remove(target)
+        target_root.insert(index, replacement)
+        preserved += 1
+    if preserved:
+        ET.indent(target_root, space="    ")
+        target_tree.write(variant_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "tls_program_preserved_count": preserved,
+        "tls_program_skipped_count": len(skipped),
+        "tls_program_skips": skipped,
+    }
+
+
+def _tls_program_compatible(source: ET.Element, target: ET.Element) -> bool:
+    source_lengths = {len(phase.attrib.get("state", "")) for phase in source.findall("phase") if phase.attrib.get("state")}
+    target_lengths = {len(phase.attrib.get("state", "")) for phase in target.findall("phase") if phase.attrib.get("state")}
+    return bool(source_lengths) and source_lengths == target_lengths
+
+
+def _empty_preservation() -> dict[str, Any]:
+    return {"tls_program_preserved_count": 0, "tls_program_skipped_count": 0, "tls_program_skips": []}
 
 
 def _source_tls_program_counts(net_file: Path) -> dict[str, int]:
