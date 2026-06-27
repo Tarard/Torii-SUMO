@@ -2279,7 +2279,8 @@ def _approach_edge_signatures(
 def _approach_edge_signature(edge: dict[str, Any]) -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
-        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('width', '')}:{lane.get('shape', '')}"
+        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('width', '')}:"
+        f"{lane.get('shape', '')}:{lane.get('outlineShape', '')}"
         for lane in lanes
         if isinstance(lane, dict)
     ]
@@ -2432,7 +2433,8 @@ def _walking_area_signatures(
 def _internal_edge_signature(edge: dict[str, Any]) -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
-        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('width', '')}:{lane.get('shape', '')}"
+        f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('width', '')}:"
+        f"{lane.get('shape', '')}:{lane.get('outlineShape', '')}"
         for lane in lanes
         if isinstance(lane, dict)
     ]
@@ -2458,7 +2460,7 @@ def _internal_junction_signatures(
         int_lanes = _mapped_lane_refs(str(junction.get("intLanes", "")), edge_map, source_junction_id, target_junction_id)
         signatures[junction_id] = (
             f"type={junction.get('type', '')}|incLanes={inc_lanes}|"
-            f"intLanes={int_lanes}|shape={junction.get('shape', '')}"
+            f"intLanes={int_lanes}|shape={junction.get('shape', '')}|customShape={junction.get('customShape', '')}"
         )
     return signatures
 

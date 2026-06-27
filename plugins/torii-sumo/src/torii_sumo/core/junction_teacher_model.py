@@ -441,6 +441,7 @@ def _junction_record(junction: ET.Element) -> dict[str, str]:
         "incLanes": junction.attrib.get("incLanes", ""),
         "intLanes": junction.attrib.get("intLanes", ""),
         "shape": junction.attrib.get("shape", ""),
+        "customShape": junction.attrib.get("customShape", ""),
     }
 
 
@@ -451,6 +452,7 @@ def _lane_record(lane: ET.Element) -> dict[str, str]:
         "allow": lane.attrib.get("allow", ""),
         "width": lane.attrib.get("width", ""),
         "shape": lane.attrib.get("shape", ""),
+        "outlineShape": lane.attrib.get("outlineShape", ""),
     }
 
 
