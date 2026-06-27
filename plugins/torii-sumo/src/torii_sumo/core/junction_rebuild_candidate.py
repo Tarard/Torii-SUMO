@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import csv
 import hashlib
 import json
@@ -1201,6 +1202,7 @@ def run_teacher_guided_repair_queue(
     output_dir.mkdir(parents=True, exist_ok=True)
     crossing_edge_overrides_by_junction = crossing_edge_overrides_by_junction or {}
     variant_reports = []
+    expanded_scope_reports = []
     skipped_candidates = []
     attempted_ready_count = 0
     for index, candidate in enumerate(candidates):
@@ -1210,6 +1212,26 @@ def run_teacher_guided_repair_queue(
         junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
         teacher_junction_id = str(candidate.get("reference_id") or junction_id)
         edge_map = _valid_edge_map(candidate.get("edge_map", {}))
+        if candidate.get("candidate_status") == "needs_expanded_rebuild_scope" and junction_id:
+            safe_junction_id = _queue_candidate_dir(index, junction_id)
+            expanded_scope_reports.append(
+                write_expanded_scope_plain_inputs(
+                    raw_node_file=raw_node_file,
+                    raw_edge_file=raw_edge_file,
+                    raw_connection_file=raw_connection_file,
+                    output_dir=output_dir / safe_junction_id,
+                    expanded_rebuild_scope=candidate.get("expanded_rebuild_scope", {}),
+                    netconvert_binary=netconvert_binary,
+                )
+            )
+            skipped_candidates.append(
+                {
+                    "index": index,
+                    "junction_id": junction_id,
+                    "candidate_status": candidate.get("candidate_status", "skipped"),
+                }
+            )
+            continue
         if candidate.get("candidate_status") != "ready_for_teacher_guided_variant" or not junction_id:
             skipped_candidates.append(
                 {
@@ -1288,6 +1310,8 @@ def run_teacher_guided_repair_queue(
         "failed_candidate_count": failed_count,
         "parity_pass_candidate_count": parity_pass_count,
         "semantic_failure_counts": semantic_failure_counts,
+        "expanded_scope_candidate_count": len(expanded_scope_reports),
+        "expanded_scope_reports": expanded_scope_reports,
         "run_report_file": str(run_report_file),
         "variant_reports": variant_reports,
         "skipped_candidates": skipped_candidates,
@@ -1295,6 +1319,99 @@ def run_teacher_guided_repair_queue(
     }
     run_report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
+
+
+def write_expanded_scope_plain_inputs(
+    *,
+    raw_node_file: Path,
+    raw_edge_file: Path,
+    raw_connection_file: Path,
+    output_dir: Path,
+    expanded_rebuild_scope: object,
+    netconvert_binary: str = "netconvert",
+) -> dict[str, object]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    node_file = output_dir / "expanded_scope.nod.xml"
+    edge_file = output_dir / "expanded_scope.edg.xml"
+    connection_file = output_dir / "expanded_scope.con.xml"
+    net_file = output_dir / "expanded_scope.net.xml"
+
+    scope = expanded_rebuild_scope if isinstance(expanded_rebuild_scope, dict) else {}
+    seed_node_ids = {str(item) for item in scope.get("junction_ids", []) or [] if str(item)}
+    blocked_edge_ids = {str(item) for item in scope.get("blocked_teacher_edge_ids", []) or [] if str(item)}
+
+    raw_edges = [edge for edge in ET.parse(raw_edge_file).getroot() if edge.tag == "edge"]
+    selected_edges = [
+        edge
+        for edge in raw_edges
+        if edge.attrib.get("id", "") in blocked_edge_ids
+        or edge.attrib.get("from", "") in seed_node_ids
+        or edge.attrib.get("to", "") in seed_node_ids
+    ]
+    selected_edge_ids = {edge.attrib.get("id", "") for edge in selected_edges if edge.attrib.get("id")}
+    selected_node_ids = set(seed_node_ids)
+    for edge in selected_edges:
+        selected_node_ids.update(endpoint for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")) if endpoint)
+
+    raw_nodes = {
+        node.attrib["id"]: node
+        for node in ET.parse(raw_node_file).getroot()
+        if node.tag == "node" and node.attrib.get("id")
+    }
+    node_root = ET.Element("nodes")
+    for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
+        node_root.append(copy.deepcopy(raw_nodes[node_id]))
+
+    edge_root = ET.Element("edges")
+    for edge in selected_edges:
+        edge_root.append(copy.deepcopy(edge))
+
+    connection_root = ET.Element("connections")
+    for connection in ET.parse(raw_connection_file).getroot():
+        if (
+            connection.tag == "connection"
+            and connection.attrib.get("from", "") in selected_edge_ids
+            and connection.attrib.get("to", "") in selected_edge_ids
+        ):
+            connection_root.append(copy.deepcopy(connection))
+
+    ET.indent(node_root, space="    ")
+    ET.indent(edge_root, space="    ")
+    ET.indent(connection_root, space="    ")
+    ET.ElementTree(node_root).write(node_file, encoding="utf-8", xml_declaration=True)
+    ET.ElementTree(edge_root).write(edge_file, encoding="utf-8", xml_declaration=True)
+    ET.ElementTree(connection_root).write(connection_file, encoding="utf-8", xml_declaration=True)
+
+    command = [
+        netconvert_binary,
+        "--node-files",
+        node_file.name,
+        "--edge-files",
+        edge_file.name,
+        "--connection-files",
+        connection_file.name,
+        "--output-file",
+        net_file.name,
+    ]
+    missing_node_ids = sorted(node_id for node_id in selected_node_ids if node_id not in raw_nodes)
+    missing_blocked_edge_ids = sorted(edge_id for edge_id in blocked_edge_ids if edge_id not in selected_edge_ids)
+    return {
+        "status": "review" if missing_node_ids or missing_blocked_edge_ids else "pass",
+        "claim_status": "diagnostic-demo",
+        "recommended_action": "run_netconvert_scope_probe",
+        "node_file": str(node_file),
+        "edge_file": str(edge_file),
+        "connection_file": str(connection_file),
+        "net_file": str(net_file),
+        "netconvert_command": command,
+        "seed_node_ids": sorted(seed_node_ids),
+        "blocked_edge_ids": sorted(blocked_edge_ids),
+        "missing_node_ids": missing_node_ids,
+        "missing_blocked_edge_ids": missing_blocked_edge_ids,
+        "node_count": len(node_root.findall("node")),
+        "edge_count": len(edge_root.findall("edge")),
+        "connection_count": len(connection_root.findall("connection")),
+    }
 
 
 def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[str, int]:
