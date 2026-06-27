@@ -2014,7 +2014,12 @@ def _compare_teacher_models(
         candidate_summary["junction_signature"] = candidate_junction_signature
         if teacher_junction_signature != candidate_junction_signature:
             delta["junction_signature_mismatch_count"] = 1
-        teacher_approach_signatures = _approach_edge_signatures(teacher_model, edge_map=edge_map)
+        teacher_approach_signatures = _approach_edge_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
         candidate_approach_signatures = _approach_edge_signatures(candidate_model)
         approach_mismatch_count = _dict_mismatch_count(teacher_approach_signatures, candidate_approach_signatures)
         teacher_summary["approach_edge_signatures"] = teacher_approach_signatures
@@ -2323,6 +2328,8 @@ def _approach_edge_signatures(
     model: dict[str, Any],
     *,
     edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
 ) -> dict[str, str]:
     approaches = model.get("approaches", {}) if isinstance(model.get("approaches"), dict) else {}
     signatures: dict[str, str] = {}
@@ -2333,11 +2340,15 @@ def _approach_edge_signatures(
             edge_id = _mapped_endpoint(str(edge.get("edge_id", "")), edge_map)
             if not edge_id:
                 continue
-            signatures[f"{direction}:{edge_id}"] = _approach_edge_signature(edge)
+            signatures[f"{direction}:{edge_id}"] = _approach_edge_signature(
+                edge,
+                source_junction_id=source_junction_id,
+                target_junction_id=target_junction_id,
+            )
     return signatures
 
 
-def _approach_edge_signature(edge: dict[str, Any]) -> str:
+def _approach_edge_signature(edge: dict[str, Any], *, source_junction_id: str = "", target_junction_id: str = "") -> str:
     lanes = edge.get("lanes", []) if isinstance(edge.get("lanes"), list) else []
     lane_signatures = [
         f"{lane.get('index', '')}:{lane.get('allow', '')}:{lane.get('disallow', '')}:"
@@ -2346,7 +2357,18 @@ def _approach_edge_signature(edge: dict[str, Any]) -> str:
         for lane in lanes
         if isinstance(lane, dict)
     ]
-    return f"type={edge.get('type', '')}|function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
+    source = _mapped_junction_ref(str(edge.get("from", "")), source_junction_id, target_junction_id)
+    target = _mapped_junction_ref(str(edge.get("to", "")), source_junction_id, target_junction_id)
+    return (
+        f"from={source}|to={target}|type={edge.get('type', '')}|"
+        f"function={edge.get('function', '')}|lanes={' '.join(lane_signatures)}"
+    )
+
+
+def _mapped_junction_ref(value: str, source_junction_id: str, target_junction_id: str) -> str:
+    if source_junction_id and target_junction_id and value == source_junction_id:
+        return target_junction_id
+    return value
 
 
 def _relative_shape(shape: str, x: str, y: str) -> str:

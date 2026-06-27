@@ -1394,10 +1394,12 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
         "summary": {},
         "approaches": {
             "incoming": [
-                {
-                    "edge_id": "teacher_in",
-                    "type": "highway.primary",
-                    "function": "",
+                    {
+                        "edge_id": "teacher_in",
+                        "from": "teacher_source",
+                        "to": "teacher_j",
+                        "type": "highway.primary",
+                        "function": "",
                     "lanes": [
                         {
                             "index": "0",
@@ -1422,10 +1424,12 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
         "summary": {},
         "approaches": {
             "incoming": [
-                {
-                    "edge_id": "cand_in",
-                    "type": "highway.primary",
-                    "function": "",
+                    {
+                        "edge_id": "cand_in",
+                        "from": "candidate_source",
+                        "to": "candidate_j",
+                        "type": "highway.primary",
+                        "function": "",
                     "lanes": [
                         {
                             "index": "0",
@@ -1456,16 +1460,71 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0,0 1,1:"
+        "incoming:cand_in": "from=teacher_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian bicycle:13.89:10.50:3.20:0,0 1,1:"
     }
     assert parity["candidate"]["approach_edge_signatures"] == {
-        "incoming:cand_in": "type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0,0 1,1:"
+        "incoming:cand_in": "from=candidate_source|to=candidate_j|type=highway.primary|function=|lanes=0:passenger:pedestrian:8.33:8.50:3.20:0,0 1,1:"
     }
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
     assert gate["failures"] == [
         {"report": "parity", "field": "approach_edge_signature_mismatch_count", "count": 1}
     ]
+
+
+def test_teacher_parity_fails_on_mapped_approach_endpoint_mismatch() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "summary": {},
+        "approaches": {
+            "incoming": [
+                {
+                    "edge_id": "teacher_in",
+                    "from": "teacher_boundary",
+                    "to": "teacher_j",
+                    "type": "highway.primary",
+                    "lanes": [{"index": "0", "allow": "passenger", "shape": "0,0 1,1"}],
+                }
+            ]
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "teacher_j"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "summary": {},
+        "approaches": {
+            "incoming": [
+                {
+                    "edge_id": "cand_in",
+                    "from": "candidate_boundary",
+                    "to": "candidate_j",
+                    "type": "highway.primary",
+                    "lanes": [{"index": "0", "allow": "passenger", "shape": "0,0 1,1"}],
+                }
+            ]
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "candidate_j"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"teacher_in": "cand_in"},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+
+    assert parity["teacher"]["approach_edge_signatures"]["incoming:cand_in"].startswith(
+        "from=teacher_boundary|to=candidate_j|"
+    )
+    assert parity["candidate"]["approach_edge_signatures"]["incoming:cand_in"].startswith(
+        "from=candidate_boundary|to=candidate_j|"
+    )
+    assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
 
 
 def test_teacher_parity_fails_on_tls_program_and_offset_mismatch() -> None:
