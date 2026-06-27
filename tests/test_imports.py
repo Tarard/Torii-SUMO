@@ -30,6 +30,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_network_junction_aggregation_variant",
         "sumo_network_scope_pruning_variant",
         "sumo_network_teacher_guided_junction_variant",
+        "sumo_network_teacher_guided_repair_queue",
         "sumo_network_tls_aggregation_variant",
         "sumo_network_review_html",
     ]

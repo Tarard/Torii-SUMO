@@ -26,6 +26,7 @@ from .tools.osm_tools import (
     sumo_network_routeability_probe,
     sumo_network_scope_pruning_variant,
     sumo_network_teacher_guided_junction_variant,
+    sumo_network_teacher_guided_repair_queue,
     sumo_network_tls_aggregation_variant,
     sumo_network_topology_audit,
     sumo_osm_build_network,
@@ -106,6 +107,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Build a diagnostic teacher-guided junction variant by replaying reference lane permissions, movements, pedestrian ring, and tlLogic onto candidate plain network files; requires NetEdit connection-mode review before adoption.")(
         sumo_network_teacher_guided_junction_variant
+    )
+    server.tool(description="Execute ready teacher-guided junction repair queue items against explicit plain node/edge/connection files; requires per-result NetEdit connection-mode review before adoption.")(
+        sumo_network_teacher_guided_repair_queue
     )
     server.tool(description="Create a separate TLS cleanup review variant with one real SUMO junction set as TLS per physical TLS audit cluster.")(
         sumo_network_tls_aggregation_variant

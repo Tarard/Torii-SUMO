@@ -258,8 +258,10 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["network_plan"]["network_profile"] == "reference_matched"
     assert "sumo_network_reference_join_audit" in report["tool_chain"]
     assert "sumo_network_junction_aggregation_variant" in report["tool_chain"]
+    assert "sumo_network_teacher_guided_repair_queue" in report["tool_chain"]
     assert "sumo_network_teacher_guided_junction_variant" in report["tool_chain"]
     assert report["reference_matched_semantics_workflow"]["claim_status"] == "diagnostic-demo"
+    assert report["reference_matched_semantics_workflow"]["batch_repair_tool"] == "sumo_network_teacher_guided_repair_queue"
     assert report["reference_matched_semantics_workflow"]["per_junction_repair_tool"] == "sumo_network_teacher_guided_junction_variant"
     assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]

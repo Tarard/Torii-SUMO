@@ -61,6 +61,7 @@ REFERENCE_MATCHED_TOOL_CHAIN = [
     "sumo_network_tls_aggregation_variant",
     "sumo_network_reference_join_audit",
     "sumo_network_junction_aggregation_variant",
+    "sumo_network_teacher_guided_repair_queue",
     "sumo_network_teacher_guided_junction_variant",
     "sumo_network_review_html",
 ]
@@ -70,6 +71,7 @@ REFERENCE_MATCHED_SEMANTICS_WORKFLOW = {
     "reference_policy": "learn road layers and service/passenger permissions from a manual reference net",
     "junction_policy": "learn reusable junction patterns from the reference net before proposing aggregation",
     "connection_policy": "audit connection, TLS, crossing, walkingarea, and internal-junction parity before adoption",
+    "batch_repair_tool": "sumo_network_teacher_guided_repair_queue",
     "per_junction_repair_tool": "sumo_network_teacher_guided_junction_variant",
     "required_manual_reviews": ["netedit_connection_mode", "map_or_field_imagery"],
 }

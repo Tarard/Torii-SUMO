@@ -6,6 +6,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     build_rebuild_candidate,
     build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
+    run_teacher_guided_repair_queue,
     write_teacher_target_internal_replay_net,
     write_teacher_connection_plan,
     write_teacher_lane_patch_edges,
@@ -172,6 +173,205 @@ def test_teacher_guided_repair_queue_uses_real_reference_join_case_after_joined_
     assert reference_join["matched_cases"][0]["learned_rule"] == "tum_like_join_candidate"
     assert queue["ready_candidate_count"] == 1
     assert queue["repair_candidates"][0]["edge_map"] == {"teacher_in": "cand_in", "teacher_out": "cand_out"}
+
+
+def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    calls = []
+
+    def fake_variant(**kwargs):
+        calls.append(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(kwargs["output_dir"] / "final.net.xml"),
+            "parity_gate_status": "pass",
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                },
+                {"junction_id": "cluster_c_d", "candidate_status": "needs_joined_candidate_junction", "edge_map": {}},
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    assert report["attempted_candidate_count"] == 1
+    assert report["skipped_candidate_count"] == 1
+    assert report["parity_gate_status"] == "pass"
+    assert calls[0]["junction_id"] == "cluster_a_b"
+    assert calls[0]["edge_map"] == {"teacher_in": "cand_in"}
+
+
+def test_run_teacher_guided_repair_queue_blocks_without_ready_candidates(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    def fail_if_called(**_kwargs):
+        raise AssertionError("variant builder must not run for blocked candidates")
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {"junction_id": "cluster_c_d", "candidate_status": "needs_joined_candidate_junction", "edge_map": {}},
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fail_if_called,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    assert report["attempted_candidate_count"] == 0
+    assert report["skipped_candidate_count"] == 1
+    assert Path(report["run_report_file"]).is_file()
+
+
+def test_run_teacher_guided_repair_queue_fails_when_parity_fails(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    def fake_variant(**kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "parity_gate_status": "fail",
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["parity_gate_status"] == "fail"
+
+
+def test_run_teacher_guided_repair_queue_resolves_relative_queue_paths(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    teacher_net = queue_dir / "teacher.net.xml"
+    candidate_net = queue_dir / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    calls = []
+
+    def fake_variant(**kwargs):
+        calls.append(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo", "parity_gate_status": "pass"}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": "teacher.net.xml",
+            "candidate_net_file": "candidate.net.xml",
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        queue_base_dir=queue_dir,
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    assert calls[0]["teacher_net_file"] == teacher_net
+    assert calls[0]["candidate_net_file"] == candidate_net
+
+
+def test_run_teacher_guided_repair_queue_skips_invalid_edge_map(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    def fail_if_called(**_kwargs):
+        raise AssertionError("variant builder must not run for malformed edge maps")
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": ["cand_in"]},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fail_if_called,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["skipped_candidates"][0]["candidate_status"] == "invalid_edge_map"
 
 
 def test_write_teacher_connection_plan_preserves_non_target_and_blocks_unlisted_targets(tmp_path: Path) -> None:

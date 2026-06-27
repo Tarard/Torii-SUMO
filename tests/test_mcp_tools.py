@@ -12,6 +12,7 @@ from torii_sumo.tools.osm_tools import (
     sumo_network_routeability_audit,
     sumo_network_scope_pruning_variant,
     sumo_network_teacher_guided_junction_variant,
+    sumo_network_teacher_guided_repair_queue,
     sumo_network_tls_aggregation_variant,
     sumo_network_topology_audit,
 )
@@ -527,4 +528,60 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
     assert report["status"] == "pass"
     assert report["claim_status"] == "diagnostic-demo"
     assert report["parity"]["delta"]["vehicle_connection_count"] == 0
+    json.dumps(report)
+
+
+def test_sumo_network_teacher_guided_repair_queue_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    raw_node_file = tmp_path / "raw.nod.xml"
+    raw_edge_file = tmp_path / "raw.edg.xml"
+    raw_connection_file = tmp_path / "raw.con.xml"
+    raw_type_file = tmp_path / "raw.typ.xml"
+    for path in (raw_node_file, raw_edge_file, raw_connection_file, raw_type_file):
+        path.write_text("<xml/>", encoding="utf-8")
+    queue_file = tmp_path / "queue.json"
+    queue_file.write_text(
+        json.dumps(
+            {
+                "teacher_net_file": str(tmp_path / "teacher.net.xml"),
+                "candidate_net_file": str(tmp_path / "candidate.net.xml"),
+                "repair_candidates": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_runner(**kwargs):
+        assert kwargs["queue_report"]["repair_candidates"] == []
+        assert kwargs["raw_node_file"] == raw_node_file
+        assert kwargs["raw_edge_file"] == raw_edge_file
+        assert kwargs["raw_connection_file"] == raw_connection_file
+        assert kwargs["raw_type_file"] == raw_type_file
+        assert kwargs["output_dir"] == tmp_path / "queue-run"
+        assert kwargs["queue_base_dir"] == queue_file.resolve().parent
+        assert kwargs["replay_target_internal_subgraph"] is True
+        return {
+            "status": "blocked",
+            "claim_status": "blocked",
+            "attempted_candidate_count": 0,
+            "skipped_candidate_count": 0,
+        }
+
+    monkeypatch.setattr(osm_tools, "run_teacher_guided_repair_queue", fake_runner)
+
+    report = sumo_network_teacher_guided_repair_queue(
+        queue_report_file=str(queue_file),
+        raw_node_file=str(raw_node_file),
+        raw_edge_file=str(raw_edge_file),
+        raw_connection_file=str(raw_connection_file),
+        raw_type_file=str(raw_type_file),
+        output_dir=str(tmp_path / "queue-run"),
+        replay_target_internal_subgraph=True,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
     json.dumps(report)
