@@ -1221,6 +1221,7 @@ def run_teacher_guided_repair_queue(
                     raw_connection_file=raw_connection_file,
                     output_dir=output_dir / safe_junction_id,
                     expanded_rebuild_scope=candidate.get("expanded_rebuild_scope", {}),
+                    approach_endpoint_rebuild_plan=candidate.get("approach_endpoint_rebuild_plan", {}),
                     netconvert_binary=netconvert_binary,
                 )
             )
@@ -1328,6 +1329,7 @@ def write_expanded_scope_plain_inputs(
     raw_connection_file: Path,
     output_dir: Path,
     expanded_rebuild_scope: object,
+    approach_endpoint_rebuild_plan: object | None = None,
     netconvert_binary: str = "netconvert",
 ) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1358,22 +1360,56 @@ def write_expanded_scope_plain_inputs(
         for node in ET.parse(raw_node_file).getroot()
         if node.tag == "node" and node.attrib.get("id")
     }
+    edge_root = ET.Element("edges")
+    endpoint_rewrites = _endpoint_rewrites(approach_endpoint_rebuild_plan)
+    rewritten_endpoint_count = 0
+    skipped_endpoint_rewrites = []
+    for edge in selected_edges:
+        copied_edge = copy.deepcopy(edge)
+        edge_id = copied_edge.attrib.get("id", "")
+        rewrite = endpoint_rewrites.get(edge_id)
+        if rewrite is not None:
+            desired_from, desired_to = rewrite
+            missing_endpoint_ids = [node_id for node_id in (desired_from, desired_to) if node_id not in raw_nodes]
+            if missing_endpoint_ids:
+                skipped_endpoint_rewrites.append(
+                    {
+                        "edge_id": edge_id,
+                        "desired_from": desired_from,
+                        "desired_to": desired_to,
+                        "missing_endpoint_ids": missing_endpoint_ids,
+                    }
+                )
+            else:
+                copied_edge.set("from", desired_from)
+                copied_edge.set("to", desired_to)
+                selected_node_ids.update((desired_from, desired_to))
+                rewritten_endpoint_count += 1
+        edge_root.append(copied_edge)
+
     node_root = ET.Element("nodes")
     for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
         node_root.append(copy.deepcopy(raw_nodes[node_id]))
 
-    edge_root = ET.Element("edges")
-    for edge in selected_edges:
-        edge_root.append(copy.deepcopy(edge))
-
     connection_root = ET.Element("connections")
+    selected_edge_endpoints = {
+        edge.attrib.get("id", ""): (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        for edge in edge_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    dropped_connection_count = 0
     for connection in ET.parse(raw_connection_file).getroot():
         if (
             connection.tag == "connection"
             and connection.attrib.get("from", "") in selected_edge_ids
             and connection.attrib.get("to", "") in selected_edge_ids
+            and _connection_edges_are_adjacent(connection, selected_edge_endpoints)
         ):
             connection_root.append(copy.deepcopy(connection))
+        elif connection.tag == "connection" and (
+            connection.attrib.get("from", "") in selected_edge_ids or connection.attrib.get("to", "") in selected_edge_ids
+        ):
+            dropped_connection_count += 1
 
     ET.indent(node_root, space="    ")
     ET.indent(edge_root, space="    ")
@@ -1408,10 +1444,34 @@ def write_expanded_scope_plain_inputs(
         "blocked_edge_ids": sorted(blocked_edge_ids),
         "missing_node_ids": missing_node_ids,
         "missing_blocked_edge_ids": missing_blocked_edge_ids,
+        "rewritten_endpoint_count": rewritten_endpoint_count,
+        "skipped_endpoint_rewrites": skipped_endpoint_rewrites,
+        "dropped_connection_count": dropped_connection_count,
         "node_count": len(node_root.findall("node")),
         "edge_count": len(edge_root.findall("edge")),
         "connection_count": len(connection_root.findall("connection")),
     }
+
+
+def _connection_edges_are_adjacent(connection: ET.Element, edge_endpoints: dict[str, tuple[str, str]]) -> bool:
+    source = edge_endpoints.get(connection.attrib.get("from", ""))
+    target = edge_endpoints.get(connection.attrib.get("to", ""))
+    return bool(source and target and source[1] == target[0])
+
+
+def _endpoint_rewrites(approach_endpoint_rebuild_plan: object | None) -> dict[str, tuple[str, str]]:
+    if not isinstance(approach_endpoint_rebuild_plan, dict):
+        return {}
+    rewrites = {}
+    for item in approach_endpoint_rebuild_plan.get("edge_rebuilds", []) or []:
+        if not isinstance(item, dict):
+            continue
+        edge_id = str(item.get("edge_id", ""))
+        desired_from = str(item.get("desired_from", ""))
+        desired_to = str(item.get("desired_to", ""))
+        if edge_id and desired_from and desired_to:
+            rewrites[edge_id] = (desired_from, desired_to)
+    return rewrites
 
 
 def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[str, int]:

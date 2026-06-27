@@ -728,6 +728,7 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
         """<edges>
   <edge id="approach_in" from="a" to="j"><lane index="0"/></edge>
   <edge id="teacher_out" from="j" to="c"><lane index="0"/></edge>
+  <edge id="old_downstream" from="c" to="e"><lane index="0"/></edge>
   <edge id="outside" from="x" to="a"><lane index="0"/></edge>
 </edges>""",
         encoding="utf-8",
@@ -736,6 +737,7 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     raw_connections.write_text(
         """<connections>
   <connection from="approach_in" to="teacher_out" fromLane="0" toLane="0"/>
+  <connection from="teacher_out" to="old_downstream" fromLane="0" toLane="0"/>
   <connection from="outside" to="approach_in" fromLane="0" toLane="0"/>
 </connections>""",
         encoding="utf-8",
@@ -764,6 +766,18 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
                         "junction_ids": ["c", "e", "j"],
                         "blocked_teacher_edge_ids": ["teacher_out"],
                     },
+                    "approach_endpoint_rebuild_plan": {
+                        "status": "review",
+                        "edge_rebuilds": [
+                            {
+                                "edge_id": "teacher_out",
+                                "candidate_from": "j",
+                                "candidate_to": "c",
+                                "desired_from": "j",
+                                "desired_to": "e",
+                            }
+                        ],
+                    },
                 }
             ],
         },
@@ -779,14 +793,16 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     scope_report = report["expanded_scope_reports"][0]
     assert scope_report["status"] == "pass"
     assert scope_report["node_count"] == 4
-    assert scope_report["edge_count"] == 2
+    assert scope_report["edge_count"] == 3
     assert scope_report["connection_count"] == 1
+    assert scope_report["rewritten_endpoint_count"] == 1
     assert scope_report["netconvert_command"][-2:] == ["--output-file", "expanded_scope.net.xml"]
     scope_nodes = ET.parse(scope_report["node_file"]).getroot()
     scope_edges = ET.parse(scope_report["edge_file"]).getroot()
     scope_connections = ET.parse(scope_report["connection_file"]).getroot()
     assert [node.attrib["id"] for node in scope_nodes] == ["a", "c", "e", "j"]
-    assert [edge.attrib["id"] for edge in scope_edges] == ["approach_in", "teacher_out"]
+    assert [edge.attrib["id"] for edge in scope_edges] == ["approach_in", "teacher_out", "old_downstream"]
+    assert scope_edges.find("edge[@id='teacher_out']").attrib["to"] == "e"
     assert [connection.attrib["from"] for connection in scope_connections] == ["approach_in"]
 
 
