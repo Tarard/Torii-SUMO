@@ -1235,17 +1235,20 @@ def run_teacher_guided_repair_queue(
         if candidate.get("candidate_status") == "needs_expanded_rebuild_scope" and junction_id:
             safe_junction_id = _queue_candidate_dir(index, junction_id)
             expanded_scope_reports.append(
-                write_expanded_scope_plain_inputs(
-                    raw_node_file=raw_node_file,
-                    raw_edge_file=raw_edge_file,
-                    raw_connection_file=raw_connection_file,
-                    output_dir=output_dir / safe_junction_id,
-                    expanded_rebuild_scope=candidate.get("expanded_rebuild_scope", {}),
-                    approach_endpoint_rebuild_plan=candidate.get("approach_endpoint_rebuild_plan", {}),
-                    netconvert_binary=netconvert_binary,
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
+                _attach_candidate_template_context(
+                    write_expanded_scope_plain_inputs(
+                        raw_node_file=raw_node_file,
+                        raw_edge_file=raw_edge_file,
+                        raw_connection_file=raw_connection_file,
+                        output_dir=output_dir / safe_junction_id,
+                        expanded_rebuild_scope=candidate.get("expanded_rebuild_scope", {}),
+                        approach_endpoint_rebuild_plan=candidate.get("approach_endpoint_rebuild_plan", {}),
+                        netconvert_binary=netconvert_binary,
+                        sumo_binary=sumo_binary,
+                        timeout_seconds=timeout_seconds,
+                        command_runner=command_runner,
+                    ),
+                    candidate,
                 )
             )
             skipped_candidates.append(
@@ -1352,7 +1355,7 @@ def run_teacher_guided_repair_queue(
         "expanded_scope_reports": expanded_scope_reports,
         "run_report_file": str(run_report_file),
         "variant_reports": variant_reports,
-        "teacher_pattern_contexts": _teacher_pattern_contexts(variant_reports),
+        "teacher_pattern_contexts": _teacher_pattern_contexts(variant_reports + expanded_scope_reports),
         "skipped_candidates": skipped_candidates,
         "review_policy": "queue execution only; inspect each final net in NetEdit connection mode before adoption",
     }
