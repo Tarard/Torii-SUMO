@@ -66,6 +66,11 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
         if edge.attrib.get("id", "").startswith(internal_prefix)
         and edge.attrib.get("function") not in {"crossing", "walkingarea"}
     ]
+    internal_junctions = [
+        _junction_record(node)
+        for node in root.findall("junction")
+        if node.attrib.get("id", "").startswith(internal_prefix)
+    ]
     outgoing_edges_sorted = sorted(outgoing_edges)
 
     vehicle_connections = []
@@ -106,6 +111,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
         "vehicle_connections": vehicle_connections,
         "internal_connections": internal_connections,
         "internal_edges": internal_edges,
+        "internal_junctions": internal_junctions,
         "crossings": crossings,
         "walking_areas": walking_areas,
         "pedestrian_connections": pedestrian_connections,
@@ -116,6 +122,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
             "outgoing_vehicle_edge_count": len(outgoing_edges_sorted),
             "vehicle_connection_count": len(vehicle_connections),
             "internal_edge_count": len(internal_edges),
+            "internal_junction_count": len(internal_junctions),
             "internal_connection_count": len(internal_connections),
             "pedestrian_connection_count": len(pedestrian_connections),
             "crossing_count": len(crossings),
@@ -423,6 +430,18 @@ def _internal_edge_record(edge: ET.Element, crossing: bool = False) -> dict[str,
     if crossing:
         record["crossingEdges"] = _split(edge.attrib.get("crossingEdges", ""))
     return record
+
+
+def _junction_record(junction: ET.Element) -> dict[str, str]:
+    return {
+        "junction_id": junction.attrib.get("id", ""),
+        "type": junction.attrib.get("type", ""),
+        "x": junction.attrib.get("x", ""),
+        "y": junction.attrib.get("y", ""),
+        "incLanes": junction.attrib.get("incLanes", ""),
+        "intLanes": junction.attrib.get("intLanes", ""),
+        "shape": junction.attrib.get("shape", ""),
+    }
 
 
 def _lane_record(lane: ET.Element) -> dict[str, str]:
