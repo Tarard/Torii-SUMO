@@ -542,6 +542,11 @@ def write_teacher_vehicle_connection_attrs_net(
             for attr in ("dir", "state"):
                 if teacher_connection.get(attr):
                     connection.set(attr, str(teacher_connection[attr]))
+            for attr in ("linkIndex2", "pass", "allow", "disallow", "keepClear", "contPos"):
+                if teacher_connection.get(attr):
+                    connection.set(attr, str(teacher_connection[attr]))
+                else:
+                    connection.attrib.pop(attr, None)
             if teacher_connection.get("tl"):
                 connection.set("tl", junction_id)
                 connection.set("linkIndex", str(teacher_connection.get("linkIndex", "")))

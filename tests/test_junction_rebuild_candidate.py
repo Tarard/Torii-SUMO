@@ -14,6 +14,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_lane_patch_edges,
     write_teacher_pedestrian_ring_net,
     write_teacher_tllogic_net,
+    write_teacher_vehicle_connection_attrs_net,
 )
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 
@@ -1156,6 +1157,59 @@ def test_write_teacher_tllogic_net_allows_no_teacher_program(tmp_path: Path) -> 
     assert report["tl_phase_count"] == 0
     assert report["controlled_link_count"] == 0
     assert report["removed_controlled_link_count"] == 2
+
+
+def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection_attrs(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out"><lane id="cand_out_0" index="0"/></edge>
+  <connection from="cand_in" to="cand_out" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "vehicle_connections": [
+            {
+                "from": "teacher_in",
+                "to": "teacher_out",
+                "fromLane": "0",
+                "toLane": "0",
+                "tl": "teacher_tls",
+                "linkIndex": "3",
+                "linkIndex2": "12",
+                "dir": "s",
+                "state": "O",
+                "pass": "true",
+                "allow": "bicycle",
+                "disallow": "truck",
+                "keepClear": "0",
+                "contPos": "43.00",
+            }
+        ]
+    }
+
+    report = write_teacher_vehicle_connection_attrs_net(
+        candidate_net_file=candidate_net,
+        output_file=tmp_path / "attrs.net.xml",
+        junction_id="candidate_tls",
+        teacher_model=teacher_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    connection = ET.parse(report["net_file"]).getroot().find("connection")
+    assert connection.attrib["tl"] == "candidate_tls"
+    assert connection.attrib["linkIndex"] == "3"
+    assert connection.attrib["linkIndex2"] == "12"
+    assert connection.attrib["dir"] == "s"
+    assert connection.attrib["state"] == "O"
+    assert connection.attrib["pass"] == "true"
+    assert connection.attrib["allow"] == "bicycle"
+    assert connection.attrib["disallow"] == "truck"
+    assert connection.attrib["keepClear"] == "0"
+    assert connection.attrib["contPos"] == "43.00"
 
 
 def test_teacher_parity_counts_only_target_tls_controlled_links() -> None:
