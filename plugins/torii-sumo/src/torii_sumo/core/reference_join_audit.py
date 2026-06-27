@@ -56,6 +56,13 @@ def audit_reference_join_patterns(
     junction_pattern_mismatch_count = sum(
         1 for comparison in junction_pattern_comparisons if comparison["status"] != "pass"
     )
+    junction_pattern_mismatch_field_counts = dict(
+        Counter(
+            field
+            for comparison in junction_pattern_comparisons
+            for field in comparison.get("mismatch_fields", [])
+        )
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -79,8 +86,28 @@ def audit_reference_join_patterns(
     matched = [case for case in matched_cases if case["match_status"] == "matched"]
 
     cases_file = output_dir / f"{prefix}_reference_join_cases.csv"
+    junction_pattern_comparisons_file = output_dir / f"{prefix}_junction_pattern_comparisons.csv"
+    junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
     summary_file = output_dir / f"{prefix}_reference_join_audit.json"
     _write_cases_csv(cases_file, matched_cases)
+    _write_junction_pattern_comparisons_csv(junction_pattern_comparisons_file, junction_pattern_comparisons)
+    junction_teacher_delta = {
+        "schema_version": 1,
+        "reference_net_file": str(reference_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "reference_cluster_prefix": reference_cluster_prefix,
+        "junction_pattern_comparison_status": "fail"
+        if junction_pattern_mismatch_count
+        else ("pass" if junction_pattern_comparisons else "skipped"),
+        "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+        "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+        "junction_pattern_comparisons": junction_pattern_comparisons,
+        "matched_cases": matched,
+    }
+    junction_teacher_delta_file.write_text(
+        json.dumps(junction_teacher_delta, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     report = {
         "status": "pass" if reference_cases else "blocked",
@@ -105,7 +132,10 @@ def audit_reference_join_patterns(
         if junction_pattern_mismatch_count
         else ("pass" if junction_pattern_comparisons else "skipped"),
         "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+        "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
         "junction_pattern_comparisons": junction_pattern_comparisons,
+        "junction_pattern_comparisons_file": str(junction_pattern_comparisons_file),
+        "junction_teacher_delta_file": str(junction_teacher_delta_file),
         "cases_file": str(cases_file),
         "summary_file": str(summary_file),
         "candidate_topology_audit_file": str(candidate_audit.get("report_file", "")),
@@ -345,6 +375,8 @@ def _compare_same_id_patterns(
                 "junction_id": junction_id,
                 "status": comparison["status"],
                 "mismatch_fields": comparison["mismatch_fields"],
+                "teacher": comparison["teacher"],
+                "candidate": comparison["candidate"],
             }
         )
     return comparisons
@@ -484,6 +516,51 @@ def _write_cases_csv(path: Path, cases: list[dict[str, Any]]) -> None:
                 if isinstance(value, list):
                     row[field] = ";".join(str(item) for item in value)
             writer.writerow(row)
+
+
+def _write_junction_pattern_comparisons_csv(path: Path, comparisons: list[dict[str, Any]]) -> None:
+    fields = [
+        "junction_id",
+        "status",
+        "mismatch_fields",
+        "teacher_approach_edge_ids",
+        "candidate_approach_edge_ids",
+        "teacher_control_type",
+        "candidate_control_type",
+        "teacher_has_tls",
+        "candidate_has_tls",
+        "teacher_internal_function_counts",
+        "candidate_internal_function_counts",
+        "teacher_request_bit_lengths_ok",
+        "candidate_request_bit_lengths_ok",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for comparison in comparisons:
+            teacher = comparison.get("teacher", {})
+            candidate = comparison.get("candidate", {})
+            writer.writerow(
+                {
+                    "junction_id": comparison.get("junction_id", ""),
+                    "status": comparison.get("status", ""),
+                    "mismatch_fields": ";".join(str(field) for field in comparison.get("mismatch_fields", [])),
+                    "teacher_approach_edge_ids": ";".join(teacher.get("approach_edge_ids", []) or []),
+                    "candidate_approach_edge_ids": ";".join(candidate.get("approach_edge_ids", []) or []),
+                    "teacher_control_type": teacher.get("control_type", ""),
+                    "candidate_control_type": candidate.get("control_type", ""),
+                    "teacher_has_tls": teacher.get("has_tls", ""),
+                    "candidate_has_tls": candidate.get("has_tls", ""),
+                    "teacher_internal_function_counts": json.dumps(
+                        teacher.get("internal_function_counts", {}), ensure_ascii=False, sort_keys=True
+                    ),
+                    "candidate_internal_function_counts": json.dumps(
+                        candidate.get("internal_function_counts", {}), ensure_ascii=False, sort_keys=True
+                    ),
+                    "teacher_request_bit_lengths_ok": teacher.get("request_bit_lengths_ok", ""),
+                    "candidate_request_bit_lengths_ok": candidate.get("request_bit_lengths_ok", ""),
+                }
+            )
 
 
 def _warnings(reference_cases: list[dict[str, Any]], matched_cases: list[dict[str, Any]]) -> list[str]:

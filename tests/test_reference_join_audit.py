@@ -1,3 +1,5 @@
+import csv
+import json
 from pathlib import Path
 
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
@@ -180,18 +182,41 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
     assert report["candidate_junction_pattern_index"][0]["junction_id"] == "cluster_a_b"
     assert report["junction_pattern_comparison_status"] == "fail"
     assert report["junction_pattern_mismatch_count"] == 1
-    assert report["junction_pattern_comparisons"] == [
-        {
-            "junction_id": "cluster_a_b",
-            "status": "fail",
-            "mismatch_fields": [
-                "control_type",
-                "has_tls",
-                "internal_function_counts",
-                "request_bit_lengths_ok",
-            ],
-        }
+    assert report["junction_pattern_mismatch_field_counts"] == {
+        "control_type": 1,
+        "has_tls": 1,
+        "internal_function_counts": 1,
+        "request_bit_lengths_ok": 1,
+    }
+    comparison = report["junction_pattern_comparisons"][0]
+    assert comparison["junction_id"] == "cluster_a_b"
+    assert comparison["status"] == "fail"
+    assert comparison["mismatch_fields"] == [
+        "control_type",
+        "has_tls",
+        "internal_function_counts",
+        "request_bit_lengths_ok",
     ]
+    assert comparison["teacher"]["control_type"] == "traffic_light"
+    assert comparison["candidate"]["control_type"] == "priority"
+    assert comparison["teacher"]["internal_function_counts"] == {"crossing": 1, "internal": 1, "walkingarea": 1}
+    assert comparison["candidate"]["internal_function_counts"] == {"crossing": 0, "internal": 1, "walkingarea": 0}
+
+    delta_file = Path(report["junction_pattern_comparisons_file"])
+    rows = list(csv.DictReader(delta_file.read_text(encoding="utf-8").splitlines()))
+    assert rows[0]["junction_id"] == "cluster_a_b"
+    assert rows[0]["mismatch_fields"] == "control_type;has_tls;internal_function_counts;request_bit_lengths_ok"
+    assert rows[0]["teacher_control_type"] == "traffic_light"
+    assert rows[0]["candidate_control_type"] == "priority"
+    assert json.loads(rows[0]["teacher_internal_function_counts"]) == {"crossing": 1, "internal": 1, "walkingarea": 1}
+    assert json.loads(rows[0]["candidate_internal_function_counts"]) == {"crossing": 0, "internal": 1, "walkingarea": 0}
+
+    delta = json.loads(Path(report["junction_teacher_delta_file"]).read_text(encoding="utf-8"))
+    assert delta["schema_version"] == 1
+    assert delta["reference_net_file"] == str(reference)
+    assert delta["candidate_net_file"] == str(candidate)
+    assert delta["junction_pattern_mismatch_field_counts"] == report["junction_pattern_mismatch_field_counts"]
+    assert delta["junction_pattern_comparisons"][0]["teacher"]["control_type"] == "traffic_light"
 
 
 def test_reference_join_audit_keeps_audit_when_pattern_extraction_fails(tmp_path: Path) -> None:
