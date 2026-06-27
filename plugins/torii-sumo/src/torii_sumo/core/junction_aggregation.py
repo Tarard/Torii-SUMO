@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 import xml.etree.ElementTree as ET
@@ -101,6 +102,47 @@ def audit_join_output_presence(net_file: Path, join_groups: Sequence[Sequence[st
     }
 
 
+def audit_junction_aggregation_preservation(source_net_file: Path, variant_net_file: Path) -> dict[str, Any]:
+    if not source_net_file.exists():
+        return {**_failure(f"source net file does not exist: {source_net_file}"), "removed_normal_edge_count": 0}
+    if not variant_net_file.exists():
+        return {**_failure(f"variant net file does not exist: {variant_net_file}"), "removed_normal_edge_count": 0}
+    try:
+        source_root = ET.parse(source_net_file).getroot()
+        variant_root = ET.parse(variant_net_file).getroot()
+    except ET.ParseError as exc:
+        return {**_failure(f"invalid SUMO net XML: {exc}"), "removed_normal_edge_count": 0}
+
+    source_edges = _plain_edges_by_id(source_root)
+    variant_edges = _plain_edges_by_id(variant_root)
+    removed_edge_ids = sorted(set(source_edges) - set(variant_edges))
+    removed_edges = [source_edges[edge_id] for edge_id in removed_edge_ids]
+    shared_edge_ids = set(source_edges) & set(variant_edges)
+    source_connection_signatures = _shared_connection_signatures(source_root, shared_edge_ids)
+    variant_connection_signatures = _shared_connection_signatures(variant_root, shared_edge_ids)
+    lost_shared_connections = sorted(source_connection_signatures - variant_connection_signatures)
+    source_dangling = _dangling_plain_edge_ids(source_root, shared_edge_ids)
+    variant_dangling = _dangling_plain_edge_ids(variant_root, shared_edge_ids)
+    new_dangling = sorted(variant_dangling - source_dangling)
+
+    return {
+        "status": "review" if removed_edge_ids or lost_shared_connections or new_dangling else "pass",
+        "claim_status": "diagnostic-demo",
+        "source_net_file": str(source_net_file),
+        "variant_net_file": str(variant_net_file),
+        "removed_normal_edge_count": len(removed_edge_ids),
+        "removed_normal_edge_ids": removed_edge_ids,
+        "removed_normal_edge_type_counts": dict(sorted(Counter(_edge_type(edge) for edge in removed_edges).items())),
+        "removed_normal_edge_mode_counts": dict(
+            sorted(Counter(mode for edge in removed_edges for mode in _edge_modes(edge)).items())
+        ),
+        "lost_shared_connection_count": len(lost_shared_connections),
+        "lost_shared_connections": lost_shared_connections,
+        "new_dangling_shared_normal_edge_count": len(new_dangling),
+        "new_dangling_shared_normal_edge_ids": new_dangling,
+    }
+
+
 def build_junction_aggregation_variant(
     *,
     net_file: Path,
@@ -134,6 +176,7 @@ def build_junction_aggregation_variant(
     joined_junctions_file = output_dir / f"{prefix}_joined_junctions.xml"
     collapse_audit_file = output_dir / f"{prefix}_collapse_audit.json"
     join_output_audit_file = output_dir / f"{prefix}_join_output_audit.json"
+    preservation_audit_file = output_dir / f"{prefix}_preservation_audit.json"
     join_definition = build_junction_join_definition(candidates, output_dir=output_dir, prefix=prefix)
     remove_edges_file = output_dir / f"{prefix}_modal_support_remove_edges.txt"
     remove_edge_ids = _short_modal_support_edges(
@@ -239,10 +282,13 @@ def build_junction_aggregation_variant(
     join_groups = _explicit_join_groups(join_definition)
     collapse_audit = audit_join_collapse_residuals(variant_file, join_groups) if netconvert_ok else {}
     join_output_audit = audit_join_output_presence(variant_file, join_groups) if netconvert_ok else {}
+    preservation_audit = audit_junction_aggregation_preservation(net_file, variant_file) if netconvert_ok else {}
     if collapse_audit:
         collapse_audit_file.write_text(json.dumps(collapse_audit, indent=2, ensure_ascii=False), encoding="utf-8")
     if join_output_audit:
         join_output_audit_file.write_text(json.dumps(join_output_audit, indent=2, ensure_ascii=False), encoding="utf-8")
+    if preservation_audit:
+        preservation_audit_file.write_text(json.dumps(preservation_audit, indent=2, ensure_ascii=False), encoding="utf-8")
     status = (
         "pass"
         if netconvert_ok
@@ -275,6 +321,23 @@ def build_junction_aggregation_variant(
         "junction_aggregation_join_output_audit_status": str(join_output_audit.get("status", "not_run")),
         "junction_aggregation_missing_joined_junction_count": int(
             join_output_audit.get("missing_joined_junction_count", 0)
+        ),
+        "junction_aggregation_preservation_audit_file": str(preservation_audit_file) if preservation_audit else "",
+        "junction_aggregation_preservation_status": str(preservation_audit.get("status", "not_run")),
+        "junction_aggregation_removed_normal_edge_count": int(
+            preservation_audit.get("removed_normal_edge_count", 0)
+        ),
+        "junction_aggregation_removed_normal_edge_type_counts": preservation_audit.get(
+            "removed_normal_edge_type_counts", {}
+        ),
+        "junction_aggregation_removed_normal_edge_mode_counts": preservation_audit.get(
+            "removed_normal_edge_mode_counts", {}
+        ),
+        "junction_aggregation_lost_shared_connection_count": int(
+            preservation_audit.get("lost_shared_connection_count", 0)
+        ),
+        "junction_aggregation_new_dangling_shared_normal_edge_count": int(
+            preservation_audit.get("new_dangling_shared_normal_edge_count", 0)
         ),
         "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
         "junction_join_definition_file": join_definition["definition_file"],
@@ -479,6 +542,60 @@ def _edge_is_plain(edge: ET.Element) -> bool:
         "crossing",
         "walkingarea",
     }
+
+
+def _plain_edges_by_id(root: ET.Element) -> dict[str, ET.Element]:
+    return {
+        edge.attrib["id"]: edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id") and _edge_is_plain(edge)
+    }
+
+
+def _edge_type(edge: ET.Element) -> str:
+    return edge.attrib.get("type", "") or "blank"
+
+
+def _edge_modes(edge: ET.Element) -> list[str]:
+    modes = []
+    for lane in edge.findall("lane"):
+        modes.extend(lane.attrib.get("allow", "").split())
+    return sorted(set(modes))
+
+
+def _shared_connection_signatures(root: ET.Element, shared_edge_ids: set[str]) -> set[str]:
+    signatures = set()
+    for connection in root.findall("connection"):
+        source = connection.attrib.get("from", "")
+        target = connection.attrib.get("to", "")
+        if source in shared_edge_ids and target in shared_edge_ids:
+            signatures.add(
+                "|".join(
+                    [
+                        source,
+                        target,
+                        connection.attrib.get("fromLane", ""),
+                        connection.attrib.get("toLane", ""),
+                        connection.attrib.get("via", ""),
+                        connection.attrib.get("tl", ""),
+                        connection.attrib.get("linkIndex", ""),
+                    ]
+                )
+            )
+    return signatures
+
+
+def _dangling_plain_edge_ids(root: ET.Element, edge_ids: set[str]) -> set[str]:
+    incoming = Counter()
+    outgoing = Counter()
+    for connection in root.findall("connection"):
+        source = connection.attrib.get("from", "")
+        target = connection.attrib.get("to", "")
+        if source in edge_ids:
+            outgoing[source] += 1
+        if target in edge_ids:
+            incoming[target] += 1
+    return {edge_id for edge_id in edge_ids if incoming[edge_id] == 0 or outgoing[edge_id] == 0}
 
 
 def _internal_id_uses_join_node(identifier: str, node_ids: set[str]) -> bool:

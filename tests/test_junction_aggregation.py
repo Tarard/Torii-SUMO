@@ -461,6 +461,82 @@ def test_junction_aggregation_variant_fails_when_planned_join_is_missing_from_ou
     assert report["junction_aggregation_missing_joined_junction_count"] == 1
 
 
+def test_junction_aggregation_variant_reports_normal_edge_and_connection_loss(tmp_path) -> None:
+    net_file = tmp_path / "source.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="approach_in" from="outside" to="core_a" type="highway.primary">
+    <lane id="approach_in_0" index="0" allow="passenger" length="20"/>
+  </edge>
+  <edge id="service_keep" from="core_b" to="service" type="highway.service">
+    <lane id="service_keep_0" index="0" allow="passenger" length="20"/>
+  </edge>
+  <edge id="plain_removed" from="core_a" to="core_b" type="highway.residential">
+    <lane id="plain_removed_0" index="0" allow="passenger bicycle" length="20"/>
+  </edge>
+  <edge id="outside_stable" from="x" to="outside" type="highway.primary">
+    <lane id="outside_stable_0" index="0" allow="passenger" length="20"/>
+  </edge>
+  <junction id="outside" type="priority" incLanes="outside_stable_0" intLanes=""/>
+  <junction id="core_a" type="priority" incLanes="approach_in_0" intLanes=""/>
+  <junction id="core_b" type="priority" incLanes="plain_removed_0" intLanes=""/>
+  <junction id="service" type="priority" incLanes="service_keep_0" intLanes=""/>
+  <junction id="x" type="priority" incLanes="" intLanes=""/>
+  <connection from="approach_in" to="plain_removed" fromLane="0" toLane="0"/>
+  <connection from="outside_stable" to="approach_in" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command(command, cwd, timeout_seconds):
+        variant_file = _command_path(command, "--output-file", cwd)
+        variant_file.write_text(
+            """<net>
+  <edge id="approach_in" from="outside" to="cluster_core_a_core_b" type="highway.primary">
+    <lane id="approach_in_0" index="0" allow="passenger" length="20"/>
+  </edge>
+  <edge id="outside_stable" from="x" to="outside" type="highway.primary">
+    <lane id="outside_stable_0" index="0" allow="passenger" length="20"/>
+  </edge>
+  <junction id="outside" type="priority" incLanes="outside_stable_0" intLanes=""/>
+  <junction id="cluster_core_a_core_b" type="priority" incLanes="approach_in_0" intLanes=""/>
+  <junction id="x" type="priority" incLanes="" intLanes=""/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "stdout": "", "stderr": "", "command": command}
+
+    report = build_junction_aggregation_variant(
+        net_file=net_file,
+        output_dir=tmp_path,
+        prefix="demo",
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_core_a_core_b",
+                    "candidate_node_ids": ["core_a", "core_b"],
+                    "match_reason": "reference_matched",
+                }
+            ]
+        },
+        command_runner=fake_command,
+    )
+
+    assert report["junction_aggregation_preservation_status"] == "review"
+    assert report["junction_aggregation_removed_normal_edge_count"] == 2
+    assert report["junction_aggregation_removed_normal_edge_type_counts"] == {
+        "highway.residential": 1,
+        "highway.service": 1,
+    }
+    assert report["junction_aggregation_removed_normal_edge_mode_counts"] == {
+        "bicycle": 1,
+        "passenger": 2,
+    }
+    assert report["junction_aggregation_lost_shared_connection_count"] == 1
+    assert report["junction_aggregation_new_dangling_shared_normal_edge_count"] == 1
+    assert Path(report["junction_aggregation_preservation_audit_file"]).is_file()
+
+
 def test_join_collapse_audit_flags_residual_nodes_edges_and_connections(tmp_path) -> None:
     net_file = tmp_path / "not_collapsed.net.xml"
     net_file.write_text(

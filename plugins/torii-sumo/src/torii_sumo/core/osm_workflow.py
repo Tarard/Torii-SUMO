@@ -1602,6 +1602,27 @@ def run_osm_cleanup_workflow(
         "reference_join_aggregation_variant_file": ""
         if reference_join_aggregation_report is None
         else str(reference_join_aggregation_report.get("junction_aggregation_variant_file", "")),
+        "reference_join_aggregation_preservation_status": "skipped"
+        if reference_join_aggregation_report is None
+        else str(reference_join_aggregation_report.get("junction_aggregation_preservation_status", "not_run")),
+        "reference_join_aggregation_preservation_audit_file": ""
+        if reference_join_aggregation_report is None
+        else str(reference_join_aggregation_report.get("junction_aggregation_preservation_audit_file", "")),
+        "reference_join_aggregation_removed_normal_edge_count": 0
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_removed_normal_edge_count", 0),
+        "reference_join_aggregation_removed_normal_edge_type_counts": {}
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_removed_normal_edge_type_counts", {}),
+        "reference_join_aggregation_removed_normal_edge_mode_counts": {}
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_removed_normal_edge_mode_counts", {}),
+        "reference_join_aggregation_lost_shared_connection_count": 0
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_lost_shared_connection_count", 0),
+        "reference_join_aggregation_new_dangling_shared_normal_edge_count": 0
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_new_dangling_shared_normal_edge_count", 0),
         "teacher_guided_repair_queue_status": "skipped"
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("status", "fail"),
