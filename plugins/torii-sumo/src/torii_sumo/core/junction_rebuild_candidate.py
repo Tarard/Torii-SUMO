@@ -755,9 +755,12 @@ def write_teacher_tllogic_net(
     if not attributes and not phases:
         if target_tl is not None:
             root.remove(target_tl)
+        valid_tls_ids = {tl.attrib["id"] for tl in root.findall("tlLogic") if tl.attrib.get("id")}
         uncontrolled_count = 0
         for connection in root.findall("connection"):
-            if connection.attrib.get("tl") == junction_id:
+            if connection.attrib.get("tl") == junction_id or (
+                connection.attrib.get("tl") and connection.attrib.get("tl") not in valid_tls_ids
+            ):
                 connection.attrib.pop("tl", None)
                 connection.attrib.pop("linkIndex", None)
                 connection.set("uncontrolled", "true")
@@ -1804,15 +1807,20 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     phase_states = [str(phase.get("state", "")) for phase in phases if isinstance(phase, dict)]
     vehicle_connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
     pedestrian_connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
+    target_tls_id = str(model.get("junction_id", ""))
     summary["tl_phase_state_lengths"] = sorted({len(state) for state in phase_states})
-    summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections)
-    summary["controlled_pedestrian_link_count"] = _controlled_link_count(pedestrian_connections)
+    summary["controlled_vehicle_link_count"] = _controlled_link_count(vehicle_connections, target_tls_id)
+    summary["controlled_pedestrian_link_count"] = _controlled_link_count(pedestrian_connections, target_tls_id)
     summary["controlled_link_count"] = summary["controlled_vehicle_link_count"] + summary["controlled_pedestrian_link_count"]
     return summary
 
 
-def _controlled_link_count(connections: list[object]) -> int:
-    return sum(1 for connection in connections if isinstance(connection, dict) and connection.get("tl") and connection.get("linkIndex"))
+def _controlled_link_count(connections: list[object], tls_id: str) -> int:
+    return sum(
+        1
+        for connection in connections
+        if isinstance(connection, dict) and connection.get("tl") == tls_id and connection.get("linkIndex")
+    )
 
 
 def _write_teacher_guided_report(path: Path, report: dict[str, object]) -> dict[str, object]:

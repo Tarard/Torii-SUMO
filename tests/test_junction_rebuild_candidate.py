@@ -2,6 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.junction_rebuild_candidate import (
+    _compare_teacher_models,
     _stage_file,
     build_rebuild_candidate,
     build_teacher_guided_repair_queue,
@@ -917,6 +918,7 @@ def test_write_teacher_tllogic_net_allows_no_teacher_program(tmp_path: Path) -> 
   <tlLogic id="other" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
   <connection from="a" to="b" tl="j" linkIndex="0"/>
   <connection from="c" to="d" tl="other" linkIndex="1"/>
+  <connection from="e" to="f" tl="missing" linkIndex="2"/>
 </net>
 """,
         encoding="utf-8",
@@ -938,8 +940,40 @@ def test_write_teacher_tllogic_net_allows_no_teacher_program(tmp_path: Path) -> 
     assert "tl" not in target_connection.attrib
     assert "linkIndex" not in target_connection.attrib
     assert target_connection.attrib["uncontrolled"] == "true"
+    dangling_connection = root.find("connection[@from='e']")
+    assert "tl" not in dangling_connection.attrib
+    assert "linkIndex" not in dangling_connection.attrib
+    assert dangling_connection.attrib["uncontrolled"] == "true"
+    assert root.find("connection[@from='c']").attrib["tl"] == "other"
     assert report["tl_phase_count"] == 0
     assert report["controlled_link_count"] == 0
+    assert report["removed_controlled_link_count"] == 2
+
+
+def test_teacher_parity_counts_only_target_tls_controlled_links() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [
+            {"from": "a", "to": "b", "tl": "external_tls", "linkIndex": "1"},
+            {"from": "a", "to": "c", "tl": "j", "linkIndex": "2"},
+        ],
+        "pedestrian_connections": [],
+        "traffic_light": {"phases": []},
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [{"from": "a", "to": "c", "tl": "j", "linkIndex": "2"}],
+        "pedestrian_connections": [],
+        "traffic_light": {"phases": []},
+    }
+
+    parity = _compare_teacher_models(teacher_model, candidate_model)
+
+    assert parity["teacher"]["controlled_vehicle_link_count"] == 1
+    assert parity["candidate"]["controlled_vehicle_link_count"] == 1
+    assert parity["delta"]["controlled_vehicle_link_count"] == 0
 
 
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:
