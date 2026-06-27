@@ -491,6 +491,60 @@ def test_run_teacher_guided_repair_queue_fails_when_parity_fails(tmp_path: Path)
     assert report["parity_gate_status"] == "fail"
 
 
+def test_run_teacher_guided_repair_queue_summarizes_semantic_failures(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    def fake_variant(**kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "parity_gate_status": "fail",
+            "semantic_replay_gate": {
+                "status": "fail",
+                "failures": [
+                    {"report": "parity", "field": "crossing_count", "count": -4},
+                    {"report": "parity", "field": "tl_type_mismatch_count", "count": 1},
+                ],
+            },
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                },
+                {
+                    "junction_id": "cluster_c_d",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fake_variant,
+    )
+
+    assert report["semantic_failure_counts"] == {
+        "parity:crossing_count": 2,
+        "parity:tl_type_mismatch_count": 2,
+    }
+
+
 def test_run_teacher_guided_repair_queue_resolves_relative_queue_paths(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"

@@ -1537,6 +1537,9 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_parity_gate_status": "skipped"
         if teacher_guided_repair_run_report is None
         else teacher_guided_repair_run_report.get("parity_gate_status", "fail"),
+        "teacher_guided_repair_semantic_failure_counts": {}
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("semantic_failure_counts", {}),
         "teacher_guided_repair_attempted_candidate_count": 0
         if teacher_guided_repair_run_report is None
         else teacher_guided_repair_run_report.get("attempted_candidate_count", 0),

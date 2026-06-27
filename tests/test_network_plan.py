@@ -427,6 +427,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "parity_gate_status": "pass",
             "attempted_candidate_count": 1,
             "pass_candidate_count": 1,
+            "semantic_failure_counts": {"parity:crossing_count": 2},
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "warnings": [],
         }
@@ -517,6 +518,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_raw_node_file"] == str(tmp_path / "plain.nod.xml")
     assert report["teacher_guided_repair_run_status"] == "pass"
     assert report["teacher_guided_repair_parity_gate_status"] == "pass"
+    assert report["teacher_guided_repair_semantic_failure_counts"] == {"parity:crossing_count": 2}
     assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
     assert report["gate_status"]["connection_semantics_parity"] == "blocked"
