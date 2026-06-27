@@ -6,7 +6,10 @@ from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
 from torii_sumo.core.junction_aggregation import build_junction_aggregation_variant
-from torii_sumo.core.junction_rebuild_candidate import build_teacher_guided_junction_variant
+from torii_sumo.core.junction_rebuild_candidate import (
+    build_teacher_guided_junction_variant,
+    run_teacher_guided_repair_queue,
+)
 from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
 from torii_sumo.core.osm_network import (
     audit_tls,
@@ -345,6 +348,36 @@ def sumo_network_teacher_guided_junction_variant(
         edge_map=edge_map,
         prefix=prefix,
         crossing_edge_overrides=crossing_edge_overrides,
+        replay_target_internal_subgraph=replay_target_internal_subgraph,
+        netconvert_binary=netconvert_binary,
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def sumo_network_teacher_guided_repair_queue(
+    queue_report_file: str,
+    raw_node_file: str,
+    raw_edge_file: str,
+    raw_connection_file: str,
+    output_dir: str,
+    prefix: str = "teacher_guided_repair",
+    raw_type_file: str | None = None,
+    replay_target_internal_subgraph: bool = False,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    queue_report_path = Path(queue_report_file)
+    return run_teacher_guided_repair_queue(
+        queue_report=_read_json_report(str(queue_report_path)) or {},
+        raw_node_file=Path(raw_node_file),
+        raw_edge_file=Path(raw_edge_file),
+        raw_connection_file=Path(raw_connection_file),
+        raw_type_file=Path(raw_type_file) if raw_type_file else None,
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        queue_base_dir=queue_report_path.resolve().parent,
         replay_target_internal_subgraph=replay_target_internal_subgraph,
         netconvert_binary=netconvert_binary,
         sumo_binary=sumo_binary,

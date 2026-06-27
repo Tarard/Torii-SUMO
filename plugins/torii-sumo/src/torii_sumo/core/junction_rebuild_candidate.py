@@ -876,8 +876,170 @@ def build_teacher_guided_junction_variant(
     )
 
 
+def run_teacher_guided_repair_queue(
+    *,
+    queue_report: dict[str, Any],
+    raw_node_file: Path,
+    raw_edge_file: Path,
+    raw_connection_file: Path,
+    output_dir: Path,
+    prefix: str = "teacher_guided_repair",
+    queue_base_dir: Path | None = None,
+    raw_type_file: Path | None = None,
+    crossing_edge_overrides_by_junction: dict[str, dict[str, str | list[str]]] | None = None,
+    replay_target_internal_subgraph: bool = False,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+    variant_builder: Any = build_teacher_guided_junction_variant,
+) -> dict[str, object]:
+    teacher_net_value = queue_report.get("teacher_net_file")
+    candidate_net_value = queue_report.get("candidate_net_file")
+    missing_fields = [
+        field
+        for field, value in (
+            ("teacher_net_file", teacher_net_value),
+            ("candidate_net_file", candidate_net_value),
+        )
+        if not value
+    ]
+    if missing_fields:
+        return _failure(f"queue report missing field(s): {', '.join(missing_fields)}")
+
+    teacher_net_file = _queue_path(teacher_net_value, queue_base_dir)
+    candidate_net_file = _queue_path(candidate_net_value, queue_base_dir)
+    missing = [
+        str(path)
+        for path in (raw_node_file, raw_edge_file, raw_connection_file, teacher_net_file, candidate_net_file)
+        if not path.exists()
+    ]
+    if raw_type_file is not None and not raw_type_file.exists():
+        missing.append(str(raw_type_file))
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+
+    candidates = queue_report.get("repair_candidates", []) or []
+    if not isinstance(candidates, list):
+        return _failure("queue report repair_candidates must be a list")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    crossing_edge_overrides_by_junction = crossing_edge_overrides_by_junction or {}
+    variant_reports = []
+    skipped_candidates = []
+    for index, candidate in enumerate(candidates):
+        if not isinstance(candidate, dict):
+            skipped_candidates.append({"index": index, "candidate_status": "invalid_candidate"})
+            continue
+        junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
+        edge_map = _valid_edge_map(candidate.get("edge_map", {}))
+        if candidate.get("candidate_status") != "ready_for_teacher_guided_variant" or not junction_id:
+            skipped_candidates.append(
+                {
+                    "index": index,
+                    "junction_id": junction_id,
+                    "candidate_status": candidate.get("candidate_status", "skipped"),
+                }
+            )
+            continue
+        if not edge_map:
+            skipped_candidates.append(
+                {"index": index, "junction_id": junction_id, "candidate_status": "invalid_edge_map"}
+            )
+            continue
+        if candidate.get("missing_teacher_edge_ids"):
+            skipped_candidates.append(
+                {"index": index, "junction_id": junction_id, "candidate_status": "edge_map_incomplete"}
+            )
+            continue
+
+        safe_junction_id = _safe_stage_name(junction_id)
+        variant_reports.append(
+            variant_builder(
+                raw_node_file=raw_node_file,
+                raw_edge_file=raw_edge_file,
+                raw_connection_file=raw_connection_file,
+                raw_type_file=raw_type_file,
+                teacher_net_file=teacher_net_file,
+                candidate_net_file=candidate_net_file,
+                junction_id=junction_id,
+                output_dir=output_dir / safe_junction_id,
+                edge_map=edge_map,
+                prefix=f"{prefix}_{safe_junction_id}",
+                crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id),
+                replay_target_internal_subgraph=replay_target_internal_subgraph,
+                netconvert_binary=netconvert_binary,
+                sumo_binary=sumo_binary,
+                timeout_seconds=timeout_seconds,
+            )
+        )
+
+    attempted_count = len(variant_reports)
+    pass_count = sum(1 for report in variant_reports if report.get("status") == "pass")
+    failed_count = attempted_count - pass_count
+    parity_pass_count = sum(1 for report in variant_reports if report.get("parity_gate_status") == "pass")
+    if attempted_count == 0:
+        status = "blocked"
+        claim_status = "blocked"
+        parity_gate_status = "blocked"
+    else:
+        status = "pass" if failed_count == 0 and parity_pass_count == attempted_count else "fail"
+        claim_status = "diagnostic-demo" if status == "pass" else "construction-invalid"
+        parity_gate_status = "pass" if parity_pass_count == attempted_count else "fail"
+
+    run_report_file = output_dir / f"{prefix}_run_report.json"
+    report = {
+        "status": status,
+        "claim_status": claim_status,
+        "parity_gate_status": parity_gate_status,
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "raw_node_file": str(raw_node_file),
+        "raw_edge_file": str(raw_edge_file),
+        "raw_connection_file": str(raw_connection_file),
+        "raw_type_file": str(raw_type_file) if raw_type_file is not None else "",
+        "candidate_count": len(candidates),
+        "attempted_candidate_count": attempted_count,
+        "skipped_candidate_count": len(skipped_candidates),
+        "pass_candidate_count": pass_count,
+        "failed_candidate_count": failed_count,
+        "parity_pass_candidate_count": parity_pass_count,
+        "run_report_file": str(run_report_file),
+        "variant_reports": variant_reports,
+        "skipped_candidates": skipped_candidates,
+        "review_policy": "queue execution only; inspect each final net in NetEdit connection mode before adoption",
+    }
+    run_report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
 def _should_emit(movement: dict[str, object]) -> bool:
     return movement.get("status") == "emit" and float(movement.get("confidence", 0.0)) >= 0.5
+
+
+def _queue_path(value: object, base_dir: Path | None) -> Path:
+    path = Path(str(value))
+    if path.is_absolute() or base_dir is None:
+        return path
+    return base_dir / path
+
+
+def _valid_edge_map(value: object) -> dict[str, str]:
+    if not isinstance(value, dict) or not value:
+        return {}
+    result: dict[str, str] = {}
+    for source, target in value.items():
+        if not isinstance(source, str) or not source.strip():
+            return {}
+        if not isinstance(target, str) or not target.strip():
+            return {}
+        result[source] = target
+    return result
+
+
+def _safe_stage_name(value: str) -> str:
+    safe = "".join(char if char.isascii() and (char.isalnum() or char in "._-") else "_" for char in value.strip())
+    safe = safe.strip("._-")
+    return safe or "candidate"
 
 
 def _split(value: str) -> list[str]:
