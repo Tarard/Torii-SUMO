@@ -676,6 +676,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["status"] == "pass"
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
     assert report["target_internal_normalize"]["status"] == "pass"
+    assert report["target_internal_pedestrian_ring"]["status"] == "pass"
     assert report["parity"]["delta"]["vehicle_connection_count"] == 0
     assert report["parity"]["delta"]["pedestrian_connection_count"] == 0
     root = ET.parse(report["final_net_file"]).getroot()

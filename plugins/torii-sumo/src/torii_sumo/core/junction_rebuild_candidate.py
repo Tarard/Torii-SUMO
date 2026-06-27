@@ -613,6 +613,7 @@ def build_teacher_guided_junction_variant(
     vehicle_attrs_net_file = output_dir / f"{prefix}_vehicle_attrs.net.xml"
     target_internal_replay_file = output_dir / f"{prefix}_target_internal_replay.net.xml"
     target_internal_normalized_net_file = output_dir / f"{prefix}_target_internal_normalized.net.xml"
+    target_internal_pedring_net_file = output_dir / f"{prefix}_target_internal_pedring.net.xml"
     target_internal_vehicle_attrs_net_file = output_dir / f"{prefix}_target_internal_vehicle_attrs.net.xml"
     final_net_file = output_dir / f"{prefix}_teacher_guided.net.xml"
     report_file = output_dir / f"{prefix}_teacher_guided_report.json"
@@ -685,6 +686,7 @@ def build_teacher_guided_junction_variant(
     )
     target_internal_replay_report = None
     target_internal_normalize_report = None
+    target_internal_pedestrian_ring_report = None
     target_internal_vehicle_attrs_report = None
     tl_logic_input_file = vehicle_attrs_net_file
     if replay_target_internal_subgraph:
@@ -740,8 +742,16 @@ def build_teacher_guided_junction_variant(
                     "target_internal_normalize": target_internal_normalize_report,
                 },
             )
-        target_internal_vehicle_attrs_report = write_teacher_vehicle_connection_attrs_net(
+        target_internal_pedestrian_ring_report = write_teacher_pedestrian_ring_net(
             candidate_net_file=target_internal_normalized_net_file,
+            output_file=target_internal_pedring_net_file,
+            junction_id=junction_id,
+            teacher_model=teacher_model,
+            edge_map=edge_map,
+            crossing_edge_overrides=crossing_edge_overrides,
+        )
+        target_internal_vehicle_attrs_report = write_teacher_vehicle_connection_attrs_net(
+            candidate_net_file=target_internal_pedring_net_file,
             output_file=target_internal_vehicle_attrs_net_file,
             junction_id=junction_id,
             teacher_model=teacher_model,
@@ -771,6 +781,7 @@ def build_teacher_guided_junction_variant(
                 "vehicle_connection_attrs": vehicle_attrs_report,
                 "target_internal_replay": target_internal_replay_report,
                 "target_internal_normalize": target_internal_normalize_report,
+                "target_internal_pedestrian_ring": target_internal_pedestrian_ring_report,
                 "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
                 "tl_logic": tl_logic_report,
             },
@@ -810,6 +821,9 @@ def build_teacher_guided_junction_variant(
             "target_internal_normalized_net_file": str(target_internal_normalized_net_file)
             if replay_target_internal_subgraph
             else "",
+            "target_internal_pedring_net_file": str(target_internal_pedring_net_file)
+            if replay_target_internal_subgraph
+            else "",
             "target_internal_vehicle_attrs_net_file": str(target_internal_vehicle_attrs_net_file)
             if replay_target_internal_subgraph
             else "",
@@ -821,6 +835,7 @@ def build_teacher_guided_junction_variant(
             "vehicle_connection_attrs": vehicle_attrs_report,
             "target_internal_replay": target_internal_replay_report,
             "target_internal_normalize": target_internal_normalize_report,
+            "target_internal_pedestrian_ring": target_internal_pedestrian_ring_report,
             "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
             "tl_logic": tl_logic_report,
             "sumo_load": sumo_report,
