@@ -1184,6 +1184,7 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
                 "dir": "s",
                 "state": "O",
                 "pass": "true",
+                "uncontrolled": "true",
                 "allow": "bicycle",
                 "disallow": "truck",
                 "keepClear": "0",
@@ -1209,6 +1210,7 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
     assert connection.attrib["dir"] == "s"
     assert connection.attrib["state"] == "O"
     assert connection.attrib["pass"] == "true"
+    assert connection.attrib["uncontrolled"] == "true"
     assert connection.attrib["allow"] == "bicycle"
     assert connection.attrib["disallow"] == "truck"
     assert connection.attrib["keepClear"] == "0"
