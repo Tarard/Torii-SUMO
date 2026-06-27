@@ -1051,7 +1051,13 @@ def build_teacher_guided_junction_variant(
     ]
     sumo_report = _command_report(command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds))
     final_model = extract_teacher_junction_model(final_net_file, junction_id)
-    parity = _compare_teacher_models(teacher_model, final_model)
+    parity = _compare_teacher_models(
+        teacher_model,
+        final_model,
+        edge_map=edge_map,
+        teacher_junction_id=teacher_junction_id,
+        candidate_junction_id=junction_id,
+    )
     semantic_gate = _teacher_guided_semantics_gate(
         parity,
         pedestrian_ring=pedestrian_ring_report,
@@ -1904,7 +1910,14 @@ def _command_report(result: Any) -> dict[str, object]:
     return payload
 
 
-def _compare_teacher_models(teacher_model: dict[str, Any], candidate_model: dict[str, Any]) -> dict[str, object]:
+def _compare_teacher_models(
+    teacher_model: dict[str, Any],
+    candidate_model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    teacher_junction_id: str = "",
+    candidate_junction_id: str = "",
+) -> dict[str, object]:
     teacher_summary = _teacher_parity_summary(teacher_model)
     candidate_summary = _teacher_parity_summary(candidate_model)
     keys = sorted(set(teacher_summary) | set(candidate_summary))
@@ -1916,6 +1929,19 @@ def _compare_teacher_models(teacher_model: dict[str, Any], candidate_model: dict
             delta[key] = candidate_value - teacher_value
         elif candidate_value != teacher_value:
             delta[f"{key}_mismatch_count"] = 1
+    if edge_map is not None:
+        teacher_signatures = _controlled_vehicle_link_signatures(
+            teacher_model,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id or str(teacher_model.get("junction_id", "")),
+            target_junction_id=candidate_junction_id or str(candidate_model.get("junction_id", "")),
+        )
+        candidate_signatures = _controlled_vehicle_link_signatures(candidate_model)
+        mismatch_count = _dict_mismatch_count(teacher_signatures, candidate_signatures)
+        teacher_summary["controlled_vehicle_link_signatures"] = teacher_signatures
+        candidate_summary["controlled_vehicle_link_signatures"] = candidate_signatures
+        if mismatch_count:
+            delta["controlled_vehicle_link_signature_mismatch_count"] = mismatch_count
     return {
         "teacher": teacher_summary,
         "candidate": candidate_summary,
@@ -1975,6 +2001,64 @@ def _controlled_link_count(connections: list[object], tls_id: str) -> int:
         for connection in connections
         if isinstance(connection, dict) and connection.get("tl") == tls_id and connection.get("linkIndex")
     )
+
+
+def _controlled_vehicle_link_signatures(
+    model: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None = None,
+    source_junction_id: str = "",
+    target_junction_id: str = "",
+) -> dict[str, str]:
+    traffic_light = model.get("traffic_light", {})
+    attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
+    tls_id = str(attributes.get("id", "") or model.get("junction_id", "")) if isinstance(attributes, dict) else ""
+    connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
+    signatures: dict[str, str] = {}
+    for connection in connections:
+        if not isinstance(connection, dict) or connection.get("tl") != tls_id or not connection.get("linkIndex"):
+            continue
+        link_index = str(connection["linkIndex"])
+        signatures[link_index] = _vehicle_connection_signature(
+            connection,
+            edge_map=edge_map,
+            source_junction_id=source_junction_id,
+            target_junction_id=target_junction_id,
+        )
+    return signatures
+
+
+def _vehicle_connection_signature(
+    connection: dict[str, Any],
+    *,
+    edge_map: dict[str, str] | None,
+    source_junction_id: str,
+    target_junction_id: str,
+) -> str:
+    source = _mapped_endpoint(str(connection.get("from", "")), edge_map)
+    target = _mapped_endpoint(str(connection.get("to", "")), edge_map)
+    via = _mapped_internal_ref(str(connection.get("via", "")), source_junction_id, target_junction_id)
+    return (
+        f"from={source}|to={target}|fromLane={connection.get('fromLane', '')}|"
+        f"toLane={connection.get('toLane', '')}|dir={connection.get('dir', '')}|"
+        f"state={connection.get('state', '')}|via={via}"
+    )
+
+
+def _mapped_endpoint(edge_id: str, edge_map: dict[str, str] | None) -> str:
+    return edge_map.get(edge_id, edge_id) if edge_map is not None else edge_id
+
+
+def _mapped_internal_ref(value: str, source_junction_id: str, target_junction_id: str) -> str:
+    source_prefix = f":{source_junction_id}_"
+    target_prefix = f":{target_junction_id}_"
+    if source_junction_id and target_junction_id and value.startswith(source_prefix):
+        return f"{target_prefix}{value[len(source_prefix):]}"
+    return value
+
+
+def _dict_mismatch_count(left: dict[str, str], right: dict[str, str]) -> int:
+    return sum(1 for key in set(left) | set(right) if left.get(key) != right.get(key))
 
 
 def _write_teacher_guided_report(path: Path, report: dict[str, object]) -> dict[str, object]:
