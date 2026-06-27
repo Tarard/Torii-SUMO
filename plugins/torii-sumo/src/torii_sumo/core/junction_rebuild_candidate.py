@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,16 @@ def write_teacher_connection_plan(
     kept = 0
     removed = 0
     for child in ET.parse(raw_connection_file).getroot():
+        if (
+            child.tag == "connection"
+            and present_candidate_edges is not None
+            and (
+                child.attrib.get("from", "") not in present_candidate_edges
+                or child.attrib.get("to", "") not in present_candidate_edges
+            )
+        ):
+            removed += 1
+            continue
         if child.tag == "connection" and (
             child.attrib.get("from", "") in candidate_edges_for_cleanup or child.attrib.get("to", "") in candidate_edges_for_cleanup
         ):
@@ -247,6 +258,8 @@ def write_teacher_lane_patch_edges(
     teacher_edge_file: Path,
     output_file: Path,
     edge_map: dict[str, str],
+    junction_id: str | None = None,
+    prune_unmapped_boundary_edges: bool = False,
 ) -> dict[str, object]:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     teacher_edges = {
@@ -258,7 +271,19 @@ def write_teacher_lane_patch_edges(
 
     tree = ET.parse(raw_edge_file)
     patched = []
+    pruned_boundary_edges = []
+    allowed_boundary_edges = set(edge_map.values())
     for edge in tree.getroot().findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if (
+            prune_unmapped_boundary_edges
+            and junction_id
+            and (edge.attrib.get("from") == junction_id or edge.attrib.get("to") == junction_id)
+            and edge_id not in allowed_boundary_edges
+        ):
+            tree.getroot().remove(edge)
+            pruned_boundary_edges.append(edge_id)
+            continue
         teacher_edge = teacher_by_candidate.get(edge.attrib.get("id", ""))
         if teacher_edge is None:
             continue
@@ -290,6 +315,8 @@ def write_teacher_lane_patch_edges(
         "edge_file": str(output_file),
         "patched_edge_count": len(patched),
         "patched_edges": patched,
+        "pruned_boundary_edge_count": len(pruned_boundary_edges),
+        "pruned_boundary_edges": pruned_boundary_edges,
     }
 
 
@@ -694,6 +721,8 @@ def build_teacher_guided_junction_variant(
         teacher_edge_file=teacher_net_file,
         output_file=patched_edge_file,
         edge_map=edge_map,
+        junction_id=junction_id,
+        prune_unmapped_boundary_edges=True,
     )
     connection_report = write_teacher_connection_plan(
         raw_connection_file=raw_connection_file,
@@ -952,7 +981,8 @@ def run_teacher_guided_repair_queue(
             )
             continue
 
-        safe_junction_id = _safe_stage_name(junction_id)
+        safe_junction_id = _queue_candidate_dir(index, junction_id)
+        variant_prefix = f"{_safe_stage_name(prefix, max_len=12)}_{index + 1:03d}"
         variant_reports.append(
             variant_builder(
                 raw_node_file=raw_node_file,
@@ -964,7 +994,7 @@ def run_teacher_guided_repair_queue(
                 junction_id=junction_id,
                 output_dir=output_dir / safe_junction_id,
                 edge_map=edge_map,
-                prefix=f"{prefix}_{safe_junction_id}",
+                prefix=variant_prefix,
                 crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id),
                 replay_target_internal_subgraph=replay_target_internal_subgraph,
                 netconvert_binary=netconvert_binary,
@@ -1036,10 +1066,22 @@ def _valid_edge_map(value: object) -> dict[str, str]:
     return result
 
 
-def _safe_stage_name(value: str) -> str:
+def _queue_candidate_dir(index: int, junction_id: str) -> str:
+    return f"candidate_{index + 1:03d}_{_stable_digest(junction_id)}"
+
+
+def _stable_digest(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:8]
+
+
+def _safe_stage_name(value: str, max_len: int = 64) -> str:
     safe = "".join(char if char.isascii() and (char.isalnum() or char in "._-") else "_" for char in value.strip())
     safe = safe.strip("._-")
-    return safe or "candidate"
+    safe = safe or "candidate"
+    if len(safe) <= max_len:
+        return safe
+    head_len = max(1, max_len - 9)
+    return f"{safe[:head_len]}_{_stable_digest(safe)}"
 
 
 def _split(value: str) -> list[str]:
