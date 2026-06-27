@@ -96,6 +96,13 @@ def test_network_plan_derives_reference_policy_from_reference_net(tmp_path: Path
     assert plan["service_passenger_policy"] == "reference_match"
     assert "routeability_audit" in plan["validation_gates"]
     assert "scope_matched_reference_comparison" in plan["validation_gates"]
+    assert "reference_join_audit" in plan["validation_gates"]
+    assert "junction_pattern_index" in plan["validation_gates"]
+    assert "connection_semantics_parity" in plan["validation_gates"]
+    assert "tls_semantics_parity" in plan["validation_gates"]
+    assert "internal_junction_parity" in plan["validation_gates"]
+    assert "netedit_connection_mode_review" in plan["validation_gates"]
+    assert "teacher_guided_junction_parity" in plan["validation_gates"]
 
 
 def test_reference_matched_plan_keeps_service_out_of_vehicle_core(tmp_path: Path) -> None:
@@ -413,6 +420,12 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"
     assert report["reference_join_aggregation_variant_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
+    assert report["gate_status"]["junction_pattern_index"] == "pass"
+    assert report["gate_status"]["connection_semantics_parity"] == "blocked"
+    assert report["gate_status"]["tls_semantics_parity"] == "blocked"
+    assert report["gate_status"]["internal_junction_parity"] == "blocked"
+    assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
+    assert report["gate_status"]["teacher_guided_junction_parity"] == "blocked"
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:

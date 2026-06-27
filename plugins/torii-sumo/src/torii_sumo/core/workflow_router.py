@@ -55,8 +55,41 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
 }
 
 
+REFERENCE_MATCHED_TOOL_CHAIN = [
+    "sumo_network_reference_hierarchy_audit",
+    "sumo_network_reference_scope_audit",
+    "sumo_network_tls_aggregation_variant",
+    "sumo_network_reference_join_audit",
+    "sumo_network_junction_aggregation_variant",
+    "sumo_network_teacher_guided_junction_variant",
+    "sumo_network_review_html",
+]
+
+REFERENCE_MATCHED_SEMANTICS_WORKFLOW = {
+    "claim_status": "diagnostic-demo",
+    "reference_policy": "learn road layers and service/passenger permissions from a manual reference net",
+    "junction_policy": "learn reusable junction patterns from the reference net before proposing aggregation",
+    "connection_policy": "audit connection, TLS, crossing, walkingarea, and internal-junction parity before adoption",
+    "per_junction_repair_tool": "sumo_network_teacher_guided_junction_variant",
+    "required_manual_reviews": ["netedit_connection_mode", "map_or_field_imagery"],
+}
+
+
 def _normalized(value: str) -> str:
     return " ".join(value.lower().split())
+
+
+def _looks_like_osm_generation(text: str) -> bool:
+    generation_terms = (
+        "build",
+        "download",
+        "generate",
+        "netconvert",
+        "open it in sumo",
+        "from osm",
+    )
+    network_terms = ("osm", "map", "network", "sumo network", "net.xml")
+    return any(token in text for token in generation_terms) and any(token in text for token in network_terms)
 
 
 def detect_workflow(user_request: str) -> str:
@@ -65,13 +98,15 @@ def detect_workflow(user_request: str) -> str:
         return "debug_bad_run"
     if any(token in text for token in ("compare", "baseline", "fixed-time", "fixed time", "max-pressure", "controller")):
         return "experiment_audit"
-    if any(token in text for token in ("traffic light", "traffic lights", "tls", "signal")):
-        return "tls_review"
     if (
         any(token in text for token in ("html", "review cockpit", "human review", "review"))
         and any(token in text for token in ("sumo network", "partial sumo network", "network", ".net.xml", "net.xml"))
     ):
         return "network_review"
+    if _looks_like_osm_generation(text):
+        return "osm_to_sumo"
+    if any(token in text for token in ("traffic light", "traffic lights", "tls", "signal")):
+        return "tls_review"
     if any(token in text for token in ("osm", "map", "network", "netconvert", "open it in sumo", "build a sumo")):
         return "osm_to_sumo"
     if any(token in text for token in ("route", "from ", " to ", "connected", "routeability", "reachable")):
@@ -112,6 +147,16 @@ def _base_report(
         "autonomy_mode": autonomy_mode,
         "user_request": user_request,
         "tool_chain": list(recipe["tool_chain"]),
+    }
+
+
+def _annotate_reference_matched_semantics(report: dict[str, Any]) -> None:
+    for tool_name in REFERENCE_MATCHED_TOOL_CHAIN:
+        if tool_name not in report["tool_chain"]:
+            report["tool_chain"].append(tool_name)
+    report["reference_matched_semantics_workflow"] = {
+        **REFERENCE_MATCHED_SEMANTICS_WORKFLOW,
+        "tool_chain": list(REFERENCE_MATCHED_TOOL_CHAIN),
     }
 
 
@@ -316,14 +361,20 @@ def _run_osm_to_sumo(
     )
     if network_plan.get("status") == "blocked":
         report.update(network_plan)
+        if network_plan.get("network_profile") == "reference_matched":
+            _annotate_reference_matched_semantics(report)
         report["execution_status"] = "needs_network_plan"
         return report
     if network_plan.get("status") != "pass":
         report.update(network_plan)
+        if network_plan.get("network_profile") == "reference_matched":
+            _annotate_reference_matched_semantics(report)
         report["status"] = "fail"
         report["claim_status"] = "construction-invalid"
         report["execution_status"] = "network_plan_failed"
         return report
+    if network_plan.get("network_profile") == "reference_matched":
+        _annotate_reference_matched_semantics(report)
     selected_highway_classes = set(network_plan.get("highway_classes", []))
 
     cleanup_kwargs = {

@@ -33,7 +33,9 @@ def test_infer_place_name_from_one_prompt_osm_request() -> None:
 
 def test_detect_workflow_routes_common_one_sentence_requests() -> None:
     assert detect_workflow("download the Altstadt map from OSM and open it in SUMO") == "osm_to_sumo"
+    assert detect_workflow("generate a TUM-like SUMO network from OSM with TLS and connection semantics") == "osm_to_sumo"
     assert detect_workflow("audit the traffic lights in this SUMO network") == "tls_review"
+    assert detect_workflow("create a TLS audit for this SUMO network") == "tls_review"
     assert detect_workflow("create an HTML review cockpit for this partial SUMO network") == "network_review"
     assert detect_workflow("check whether this route from station to museum is connected") == "routeability"
     assert detect_workflow("my waiting time got worse after cleanup") == "debug_bad_run"
@@ -225,6 +227,44 @@ def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_pa
     assert captured["service_passenger_policy"] == "reference_match"
     assert "service" not in captured["highway_classes"]
     assert "cycleway" not in captured["highway_classes"]
+
+
+def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "tum-reference.net.xml"
+    _write_reference_net(reference_net_file)
+
+    def fake_cleanup(**_kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "network_profile": "reference_matched",
+            "reference_join_audit": {"junction_pattern_index": [{"junction_id": "cluster_a_b"}]},
+            "gate_status": {
+                "reference_join_audit": "pass",
+                "reference_join_aggregation": "blocked",
+                "netedit": "blocked",
+            },
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to generate a TUM-like SUMO network from OSM and mimic the manually cleaned reference connection and TLS semantics",
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        reference_net_file=reference_net_file,
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert report["network_plan"]["network_profile"] == "reference_matched"
+    assert "sumo_network_reference_join_audit" in report["tool_chain"]
+    assert "sumo_network_junction_aggregation_variant" in report["tool_chain"]
+    assert "sumo_network_teacher_guided_junction_variant" in report["tool_chain"]
+    assert report["reference_matched_semantics_workflow"]["claim_status"] == "diagnostic-demo"
+    assert report["reference_matched_semantics_workflow"]["per_junction_repair_tool"] == "sumo_network_teacher_guided_junction_variant"
+    assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
+    assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]
+    assert "internal_junction_parity" in report["network_plan"]["validation_gates"]
 
 
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:

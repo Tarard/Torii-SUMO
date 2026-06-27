@@ -297,6 +297,18 @@ def _reference_join_gate(report: Mapping[str, Any] | None) -> str:
     return _gate_value(report)
 
 
+def _junction_pattern_index_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    if report.get("status") != "pass":
+        return _gate_value(report)
+    if report.get("junction_pattern_index"):
+        return "pass"
+    if _int_field(report, "reference_case_count") == 0:
+        return "skipped"
+    return "blocked"
+
+
 def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
     if report is None:
         return "skipped"
@@ -1175,6 +1187,12 @@ def run_osm_cleanup_workflow(
         gate_status["reference_scope_pruning"] = _reference_scope_pruning_gate(reference_scope_pruning_report)
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
         gate_status["reference_join_aggregation"] = _reference_join_aggregation_gate(reference_join_aggregation_report)
+        gate_status["junction_pattern_index"] = _junction_pattern_index_gate(reference_join_audit_report)
+        gate_status["connection_semantics_parity"] = "blocked"
+        gate_status["tls_semantics_parity"] = "blocked"
+        gate_status["internal_junction_parity"] = "blocked"
+        gate_status["netedit_connection_mode_review"] = "blocked"
+        gate_status["teacher_guided_junction_parity"] = "blocked"
     if topology_audit_report is not None:
         gate_status["topology_audit"] = _gate_value(topology_audit_report)
     if junction_aggregation_report is not None:
