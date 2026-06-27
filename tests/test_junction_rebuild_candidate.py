@@ -1019,6 +1019,29 @@ def test_teacher_parity_counts_only_target_tls_controlled_links() -> None:
     assert parity["delta"]["controlled_vehicle_link_count"] == 0
 
 
+def test_teacher_parity_counts_referenced_tls_id_controlled_links() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [{"from": "a", "to": "b", "tl": "cluster_tls", "linkIndex": "1"}],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "cluster_tls"}, "phases": []},
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "summary": {},
+        "vehicle_connections": [{"from": "a", "to": "b", "tl": "cluster_tls", "linkIndex": "1"}],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "cluster_tls"}, "phases": []},
+    }
+
+    parity = _compare_teacher_models(teacher_model, candidate_model)
+
+    assert parity["teacher"]["controlled_vehicle_link_count"] == 1
+    assert parity["candidate"]["controlled_vehicle_link_count"] == 1
+    assert parity["delta"]["controlled_vehicle_link_count"] == 0
+
+
 def test_teacher_parity_fails_on_tls_type_mismatch() -> None:
     teacher_model = {
         "junction_id": "j",
