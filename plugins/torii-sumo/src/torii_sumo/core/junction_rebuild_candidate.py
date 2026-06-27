@@ -3089,6 +3089,12 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     requests = model.get("requests", []) if isinstance(model.get("requests"), list) else []
     vehicle_connections = model.get("vehicle_connections", []) if isinstance(model.get("vehicle_connections"), list) else []
     pedestrian_connections = model.get("pedestrian_connections", []) if isinstance(model.get("pedestrian_connections"), list) else []
+    incoming_count = int(summary.get("incoming_vehicle_edge_count", 0) or 0)
+    outgoing_count = int(summary.get("outgoing_vehicle_edge_count", 0) or 0)
+    vehicle_connection_count = int(summary.get("vehicle_connection_count", 0) or 0)
+    expected_vehicle_movements = incoming_count * outgoing_count
+    summary["vehicle_movement_matrix_expected_count"] = expected_vehicle_movements
+    summary["vehicle_movement_matrix_missing_count"] = max(0, expected_vehicle_movements - vehicle_connection_count)
     target_tls_id = str(attributes.get("id", "") or model.get("junction_id", ""))
     summary["tl_type"] = str(attributes.get("type", "")) if isinstance(attributes, dict) else ""
     summary["tl_programID"] = str(attributes.get("programID", "")) if isinstance(attributes, dict) else ""

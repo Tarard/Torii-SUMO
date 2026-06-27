@@ -2241,6 +2241,45 @@ def test_teacher_parity_counts_referenced_tls_id_controlled_links() -> None:
     assert parity["delta"]["controlled_vehicle_link_count"] == 0
 
 
+def test_teacher_parity_reports_vehicle_movement_matrix_completeness_delta() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "summary": {
+            "incoming_vehicle_edge_count": 4,
+            "outgoing_vehicle_edge_count": 4,
+            "vehicle_connection_count": 16,
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"phases": []},
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "summary": {
+            "incoming_vehicle_edge_count": 4,
+            "outgoing_vehicle_edge_count": 4,
+            "vehicle_connection_count": 4,
+        },
+        "vehicle_connections": [],
+        "pedestrian_connections": [],
+        "traffic_light": {"phases": []},
+    }
+
+    parity = _compare_teacher_models(teacher_model, candidate_model)
+    gate = _teacher_guided_semantics_gate(parity)
+
+    assert parity["teacher"]["vehicle_movement_matrix_expected_count"] == 16
+    assert parity["teacher"]["vehicle_movement_matrix_missing_count"] == 0
+    assert parity["candidate"]["vehicle_movement_matrix_expected_count"] == 16
+    assert parity["candidate"]["vehicle_movement_matrix_missing_count"] == 12
+    assert parity["delta"]["vehicle_movement_matrix_missing_count"] == 12
+    assert {
+        "report": "parity",
+        "field": "vehicle_movement_matrix_missing_count",
+        "count": 12,
+    } in gate["failures"]
+
+
 def test_teacher_parity_fails_on_tls_type_mismatch() -> None:
     teacher_model = {
         "junction_id": "j",
