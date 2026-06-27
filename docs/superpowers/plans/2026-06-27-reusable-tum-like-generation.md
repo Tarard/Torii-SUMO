@@ -127,14 +127,14 @@ def extract_junction_pattern_index(
         )
         if arm_count < min_approaches or arm_count > max_approaches:
             continue
-        tl = tl_by_id.get(junction_id)
-        phases = tl.findall("phase") if tl is not None else []
-        vehicle_connections = model.get("vehicle_connections", [])
-        dir_counts = Counter(
-            str(connection.get("dir", ""))
-            for connection in vehicle_connections
-            if isinstance(connection, dict) and connection.get("dir")
-        )
+        dir_counts = dict(summary.get("vehicle_connection_dirs", {}))
+        all_connections = model.get("vehicle_connections", []) + model.get("pedestrian_connections", [])
+        controlled_connections = [
+            connection
+            for connection in all_connections
+            if isinstance(connection, dict) and connection.get("tl") and connection.get("linkIndex")
+        ]
+        controlled_tl_ids = {str(connection.get("tl", "")) for connection in controlled_connections}
         records.append(
             {
                 "junction_id": junction_id,
@@ -147,12 +147,10 @@ def extract_junction_pattern_index(
                 "crossing_count": int(summary.get("crossing_count", 0)),
                 "walkingarea_count": int(summary.get("walkingarea_count", 0)),
                 "request_count": len(junction.findall("request")),
-                "tl_phase_count": len(phases),
-                "controlled_link_count": sum(
-                    1
-                    for connection in model.get("vehicle_connections", []) + model.get("pedestrian_connections", [])
-                    if isinstance(connection, dict) and connection.get("tl") == junction_id and connection.get("linkIndex")
+                "tl_phase_count": sum(
+                    len(tl_by_id[tl_id].findall("phase")) for tl_id in controlled_tl_ids if tl_id in tl_by_id
                 ),
+                "controlled_link_count": len(controlled_connections),
             }
         )
     return records
