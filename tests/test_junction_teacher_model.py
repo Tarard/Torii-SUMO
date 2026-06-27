@@ -133,11 +133,15 @@ def test_extract_junction_pattern_index_groups_by_reusable_counts(tmp_path: Path
     assert records == [
         {
             "junction_id": "j",
+            "pattern_family": "three_way",
+            "pattern_key": "three_way|control=right_before_left|dir=l:1,r:1,t:1|veh=3|tls=0/0|ped=0/0|internal=1/0|requests=3",
             "arm_count": 3,
             "control_type": "right_before_left",
             "in_edge_count": 3,
             "out_edge_count": 3,
             "vehicle_connection_count": 3,
+            "internal_edge_count": 1,
+            "internal_connection_count": 0,
             "dir_counts": {"l": 1, "r": 1, "t": 1},
             "movement_signature_counts": {
                 "dir=l|state=blank|fromLane=0|toLane=0|controlled=false|via=false": 1,
@@ -247,6 +251,8 @@ def test_extract_junction_pattern_exemplar_uses_slots_not_edge_ids(tmp_path: Pat
     exemplar = extract_junction_pattern_exemplar(net_file, "j")
 
     assert exemplar["junction_id"] == "j"
+    assert exemplar["pattern_family"] == "1_arm"
+    assert exemplar["pattern_key"] == "1_arm|control=traffic_light|dir=r:1|veh=1|tls=1/1|ped=0/0|internal=1/0|requests=1"
     assert exemplar["approach_slots"][0]["slot_id"] == "slot_0"
     assert exemplar["approach_slots"][0]["members"] == ["north_in"]
     assert exemplar["vehicle_connections"] == [

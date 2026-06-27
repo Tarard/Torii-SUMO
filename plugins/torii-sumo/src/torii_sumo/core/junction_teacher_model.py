@@ -60,6 +60,12 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
         for edge in edges.values()
         if edge.attrib.get("id", "").startswith(internal_prefix) and edge.attrib.get("function") == "walkingarea"
     ]
+    internal_edge_count = sum(
+        1
+        for edge in edges.values()
+        if edge.attrib.get("id", "").startswith(internal_prefix)
+        and edge.attrib.get("function") not in {"crossing", "walkingarea"}
+    )
     outgoing_edges_sorted = sorted(outgoing_edges)
 
     vehicle_connections = []
@@ -108,6 +114,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
             "incoming_vehicle_edge_count": len(incoming_edges),
             "outgoing_vehicle_edge_count": len(outgoing_edges_sorted),
             "vehicle_connection_count": len(vehicle_connections),
+            "internal_edge_count": internal_edge_count,
             "internal_connection_count": len(internal_connections),
             "pedestrian_connection_count": len(pedestrian_connections),
             "crossing_count": len(crossings),
@@ -149,27 +156,20 @@ def extract_junction_pattern_index(
             connection for connection in all_connections if connection["tl"] and connection["linkIndex"]
         ]
         controlled_tl_ids = {connection["tl"] for connection in controlled_connections}
-        dir_counts = dict(summary["vehicle_connection_dirs"])
         movement_signature_counts = dict(
             Counter(_movement_signature_key(connection) for connection in vehicle_connections)
         )
+        tl_phase_count = sum(
+            len(tl_by_id[tl_id].findall("phase")) for tl_id in controlled_tl_ids if tl_id in tl_by_id
+        )
+        pattern_fields = _pattern_fields(model)
+        pattern_fields["tl_phase_count"] = tl_phase_count
+        pattern_fields["pattern_key"] = _pattern_key(pattern_fields)
         records.append(
             {
                 "junction_id": junction_id,
-                "arm_count": arm_count,
-                "control_type": junction.attrib.get("type", ""),
-                "in_edge_count": in_edge_count,
-                "out_edge_count": out_edge_count,
-                "vehicle_connection_count": int(summary["vehicle_connection_count"]),
-                "dir_counts": dict(sorted(dir_counts.items())),
+                **pattern_fields,
                 "movement_signature_counts": dict(sorted(movement_signature_counts.items())),
-                "crossing_count": int(summary["crossing_count"]),
-                "walkingarea_count": int(summary["walkingarea_count"]),
-                "request_count": len(junction.findall("request")),
-                "tl_phase_count": sum(
-                    len(tl_by_id[tl_id].findall("phase")) for tl_id in controlled_tl_ids if tl_id in tl_by_id
-                ),
-                "controlled_link_count": len(controlled_connections),
             }
         )
     return records
@@ -224,9 +224,12 @@ def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[
     root = ET.parse(net_file).getroot()
     junction = next((node for node in root.findall("junction") if node.attrib.get("id") == junction_id), None)
     requests = [dict(request.attrib) for request in junction.findall("request")] if junction is not None else []
+    pattern_fields = _pattern_fields(model)
     return {
         "schema_version": 1,
         "junction_id": junction_id,
+        "pattern_family": pattern_fields["pattern_family"],
+        "pattern_key": pattern_fields["pattern_key"],
         "approach_slots": slots,
         "vehicle_connections": vehicle_connections,
         "movement_signatures": movement_signatures,
@@ -333,6 +336,57 @@ def match_teacher_approaches(
             used_candidates.add(candidate_id)
 
     return matches
+
+
+def _pattern_fields(model: dict[str, Any]) -> dict[str, Any]:
+    summary = model["summary"]
+    in_edge_count = int(summary["incoming_vehicle_edge_count"])
+    out_edge_count = int(summary["outgoing_vehicle_edge_count"])
+    arm_count = min(in_edge_count, out_edge_count)
+    dir_counts = dict(sorted(dict(summary["vehicle_connection_dirs"]).items()))
+    all_connections = [
+        connection
+        for connection in (model.get("vehicle_connections", []) or []) + (model.get("pedestrian_connections", []) or [])
+        if isinstance(connection, dict)
+    ]
+    controlled_link_count = sum(1 for connection in all_connections if connection.get("tl") and connection.get("linkIndex"))
+    fields = {
+        "pattern_family": _pattern_family(arm_count),
+        "arm_count": arm_count,
+        "control_type": summary.get("junction_type", ""),
+        "in_edge_count": in_edge_count,
+        "out_edge_count": out_edge_count,
+        "vehicle_connection_count": int(summary["vehicle_connection_count"]),
+        "internal_edge_count": int(summary.get("internal_edge_count", 0)),
+        "internal_connection_count": int(summary["internal_connection_count"]),
+        "dir_counts": dir_counts,
+        "crossing_count": int(summary["crossing_count"]),
+        "walkingarea_count": int(summary["walkingarea_count"]),
+        "request_count": int(summary["request_count"]),
+        "tl_phase_count": int(summary["tl_phase_count"]),
+        "controlled_link_count": controlled_link_count,
+    }
+    return {"pattern_key": _pattern_key(fields), **fields}
+
+
+def _pattern_family(arm_count: int) -> str:
+    if arm_count == 3:
+        return "three_way"
+    if arm_count == 4:
+        return "four_way"
+    return f"{arm_count}_arm"
+
+
+def _pattern_key(fields: dict[str, Any]) -> str:
+    dir_counts = fields.get("dir_counts", {})
+    dirs = ",".join(f"{key}:{dir_counts[key]}" for key in sorted(dir_counts)) if isinstance(dir_counts, dict) else ""
+    return (
+        f"{fields['pattern_family']}|control={fields['control_type'] or 'none'}|dir={dirs or 'none'}|"
+        f"veh={fields['vehicle_connection_count']}|tls={fields['controlled_link_count']}/{fields['tl_phase_count']}|"
+        f"ped={fields['crossing_count']}/{fields['walkingarea_count']}|"
+        f"internal={fields['internal_edge_count']}/{fields['internal_connection_count']}|"
+        f"requests={fields['request_count']}"
+    )
 
 
 def _split(value: str) -> list[str]:
