@@ -58,6 +58,95 @@ def build_tls_signal_grouping_variant(
     }
 
 
+def build_tls_low_vehicle_control_variant(
+    *,
+    source_net_file: Path,
+    tls_control_review_queue: list[Mapping[str, Any]],
+    output_dir: Path,
+    prefix: str = "tls_low_vehicle_control",
+    max_removed_controlled_connections: int | None = None,
+    max_selected_tllogic_count: int | None = None,
+) -> dict[str, Any]:
+    if not source_net_file.exists():
+        return _failure(f"net file does not exist: {source_net_file}")
+    queue = [
+        item
+        for item in tls_control_review_queue
+        if item.get("review_type") == "downgrade_low_vehicle_approach_tls" and item.get("tl_id")
+    ]
+    if not queue or max_removed_controlled_connections == 0 or max_selected_tllogic_count == 0:
+        return {
+            "status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "tls_low_vehicle_control_status": "not_needed",
+            "tls_low_vehicle_control_variant_file": "",
+            "tls_low_vehicle_control_selected_tllogic_count": 0,
+            "tls_low_vehicle_control_removed_connection_count": 0,
+            "warnings": [],
+        }
+    queue.sort(
+        key=lambda item: (
+            int(item.get("controlled_passenger_from_edge_count", 0) or 0),
+            int(item.get("controlled_connection_count", 0) or 0),
+            str(item.get("tl_id", "")),
+        )
+    )
+    selected: list[Mapping[str, Any]] = []
+    selected_connection_count = 0
+    for item in queue:
+        if max_selected_tllogic_count is not None and len(selected) >= max_selected_tllogic_count:
+            break
+        connection_count = int(item.get("controlled_connection_count", 0) or 0)
+        if (
+            max_removed_controlled_connections is not None
+            and selected_connection_count + connection_count > max_removed_controlled_connections
+        ):
+            continue
+        selected.append(item)
+        selected_connection_count += connection_count
+    if not selected:
+        return {
+            "status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "tls_low_vehicle_control_status": "budget_exhausted",
+            "tls_low_vehicle_control_variant_file": "",
+            "tls_low_vehicle_control_selected_tllogic_count": 0,
+            "tls_low_vehicle_control_removed_connection_count": 0,
+            "warnings": [],
+        }
+
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    variant_file = output_dir / "tls_low_vehicle_control_review.net.xml"
+    plan_file = output_dir / f"{prefix}_plan.json"
+    variant_file.write_bytes(source_net_file.read_bytes())
+    selected_tl_ids = [str(item["tl_id"]) for item in selected]
+    demotion = _demote_tls_ids(variant_file, selected_tl_ids)
+    counts = _tls_counts(variant_file)
+    plan = {
+        "source_net_file": str(source_net_file),
+        "variant_file": str(variant_file),
+        "max_removed_controlled_connections": max_removed_controlled_connections,
+        "max_selected_tllogic_count": max_selected_tllogic_count,
+        "selected_tl_ids": selected_tl_ids,
+        "selected_connection_count": selected_connection_count,
+        "review_policy": "review-only variant; promote only after SUMO load and reference/map validation",
+    }
+    plan_file.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {
+        "status": "pass",
+        "claim_status": "blocked",
+        "tls_low_vehicle_control_status": "variant_created_for_review",
+        "tls_low_vehicle_control_variant_file": str(variant_file),
+        "tls_low_vehicle_control_plan_file": str(plan_file),
+        "tls_low_vehicle_control_selected_tllogic_count": len(selected_tl_ids),
+        "tls_low_vehicle_control_selected_connection_count": selected_connection_count,
+        **demotion,
+        **counts,
+        "warnings": ["Low-vehicle TLS demotion requires SUMO load, Netedit, and map/reference review before adoption"],
+    }
+
+
 def build_tls_aggregation_variant(
     *,
     net_file: Path,
@@ -563,6 +652,63 @@ def _demote_uncontrolled_tls_artifacts(net_file: Path) -> dict[str, Any]:
         "tls_orphan_traffic_light_junction_demoted_ids": sorted(demoted),
         "tls_uncontrolled_tllogic_removed_count": len(removed_tllogics),
         "tls_uncontrolled_tllogic_removed_ids": sorted(removed_tllogics),
+    }
+
+
+def _demote_tls_ids(net_file: Path, tls_ids: list[str]) -> dict[str, Any]:
+    selected = set(tls_ids)
+    tree = ET.parse(net_file)
+    root = tree.getroot()
+    junction_ids = {
+        junction.attrib["id"]
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib.get("id", "").startswith(":")
+    }
+    touched_junctions: set[str] = set()
+    removed_connections = 0
+    for connection in root.findall("connection"):
+        if connection.attrib.get("tl") not in selected:
+            continue
+        junction_id = _connection_junction_id(connection, junction_ids)
+        if junction_id:
+            touched_junctions.add(junction_id)
+        for attr in ("tl", "linkIndex", "linkIndex2"):
+            connection.attrib.pop(attr, None)
+        removed_connections += 1
+
+    removed_tllogics = []
+    for tl_logic in list(root.findall("tlLogic")):
+        tl_id = tl_logic.attrib.get("id", "")
+        if tl_id in selected:
+            root.remove(tl_logic)
+            removed_tllogics.append(tl_id)
+
+    controlled_junctions: set[str] = set()
+    for connection in root.findall("connection"):
+        if connection.attrib.get("tl") and connection.attrib.get("linkIndex"):
+            junction_id = _connection_junction_id(connection, junction_ids)
+            if junction_id:
+                controlled_junctions.add(junction_id)
+    demoted_junctions = []
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if (
+            junction_id in touched_junctions
+            and junction_id not in controlled_junctions
+            and junction.attrib.get("type") == "traffic_light"
+        ):
+            junction.set("type", "priority")
+            demoted_junctions.append(junction_id)
+
+    if removed_connections or removed_tllogics or demoted_junctions:
+        ET.indent(root, space="    ")
+        tree.write(net_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "tls_low_vehicle_control_removed_connection_count": removed_connections,
+        "tls_low_vehicle_control_removed_tllogic_count": len(removed_tllogics),
+        "tls_low_vehicle_control_removed_tllogic_ids": sorted(removed_tllogics),
+        "tls_low_vehicle_control_demoted_junction_count": len(demoted_junctions),
+        "tls_low_vehicle_control_demoted_junction_ids": sorted(demoted_junctions),
     }
 
 

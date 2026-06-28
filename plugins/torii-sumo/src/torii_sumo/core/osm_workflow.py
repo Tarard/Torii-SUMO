@@ -29,7 +29,11 @@ from .road_scope import (
 )
 from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
-from .tls_aggregation import build_tls_aggregation_variant, build_tls_signal_grouping_variant
+from .tls_aggregation import (
+    build_tls_aggregation_variant,
+    build_tls_low_vehicle_control_variant,
+    build_tls_signal_grouping_variant,
+)
 from .topology_audit import audit_topology_fragmentation
 from .workflow_review_html import build_workflow_review_html
 
@@ -666,6 +670,55 @@ def _reference_delta_promotion_decision(
     }
 
 
+def _low_vehicle_control_candidate_limits(delta_report: Mapping[str, Any] | None) -> list[dict[str, int | str | None]]:
+    if delta_report is None:
+        return []
+    queue = [
+        item
+        for item in delta_report.get("tls_control_review_queue", []) or []
+        if isinstance(item, Mapping) and item.get("review_type") == "downgrade_low_vehicle_approach_tls"
+    ]
+    if not queue:
+        return []
+    extra_counts = delta_report.get("network_structural_extra_counts", {})
+    if not isinstance(extra_counts, Mapping):
+        extra_counts = {}
+    limits: list[dict[str, int | str | None]] = []
+    seen: set[tuple[int | None, int | None]] = set()
+
+    def add_limit(label: str, *, max_removed: int | None = None, max_selected: int | None = None) -> None:
+        if max_removed is not None and max_removed <= 0:
+            return
+        if max_selected is not None:
+            if max_selected <= 0:
+                return
+            max_selected = min(max_selected, len(queue))
+        key = (max_removed, max_selected)
+        if key in seen:
+            return
+        seen.add(key)
+        limits.append(
+            {
+                "label": label,
+                "max_removed_controlled_connections": max_removed,
+                "max_selected_tllogic_count": max_selected,
+            }
+        )
+
+    extra_controlled = int(extra_counts.get("tls_controlled_connection_count", 0) or 0)
+    add_limit(f"controlled{extra_controlled}", max_removed=extra_controlled)
+
+    extra_tllogic = int(extra_counts.get("tl_logic_count", 0) or 0)
+    extra_junctions = int(extra_counts.get("traffic_light_junction_count", 0) or 0)
+    extra_tls = min(count for count in (extra_tllogic, extra_junctions) if count > 0) if any(
+        count > 0 for count in (extra_tllogic, extra_junctions)
+    ) else 0
+    if extra_tls > 0:
+        add_limit(f"tls{max(1, extra_tls // 4)}", max_selected=max(1, extra_tls // 4))
+        add_limit(f"tls{max(1, extra_tls // 2)}", max_selected=max(1, extra_tls // 2))
+    return limits[:3]
+
+
 def _tls_control_review_category_counts(report: Mapping[str, Any] | None) -> dict[str, int]:
     if report is None:
         return {}
@@ -814,6 +867,7 @@ def run_osm_cleanup_workflow(
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
     tls_signal_grouping_func: Callable[..., dict[str, Any]] = build_tls_signal_grouping_variant,
+    tls_low_vehicle_control_func: Callable[..., dict[str, Any]] = build_tls_low_vehicle_control_variant,
     tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
     junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
@@ -1050,6 +1104,8 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_candidates: list[dict[str, Any]] = []
     reference_visual_detail_tls_signal_grouping_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_candidates: list[dict[str, Any]] = []
     reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
     reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
@@ -1059,6 +1115,12 @@ def run_osm_cleanup_workflow(
     }
     reference_visual_detail_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
     reference_visual_detail_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    reference_visual_detail_tls_low_vehicle_control_sumo_load_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_low_vehicle_control_reference_promotion_report: dict[str, Any] = {
         "status": "skipped",
         "reason": "not_run",
     }
@@ -1505,6 +1567,116 @@ def run_osm_cleanup_workflow(
                                     "reason", ""
                                 )
                             )
+            low_vehicle_baseline_delta_report = (
+                reference_visual_detail_tls_signal_grouping_reference_delta_report
+                if reference_visual_detail_tls_signal_grouping_reference_promotion_report.get("status") == "pass"
+                else reference_visual_detail_tls_aggregation_reference_delta_report
+            )
+            low_vehicle_source_net_file = reference_visual_detail_comparison_net_file
+            if (
+                low_vehicle_source_net_file is not None
+                and low_vehicle_baseline_delta_report is not None
+                and reference_matched_tls_delta
+            ):
+                low_vehicle_queue = low_vehicle_baseline_delta_report.get("tls_control_review_queue", [])
+                selected_low_vehicle_candidate: tuple[
+                    int,
+                    dict[str, Any],
+                    dict[str, Any],
+                    dict[str, Any],
+                    dict[str, Any],
+                    Path,
+                ] | None = None
+                for low_vehicle_limit in _low_vehicle_control_candidate_limits(low_vehicle_baseline_delta_report):
+                    low_vehicle_label = str(low_vehicle_limit["label"])
+                    low_vehicle_output_dir = output_dir / f"reference_visual_detail_tls_low_vehicle_control_{low_vehicle_label}"
+                    low_vehicle_report = tls_low_vehicle_control_func(
+                        source_net_file=low_vehicle_source_net_file,
+                        tls_control_review_queue=low_vehicle_queue,
+                        output_dir=low_vehicle_output_dir,
+                        prefix=f"{prefix}_reference_visual_detail_tls_low_vehicle_control_{low_vehicle_label}",
+                        max_removed_controlled_connections=low_vehicle_limit["max_removed_controlled_connections"],
+                        max_selected_tllogic_count=low_vehicle_limit["max_selected_tllogic_count"],
+                    )
+                    low_vehicle_candidate_record = {
+                        "candidate_label": low_vehicle_label,
+                        "status": low_vehicle_report.get("status", "fail"),
+                        "max_removed_controlled_connections": low_vehicle_limit[
+                            "max_removed_controlled_connections"
+                        ],
+                        "max_selected_tllogic_count": low_vehicle_limit["max_selected_tllogic_count"],
+                        "selected_tllogic_count": low_vehicle_report.get(
+                            "tls_low_vehicle_control_selected_tllogic_count", 0
+                        ),
+                        "removed_connection_count": low_vehicle_report.get(
+                            "tls_low_vehicle_control_removed_connection_count", 0
+                        ),
+                    }
+                    low_vehicle_variant_value = low_vehicle_report.get("tls_low_vehicle_control_variant_file", "")
+                    low_vehicle_variant_file = Path(str(low_vehicle_variant_value)) if low_vehicle_variant_value else None
+                    if low_vehicle_variant_file is not None and low_vehicle_variant_file.exists():
+                        low_vehicle_sumo_load_report = _sumo_load_net(
+                            low_vehicle_variant_file,
+                            output_dir=low_vehicle_output_dir,
+                            sumo_binary=sumo_binary,
+                            timeout_seconds=timeout_seconds,
+                            command_runner=command_runner,
+                        )
+                        low_vehicle_candidate_record["sumo_load_status"] = low_vehicle_sumo_load_report.get(
+                            "status", "fail"
+                        )
+                        if low_vehicle_sumo_load_report.get("status") == "pass":
+                            low_vehicle_delta_report = reference_join_audit_func(
+                                reference_net_file=reference_net_file,
+                                candidate_net_file=low_vehicle_variant_file,
+                                output_dir=output_dir
+                                / f"reference_visual_detail_tls_low_vehicle_control_reference_delta_{low_vehicle_label}",
+                                prefix=f"{prefix}_reference_visual_detail_tls_low_vehicle_control_reference_delta_{low_vehicle_label}",
+                                candidate_cluster_radius_m=topology_cluster_radius_m,
+                                candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                structural_only=True,
+                            )
+                            low_vehicle_promotion_report = _reference_delta_promotion_decision(
+                                candidate_delta_report=low_vehicle_delta_report,
+                                baseline_delta_report=low_vehicle_baseline_delta_report,
+                                reason="tls_low_vehicle_control_promoted_by_reference_delta",
+                            )
+                            low_vehicle_score = _tls_semantic_delta_score(low_vehicle_delta_report)
+                            low_vehicle_candidate_record.update(
+                                {
+                                    "reference_tls_semantic_delta_score": low_vehicle_score,
+                                    "reference_delta_file": low_vehicle_delta_report.get("summary_file", ""),
+                                    "reference_promotion_status": low_vehicle_promotion_report.get("status", ""),
+                                }
+                            )
+                            if low_vehicle_promotion_report.get("status") == "pass" and (
+                                selected_low_vehicle_candidate is None
+                                or low_vehicle_score < selected_low_vehicle_candidate[0]
+                            ):
+                                selected_low_vehicle_candidate = (
+                                    low_vehicle_score,
+                                    low_vehicle_report,
+                                    low_vehicle_sumo_load_report,
+                                    low_vehicle_delta_report,
+                                    low_vehicle_promotion_report,
+                                    low_vehicle_variant_file,
+                                )
+                        else:
+                            low_vehicle_candidate_record["reference_promotion_status"] = "blocked"
+                    reference_visual_detail_tls_low_vehicle_control_candidates.append(low_vehicle_candidate_record)
+                if selected_low_vehicle_candidate is not None:
+                    (
+                        _low_vehicle_score,
+                        reference_visual_detail_tls_low_vehicle_control_report,
+                        reference_visual_detail_tls_low_vehicle_control_sumo_load_report,
+                        reference_visual_detail_tls_low_vehicle_control_reference_delta_report,
+                        reference_visual_detail_tls_low_vehicle_control_reference_promotion_report,
+                        low_vehicle_variant_file,
+                    ) = selected_low_vehicle_candidate
+                    reference_visual_detail_comparison_net_file = low_vehicle_variant_file
+                    reference_visual_detail_comparison_selection_reason = str(
+                        reference_visual_detail_tls_low_vehicle_control_reference_promotion_report.get("reason", "")
+                    )
             if candidate_visual_tls_net_file is not None and reference_matched_tls_delta:
                 tls_id_map = (
                     {}
@@ -2446,6 +2618,46 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_signal_grouping_reference_promotion_reason": str(
             reference_visual_detail_tls_signal_grouping_reference_promotion_report.get("reason", "")
         ),
+        "reference_visual_detail_tls_low_vehicle_control_status": "skipped"
+        if reference_visual_detail_tls_low_vehicle_control_report is None
+        else str(
+            reference_visual_detail_tls_low_vehicle_control_report.get(
+                "tls_low_vehicle_control_status",
+                reference_visual_detail_tls_low_vehicle_control_report.get("status", "fail"),
+            )
+        ),
+        "reference_visual_detail_tls_low_vehicle_control_variant_file": ""
+        if reference_visual_detail_tls_low_vehicle_control_report is None
+        else str(reference_visual_detail_tls_low_vehicle_control_report.get("tls_low_vehicle_control_variant_file", "")),
+        "reference_visual_detail_tls_low_vehicle_control_selected_tllogic_count": 0
+        if reference_visual_detail_tls_low_vehicle_control_report is None
+        else reference_visual_detail_tls_low_vehicle_control_report.get(
+            "tls_low_vehicle_control_selected_tllogic_count", 0
+        ),
+        "reference_visual_detail_tls_low_vehicle_control_removed_connection_count": 0
+        if reference_visual_detail_tls_low_vehicle_control_report is None
+        else reference_visual_detail_tls_low_vehicle_control_report.get(
+            "tls_low_vehicle_control_removed_connection_count", 0
+        ),
+        "reference_visual_detail_tls_low_vehicle_control_candidate_count": len(
+            reference_visual_detail_tls_low_vehicle_control_candidates
+        ),
+        "reference_visual_detail_tls_low_vehicle_control_candidates": reference_visual_detail_tls_low_vehicle_control_candidates,
+        "reference_visual_detail_tls_low_vehicle_control_sumo_load_status": "skipped"
+        if reference_visual_detail_tls_low_vehicle_control_sumo_load_report is None
+        else str(reference_visual_detail_tls_low_vehicle_control_sumo_load_report.get("status", "fail")),
+        "reference_visual_detail_tls_low_vehicle_control_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            reference_visual_detail_tls_low_vehicle_control_reference_delta_report
+        ),
+        "reference_visual_detail_tls_low_vehicle_control_reference_delta_file": ""
+        if reference_visual_detail_tls_low_vehicle_control_reference_delta_report is None
+        else str(reference_visual_detail_tls_low_vehicle_control_reference_delta_report.get("summary_file", "")),
+        "reference_visual_detail_tls_low_vehicle_control_reference_promotion_status": str(
+            reference_visual_detail_tls_low_vehicle_control_reference_promotion_report.get("status", "skipped")
+        ),
+        "reference_visual_detail_tls_low_vehicle_control_reference_promotion_reason": str(
+            reference_visual_detail_tls_low_vehicle_control_reference_promotion_report.get("reason", "")
+        ),
         "reference_visual_detail_tls_connection_repair_status": "skipped"
         if reference_visual_detail_tls_connection_repair_report is None
         else str(reference_visual_detail_tls_connection_repair_report.get("status", "fail")),
@@ -2533,6 +2745,13 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_signal_grouping_sumo_load": reference_visual_detail_tls_signal_grouping_sumo_load_report
         or {},
         "reference_visual_detail_tls_signal_grouping_reference_promotion": reference_visual_detail_tls_signal_grouping_reference_promotion_report,
+        "reference_visual_detail_tls_low_vehicle_control": reference_visual_detail_tls_low_vehicle_control_report
+        or {},
+        "reference_visual_detail_tls_low_vehicle_control_sumo_load": reference_visual_detail_tls_low_vehicle_control_sumo_load_report
+        or {},
+        "reference_visual_detail_tls_low_vehicle_control_reference_delta": reference_visual_detail_tls_low_vehicle_control_reference_delta_report
+        or {},
+        "reference_visual_detail_tls_low_vehicle_control_reference_promotion": reference_visual_detail_tls_low_vehicle_control_reference_promotion_report,
         "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
         or {},
         "reference_visual_detail_tls_connection_repair_reference_delta": reference_visual_detail_tls_connection_repair_reference_delta_report
