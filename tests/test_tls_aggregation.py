@@ -80,6 +80,7 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     command = calls[0]
     assert "--tls.discard-loaded" in command
     assert command[command.index("--tls.set") + 1] == "n1,n3"
+    assert command[command.index("--tls.default-type") + 1] == "actuated"
     assert command[command.index("--sumo-net-file") + 1] == str(net_file.resolve())
     assert command[command.index("--output-file") + 1] == "demo_tls_tls_aggregated.net.xml"
 

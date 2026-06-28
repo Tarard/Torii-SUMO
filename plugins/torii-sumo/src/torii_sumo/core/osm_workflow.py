@@ -595,7 +595,7 @@ def run_osm_cleanup_workflow(
     run_reference_join_aggregation_after_build: bool = True,
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
-    run_scope_pruning_after_build: bool = True,
+    run_scope_pruning_after_build: bool = False,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
