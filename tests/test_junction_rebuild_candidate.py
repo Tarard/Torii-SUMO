@@ -1974,9 +1974,20 @@ def test_run_teacher_guided_repair_queue_replays_no_join_expanded_scope_on_full_
                     "expanded_rebuild_scope": {
                         "status": "review",
                         "core_junction_id": "j",
-                        "junction_ids": ["j"],
+                        "junction_ids": ["j", "missing_endpoint"],
                         "join_junction_ids": ["j"],
                         "blocked_teacher_edge_ids": [],
+                        "missing_desired_endpoint_ids": ["missing_endpoint"],
+                    },
+                    "approach_endpoint_rebuild_plan": {
+                        "status": "review",
+                        "edge_rebuilds": [
+                            {
+                                "edge_id": "cand_out",
+                                "desired_from": "j",
+                                "desired_to": "missing_endpoint",
+                            }
+                        ],
                     },
                 }
             ],
@@ -1996,6 +2007,7 @@ def test_run_teacher_guided_repair_queue_replays_no_join_expanded_scope_on_full_
     assert report["composite_applied_candidate_count"] == 1
     assert report["composite_net_file"] == report["variant_reports"][0]["final_net_file"]
     assert report["expanded_scope_reports"][0]["join_explicit_join_count"] == 0
+    assert report["expanded_scope_reports"][0]["missing_node_ids"] == ["missing_endpoint"]
     assert variant_calls[0]["raw_node_file"] == raw_nodes
     assert variant_calls[0]["raw_edge_file"] == raw_edges
     assert variant_calls[0]["raw_connection_file"] == raw_connections
