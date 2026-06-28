@@ -460,7 +460,13 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "junction_teacher_delta_file": str(tmp_path / "junction_teacher_delta.json"),
             "junction_pattern_comparisons_file": str(tmp_path / "junction_pattern_comparisons.csv"),
             "junction_pattern_templates_file": str(tmp_path / "junction_pattern_templates.json"),
+            "junction_pattern_comparison_status": "fail",
+            "junction_pattern_mismatch_count": 2,
             "junction_pattern_mismatch_field_counts": {"internal_function_counts": 2},
+            "junction_pattern_comparisons": [
+                {"junction_id": "j1", "status": "fail"},
+                {"junction_id": "j2", "status": "pass"},
+            ],
             "junction_structural_signature_status": "fail",
             "junction_structural_signature_missing_counts": {"tls_pattern_count": 1},
             "reference_structural_signature_summary": {
@@ -692,6 +698,9 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_junction_teacher_delta_file"] == str(tmp_path / "junction_teacher_delta.json")
     assert report["reference_join_junction_pattern_comparisons_file"] == str(tmp_path / "junction_pattern_comparisons.csv")
     assert report["reference_join_junction_pattern_templates_file"] == str(tmp_path / "junction_pattern_templates.json")
+    assert report["reference_join_junction_pattern_comparison_status"] == "fail"
+    assert report["reference_join_junction_pattern_mismatch_count"] == 2
+    assert report["reference_join_junction_pattern_comparison_sample_count"] == 2
     assert report["reference_join_junction_pattern_mismatch_field_counts"] == {"internal_function_counts": 2}
     assert report["reference_join_structural_signature_status"] == "fail"
     assert report["reference_join_structural_signature_missing_counts"] == {"tls_pattern_count": 1}

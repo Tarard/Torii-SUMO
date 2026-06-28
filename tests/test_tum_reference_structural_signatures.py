@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from torii_sumo.core.junction_teacher_model import extract_teacher_junction_model
+from torii_sumo.core.junction_teacher_model import extract_junction_pattern_exemplar, extract_teacher_junction_model
 
 
 REFERENCE_NET = Path("examples/02_one_prompt_osm_network/networks/tum_ingolstadt_center_reference.net.xml")
@@ -60,3 +60,36 @@ def test_tum_reference_keeps_priority_internal_and_pedestrian_layers_separate() 
     assert priority_vehicle_only["summary"]["walkingarea_count"] == 0
     assert priority_vehicle_only["summary"]["internal_junction_count"] == 3
     assert priority_vehicle_only["vehicle_connections"][0]["via"].startswith(":2290821380_")
+
+
+def test_tum_reference_pattern_exemplars_keep_generic_teacher_signals() -> None:
+    priority_three_way = extract_junction_pattern_exemplar(REFERENCE_NET, "1433119620")
+    tls_three_way = extract_junction_pattern_exemplar(REFERENCE_NET, "267380207")
+    tls_four_way = extract_junction_pattern_exemplar(REFERENCE_NET, "267517510")
+
+    assert priority_three_way["pattern_family"] == "three_way"
+    assert priority_three_way["summary"]["junction_type"] == "priority"
+    assert priority_three_way["summary"]["crossing_count"] == 1
+    assert priority_three_way["summary"]["walkingarea_count"] == 2
+    assert priority_three_way["summary"]["tl_phase_count"] == 0
+    assert len(priority_three_way["movement_signatures"]) == 9
+    assert all(not movement["controlled"] for movement in priority_three_way["movement_signatures"])
+    assert all(movement["has_internal_via"] for movement in priority_three_way["movement_signatures"])
+
+    assert tls_three_way["pattern_family"] == "three_way"
+    assert tls_three_way["summary"]["junction_type"] == "traffic_light"
+    assert tls_three_way["summary"]["crossing_count"] == 4
+    assert tls_three_way["summary"]["walkingarea_count"] == 4
+    assert tls_three_way["summary"]["tl_phase_count"] == 11
+    assert len(tls_three_way["movement_signatures"]) == 8
+    assert all(movement["controlled"] for movement in tls_three_way["movement_signatures"])
+    assert all(movement["has_internal_via"] for movement in tls_three_way["movement_signatures"])
+
+    assert tls_four_way["pattern_family"] == "four_way"
+    assert tls_four_way["summary"]["junction_type"] == "traffic_light"
+    assert tls_four_way["summary"]["crossing_count"] == 3
+    assert tls_four_way["summary"]["walkingarea_count"] == 3
+    assert tls_four_way["summary"]["tl_phase_count"] == 6
+    assert len(tls_four_way["movement_signatures"]) == 10
+    assert all(movement["controlled"] for movement in tls_four_way["movement_signatures"])
+    assert all(movement["has_internal_via"] for movement in tls_four_way["movement_signatures"])

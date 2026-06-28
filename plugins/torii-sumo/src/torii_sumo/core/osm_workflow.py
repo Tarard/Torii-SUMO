@@ -175,6 +175,13 @@ def _int_field(report: Mapping[str, Any], key: str) -> int:
         return 0
 
 
+def _list_field_count(report: Mapping[str, Any] | None, key: str) -> int:
+    if report is None:
+        return 0
+    value = report.get(key, [])
+    return len(value) if isinstance(value, list) else 0
+
+
 def _teacher_guided_exemplar_ready_stats(report: Mapping[str, Any] | None) -> tuple[int, int]:
     if report is None:
         return 0, 0
@@ -2289,6 +2296,16 @@ def run_osm_cleanup_workflow(
         "reference_join_junction_pattern_templates_file": ""
         if reference_join_audit_report is None
         else str(reference_join_audit_report.get("junction_pattern_templates_file", "")),
+        "reference_join_junction_pattern_comparison_status": "skipped"
+        if reference_join_audit_report is None
+        else str(reference_join_audit_report.get("junction_pattern_comparison_status", "skipped")),
+        "reference_join_junction_pattern_mismatch_count": 0
+        if reference_join_audit_report is None
+        else _int_field(reference_join_audit_report, "junction_pattern_mismatch_count"),
+        "reference_join_junction_pattern_comparison_sample_count": _list_field_count(
+            reference_join_audit_report,
+            "junction_pattern_comparisons",
+        ),
         "reference_join_junction_pattern_mismatch_field_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("junction_pattern_mismatch_field_counts", {}),

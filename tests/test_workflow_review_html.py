@@ -101,6 +101,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "reference_join_junction_teacher_delta_file": str(teacher_delta),
             "reference_join_junction_pattern_comparisons_file": str(pattern_comparisons),
             "reference_join_junction_pattern_templates_file": str(pattern_templates),
+            "reference_join_junction_pattern_comparison_status": "fail",
+            "reference_join_junction_pattern_mismatch_count": 4,
+            "reference_join_junction_pattern_comparison_sample_count": 5,
             "teacher_guided_repair_queue_file": str(repair_queue),
             "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
             "teacher_guided_repair_run_report_file": str(repair_run),
@@ -213,6 +216,10 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Review Queue" in html
     assert "Evidence Summary" in html
     assert "topology_fragmentation_status=needs_review" in html
+    assert "reference_join_patterns" in html
+    assert "reference_join_junction_pattern_comparison_status=fail" in html
+    assert "reference_join_junction_pattern_mismatch_count=4" in html
+    assert "reference_join_junction_pattern_comparison_sample_count=5" in html
     assert "modal_decision_counts" in html
     assert "modal_review_action_counts" in html
     assert "junction_aggregation_blocked_by_modal_count" in html

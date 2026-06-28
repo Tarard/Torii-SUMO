@@ -750,6 +750,68 @@ def test_build_teacher_guided_repair_queue_flags_vehicle_movement_matrix_gap(tmp
     assert rows[0]["netedit_review_actions"] == "rebuild_vehicle_movement_matrix"
 
 
+def test_build_teacher_guided_repair_queue_uses_same_id_pattern_delta_without_join_case(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="j" type="highway.primary"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="south_in" from="s" to="j" type="highway.primary"><lane id="south_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="east_out" from="j" to="e" type="highway.primary"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="north_out" from="j" to="n" type="highway.primary"><lane id="north_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="west_in_0 south_in_0" intLanes=""/>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s"/>
+  <connection from="west_in" to="north_out" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="l"/>
+  <connection from="south_in" to="east_out" fromLane="0" toLane="0" tl="j" linkIndex="2" dir="r"/>
+  <connection from="south_in" to="north_out" fromLane="0" toLane="0" tl="j" linkIndex="3" dir="s"/>
+  <tlLogic id="j" type="actuated" programID="0"><phase duration="30" state="GGGG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="j" type="highway.primary"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="south_in" from="s" to="j" type="highway.primary"><lane id="south_in_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="east_out" from="j" to="e" type="highway.primary"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="north_out" from="j" to="n" type="highway.primary"><lane id="north_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="west_in_0 south_in_0" intLanes=""/>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s"/>
+  <tlLogic id="j" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [],
+            "junction_pattern_comparisons": [
+                {
+                    "junction_id": "j",
+                    "status": "fail",
+                    "mismatch_fields": ["movement_signature_counts", "has_tls"],
+                    "teacher": {"has_tls": True},
+                    "candidate": {"has_tls": True},
+                }
+            ],
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["repair_candidate_count"] == 1
+    assert report["same_id_pattern_candidate_count"] == 1
+    candidate = report["repair_candidates"][0]
+    assert candidate["reference_id"] == "j"
+    assert candidate["junction_id"] == "j"
+    assert candidate["learned_rule"] == "tum_like_same_id_pattern_candidate"
+    assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+    assert candidate["vehicle_movement_matrix_missing_count"] == 3
+    assert candidate["junction_pattern_mismatch_fields"] == ["movement_signature_counts", "has_tls"]
+    assert candidate["netedit_review_actions"] == ["rebuild_vehicle_movement_matrix", "inspect_tls_control"]
+
+
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
