@@ -724,6 +724,13 @@ def _sumo_load_net(
     return report
 
 
+def _has_tls_incompatibility_warning(report: Mapping[str, Any] | None) -> bool:
+    if report is None:
+        return False
+    text = "\n".join(str(report.get(field, "")) for field in ("stdout", "stderr", "error")).lower()
+    return "tllogic" in text and "incompatible with logic" in text
+
+
 def _command_path_for_cwd(path: Path, cwd: Path) -> str:
     try:
         return str(Path(os.path.relpath(path.resolve(), cwd.resolve())))
@@ -747,6 +754,8 @@ def _tls_connection_repair_promotion_decision(
         return {"status": "blocked", "reason": "invalid_mapped_linkindex_skipped"}
     if sumo_load_report is None or sumo_load_report.get("status") != "pass":
         return {"status": "blocked", "reason": "sumo_load_not_pass"}
+    if _has_tls_incompatibility_warning(sumo_load_report):
+        return {"status": "blocked", "reason": "sumo_load_tls_incompatible"}
     if repair_delta_report is None or repair_delta_report.get("status") != "pass":
         return {"status": "blocked", "reason": "repair_reference_delta_not_pass"}
     repair_score = _tls_semantic_delta_score(repair_delta_report)

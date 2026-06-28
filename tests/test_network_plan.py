@@ -255,6 +255,38 @@ def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_p
     assert decision["reason"] == "reference_tls_semantic_delta_regressed"
 
 
+def test_tls_connection_repair_promotion_blocks_incompatible_tllogic_warning(tmp_path: Path) -> None:
+    variant_file = tmp_path / "repaired.net.xml"
+    variant_file.write_text("<net/>", encoding="utf-8")
+
+    decision = _tls_connection_repair_promotion_decision(
+        repair_report={
+            "status": "pass",
+            "variant_file": str(variant_file),
+            "skipped_invalid_mapped_linkindex_connection_count": 0,
+        },
+        sumo_load_report={
+            "status": "pass",
+            "stderr": (
+                "Warning: Program '0' at tlLogic 'joinedS_10176312934_7881057697' "
+                "is incompatible with logic at junction '7881057697'."
+            ),
+        },
+        rejected_delta_report={
+            "network_structural_missing_counts": {"tls_controlled_connection_count": 10},
+            "network_structural_extra_counts": {},
+        },
+        repair_delta_report={
+            "status": "pass",
+            "network_structural_missing_counts": {},
+            "network_structural_extra_counts": {},
+        },
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "sumo_load_tls_incompatible"
+
+
 def test_reference_delta_promotion_prefers_candidate_with_lower_tls_semantic_score() -> None:
     decision = _reference_delta_promotion_decision(
         candidate_delta_report={
