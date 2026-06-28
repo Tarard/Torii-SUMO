@@ -276,7 +276,9 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "tls_controlled_connection_count": 1,
         "walkingarea_edge_count": 1,
     }
+    assert report["network_structural_extra_counts"] == {}
     assert report["network_structural_junction_type_missing_counts"] == {"traffic_light": 1}
+    assert report["network_structural_junction_type_extra_counts"] == {"priority": 1}
     comparison = report["junction_pattern_comparisons"][0]
     assert comparison["junction_id"] == "cluster_a_b"
     assert comparison["status"] == "fail"
@@ -313,7 +315,52 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
     assert delta["junction_structural_signature_missing_counts"] == report["junction_structural_signature_missing_counts"]
     assert delta["network_structural_delta_status"] == "fail"
     assert delta["network_structural_missing_counts"] == report["network_structural_missing_counts"]
+    assert delta["network_structural_extra_counts"] == report["network_structural_extra_counts"]
     assert delta["junction_pattern_comparisons"][0]["teacher"]["control_type"] == "traffic_light"
+
+
+def test_reference_join_audit_structural_only_reports_extra_network_structure(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id="in"><lane id="in_0" index="0"/></edge>
+  <junction id="j" type="priority"/>
+  <connection from="in" to="out"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="in"><lane id="in_0" index="0"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0"/></edge>
+  <junction id="j" type="priority"/>
+  <junction id="tls_extra" type="traffic_light"/>
+  <connection from="in" to="out"/>
+  <connection from="a" to="b" tl="tls_extra" linkIndex="0"/>
+  <tlLogic id="tls_extra" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        structural_only=True,
+    )
+
+    assert report["network_structural_delta_status"] == "fail"
+    assert report["network_structural_missing_counts"] == {}
+    assert report["network_structural_extra_counts"] == {
+        "connection_count": 1,
+        "tl_logic_count": 1,
+        "traffic_light_junction_count": 1,
+        "tls_controlled_connection_count": 1,
+        "walkingarea_edge_count": 1,
+    }
+    assert report["network_structural_junction_type_missing_counts"] == {}
+    assert report["network_structural_junction_type_extra_counts"] == {"traffic_light": 1}
 
 
 def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, tmp_path: Path) -> None:
@@ -378,7 +425,9 @@ def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, t
         "tls_controlled_connection_count": 1,
         "walkingarea_edge_count": 1,
     }
+    assert report["network_structural_extra_counts"] == {}
     assert report["network_structural_junction_type_missing_counts"] == {"traffic_light": 1}
+    assert report["network_structural_junction_type_extra_counts"] == {"priority": 1}
     assert Path(report["junction_teacher_delta_file"]).is_file()
     summary = json.loads(Path(report["summary_file"]).read_text(encoding="utf-8"))
     assert summary["audit_mode"] == "structural_only"

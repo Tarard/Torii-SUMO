@@ -155,7 +155,9 @@ def audit_reference_join_patterns(
         "candidate_structural_signature_summary": candidate_structural_signature_summary,
         "network_structural_delta_status": network_structural_delta["status"],
         "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_extra_counts": network_structural_delta["extra_counts"],
         "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -199,7 +201,9 @@ def audit_reference_join_patterns(
         "candidate_structural_signature_summary": candidate_structural_signature_summary,
         "network_structural_delta_status": network_structural_delta["status"],
         "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_extra_counts": network_structural_delta["extra_counts"],
         "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -269,7 +273,9 @@ def _structural_only_report(
         "candidate_structural_signature_summary": {},
         "network_structural_delta_status": network_structural_delta["status"],
         "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_extra_counts": network_structural_delta["extra_counts"],
         "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": [],
@@ -294,8 +300,12 @@ def _structural_only_report(
                 "candidate_net_file": str(candidate_net_file),
                 "network_structural_delta_status": network_structural_delta["status"],
                 "network_structural_missing_counts": network_structural_delta["missing_counts"],
+                "network_structural_extra_counts": network_structural_delta["extra_counts"],
                 "network_structural_junction_type_missing_counts": network_structural_delta[
                     "junction_type_missing_counts"
+                ],
+                "network_structural_junction_type_extra_counts": network_structural_delta[
+                    "junction_type_extra_counts"
                 ],
                 "reference_network_structural_summary": reference_network_structural_summary,
                 "candidate_network_structural_summary": candidate_network_structural_summary,
@@ -605,6 +615,11 @@ def _network_structural_delta(reference: dict[str, Any], candidate: dict[str, An
         for key in scalar_keys
         if int(reference.get(key, 0)) > int(candidate.get(key, 0))
     }
+    extra_counts = {
+        key: int(candidate.get(key, 0)) - int(reference.get(key, 0))
+        for key in scalar_keys
+        if int(candidate.get(key, 0)) > int(reference.get(key, 0))
+    }
     reference_types = reference.get("junction_type_counts", {}) if isinstance(reference.get("junction_type_counts"), dict) else {}
     candidate_types = candidate.get("junction_type_counts", {}) if isinstance(candidate.get("junction_type_counts"), dict) else {}
     junction_type_missing_counts = {
@@ -612,10 +627,19 @@ def _network_structural_delta(reference: dict[str, Any], candidate: dict[str, An
         for key, value in reference_types.items()
         if int(value) > int(candidate_types.get(key, 0))
     }
+    junction_type_extra_counts = {
+        key: int(value) - int(reference_types.get(key, 0))
+        for key, value in candidate_types.items()
+        if int(value) > int(reference_types.get(key, 0))
+    }
     return {
-        "status": "fail" if missing_counts or junction_type_missing_counts else "pass",
+        "status": "fail"
+        if missing_counts or extra_counts or junction_type_missing_counts or junction_type_extra_counts
+        else "pass",
         "missing_counts": dict(sorted(missing_counts.items())),
+        "extra_counts": dict(sorted(extra_counts.items())),
         "junction_type_missing_counts": dict(sorted(junction_type_missing_counts.items())),
+        "junction_type_extra_counts": dict(sorted(junction_type_extra_counts.items())),
     }
 
 

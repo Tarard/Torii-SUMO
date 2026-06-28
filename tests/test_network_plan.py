@@ -389,7 +389,9 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             },
             "network_structural_delta_status": "fail",
             "network_structural_missing_counts": {"crossing_edge_count": 620, "walkingarea_edge_count": 1648},
+            "network_structural_extra_counts": {"tl_logic_count": 35, "traffic_light_junction_count": 41},
             "network_structural_junction_type_missing_counts": {"traffic_light": 1},
+            "network_structural_junction_type_extra_counts": {"priority": 22},
             "reference_network_structural_summary": {
                 "crossing_edge_count": 620,
                 "walkingarea_edge_count": 1648,
@@ -611,7 +613,12 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         "crossing_edge_count": 620,
         "walkingarea_edge_count": 1648,
     }
+    assert report["reference_join_network_structural_extra_counts"] == {
+        "tl_logic_count": 35,
+        "traffic_light_junction_count": 41,
+    }
     assert report["reference_join_network_structural_junction_type_missing_counts"] == {"traffic_light": 1}
+    assert report["reference_join_network_structural_junction_type_extra_counts"] == {"priority": 22}
     assert report["reference_join_reference_network_structural_summary"] == {
         "crossing_edge_count": 620,
         "walkingarea_edge_count": 1648,
