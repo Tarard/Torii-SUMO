@@ -893,6 +893,21 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
         }
 
     def fake_reference_join_audit(**kwargs):
+        if Path(kwargs["candidate_net_file"]) == visual_tls_net_file:
+            calls["rejected_tls_delta_candidate_net_file"] = kwargs["candidate_net_file"]
+            calls["rejected_tls_delta_structural_only"] = kwargs["structural_only"]
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_delta_status": "fail",
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 337},
+                "network_structural_extra_counts": {"tl_logic_count": 12, "traffic_light_junction_count": 41},
+                "network_structural_junction_type_missing_counts": {},
+                "network_structural_junction_type_extra_counts": {"traffic_light": 41},
+                "summary_file": str(tmp_path / "rejected_tls_delta.json"),
+                "warnings": [],
+            }
         calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
         return {
             "status": "pass",
@@ -901,6 +916,11 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
             "reference_case_count": 0,
             "matched_case_count": 0,
             "unmatched_case_count": 0,
+            "network_structural_delta_status": "fail",
+            "network_structural_missing_counts": {},
+            "network_structural_extra_counts": {"tl_logic_count": 35},
+            "network_structural_junction_type_missing_counts": {},
+            "network_structural_junction_type_extra_counts": {"traffic_light": 186},
             "warnings": [],
         }
 
@@ -957,9 +977,19 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
 
     raw_visual_detail_net_file = tmp_path / "sumo" / "reference-regression_reference_visual_detail.net.xml"
     assert calls["reference_join_candidate_net_file"] == raw_visual_detail_net_file
+    assert calls["rejected_tls_delta_candidate_net_file"] == visual_tls_net_file
+    assert calls["rejected_tls_delta_structural_only"] is True
     assert report["reference_visual_detail_comparison_net_file"] == str(raw_visual_detail_net_file)
     assert report["reference_visual_detail_tls_controlled_connection_preservation_status"] == "fail"
     assert report["reference_visual_detail_tls_controlled_connection_regression_count"] == 12
+    assert report["reference_visual_detail_tls_aggregation_reference_delta_status"] == "fail"
+    assert report["reference_visual_detail_tls_aggregation_reference_delta_missing_counts"] == {
+        "tls_controlled_connection_count": 337
+    }
+    assert report["reference_visual_detail_tls_aggregation_reference_delta_extra_counts"] == {
+        "tl_logic_count": 12,
+        "traffic_light_junction_count": 41,
+    }
 
 
 def test_reference_matched_workflow_runs_reference_scope_audit_without_default_pruning_variant(tmp_path: Path) -> None:
