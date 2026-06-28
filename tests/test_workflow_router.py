@@ -5,6 +5,7 @@ from torii_sumo.core.workflow_router import (
     infer_place_name,
     run_auto_workflow,
 )
+from torii_sumo.tools.workflow_tools import torii_auto_workflow
 from torii_sumo.core.osm_network import parse_bbox
 
 
@@ -227,6 +228,27 @@ def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_pa
     assert captured["service_passenger_policy"] == "reference_match"
     assert "service" not in captured["highway_classes"]
     assert "cycleway" not in captured["highway_classes"]
+
+
+def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_run_auto_workflow(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo"}
+
+    monkeypatch.setattr("torii_sumo.tools.workflow_tools.run_auto_workflow", fake_run_auto_workflow)
+
+    report = torii_auto_workflow(
+        user_request="Generate a TUM-like SUMO network from OSM using the reference net",
+        output_dir=str(tmp_path),
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        network_profile="reference_matched",
+        reference_net_file=str(tmp_path / "reference.net.xml"),
+    )
+
+    assert report["status"] == "pass"
+    assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
 
 
 def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path) -> None:

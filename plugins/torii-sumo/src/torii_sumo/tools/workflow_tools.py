@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from torii_sumo.core.workflow_router import run_auto_workflow
+from torii_sumo.tools.osm_tools import sumo_osm_cleanup_workflow
 
 
 def torii_auto_workflow(
@@ -45,4 +46,5 @@ def torii_auto_workflow(
         official_inventory_csv=Path(official_inventory_csv) if official_inventory_csv else None,
         signal_plan_csv=Path(signal_plan_csv) if signal_plan_csv else None,
         field_evidence_csv=Path(field_evidence_csv) if field_evidence_csv else None,
+        cleanup_workflow_func=sumo_osm_cleanup_workflow,
     )
