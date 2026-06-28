@@ -25,7 +25,7 @@ from torii_sumo.core.osm_network import (
 from torii_sumo.core.osm_area import osm_map_url_bbox, resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
-from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network
+from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network, sumo_osm_cleanup_workflow
 
 
 def test_build_overpass_query_uses_overpass_coordinate_order_and_date() -> None:
@@ -48,6 +48,31 @@ def test_resolve_highway_classes_supports_osmnet_inspired_presets() -> None:
     assert "unclassified" in resolve_highway_classes("drive_plus_unclassified")
     assert "service" in resolve_highway_classes("full_vehicle")
     assert resolve_highway_classes("primary,residential") == {"primary", "residential"}
+
+
+def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matched(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    captured = {}
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo"}
+
+    monkeypatch.setattr("torii_sumo.tools.osm_tools.run_osm_cleanup_workflow", fake_cleanup)
+    reference_net_file = tmp_path / "reference.net.xml"
+    reference_net_file.write_text("<net/>", encoding="utf-8")
+
+    report = sumo_osm_cleanup_workflow(
+        output_dir=str(tmp_path / "out"),
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        network_profile="reference_matched",
+        reference_net_file=str(reference_net_file),
+    )
+
+    assert report["status"] == "pass"
+    assert captured["reference_join_audit_structural_only"] is False
 
 
 def test_osm_map_url_bbox_extracts_small_area_around_center() -> None:
