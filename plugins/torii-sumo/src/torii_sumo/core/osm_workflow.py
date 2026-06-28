@@ -411,6 +411,9 @@ def _teacher_guided_parity_gate(report: Mapping[str, Any] | None) -> str:
 def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
     if report is None or report.get("status") != "pass" or report.get("parity_gate_status") != "pass":
         return None
+    composite_net_file = str(report.get("composite_net_file", ""))
+    if composite_net_file and Path(composite_net_file).exists():
+        return Path(composite_net_file)
     for variant in report.get("variant_reports", []) or []:
         if not isinstance(variant, Mapping):
             continue
@@ -429,9 +432,14 @@ def _teacher_guided_application_stats(
     report: Mapping[str, Any] | None, best_variant_file: Path | None
 ) -> dict[str, str | int]:
     pass_count = 0 if report is None else _int_field(report, "pass_candidate_count")
-    applied_count = 1 if best_variant_file is not None else 0
+    composite_applied_count = 0 if report is None else _int_field(report, "composite_applied_candidate_count")
+    applied_count = composite_applied_count if composite_applied_count and best_variant_file is not None else 0
+    if not applied_count and best_variant_file is not None:
+        applied_count = 1
     if report is None:
         scope = "skipped"
+    elif composite_applied_count > 1 and best_variant_file is not None:
+        scope = "sequential_composite"
     elif applied_count:
         scope = "single_best_variant"
     else:
@@ -1931,6 +1939,8 @@ def run_osm_cleanup_workflow(
                         netconvert_binary=netconvert_binary,
                         sumo_binary=sumo_binary,
                         timeout_seconds=timeout_seconds,
+                        sequential_accept_passed_variants=True,
+                        plain_exporter=teacher_guided_plain_export_func,
                     )
                     teacher_guided_repair_best_variant_file = _teacher_guided_best_variant_file(
                         teacher_guided_repair_run_report
