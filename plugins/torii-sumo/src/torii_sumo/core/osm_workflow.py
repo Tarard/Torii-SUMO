@@ -755,6 +755,7 @@ def run_osm_cleanup_workflow(
         max_tile_area_km2=max_tile_area_km2,
         max_retries=max_retries,
         retry_pause_seconds=retry_pause_seconds,
+        netconvert_profile="vehicle_core",
     )
     if build_report.get("status") != "pass":
         return {
@@ -916,6 +917,7 @@ def run_osm_cleanup_workflow(
             max_tile_area_km2=max_tile_area_km2,
             max_retries=max_retries,
             retry_pause_seconds=retry_pause_seconds,
+            netconvert_profile="reference_visual_detail",
         )
         if reference_visual_detail_build_report.get("status") != "pass":
             return {

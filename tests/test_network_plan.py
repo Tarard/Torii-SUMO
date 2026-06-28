@@ -221,6 +221,7 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
                 "prefix": kwargs["prefix"],
                 "allowed_highways": set(kwargs["allowed_highways"]),
                 "source_osm_path": kwargs.get("source_osm_path"),
+                "netconvert_profile": kwargs.get("netconvert_profile"),
             }
         )
         current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
@@ -312,6 +313,8 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     assert len(build_calls) == 2
     assert build_calls[0]["prefix"] == "reference-matched"
     assert build_calls[1]["prefix"] == "reference-matched_reference_visual_detail"
+    assert build_calls[0]["netconvert_profile"] == "vehicle_core"
+    assert build_calls[1]["netconvert_profile"] == "reference_visual_detail"
     assert "service" not in build_calls[0]["allowed_highways"]
     assert "service" in build_calls[1]["allowed_highways"]
     assert "cycleway" not in build_calls[0]["allowed_highways"]

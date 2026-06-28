@@ -570,6 +570,92 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
     ]
 
 
+def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tls_structure(tmp_path: Path) -> None:
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="51.0" lon="13.70"/>
+  <node id="2" lat="51.0" lon="13.71"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="primary"/>
+    <tag k="sidewalk" v="both"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_runner(command: list[str], *, cwd: Path | None = None, timeout_seconds: float = 60.0):
+        calls.append(command)
+        output = Path(command[command.index("--output-file") + 1])
+        if not output.is_absolute():
+            assert cwd is not None
+            output = cwd / output
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("<net/>", encoding="utf-8")
+        return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
+
+    report = build_osm_network(
+        bbox="13.6000,50.9800,13.9000,51.1500",
+        output_dir=tmp_path / "build",
+        prefix="demo",
+        source_osm_path=source,
+        allowed_highways={"primary"},
+        netconvert_profile="reference_visual_detail",
+        command_runner=fake_runner,
+    )
+
+    command = calls[0]
+    assert report["status"] == "pass"
+    assert report["netconvert_profile"] == "reference_visual_detail"
+    assert report["netconvert_profile_options"] == [
+        "--osm.bike-access",
+        "--osm.sidewalks",
+        "--osm.crossings",
+        "--osm.turn-lanes",
+        "--crossings.guess",
+        "--walkingareas",
+        "--tls.guess-signals",
+        "--tls.rebuild",
+        "--tls.default-type",
+        "actuated",
+    ]
+    for option in report["netconvert_profile_options"]:
+        assert option in command
+
+
+def test_build_osm_network_rejects_tum_named_netconvert_profile(tmp_path: Path) -> None:
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="51.0" lon="13.70"/>
+  <node id="2" lat="51.0" lon="13.71"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="primary"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    report = build_osm_network(
+        bbox="13.6000,50.9800,13.9000,51.1500",
+        output_dir=tmp_path / "build",
+        prefix="demo",
+        source_osm_path=source,
+        allowed_highways={"primary"},
+        netconvert_profile="tum_like_visual_detail",
+        command_runner=lambda command, **_kwargs: calls.append(command),
+    )
+
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["error"] == "unsupported netconvert_profile: tum_like_visual_detail"
+    assert calls == []
+
+
 def test_build_osm_network_uses_robust_downloader_when_no_source_osm(tmp_path: Path) -> None:
     calls: list[str] = []
 
