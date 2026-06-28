@@ -1703,12 +1703,21 @@ def run_teacher_guided_repair_queue(
             replay_edge_map = edge_map
             if not replay_edge_map and joined_scope_junction_id:
                 try:
+                    teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
                     replay_edge_map = _teacher_candidate_edge_map(
-                        extract_teacher_junction_model(teacher_net_file, teacher_junction_id),
+                        teacher_model,
                         extract_teacher_junction_model(Path(str(scope_report.get("net_file", ""))), joined_scope_junction_id),
                         teacher_junction_id=teacher_junction_id,
                         candidate_junction_id=joined_scope_junction_id,
                     )
+                    if not replay_edge_map:
+                        replay_edge_map = _edge_map_from_approach_endpoint_rebuild_plan(
+                            teacher_model,
+                            candidate.get("approach_endpoint_rebuild_plan", {}),
+                            teacher_junction_id=teacher_junction_id,
+                            candidate_junction_id=joined_scope_junction_id,
+                            plan_junction_id=junction_id,
+                        )
                     scope_report["derived_edge_map"] = replay_edge_map
                 except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
                     replay_edge_map = {}
@@ -1965,10 +1974,12 @@ def write_expanded_scope_plain_inputs(
 
     scope = expanded_rebuild_scope if isinstance(expanded_rebuild_scope, dict) else {}
     seed_node_ids = {str(item) for item in scope.get("junction_ids", []) or [] if str(item)}
+    core_junction_id = str(scope.get("core_junction_id", ""))
     requested_join_ids = scope.get("join_junction_ids", None)
+    default_join_ids = [core_junction_id] if core_junction_id else scope.get("junction_ids", []) or []
     join_seed_node_ids = {
         str(item)
-        for item in (requested_join_ids if requested_join_ids is not None else scope.get("junction_ids", []) or [])
+        for item in (requested_join_ids if requested_join_ids is not None else default_join_ids)
         if str(item)
     }
     blocked_edge_ids = {str(item) for item in scope.get("blocked_teacher_edge_ids", []) or [] if str(item)}
@@ -2022,7 +2033,6 @@ def write_expanded_scope_plain_inputs(
     for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
         node_root.append(copy.deepcopy(raw_nodes[node_id]))
     join_node_ids = sorted(node_id for node_id in join_seed_node_ids if node_id in raw_nodes)
-    core_junction_id = str(scope.get("core_junction_id", ""))
     if len(join_node_ids) >= 2:
         join_definition = build_junction_join_definition(
             [
@@ -2929,6 +2939,50 @@ def _teacher_candidate_edge_map(
             candidate_junction_id=candidate_junction_id,
         )
     return dict(sorted((source, target) for source, target in edge_map.items() if source and target))
+
+
+def _edge_map_from_approach_endpoint_rebuild_plan(
+    teacher_model: dict[str, object],
+    approach_endpoint_rebuild_plan: object,
+    *,
+    teacher_junction_id: str = "",
+    candidate_junction_id: str = "",
+    plan_junction_id: str = "",
+) -> dict[str, str]:
+    if not isinstance(approach_endpoint_rebuild_plan, dict):
+        return {}
+    candidates_by_endpoint: dict[tuple[str, str, str], list[str]] = {}
+    for item in approach_endpoint_rebuild_plan.get("edge_rebuilds", []) or []:
+        if not isinstance(item, dict):
+            continue
+        edge_id = str(item.get("edge_id", "")).strip()
+        direction = str(item.get("direction", "")).strip()
+        if not direction and ":" in str(item.get("approach_key", "")):
+            direction = str(item.get("approach_key", "")).split(":", 1)[0]
+        desired_from = str(item.get("desired_from", "")).strip()
+        desired_to = str(item.get("desired_to", "")).strip()
+        if direction not in {"incoming", "outgoing"} or not edge_id or not desired_from or not desired_to:
+            continue
+        candidates_by_endpoint.setdefault((direction, desired_from, desired_to), []).append(edge_id)
+
+    edge_map: dict[str, str] = {}
+    target_junction_ids = list(dict.fromkeys(item for item in (candidate_junction_id, plan_junction_id) if item))
+    for direction in ("incoming", "outgoing"):
+        for teacher_edge in _approaches(teacher_model, direction):
+            teacher_edge_id = str(teacher_edge.get("edge_id", "")).strip()
+            if not teacher_edge_id:
+                continue
+            matches = []
+            for target_junction_id in target_junction_ids or [""]:
+                desired_from = _mapped_junction_ref(
+                    str(teacher_edge.get("from", "")), teacher_junction_id, target_junction_id
+                )
+                desired_to = _mapped_junction_ref(str(teacher_edge.get("to", "")), teacher_junction_id, target_junction_id)
+                matches.extend(candidates_by_endpoint.get((direction, desired_from, desired_to), []))
+            unique_matches = sorted(set(matches))
+            if len(unique_matches) == 1:
+                edge_map[teacher_edge_id] = unique_matches[0]
+    return dict(sorted(edge_map.items()))
 
 
 def _drop_endpoint_mismatched_edge_map_entries(
