@@ -5297,6 +5297,7 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
         calls.append(command)
         if command[0] == "netconvert":
             assert "--sidewalks.guess" not in command
+            assert "--tls.ignore-internal-junction-jam" in command
             assert Path(command[command.index("--node-files") + 1]).is_absolute()
             for flag in ("--edge-files", "--connection-files", "--output-file"):
                 assert not Path(command[command.index(flag) + 1]).is_absolute()
