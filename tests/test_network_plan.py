@@ -1070,7 +1070,13 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     low_vehicle_net = tmp_path / "post_teacher_tls_low_vehicle" / "tls_low_vehicle_control_review.net.xml"
     signal_grouped_net = tmp_path / "post_teacher_tls_signal_grouping" / "tls_signal_grouped.net.xml"
     tls_connection_repaired_net = tmp_path / "post_teacher_tls_connection_repair" / "repaired.net.xml"
-    calls: dict[str, object] = {"reference_join_candidate_net_files": [], "teacher_guided_queue_calls": []}
+    post_repair_movement_composite_net = tmp_path / "post_repair_movement_composite.net.xml"
+    calls: dict[str, object] = {
+        "reference_join_candidate_net_files": [],
+        "teacher_guided_queue_calls": [],
+        "teacher_guided_queue_reports": [],
+        "teacher_guided_run_calls": [],
+    }
 
     def fake_build(**kwargs):
         current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
@@ -1221,12 +1227,22 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
                 "network_structural_missing_counts": {"connection_count": 4, "crossing_edge_count": 3},
                 "network_structural_extra_counts": {"walkingarea_edge_count": 5},
             }
+        if kwargs["candidate_net_file"] == post_repair_movement_composite_net:
+            return {
+                **base,
+                "summary_file": str(tmp_path / "post_repair_movement_delta.json"),
+                "junction_pattern_mismatch_count": 0,
+                "junction_pattern_mismatch_field_counts": {},
+                "junction_pattern_comparisons": [],
+                "network_structural_missing_counts": {"connection_count": 2, "crossing_edge_count": 1},
+                "network_structural_extra_counts": {"walkingarea_edge_count": 2},
+            }
         return base
 
     def fake_teacher_guided_repair_queue(**kwargs):
         calls["teacher_guided_queue_calls"].append(kwargs)
         if kwargs["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild"):
-            return {
+            report = {
                 "status": "pass",
                 "claim_status": "diagnostic-demo",
                 "repair_candidate_count": 2,
@@ -1246,16 +1262,19 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
                 ],
                 "warnings": [],
             }
-        return {
-            "status": "pass",
-            "claim_status": "diagnostic-demo",
-            "repair_candidate_count": 1,
-            "ready_candidate_count": 1,
-            "expanded_scope_candidate_count": 0,
-            "queue_file": str(tmp_path / "teacher_guided_queue.json"),
-            "repair_candidates": [],
-            "warnings": [],
-        }
+        else:
+            report = {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "repair_candidate_count": 1,
+                "ready_candidate_count": 1,
+                "expanded_scope_candidate_count": 0,
+                "queue_file": str(tmp_path / "teacher_guided_queue.json"),
+                "repair_candidates": [],
+                "warnings": [],
+            }
+        calls["teacher_guided_queue_reports"].append(report)
+        return report
 
     def fake_teacher_guided_plain_export(**_kwargs):
         return {
@@ -1268,8 +1287,10 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
             "warnings": [],
         }
 
-    def fake_teacher_guided_repair_run(**_kwargs):
-        composite_net = tmp_path / "teacher_guided_composite.net.xml"
+    def fake_teacher_guided_repair_run(**kwargs):
+        calls["teacher_guided_run_calls"].append(kwargs)
+        is_post_repair_movement = kwargs["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild")
+        composite_net = post_repair_movement_composite_net if is_post_repair_movement else tmp_path / "teacher_guided_composite.net.xml"
         composite_net.write_text("<net/>", encoding="utf-8")
         return {
             "status": "pass",
@@ -1367,6 +1388,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert low_vehicle_net in calls["reference_join_candidate_net_files"]
     assert signal_grouped_net in calls["reference_join_candidate_net_files"]
     assert tls_connection_repaired_net in calls["reference_join_candidate_net_files"]
+    assert post_repair_movement_composite_net in calls["reference_join_candidate_net_files"]
     assert calls["reference_join_candidate_net_files"].index(tmp_path / "teacher_guided_composite.net.xml") < calls[
         "reference_join_candidate_net_files"
     ].index(low_vehicle_net)
@@ -1384,29 +1406,30 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert calls["post_teacher_tls_connection_repair_candidate_net_file"] == signal_grouped_net
     assert calls["post_teacher_tls_connection_repair_copy_unmapped_tls"] is True
     assert len(calls["teacher_guided_queue_calls"]) == 2
+    assert len(calls["teacher_guided_queue_reports"]) == 2
+    assert len(calls["teacher_guided_run_calls"]) == 2
     post_repair_queue_call = calls["teacher_guided_queue_calls"][1]
+    post_repair_queue_report = calls["teacher_guided_queue_reports"][1]
     assert post_repair_queue_call["candidate_net_file"] == tls_connection_repaired_net
     assert post_repair_queue_call["reference_join_audit_report"]["summary_file"] == str(
         tmp_path / "post_teacher_tls_connection_repair_delta.json"
     )
-    assert report["reference_visual_detail_comparison_net_file"] == str(tls_connection_repaired_net)
+    post_repair_run_call = calls["teacher_guided_run_calls"][1]
+    assert post_repair_run_call["queue_report"] is post_repair_queue_report
+    assert post_repair_run_call["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild")
+    assert report["reference_visual_detail_comparison_net_file"] == str(post_repair_movement_composite_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
-        "post_teacher_tls_connection_repair_promoted_by_reference_delta"
+        "post_teacher_tls_connection_repair_movement_rebuild_promoted"
     )
     assert report["reference_join_post_teacher_audit_status"] == "pass"
-    assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 1
-    assert report["reference_join_post_teacher_junction_pattern_mismatch_field_counts"] == {
-        "movement_signature_counts": 1
-    }
+    assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 0
+    assert report["reference_join_post_teacher_junction_pattern_mismatch_field_counts"] == {}
     assert report["reference_join_post_teacher_network_structural_missing_counts"] == {
-        "connection_count": 4,
-        "crossing_edge_count": 3,
+        "connection_count": 2,
+        "crossing_edge_count": 1,
     }
     assert report["reference_join_post_teacher_network_structural_extra_counts"] == {
-        "tl_logic_count": 6,
-        "tls_controlled_connection_count": 10,
-        "traffic_light_junction_count": 9,
-        "walkingarea_edge_count": 5,
+        "walkingarea_edge_count": 2,
     }
     assert report["post_teacher_tls_low_vehicle_control_status"] == "pass"
     assert report["post_teacher_tls_low_vehicle_control_reference_promotion_status"] == "pass"
@@ -1449,6 +1472,11 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert report["post_teacher_tls_connection_repair_movement_rebuild_max_gap_count"] == 3
     assert report["post_teacher_tls_connection_repair_movement_rebuild_queue_file"] == str(
         tmp_path / "post_repair_movement_queue.json"
+    )
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_run_status"] == "pass"
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status"] == "pass"
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_best_variant_file"] == str(
+        post_repair_movement_composite_net
     )
 
 

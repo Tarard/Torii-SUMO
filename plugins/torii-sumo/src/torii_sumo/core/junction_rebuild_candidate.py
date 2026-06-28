@@ -448,6 +448,11 @@ def write_teacher_connection_plan(
         ):
             removed += 1
             continue
+        if child.tag == "crossing" and present_candidate_edges is not None:
+            crossing_edges = set(_split(child.attrib.get("edges", "")))
+            if crossing_edges and not crossing_edges <= present_candidate_edges:
+                removed += 1
+                continue
         if child.tag == "crossing" and child.attrib.get("node") == junction_id:
             removed += 1
             continue
