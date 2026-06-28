@@ -1,7 +1,11 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant, build_tls_signal_grouping_variant
+from torii_sumo.core.tls_aggregation import (
+    build_tls_aggregation_variant,
+    build_tls_low_vehicle_control_variant,
+    build_tls_signal_grouping_variant,
+)
 
 
 def _command_path(command: list[str], option: str, cwd: Path) -> Path:
@@ -179,6 +183,96 @@ def test_build_tls_aggregation_variant_demotes_traffic_light_junctions_without_c
     assert report["tls_uncontrolled_tllogic_removed_count"] == 1
     assert report["tls_aggregated_traffic_light_junction_count"] == 1
     assert report["tls_aggregated_tl_logic_count"] == 1
+
+
+def test_build_tls_low_vehicle_control_variant_demotes_review_queue_entries(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text(
+        """<net>
+  <junction id="keep" type="traffic_light"/>
+  <junction id="drop" type="traffic_light"/>
+  <edge id=":keep_0" function="internal"><lane id=":keep_0_0" index="0"/></edge>
+  <edge id=":drop_0" function="internal"><lane id=":drop_0_0" index="0"/></edge>
+  <tlLogic id="tlKeep" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <tlLogic id="tlDrop" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="tlKeep" linkIndex="0" via=":keep_0_0"/>
+  <connection from="c" to="d" tl="tlDrop" linkIndex="0" linkIndex2="4" via=":drop_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_low_vehicle_control_variant(
+        source_net_file=net_file,
+        tls_control_review_queue=[
+            {
+                "repair_category": "tls_reality_review",
+                "review_type": "downgrade_low_vehicle_approach_tls",
+                "tl_id": "tlDrop",
+                "controlled_connection_count": 1,
+                "controlled_passenger_from_edge_count": 1,
+            }
+        ],
+        output_dir=tmp_path / "low_vehicle",
+        max_removed_controlled_connections=1,
+    )
+
+    root = ET.parse(report["tls_low_vehicle_control_variant_file"]).getroot()
+    dropped_connection = next(conn for conn in root.findall("connection") if conn.attrib.get("from") == "c")
+
+    assert report["status"] == "pass"
+    assert report["tls_low_vehicle_control_status"] == "variant_created_for_review"
+    assert report["tls_low_vehicle_control_selected_tllogic_count"] == 1
+    assert report["tls_low_vehicle_control_removed_connection_count"] == 1
+    assert root.find("tlLogic[@id='tlDrop']") is None
+    assert root.find("tlLogic[@id='tlKeep']") is not None
+    assert root.find("junction[@id='drop']").attrib["type"] == "priority"
+    assert root.find("junction[@id='keep']").attrib["type"] == "traffic_light"
+    assert "tl" not in dropped_connection.attrib
+    assert "linkIndex" not in dropped_connection.attrib
+    assert "linkIndex2" not in dropped_connection.attrib
+
+
+def test_build_tls_low_vehicle_control_variant_respects_selected_tllogic_limit(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text(
+        """<net>
+  <junction id="first" type="traffic_light"/>
+  <junction id="second" type="traffic_light"/>
+  <edge id=":first_0" function="internal"><lane id=":first_0_0" index="0"/></edge>
+  <edge id=":second_0" function="internal"><lane id=":second_0_0" index="0"/></edge>
+  <tlLogic id="tlFirst" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <tlLogic id="tlSecond" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="tlFirst" linkIndex="0" via=":first_0_0"/>
+  <connection from="c" to="d" tl="tlSecond" linkIndex="0" via=":second_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_low_vehicle_control_variant(
+        source_net_file=net_file,
+        tls_control_review_queue=[
+            {
+                "review_type": "downgrade_low_vehicle_approach_tls",
+                "tl_id": "tlFirst",
+                "controlled_connection_count": 1,
+                "controlled_passenger_from_edge_count": 1,
+            },
+            {
+                "review_type": "downgrade_low_vehicle_approach_tls",
+                "tl_id": "tlSecond",
+                "controlled_connection_count": 1,
+                "controlled_passenger_from_edge_count": 2,
+            },
+        ],
+        output_dir=tmp_path / "low_vehicle",
+        max_selected_tllogic_count=1,
+    )
+
+    root = ET.parse(report["tls_low_vehicle_control_variant_file"]).getroot()
+
+    assert report["tls_low_vehicle_control_selected_tllogic_count"] == 1
+    assert root.find("tlLogic[@id='tlFirst']") is None
+    assert root.find("tlLogic[@id='tlSecond']") is not None
 
 
 def test_build_tls_aggregation_variant_deduplicates_representatives_in_tls_set(tmp_path: Path) -> None:

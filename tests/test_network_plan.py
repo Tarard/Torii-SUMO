@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.network_permissions import apply_service_passenger_permissions
 from torii_sumo.core.network_plan import derive_network_plan
 from torii_sumo.core.osm_workflow import (
+    _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
@@ -86,6 +87,37 @@ def test_reference_delta_promotion_prefers_candidate_with_lower_tls_semantic_sco
     assert decision["reason"] == "tls_aggregation_promoted_by_reference_delta"
     assert decision["candidate_tls_semantic_delta_score"] == 211
     assert decision["baseline_tls_semantic_delta_score"] == 394
+
+
+def test_low_vehicle_control_candidate_limits_include_tls_count_fallback() -> None:
+    limits = _low_vehicle_control_candidate_limits(
+        {
+            "network_structural_extra_counts": {
+                "tl_logic_count": 41,
+                "traffic_light_junction_count": 46,
+            },
+            "tls_control_review_queue": [
+                {
+                    "review_type": "downgrade_low_vehicle_approach_tls",
+                    "tl_id": str(index),
+                }
+                for index in range(60)
+            ],
+        }
+    )
+
+    assert limits == [
+        {
+            "label": "tls10",
+            "max_removed_controlled_connections": None,
+            "max_selected_tllogic_count": 10,
+        },
+        {
+            "label": "tls20",
+            "max_removed_controlled_connections": None,
+            "max_selected_tllogic_count": 20,
+        },
+    ]
 
 
 def test_network_plan_blocks_when_layers_and_reference_are_missing() -> None:
@@ -1160,6 +1192,7 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
     _write_reference_net(reference_net_file)
     filtered_osm = tmp_path / "osm" / "reference-delta_filtered.osm.xml.gz"
     best_visual_tls_net_file = tmp_path / "reference_visual_detail_tls_aggregation_guess20" / "tls_aggregated.net.xml"
+    low_vehicle_net_file = tmp_path / "reference_visual_detail_tls_low_vehicle_control" / "tls_low_vehicle_control_review.net.xml"
     calls: dict[str, object] = {}
 
     def fake_build(**kwargs):
@@ -1221,9 +1254,9 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
         if "tls_aggregation_reference_delta" in output_dir:
             calls.setdefault("aggregation_delta_candidate_net_files", []).append(kwargs["candidate_net_file"])
             score_counts = (
-                {"traffic_light_junction_count": 30}
+                {"traffic_light_junction_count": 30, "tls_controlled_connection_count": 77}
                 if "guess20" in str(candidate_net_file.parent)
-                else {"traffic_light_junction_count": 46}
+                else {"traffic_light_junction_count": 300}
             )
             return {
                 "status": "pass",
@@ -1234,6 +1267,17 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
                 "network_structural_extra_counts": score_counts,
                 "network_structural_junction_type_missing_counts": {},
                 "network_structural_junction_type_extra_counts": {"traffic_light": score_counts["traffic_light_junction_count"]},
+                "tls_control_review_queue": [
+                    {
+                        "repair_category": "tls_reality_review",
+                        "review_type": "downgrade_low_vehicle_approach_tls",
+                        "tl_id": "lowTls",
+                        "controlled_connection_count": 77,
+                        "controlled_passenger_from_edge_count": 1,
+                    }
+                ]
+                if "guess20" in str(candidate_net_file.parent)
+                else [],
                 "summary_file": str(tmp_path / "aggregation_delta.json"),
                 "warnings": [],
             }
@@ -1264,6 +1308,20 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
                 "network_structural_junction_type_extra_counts": {"traffic_light": 30},
                 "warnings": [],
             }
+        if candidate_net_file == low_vehicle_net_file:
+            calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_delta_status": "fail",
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 90},
+                "network_structural_extra_counts": {"traffic_light_junction_count": 5},
+                "network_structural_junction_type_missing_counts": {},
+                "network_structural_junction_type_extra_counts": {"traffic_light": 5},
+                "summary_file": str(tmp_path / "low_vehicle_delta.json"),
+                "warnings": [],
+            }
         calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
         return {
             "status": "pass",
@@ -1277,6 +1335,27 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
             "warnings": [],
         }
 
+    def fake_low_vehicle_control(**kwargs):
+        calls["low_vehicle_source_net_file"] = kwargs["source_net_file"]
+        calls.setdefault("low_vehicle_budgets", []).append(kwargs["max_removed_controlled_connections"])
+        calls.setdefault("low_vehicle_max_selected_counts", []).append(kwargs["max_selected_tllogic_count"])
+        calls.setdefault("low_vehicle_queue_counts", []).append(len(kwargs["tls_control_review_queue"]))
+        low_vehicle_net_file.parent.mkdir(parents=True, exist_ok=True)
+        low_vehicle_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_low_vehicle_control_status": "variant_created_for_review",
+            "tls_low_vehicle_control_variant_file": str(low_vehicle_net_file),
+            "tls_low_vehicle_control_selected_tllogic_count": 1,
+            "tls_low_vehicle_control_removed_connection_count": 77,
+            "warnings": [],
+        }
+
+    def fake_command_runner(command, **_kwargs):
+        calls["low_vehicle_sumo_command"] = command
+        return {"status": "pass", "returncode": 0, "stdout": "", "stderr": ""}
+
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
         output_dir=tmp_path,
@@ -1286,6 +1365,8 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
         build_func=fake_build,
         tls_audit_func=fake_tls,
         tls_aggregation_func=fake_tls_aggregation,
+        tls_low_vehicle_control_func=fake_low_vehicle_control,
+        command_runner=fake_command_runner,
         tls_connection_repair_func=lambda **_kwargs: (_ for _ in ()).throw(
             AssertionError("reference-delta promotion should skip TLS repair")
         ),
@@ -1334,13 +1415,21 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
     assert calls["tls_aggregation_guess_signal_dists"] == [35.0, 20.0, None]
     assert best_visual_tls_net_file in [Path(str(path)) for path in calls["aggregation_delta_candidate_net_files"]]
     assert calls["raw_delta_candidate_net_file"] == raw_visual_detail_net_file
-    assert calls["reference_join_candidate_net_file"] == best_visual_tls_net_file
-    assert report["reference_visual_detail_comparison_net_file"] == str(best_visual_tls_net_file)
-    assert report["reference_visual_detail_comparison_selection_reason"] == "tls_aggregation_promoted_by_reference_delta"
+    assert calls["low_vehicle_source_net_file"] == best_visual_tls_net_file
+    assert 77 in calls["low_vehicle_budgets"]
+    assert calls["low_vehicle_queue_counts"] == [1, 1]
+    assert calls["reference_join_candidate_net_file"] == low_vehicle_net_file
+    assert report["reference_visual_detail_comparison_net_file"] == str(low_vehicle_net_file)
+    assert report["reference_visual_detail_comparison_selection_reason"] == (
+        "tls_low_vehicle_control_promoted_by_reference_delta"
+    )
     assert report["reference_visual_detail_tls_aggregation_reference_promotion_status"] == "pass"
-    assert report["reference_visual_detail_tls_aggregation_reference_tls_semantic_delta_score"] == 120
+    assert report["reference_visual_detail_tls_aggregation_reference_tls_semantic_delta_score"] == 197
+    assert report["reference_visual_detail_tls_low_vehicle_control_reference_promotion_status"] == "pass"
+    assert report["reference_visual_detail_tls_low_vehicle_control_reference_tls_semantic_delta_score"] == 95
+    assert report["reference_visual_detail_tls_low_vehicle_control_sumo_load_status"] == "pass"
     assert report["reference_visual_detail_raw_reference_tls_semantic_delta_score"] == 394
-    assert report["reference_join_tls_semantic_delta_score"] == 120
+    assert report["reference_join_tls_semantic_delta_score"] == 95
     assert report["reference_visual_detail_tls_aggregation_candidate_count"] == 3
 
 
