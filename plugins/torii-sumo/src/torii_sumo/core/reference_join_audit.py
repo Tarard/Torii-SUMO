@@ -249,10 +249,68 @@ def _structural_only_report(
         candidate_network_structural_summary,
     )
     tls_control_review = _tls_control_review(reference_network_structural_summary, candidate_network_structural_summary)
+    pattern_junction_ids, pattern_sample_warning = _structural_only_pattern_junction_ids(
+        reference_net_file,
+        candidate_net_file,
+        limit=5,
+    )
+    pattern_warnings = []
+    try:
+        junction_pattern_index = extract_junction_pattern_index(reference_net_file, junction_ids=pattern_junction_ids)
+    except (KeyError, TypeError, ValueError) as exc:
+        junction_pattern_index = []
+        pattern_warnings.append(f"junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    try:
+        candidate_junction_pattern_index = extract_junction_pattern_index(
+            candidate_net_file,
+            junction_ids=pattern_junction_ids,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        candidate_junction_pattern_index = []
+        pattern_warnings.append(f"candidate junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    junction_pattern_comparisons = _compare_same_id_patterns(
+        junction_pattern_index,
+        candidate_junction_pattern_index,
+    )
+    junction_pattern_mismatch_count = sum(
+        1 for comparison in junction_pattern_comparisons if comparison["status"] != "pass"
+    )
+    junction_pattern_mismatch_field_counts = dict(
+        Counter(
+            field
+            for comparison in junction_pattern_comparisons
+            for field in comparison.get("mismatch_fields", [])
+        )
+    )
+    junction_pattern_templates = summarize_junction_pattern_templates(junction_pattern_index)
+    candidate_junction_pattern_templates = summarize_junction_pattern_templates(candidate_junction_pattern_index)
+    reference_structural_signature_summary = _structural_signature_summary(junction_pattern_index)
+    candidate_structural_signature_summary = _structural_signature_summary(candidate_junction_pattern_index)
+    junction_structural_signature_delta = _structural_signature_delta(
+        reference_structural_signature_summary,
+        candidate_structural_signature_summary,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
+    junction_pattern_comparisons_file = output_dir / f"{prefix}_junction_pattern_comparisons.csv"
+    junction_pattern_templates_file = output_dir / f"{prefix}_junction_pattern_templates.json"
     summary_file = output_dir / f"{prefix}_reference_join_audit.json"
+    _write_junction_pattern_comparisons_csv(junction_pattern_comparisons_file, junction_pattern_comparisons)
+    junction_pattern_templates_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "reference_net_file": str(reference_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "reference_templates": junction_pattern_templates,
+                "candidate_templates": candidate_junction_pattern_templates,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     report = {
         "status": "pass",
         "claim_status": "diagnostic-demo",
@@ -271,15 +329,17 @@ def _structural_only_report(
         "reference_type_counts": {},
         "learned_rule_counts": {},
         "pattern_stats": {},
-        "junction_pattern_index": [],
-        "candidate_junction_pattern_index": [],
-        "junction_pattern_comparison_status": "skipped",
-        "junction_pattern_mismatch_count": 0,
-        "junction_pattern_mismatch_field_counts": {},
-        "junction_structural_signature_status": "skipped",
-        "junction_structural_signature_missing_counts": {},
-        "reference_structural_signature_summary": {},
-        "candidate_structural_signature_summary": {},
+        "junction_pattern_index": junction_pattern_index,
+        "candidate_junction_pattern_index": candidate_junction_pattern_index,
+        "junction_pattern_comparison_status": "fail"
+        if junction_pattern_mismatch_count
+        else ("pass" if junction_pattern_comparisons else "skipped"),
+        "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+        "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+        "junction_structural_signature_status": junction_structural_signature_delta["status"],
+        "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
+        "reference_structural_signature_summary": reference_structural_signature_summary,
+        "candidate_structural_signature_summary": candidate_structural_signature_summary,
         "network_structural_delta_status": network_structural_delta["status"],
         "network_structural_missing_counts": network_structural_delta["missing_counts"],
         "network_structural_extra_counts": network_structural_delta["extra_counts"],
@@ -290,18 +350,20 @@ def _structural_only_report(
         "tls_control_review_queue": tls_control_review["queue"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
-        "junction_pattern_comparisons": [],
-        "junction_pattern_templates": [],
-        "candidate_junction_pattern_templates": [],
-        "junction_pattern_comparisons_file": "",
-        "junction_pattern_templates_file": "",
+        "junction_pattern_comparisons": junction_pattern_comparisons,
+        "junction_pattern_templates": junction_pattern_templates,
+        "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
+        "junction_pattern_comparisons_file": str(junction_pattern_comparisons_file),
+        "junction_pattern_templates_file": str(junction_pattern_templates_file),
         "junction_teacher_delta_file": str(junction_teacher_delta_file),
         "cases_file": "",
         "summary_file": str(summary_file),
         "candidate_topology_audit_file": "",
         "matched_cases": [],
         "all_cases": [],
-        "warnings": ["reference join audit ran in structural-only mode; full case matching was skipped"],
+        "warnings": ["reference join audit ran in structural-only mode; full case matching was skipped"]
+        + ([pattern_sample_warning] if pattern_sample_warning else [])
+        + pattern_warnings,
     }
     junction_teacher_delta_file.write_text(
         json.dumps(
@@ -310,6 +372,11 @@ def _structural_only_report(
                 "audit_mode": "structural_only",
                 "reference_net_file": str(reference_net_file),
                 "candidate_net_file": str(candidate_net_file),
+                "junction_pattern_comparison_status": report["junction_pattern_comparison_status"],
+                "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+                "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+                "junction_structural_signature_status": junction_structural_signature_delta["status"],
+                "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
                 "network_structural_delta_status": network_structural_delta["status"],
                 "network_structural_missing_counts": network_structural_delta["missing_counts"],
                 "network_structural_extra_counts": network_structural_delta["extra_counts"],
@@ -324,7 +391,7 @@ def _structural_only_report(
                 "tls_control_review_queue": tls_control_review["queue"],
                 "reference_network_structural_summary": reference_network_structural_summary,
                 "candidate_network_structural_summary": candidate_network_structural_summary,
-                "junction_pattern_comparisons": [],
+                "junction_pattern_comparisons": junction_pattern_comparisons,
                 "matched_cases": [],
             },
             indent=2,
@@ -334,6 +401,46 @@ def _structural_only_report(
     )
     summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
+
+
+def _structural_only_pattern_junction_ids(
+    reference_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    limit: int,
+) -> tuple[list[str], str]:
+    reference = _junction_pattern_candidates(reference_net_file)
+    candidate = _junction_pattern_candidates(candidate_net_file)
+    common_ids = sorted(set(reference) & set(candidate))
+    ranked = sorted(
+        common_ids,
+        key=lambda junction_id: (
+            not (reference[junction_id]["is_tls"] or candidate[junction_id]["is_tls"]),
+            -max(reference[junction_id]["inc_lane_count"], candidate[junction_id]["inc_lane_count"]),
+            junction_id,
+        ),
+    )
+    warning = ""
+    if len(ranked) > limit:
+        warning = (
+            f"structural-only junction pattern comparison sampled {limit} of {len(ranked)} common junction ids; "
+            "full topology matching was skipped"
+        )
+    return ranked[:limit], warning
+
+
+def _junction_pattern_candidates(net_file: Path) -> dict[str, dict[str, Any]]:
+    root = ET.parse(net_file).getroot()
+    candidates: dict[str, dict[str, Any]] = {}
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if not junction_id or junction_id.startswith(":") or junction.attrib.get("type") == "internal":
+            continue
+        candidates[junction_id] = {
+            "is_tls": junction.attrib.get("type") == "traffic_light",
+            "inc_lane_count": len(junction.attrib.get("incLanes", "").split()),
+        }
+    return candidates
 
 
 def _failure(error: str) -> dict[str, Any]:

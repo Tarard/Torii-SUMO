@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 import xml.etree.ElementTree as ET
 
 
@@ -140,8 +140,10 @@ def extract_junction_pattern_index(
     *,
     min_approaches: int = 3,
     max_approaches: int = 4,
+    junction_ids: Iterable[str] | None = None,
 ) -> list[dict[str, Any]]:
     root = ET.parse(net_file).getroot()
+    allowed_junction_ids = set(junction_ids) if junction_ids is not None else None
     tl_by_id = {tl.attrib["id"]: tl for tl in root.findall("tlLogic") if tl.attrib.get("id")}
     lane_to_edge_id = {
         lane.attrib["id"]: edge.attrib["id"]
@@ -154,6 +156,8 @@ def extract_junction_pattern_index(
     for junction in root.findall("junction"):
         junction_id = junction.attrib.get("id", "")
         if not junction_id or junction_id.startswith(":") or junction.attrib.get("type") == "internal":
+            continue
+        if allowed_junction_ids is not None and junction_id not in allowed_junction_ids:
             continue
         incoming_edge_ids = {
             edge_id
