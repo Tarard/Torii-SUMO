@@ -938,7 +938,7 @@ def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_
     assert candidate["uncopyable_missing_teacher_edge_ids"] == []
 
 
-def test_build_teacher_guided_repair_queue_leaves_endpoint_mismatched_approach_copyable(tmp_path: Path) -> None:
+def test_build_teacher_guided_repair_queue_scopes_endpoint_mismatched_approach_copyable(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
         """<net>
@@ -971,13 +971,24 @@ def test_build_teacher_guided_repair_queue_leaves_endpoint_mismatched_approach_c
     )
 
     candidate = report["repair_candidates"][0]
-    assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+    assert report["ready_candidate_count"] == 0
+    assert report["expanded_scope_candidate_count"] == 1
+    assert candidate["candidate_status"] == "needs_expanded_rebuild_scope"
     assert candidate["edge_map"] == {"teacher_in": "cand_in"}
     assert candidate["missing_teacher_edge_ids"] == ["teacher_out"]
     assert candidate["copyable_missing_teacher_edge_ids"] == ["teacher_out"]
     assert candidate["uncopyable_missing_teacher_edge_ids"] == []
     assert candidate["approach_endpoint_rebuild_plan"]["mismatch_count"] == 1
     assert candidate["approach_endpoint_rebuild_plan"]["affected_neighbor_junction_ids"] == ["c", "e"]
+    assert candidate["expanded_rebuild_scope"] == {
+        "status": "review",
+        "recommended_action": "rebuild_plain_xml_scope",
+        "core_junction_id": "cluster_a_b",
+        "junction_ids": ["c", "cluster_a_b", "e"],
+        "blocked_teacher_edge_ids": [],
+        "missing_desired_endpoint_ids": ["e"],
+        "reason": "approach endpoints differ; rebuild expanded scope before teacher movement replay",
+    }
 
 
 def test_build_teacher_guided_repair_queue_scopes_missing_joined_candidate_junction(tmp_path: Path) -> None:
