@@ -497,6 +497,10 @@ def _should_run_tls_aggregation(
     return clusters_file.exists() or tls_aggregation_func is not build_tls_aggregation_variant
 
 
+def _tls_aggregation_preserves_controlled_connections(report: Mapping[str, Any]) -> bool:
+    return str(report.get("tls_controlled_connection_preservation_status", "pass")) != "fail"
+
+
 def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | None) -> dict[str, Any]:
     if topology_audit_report is None:
         return {
@@ -1020,7 +1024,11 @@ def run_osm_cleanup_workflow(
             timeout_seconds=timeout_seconds,
         )
         tls_variant_value = tls_aggregation_report.get("tls_aggregation_variant_file", "") if tls_aggregation_report else ""
-        if tls_aggregation_report.get("status") == "pass" and tls_variant_value:
+        if (
+            tls_aggregation_report.get("status") == "pass"
+            and tls_variant_value
+            and _tls_aggregation_preserves_controlled_connections(tls_aggregation_report)
+        ):
             candidate_tls_net_file = Path(str(tls_variant_value))
             if candidate_tls_net_file.exists():
                 net_file = candidate_tls_net_file
@@ -1044,7 +1052,11 @@ def run_osm_cleanup_workflow(
             visual_tls_variant_value = reference_visual_detail_tls_aggregation_report.get(
                 "tls_aggregation_variant_file", ""
             )
-            if reference_visual_detail_tls_aggregation_report.get("status") == "pass" and visual_tls_variant_value:
+            if (
+                reference_visual_detail_tls_aggregation_report.get("status") == "pass"
+                and visual_tls_variant_value
+                and _tls_aggregation_preserves_controlled_connections(reference_visual_detail_tls_aggregation_report)
+            ):
                 candidate_visual_tls_net_file = Path(str(visual_tls_variant_value))
                 if candidate_visual_tls_net_file.exists():
                     reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
@@ -1495,6 +1507,18 @@ def run_osm_cleanup_workflow(
         "tls_aggregated_tl_logic_count": ""
         if tls_aggregation_report is None
         else tls_aggregation_report.get("tls_aggregated_tl_logic_count", ""),
+        "tls_aggregated_controlled_connection_count": ""
+        if tls_aggregation_report is None
+        else tls_aggregation_report.get("tls_aggregated_controlled_connection_count", ""),
+        "tls_aggregated_tl_connection_missing_linkindex_count": ""
+        if tls_aggregation_report is None
+        else tls_aggregation_report.get("tls_aggregated_tl_connection_missing_linkindex_count", ""),
+        "tls_controlled_connection_preservation_status": "skipped"
+        if tls_aggregation_report is None
+        else str(tls_aggregation_report.get("tls_controlled_connection_preservation_status", "pass")),
+        "tls_controlled_connection_regression_count": 0
+        if tls_aggregation_report is None
+        else tls_aggregation_report.get("tls_controlled_connection_regression_count", 0),
         "connectivity_status": connectivity_report.get("connectivity_status", connectivity_report.get("status", "fail")),
         "raw_connectivity_status": raw_connectivity_report.get("connectivity_status", raw_connectivity_report.get("status", "fail")),
         "strict_connectivity_status": connectivity_quality["strict_connectivity_status"],
@@ -1824,6 +1848,20 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_aggregated_tl_logic_count": ""
         if reference_visual_detail_tls_aggregation_report is None
         else reference_visual_detail_tls_aggregation_report.get("tls_aggregated_tl_logic_count", ""),
+        "reference_visual_detail_tls_aggregated_controlled_connection_count": ""
+        if reference_visual_detail_tls_aggregation_report is None
+        else reference_visual_detail_tls_aggregation_report.get("tls_aggregated_controlled_connection_count", ""),
+        "reference_visual_detail_tls_aggregated_tl_connection_missing_linkindex_count": ""
+        if reference_visual_detail_tls_aggregation_report is None
+        else reference_visual_detail_tls_aggregation_report.get("tls_aggregated_tl_connection_missing_linkindex_count", ""),
+        "reference_visual_detail_tls_controlled_connection_preservation_status": "skipped"
+        if reference_visual_detail_tls_aggregation_report is None
+        else str(
+            reference_visual_detail_tls_aggregation_report.get("tls_controlled_connection_preservation_status", "pass")
+        ),
+        "reference_visual_detail_tls_controlled_connection_regression_count": 0
+        if reference_visual_detail_tls_aggregation_report is None
+        else reference_visual_detail_tls_aggregation_report.get("tls_controlled_connection_regression_count", 0),
         "reference_visual_detail_netedit_status": reference_visual_detail_netedit_report.get("netedit_status", "not_started"),
         "reference_visual_detail_netedit_network_file": reference_visual_detail_netedit_report.get("netedit_network_file", ""),
         "sumo_gui_status": sumo_gui_report.get("sumo_gui_status", "failed"),

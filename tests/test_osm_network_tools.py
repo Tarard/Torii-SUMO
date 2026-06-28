@@ -1616,6 +1616,10 @@ def test_osm_cleanup_workflow_uses_tls_aggregation_variant_for_downstream_checks
             "tls_aggregation_variant_file": str(tls_net),
             "tls_aggregated_traffic_light_junction_count": 2,
             "tls_aggregated_tl_logic_count": 2,
+            "tls_aggregated_controlled_connection_count": 9,
+            "tls_aggregated_tl_connection_missing_linkindex_count": 1,
+            "tls_controlled_connection_preservation_status": "pass",
+            "tls_controlled_connection_regression_count": 0,
             "warnings": ["TLS aggregation variant requires Google Maps and Netedit review before adoption"],
         }
 
@@ -1690,6 +1694,10 @@ def test_osm_cleanup_workflow_uses_tls_aggregation_variant_for_downstream_checks
     assert report["tls_aggregation_status"] == "variant_created_for_review"
     assert report["tls_aggregation_variant_file"] == str(tls_net)
     assert report["tls_aggregated_tl_logic_count"] == 2
+    assert report["tls_aggregated_controlled_connection_count"] == 9
+    assert report["tls_aggregated_tl_connection_missing_linkindex_count"] == 1
+    assert report["tls_controlled_connection_preservation_status"] == "pass"
+    assert report["tls_controlled_connection_regression_count"] == 0
     assert report["gate_status"]["tls_reality_audit"] == "blocked"
 
 

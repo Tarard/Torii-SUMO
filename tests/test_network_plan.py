@@ -739,6 +739,10 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
             "tls_aggregation_variant_file": str(visual_tls_net_file),
             "tls_aggregated_traffic_light_junction_count": 2,
             "tls_aggregated_tl_logic_count": 2,
+            "tls_aggregated_controlled_connection_count": 7,
+            "tls_aggregated_tl_connection_missing_linkindex_count": 1,
+            "tls_controlled_connection_preservation_status": "pass",
+            "tls_controlled_connection_regression_count": 0,
             "warnings": ["TLS aggregation variant requires Google Maps and Netedit review before adoption"],
         }
 
@@ -817,6 +821,138 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
     assert report["reference_visual_detail_comparison_net_file"] == str(visual_tls_net_file)
     assert report["reference_visual_detail_tls_aggregation_status"] == "variant_created_for_review"
     assert report["reference_visual_detail_tls_aggregated_tl_logic_count"] == 2
+    assert report["reference_visual_detail_tls_aggregated_controlled_connection_count"] == 7
+    assert report["reference_visual_detail_tls_aggregated_tl_connection_missing_linkindex_count"] == 1
+    assert report["reference_visual_detail_tls_controlled_connection_preservation_status"] == "pass"
+    assert report["reference_visual_detail_tls_controlled_connection_regression_count"] == 0
+
+
+def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation_loses_controlled_connections(
+    tmp_path: Path,
+) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-regression_filtered.osm.xml.gz"
+    visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
+    calls: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_tls(**kwargs):
+        if "reference_visual_detail" in Path(kwargs["net_file"]).name:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "tls_candidate_count": 4,
+                "tls_cluster_count": 2,
+                "clusters_file": str(tmp_path / "visual_tls_clusters.csv"),
+                "warnings": [],
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**_kwargs):
+        visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
+        visual_tls_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_aggregation_variant_file": str(visual_tls_net_file),
+            "tls_controlled_connection_preservation_status": "fail",
+            "tls_controlled_connection_regression_count": 12,
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**kwargs):
+        calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "structural_only",
+            "reference_case_count": 0,
+            "matched_case_count": 0,
+            "unmatched_case_count": 0,
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-regression",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        tls_aggregation_func=fake_tls_aggregation,
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 100,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 100,
+            "warnings": [],
+        },
+        topology_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "topology_fragmentation_status": "pass",
+            "warnings": [],
+        },
+        routeability_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        reference_join_audit_func=fake_reference_join_audit,
+        reference_join_aggregation_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("structural-only audit should not trigger aggregation")
+        ),
+        teacher_guided_repair_queue_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("structural-only audit should not trigger teacher queue")
+        ),
+    )
+
+    raw_visual_detail_net_file = tmp_path / "sumo" / "reference-regression_reference_visual_detail.net.xml"
+    assert calls["reference_join_candidate_net_file"] == raw_visual_detail_net_file
+    assert report["reference_visual_detail_comparison_net_file"] == str(raw_visual_detail_net_file)
+    assert report["reference_visual_detail_tls_controlled_connection_preservation_status"] == "fail"
+    assert report["reference_visual_detail_tls_controlled_connection_regression_count"] == 12
 
 
 def test_reference_matched_workflow_runs_reference_scope_audit_without_default_pruning_variant(tmp_path: Path) -> None:

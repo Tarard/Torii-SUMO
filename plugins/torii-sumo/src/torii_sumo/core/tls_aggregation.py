@@ -118,6 +118,9 @@ def build_tls_aggregation_variant(
         "--tls.discard-loaded",
         "--tls.set",
         ",".join(representative_node_ids),
+        "--tls.join",
+        "--tls.join-dist",
+        "35",
         "--tls.default-type",
         "actuated",
         "--output-file",
@@ -140,6 +143,7 @@ def build_tls_aggregation_variant(
         _preserve_compatible_tls_programs(net_file, variant_file, representatives) if status == "pass" else _empty_preservation()
     )
     counts = _tls_counts(variant_file) if variant_file.exists() else {}
+    tls_connection_preservation = _tls_connection_preservation(source_tls_counts, counts) if status == "pass" else {}
     warnings = ["TLS aggregation variant requires Google Maps and Netedit review before adoption"]
     if source_tls_counts["source_tl_logic_count"] and not tls_program_preservation["tls_program_preserved_count"]:
         warnings.append(
@@ -148,6 +152,12 @@ def build_tls_aggregation_variant(
         )
     elif tls_program_preservation["tls_program_skipped_count"]:
         warnings.append("Some source tlLogic programs were not compatible with the rebuilt TLS link state length")
+    if tls_connection_preservation.get("tls_controlled_connection_preservation_status") == "fail":
+        warnings.append(
+            "TLS aggregation lost "
+            f"{tls_connection_preservation['tls_controlled_connection_regression_count']} controlled TLS connections; "
+            "keep the source network for TLS parity review"
+        )
     if status != "pass":
         warnings.append(f"TLS aggregation variant was not created: {variant_file}")
     return {
@@ -165,6 +175,7 @@ def build_tls_aggregation_variant(
         **source_tls_counts,
         **tls_program_preservation,
         **counts,
+        **tls_connection_preservation,
         "warnings": warnings,
     }
 
@@ -246,11 +257,14 @@ def _write_representatives_csv(path: Path, rows: list[dict[str, str]]) -> None:
 
 def _tls_counts(net_file: Path) -> dict[str, int]:
     root = ET.parse(net_file).getroot()
+    connection_counts = _tls_connection_counts(root)
     return {
         "tls_aggregated_traffic_light_junction_count": sum(
             1 for junction in root.findall("junction") if junction.attrib.get("type") == "traffic_light"
         ),
         "tls_aggregated_tl_logic_count": len(root.findall("tlLogic")),
+        "tls_aggregated_controlled_connection_count": connection_counts["controlled"],
+        "tls_aggregated_tl_connection_missing_linkindex_count": connection_counts["missing_linkindex"],
     }
 
 
@@ -315,6 +329,7 @@ def _source_tls_program_counts(net_file: Path) -> dict[str, int]:
     root = ET.parse(net_file).getroot()
     tl_logics = root.findall("tlLogic")
     phases = [phase for tl_logic in tl_logics for phase in tl_logic.findall("phase")]
+    connection_counts = _tls_connection_counts(root)
     return {
         "source_tl_logic_count": len(tl_logics),
         "source_actuated_tl_logic_count": sum(1 for tl_logic in tl_logics if tl_logic.attrib.get("type") == "actuated"),
@@ -322,6 +337,26 @@ def _source_tls_program_counts(net_file: Path) -> dict[str, int]:
         "source_tls_phase_with_minmax_count": sum(
             1 for phase in phases if phase.attrib.get("minDur") or phase.attrib.get("maxDur")
         ),
+        "source_tls_controlled_connection_count": connection_counts["controlled"],
+        "source_tl_connection_missing_linkindex_count": connection_counts["missing_linkindex"],
+    }
+
+
+def _tls_connection_counts(root: ET.Element) -> dict[str, int]:
+    connections = [connection for connection in root.findall("connection") if connection.attrib.get("tl")]
+    return {
+        "controlled": sum(1 for connection in connections if connection.attrib.get("linkIndex")),
+        "missing_linkindex": sum(1 for connection in connections if not connection.attrib.get("linkIndex")),
+    }
+
+
+def _tls_connection_preservation(source_counts: Mapping[str, int], variant_counts: Mapping[str, int]) -> dict[str, int | str]:
+    source_controlled = int(source_counts.get("source_tls_controlled_connection_count", 0) or 0)
+    variant_controlled = int(variant_counts.get("tls_aggregated_controlled_connection_count", 0) or 0)
+    regression = max(0, source_controlled - variant_controlled)
+    return {
+        "tls_controlled_connection_preservation_status": "fail" if regression else "pass",
+        "tls_controlled_connection_regression_count": regression,
     }
 
 
