@@ -104,6 +104,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "reference_join_junction_pattern_comparison_status": "fail",
             "reference_join_junction_pattern_mismatch_count": 4,
             "reference_join_junction_pattern_comparison_sample_count": 5,
+            "teacher_guided_repair_movement_gap_candidate_count": 1,
+            "teacher_guided_repair_max_vehicle_movement_matrix_missing_count": 12,
+            "teacher_guided_repair_missing_movement_plan_count": 2,
             "teacher_guided_repair_queue_file": str(repair_queue),
             "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
             "teacher_guided_repair_run_report_file": str(repair_run),
@@ -220,6 +223,10 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "reference_join_junction_pattern_comparison_status=fail" in html
     assert "reference_join_junction_pattern_mismatch_count=4" in html
     assert "reference_join_junction_pattern_comparison_sample_count=5" in html
+    assert "teacher_movement_plans" in html
+    assert "teacher_guided_repair_movement_gap_candidate_count=1" in html
+    assert "teacher_guided_repair_max_vehicle_movement_matrix_missing_count=12" in html
+    assert "teacher_guided_repair_missing_movement_plan_count=2" in html
     assert "modal_decision_counts" in html
     assert "modal_review_action_counts" in html
     assert "junction_aggregation_blocked_by_modal_count" in html
