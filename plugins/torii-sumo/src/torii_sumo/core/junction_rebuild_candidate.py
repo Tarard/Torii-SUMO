@@ -2658,12 +2658,10 @@ def _teacher_guided_repair_candidate(
         fallback_junction_ids=scope_node_ids,
     )
     candidate_status = "ready_for_teacher_guided_variant"
-    if uncopyable_missing:
-        candidate_status = (
-            "needs_expanded_rebuild_scope"
-            if expanded_rebuild_scope["status"] == "review"
-            else "edge_map_incomplete"
-        )
+    if expanded_rebuild_scope["status"] == "review":
+        candidate_status = "needs_expanded_rebuild_scope"
+    elif uncopyable_missing:
+        candidate_status = "edge_map_incomplete"
     teacher_parity = _teacher_parity_summary(teacher_model)
     candidate_parity = _teacher_parity_summary(candidate_model)
     missing_teacher_movement_plan = _missing_teacher_movement_plan(
@@ -2728,13 +2726,16 @@ def _expanded_rebuild_scope(
     blocked_teacher_edge_ids: list[str],
     fallback_junction_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    if not blocked_teacher_edge_ids:
-        return {"status": "pass", "recommended_action": "none", "junction_ids": []}
     if approach_endpoint_rebuild_plan.get("status") == "review":
         neighbor_ids = [
             str(item) for item in approach_endpoint_rebuild_plan.get("affected_neighbor_junction_ids", []) or []
         ]
         missing_ids = [str(item) for item in approach_endpoint_rebuild_plan.get("missing_desired_endpoint_ids", []) or []]
+        reason = (
+            "approach endpoints differ and at least one missing teacher edge cannot be copied safely"
+            if blocked_teacher_edge_ids
+            else "approach endpoints differ; rebuild expanded scope before teacher movement replay"
+        )
         return {
             "status": "review",
             "recommended_action": "rebuild_plain_xml_scope",
@@ -2742,8 +2743,10 @@ def _expanded_rebuild_scope(
             "junction_ids": sorted({core_junction_id, *neighbor_ids, *missing_ids}),
             "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
             "missing_desired_endpoint_ids": missing_ids,
-            "reason": "approach endpoints differ and at least one missing teacher edge cannot be copied safely",
+            "reason": reason,
         }
+    if not blocked_teacher_edge_ids:
+        return {"status": "pass", "recommended_action": "none", "junction_ids": []}
     fallback_ids = sorted({str(item) for item in fallback_junction_ids or [] if str(item)})
     if len(fallback_ids) < 2:
         return {"status": "pass", "recommended_action": "none", "junction_ids": []}
