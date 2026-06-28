@@ -207,6 +207,27 @@ def _evidence_rows(
         f"<td>{escape('; '.join(pattern_values) if pattern_values else 'no compact status supplied')}</td>"
         "</tr>"
     )
+    post_teacher_values = []
+    if "reference_join_post_teacher_junction_pattern_mismatch_count" in workflow_summary:
+        post_teacher_values.append(
+            "reference_join_post_teacher_junction_pattern_mismatch_count="
+            f"{workflow_summary['reference_join_post_teacher_junction_pattern_mismatch_count']}"
+        )
+    for label, key in (
+        ("missing", "reference_join_post_teacher_network_structural_missing_counts"),
+        ("extra", "reference_join_post_teacher_network_structural_extra_counts"),
+    ):
+        counts = workflow_summary.get(key, {}) or {}
+        if isinstance(counts, Mapping) and counts:
+            post_teacher_values.append(
+                f"{label}: " + ", ".join(f"{name}={value}" for name, value in sorted(counts.items()))
+            )
+    html_rows.append(
+        "<tr>"
+        "<td>reference_join_post_teacher</td>"
+        f"<td>{escape('; '.join(post_teacher_values) if post_teacher_values else 'no compact status supplied')}</td>"
+        "</tr>"
+    )
     movement_values = []
     for key in (
         "teacher_guided_repair_movement_gap_candidate_count",

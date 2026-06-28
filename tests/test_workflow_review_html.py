@@ -104,6 +104,14 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "reference_join_junction_pattern_comparison_status": "fail",
             "reference_join_junction_pattern_mismatch_count": 4,
             "reference_join_junction_pattern_comparison_sample_count": 5,
+            "reference_join_post_teacher_junction_pattern_mismatch_count": 2,
+            "reference_join_post_teacher_network_structural_missing_counts": {
+                "connection_count": 8,
+                "crossing_edge_count": 3,
+            },
+            "reference_join_post_teacher_network_structural_extra_counts": {
+                "walkingarea_edge_count": 5,
+            },
             "teacher_guided_repair_movement_gap_candidate_count": 1,
             "teacher_guided_repair_max_vehicle_movement_matrix_missing_count": 12,
             "teacher_guided_repair_missing_movement_plan_count": 2,
@@ -241,6 +249,10 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "reference_join_junction_pattern_comparison_status=fail" in html
     assert "reference_join_junction_pattern_mismatch_count=4" in html
     assert "reference_join_junction_pattern_comparison_sample_count=5" in html
+    assert "reference_join_post_teacher" in html
+    assert "reference_join_post_teacher_junction_pattern_mismatch_count=2" in html
+    assert "missing: connection_count=8, crossing_edge_count=3" in html
+    assert "extra: walkingarea_edge_count=5" in html
     assert "teacher_movement_plans" in html
     assert "teacher_guided_repair_movement_gap_candidate_count=1" in html
     assert "teacher_guided_repair_max_vehicle_movement_matrix_missing_count=12" in html

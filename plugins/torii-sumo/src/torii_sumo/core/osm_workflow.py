@@ -1179,6 +1179,7 @@ def run_osm_cleanup_workflow(
     }
     junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
+    reference_join_post_teacher_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
@@ -1952,6 +1953,15 @@ def run_osm_cleanup_workflow(
                             teacher_guided_repair_best_expanded_scope_net_file = expanded_scope_file
                     if teacher_guided_repair_best_variant_file is not None:
                         reference_visual_detail_comparison_net_file = teacher_guided_repair_best_variant_file
+                        reference_join_post_teacher_audit_report = reference_join_audit_func(
+                            reference_net_file=reference_net_file,
+                            candidate_net_file=teacher_guided_repair_best_variant_file,
+                            output_dir=output_dir / "post_teacher_reference_join_audit",
+                            prefix=f"{prefix}_post_teacher_reference_join_audit",
+                            candidate_cluster_radius_m=topology_cluster_radius_m,
+                            candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                            structural_only=reference_join_audit_structural_only,
+                        )
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -2372,6 +2382,24 @@ def run_osm_cleanup_workflow(
         "reference_join_network_structural_extra_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_extra_counts", {}),
+        "reference_join_post_teacher_audit_status": "skipped"
+        if reference_join_post_teacher_audit_report is None
+        else reference_join_post_teacher_audit_report.get("status", "fail"),
+        "reference_join_post_teacher_audit_report_file": ""
+        if reference_join_post_teacher_audit_report is None
+        else str(reference_join_post_teacher_audit_report.get("summary_file", "")),
+        "reference_join_post_teacher_junction_pattern_mismatch_count": 0
+        if reference_join_post_teacher_audit_report is None
+        else _int_field(reference_join_post_teacher_audit_report, "junction_pattern_mismatch_count"),
+        "reference_join_post_teacher_junction_pattern_mismatch_field_counts": {}
+        if reference_join_post_teacher_audit_report is None
+        else reference_join_post_teacher_audit_report.get("junction_pattern_mismatch_field_counts", {}),
+        "reference_join_post_teacher_network_structural_missing_counts": {}
+        if reference_join_post_teacher_audit_report is None
+        else reference_join_post_teacher_audit_report.get("network_structural_missing_counts", {}),
+        "reference_join_post_teacher_network_structural_extra_counts": {}
+        if reference_join_post_teacher_audit_report is None
+        else reference_join_post_teacher_audit_report.get("network_structural_extra_counts", {}),
         "reference_join_tls_semantic_delta_score": _tls_semantic_delta_score(reference_join_audit_report),
         "reference_join_tls_control_review_status": "skipped"
         if reference_join_audit_report is None
@@ -2830,6 +2858,7 @@ def run_osm_cleanup_workflow(
         "reference_scope_audit": reference_scope_audit_report or {},
         "reference_scope_pruning": reference_scope_pruning_report or {},
         "reference_join_audit": reference_join_audit_report or {},
+        "reference_join_post_teacher_audit": reference_join_post_teacher_audit_report or {},
         "reference_join_aggregation": reference_join_aggregation_report or {},
         "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
         "teacher_guided_repair_plain_export": teacher_guided_plain_export_report or {},

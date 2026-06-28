@@ -912,6 +912,141 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["gate_status"]["teacher_guided_junction_parity"] == "blocked"
 
 
+def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-post-teacher_filtered.osm.xml.gz"
+    calls: dict[str, object] = {"reference_join_candidate_net_files": []}
+
+    def fake_build(**kwargs):
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**kwargs):
+        calls["reference_join_candidate_net_files"].append(kwargs["candidate_net_file"])
+        base = {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "full",
+            "reference_case_count": 3,
+            "matched_case_count": 2,
+            "unmatched_case_count": 1,
+            "junction_pattern_index": [{"junction_id": "cluster_a_b"}],
+            "summary_file": str(tmp_path / "reference_join_audit.json"),
+            "cases_file": str(tmp_path / "reference_join_cases.csv"),
+            "junction_pattern_comparison_status": "fail",
+            "junction_pattern_mismatch_count": 2,
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 2},
+            "junction_pattern_comparisons": [{"junction_id": "j1", "status": "fail"}],
+            "network_structural_delta_status": "fail",
+            "network_structural_missing_counts": {"connection_count": 10, "crossing_edge_count": 2},
+            "network_structural_extra_counts": {"walkingarea_edge_count": 1},
+            "warnings": [],
+        }
+        if kwargs["prefix"].endswith("_post_teacher_reference_join_audit"):
+            return {
+                **base,
+                "summary_file": str(tmp_path / "post_teacher_reference_join_audit.json"),
+                "junction_pattern_mismatch_count": 1,
+                "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
+                "network_structural_missing_counts": {"connection_count": 4, "crossing_edge_count": 3},
+                "network_structural_extra_counts": {"walkingarea_edge_count": 5},
+            }
+        return base
+
+    def fake_teacher_guided_repair_queue(**_kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "repair_candidate_count": 1,
+            "ready_candidate_count": 1,
+            "expanded_scope_candidate_count": 0,
+            "queue_file": str(tmp_path / "teacher_guided_queue.json"),
+            "repair_candidates": [],
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_plain_export(**_kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "raw_node_file": str(tmp_path / "plain.nod.xml"),
+            "raw_edge_file": str(tmp_path / "plain.edg.xml"),
+            "raw_connection_file": str(tmp_path / "plain.con.xml"),
+            "raw_type_file": str(tmp_path / "plain.typ.xml"),
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_repair_run(**_kwargs):
+        composite_net = tmp_path / "teacher_guided_composite.net.xml"
+        composite_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "parity_gate_status": "pass",
+            "attempted_candidate_count": 2,
+            "pass_candidate_count": 2,
+            "composite_applied_candidate_count": 2,
+            "composite_net_file": str(composite_net),
+            "variant_reports": [],
+            "run_report_file": str(tmp_path / "teacher_guided_run.json"),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-post-teacher",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {"status": "pass", "tls_candidate_count": 0, "warnings": []},
+        connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "passenger_edge_count": 1},
+        topology_audit_func=lambda **_kwargs: {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []},
+        routeability_audit_func=lambda **_kwargs: {"status": "pass", "routeability_status": "pass", "warnings": []},
+        netedit_func=lambda _path: {"status": "blocked", "netedit_status": "skipped", "warnings": []},
+        sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "skipped", "warnings": []},
+        reference_join_audit_func=fake_reference_join_audit,
+        reference_join_aggregation_func=lambda **_kwargs: {"status": "blocked", "warnings": []},
+        teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
+        teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
+        teacher_guided_repair_run_func=fake_teacher_guided_repair_run,
+        review_html_func=lambda **kwargs: {
+            "status": "pass",
+            "workflow_review_html_status": "pass",
+            "workflow_review_html_file": str(tmp_path / "review.html"),
+            "workflow_review_net_file": str(kwargs["net_file"]),
+            "workflow_report_file": str(tmp_path / "workflow_report.json"),
+            "warnings": [],
+        },
+    )
+
+    assert calls["reference_join_candidate_net_files"][-1] == tmp_path / "teacher_guided_composite.net.xml"
+    assert report["reference_join_post_teacher_audit_status"] == "pass"
+    assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 1
+    assert report["reference_join_post_teacher_junction_pattern_mismatch_field_counts"] == {
+        "movement_signature_counts": 1
+    }
+    assert report["reference_join_post_teacher_network_structural_missing_counts"] == {
+        "connection_count": 4,
+        "crossing_edge_count": 3,
+    }
+    assert report["reference_join_post_teacher_network_structural_extra_counts"] == {"walkingarea_edge_count": 5}
+
+
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
