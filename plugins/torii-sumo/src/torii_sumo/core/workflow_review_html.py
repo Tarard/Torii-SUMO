@@ -212,6 +212,9 @@ def _evidence_rows(
         "teacher_guided_repair_movement_gap_candidate_count",
         "teacher_guided_repair_max_vehicle_movement_matrix_missing_count",
         "teacher_guided_repair_missing_movement_plan_count",
+        "teacher_guided_repair_application_scope",
+        "teacher_guided_repair_applied_candidate_count",
+        "teacher_guided_repair_unapplied_pass_candidate_count",
     ):
         if key in workflow_summary:
             movement_values.append(f"{key}={workflow_summary[key]}")
