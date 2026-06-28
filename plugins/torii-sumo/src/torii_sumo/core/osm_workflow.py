@@ -28,6 +28,15 @@ from .workflow_review_html import build_workflow_review_html
 
 
 PARTIAL_MAIN_COMPONENT_RATIO = 0.98
+TLS_SEMANTIC_DELTA_KEYS = {
+    "tl_logic_count",
+    "traffic_light_junction_count",
+    "tls_controlled_connection_count",
+    "multi_junction_tl_logic_count",
+    "traffic_light_junction_without_tls_connection_count",
+    "tls_shared_linkindex_group_count",
+    "tls_sparse_linkindex_tl_logic_count",
+}
 
 
 def _candidate_fields(place_report: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -501,6 +510,20 @@ def _tls_aggregation_preserves_controlled_connections(report: Mapping[str, Any])
     return str(report.get("tls_controlled_connection_preservation_status", "pass")) != "fail"
 
 
+def _tls_semantic_delta_score(report: Mapping[str, Any] | None) -> int:
+    if report is None:
+        return 0
+    return _delta_count_score(report.get("network_structural_missing_counts", {})) + _delta_count_score(
+        report.get("network_structural_extra_counts", {})
+    )
+
+
+def _delta_count_score(counts: Any) -> int:
+    if not isinstance(counts, Mapping):
+        return 0
+    return sum(int(value or 0) for key, value in counts.items() if key in TLS_SEMANTIC_DELTA_KEYS)
+
+
 def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | None) -> dict[str, Any]:
     if topology_audit_report is None:
         return {
@@ -837,6 +860,7 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_status = "not_applicable"
     reference_visual_detail_net_file: Path | None = None
     reference_visual_detail_comparison_net_file: Path | None = None
+    reference_visual_detail_comparison_selection_reason = "not_applicable"
     reference_visual_detail_build_report: dict[str, Any] = {}
     reference_visual_detail_service_permission_report: dict[str, Any] = {}
     reference_visual_detail_netedit_report: dict[str, Any] = {}
@@ -1006,6 +1030,7 @@ def run_osm_cleanup_workflow(
             }
         reference_visual_detail_status = "built"
         reference_visual_detail_comparison_net_file = reference_visual_detail_net_file
+        reference_visual_detail_comparison_selection_reason = "raw_visual_detail"
     filtered_osm_value = build_report.get("filtered_osm_file") or build_report.get("source_osm_file")
     osm_file = Path(str(filtered_osm_value)) if filtered_osm_value else None
     tls_report = tls_audit_func(
@@ -1062,11 +1087,17 @@ def run_osm_cleanup_workflow(
                     reference_visual_detail_tls_aggregation_report
                 ):
                     reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
+                    reference_visual_detail_comparison_selection_reason = (
+                        "tls_aggregation_preserved_controlled_connections"
+                    )
                 elif (
                     candidate_visual_tls_net_file.exists()
                     and reference_net_file is not None
                     and str(network_plan.get("network_profile", "")) == "reference_matched"
                 ):
+                    reference_visual_detail_comparison_selection_reason = (
+                        "tls_aggregation_rejected_controlled_connection_regression"
+                    )
                     reference_visual_detail_tls_aggregation_reference_delta_report = reference_join_audit_func(
                         reference_net_file=reference_net_file,
                         candidate_net_file=candidate_visual_tls_net_file,
@@ -1645,6 +1676,7 @@ def run_osm_cleanup_workflow(
         "reference_join_network_structural_extra_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_extra_counts", {}),
+        "reference_join_tls_semantic_delta_score": _tls_semantic_delta_score(reference_join_audit_report),
         "reference_join_network_structural_junction_type_missing_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_junction_type_missing_counts", {}),
@@ -1850,6 +1882,7 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_comparison_net_file": ""
         if reference_visual_detail_comparison_net_file is None
         else str(reference_visual_detail_comparison_net_file),
+        "reference_visual_detail_comparison_selection_reason": reference_visual_detail_comparison_selection_reason,
         "reference_visual_detail_tls_candidate_count": ""
         if reference_visual_detail_tls_report is None
         else reference_visual_detail_tls_report.get("tls_candidate_count", ""),
@@ -1887,6 +1920,9 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_aggregation_reference_delta_status": "skipped"
         if reference_visual_detail_tls_aggregation_reference_delta_report is None
         else reference_visual_detail_tls_aggregation_reference_delta_report.get("network_structural_delta_status", "fail"),
+        "reference_visual_detail_tls_aggregation_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            reference_visual_detail_tls_aggregation_reference_delta_report
+        ),
         "reference_visual_detail_tls_aggregation_reference_delta_missing_counts": {}
         if reference_visual_detail_tls_aggregation_reference_delta_report is None
         else reference_visual_detail_tls_aggregation_reference_delta_report.get("network_structural_missing_counts", {}),
