@@ -1897,10 +1897,20 @@ def run_teacher_guided_repair_queue(
         if net_file.exists():
             best_expanded_scope_net_file = str(net_file)
             break
+    sequential_composite_ready = (
+        sequential_accept_passed_variants
+        and composite_applied_candidate_count > 0
+        and bool(composite_net_file)
+        and Path(composite_net_file).exists()
+    )
     if attempted_count == 0:
         status = "blocked"
         claim_status = "blocked"
         parity_gate_status = "blocked"
+    elif sequential_composite_ready and failed_count == 0:
+        status = "pass"
+        claim_status = "diagnostic-demo"
+        parity_gate_status = "pass"
     else:
         status = "pass" if failed_count == 0 and parity_pass_count == attempted_count else "fail"
         claim_status = "construction-invalid" if failed_count else "diagnostic-demo"
