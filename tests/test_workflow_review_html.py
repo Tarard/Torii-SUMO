@@ -107,6 +107,21 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "teacher_guided_repair_movement_gap_candidate_count": 1,
             "teacher_guided_repair_max_vehicle_movement_matrix_missing_count": 12,
             "teacher_guided_repair_missing_movement_plan_count": 2,
+            "teacher_guided_repair_top_movement_gaps": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "first_missing_teacher_movement": {
+                        "from_edge_id": "cand_in",
+                        "to_edge_id": "cand_out",
+                        "fromLane": "1",
+                        "toLane": "0",
+                        "dir": "l",
+                        "tl": "tlsA",
+                        "linkIndex": "7",
+                        "via": ":tlsA_7_0",
+                    },
+                }
+            ],
             "teacher_guided_repair_queue_file": str(repair_queue),
             "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
             "teacher_guided_repair_run_report_file": str(repair_run),
@@ -227,6 +242,11 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "teacher_guided_repair_movement_gap_candidate_count=1" in html
     assert "teacher_guided_repair_max_vehicle_movement_matrix_missing_count=12" in html
     assert "teacher_guided_repair_missing_movement_plan_count=2" in html
+    assert "first_missing_teacher_movement" in html
+    assert "from_edge_id=cand_in" in html
+    assert "to_edge_id=cand_out" in html
+    assert "linkIndex=7" in html
+    assert "via=:tlsA_7_0" in html
     assert "modal_decision_counts" in html
     assert "modal_review_action_counts" in html
     assert "junction_aggregation_blocked_by_modal_count" in html
