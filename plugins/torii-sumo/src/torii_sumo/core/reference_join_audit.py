@@ -564,12 +564,18 @@ def _structural_signature_delta(reference: dict[str, int], candidate: dict[str, 
 def _net_structural_summary(net_file: Path) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
     edge_function_counts = Counter(_edge_function(edge) for edge in root.findall("edge"))
+    junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib.get("id", "").startswith(":")
+    }
     junction_type_counts = Counter(
         junction.attrib.get("type", "") or "blank"
         for junction in root.findall("junction")
         if not junction.attrib.get("id", "").startswith(":") and junction.attrib.get("type") != "internal"
     )
     connections = root.findall("connection")
+    tls_summary = _tls_semantic_summary(root, connections, junction_ids)
     return {
         "plain_edge_count": edge_function_counts.get("plain", 0),
         "internal_edge_count": edge_function_counts.get("internal", 0),
@@ -585,9 +591,78 @@ def _net_structural_summary(net_file: Path) -> dict[str, Any]:
         "tl_connection_missing_linkindex_count": sum(
             1 for connection in connections if connection.attrib.get("tl") and not connection.attrib.get("linkIndex")
         ),
+        **tls_summary,
         "junction_type_counts": dict(sorted(junction_type_counts.items())),
         "edge_function_counts": dict(sorted(edge_function_counts.items())),
     }
+
+
+def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junction_ids: set[str]) -> dict[str, Any]:
+    tl_logic_ids = [tl.attrib["id"] for tl in root.findall("tlLogic") if tl.attrib.get("id")]
+    traffic_light_ids = {
+        junction.attrib["id"]
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and junction.attrib.get("type") == "traffic_light"
+    }
+    phase_state_lengths = {
+        tl_id: max((len(phase.attrib.get("state", "")) for phase in tl.findall("phase")), default=0)
+        for tl in root.findall("tlLogic")
+        if (tl_id := tl.attrib.get("id"))
+    }
+    controlled_connection_counts: Counter[str] = Counter()
+    controlled_junctions_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    controlled_junctions: set[str] = set()
+    linkindex_group_counts: Counter[tuple[str, str]] = Counter()
+    linkindexes_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    for connection in connections:
+        tl_id = connection.attrib.get("tl", "")
+        link_index = connection.attrib.get("linkIndex", "")
+        if not tl_id or not link_index:
+            continue
+        controlled_connection_counts[tl_id] += 1
+        linkindex_group_counts[(tl_id, link_index)] += 1
+        try:
+            linkindexes_by_tl.setdefault(tl_id, set()).add(int(link_index))
+        except ValueError:
+            pass
+        junction_id = _connection_junction_id(connection, junction_ids)
+        if junction_id:
+            controlled_junctions_by_tl.setdefault(tl_id, set()).add(junction_id)
+            controlled_junctions.add(junction_id)
+    return {
+        "tl_logic_controlled_connection_count_distribution": _count_distribution(
+            controlled_connection_counts.get(tl_id, 0) for tl_id in tl_logic_ids
+        ),
+        "tl_logic_controlled_junction_count_distribution": _count_distribution(
+            len(controlled_junctions_by_tl.get(tl_id, set())) for tl_id in tl_logic_ids
+        ),
+        "multi_junction_tl_logic_count": sum(
+            1 for tl_id in tl_logic_ids if len(controlled_junctions_by_tl.get(tl_id, set())) > 1
+        ),
+        "traffic_light_junction_without_tls_connection_count": len(traffic_light_ids - controlled_junctions),
+        "tls_shared_linkindex_group_count": sum(1 for count in linkindex_group_counts.values() if count > 1),
+        "tls_sparse_linkindex_tl_logic_count": sum(
+            1
+            for tl_id in tl_logic_ids
+            if linkindexes_by_tl.get(tl_id)
+            and int(phase_state_lengths.get(tl_id, 0)) > len(linkindexes_by_tl.get(tl_id, set()))
+        ),
+    }
+
+
+def _count_distribution(values: Any) -> dict[str, int]:
+    return dict(sorted(Counter(str(value) for value in values).items(), key=lambda item: int(item[0])))
+
+
+def _connection_junction_id(connection: ET.Element, junction_ids: set[str]) -> str:
+    via = connection.attrib.get("via", "")
+    if via.startswith(":"):
+        lane_id = via[1:]
+        matches = [junction_id for junction_id in junction_ids if lane_id == junction_id or lane_id.startswith(f"{junction_id}_")]
+        if matches:
+            return max(matches, key=len)
+    tl_id = connection.attrib.get("tl", "")
+    return tl_id if tl_id in junction_ids else ""
 
 
 def _edge_function(edge: ET.Element) -> str:
@@ -609,6 +684,10 @@ def _network_structural_delta(reference: dict[str, Any], candidate: dict[str, An
         "tl_logic_count",
         "traffic_light_junction_count",
         "tls_controlled_connection_count",
+        "multi_junction_tl_logic_count",
+        "traffic_light_junction_without_tls_connection_count",
+        "tls_shared_linkindex_group_count",
+        "tls_sparse_linkindex_tl_logic_count",
     ]
     missing_counts = {
         key: int(reference.get(key, 0)) - int(candidate.get(key, 0))
