@@ -863,6 +863,7 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
     _write_reference_net(reference_net_file)
     filtered_osm = tmp_path / "osm" / "reference-regression_filtered.osm.xml.gz"
     visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
+    representatives_file = tmp_path / "tls_aggregation" / "representatives.csv"
     calls: dict[str, object] = {}
 
     def fake_build(**kwargs):
@@ -904,11 +905,17 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
     def fake_tls_aggregation(**_kwargs):
         visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
         visual_tls_net_file.write_text("<net/>", encoding="utf-8")
+        representatives_file.write_text(
+            "cluster_id,representative_node_id,tls_ids,tls_count,google_maps_url\n"
+            "G001,agg_tls,raw_tls;agg_tls,2,https://example.invalid\n",
+            encoding="utf-8",
+        )
         return {
             "status": "pass",
             "claim_status": "blocked",
             "tls_aggregation_status": "variant_created_for_review",
             "tls_aggregation_variant_file": str(visual_tls_net_file),
+            "tls_aggregation_representatives_file": str(representatives_file),
             "tls_controlled_connection_preservation_status": "fail",
             "tls_controlled_connection_regression_count": 12,
             "warnings": [],
@@ -946,6 +953,29 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
             "warnings": [],
         }
 
+    def fake_tls_connection_repair(**kwargs):
+        calls["tls_connection_repair_source_net_file"] = kwargs["source_net_file"]
+        calls["tls_connection_repair_candidate_net_file"] = kwargs["candidate_net_file"]
+        calls["tls_connection_repair_tls_id_map"] = kwargs["tls_id_map"]
+        calls["tls_connection_repair_copy_unmapped_tls"] = kwargs["copy_unmapped_tls"]
+        calls["tls_connection_repair_require_capacity"] = kwargs["require_target_link_index_capacity"]
+        variant_file = tmp_path / "tls_connection_repair" / "repaired.net.xml"
+        variant_file.parent.mkdir(parents=True, exist_ok=True)
+        variant_file.write_text("<net/>", encoding="utf-8")
+        summary_file = tmp_path / "tls_connection_repair" / "summary.json"
+        summary_file.write_text("{}", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "variant_file": str(variant_file),
+            "summary_file": str(summary_file),
+            "candidate_tls_controlled_connection_count_before": 7,
+            "candidate_tls_controlled_connection_count_after": 9,
+            "updated_connection_count": 2,
+            "skipped_invalid_mapped_linkindex_connection_count": 1,
+            "warnings": ["diagnostic repair"],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
         output_dir=tmp_path,
@@ -955,6 +985,7 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
         build_func=fake_build,
         tls_audit_func=fake_tls,
         tls_aggregation_func=fake_tls_aggregation,
+        tls_connection_repair_func=fake_tls_connection_repair,
         connectivity_func=lambda _path: {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -1001,6 +1032,11 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
     assert calls["reference_join_candidate_net_file"] == raw_visual_detail_net_file
     assert calls["rejected_tls_delta_candidate_net_file"] == visual_tls_net_file
     assert calls["rejected_tls_delta_structural_only"] is True
+    assert calls["tls_connection_repair_source_net_file"] == raw_visual_detail_net_file
+    assert calls["tls_connection_repair_candidate_net_file"] == visual_tls_net_file
+    assert calls["tls_connection_repair_tls_id_map"] == {"raw_tls": "agg_tls", "agg_tls": "agg_tls"}
+    assert calls["tls_connection_repair_copy_unmapped_tls"] is False
+    assert calls["tls_connection_repair_require_capacity"] is True
     assert report["reference_visual_detail_comparison_net_file"] == str(raw_visual_detail_net_file)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
         "tls_aggregation_rejected_controlled_connection_regression"
@@ -1017,6 +1053,11 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
         "tl_logic_count": 12,
         "traffic_light_junction_count": 41,
     }
+    assert report["reference_visual_detail_tls_connection_repair_status"] == "pass"
+    assert report["reference_visual_detail_tls_connection_repair_controlled_connection_count_before"] == 7
+    assert report["reference_visual_detail_tls_connection_repair_controlled_connection_count_after"] == 9
+    assert report["reference_visual_detail_tls_connection_repair_updated_connection_count"] == 2
+    assert report["reference_visual_detail_tls_connection_repair_skipped_invalid_mapped_linkindex_count"] == 1
 
 
 def test_reference_matched_workflow_runs_reference_scope_audit_without_default_pruning_variant(tmp_path: Path) -> None:

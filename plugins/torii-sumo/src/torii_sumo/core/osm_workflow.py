@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -7,7 +8,11 @@ from .osm_area import osm_map_url_bbox, osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
 from .command_runner import run_command
 from .junction_aggregation import build_junction_aggregation_variant
-from .junction_rebuild_candidate import build_teacher_guided_repair_queue, run_teacher_guided_repair_queue
+from .junction_rebuild_candidate import (
+    build_teacher_guided_repair_queue,
+    build_tls_connection_repair_variant,
+    run_teacher_guided_repair_queue,
+)
 from .netedit import launch_netedit
 from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
@@ -531,6 +536,24 @@ def _tls_control_review_category_counts(report: Mapping[str, Any] | None) -> dic
     return dict(sorted(counts.items()))
 
 
+def _tls_representative_id_map(report: Mapping[str, Any] | None) -> dict[str, str]:
+    if report is None:
+        return {}
+    representatives_file = Path(str(report.get("tls_aggregation_representatives_file", "")))
+    if not representatives_file.exists():
+        return {}
+    tls_id_map: dict[str, str] = {}
+    with representatives_file.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            representative = str(row.get("representative_node_id", ""))
+            if not representative:
+                continue
+            for tls_id in str(row.get("tls_ids", "")).split(";"):
+                if tls_id:
+                    tls_id_map[tls_id] = representative
+    return tls_id_map
+
+
 def _delta_count_score(counts: Any) -> int:
     if not isinstance(counts, Mapping):
         return 0
@@ -647,6 +670,7 @@ def run_osm_cleanup_workflow(
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
+    tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
     junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
@@ -879,6 +903,7 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_netedit_report: dict[str, Any] = {}
     reference_visual_detail_tls_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
     junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
@@ -1120,6 +1145,17 @@ def run_osm_cleanup_workflow(
                         candidate_min_cluster_nodes=topology_min_cluster_nodes,
                         structural_only=True,
                     )
+                    tls_id_map = _tls_representative_id_map(reference_visual_detail_tls_aggregation_report)
+                    if tls_id_map:
+                        reference_visual_detail_tls_connection_repair_report = tls_connection_repair_func(
+                            source_net_file=reference_visual_detail_net_file,
+                            candidate_net_file=candidate_visual_tls_net_file,
+                            output_dir=output_dir / "reference_visual_detail_tls_connection_repair",
+                            prefix=f"{prefix}_reference_visual_detail_tls_connection_repair",
+                            tls_id_map=tls_id_map,
+                            copy_unmapped_tls=False,
+                            require_target_link_index_capacity=True,
+                        )
     raw_connectivity_report = connectivity_func(net_file)
     connectivity_report = raw_connectivity_report
     connectivity_quality = _connectivity_quality(connectivity_report)
@@ -1368,6 +1404,7 @@ def run_osm_cleanup_workflow(
         tls_aggregation_report or {},
         reference_visual_detail_tls_report or {},
         reference_visual_detail_tls_aggregation_report or {},
+        reference_visual_detail_tls_connection_repair_report or {},
         raw_connectivity_report,
         connected_core_report or {},
         connected_core_connectivity_report or {},
@@ -1399,6 +1436,11 @@ def run_osm_cleanup_workflow(
         warnings.append(
             "reference visual-detail TLS aggregation created a separate comparison variant; use it for TUM/manual-reference "
             "Netedit comparison before adopting signal cleanup"
+        )
+    if reference_visual_detail_tls_connection_repair_report is not None:
+        warnings.append(
+            "reference visual-detail TLS connection repair created a diagnostic variant; use SUMO load, reference audit, "
+            "and Netedit connection mode before adopting any copied signal semantics"
         )
     if connectivity_quality["quality_warning"]:
         warnings.append(str(connectivity_quality["quality_warning"]))
@@ -1960,6 +2002,33 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_aggregation_reference_delta_file": ""
         if reference_visual_detail_tls_aggregation_reference_delta_report is None
         else str(reference_visual_detail_tls_aggregation_reference_delta_report.get("summary_file", "")),
+        "reference_visual_detail_tls_connection_repair_status": "skipped"
+        if reference_visual_detail_tls_connection_repair_report is None
+        else str(reference_visual_detail_tls_connection_repair_report.get("status", "fail")),
+        "reference_visual_detail_tls_connection_repair_variant_file": ""
+        if reference_visual_detail_tls_connection_repair_report is None
+        else str(reference_visual_detail_tls_connection_repair_report.get("variant_file", "")),
+        "reference_visual_detail_tls_connection_repair_controlled_connection_count_before": ""
+        if reference_visual_detail_tls_connection_repair_report is None
+        else reference_visual_detail_tls_connection_repair_report.get(
+            "candidate_tls_controlled_connection_count_before", ""
+        ),
+        "reference_visual_detail_tls_connection_repair_controlled_connection_count_after": ""
+        if reference_visual_detail_tls_connection_repair_report is None
+        else reference_visual_detail_tls_connection_repair_report.get(
+            "candidate_tls_controlled_connection_count_after", ""
+        ),
+        "reference_visual_detail_tls_connection_repair_updated_connection_count": 0
+        if reference_visual_detail_tls_connection_repair_report is None
+        else reference_visual_detail_tls_connection_repair_report.get("updated_connection_count", 0),
+        "reference_visual_detail_tls_connection_repair_skipped_invalid_mapped_linkindex_count": 0
+        if reference_visual_detail_tls_connection_repair_report is None
+        else reference_visual_detail_tls_connection_repair_report.get(
+            "skipped_invalid_mapped_linkindex_connection_count", 0
+        ),
+        "reference_visual_detail_tls_connection_repair_summary_file": ""
+        if reference_visual_detail_tls_connection_repair_report is None
+        else str(reference_visual_detail_tls_connection_repair_report.get("summary_file", "")),
         "reference_visual_detail_netedit_status": reference_visual_detail_netedit_report.get("netedit_status", "not_started"),
         "reference_visual_detail_netedit_network_file": reference_visual_detail_netedit_report.get("netedit_network_file", ""),
         "sumo_gui_status": sumo_gui_report.get("sumo_gui_status", "failed"),
@@ -1979,6 +2048,7 @@ def run_osm_cleanup_workflow(
         "tls_aggregation": tls_aggregation_report or {},
         "reference_visual_detail_tls_audit": reference_visual_detail_tls_report or {},
         "reference_visual_detail_tls_aggregation": reference_visual_detail_tls_aggregation_report or {},
+        "reference_visual_detail_tls_connection_repair": reference_visual_detail_tls_connection_repair_report or {},
         "reference_visual_detail_tls_aggregation_reference_delta": reference_visual_detail_tls_aggregation_reference_delta_report
         or {},
         "raw_connectivity": raw_connectivity_report,

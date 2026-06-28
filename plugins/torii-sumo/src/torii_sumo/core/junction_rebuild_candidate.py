@@ -30,6 +30,19 @@ APPROACH_INTEGRITY_FAILURE_FIELDS = {
     "outgoing_vehicle_edge_count",
 }
 
+TLS_CONNECTION_REPAIR_ATTRS = (
+    "tl",
+    "linkIndex",
+    "linkIndex2",
+    "dir",
+    "state",
+    "pass",
+    "allow",
+    "disallow",
+    "keepClear",
+    "contPos",
+)
+
 
 def build_rebuild_candidate(
     *,
@@ -201,6 +214,133 @@ def build_teacher_guided_repair_queue(
     }
     queue_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     _write_teacher_guided_queue_csv(queue_csv_file, repair_candidates)
+    return report
+
+
+def build_tls_connection_repair_variant(
+    *,
+    source_net_file: Path,
+    candidate_net_file: Path,
+    output_dir: Path,
+    prefix: str = "tls_connection_repair",
+    tls_id_map: dict[str, str] | None = None,
+    copy_unmapped_tls: bool = True,
+    require_target_link_index_capacity: bool = False,
+) -> dict[str, object]:
+    if not source_net_file.exists():
+        return _failure(f"source net file does not exist: {source_net_file}")
+    if not candidate_net_file.exists():
+        return _failure(f"candidate net file does not exist: {candidate_net_file}")
+
+    source_net_file = source_net_file.resolve()
+    candidate_net_file = candidate_net_file.resolve()
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    variant_file = output_dir / f"{prefix}_tls_connection_repaired.net.xml"
+    summary_file = output_dir / f"{prefix}_tls_connection_repair.json"
+
+    source_root = ET.parse(source_net_file).getroot()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    tls_id_map = tls_id_map or {}
+    candidate_tllogic_ids = {
+        tl_logic.attrib["id"]
+        for tl_logic in candidate_root.findall("tlLogic")
+        if tl_logic.attrib.get("id")
+    }
+    target_tllogic_capacities = _tllogic_min_state_length_by_id(candidate_root)
+    source_unique, source_duplicate_keys = _unique_connections_by_key(source_root)
+    candidate_unique, candidate_duplicate_keys = _unique_connections_by_key(candidate_root)
+    source_controlled = _controlled_tls_connection_count(source_root)
+    candidate_controlled_before = _controlled_tls_connection_count(candidate_root)
+    matched_connections = 0
+    updated_connections = 0
+    missing_candidate_connections = 0
+    ambiguous_connections = 0
+    skipped_unmapped_tls_connections = 0
+    skipped_missing_mapped_tllogic_connections = 0
+    skipped_invalid_mapped_linkindex_connections = 0
+    copied_tls_ids: set[str] = set()
+    updated_keys: list[dict[str, str]] = []
+
+    for key, source_connection in sorted(source_unique.items()):
+        tls_id = source_connection.attrib.get("tl", "")
+        if not tls_id or not source_connection.attrib.get("linkIndex"):
+            continue
+        target_tls_id = tls_id_map.get(tls_id, tls_id)
+        if tls_id not in tls_id_map and not copy_unmapped_tls:
+            skipped_unmapped_tls_connections += 1
+            continue
+        if tls_id in tls_id_map and target_tls_id not in candidate_tllogic_ids:
+            skipped_missing_mapped_tllogic_connections += 1
+            continue
+        if (
+            require_target_link_index_capacity
+            and tls_id in tls_id_map
+            and not _connection_link_indices_fit(
+                source_connection,
+                target_tllogic_capacities.get(target_tls_id),
+            )
+        ):
+            skipped_invalid_mapped_linkindex_connections += 1
+            continue
+        if key in source_duplicate_keys or key in candidate_duplicate_keys:
+            ambiguous_connections += 1
+            continue
+        candidate_connection = candidate_unique.get(key)
+        if candidate_connection is None:
+            missing_candidate_connections += 1
+            continue
+        matched_connections += 1
+        before = dict(candidate_connection.attrib)
+        for attr in TLS_CONNECTION_REPAIR_ATTRS:
+            if attr in source_connection.attrib:
+                candidate_connection.set(attr, source_connection.attrib[attr])
+            else:
+                candidate_connection.attrib.pop(attr, None)
+        candidate_connection.set("tl", target_tls_id)
+        candidate_connection.attrib.pop("uncontrolled", None)
+        if target_tls_id == tls_id:
+            copied_tls_ids.add(tls_id)
+        if dict(candidate_connection.attrib) != before:
+            updated_connections += 1
+            updated_keys.append(_connection_key_record(key))
+
+    tl_logic_report = _copy_referenced_tllogics(source_root, candidate_root, copied_tls_ids)
+    candidate_controlled_after = _controlled_tls_connection_count(candidate_root)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(variant_file, encoding="utf-8", xml_declaration=True)
+
+    report: dict[str, object] = {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "source_net_file": str(source_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "variant_file": str(variant_file),
+        "summary_file": str(summary_file),
+        "source_tls_controlled_connection_count": source_controlled,
+        "candidate_tls_controlled_connection_count_before": candidate_controlled_before,
+        "candidate_tls_controlled_connection_count_after": candidate_controlled_after,
+        "matched_connection_count": matched_connections,
+        "updated_connection_count": updated_connections,
+        "missing_candidate_connection_count": missing_candidate_connections,
+        "skipped_ambiguous_connection_count": ambiguous_connections,
+        "skipped_unmapped_tls_connection_count": skipped_unmapped_tls_connections,
+        "skipped_missing_mapped_tllogic_connection_count": skipped_missing_mapped_tllogic_connections,
+        "skipped_invalid_mapped_linkindex_connection_count": skipped_invalid_mapped_linkindex_connections,
+        "source_duplicate_connection_key_count": len(source_duplicate_keys),
+        "candidate_duplicate_connection_key_count": len(candidate_duplicate_keys),
+        "tls_id_map_count": len(tls_id_map),
+        "copy_unmapped_tls": copy_unmapped_tls,
+        "require_target_link_index_capacity": require_target_link_index_capacity,
+        "updated_connection_keys": updated_keys,
+        **tl_logic_report,
+        "review_policy": (
+            "diagnostic variant only: run SUMO load and NetEdit connection-mode review before adoption; "
+            "this repair copies TLS control attributes without changing edge, junction, via, or shape geometry"
+        ),
+    }
+    summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
 
 
@@ -3803,6 +3943,120 @@ def _net_junction_ids(net_file: Path) -> set[str]:
         for junction in ET.parse(net_file).getroot().findall("junction")
         if junction.attrib.get("id")
     }
+
+
+def _unique_connections_by_key(root: ET.Element) -> tuple[dict[tuple[str, str, str, str], ET.Element], set[tuple[str, str, str, str]]]:
+    connections_by_key: dict[tuple[str, str, str, str], list[ET.Element]] = {}
+    for connection in root.findall("connection"):
+        key = _connection_key(connection)
+        connections_by_key.setdefault(key, []).append(connection)
+    duplicate_keys = {key for key, connections in connections_by_key.items() if len(connections) > 1}
+    return (
+        {key: connections[0] for key, connections in connections_by_key.items() if len(connections) == 1},
+        duplicate_keys,
+    )
+
+
+def _connection_key(connection: ET.Element) -> tuple[str, str, str, str]:
+    return (
+        connection.attrib.get("from", ""),
+        connection.attrib.get("to", ""),
+        connection.attrib.get("fromLane", "0"),
+        connection.attrib.get("toLane", "0"),
+    )
+
+
+def _connection_key_record(key: tuple[str, str, str, str]) -> dict[str, str]:
+    return {"from": key[0], "to": key[1], "fromLane": key[2], "toLane": key[3]}
+
+
+def _controlled_tls_connection_count(root: ET.Element) -> int:
+    return sum(
+        1
+        for connection in root.findall("connection")
+        if connection.attrib.get("tl") and connection.attrib.get("linkIndex")
+    )
+
+
+def _tllogic_min_state_length_by_id(root: ET.Element) -> dict[str, int]:
+    lengths_by_id = {}
+    for tl_logic in root.findall("tlLogic"):
+        tls_id = tl_logic.attrib.get("id", "")
+        lengths = [
+            len(phase.attrib.get("state", ""))
+            for phase in tl_logic.findall("phase")
+            if phase.attrib.get("state")
+        ]
+        if tls_id and lengths:
+            lengths_by_id[tls_id] = min(lengths)
+    return lengths_by_id
+
+
+def _connection_link_indices_fit(connection: ET.Element, capacity: int | None) -> bool:
+    if capacity is None:
+        return False
+    for attr in ("linkIndex", "linkIndex2"):
+        value = connection.attrib.get(attr, "")
+        if not value:
+            continue
+        try:
+            if int(value) >= capacity:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
+def _copy_referenced_tllogics(
+    source_root: ET.Element,
+    candidate_root: ET.Element,
+    tls_ids: set[str],
+) -> dict[str, object]:
+    source_by_id = {
+        tl_logic.attrib["id"]: tl_logic
+        for tl_logic in source_root.findall("tlLogic")
+        if tl_logic.attrib.get("id")
+    }
+    copied = 0
+    replaced = 0
+    missing: list[str] = []
+    insert_index = _tl_logic_insert_index(candidate_root)
+    for tls_id in sorted(tls_ids):
+        source = source_by_id.get(tls_id)
+        if source is None:
+            missing.append(tls_id)
+            continue
+        replacement = copy.deepcopy(source)
+        target = next(
+            (tl_logic for tl_logic in candidate_root.findall("tlLogic") if tl_logic.attrib.get("id") == tls_id),
+            None,
+        )
+        if target is None:
+            candidate_root.insert(insert_index, replacement)
+            insert_index += 1
+            copied += 1
+            continue
+        target_index = list(candidate_root).index(target)
+        candidate_root.remove(target)
+        candidate_root.insert(target_index, replacement)
+        replaced += 1
+    return {
+        "copied_tllogic_count": copied,
+        "replaced_tllogic_count": replaced,
+        "missing_source_tllogic_count": len(missing),
+        "missing_source_tllogic_ids": missing,
+    }
+
+
+def _tl_logic_insert_index(root: ET.Element) -> int:
+    children = list(root)
+    for index, child in enumerate(children):
+        if child.tag == "tlLogic":
+            return index
+    for index, child in enumerate(children):
+        if child.tag == "connection":
+            return index
+    return len(children)
 
 
 def _mapped_internal_ref(value: str, source_junction_id: str, target_junction_id: str) -> str:
