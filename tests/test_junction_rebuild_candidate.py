@@ -176,6 +176,16 @@ def test_build_tls_connection_repair_variant_can_require_target_link_index_capac
     assert "tl" not in connection.attrib
     assert report["updated_connection_count"] == 0
     assert report["skipped_invalid_mapped_linkindex_connection_count"] == 1
+    assert report["invalid_mapped_linkindex_capacity_gaps"] == [
+        {
+            "target_tls": "aggTls",
+            "target_capacity": 1,
+            "required_state_length": 5,
+            "max_required_link_index": 4,
+            "skipped_connection_count": 1,
+            "source_tls_ids": ["rawTls"],
+        }
+    ]
 
 
 def test_netedit_review_actions_routes_movement_signature_delta_to_vehicle_matrix_rebuild() -> None:

@@ -260,6 +260,7 @@ def build_tls_connection_repair_variant(
     skipped_unmapped_tls_connections = 0
     skipped_missing_mapped_tllogic_connections = 0
     skipped_invalid_mapped_linkindex_connections = 0
+    invalid_mapped_linkindex_capacity_gaps: dict[str, dict[str, object]] = {}
     copied_tls_ids: set[str] = set()
     updated_keys: list[dict[str, str]] = []
 
@@ -283,6 +284,13 @@ def build_tls_connection_repair_variant(
             )
         ):
             skipped_invalid_mapped_linkindex_connections += 1
+            _record_linkindex_capacity_gap(
+                invalid_mapped_linkindex_capacity_gaps,
+                source_connection=source_connection,
+                source_tls_id=tls_id,
+                target_tls_id=target_tls_id,
+                capacity=target_tllogic_capacities.get(target_tls_id),
+            )
             continue
         if key in source_duplicate_keys or key in candidate_duplicate_keys:
             ambiguous_connections += 1
@@ -328,6 +336,7 @@ def build_tls_connection_repair_variant(
         "skipped_unmapped_tls_connection_count": skipped_unmapped_tls_connections,
         "skipped_missing_mapped_tllogic_connection_count": skipped_missing_mapped_tllogic_connections,
         "skipped_invalid_mapped_linkindex_connection_count": skipped_invalid_mapped_linkindex_connections,
+        "invalid_mapped_linkindex_capacity_gaps": _capacity_gap_records(invalid_mapped_linkindex_capacity_gaps),
         "source_duplicate_connection_key_count": len(source_duplicate_keys),
         "candidate_duplicate_connection_key_count": len(candidate_duplicate_keys),
         "tls_id_map_count": len(tls_id_map),
@@ -4005,6 +4014,64 @@ def _connection_link_indices_fit(connection: ET.Element, capacity: int | None) -
         except ValueError:
             return False
     return True
+
+
+def _record_linkindex_capacity_gap(
+    gaps: dict[str, dict[str, object]],
+    *,
+    source_connection: ET.Element,
+    source_tls_id: str,
+    target_tls_id: str,
+    capacity: int | None,
+) -> None:
+    record = gaps.setdefault(
+        target_tls_id,
+        {
+            "target_tls": target_tls_id,
+            "target_capacity": capacity if capacity is not None else 0,
+            "max_required_link_index": 0,
+            "skipped_connection_count": 0,
+            "source_tls_ids": set(),
+        },
+    )
+    record["skipped_connection_count"] = int(record["skipped_connection_count"]) + 1
+    record["max_required_link_index"] = max(
+        int(record["max_required_link_index"]),
+        _connection_max_link_index(source_connection),
+    )
+    source_ids = record["source_tls_ids"]
+    if isinstance(source_ids, set):
+        source_ids.add(source_tls_id)
+
+
+def _connection_max_link_index(connection: ET.Element) -> int:
+    values = []
+    for attr in ("linkIndex", "linkIndex2"):
+        value = connection.attrib.get(attr, "")
+        if value:
+            try:
+                values.append(int(value))
+            except ValueError:
+                pass
+    return max(values) if values else 0
+
+
+def _capacity_gap_records(gaps: dict[str, dict[str, object]]) -> list[dict[str, object]]:
+    records = []
+    for record in gaps.values():
+        max_required = int(record["max_required_link_index"])
+        source_ids = record["source_tls_ids"]
+        records.append(
+            {
+                "target_tls": str(record["target_tls"]),
+                "target_capacity": int(record["target_capacity"]),
+                "required_state_length": max_required + 1,
+                "max_required_link_index": max_required,
+                "skipped_connection_count": int(record["skipped_connection_count"]),
+                "source_tls_ids": sorted(source_ids) if isinstance(source_ids, set) else [],
+            }
+        )
+    return sorted(records, key=lambda item: (-int(item["skipped_connection_count"]), str(item["target_tls"])))
 
 
 def _copy_referenced_tllogics(
