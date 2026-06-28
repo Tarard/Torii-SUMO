@@ -110,6 +110,125 @@ def test_teacher_guided_best_variant_file_prefers_composite_net(tmp_path: Path) 
     assert best == composite_net
 
 
+def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-composite_filtered.osm.xml.gz"
+    composite_net = tmp_path / "teacher_guided_composite.net.xml"
+    calls: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**kwargs):
+        calls.setdefault("reference_join_candidate_net_files", []).append(kwargs["candidate_net_file"])
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "full",
+            "reference_case_count": 1,
+            "matched_case_count": 1,
+            "unmatched_case_count": 0,
+            "junction_pattern_index": [{"junction_id": "cluster_a_b"}],
+            "summary_file": str(tmp_path / "reference_join_audit.json"),
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_queue(**kwargs):
+        calls["teacher_guided_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "repair_candidate_count": 4,
+            "ready_candidate_count": 0,
+            "expanded_scope_candidate_count": 4,
+            "queue_file": str(tmp_path / "teacher_guided_queue.json"),
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_plain_export(**kwargs):
+        calls["teacher_guided_plain_net_file"] = kwargs["net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "raw_node_file": str(tmp_path / "plain.nod.xml"),
+            "raw_edge_file": str(tmp_path / "plain.edg.xml"),
+            "raw_connection_file": str(tmp_path / "plain.con.xml"),
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_run(**kwargs):
+        calls["teacher_guided_run_sequential_accept_passed_variants"] = kwargs["sequential_accept_passed_variants"]
+        composite_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "parity_gate_status": "pass",
+            "attempted_candidate_count": 4,
+            "pass_candidate_count": 4,
+            "composite_applied_candidate_count": 4,
+            "composite_net_file": str(composite_net),
+            "run_report_file": str(tmp_path / "teacher_guided_run.json"),
+            "warnings": [],
+        }
+
+    def fake_review_html(**kwargs):
+        calls["workflow_review_net_file"] = kwargs["net_file"]
+        return {
+            "status": "pass",
+            "workflow_review_html_status": "pass",
+            "workflow_review_html_file": str(tmp_path / "review.html"),
+            "workflow_review_net_file": str(kwargs["net_file"]),
+            "workflow_report_file": str(tmp_path / "workflow_report.json"),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-composite",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        run_tls_aggregation_after_build=False,
+        run_routeability_audit_after_build=False,
+        run_reference_join_aggregation_after_build=False,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {"status": "pass", "tls_candidate_count": 0, "warnings": []},
+        connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "passenger_edge_count": 1},
+        topology_audit_func=lambda **_kwargs: {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []},
+        netedit_func=lambda _path: {"status": "blocked", "netedit_status": "skipped", "warnings": []},
+        sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "skipped", "warnings": []},
+        reference_join_audit_func=fake_reference_join_audit,
+        teacher_guided_repair_queue_func=fake_teacher_guided_queue,
+        teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
+        teacher_guided_repair_run_func=fake_teacher_guided_run,
+        review_html_func=fake_review_html,
+    )
+
+    assert calls["teacher_guided_run_sequential_accept_passed_variants"] is True
+    assert calls["workflow_review_net_file"] == composite_net
+    assert report["reference_visual_detail_comparison_net_file"] == str(composite_net)
+    assert report["teacher_guided_repair_best_variant_file"] == str(composite_net)
+    assert report["teacher_guided_repair_application_scope"] == "sequential_composite"
+    assert report["teacher_guided_repair_applied_candidate_count"] == 4
+    assert report["teacher_guided_repair_unapplied_pass_candidate_count"] == 0
+    assert calls["reference_join_candidate_net_files"][-1] == composite_net
+
+
 def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_path: Path) -> None:
     variant_file = tmp_path / "repaired.net.xml"
     variant_file.write_text("<net/>", encoding="utf-8")
