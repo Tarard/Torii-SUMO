@@ -93,10 +93,50 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     assert command[command.index("--tls.set") + 1] == "n1,n3"
     assert "--tls.rebuild" in command
     assert command[command.index("--tls.join-dist") + 1] == "20"
+    assert "--tls.guess-signals" not in command
     assert "--tls.join" in command
     assert command[command.index("--tls.default-type") + 1] == "actuated"
     assert command[command.index("--sumo-net-file") + 1] == str(net_file.resolve())
     assert command[command.index("--output-file") + 1] == "tls_aggregated.net.xml"
+
+
+def test_build_tls_aggregation_variant_can_enable_bounded_osm_signal_guessing(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    clusters_file = tmp_path / "tls_clusters.csv"
+    net_file.write_text("<net/>", encoding="utf-8")
+    clusters_file.write_text(
+        "\n".join(["cluster_id,tls_ids,tls_count,google_maps_url", "G001,tlA,1,https://maps.example/g1"]),
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_command_runner(command, **kwargs):
+        calls.append(command)
+        _command_path(command, "--output-file", kwargs["cwd"]).write_text(
+            """<net>
+  <junction id="n1" type="traffic_light"/>
+  <edge id=":n1_0" function="internal"><lane id=":n1_0_0" index="0"/></edge>
+  <tlLogic id="n1" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="n1" linkIndex="0" via=":n1_0_0"/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = build_tls_aggregation_variant(
+        net_file=net_file,
+        tls_audit_report={"status": "pass", "tls_cluster_count": 1, "clusters_file": str(clusters_file)},
+        output_dir=tmp_path / "tls_aggregation",
+        prefix="demo_tls",
+        command_runner=fake_command_runner,
+        controlled_nodes_by_tls_func=lambda _net_file: {"tlA": ["n1"]},
+        tls_guess_signals_dist_m=35.0,
+    )
+
+    command = calls[0]
+    assert command[command.index("--tls.guess-signals.dist") + 1] == "35"
+    assert command.index("--tls.guess-signals") < command.index("--output-file")
+    assert report["tls_guess_signals_dist_m"] == 35.0
 
 
 def test_build_tls_aggregation_variant_demotes_traffic_light_junctions_without_controlled_links(tmp_path: Path) -> None:
