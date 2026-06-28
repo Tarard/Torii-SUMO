@@ -525,6 +525,24 @@ def _tls_semantic_delta_score(report: Mapping[str, Any] | None) -> int:
     )
 
 
+def _reference_visual_tls_guess_signal_distances(
+    *,
+    reference_net_file: Path | None,
+    network_profile: str,
+) -> tuple[float | None, ...]:
+    if reference_net_file is not None and network_profile == "reference_matched":
+        return (35.0, 20.0, None)
+    return (35.0,)
+
+
+def _tls_guess_signal_distance_label(distance_m: float | None) -> str:
+    if distance_m is None:
+        return "default"
+    if float(distance_m).is_integer():
+        return f"guess{int(distance_m)}"
+    return "guess" + str(distance_m).replace(".", "p")
+
+
 def _command_result_report(result: Any) -> dict[str, Any]:
     if hasattr(result, "to_dict"):
         report = result.to_dict()
@@ -1030,6 +1048,7 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_netedit_report: dict[str, Any] = {}
     reference_visual_detail_tls_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_candidates: list[dict[str, Any]] = []
     reference_visual_detail_tls_signal_grouping_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
     reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None = None
@@ -1251,186 +1270,297 @@ def run_osm_cleanup_workflow(
             google_maps_target_date=map_target_date,
         )
         if _should_run_tls_aggregation(reference_visual_detail_tls_report, tls_aggregation_func):
-            reference_visual_detail_tls_aggregation_report = tls_aggregation_func(
-                net_file=reference_visual_detail_net_file,
-                tls_audit_report=reference_visual_detail_tls_report,
-                output_dir=output_dir / "reference_visual_detail_tls_aggregation",
-                prefix=f"{prefix}_reference_visual_detail_tls_aggregation",
-                timeout_seconds=timeout_seconds,
-                tls_guess_signals_dist_m=35.0,
+            reference_matched_tls_delta = (
+                reference_net_file is not None and str(network_plan.get("network_profile", "")) == "reference_matched"
             )
-            visual_tls_variant_value = reference_visual_detail_tls_aggregation_report.get(
-                "tls_aggregation_variant_file", ""
+            selected_tls_candidate: tuple[
+                dict[str, Any],
+                dict[str, Any] | None,
+                dict[str, Any],
+                Path,
+            ] | None = None
+            best_scored_tls_candidate: tuple[
+                int,
+                dict[str, Any],
+                dict[str, Any],
+                dict[str, Any],
+                Path,
+            ] | None = None
+            first_tls_aggregation_report: dict[str, Any] | None = None
+            rejected_controlled_connection_variant_file: Path | None = None
+            tls_guess_signal_distances = _reference_visual_tls_guess_signal_distances(
+                reference_net_file=reference_net_file,
+                network_profile=str(network_plan.get("network_profile", "")),
             )
-            if (
-                reference_visual_detail_tls_aggregation_report.get("status") == "pass"
-                and visual_tls_variant_value
-            ):
-                candidate_visual_tls_net_file = Path(str(visual_tls_variant_value))
-                if candidate_visual_tls_net_file.exists() and _tls_aggregation_preserves_controlled_connections(
-                    reference_visual_detail_tls_aggregation_report
+            for index, tls_guess_signals_dist_m in enumerate(tls_guess_signal_distances):
+                candidate_label = _tls_guess_signal_distance_label(tls_guess_signals_dist_m)
+                primary_candidate = index == 0
+                aggregation_output_dir = (
+                    output_dir / "reference_visual_detail_tls_aggregation"
+                    if primary_candidate
+                    else output_dir / f"reference_visual_detail_tls_aggregation_{candidate_label}"
+                )
+                aggregation_prefix = (
+                    f"{prefix}_reference_visual_detail_tls_aggregation"
+                    if primary_candidate
+                    else f"{prefix}_reference_visual_detail_tls_aggregation_{candidate_label}"
+                )
+                tls_aggregation_report = tls_aggregation_func(
+                    net_file=reference_visual_detail_net_file,
+                    tls_audit_report=reference_visual_detail_tls_report,
+                    output_dir=aggregation_output_dir,
+                    prefix=aggregation_prefix,
+                    timeout_seconds=timeout_seconds,
+                    tls_guess_signals_dist_m=tls_guess_signals_dist_m,
+                )
+                if first_tls_aggregation_report is None:
+                    first_tls_aggregation_report = tls_aggregation_report
+                visual_tls_variant_value = tls_aggregation_report.get("tls_aggregation_variant_file", "")
+                candidate_record: dict[str, Any] = {
+                    "tls_guess_signals_dist_m": tls_guess_signals_dist_m,
+                    "candidate_label": candidate_label,
+                    "status": tls_aggregation_report.get("status", "fail"),
+                    "tls_aggregation_status": tls_aggregation_report.get("tls_aggregation_status", "fail"),
+                    "tls_aggregation_variant_file": visual_tls_variant_value,
+                }
+                netconvert_report = tls_aggregation_report.get("tls_aggregation_netconvert", {})
+                if isinstance(netconvert_report, Mapping):
+                    candidate_record["netconvert_returncode"] = netconvert_report.get("returncode")
+                candidate_visual_tls_net_file = Path(str(visual_tls_variant_value)) if visual_tls_variant_value else None
+                if (
+                    tls_aggregation_report.get("status") == "pass"
+                    and candidate_visual_tls_net_file is not None
+                    and candidate_visual_tls_net_file.exists()
                 ):
-                    reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
-                    reference_visual_detail_comparison_selection_reason = (
-                        "tls_aggregation_preserved_controlled_connections"
-                    )
-                elif (
-                    candidate_visual_tls_net_file.exists()
-                    and reference_net_file is not None
-                    and str(network_plan.get("network_profile", "")) == "reference_matched"
-                ):
-                    reference_visual_detail_comparison_selection_reason = (
-                        "tls_aggregation_rejected_controlled_connection_regression"
-                    )
-                    reference_visual_detail_tls_aggregation_reference_delta_report = reference_join_audit_func(
-                        reference_net_file=reference_net_file,
-                        candidate_net_file=candidate_visual_tls_net_file,
-                        output_dir=output_dir / "reference_visual_detail_tls_aggregation_reference_delta",
-                        prefix=f"{prefix}_reference_visual_detail_tls_aggregation_reference_delta",
-                        candidate_cluster_radius_m=topology_cluster_radius_m,
-                        candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                        structural_only=True,
-                    )
-                    reference_visual_detail_raw_reference_delta_report = reference_join_audit_func(
-                        reference_net_file=reference_net_file,
-                        candidate_net_file=reference_visual_detail_net_file,
-                        output_dir=output_dir / "reference_visual_detail_raw_reference_delta",
-                        prefix=f"{prefix}_reference_visual_detail_raw_reference_delta",
-                        candidate_cluster_radius_m=topology_cluster_radius_m,
-                        candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                        structural_only=True,
-                    )
-                    reference_visual_detail_tls_aggregation_reference_promotion_report = (
-                        _reference_delta_promotion_decision(
-                            candidate_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+                    if reference_matched_tls_delta:
+                        if reference_visual_detail_raw_reference_delta_report is None:
+                            reference_visual_detail_raw_reference_delta_report = reference_join_audit_func(
+                                reference_net_file=reference_net_file,
+                                candidate_net_file=reference_visual_detail_net_file,
+                                output_dir=output_dir / "reference_visual_detail_raw_reference_delta",
+                                prefix=f"{prefix}_reference_visual_detail_raw_reference_delta",
+                                candidate_cluster_radius_m=topology_cluster_radius_m,
+                                candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                structural_only=True,
+                            )
+                        delta_output_dir = (
+                            output_dir / "reference_visual_detail_tls_aggregation_reference_delta"
+                            if primary_candidate
+                            else output_dir / f"reference_visual_detail_tls_aggregation_reference_delta_{candidate_label}"
+                        )
+                        delta_prefix = (
+                            f"{prefix}_reference_visual_detail_tls_aggregation_reference_delta"
+                            if primary_candidate
+                            else f"{prefix}_reference_visual_detail_tls_aggregation_reference_delta_{candidate_label}"
+                        )
+                        tls_aggregation_delta_report = reference_join_audit_func(
+                            reference_net_file=reference_net_file,
+                            candidate_net_file=candidate_visual_tls_net_file,
+                            output_dir=delta_output_dir,
+                            prefix=delta_prefix,
+                            candidate_cluster_radius_m=topology_cluster_radius_m,
+                            candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                            structural_only=True,
+                        )
+                        tls_aggregation_promotion_report = _reference_delta_promotion_decision(
+                            candidate_delta_report=tls_aggregation_delta_report,
                             baseline_delta_report=reference_visual_detail_raw_reference_delta_report,
                             reason="tls_aggregation_promoted_by_reference_delta",
                         )
+                        candidate_score = _tls_semantic_delta_score(tls_aggregation_delta_report)
+                        candidate_record.update(
+                            {
+                                "reference_tls_semantic_delta_score": candidate_score,
+                                "reference_delta_file": tls_aggregation_delta_report.get("summary_file", ""),
+                                "reference_promotion_status": tls_aggregation_promotion_report.get("status", ""),
+                            }
+                        )
+                        if best_scored_tls_candidate is None or candidate_score < best_scored_tls_candidate[0]:
+                            best_scored_tls_candidate = (
+                                candidate_score,
+                                tls_aggregation_report,
+                                tls_aggregation_delta_report,
+                                tls_aggregation_promotion_report,
+                                candidate_visual_tls_net_file,
+                            )
+                        if tls_aggregation_promotion_report.get("status") == "pass" and (
+                            selected_tls_candidate is None
+                            or candidate_score
+                            < _tls_semantic_delta_score(selected_tls_candidate[1])
+                        ):
+                            selected_tls_candidate = (
+                                tls_aggregation_report,
+                                tls_aggregation_delta_report,
+                                tls_aggregation_promotion_report,
+                                candidate_visual_tls_net_file,
+                            )
+                    elif _tls_aggregation_preserves_controlled_connections(tls_aggregation_report):
+                        selected_tls_candidate = (
+                            tls_aggregation_report,
+                            None,
+                            {
+                                "status": "pass",
+                                "reason": "tls_aggregation_preserved_controlled_connections",
+                            },
+                            candidate_visual_tls_net_file,
+                        )
+                        candidate_record["reference_promotion_status"] = "not_applicable"
+                        reference_visual_detail_tls_aggregation_candidates.append(candidate_record)
+                        break
+                    else:
+                        rejected_controlled_connection_variant_file = candidate_visual_tls_net_file
+                reference_visual_detail_tls_aggregation_candidates.append(candidate_record)
+
+            if selected_tls_candidate is not None:
+                (
+                    reference_visual_detail_tls_aggregation_report,
+                    reference_visual_detail_tls_aggregation_reference_delta_report,
+                    reference_visual_detail_tls_aggregation_reference_promotion_report,
+                    candidate_visual_tls_net_file,
+                ) = selected_tls_candidate
+                reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
+                reference_visual_detail_comparison_selection_reason = str(
+                    reference_visual_detail_tls_aggregation_reference_promotion_report.get("reason", "")
+                )
+            elif best_scored_tls_candidate is not None:
+                (
+                    _best_tls_score,
+                    reference_visual_detail_tls_aggregation_report,
+                    reference_visual_detail_tls_aggregation_reference_delta_report,
+                    reference_visual_detail_tls_aggregation_reference_promotion_report,
+                    candidate_visual_tls_net_file,
+                ) = best_scored_tls_candidate
+                reference_visual_detail_comparison_selection_reason = (
+                    "tls_aggregation_rejected_controlled_connection_regression"
+                )
+            else:
+                reference_visual_detail_tls_aggregation_report = first_tls_aggregation_report
+                candidate_visual_tls_net_file = rejected_controlled_connection_variant_file
+                if rejected_controlled_connection_variant_file is not None:
+                    reference_visual_detail_comparison_selection_reason = (
+                        "tls_aggregation_rejected_controlled_connection_regression"
                     )
-                    if reference_visual_detail_tls_aggregation_reference_promotion_report.get("status") == "pass":
-                        reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
-                        reference_visual_detail_comparison_selection_reason = str(
-                            reference_visual_detail_tls_aggregation_reference_promotion_report.get("reason", "")
-                        )
-                        missing_counts = (
-                            reference_visual_detail_tls_aggregation_reference_delta_report.get(
-                                "network_structural_missing_counts", {}
-                            )
-                            if reference_visual_detail_tls_aggregation_reference_delta_report
-                            else {}
-                        )
-                        missing_shared_groups = int(missing_counts.get("tls_shared_linkindex_group_count", 0) or 0)
-                        if missing_shared_groups > 0:
-                            reference_visual_detail_tls_signal_grouping_report = tls_signal_grouping_func(
-                                source_net_file=candidate_visual_tls_net_file,
-                                output_dir=output_dir / "reference_visual_detail_tls_signal_grouping",
-                                prefix=f"{prefix}_reference_visual_detail_tls_signal_grouping",
-                                max_shared_linkindex_groups=missing_shared_groups,
-                            )
-                            signal_grouping_variant_value = reference_visual_detail_tls_signal_grouping_report.get(
-                                "tls_signal_grouping_variant_file", ""
-                            )
-                            signal_grouping_variant_file = (
-                                Path(str(signal_grouping_variant_value)) if signal_grouping_variant_value else None
-                            )
-                            if signal_grouping_variant_file is not None and signal_grouping_variant_file.exists():
-                                reference_visual_detail_tls_signal_grouping_sumo_load_report = _sumo_load_net(
-                                    signal_grouping_variant_file,
-                                    output_dir=output_dir / "reference_visual_detail_tls_signal_grouping",
-                                    sumo_binary=sumo_binary,
-                                    timeout_seconds=timeout_seconds,
-                                    command_runner=command_runner,
-                                )
-                                if reference_visual_detail_tls_signal_grouping_sumo_load_report.get("status") == "pass":
-                                    reference_visual_detail_tls_signal_grouping_reference_delta_report = (
-                                        reference_join_audit_func(
-                                            reference_net_file=reference_net_file,
-                                            candidate_net_file=signal_grouping_variant_file,
-                                            output_dir=output_dir
-                                            / "reference_visual_detail_tls_signal_grouping_reference_delta",
-                                            prefix=f"{prefix}_reference_visual_detail_tls_signal_grouping_reference_delta",
-                                            candidate_cluster_radius_m=topology_cluster_radius_m,
-                                            candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                                            structural_only=True,
-                                        )
-                                    )
-                                    reference_visual_detail_tls_signal_grouping_reference_promotion_report = (
-                                        _reference_delta_promotion_decision(
-                                            candidate_delta_report=reference_visual_detail_tls_signal_grouping_reference_delta_report,
-                                            baseline_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
-                                            reason="tls_signal_grouping_promoted_by_reference_delta",
-                                        )
-                                    )
-                                else:
-                                    reference_visual_detail_tls_signal_grouping_reference_promotion_report = {
-                                        "status": "blocked",
-                                        "reason": "sumo_load_not_pass",
-                                    }
-                                if (
-                                    reference_visual_detail_tls_signal_grouping_reference_promotion_report.get("status")
-                                    == "pass"
-                                ):
-                                    reference_visual_detail_comparison_net_file = signal_grouping_variant_file
-                                    reference_visual_detail_comparison_selection_reason = str(
-                                        reference_visual_detail_tls_signal_grouping_reference_promotion_report.get(
-                                            "reason", ""
-                                        )
-                                    )
-                    tls_id_map = (
-                        {}
-                        if reference_visual_detail_tls_aggregation_reference_promotion_report.get("status") == "pass"
-                        else _tls_representative_id_map(reference_visual_detail_tls_aggregation_report)
+
+            if (
+                selected_tls_candidate is not None
+                and reference_visual_detail_tls_aggregation_reference_delta_report is not None
+            ):
+                missing_counts = reference_visual_detail_tls_aggregation_reference_delta_report.get(
+                    "network_structural_missing_counts", {}
+                )
+                missing_shared_groups = int(missing_counts.get("tls_shared_linkindex_group_count", 0) or 0)
+                if missing_shared_groups > 0:
+                    reference_visual_detail_tls_signal_grouping_report = tls_signal_grouping_func(
+                        source_net_file=candidate_visual_tls_net_file,
+                        output_dir=output_dir / "reference_visual_detail_tls_signal_grouping",
+                        prefix=f"{prefix}_reference_visual_detail_tls_signal_grouping",
+                        max_shared_linkindex_groups=missing_shared_groups,
                     )
-                    if tls_id_map:
-                        reference_visual_detail_tls_connection_repair_report = tls_connection_repair_func(
-                            source_net_file=reference_visual_detail_net_file,
-                            candidate_net_file=candidate_visual_tls_net_file,
-                            output_dir=output_dir / "reference_visual_detail_tls_connection_repair",
-                            prefix=f"{prefix}_reference_visual_detail_tls_connection_repair",
-                            tls_id_map=tls_id_map,
-                            copy_unmapped_tls=False,
-                            require_target_link_index_capacity=True,
+                    signal_grouping_variant_value = reference_visual_detail_tls_signal_grouping_report.get(
+                        "tls_signal_grouping_variant_file", ""
+                    )
+                    signal_grouping_variant_file = (
+                        Path(str(signal_grouping_variant_value)) if signal_grouping_variant_value else None
+                    )
+                    if signal_grouping_variant_file is not None and signal_grouping_variant_file.exists():
+                        reference_visual_detail_tls_signal_grouping_sumo_load_report = _sumo_load_net(
+                            signal_grouping_variant_file,
+                            output_dir=output_dir / "reference_visual_detail_tls_signal_grouping",
+                            sumo_binary=sumo_binary,
+                            timeout_seconds=timeout_seconds,
+                            command_runner=command_runner,
                         )
-                        repair_variant_value = reference_visual_detail_tls_connection_repair_report.get(
-                            "variant_file", ""
-                        )
-                        repair_variant_file = Path(str(repair_variant_value)) if repair_variant_value else None
-                        if repair_variant_file is not None and repair_variant_file.exists():
-                            reference_visual_detail_tls_connection_repair_sumo_load_report = _sumo_load_net(
-                                repair_variant_file,
-                                output_dir=output_dir / "reference_visual_detail_tls_connection_repair",
-                                sumo_binary=sumo_binary,
-                                timeout_seconds=timeout_seconds,
-                                command_runner=command_runner,
-                            )
-                            reference_visual_detail_tls_connection_repair_reference_delta_report = (
+                        if reference_visual_detail_tls_signal_grouping_sumo_load_report.get("status") == "pass":
+                            reference_visual_detail_tls_signal_grouping_reference_delta_report = (
                                 reference_join_audit_func(
                                     reference_net_file=reference_net_file,
-                                    candidate_net_file=repair_variant_file,
+                                    candidate_net_file=signal_grouping_variant_file,
                                     output_dir=output_dir
-                                    / "reference_visual_detail_tls_connection_repair_reference_delta",
-                                    prefix=f"{prefix}_reference_visual_detail_tls_connection_repair_reference_delta",
+                                    / "reference_visual_detail_tls_signal_grouping_reference_delta",
+                                    prefix=f"{prefix}_reference_visual_detail_tls_signal_grouping_reference_delta",
                                     candidate_cluster_radius_m=topology_cluster_radius_m,
                                     candidate_min_cluster_nodes=topology_min_cluster_nodes,
                                     structural_only=True,
                                 )
                             )
-                        reference_visual_detail_tls_connection_repair_promotion_report = (
-                            _tls_connection_repair_promotion_decision(
-                                repair_report=reference_visual_detail_tls_connection_repair_report,
-                                sumo_load_report=reference_visual_detail_tls_connection_repair_sumo_load_report,
-                                repair_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
-                                rejected_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+                            reference_visual_detail_tls_signal_grouping_reference_promotion_report = (
+                                _reference_delta_promotion_decision(
+                                    candidate_delta_report=reference_visual_detail_tls_signal_grouping_reference_delta_report,
+                                    baseline_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+                                    reason="tls_signal_grouping_promoted_by_reference_delta",
+                                )
+                            )
+                        else:
+                            reference_visual_detail_tls_signal_grouping_reference_promotion_report = {
+                                "status": "blocked",
+                                "reason": "sumo_load_not_pass",
+                            }
+                        if (
+                            reference_visual_detail_tls_signal_grouping_reference_promotion_report.get("status")
+                            == "pass"
+                        ):
+                            reference_visual_detail_comparison_net_file = signal_grouping_variant_file
+                            reference_visual_detail_comparison_selection_reason = str(
+                                reference_visual_detail_tls_signal_grouping_reference_promotion_report.get(
+                                    "reason", ""
+                                )
+                            )
+            if candidate_visual_tls_net_file is not None and reference_matched_tls_delta:
+                tls_id_map = (
+                    {}
+                    if reference_visual_detail_tls_aggregation_reference_promotion_report.get("status") == "pass"
+                    else _tls_representative_id_map(reference_visual_detail_tls_aggregation_report or {})
+                )
+                if tls_id_map:
+                    reference_visual_detail_tls_connection_repair_report = tls_connection_repair_func(
+                        source_net_file=reference_visual_detail_net_file,
+                        candidate_net_file=candidate_visual_tls_net_file,
+                        output_dir=output_dir / "reference_visual_detail_tls_connection_repair",
+                        prefix=f"{prefix}_reference_visual_detail_tls_connection_repair",
+                        tls_id_map=tls_id_map,
+                        copy_unmapped_tls=False,
+                        require_target_link_index_capacity=True,
+                    )
+                    repair_variant_value = reference_visual_detail_tls_connection_repair_report.get(
+                        "variant_file", ""
+                    )
+                    repair_variant_file = Path(str(repair_variant_value)) if repair_variant_value else None
+                    if repair_variant_file is not None and repair_variant_file.exists():
+                        reference_visual_detail_tls_connection_repair_sumo_load_report = _sumo_load_net(
+                            repair_variant_file,
+                            output_dir=output_dir / "reference_visual_detail_tls_connection_repair",
+                            sumo_binary=sumo_binary,
+                            timeout_seconds=timeout_seconds,
+                            command_runner=command_runner,
+                        )
+                        reference_visual_detail_tls_connection_repair_reference_delta_report = (
+                            reference_join_audit_func(
+                                reference_net_file=reference_net_file,
+                                candidate_net_file=repair_variant_file,
+                                output_dir=output_dir
+                                / "reference_visual_detail_tls_connection_repair_reference_delta",
+                                prefix=f"{prefix}_reference_visual_detail_tls_connection_repair_reference_delta",
+                                candidate_cluster_radius_m=topology_cluster_radius_m,
+                                candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                structural_only=True,
                             )
                         )
-                        if (
-                            reference_visual_detail_tls_connection_repair_promotion_report.get("status") == "pass"
-                            and repair_variant_file is not None
-                        ):
-                            reference_visual_detail_comparison_net_file = repair_variant_file
-                            reference_visual_detail_comparison_selection_reason = str(
-                                reference_visual_detail_tls_connection_repair_promotion_report.get("reason", "")
-                            )
+                    reference_visual_detail_tls_connection_repair_promotion_report = (
+                        _tls_connection_repair_promotion_decision(
+                            repair_report=reference_visual_detail_tls_connection_repair_report,
+                            sumo_load_report=reference_visual_detail_tls_connection_repair_sumo_load_report,
+                            repair_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
+                            rejected_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+                        )
+                    )
+                    if (
+                        reference_visual_detail_tls_connection_repair_promotion_report.get("status") == "pass"
+                        and repair_variant_file is not None
+                    ):
+                        reference_visual_detail_comparison_net_file = repair_variant_file
+                        reference_visual_detail_comparison_selection_reason = str(
+                            reference_visual_detail_tls_connection_repair_promotion_report.get("reason", "")
+                        )
     raw_connectivity_report = connectivity_func(net_file)
     connectivity_report = raw_connectivity_report
     connectivity_quality = _connectivity_quality(connectivity_report)
@@ -2247,6 +2377,10 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_aggregation_variant_file": ""
         if reference_visual_detail_tls_aggregation_report is None
         else str(reference_visual_detail_tls_aggregation_report.get("tls_aggregation_variant_file", "")),
+        "reference_visual_detail_tls_aggregation_candidate_count": len(
+            reference_visual_detail_tls_aggregation_candidates
+        ),
+        "reference_visual_detail_tls_aggregation_candidates": reference_visual_detail_tls_aggregation_candidates,
         "reference_visual_detail_tls_aggregated_traffic_light_junction_count": ""
         if reference_visual_detail_tls_aggregation_report is None
         else reference_visual_detail_tls_aggregation_report.get("tls_aggregated_traffic_light_junction_count", ""),

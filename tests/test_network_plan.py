@@ -1159,7 +1159,7 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
     filtered_osm = tmp_path / "osm" / "reference-delta_filtered.osm.xml.gz"
-    visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
+    best_visual_tls_net_file = tmp_path / "reference_visual_detail_tls_aggregation_guess20" / "tls_aggregated.net.xml"
     calls: dict[str, object] = {}
 
     def fake_build(**kwargs):
@@ -1199,7 +1199,8 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
         }
 
     def fake_tls_aggregation(**_kwargs):
-        calls["tls_aggregation_guess_signals_dist"] = _kwargs.get("tls_guess_signals_dist_m")
+        calls.setdefault("tls_aggregation_guess_signal_dists", []).append(_kwargs.get("tls_guess_signals_dist_m"))
+        visual_tls_net_file = Path(_kwargs["output_dir"]) / "tls_aggregated.net.xml"
         visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
         visual_tls_net_file.write_text("<net/>", encoding="utf-8")
         return {
@@ -1217,17 +1218,22 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
     def fake_reference_join_audit(**kwargs):
         candidate_net_file = Path(kwargs["candidate_net_file"])
         output_dir = str(kwargs["output_dir"])
-        if candidate_net_file == visual_tls_net_file and "tls_aggregation_reference_delta" in output_dir:
-            calls["aggregation_delta_candidate_net_file"] = kwargs["candidate_net_file"]
+        if "tls_aggregation_reference_delta" in output_dir:
+            calls.setdefault("aggregation_delta_candidate_net_files", []).append(kwargs["candidate_net_file"])
+            score_counts = (
+                {"traffic_light_junction_count": 30}
+                if "guess20" in str(candidate_net_file.parent)
+                else {"traffic_light_junction_count": 46}
+            )
             return {
                 "status": "pass",
                 "claim_status": "diagnostic-demo",
                 "audit_mode": "structural_only",
                 "network_structural_delta_status": "fail",
-                "network_structural_missing_counts": {"tls_controlled_connection_count": 165},
-                "network_structural_extra_counts": {"traffic_light_junction_count": 46},
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 90},
+                "network_structural_extra_counts": score_counts,
                 "network_structural_junction_type_missing_counts": {},
-                "network_structural_junction_type_extra_counts": {"traffic_light": 46},
+                "network_structural_junction_type_extra_counts": {"traffic_light": score_counts["traffic_light_junction_count"]},
                 "summary_file": str(tmp_path / "aggregation_delta.json"),
                 "warnings": [],
             }
@@ -1243,6 +1249,19 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
                 "network_structural_junction_type_missing_counts": {},
                 "network_structural_junction_type_extra_counts": {"traffic_light": 354},
                 "summary_file": str(tmp_path / "raw_delta.json"),
+                "warnings": [],
+            }
+        if candidate_net_file == best_visual_tls_net_file:
+            calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_delta_status": "fail",
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 90},
+                "network_structural_extra_counts": {"traffic_light_junction_count": 30},
+                "network_structural_junction_type_missing_counts": {},
+                "network_structural_junction_type_extra_counts": {"traffic_light": 30},
                 "warnings": [],
             }
         calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
@@ -1312,15 +1331,17 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
         ),
     )
 
-    assert calls["aggregation_delta_candidate_net_file"] == visual_tls_net_file
+    assert calls["tls_aggregation_guess_signal_dists"] == [35.0, 20.0, None]
+    assert best_visual_tls_net_file in [Path(str(path)) for path in calls["aggregation_delta_candidate_net_files"]]
     assert calls["raw_delta_candidate_net_file"] == raw_visual_detail_net_file
-    assert calls["reference_join_candidate_net_file"] == visual_tls_net_file
-    assert report["reference_visual_detail_comparison_net_file"] == str(visual_tls_net_file)
+    assert calls["reference_join_candidate_net_file"] == best_visual_tls_net_file
+    assert report["reference_visual_detail_comparison_net_file"] == str(best_visual_tls_net_file)
     assert report["reference_visual_detail_comparison_selection_reason"] == "tls_aggregation_promoted_by_reference_delta"
     assert report["reference_visual_detail_tls_aggregation_reference_promotion_status"] == "pass"
-    assert report["reference_visual_detail_tls_aggregation_reference_tls_semantic_delta_score"] == 211
+    assert report["reference_visual_detail_tls_aggregation_reference_tls_semantic_delta_score"] == 120
     assert report["reference_visual_detail_raw_reference_tls_semantic_delta_score"] == 394
-    assert report["reference_join_tls_semantic_delta_score"] == 211
+    assert report["reference_join_tls_semantic_delta_score"] == 120
+    assert report["reference_visual_detail_tls_aggregation_candidate_count"] == 3
 
 
 def test_reference_matched_workflow_promotes_signal_grouping_when_reference_delta_improves(
@@ -1361,7 +1382,15 @@ def test_reference_matched_workflow_promotes_signal_grouping_when_reference_delt
         }
 
     def fake_tls_aggregation(**_kwargs):
-        calls["tls_aggregation_guess_signals_dist"] = _kwargs.get("tls_guess_signals_dist_m")
+        calls.setdefault("tls_aggregation_guess_signal_dists", []).append(_kwargs.get("tls_guess_signals_dist_m"))
+        if _kwargs.get("tls_guess_signals_dist_m") != 35.0:
+            return {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "tls_aggregation_status": "failed",
+                "tls_aggregation_variant_file": "",
+                "warnings": [],
+            }
         visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
         visual_tls_net_file.write_text("<net/>", encoding="utf-8")
         return {
@@ -1478,7 +1507,7 @@ def test_reference_matched_workflow_promotes_signal_grouping_when_reference_delt
     )
 
     assert calls["signal_grouping_max_shared_linkindex_groups"] == 40
-    assert calls["tls_aggregation_guess_signals_dist"] == 35.0
+    assert calls["tls_aggregation_guess_signal_dists"] == [35.0, 20.0, None]
     assert calls["signal_grouping_sumo_command"][0] == "sumo"
     assert calls["signal_grouping_delta_candidate_net_file"] == signal_grouped_net_file
     assert calls["reference_join_candidate_net_file"] == signal_grouped_net_file
