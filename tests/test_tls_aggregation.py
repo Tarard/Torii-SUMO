@@ -44,6 +44,7 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
   <tlLogic id="n1" type="static"/>
   <tlLogic id="n3" type="static"/>
   <connection from="a" to="b" tl="n1" linkIndex="0"/>
+  <connection from="e" to="f" tl="n3" linkIndex="0"/>
   <connection from="c" to="d" tl="n1"/>
 </net>""",
             encoding="utf-8",
@@ -81,7 +82,7 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     assert any("discards loaded tlLogic" in warning for warning in report["warnings"])
     assert report["tls_aggregated_tl_logic_count"] == 2
     assert report["tls_aggregated_traffic_light_junction_count"] == 2
-    assert report["tls_aggregated_controlled_connection_count"] == 1
+    assert report["tls_aggregated_controlled_connection_count"] == 2
     assert report["tls_aggregated_tl_connection_missing_linkindex_count"] == 1
     assert report["tls_controlled_connection_preservation_status"] == "pass"
     assert report["tls_controlled_connection_regression_count"] == 0
@@ -90,11 +91,147 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     command = calls[0]
     assert "--tls.discard-loaded" in command
     assert command[command.index("--tls.set") + 1] == "n1,n3"
+    assert "--tls.rebuild" in command
     assert command[command.index("--tls.join-dist") + 1] == "35"
     assert "--tls.join" in command
     assert command[command.index("--tls.default-type") + 1] == "actuated"
     assert command[command.index("--sumo-net-file") + 1] == str(net_file.resolve())
-    assert command[command.index("--output-file") + 1] == "demo_tls_tls_aggregated.net.xml"
+    assert command[command.index("--output-file") + 1] == "tls_aggregated.net.xml"
+
+
+def test_build_tls_aggregation_variant_demotes_traffic_light_junctions_without_controlled_links(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    clusters_file = tmp_path / "tls_clusters.csv"
+    net_file.write_text("<net/>", encoding="utf-8")
+    clusters_file.write_text(
+        "\n".join(["cluster_id,tls_ids,tls_count,google_maps_url", "G001,tlA,1,https://maps.example/g1"]),
+        encoding="utf-8",
+    )
+
+    def fake_command_runner(command, **kwargs):
+        _command_path(command, "--output-file", kwargs["cwd"]).write_text(
+            """<net>
+  <junction id="kept" type="traffic_light"/>
+  <junction id="orphan" type="traffic_light"/>
+  <edge id=":kept_0" function="internal"><lane id=":kept_0_0" index="0"/></edge>
+  <tlLogic id="kept" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <tlLogic id="orphan" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="kept" linkIndex="0" via=":kept_0_0"/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = build_tls_aggregation_variant(
+        net_file=net_file,
+        tls_audit_report={"status": "pass", "tls_cluster_count": 1, "clusters_file": str(clusters_file)},
+        output_dir=tmp_path / "tls_aggregation",
+        prefix="demo_tls",
+        command_runner=fake_command_runner,
+        controlled_nodes_by_tls_func=lambda _net_file: {"tlA": ["kept"]},
+    )
+
+    root = ET.parse(report["tls_aggregation_variant_file"]).getroot()
+
+    assert root.find("junction[@id='orphan']").attrib["type"] == "priority"
+    assert root.find("tlLogic[@id='orphan']") is None
+    assert report["tls_orphan_traffic_light_junction_demoted_count"] == 1
+    assert report["tls_uncontrolled_tllogic_removed_count"] == 1
+    assert report["tls_aggregated_traffic_light_junction_count"] == 1
+    assert report["tls_aggregated_tl_logic_count"] == 1
+
+
+def test_build_tls_aggregation_variant_deduplicates_representatives_in_tls_set(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    clusters_file = tmp_path / "tls_clusters.csv"
+    net_file.write_text("<net/>", encoding="utf-8")
+    clusters_file.write_text(
+        "\n".join(
+            [
+                "cluster_id,tls_ids,tls_count,google_maps_url",
+                "G001,tlA,1,https://maps.example/g1",
+                "G002,tlB,1,https://maps.example/g2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_command_runner(command, **kwargs):
+        calls.append(command)
+        _command_path(command, "--output-file", kwargs["cwd"]).write_text(
+            """<net>
+  <junction id="n1" type="traffic_light"/>
+  <edge id=":n1_0" function="internal"><lane id=":n1_0_0" index="0"/></edge>
+  <tlLogic id="n1" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="n1" linkIndex="0" via=":n1_0_0"/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    build_tls_aggregation_variant(
+        net_file=net_file,
+        tls_audit_report={"status": "pass", "tls_cluster_count": 2, "clusters_file": str(clusters_file)},
+        output_dir=tmp_path / "tls_aggregation",
+        prefix="demo_tls",
+        command_runner=fake_command_runner,
+        controlled_nodes_by_tls_func=lambda _net_file: {"tlA": ["n1"], "tlB": ["n1"]},
+    )
+
+    assert calls[0][calls[0].index("--tls.set") + 1] == "n1"
+
+
+def test_build_tls_aggregation_variant_prunes_representatives_within_tls_join_distance(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    clusters_file = tmp_path / "tls_clusters.csv"
+    net_file.write_text(
+        """<net>
+  <junction id="n1" x="0" y="0" type="traffic_light"/>
+  <junction id="n2" x="10" y="0" type="traffic_light"/>
+</net>""",
+        encoding="utf-8",
+    )
+    clusters_file.write_text(
+        "\n".join(
+            [
+                "cluster_id,tls_ids,tls_count,google_maps_url",
+                "G001,tlA,1,https://maps.example/g1",
+                "G002,tlB,1,https://maps.example/g2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_command_runner(command, **kwargs):
+        calls.append(command)
+        _command_path(command, "--output-file", kwargs["cwd"]).write_text(
+            """<net>
+  <junction id="n1" type="traffic_light"/>
+  <edge id=":n1_0" function="internal"><lane id=":n1_0_0" index="0"/></edge>
+  <tlLogic id="n1" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="n1" linkIndex="0" via=":n1_0_0"/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = build_tls_aggregation_variant(
+        net_file=net_file,
+        tls_audit_report={"status": "pass", "tls_cluster_count": 2, "clusters_file": str(clusters_file)},
+        output_dir=tmp_path / "tls_aggregation",
+        prefix="demo_tls",
+        command_runner=fake_command_runner,
+        controlled_nodes_by_tls_func=lambda _net_file: {"tlA": ["n1"], "tlB": ["n2"]},
+    )
+
+    assert calls[0][calls[0].index("--tls.set") + 1] == "n1"
+    assert report["tls_set_representative_count"] == 1
+    assert report["tls_set_spatially_pruned_count"] == 1
+    assert report["tls_set_spatially_pruned_representatives"] == [
+        {"representative_node_id": "n2", "kept_representative_node_id": "n1", "distance_m": 10.0}
+    ]
 
 
 def test_build_tls_aggregation_variant_reports_controlled_connection_regression(tmp_path: Path) -> None:
@@ -159,9 +296,11 @@ def test_build_tls_aggregation_variant_preserves_compatible_actuated_program(tmp
         output_file.write_text(
             """<net>
   <junction id="n1" type="traffic_light"/>
+  <edge id=":n1_0" function="internal"><lane id=":n1_0_0" index="0"/></edge>
   <tlLogic id="n1" type="static" programID="0" offset="0">
     <phase duration="1" state="r"/>
   </tlLogic>
+  <connection from="a" to="b" tl="n1" linkIndex="0" via=":n1_0_0"/>
 </net>""",
             encoding="utf-8",
         )
@@ -212,7 +351,7 @@ def test_build_tls_aggregation_variant_resolves_relative_paths(tmp_path: Path, m
 
     assert report["status"] == "pass"
     assert calls[0][calls[0].index("--sumo-net-file") + 1] == str(tmp_path / "candidate.net.xml")
-    assert calls[0][calls[0].index("--output-file") + 1] == "demo_tls_tls_aggregated.net.xml"
+    assert calls[0][calls[0].index("--output-file") + 1] == "tls_aggregated.net.xml"
 
 
 def test_build_tls_aggregation_variant_skips_when_no_tls_clusters(tmp_path: Path) -> None:

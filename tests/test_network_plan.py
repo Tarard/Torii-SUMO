@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.network_permissions import apply_service_passenger_permissions
 from torii_sumo.core.network_plan import derive_network_plan
 from torii_sumo.core.osm_workflow import (
+    _reference_delta_promotion_decision,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
     run_osm_cleanup_workflow,
@@ -64,6 +65,27 @@ def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_p
 
     assert decision["status"] == "blocked"
     assert decision["reason"] == "reference_tls_semantic_delta_regressed"
+
+
+def test_reference_delta_promotion_prefers_candidate_with_lower_tls_semantic_score() -> None:
+    decision = _reference_delta_promotion_decision(
+        candidate_delta_report={
+            "status": "pass",
+            "network_structural_missing_counts": {"tls_controlled_connection_count": 165},
+            "network_structural_extra_counts": {"traffic_light_junction_count": 46},
+        },
+        baseline_delta_report={
+            "status": "pass",
+            "network_structural_missing_counts": {"tls_shared_linkindex_group_count": 40},
+            "network_structural_extra_counts": {"traffic_light_junction_count": 354},
+        },
+        reason="tls_aggregation_promoted_by_reference_delta",
+    )
+
+    assert decision["status"] == "pass"
+    assert decision["reason"] == "tls_aggregation_promoted_by_reference_delta"
+    assert decision["candidate_tls_semantic_delta_score"] == 211
+    assert decision["baseline_tls_semantic_delta_score"] == 394
 
 
 def test_network_plan_blocks_when_layers_and_reference_are_missing() -> None:
@@ -1007,9 +1029,9 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
         calls["tls_connection_repair_tls_id_map"] = kwargs["tls_id_map"]
         calls["tls_connection_repair_copy_unmapped_tls"] = kwargs["copy_unmapped_tls"]
         calls["tls_connection_repair_require_capacity"] = kwargs["require_target_link_index_capacity"]
-        calls["tls_connection_repair_pad_capacity"] = kwargs["pad_mapped_tllogic_capacity"]
-        calls["tls_connection_repair_add_green"] = kwargs["add_green_phases_for_padded_links"]
-        calls["tls_connection_repair_add_yellow"] = kwargs["add_yellow_phases_for_generated_green"]
+        calls["tls_connection_repair_pad_capacity"] = kwargs.get("pad_mapped_tllogic_capacity", False)
+        calls["tls_connection_repair_add_green"] = kwargs.get("add_green_phases_for_padded_links", False)
+        calls["tls_connection_repair_add_yellow"] = kwargs.get("add_yellow_phases_for_generated_green", False)
         repaired_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
         repaired_tls_net_file.write_text("<net/>", encoding="utf-8")
         summary_file = tmp_path / "tls_connection_repair" / "summary.json"
@@ -1093,9 +1115,9 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
     assert calls["tls_connection_repair_tls_id_map"] == {"raw_tls": "agg_tls", "agg_tls": "agg_tls"}
     assert calls["tls_connection_repair_copy_unmapped_tls"] is False
     assert calls["tls_connection_repair_require_capacity"] is True
-    assert calls["tls_connection_repair_pad_capacity"] is True
-    assert calls["tls_connection_repair_add_green"] is True
-    assert calls["tls_connection_repair_add_yellow"] is True
+    assert calls["tls_connection_repair_pad_capacity"] is False
+    assert calls["tls_connection_repair_add_green"] is False
+    assert calls["tls_connection_repair_add_yellow"] is False
     assert calls["repair_tls_delta_candidate_net_file"] == repaired_tls_net_file
     assert calls["repair_tls_delta_structural_only"] is True
     assert calls["reference_join_candidate_net_file"] == repaired_tls_net_file
@@ -1128,6 +1150,175 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
     assert report["reference_visual_detail_tls_connection_repair_reference_delta_missing_counts"] == {
         "tls_controlled_connection_count": 90
     }
+
+
+def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delta_improves(
+    tmp_path: Path,
+) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-delta_filtered.osm.xml.gz"
+    visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
+    calls: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_tls(**kwargs):
+        if "reference_visual_detail" in Path(kwargs["net_file"]).name:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "tls_candidate_count": 4,
+                "tls_cluster_count": 2,
+                "clusters_file": str(tmp_path / "visual_tls_clusters.csv"),
+                "warnings": [],
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**_kwargs):
+        visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
+        visual_tls_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_aggregation_variant_file": str(visual_tls_net_file),
+            "tls_controlled_connection_preservation_status": "fail",
+            "tls_controlled_connection_regression_count": 12,
+            "warnings": [],
+        }
+
+    raw_visual_detail_net_file = tmp_path / "sumo" / "reference-delta_reference_visual_detail.net.xml"
+
+    def fake_reference_join_audit(**kwargs):
+        candidate_net_file = Path(kwargs["candidate_net_file"])
+        output_dir = str(kwargs["output_dir"])
+        if candidate_net_file == visual_tls_net_file and "tls_aggregation_reference_delta" in output_dir:
+            calls["aggregation_delta_candidate_net_file"] = kwargs["candidate_net_file"]
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_delta_status": "fail",
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 165},
+                "network_structural_extra_counts": {"traffic_light_junction_count": 46},
+                "network_structural_junction_type_missing_counts": {},
+                "network_structural_junction_type_extra_counts": {"traffic_light": 46},
+                "summary_file": str(tmp_path / "aggregation_delta.json"),
+                "warnings": [],
+            }
+        if candidate_net_file == raw_visual_detail_net_file and "raw_reference_delta" in output_dir:
+            calls["raw_delta_candidate_net_file"] = kwargs["candidate_net_file"]
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_delta_status": "fail",
+                "network_structural_missing_counts": {"tls_shared_linkindex_group_count": 40},
+                "network_structural_extra_counts": {"traffic_light_junction_count": 354},
+                "network_structural_junction_type_missing_counts": {},
+                "network_structural_junction_type_extra_counts": {"traffic_light": 354},
+                "summary_file": str(tmp_path / "raw_delta.json"),
+                "warnings": [],
+            }
+        calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "structural_only",
+            "network_structural_delta_status": "fail",
+            "network_structural_missing_counts": {"tls_controlled_connection_count": 165},
+            "network_structural_extra_counts": {"traffic_light_junction_count": 46},
+            "network_structural_junction_type_missing_counts": {},
+            "network_structural_junction_type_extra_counts": {"traffic_light": 46},
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-delta",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        tls_aggregation_func=fake_tls_aggregation,
+        tls_connection_repair_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("reference-delta promotion should skip TLS repair")
+        ),
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 100,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 100,
+            "warnings": [],
+        },
+        topology_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "topology_fragmentation_status": "pass",
+            "warnings": [],
+        },
+        routeability_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        reference_join_audit_func=fake_reference_join_audit,
+        reference_join_aggregation_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("structural-only audit should not trigger aggregation")
+        ),
+        teacher_guided_repair_queue_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("structural-only audit should not trigger teacher queue")
+        ),
+    )
+
+    assert calls["aggregation_delta_candidate_net_file"] == visual_tls_net_file
+    assert calls["raw_delta_candidate_net_file"] == raw_visual_detail_net_file
+    assert calls["reference_join_candidate_net_file"] == visual_tls_net_file
+    assert report["reference_visual_detail_comparison_net_file"] == str(visual_tls_net_file)
+    assert report["reference_visual_detail_comparison_selection_reason"] == "tls_aggregation_promoted_by_reference_delta"
+    assert report["reference_visual_detail_tls_aggregation_reference_promotion_status"] == "pass"
+    assert report["reference_visual_detail_tls_aggregation_reference_tls_semantic_delta_score"] == 211
+    assert report["reference_visual_detail_raw_reference_tls_semantic_delta_score"] == 394
+    assert report["reference_join_tls_semantic_delta_score"] == 211
 
 
 def test_reference_matched_workflow_runs_reference_scope_audit_without_default_pruning_variant(tmp_path: Path) -> None:
