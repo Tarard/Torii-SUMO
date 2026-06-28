@@ -76,6 +76,22 @@ REFERENCE_MATCHED_SEMANTICS_WORKFLOW = {
     "required_manual_reviews": ["netedit_connection_mode", "map_or_field_imagery"],
 }
 
+OSM_WORKFLOW_SUMMARY_KEYS = (
+    "workflow_review_html_status",
+    "workflow_review_html_file",
+    "reference_join_audit_mode",
+    "teacher_guided_repair_queue_status",
+    "teacher_guided_repair_run_status",
+    "teacher_guided_repair_parity_gate_status",
+    "teacher_guided_repair_application_scope",
+    "teacher_guided_repair_best_variant_file",
+    "teacher_guided_repair_run_report_file",
+    "teacher_guided_repair_applied_candidate_count",
+    "teacher_guided_repair_unapplied_pass_candidate_count",
+    "reference_join_post_teacher_audit_status",
+    "routeability_audit_status",
+)
+
 
 def _normalized(value: str) -> str:
     return " ".join(value.lower().split())
@@ -433,6 +449,9 @@ def _run_osm_to_sumo(
             "workflow_result": workflow_report,
         }
     )
+    for key in OSM_WORKFLOW_SUMMARY_KEYS:
+        if key in workflow_report:
+            report[key] = workflow_report[key]
     if network_plan.get("network_profile") == "reference_matched":
         _annotate_reference_matched_semantics(report, workflow_report)
     return report
