@@ -1,7 +1,7 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
+from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant, build_tls_signal_grouping_variant
 
 
 def _command_path(command: list[str], option: str, cwd: Path) -> Path:
@@ -233,6 +233,43 @@ def test_build_tls_aggregation_variant_prunes_nearby_representatives_before_tls_
     assert report["tls_set_spatially_pruned_representatives"] == [
         {"representative_node_id": "n2", "kept_representative_node_id": "n1", "distance_m": 30.0}
     ]
+
+
+def test_build_tls_signal_grouping_variant_limits_identical_signal_column_merges(tmp_path: Path) -> None:
+    source_net_file = tmp_path / "source.net.xml"
+    source_net_file.write_text(
+        """<net>
+  <junction id="n1" type="traffic_light"/>
+  <edge id=":n1_0" function="internal"><lane id=":n1_0_0" index="0"/></edge>
+  <tlLogic id="n1" type="actuated" programID="0">
+    <phase duration="30" state="GGGr"/>
+    <phase duration="4" state="yyyr"/>
+  </tlLogic>
+  <connection from="a" to="b" tl="n1" linkIndex="0" via=":n1_0_0"/>
+  <connection from="c" to="d" tl="n1" linkIndex="1" via=":n1_0_0"/>
+  <connection from="e" to="f" tl="n1" linkIndex="2" via=":n1_0_0"/>
+  <connection from="g" to="h" tl="n1" linkIndex="3" via=":n1_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_signal_grouping_variant(
+        source_net_file=source_net_file,
+        output_dir=tmp_path / "signal_grouping",
+        prefix="demo_signal_grouping",
+        max_shared_linkindex_groups=1,
+    )
+
+    root = ET.parse(report["tls_signal_grouping_variant_file"]).getroot()
+    phases = root.findall("tlLogic[@id='n1']/phase")
+    link_indexes = [connection.attrib["linkIndex"] for connection in root.findall("connection")]
+
+    assert Path(report["tls_signal_grouping_variant_file"]).name == "tls_signal_grouped.net.xml"
+    assert [phase.attrib["state"] for phase in phases] == ["Gr", "yr"]
+    assert link_indexes == ["0", "0", "0", "1"]
+    assert report["tls_signal_grouping_merged_group_count"] == 1
+    assert report["tls_signal_grouping_remapped_connection_count"] == 3
+    assert report["tls_aggregated_controlled_connection_count"] == 4
 
 
 def test_build_tls_aggregation_variant_reports_controlled_connection_regression(tmp_path: Path) -> None:
