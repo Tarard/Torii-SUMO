@@ -6,6 +6,7 @@ from torii_sumo.core.network_plan import derive_network_plan
 from torii_sumo.core.osm_workflow import (
     _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
+    _teacher_guided_application_stats,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
     run_osm_cleanup_workflow,
@@ -40,6 +41,26 @@ def _write_reference_net(path: Path) -> None:
 </net>""",
         encoding="utf-8",
     )
+
+
+def test_teacher_guided_application_stats_reports_single_variant_scope(tmp_path: Path) -> None:
+    best_net = tmp_path / "candidate_001_teacher_guided.net.xml"
+    best_net.write_text("<net/>", encoding="utf-8")
+
+    stats = _teacher_guided_application_stats(
+        {
+            "status": "pass",
+            "parity_gate_status": "pass",
+            "pass_candidate_count": 3,
+        },
+        best_net,
+    )
+
+    assert stats == {
+        "teacher_guided_repair_application_scope": "single_best_variant",
+        "teacher_guided_repair_applied_candidate_count": 1,
+        "teacher_guided_repair_unapplied_pass_candidate_count": 2,
+    }
 
 
 def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_path: Path) -> None:
@@ -816,6 +837,9 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_raw_node_file"] == str(tmp_path / "plain.nod.xml")
     assert report["teacher_guided_repair_run_status"] == "blocked"
     assert report["teacher_guided_repair_parity_gate_status"] == "blocked"
+    assert report["teacher_guided_repair_application_scope"] == "none"
+    assert report["teacher_guided_repair_applied_candidate_count"] == 0
+    assert report["teacher_guided_repair_unapplied_pass_candidate_count"] == 0
     assert report["teacher_guided_repair_semantic_failure_counts"] == {}
     assert report["teacher_guided_repair_approach_integrity_status"] == "blocked"
     assert report["teacher_guided_repair_approach_integrity_failure_counts"] == {}

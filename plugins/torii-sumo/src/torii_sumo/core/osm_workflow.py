@@ -425,6 +425,24 @@ def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path 
     return None
 
 
+def _teacher_guided_application_stats(
+    report: Mapping[str, Any] | None, best_variant_file: Path | None
+) -> dict[str, str | int]:
+    pass_count = 0 if report is None else _int_field(report, "pass_candidate_count")
+    applied_count = 1 if best_variant_file is not None else 0
+    if report is None:
+        scope = "skipped"
+    elif applied_count:
+        scope = "single_best_variant"
+    else:
+        scope = "none"
+    return {
+        "teacher_guided_repair_application_scope": scope,
+        "teacher_guided_repair_applied_candidate_count": applied_count,
+        "teacher_guided_repair_unapplied_pass_candidate_count": max(0, pass_count - applied_count),
+    }
+
+
 def export_plain_net_for_teacher_guided_repair(
     *,
     net_file: Path,
@@ -2483,6 +2501,9 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_pass_candidate_count": 0
         if teacher_guided_repair_run_report is None
         else teacher_guided_repair_run_report.get("pass_candidate_count", 0),
+        **_teacher_guided_application_stats(
+            teacher_guided_repair_run_report, teacher_guided_repair_best_variant_file
+        ),
         "teacher_guided_repair_run_report_file": ""
         if teacher_guided_repair_run_report is None
         else str(teacher_guided_repair_run_report.get("run_report_file", "")),

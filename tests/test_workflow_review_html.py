@@ -107,6 +107,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "teacher_guided_repair_movement_gap_candidate_count": 1,
             "teacher_guided_repair_max_vehicle_movement_matrix_missing_count": 12,
             "teacher_guided_repair_missing_movement_plan_count": 2,
+            "teacher_guided_repair_application_scope": "single_best_variant",
+            "teacher_guided_repair_applied_candidate_count": 1,
+            "teacher_guided_repair_unapplied_pass_candidate_count": 4,
             "teacher_guided_repair_top_movement_gaps": [
                 {
                     "reference_id": "cluster_a_b",
@@ -242,6 +245,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "teacher_guided_repair_movement_gap_candidate_count=1" in html
     assert "teacher_guided_repair_max_vehicle_movement_matrix_missing_count=12" in html
     assert "teacher_guided_repair_missing_movement_plan_count=2" in html
+    assert "teacher_guided_repair_application_scope=single_best_variant" in html
+    assert "teacher_guided_repair_applied_candidate_count=1" in html
+    assert "teacher_guided_repair_unapplied_pass_candidate_count=4" in html
     assert "first_missing_teacher_movement" in html
     assert "from_edge_id=cand_in" in html
     assert "to_edge_id=cand_out" in html
