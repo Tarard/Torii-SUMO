@@ -280,6 +280,52 @@ def test_build_tls_connection_repair_variant_can_add_green_phase_for_padded_link
     assert report["added_green_phase_tllogic_count"] == 1
 
 
+def test_build_tls_connection_repair_variant_can_add_yellow_phase_after_generated_green(tmp_path: Path) -> None:
+    source_net = tmp_path / "source.net.xml"
+    source_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="rawTls" linkIndex="2" dir="s" state="O"/>
+  <tlLogic id="rawTls" type="actuated" programID="0"><phase duration="4" state="rrG"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <tlLogic id="aggTls" type="static" programID="0"><phase duration="1" state="r"/></tlLogic>
+  <connection from="in" to="out" fromLane="0" toLane="0" uncontrolled="true"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_connection_repair_variant(
+        source_net_file=source_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "out",
+        prefix="demo",
+        tls_id_map={"rawTls": "aggTls"},
+        copy_unmapped_tls=False,
+        require_target_link_index_capacity=True,
+        pad_mapped_tllogic_capacity=True,
+        add_green_phases_for_padded_links=True,
+        add_yellow_phases_for_generated_green=True,
+    )
+
+    states = [phase.attrib["state"] for phase in ET.parse(report["variant_file"]).getroot().findall("tlLogic[@id='aggTls']/phase")]
+    assert states == ["rrr", "rrG", "rry"]
+    assert report["added_green_phase_count"] == 1
+    assert report["added_yellow_phase_count"] == 1
+    assert report["added_yellow_phase_tllogic_count"] == 1
+
+
 def test_netedit_review_actions_routes_movement_signature_delta_to_vehicle_matrix_rebuild() -> None:
     assert _netedit_review_actions(["movement_signature_counts"]) == ["rebuild_vehicle_movement_matrix"]
 
