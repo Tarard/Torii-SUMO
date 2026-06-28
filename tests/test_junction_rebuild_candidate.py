@@ -12,6 +12,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     build_rebuild_candidate,
     build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
+    build_tls_connection_repair_variant,
     run_teacher_guided_repair_queue,
     write_expanded_scope_plain_inputs,
     write_teacher_target_internal_replay_net,
@@ -22,6 +23,159 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_vehicle_connection_attrs_net,
 )
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+
+
+def test_build_tls_connection_repair_variant_restores_unique_connection_control_attrs(tmp_path: Path) -> None:
+    source_net = tmp_path / "source.net.xml"
+    source_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="right" from="j" to="c"><lane id="right_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="tlsA" linkIndex="3" linkIndex2="9" dir="s" state="O" pass="true" allow="passenger"/>
+  <connection from="in" to="right" fromLane="0" toLane="0" dir="r" state="M"/>
+  <tlLogic id="tlsA" type="actuated" programID="0" offset="5">
+    <phase duration="4" minDur="2" maxDur="7" state="G"/>
+  </tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="right" from="j" to="c"><lane id="right_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" uncontrolled="true"/>
+  <connection from="in" to="right" fromLane="0" toLane="0" uncontrolled="true"/>
+  <tlLogic id="old" type="static" programID="0"><phase duration="1" state="r"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_connection_repair_variant(
+        source_net_file=source_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "out",
+        prefix="demo",
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["source_tls_controlled_connection_count"] == 1
+    assert report["candidate_tls_controlled_connection_count_before"] == 0
+    assert report["candidate_tls_controlled_connection_count_after"] == 1
+    assert report["updated_connection_count"] == 1
+    assert report["copied_tllogic_count"] == 1
+    root = ET.parse(report["variant_file"]).getroot()
+    repaired = root.find("connection[@from='in'][@to='out']")
+    assert repaired.attrib["tl"] == "tlsA"
+    assert repaired.attrib["linkIndex"] == "3"
+    assert repaired.attrib["linkIndex2"] == "9"
+    assert repaired.attrib["dir"] == "s"
+    assert repaired.attrib["state"] == "O"
+    assert repaired.attrib["pass"] == "true"
+    assert repaired.attrib["allow"] == "passenger"
+    assert "uncontrolled" not in repaired.attrib
+    untouched = root.find("connection[@from='in'][@to='right']")
+    assert untouched.attrib["uncontrolled"] == "true"
+    target_tls = root.find("tlLogic[@id='tlsA']")
+    assert target_tls.attrib["type"] == "actuated"
+    assert target_tls.find("phase").attrib["minDur"] == "2"
+
+
+def test_build_tls_connection_repair_variant_can_remap_tls_without_copying_raw_tllogic(tmp_path: Path) -> None:
+    source_net = tmp_path / "source.net.xml"
+    source_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="rawTls" linkIndex="4" dir="l" state="o"/>
+  <tlLogic id="rawTls" type="actuated" programID="0"><phase duration="4" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <tlLogic id="aggTls" type="static" programID="0"><phase duration="1" state="r"/></tlLogic>
+  <connection from="in" to="out" fromLane="0" toLane="0" uncontrolled="true"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_connection_repair_variant(
+        source_net_file=source_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "out",
+        prefix="demo",
+        tls_id_map={"rawTls": "aggTls"},
+        copy_unmapped_tls=False,
+    )
+
+    root = ET.parse(report["variant_file"]).getroot()
+    repaired = root.find("connection[@from='in'][@to='out']")
+    assert repaired.attrib["tl"] == "aggTls"
+    assert repaired.attrib["linkIndex"] == "4"
+    assert root.find("tlLogic[@id='rawTls']") is None
+    assert root.find("tlLogic[@id='aggTls']").attrib["type"] == "static"
+    assert report["copied_tllogic_count"] == 0
+    assert report["replaced_tllogic_count"] == 0
+    assert report["skipped_unmapped_tls_connection_count"] == 0
+
+
+def test_build_tls_connection_repair_variant_can_require_target_link_index_capacity(tmp_path: Path) -> None:
+    source_net = tmp_path / "source.net.xml"
+    source_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="rawTls" linkIndex="4" dir="l" state="o"/>
+  <tlLogic id="rawTls" type="actuated" programID="0"><phase duration="4" state="GGGGG"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=""/>
+  <tlLogic id="aggTls" type="static" programID="0"><phase duration="1" state="r"/></tlLogic>
+  <connection from="in" to="out" fromLane="0" toLane="0" uncontrolled="true"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_connection_repair_variant(
+        source_net_file=source_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "out",
+        prefix="demo",
+        tls_id_map={"rawTls": "aggTls"},
+        copy_unmapped_tls=False,
+        require_target_link_index_capacity=True,
+    )
+
+    root = ET.parse(report["variant_file"]).getroot()
+    connection = root.find("connection[@from='in'][@to='out']")
+    assert connection.attrib["uncontrolled"] == "true"
+    assert "tl" not in connection.attrib
+    assert report["updated_connection_count"] == 0
+    assert report["skipped_invalid_mapped_linkindex_connection_count"] == 1
 
 
 def test_netedit_review_actions_routes_movement_signature_delta_to_vehicle_matrix_rebuild() -> None:
