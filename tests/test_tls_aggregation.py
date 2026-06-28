@@ -17,6 +17,8 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
   <tlLogic id="tlA" type="actuated" programID="0">
     <phase duration="30" minDur="10" maxDur="60" state="G"/>
   </tlLogic>
+  <connection from="src_a" to="src_b" tl="tlA" linkIndex="0"/>
+  <connection from="src_c" to="src_d" tl="tlA"/>
 </net>""",
         encoding="utf-8",
     )
@@ -41,6 +43,8 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
   <junction id="n3" type="traffic_light"/>
   <tlLogic id="n1" type="static"/>
   <tlLogic id="n3" type="static"/>
+  <connection from="a" to="b" tl="n1" linkIndex="0"/>
+  <connection from="c" to="d" tl="n1"/>
 </net>""",
             encoding="utf-8",
         )
@@ -71,18 +75,67 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     assert report["source_actuated_tl_logic_count"] == 1
     assert report["source_tls_phase_count"] == 1
     assert report["source_tls_phase_with_minmax_count"] == 1
+    assert report["source_tls_controlled_connection_count"] == 1
+    assert report["source_tl_connection_missing_linkindex_count"] == 1
     assert report["tls_program_policy"] == "discard_loaded_programs_rebuild_tls_set"
     assert any("discards loaded tlLogic" in warning for warning in report["warnings"])
     assert report["tls_aggregated_tl_logic_count"] == 2
     assert report["tls_aggregated_traffic_light_junction_count"] == 2
+    assert report["tls_aggregated_controlled_connection_count"] == 1
+    assert report["tls_aggregated_tl_connection_missing_linkindex_count"] == 1
+    assert report["tls_controlled_connection_preservation_status"] == "pass"
+    assert report["tls_controlled_connection_regression_count"] == 0
     assert Path(report["tls_aggregation_variant_file"]).is_file()
     assert Path(report["tls_aggregation_plan_file"]).is_file()
     command = calls[0]
     assert "--tls.discard-loaded" in command
     assert command[command.index("--tls.set") + 1] == "n1,n3"
+    assert command[command.index("--tls.join-dist") + 1] == "35"
+    assert "--tls.join" in command
     assert command[command.index("--tls.default-type") + 1] == "actuated"
     assert command[command.index("--sumo-net-file") + 1] == str(net_file.resolve())
     assert command[command.index("--output-file") + 1] == "demo_tls_tls_aggregated.net.xml"
+
+
+def test_build_tls_aggregation_variant_reports_controlled_connection_regression(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    clusters_file = tmp_path / "tls_clusters.csv"
+    net_file.write_text(
+        """<net>
+  <tlLogic id="tlA" type="actuated" programID="0"><phase duration="30" state="GG"/></tlLogic>
+  <connection from="a" to="b" tl="tlA" linkIndex="0"/>
+  <connection from="c" to="d" tl="tlA" linkIndex="1"/>
+</net>""",
+        encoding="utf-8",
+    )
+    clusters_file.write_text(
+        "\n".join(["cluster_id,tls_ids,tls_count,google_maps_url", "G001,tlA,1,https://maps.example/g1"]),
+        encoding="utf-8",
+    )
+
+    def fake_command_runner(command, **kwargs):
+        _command_path(command, "--output-file", kwargs["cwd"]).write_text(
+            """<net>
+  <junction id="n1" type="traffic_light"/>
+  <tlLogic id="n1" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="n1" linkIndex="0"/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = build_tls_aggregation_variant(
+        net_file=net_file,
+        tls_audit_report={"status": "pass", "tls_cluster_count": 1, "clusters_file": str(clusters_file)},
+        output_dir=tmp_path / "tls_aggregation",
+        prefix="demo_tls",
+        command_runner=fake_command_runner,
+        controlled_nodes_by_tls_func=lambda _net_file: {"tlA": ["n1"]},
+    )
+
+    assert report["tls_controlled_connection_preservation_status"] == "fail"
+    assert report["tls_controlled_connection_regression_count"] == 1
+    assert any("controlled TLS connections" in warning for warning in report["warnings"])
 
 
 def test_build_tls_aggregation_variant_preserves_compatible_actuated_program(tmp_path: Path) -> None:
