@@ -2589,10 +2589,18 @@ def _teacher_guided_repair_candidate(
         )
     teacher_parity = _teacher_parity_summary(teacher_model)
     candidate_parity = _teacher_parity_summary(candidate_model)
+    missing_teacher_movement_plan = _missing_teacher_movement_plan(
+        teacher_model,
+        candidate_model,
+        edge_map=edge_map,
+        teacher_junction_id=reference_id,
+        candidate_junction_id=candidate_junction_id,
+    )
     movement_matrix_missing_count = max(
         0,
         int(candidate_parity.get("vehicle_movement_matrix_missing_count", 0) or 0)
         - int(teacher_parity.get("vehicle_movement_matrix_missing_count", 0) or 0),
+        len(missing_teacher_movement_plan),
     )
     review_actions = ["rebuild_vehicle_movement_matrix"] if movement_matrix_missing_count else []
     return {
@@ -2608,6 +2616,8 @@ def _teacher_guided_repair_candidate(
         "copyable_missing_teacher_edge_ids": copyable_missing,
         "uncopyable_missing_teacher_edge_ids": uncopyable_missing,
         "vehicle_movement_matrix_missing_count": movement_matrix_missing_count,
+        "missing_teacher_movement_plan_count": len(missing_teacher_movement_plan),
+        "missing_teacher_movement_plan": missing_teacher_movement_plan,
         "netedit_review_actions": review_actions,
         "review_priority": "high" if review_actions else "normal",
         "teacher_incoming_edge_count": len(_approach_edges(teacher_model, "incoming")),
@@ -2745,6 +2755,60 @@ def _copyable_missing_teacher_edge_ids(
     )
 
 
+def _missing_teacher_movement_plan(
+    teacher_model: dict[str, object],
+    candidate_model: dict[str, object],
+    *,
+    edge_map: dict[str, str],
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+) -> list[dict[str, object]]:
+    candidate_signatures = Counter(
+        _vehicle_connection_signature(connection, edge_map=None, source_junction_id="", target_junction_id="")
+        for connection in candidate_model.get("vehicle_connections", []) or []
+        if isinstance(connection, dict)
+    )
+    missing = []
+    for connection in teacher_model.get("vehicle_connections", []) or []:
+        if not isinstance(connection, dict):
+            continue
+        teacher_from = str(connection.get("from", ""))
+        teacher_to = str(connection.get("to", ""))
+        source = edge_map.get(teacher_from)
+        target = edge_map.get(teacher_to)
+        if not source or not target:
+            continue
+        signature = _vehicle_connection_signature(
+            connection,
+            edge_map=edge_map,
+            source_junction_id=teacher_junction_id,
+            target_junction_id=candidate_junction_id,
+        )
+        if candidate_signatures[signature] > 0:
+            candidate_signatures[signature] -= 1
+            continue
+        via = _mapped_internal_ref(str(connection.get("via", "")), teacher_junction_id, candidate_junction_id)
+        missing.append(
+            {
+                "teacher_from_edge_id": teacher_from,
+                "teacher_to_edge_id": teacher_to,
+                "from_edge_id": source,
+                "to_edge_id": target,
+                "fromLane": str(connection.get("fromLane", "")),
+                "toLane": str(connection.get("toLane", "")),
+                "dir": str(connection.get("dir", "")),
+                "state": str(connection.get("state", "")),
+                "tl": _mapped_junction_ref(str(connection.get("tl", "")), teacher_junction_id, candidate_junction_id),
+                "linkIndex": str(connection.get("linkIndex", "")),
+                "via": via,
+                "controlled": bool(connection.get("tl") and connection.get("linkIndex")),
+                "has_internal_via": bool(via),
+                "match_status": "missing_candidate_connection",
+            }
+        )
+    return missing
+
+
 def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
@@ -2760,6 +2824,7 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                 "teacher_pattern_key",
                 "teacher_pattern_template_count",
                 "vehicle_movement_matrix_missing_count",
+                "missing_teacher_movement_plan_count",
                 "edge_map_size",
                 "missing_teacher_edge_ids",
                 "copyable_missing_teacher_edge_ids",
@@ -2788,6 +2853,7 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                     "teacher_pattern_key": row.get("teacher_pattern_key", ""),
                     "teacher_pattern_template_count": row.get("teacher_pattern_template_count", 0),
                     "vehicle_movement_matrix_missing_count": row.get("vehicle_movement_matrix_missing_count", 0),
+                    "missing_teacher_movement_plan_count": row.get("missing_teacher_movement_plan_count", 0),
                     "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
                     "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
                     "copyable_missing_teacher_edge_ids": ";".join(
