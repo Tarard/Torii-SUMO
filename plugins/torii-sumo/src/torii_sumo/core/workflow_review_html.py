@@ -215,6 +215,25 @@ def _evidence_rows(
     ):
         if key in workflow_summary:
             movement_values.append(f"{key}={workflow_summary[key]}")
+    top_movement_gaps = workflow_summary.get("teacher_guided_repair_top_movement_gaps", []) or []
+    if isinstance(top_movement_gaps, list):
+        for gap in top_movement_gaps:
+            if not isinstance(gap, Mapping):
+                continue
+            sample = gap.get("first_missing_teacher_movement", {})
+            if not isinstance(sample, Mapping):
+                continue
+            sample_values = []
+            if gap.get("reference_id"):
+                sample_values.append(f"reference_id={gap['reference_id']}")
+            sample_values.extend(
+                f"{key}={sample[key]}"
+                for key in ("from_edge_id", "to_edge_id", "fromLane", "toLane", "dir", "tl", "linkIndex", "via")
+                if sample.get(key) not in (None, "")
+            )
+            if sample_values:
+                movement_values.append("first_missing_teacher_movement: " + ", ".join(sample_values))
+                break
     html_rows.append(
         "<tr>"
         "<td>teacher_movement_plans</td>"
