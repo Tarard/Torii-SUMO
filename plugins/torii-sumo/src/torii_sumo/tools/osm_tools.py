@@ -489,10 +489,17 @@ def sumo_osm_cleanup_workflow(
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = True,
+    reference_join_audit_structural_only: bool | None = None,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
+    normalized_profile = (network_profile or "").strip().lower()
+    structural_only = (
+        not (normalized_profile == "reference_matched" and reference_net_file)
+        if reference_join_audit_structural_only is None
+        else reference_join_audit_structural_only
+    )
     return run_osm_cleanup_workflow(
         output_dir=Path(output_dir),
         bbox=bbox,
@@ -531,6 +538,7 @@ def sumo_osm_cleanup_workflow(
         run_reference_hierarchy_audit_after_build=run_reference_hierarchy_audit_after_build,
         run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
         run_scope_pruning_after_build=run_scope_pruning_after_build,
+        reference_join_audit_structural_only=structural_only,
         teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
         key_edge_queries=key_edge_queries,
     )
