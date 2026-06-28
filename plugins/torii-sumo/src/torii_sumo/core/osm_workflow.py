@@ -592,6 +592,7 @@ def run_osm_cleanup_workflow(
     run_tls_aggregation_after_build: bool = True,
     run_junction_aggregation_after_build: bool = True,
     run_reference_join_audit_after_build: bool = True,
+    reference_join_audit_structural_only: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
@@ -1152,8 +1153,10 @@ def run_osm_cleanup_workflow(
             prefix=f"{prefix}_reference_join_audit",
             candidate_cluster_radius_m=topology_cluster_radius_m,
             candidate_min_cluster_nodes=topology_min_cluster_nodes,
+            structural_only=reference_join_audit_structural_only,
         )
-        if run_reference_join_aggregation_after_build:
+        reference_join_audit_is_structural_only = reference_join_audit_report.get("audit_mode") == "structural_only"
+        if run_reference_join_aggregation_after_build and not reference_join_audit_is_structural_only:
             reference_join_aggregation_report = reference_join_aggregation_func(
                 net_file=reference_join_audit_candidate_net_file,
                 output_dir=output_dir / "reference_join_aggregation",
@@ -1168,53 +1171,54 @@ def run_osm_cleanup_workflow(
                 candidate_joined_net_file = Path(str(joined_value))
                 if candidate_joined_net_file.exists():
                     reference_visual_detail_comparison_net_file = candidate_joined_net_file
-        teacher_guided_repair_queue_report = teacher_guided_repair_queue_func(
-            teacher_net_file=reference_net_file,
-            candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
-            reference_join_audit_report=reference_join_audit_report,
-            output_dir=output_dir / "teacher_guided_repair_queue",
-            prefix=f"{prefix}_teacher_guided_repair",
-            max_ready_candidates=teacher_guided_repair_max_ready_candidates,
-        )
-        if (
-            _int_field(teacher_guided_repair_queue_report, "ready_candidate_count") > 0
-            or _int_field(teacher_guided_repair_queue_report, "expanded_scope_candidate_count") > 0
-        ):
-            teacher_guided_plain_export_report = teacher_guided_plain_export_func(
-                net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
-                output_dir=output_dir / "teacher_guided_repair_plain",
+        if not reference_join_audit_is_structural_only:
+            teacher_guided_repair_queue_report = teacher_guided_repair_queue_func(
+                teacher_net_file=reference_net_file,
+                candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
+                reference_join_audit_report=reference_join_audit_report,
+                output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair",
-                netconvert_binary=netconvert_binary,
-                timeout_seconds=timeout_seconds,
+                max_ready_candidates=teacher_guided_repair_max_ready_candidates,
             )
-            if teacher_guided_plain_export_report.get("status") == "pass":
-                raw_type_value = str(teacher_guided_plain_export_report.get("raw_type_file", ""))
-                queue_file_value = str(teacher_guided_repair_queue_report.get("queue_file", ""))
-                teacher_guided_repair_run_report = teacher_guided_repair_run_func(
-                    queue_report=teacher_guided_repair_queue_report,
-                    raw_node_file=Path(str(teacher_guided_plain_export_report["raw_node_file"])),
-                    raw_edge_file=Path(str(teacher_guided_plain_export_report["raw_edge_file"])),
-                    raw_connection_file=Path(str(teacher_guided_plain_export_report["raw_connection_file"])),
-                    raw_type_file=Path(raw_type_value) if raw_type_value else None,
-                    output_dir=output_dir / "teacher_guided_repair_execution",
+            if (
+                _int_field(teacher_guided_repair_queue_report, "ready_candidate_count") > 0
+                or _int_field(teacher_guided_repair_queue_report, "expanded_scope_candidate_count") > 0
+            ):
+                teacher_guided_plain_export_report = teacher_guided_plain_export_func(
+                    net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
+                    output_dir=output_dir / "teacher_guided_repair_plain",
                     prefix=f"{prefix}_teacher_guided_repair",
-                    queue_base_dir=Path(queue_file_value).resolve().parent if queue_file_value else None,
-                    replay_target_internal_subgraph=True,
-                    max_ready_candidates=teacher_guided_repair_max_ready_candidates,
                     netconvert_binary=netconvert_binary,
-                    sumo_binary=sumo_binary,
                     timeout_seconds=timeout_seconds,
                 )
-                teacher_guided_repair_best_variant_file = _teacher_guided_best_variant_file(
-                    teacher_guided_repair_run_report
-                )
-                expanded_scope_value = str(teacher_guided_repair_run_report.get("best_expanded_scope_net_file", ""))
-                if expanded_scope_value:
-                    expanded_scope_file = Path(expanded_scope_value)
-                    if expanded_scope_file.exists():
-                        teacher_guided_repair_best_expanded_scope_net_file = expanded_scope_file
-                if teacher_guided_repair_best_variant_file is not None:
-                    reference_visual_detail_comparison_net_file = teacher_guided_repair_best_variant_file
+                if teacher_guided_plain_export_report.get("status") == "pass":
+                    raw_type_value = str(teacher_guided_plain_export_report.get("raw_type_file", ""))
+                    queue_file_value = str(teacher_guided_repair_queue_report.get("queue_file", ""))
+                    teacher_guided_repair_run_report = teacher_guided_repair_run_func(
+                        queue_report=teacher_guided_repair_queue_report,
+                        raw_node_file=Path(str(teacher_guided_plain_export_report["raw_node_file"])),
+                        raw_edge_file=Path(str(teacher_guided_plain_export_report["raw_edge_file"])),
+                        raw_connection_file=Path(str(teacher_guided_plain_export_report["raw_connection_file"])),
+                        raw_type_file=Path(raw_type_value) if raw_type_value else None,
+                        output_dir=output_dir / "teacher_guided_repair_execution",
+                        prefix=f"{prefix}_teacher_guided_repair",
+                        queue_base_dir=Path(queue_file_value).resolve().parent if queue_file_value else None,
+                        replay_target_internal_subgraph=True,
+                        max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                        netconvert_binary=netconvert_binary,
+                        sumo_binary=sumo_binary,
+                        timeout_seconds=timeout_seconds,
+                    )
+                    teacher_guided_repair_best_variant_file = _teacher_guided_best_variant_file(
+                        teacher_guided_repair_run_report
+                    )
+                    expanded_scope_value = str(teacher_guided_repair_run_report.get("best_expanded_scope_net_file", ""))
+                    if expanded_scope_value:
+                        expanded_scope_file = Path(expanded_scope_value)
+                        if expanded_scope_file.exists():
+                            teacher_guided_repair_best_expanded_scope_net_file = expanded_scope_file
+                    if teacher_guided_repair_best_variant_file is not None:
+                        reference_visual_detail_comparison_net_file = teacher_guided_repair_best_variant_file
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -1546,6 +1550,9 @@ def run_osm_cleanup_workflow(
         "reference_join_audit_status": "skipped"
         if reference_join_audit_report is None
         else reference_join_audit_report.get("status", "fail"),
+        "reference_join_audit_mode": "skipped"
+        if reference_join_audit_report is None
+        else str(reference_join_audit_report.get("audit_mode", "full")),
         "reference_join_audit_candidate_layer": reference_join_audit_candidate_layer,
         "reference_join_audit_candidate_net_file": ""
         if reference_join_audit_candidate_net_file is None

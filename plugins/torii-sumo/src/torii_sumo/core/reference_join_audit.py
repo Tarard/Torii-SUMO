@@ -28,6 +28,7 @@ def audit_reference_join_patterns(
     candidate_cluster_radius_m: float = 30.0,
     candidate_min_cluster_nodes: int = 3,
     match_radius_m: float = 45.0,
+    structural_only: bool = False,
 ) -> dict[str, Any]:
     if match_radius_m <= 0:
         return _failure("match_radius_m must be positive")
@@ -35,6 +36,20 @@ def audit_reference_join_patterns(
         return _failure(f"reference net file does not exist: {reference_net_file}")
     if not candidate_net_file.exists():
         return _failure(f"candidate net file does not exist: {candidate_net_file}")
+    if structural_only:
+        try:
+            return _structural_only_report(
+                reference_net_file=reference_net_file,
+                candidate_net_file=candidate_net_file,
+                output_dir=output_dir,
+                prefix=prefix,
+                reference_cluster_prefix=reference_cluster_prefix,
+                candidate_cluster_radius_m=candidate_cluster_radius_m,
+                candidate_min_cluster_nodes=candidate_min_cluster_nodes,
+                match_radius_m=match_radius_m,
+            )
+        except (OSError, ET.ParseError, KeyError, ValueError) as exc:
+            return _failure(f"{type(exc).__name__}: {exc}")
 
     try:
         reference_cases = _reference_join_cases(reference_net_file, reference_cluster_prefix)
@@ -156,6 +171,7 @@ def audit_reference_join_patterns(
     report = {
         "status": "pass" if reference_cases else "blocked",
         "claim_status": "diagnostic-demo" if reference_cases else "blocked",
+        "audit_mode": "full",
         "reference_net_file": str(reference_net_file),
         "candidate_net_file": str(candidate_net_file),
         "output_dir": str(output_dir),
@@ -199,6 +215,98 @@ def audit_reference_join_patterns(
         "all_cases": matched_cases,
         "warnings": _warnings(reference_cases, matched_cases) + pattern_warnings,
     }
+    summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
+def _structural_only_report(
+    *,
+    reference_net_file: Path,
+    candidate_net_file: Path,
+    output_dir: Path,
+    prefix: str,
+    reference_cluster_prefix: str,
+    candidate_cluster_radius_m: float,
+    candidate_min_cluster_nodes: int,
+    match_radius_m: float,
+) -> dict[str, Any]:
+    reference_network_structural_summary = _net_structural_summary(reference_net_file)
+    candidate_network_structural_summary = _net_structural_summary(candidate_net_file)
+    network_structural_delta = _network_structural_delta(
+        reference_network_structural_summary,
+        candidate_network_structural_summary,
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
+    summary_file = output_dir / f"{prefix}_reference_join_audit.json"
+    report = {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "audit_mode": "structural_only",
+        "reference_net_file": str(reference_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_dir": str(output_dir),
+        "reference_cluster_prefix": reference_cluster_prefix,
+        "candidate_cluster_radius_m": candidate_cluster_radius_m,
+        "candidate_min_cluster_nodes": candidate_min_cluster_nodes,
+        "match_radius_m": match_radius_m,
+        "reference_case_count": 0,
+        "matched_case_count": 0,
+        "unmatched_case_count": 0,
+        "candidate_topology_cluster_count": 0,
+        "reference_type_counts": {},
+        "learned_rule_counts": {},
+        "pattern_stats": {},
+        "junction_pattern_index": [],
+        "candidate_junction_pattern_index": [],
+        "junction_pattern_comparison_status": "skipped",
+        "junction_pattern_mismatch_count": 0,
+        "junction_pattern_mismatch_field_counts": {},
+        "junction_structural_signature_status": "skipped",
+        "junction_structural_signature_missing_counts": {},
+        "reference_structural_signature_summary": {},
+        "candidate_structural_signature_summary": {},
+        "network_structural_delta_status": network_structural_delta["status"],
+        "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "reference_network_structural_summary": reference_network_structural_summary,
+        "candidate_network_structural_summary": candidate_network_structural_summary,
+        "junction_pattern_comparisons": [],
+        "junction_pattern_templates": [],
+        "candidate_junction_pattern_templates": [],
+        "junction_pattern_comparisons_file": "",
+        "junction_pattern_templates_file": "",
+        "junction_teacher_delta_file": str(junction_teacher_delta_file),
+        "cases_file": "",
+        "summary_file": str(summary_file),
+        "candidate_topology_audit_file": "",
+        "matched_cases": [],
+        "all_cases": [],
+        "warnings": ["reference join audit ran in structural-only mode; full case matching was skipped"],
+    }
+    junction_teacher_delta_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "audit_mode": "structural_only",
+                "reference_net_file": str(reference_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "network_structural_delta_status": network_structural_delta["status"],
+                "network_structural_missing_counts": network_structural_delta["missing_counts"],
+                "network_structural_junction_type_missing_counts": network_structural_delta[
+                    "junction_type_missing_counts"
+                ],
+                "reference_network_structural_summary": reference_network_structural_summary,
+                "candidate_network_structural_summary": candidate_network_structural_summary,
+                "junction_pattern_comparisons": [],
+                "matched_cases": [],
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
 

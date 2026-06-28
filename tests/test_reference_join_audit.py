@@ -316,6 +316,75 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
     assert delta["junction_pattern_comparisons"][0]["teacher"]["control_type"] == "traffic_light"
 
 
+def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id="west_in"><lane id="west_in_0" index="0" allow="passenger"/></edge>
+  <edge id="east_out"><lane id="east_out_0" index="0" allow="passenger"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0"/></edge>
+  <edge id=":cluster_a_b_c0" function="crossing"><lane id=":cluster_a_b_c0_0" index="0"/></edge>
+  <edge id=":cluster_a_b_w0" function="walkingarea"><lane id=":cluster_a_b_w0_0" index="0"/></edge>
+  <junction id="cluster_a_b" type="traffic_light" x="0" y="0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0" tl="cluster_a_b" linkIndex="0"/>
+  <tlLogic id="cluster_a_b" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="west_in"><lane id="west_in_0" index="0" allow="passenger"/></edge>
+  <edge id="east_out"><lane id="east_out_0" index="0" allow="passenger"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0"/>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "torii_sumo.core.reference_join_audit._reference_join_cases",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("case matching should be skipped")),
+    )
+    monkeypatch.setattr(
+        "torii_sumo.core.reference_join_audit.audit_topology_fragmentation",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("topology matching should be skipped")),
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        prefix="structural",
+        structural_only=True,
+    )
+
+    assert report["status"] == "pass"
+    assert report["audit_mode"] == "structural_only"
+    assert report["reference_case_count"] == 0
+    assert report["matched_case_count"] == 0
+    assert report["cases_file"] == ""
+    assert report["candidate_topology_audit_file"] == ""
+    assert report["junction_pattern_comparison_status"] == "skipped"
+    assert report["network_structural_delta_status"] == "fail"
+    assert report["network_structural_missing_counts"] == {
+        "crossing_edge_count": 1,
+        "request_count": 1,
+        "tl_logic_count": 1,
+        "traffic_light_junction_count": 1,
+        "tls_controlled_connection_count": 1,
+        "walkingarea_edge_count": 1,
+    }
+    assert report["network_structural_junction_type_missing_counts"] == {"traffic_light": 1}
+    assert Path(report["junction_teacher_delta_file"]).is_file()
+    summary = json.loads(Path(report["summary_file"]).read_text(encoding="utf-8"))
+    assert summary["audit_mode"] == "structural_only"
+    assert any("structural-only mode" in warning for warning in report["warnings"])
+
+
 def test_reference_join_audit_keeps_audit_when_pattern_extraction_fails(tmp_path: Path) -> None:
     reference = tmp_path / "reference.net.xml"
     candidate = tmp_path / "candidate.net.xml"
