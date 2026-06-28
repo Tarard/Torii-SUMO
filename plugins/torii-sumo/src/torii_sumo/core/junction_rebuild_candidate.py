@@ -161,6 +161,7 @@ def build_teacher_guided_repair_queue(
         )
         repair_candidates.append(candidate)
     repair_candidates.sort(key=_teacher_guided_candidate_sort_key)
+    tls_repair_candidates = _tls_repair_candidates(reference_join_audit_report)
     if max_ready_candidates is not None and max_ready_candidates > 0:
         repair_candidates = _limit_ready_repair_candidates(repair_candidates, max_ready_candidates)
     ready_count = sum(
@@ -185,6 +186,11 @@ def build_teacher_guided_repair_queue(
         "ready_candidate_count": ready_count,
         "expanded_scope_candidate_count": expanded_scope_count,
         "blocked_candidate_count": len(repair_candidates) - ready_count - expanded_scope_count,
+        "tls_repair_candidate_count": len(tls_repair_candidates),
+        "tls_repair_category_counts": dict(
+            sorted(Counter(str(candidate.get("repair_category", "")) for candidate in tls_repair_candidates).items())
+        ),
+        "tls_repair_candidates": tls_repair_candidates,
         "junction_pattern_mismatch_field_counts": reference_join_audit_report.get(
             "junction_pattern_mismatch_field_counts", {}
         ),
@@ -1988,6 +1994,30 @@ def _limit_ready_repair_candidates(candidates: list[dict[str, object]], max_read
         if ready_count >= max_ready_candidates:
             break
     return selected
+
+
+def _tls_repair_candidates(reference_join_audit_report: dict[str, Any]) -> list[dict[str, object]]:
+    candidates = []
+    for entry in reference_join_audit_report.get("tls_control_review_queue", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        repair_category = str(entry.get("repair_category", "tls_controller_cardinality_repair"))
+        candidates.append(
+            {
+                **entry,
+                "candidate_status": "needs_tls_semantic_repair",
+                "repair_category": repair_category,
+                "netedit_review_actions": _tls_repair_actions(repair_category),
+                "tls_review_index": len(candidates),
+            }
+        )
+    return candidates
+
+
+def _tls_repair_actions(repair_category: str) -> list[str]:
+    if repair_category == "tls_linkindex_phase_repair":
+        return ["inspect_tls_linkindex_phase"]
+    return ["inspect_tls_control"]
 
 
 def _queue_path(value: object, base_dir: Path | None) -> Path:

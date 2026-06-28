@@ -346,6 +346,53 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     assert rows[0]["review_priority"] == "high"
 
 
+def test_build_teacher_guided_repair_queue_carries_tls_semantic_repairs(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text("<net/>", encoding="utf-8")
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text("<net/>", encoding="utf-8")
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [],
+            "tls_control_review_queue": [
+                {
+                    "repair_category": "tls_controller_cardinality_repair",
+                    "review_type": "restore_tls_controlled_connections",
+                    "reference_count": 550,
+                    "candidate_count": 160,
+                    "missing_count": 390,
+                },
+                {
+                    "repair_category": "tls_linkindex_phase_repair",
+                    "review_type": "restore_shared_linkindex_groups",
+                    "reference_count": 40,
+                    "candidate_count": 0,
+                    "missing_count": 40,
+                },
+            ],
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["repair_candidate_count"] == 0
+    assert report["tls_repair_candidate_count"] == 2
+    assert report["tls_repair_category_counts"] == {
+        "tls_controller_cardinality_repair": 1,
+        "tls_linkindex_phase_repair": 1,
+    }
+    assert [candidate["candidate_status"] for candidate in report["tls_repair_candidates"]] == [
+        "needs_tls_semantic_repair",
+        "needs_tls_semantic_repair",
+    ]
+    assert report["tls_repair_candidates"][0]["netedit_review_actions"] == ["inspect_tls_control"]
+    assert report["tls_repair_candidates"][1]["netedit_review_actions"] == ["inspect_tls_linkindex_phase"]
+    assert json.loads(Path(report["queue_file"]).read_text(encoding="utf-8"))["tls_repair_candidate_count"] == 2
+
+
 def test_build_teacher_guided_repair_queue_flags_vehicle_movement_matrix_gap(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(

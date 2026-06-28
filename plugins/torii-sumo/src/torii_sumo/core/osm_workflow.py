@@ -1770,6 +1770,12 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_queued_case_count": 0
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("queued_case_count", 0),
+        "teacher_guided_repair_tls_candidate_count": 0
+        if teacher_guided_repair_queue_report is None
+        else teacher_guided_repair_queue_report.get("tls_repair_candidate_count", 0),
+        "teacher_guided_repair_tls_category_counts": {}
+        if teacher_guided_repair_queue_report is None
+        else teacher_guided_repair_queue_report.get("tls_repair_category_counts", {}),
         "teacher_guided_repair_queue_truncated": False
         if teacher_guided_repair_queue_report is None
         else bool(teacher_guided_repair_queue_report.get("queue_truncated", False)),

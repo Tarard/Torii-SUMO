@@ -442,6 +442,11 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "expanded_scope_candidate_count": 1,
             "queue_file": str(tmp_path / "teacher_guided_queue.json"),
             "queue_csv_file": str(tmp_path / "teacher_guided_queue.csv"),
+            "tls_repair_candidate_count": 2,
+            "tls_repair_category_counts": {
+                "tls_controller_cardinality_repair": 1,
+                "tls_linkindex_phase_repair": 1,
+            },
             "repair_candidates": [
                 {
                     "reference_id": "cluster_a_b",
@@ -660,6 +665,11 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_best_expanded_scope_net_file"] == str(tmp_path / "expanded_scope.net.xml")
     assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["teacher_guided_repair_queue_status"] == "pass"
+    assert report["teacher_guided_repair_tls_candidate_count"] == 2
+    assert report["teacher_guided_repair_tls_category_counts"] == {
+        "tls_controller_cardinality_repair": 1,
+        "tls_linkindex_phase_repair": 1,
+    }
     assert report["teacher_guided_repair_ready_candidate_count"] == 0
     assert report["teacher_guided_repair_expanded_scope_candidate_count"] == 1
     assert report["teacher_guided_repair_expanded_scope_pass_candidate_count"] == 1
