@@ -255,8 +255,22 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "tl_logic_controlled_junction_count_distribution": {"1": 1},
         "multi_junction_tl_logic_count": 0,
         "traffic_light_junction_without_tls_connection_count": 0,
+        "traffic_light_junction_without_tls_connection_ids": [],
         "tls_shared_linkindex_group_count": 0,
         "tls_sparse_linkindex_tl_logic_count": 0,
+        "tl_logic_control_records": [
+            {
+                "tl_id": "cluster_a_b",
+                "controlled_connection_count": 1,
+                "controlled_junction_count": 1,
+                "junction_ids": ["cluster_a_b"],
+                "linkindexes": [0],
+                "controlled_linkindex_count": 1,
+                "phase_state_length": 1,
+                "shared_linkindex_group_count": 0,
+                "sparse_linkindex": False,
+            }
+        ],
         "junction_type_counts": {"traffic_light": 1},
         "edge_function_counts": {"crossing": 1, "internal": 1, "plain": 6, "walkingarea": 1},
     }
@@ -275,8 +289,10 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "tl_logic_controlled_junction_count_distribution": {},
         "multi_junction_tl_logic_count": 0,
         "traffic_light_junction_without_tls_connection_count": 0,
+        "traffic_light_junction_without_tls_connection_ids": [],
         "tls_shared_linkindex_group_count": 0,
         "tls_sparse_linkindex_tl_logic_count": 0,
+        "tl_logic_control_records": [],
         "junction_type_counts": {"priority": 1},
         "edge_function_counts": {"internal": 1, "plain": 6},
     }
@@ -412,6 +428,131 @@ def test_reference_join_audit_summarizes_tls_control_semantics(tmp_path: Path) -
     assert report["network_structural_missing_counts"]["multi_junction_tl_logic_count"] == 1
     assert report["network_structural_missing_counts"]["tls_shared_linkindex_group_count"] == 1
     assert report["network_structural_missing_counts"]["tls_sparse_linkindex_tl_logic_count"] == 1
+
+
+def test_reference_join_audit_builds_tls_control_review_queue(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id=":r1_0" function="internal"><lane id=":r1_0_0" index="0"/></edge>
+  <edge id=":r2_0" function="internal"><lane id=":r2_0_0" index="0"/></edge>
+  <junction id="r1" type="traffic_light"/>
+  <junction id="r2" type="traffic_light"/>
+  <connection from="ra" to="rb" tl="tlRef" linkIndex="0" via=":r1_0_0"/>
+  <connection from="rc" to="rd" tl="tlRef" linkIndex="1" via=":r2_0_0"/>
+  <tlLogic id="tlRef" type="actuated" programID="0"><phase duration="30" state="GG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id=":j1_0" function="internal"><lane id=":j1_0_0" index="0"/></edge>
+  <edge id=":j2_0" function="internal"><lane id=":j2_0_0" index="0"/></edge>
+  <edge id=":j3_0" function="internal"><lane id=":j3_0_0" index="0"/></edge>
+  <edge id=":j4_0" function="internal"><lane id=":j4_0_0" index="0"/></edge>
+  <edge id=":j4_1" function="internal"><lane id=":j4_1_0" index="0"/></edge>
+  <junction id="j1" type="traffic_light"/>
+  <junction id="j2" type="traffic_light"/>
+  <junction id="j3" type="traffic_light"/>
+  <junction id="j4" type="traffic_light"/>
+  <junction id="j5" type="traffic_light"/>
+  <connection from="a" to="b" tl="tlWide" linkIndex="0" via=":j1_0_0"/>
+  <connection from="c" to="d" tl="tlWide" linkIndex="1" via=":j2_0_0"/>
+  <connection from="e" to="f" tl="tlWide" linkIndex="2" via=":j3_0_0"/>
+  <connection from="g" to="h" tl="tlSparse" linkIndex="0" via=":j4_0_0"/>
+  <connection from="i" to="k" tl="tlSparse" linkIndex="3" via=":j4_1_0"/>
+  <tlLogic id="tlWide" type="actuated" programID="0"><phase duration="30" state="GGG"/></tlLogic>
+  <tlLogic id="tlSparse" type="actuated" programID="0"><phase duration="30" state="rrrr"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        structural_only=True,
+    )
+
+    assert report["tls_control_review_status"] == "needs_review"
+    assert report["tls_control_review_queue_count"] == 3
+    queue = report["tls_control_review_queue"]
+    assert [entry["review_type"] for entry in queue] == [
+        "split_multi_junction_tls",
+        "inspect_sparse_linkindex",
+        "bind_or_downgrade_uncontrolled_traffic_light_junction",
+    ]
+    assert [entry["repair_category"] for entry in queue] == [
+        "tls_controller_cardinality_repair",
+        "tls_linkindex_phase_repair",
+        "tls_controller_cardinality_repair",
+    ]
+    assert queue[0]["tl_id"] == "tlWide"
+    assert queue[0]["controlled_junction_count"] == 3
+    assert queue[0]["reference_max_controlled_junction_count"] == 2
+    assert queue[0]["junction_ids"] == ["j1", "j2", "j3"]
+    assert queue[1]["tl_id"] == "tlSparse"
+    assert queue[1]["phase_state_length"] == 4
+    assert queue[1]["controlled_linkindex_count"] == 2
+    assert queue[1]["linkindexes"] == [0, 3]
+    assert queue[2]["junction_id"] == "j5"
+
+
+def test_reference_join_audit_queues_missing_reference_tls_semantics(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id=":r1_0" function="internal"><lane id=":r1_0_0" index="0"/></edge>
+  <edge id=":r2_0" function="internal"><lane id=":r2_0_0" index="0"/></edge>
+  <edge id=":r2_1" function="internal"><lane id=":r2_1_0" index="0"/></edge>
+  <junction id="r1" type="traffic_light"/>
+  <junction id="r2" type="traffic_light"/>
+  <connection from="ra" to="rb" tl="tlRef" linkIndex="0" via=":r1_0_0"/>
+  <connection from="rc" to="rd" tl="tlRef" linkIndex="0" via=":r2_0_0"/>
+  <connection from="re" to="rf" tl="tlRef" linkIndex="3" via=":r2_1_0"/>
+  <tlLogic id="tlRef" type="actuated" programID="0"><phase duration="30" state="rrrr"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id=":c1_0" function="internal"><lane id=":c1_0_0" index="0"/></edge>
+  <junction id="c1" type="traffic_light"/>
+  <connection from="ca" to="cb" tl="tlCand" linkIndex="0" via=":c1_0_0"/>
+  <tlLogic id="tlCand" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        structural_only=True,
+    )
+
+    assert report["tls_control_review_status"] == "needs_review"
+    queue = report["tls_control_review_queue"]
+    assert [entry["review_type"] for entry in queue] == [
+        "restore_tls_controlled_connections",
+        "restore_reference_multi_junction_tls_scope",
+        "restore_shared_linkindex_groups",
+        "inspect_reference_sparse_linkindex_programs",
+    ]
+    assert [entry["repair_category"] for entry in queue] == [
+        "tls_controller_cardinality_repair",
+        "tls_controller_cardinality_repair",
+        "tls_linkindex_phase_repair",
+        "tls_linkindex_phase_repair",
+    ]
+    assert queue[0]["reference_count"] == 3
+    assert queue[0]["candidate_count"] == 1
+    assert queue[0]["missing_count"] == 2
+    assert queue[1]["missing_count"] == 1
+    assert queue[2]["missing_count"] == 1
+    assert queue[3]["missing_count"] == 1
 
 
 def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, tmp_path: Path) -> None:
