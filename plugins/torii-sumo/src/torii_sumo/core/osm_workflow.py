@@ -842,6 +842,7 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_netedit_report: dict[str, Any] = {}
     reference_visual_detail_tls_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
     junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
@@ -1055,11 +1056,26 @@ def run_osm_cleanup_workflow(
             if (
                 reference_visual_detail_tls_aggregation_report.get("status") == "pass"
                 and visual_tls_variant_value
-                and _tls_aggregation_preserves_controlled_connections(reference_visual_detail_tls_aggregation_report)
             ):
                 candidate_visual_tls_net_file = Path(str(visual_tls_variant_value))
-                if candidate_visual_tls_net_file.exists():
+                if candidate_visual_tls_net_file.exists() and _tls_aggregation_preserves_controlled_connections(
+                    reference_visual_detail_tls_aggregation_report
+                ):
                     reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
+                elif (
+                    candidate_visual_tls_net_file.exists()
+                    and reference_net_file is not None
+                    and str(network_plan.get("network_profile", "")) == "reference_matched"
+                ):
+                    reference_visual_detail_tls_aggregation_reference_delta_report = reference_join_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=candidate_visual_tls_net_file,
+                        output_dir=output_dir / "reference_visual_detail_tls_aggregation_reference_delta",
+                        prefix=f"{prefix}_reference_visual_detail_tls_aggregation_reference_delta",
+                        candidate_cluster_radius_m=topology_cluster_radius_m,
+                        candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                        structural_only=True,
+                    )
     raw_connectivity_report = connectivity_func(net_file)
     connectivity_report = raw_connectivity_report
     connectivity_quality = _connectivity_quality(connectivity_report)
@@ -1868,6 +1884,18 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_controlled_connection_regression_count": 0
         if reference_visual_detail_tls_aggregation_report is None
         else reference_visual_detail_tls_aggregation_report.get("tls_controlled_connection_regression_count", 0),
+        "reference_visual_detail_tls_aggregation_reference_delta_status": "skipped"
+        if reference_visual_detail_tls_aggregation_reference_delta_report is None
+        else reference_visual_detail_tls_aggregation_reference_delta_report.get("network_structural_delta_status", "fail"),
+        "reference_visual_detail_tls_aggregation_reference_delta_missing_counts": {}
+        if reference_visual_detail_tls_aggregation_reference_delta_report is None
+        else reference_visual_detail_tls_aggregation_reference_delta_report.get("network_structural_missing_counts", {}),
+        "reference_visual_detail_tls_aggregation_reference_delta_extra_counts": {}
+        if reference_visual_detail_tls_aggregation_reference_delta_report is None
+        else reference_visual_detail_tls_aggregation_reference_delta_report.get("network_structural_extra_counts", {}),
+        "reference_visual_detail_tls_aggregation_reference_delta_file": ""
+        if reference_visual_detail_tls_aggregation_reference_delta_report is None
+        else str(reference_visual_detail_tls_aggregation_reference_delta_report.get("summary_file", "")),
         "reference_visual_detail_netedit_status": reference_visual_detail_netedit_report.get("netedit_status", "not_started"),
         "reference_visual_detail_netedit_network_file": reference_visual_detail_netedit_report.get("netedit_network_file", ""),
         "sumo_gui_status": sumo_gui_report.get("sumo_gui_status", "failed"),
@@ -1887,6 +1915,8 @@ def run_osm_cleanup_workflow(
         "tls_aggregation": tls_aggregation_report or {},
         "reference_visual_detail_tls_audit": reference_visual_detail_tls_report or {},
         "reference_visual_detail_tls_aggregation": reference_visual_detail_tls_aggregation_report or {},
+        "reference_visual_detail_tls_aggregation_reference_delta": reference_visual_detail_tls_aggregation_reference_delta_report
+        or {},
         "raw_connectivity": raw_connectivity_report,
         "connected_core": connected_core_report or {},
         "connected_core_connectivity": connected_core_connectivity_report or {},
