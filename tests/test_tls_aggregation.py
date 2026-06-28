@@ -92,7 +92,7 @@ def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tm
     assert "--tls.discard-loaded" in command
     assert command[command.index("--tls.set") + 1] == "n1,n3"
     assert "--tls.rebuild" in command
-    assert command[command.index("--tls.join-dist") + 1] == "35"
+    assert command[command.index("--tls.join-dist") + 1] == "20"
     assert "--tls.join" in command
     assert command[command.index("--tls.default-type") + 1] == "actuated"
     assert command[command.index("--sumo-net-file") + 1] == str(net_file.resolve())
@@ -182,13 +182,13 @@ def test_build_tls_aggregation_variant_deduplicates_representatives_in_tls_set(t
     assert calls[0][calls[0].index("--tls.set") + 1] == "n1"
 
 
-def test_build_tls_aggregation_variant_prunes_representatives_within_tls_join_distance(tmp_path: Path) -> None:
+def test_build_tls_aggregation_variant_prunes_nearby_representatives_before_tls_join(tmp_path: Path) -> None:
     net_file = tmp_path / "candidate.net.xml"
     clusters_file = tmp_path / "tls_clusters.csv"
     net_file.write_text(
         """<net>
   <junction id="n1" x="0" y="0" type="traffic_light"/>
-  <junction id="n2" x="10" y="0" type="traffic_light"/>
+  <junction id="n2" x="30" y="0" type="traffic_light"/>
 </net>""",
         encoding="utf-8",
     )
@@ -227,10 +227,11 @@ def test_build_tls_aggregation_variant_prunes_representatives_within_tls_join_di
     )
 
     assert calls[0][calls[0].index("--tls.set") + 1] == "n1"
+    assert calls[0][calls[0].index("--tls.join-dist") + 1] == "20"
     assert report["tls_set_representative_count"] == 1
     assert report["tls_set_spatially_pruned_count"] == 1
     assert report["tls_set_spatially_pruned_representatives"] == [
-        {"representative_node_id": "n2", "kept_representative_node_id": "n1", "distance_m": 10.0}
+        {"representative_node_id": "n2", "kept_representative_node_id": "n1", "distance_m": 30.0}
     ]
 
 
