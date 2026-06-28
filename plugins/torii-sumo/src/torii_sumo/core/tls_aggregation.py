@@ -29,7 +29,7 @@ def build_tls_aggregation_variant(
     output_dir.mkdir(parents=True, exist_ok=True)
     plan_file = output_dir / f"{prefix}_plan.json"
     candidates_file = output_dir / f"{prefix}_representatives.csv"
-    variant_file = output_dir / f"{prefix}_tls_aggregated.net.xml"
+    variant_file = output_dir / "tls_aggregated.net.xml"
     command_record = output_dir / f"{prefix}_netconvert.cmd.txt"
     source_tls_counts = _source_tls_program_counts(net_file)
 
@@ -86,12 +86,24 @@ def build_tls_aggregation_variant(
         }
     representatives = _representatives_for_clusters(clusters, controlled_nodes_by_tls)
     _write_representatives_csv(candidates_file, representatives)
+    tls_join_dist_m = 35.0
+    representative_node_ids = list(
+        dict.fromkeys(row["representative_node_id"] for row in representatives if row["representative_node_id"])
+    )
+    representative_node_ids, spatially_pruned_representatives = _spatially_prune_representatives(
+        representative_node_ids,
+        _junction_positions(net_file),
+        tls_join_dist_m,
+    )
     plan = {
         "tls_aggregation_status": "planned_for_review_variant",
         "net_file": str(net_file),
         "variant_file": str(variant_file),
         "tls_physical_cluster_count": len(clusters),
         "representative_count": len(representatives),
+        "tls_set_representative_count": len(representative_node_ids),
+        "tls_set_spatially_pruned_count": len(spatially_pruned_representatives),
+        "tls_set_spatially_pruned_representatives": spatially_pruned_representatives,
         "tls_program_policy": "discard_loaded_programs_rebuild_tls_set",
         **source_tls_counts,
         "review_policy": (
@@ -102,7 +114,6 @@ def build_tls_aggregation_variant(
     }
     plan_file.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    representative_node_ids = [row["representative_node_id"] for row in representatives if row["representative_node_id"]]
     if not representative_node_ids:
         return {
             **_failure("no representative junction ids could be derived from TLS clusters"),
@@ -118,9 +129,10 @@ def build_tls_aggregation_variant(
         "--tls.discard-loaded",
         "--tls.set",
         ",".join(representative_node_ids),
+        "--tls.rebuild",
         "--tls.join",
         "--tls.join-dist",
-        "35",
+        str(int(tls_join_dist_m)),
         "--tls.default-type",
         "actuated",
         "--output-file",
@@ -142,6 +154,7 @@ def build_tls_aggregation_variant(
     tls_program_preservation = (
         _preserve_compatible_tls_programs(net_file, variant_file, representatives) if status == "pass" else _empty_preservation()
     )
+    tls_orphan_cleanup = _demote_uncontrolled_tls_artifacts(variant_file) if status == "pass" else _empty_tls_orphan_cleanup()
     counts = _tls_counts(variant_file) if variant_file.exists() else {}
     tls_connection_preservation = _tls_connection_preservation(source_tls_counts, counts) if status == "pass" else {}
     warnings = ["TLS aggregation variant requires Google Maps and Netedit review before adoption"]
@@ -172,8 +185,12 @@ def build_tls_aggregation_variant(
         "tls_aggregation_command_record": str(command_record),
         "tls_aggregation_netconvert": result,
         "tls_program_policy": "discard_loaded_programs_rebuild_tls_set",
+        "tls_set_representative_count": len(representative_node_ids),
+        "tls_set_spatially_pruned_count": len(spatially_pruned_representatives),
+        "tls_set_spatially_pruned_representatives": spatially_pruned_representatives,
         **source_tls_counts,
         **tls_program_preservation,
+        **tls_orphan_cleanup,
         **counts,
         **tls_connection_preservation,
         "warnings": warnings,
@@ -220,6 +237,55 @@ def _representatives_for_clusters(
 
 def _split_tls_ids(value: str) -> list[str]:
     return [item.strip() for item in value.replace(",", ";").split(";") if item.strip()]
+
+
+def _junction_positions(net_file: Path) -> dict[str, tuple[float, float]]:
+    root = ET.parse(net_file).getroot()
+    positions = {}
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if not junction_id or junction_id.startswith(":"):
+            continue
+        try:
+            positions[junction_id] = (float(junction.attrib.get("x", "0")), float(junction.attrib.get("y", "0")))
+        except ValueError:
+            continue
+    return positions
+
+
+def _spatially_prune_representatives(
+    representative_node_ids: list[str],
+    positions: Mapping[str, tuple[float, float]],
+    join_dist_m: float,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    kept: list[str] = []
+    pruned: list[dict[str, Any]] = []
+    max_distance_sq = join_dist_m * join_dist_m
+    for node_id in representative_node_ids:
+        position = positions.get(node_id)
+        matched_kept = ""
+        matched_distance_sq = 0.0
+        if position is not None:
+            for kept_id in kept:
+                kept_position = positions.get(kept_id)
+                if kept_position is None:
+                    continue
+                distance_sq = (position[0] - kept_position[0]) ** 2 + (position[1] - kept_position[1]) ** 2
+                if distance_sq <= max_distance_sq:
+                    matched_kept = kept_id
+                    matched_distance_sq = distance_sq
+                    break
+        if matched_kept:
+            pruned.append(
+                {
+                    "representative_node_id": node_id,
+                    "kept_representative_node_id": matched_kept,
+                    "distance_m": round(matched_distance_sq**0.5, 2),
+                }
+            )
+        else:
+            kept.append(node_id)
+    return kept, pruned
 
 
 def _controlled_nodes_by_tls(net_file: Path) -> dict[str, list[str]]:
@@ -319,6 +385,74 @@ def _tls_program_compatible(source: ET.Element, target: ET.Element) -> bool:
     source_lengths = {len(phase.attrib.get("state", "")) for phase in source.findall("phase") if phase.attrib.get("state")}
     target_lengths = {len(phase.attrib.get("state", "")) for phase in target.findall("phase") if phase.attrib.get("state")}
     return bool(source_lengths) and source_lengths == target_lengths
+
+
+def _demote_uncontrolled_tls_artifacts(net_file: Path) -> dict[str, Any]:
+    tree = ET.parse(net_file)
+    root = tree.getroot()
+    junction_ids = {
+        junction.attrib["id"]
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib.get("id", "").startswith(":")
+    }
+    controlled_junctions: set[str] = set()
+    controlled_tls_ids: set[str] = set()
+    for connection in root.findall("connection"):
+        tl_id = connection.attrib.get("tl", "")
+        if not tl_id or not connection.attrib.get("linkIndex"):
+            continue
+        controlled_tls_ids.add(tl_id)
+        junction_id = _connection_junction_id(connection, junction_ids)
+        if junction_id:
+            controlled_junctions.add(junction_id)
+
+    demoted = []
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if junction.attrib.get("type") == "traffic_light" and junction_id not in controlled_junctions:
+            junction.set("type", "priority")
+            demoted.append(junction_id)
+
+    removed_tllogics = []
+    for tl_logic in list(root.findall("tlLogic")):
+        tl_id = tl_logic.attrib.get("id", "")
+        if tl_id not in controlled_tls_ids:
+            root.remove(tl_logic)
+            removed_tllogics.append(tl_id)
+
+    if demoted or removed_tllogics:
+        ET.indent(root, space="    ")
+        tree.write(net_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "tls_orphan_traffic_light_junction_demoted_count": len(demoted),
+        "tls_orphan_traffic_light_junction_demoted_ids": sorted(demoted),
+        "tls_uncontrolled_tllogic_removed_count": len(removed_tllogics),
+        "tls_uncontrolled_tllogic_removed_ids": sorted(removed_tllogics),
+    }
+
+
+def _connection_junction_id(connection: ET.Element, junction_ids: set[str]) -> str:
+    via = connection.attrib.get("via", "")
+    if via.startswith(":"):
+        lane_id = via[1:]
+        matches = [
+            junction_id
+            for junction_id in junction_ids
+            if lane_id == junction_id or lane_id.startswith(f"{junction_id}_")
+        ]
+        if matches:
+            return max(matches, key=len)
+    tl_id = connection.attrib.get("tl", "")
+    return tl_id if tl_id in junction_ids else ""
+
+
+def _empty_tls_orphan_cleanup() -> dict[str, Any]:
+    return {
+        "tls_orphan_traffic_light_junction_demoted_count": 0,
+        "tls_orphan_traffic_light_junction_demoted_ids": [],
+        "tls_uncontrolled_tllogic_removed_count": 0,
+        "tls_uncontrolled_tllogic_removed_ids": [],
+    }
 
 
 def _empty_preservation() -> dict[str, Any]:

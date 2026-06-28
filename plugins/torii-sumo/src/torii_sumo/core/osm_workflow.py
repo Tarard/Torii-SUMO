@@ -621,6 +621,33 @@ def _tls_connection_repair_promotion_decision(
     }
 
 
+def _reference_delta_promotion_decision(
+    *,
+    candidate_delta_report: Mapping[str, Any] | None,
+    baseline_delta_report: Mapping[str, Any] | None,
+    reason: str,
+) -> dict[str, Any]:
+    if candidate_delta_report is None or candidate_delta_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "candidate_reference_delta_not_pass"}
+    if baseline_delta_report is None or baseline_delta_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "baseline_reference_delta_not_pass"}
+    candidate_score = _tls_semantic_delta_score(candidate_delta_report)
+    baseline_score = _tls_semantic_delta_score(baseline_delta_report)
+    if candidate_score > baseline_score:
+        return {
+            "status": "blocked",
+            "reason": "reference_tls_semantic_delta_regressed",
+            "candidate_tls_semantic_delta_score": candidate_score,
+            "baseline_tls_semantic_delta_score": baseline_score,
+        }
+    return {
+        "status": "pass",
+        "reason": reason,
+        "candidate_tls_semantic_delta_score": candidate_score,
+        "baseline_tls_semantic_delta_score": baseline_score,
+    }
+
+
 def _tls_control_review_category_counts(report: Mapping[str, Any] | None) -> dict[str, int]:
     if report is None:
         return {}
@@ -1003,7 +1030,12 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_tls_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
+    reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_aggregation_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
     reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_sumo_load_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_promotion_report: dict[str, Any] = {
@@ -1250,7 +1282,32 @@ def run_osm_cleanup_workflow(
                         candidate_min_cluster_nodes=topology_min_cluster_nodes,
                         structural_only=True,
                     )
-                    tls_id_map = _tls_representative_id_map(reference_visual_detail_tls_aggregation_report)
+                    reference_visual_detail_raw_reference_delta_report = reference_join_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=reference_visual_detail_net_file,
+                        output_dir=output_dir / "reference_visual_detail_raw_reference_delta",
+                        prefix=f"{prefix}_reference_visual_detail_raw_reference_delta",
+                        candidate_cluster_radius_m=topology_cluster_radius_m,
+                        candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                        structural_only=True,
+                    )
+                    reference_visual_detail_tls_aggregation_reference_promotion_report = (
+                        _reference_delta_promotion_decision(
+                            candidate_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+                            baseline_delta_report=reference_visual_detail_raw_reference_delta_report,
+                            reason="tls_aggregation_promoted_by_reference_delta",
+                        )
+                    )
+                    if reference_visual_detail_tls_aggregation_reference_promotion_report.get("status") == "pass":
+                        reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
+                        reference_visual_detail_comparison_selection_reason = str(
+                            reference_visual_detail_tls_aggregation_reference_promotion_report.get("reason", "")
+                        )
+                    tls_id_map = (
+                        {}
+                        if reference_visual_detail_tls_aggregation_reference_promotion_report.get("status") == "pass"
+                        else _tls_representative_id_map(reference_visual_detail_tls_aggregation_report)
+                    )
                     if tls_id_map:
                         reference_visual_detail_tls_connection_repair_report = tls_connection_repair_func(
                             source_net_file=reference_visual_detail_net_file,
@@ -1260,9 +1317,6 @@ def run_osm_cleanup_workflow(
                             tls_id_map=tls_id_map,
                             copy_unmapped_tls=False,
                             require_target_link_index_capacity=True,
-                            pad_mapped_tllogic_capacity=True,
-                            add_green_phases_for_padded_links=True,
-                            add_yellow_phases_for_generated_green=True,
                         )
                         repair_variant_value = reference_visual_detail_tls_connection_repair_report.get(
                             "variant_file", ""
@@ -1553,6 +1607,7 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_tls_report or {},
         reference_visual_detail_tls_aggregation_report or {},
         reference_visual_detail_tls_connection_repair_report or {},
+        reference_visual_detail_raw_reference_delta_report or {},
         reference_visual_detail_tls_connection_repair_sumo_load_report or {},
         reference_visual_detail_tls_connection_repair_reference_delta_report or {},
         raw_connectivity_report,
@@ -2152,6 +2207,18 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_aggregation_reference_delta_file": ""
         if reference_visual_detail_tls_aggregation_reference_delta_report is None
         else str(reference_visual_detail_tls_aggregation_reference_delta_report.get("summary_file", "")),
+        "reference_visual_detail_raw_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            reference_visual_detail_raw_reference_delta_report
+        ),
+        "reference_visual_detail_raw_reference_delta_file": ""
+        if reference_visual_detail_raw_reference_delta_report is None
+        else str(reference_visual_detail_raw_reference_delta_report.get("summary_file", "")),
+        "reference_visual_detail_tls_aggregation_reference_promotion_status": str(
+            reference_visual_detail_tls_aggregation_reference_promotion_report.get("status", "skipped")
+        ),
+        "reference_visual_detail_tls_aggregation_reference_promotion_reason": str(
+            reference_visual_detail_tls_aggregation_reference_promotion_report.get("reason", "")
+        ),
         "reference_visual_detail_tls_connection_repair_status": "skipped"
         if reference_visual_detail_tls_connection_repair_report is None
         else str(reference_visual_detail_tls_connection_repair_report.get("status", "fail")),
@@ -2229,8 +2296,10 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_audit": reference_visual_detail_tls_report or {},
         "reference_visual_detail_tls_aggregation": reference_visual_detail_tls_aggregation_report or {},
         "reference_visual_detail_tls_connection_repair": reference_visual_detail_tls_connection_repair_report or {},
+        "reference_visual_detail_raw_reference_delta": reference_visual_detail_raw_reference_delta_report or {},
         "reference_visual_detail_tls_aggregation_reference_delta": reference_visual_detail_tls_aggregation_reference_delta_report
         or {},
+        "reference_visual_detail_tls_aggregation_reference_promotion": reference_visual_detail_tls_aggregation_reference_promotion_report,
         "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
         or {},
         "reference_visual_detail_tls_connection_repair_reference_delta": reference_visual_detail_tls_connection_repair_reference_delta_report
