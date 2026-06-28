@@ -1727,9 +1727,17 @@ def run_teacher_guided_repair_queue(
                     scope_report["derived_edge_map"] = replay_edge_map
                 except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
                     replay_edge_map = {}
+            missing_node_ids = {str(item) for item in scope_report.get("missing_node_ids", []) or [] if str(item)}
+            skipped_endpoint_missing_ids = {
+                str(node_id)
+                for item in scope_report.get("skipped_endpoint_rewrites", []) or []
+                if isinstance(item, dict)
+                for node_id in item.get("missing_endpoint_ids", []) or []
+                if str(node_id)
+            }
             use_full_network_replay = (
                 not str(scope_report.get("join_nodes_patch_file", ""))
-                and not scope_report.get("missing_node_ids")
+                and (not missing_node_ids or missing_node_ids <= skipped_endpoint_missing_ids)
                 and not scope_report.get("blocking_missing_node_ids")
                 and not scope_report.get("missing_blocked_edge_ids")
             )
