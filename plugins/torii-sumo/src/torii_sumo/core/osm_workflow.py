@@ -204,27 +204,40 @@ def _teacher_guided_exemplar_ready_stats(report: Mapping[str, Any] | None) -> tu
     return ready_count, signature_count
 
 
-def _teacher_guided_movement_gap_stats(report: Mapping[str, Any] | None) -> tuple[int, int, list[dict[str, Any]]]:
+def _teacher_guided_movement_gap_stats(report: Mapping[str, Any] | None) -> tuple[int, int, int, list[dict[str, Any]]]:
     if report is None:
-        return 0, 0, []
+        return 0, 0, 0, []
     gaps = []
+    missing_plan_total = 0
     for candidate in report.get("repair_candidates", []) or []:
         if not isinstance(candidate, Mapping):
             continue
         gap = _int_field(candidate, "vehicle_movement_matrix_missing_count")
-        if gap <= 0:
+        missing_plan = candidate.get("missing_teacher_movement_plan", []) or []
+        missing_plan_count = _int_field(candidate, "missing_teacher_movement_plan_count")
+        if missing_plan_count <= 0 and isinstance(missing_plan, list):
+            missing_plan_count = len(missing_plan)
+        if gap <= 0 and missing_plan_count <= 0:
             continue
-        gaps.append(
-            {
-                "reference_id": str(candidate.get("reference_id", "")),
-                "junction_id": str(candidate.get("junction_id", "")),
-                "candidate_status": str(candidate.get("candidate_status", "")),
-                "vehicle_movement_matrix_missing_count": gap,
-                "netedit_review_actions": [str(item) for item in candidate.get("netedit_review_actions", []) or []],
-            }
+        missing_plan_total += missing_plan_count
+        first_missing = (
+            missing_plan[0]
+            if isinstance(missing_plan, list) and missing_plan and isinstance(missing_plan[0], Mapping)
+            else {}
         )
+        gap_summary = {
+            "reference_id": str(candidate.get("reference_id", "")),
+            "junction_id": str(candidate.get("junction_id", "")),
+            "candidate_status": str(candidate.get("candidate_status", "")),
+            "vehicle_movement_matrix_missing_count": gap,
+            "missing_teacher_movement_plan_count": missing_plan_count,
+            "netedit_review_actions": [str(item) for item in candidate.get("netedit_review_actions", []) or []],
+        }
+        if first_missing:
+            gap_summary["first_missing_teacher_movement"] = dict(first_missing)
+        gaps.append(gap_summary)
     gaps.sort(key=lambda item: (-int(item["vehicle_movement_matrix_missing_count"]), item["reference_id"]))
-    return len(gaps), int(gaps[0]["vehicle_movement_matrix_missing_count"]) if gaps else 0, gaps[:5]
+    return len(gaps), int(gaps[0]["vehicle_movement_matrix_missing_count"]) if gaps else 0, missing_plan_total, gaps[:5]
 
 
 def _class_set(value: Any) -> set[str]:
@@ -2140,6 +2153,7 @@ def run_osm_cleanup_workflow(
     (
         teacher_guided_movement_gap_candidate_count,
         teacher_guided_max_vehicle_movement_matrix_missing_count,
+        teacher_guided_missing_movement_plan_count,
         teacher_guided_top_movement_gaps,
     ) = _teacher_guided_movement_gap_stats(teacher_guided_repair_queue_report)
     report = {
@@ -2407,6 +2421,7 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_exemplar_movement_signature_count": teacher_guided_exemplar_movement_signature_count,
         "teacher_guided_repair_movement_gap_candidate_count": teacher_guided_movement_gap_candidate_count,
         "teacher_guided_repair_max_vehicle_movement_matrix_missing_count": teacher_guided_max_vehicle_movement_matrix_missing_count,
+        "teacher_guided_repair_missing_movement_plan_count": teacher_guided_missing_movement_plan_count,
         "teacher_guided_repair_top_movement_gaps": teacher_guided_top_movement_gaps,
         "teacher_guided_repair_queued_case_count": 0
         if teacher_guided_repair_queue_report is None

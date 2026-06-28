@@ -207,6 +207,20 @@ def _evidence_rows(
         f"<td>{escape('; '.join(pattern_values) if pattern_values else 'no compact status supplied')}</td>"
         "</tr>"
     )
+    movement_values = []
+    for key in (
+        "teacher_guided_repair_movement_gap_candidate_count",
+        "teacher_guided_repair_max_vehicle_movement_matrix_missing_count",
+        "teacher_guided_repair_missing_movement_plan_count",
+    ):
+        if key in workflow_summary:
+            movement_values.append(f"{key}={workflow_summary[key]}")
+    html_rows.append(
+        "<tr>"
+        "<td>teacher_movement_plans</td>"
+        f"<td>{escape('; '.join(movement_values) if movement_values else 'no compact status supplied')}</td>"
+        "</tr>"
+    )
     template_contexts = workflow_summary.get("teacher_guided_repair_template_contexts", []) or []
     template_values = []
     if isinstance(template_contexts, list):
