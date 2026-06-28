@@ -118,6 +118,8 @@ def build_tls_aggregation_variant(
         "--tls.discard-loaded",
         "--tls.set",
         ",".join(representative_node_ids),
+        "--tls.default-type",
+        "actuated",
         "--output-file",
         _command_path(variant_file, output_dir),
     ]

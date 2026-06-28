@@ -811,12 +811,11 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
     assert report["reference_visual_detail_tls_aggregated_tl_logic_count"] == 2
 
 
-def test_reference_matched_workflow_runs_reference_scope_audit_and_pruning_variant(tmp_path: Path) -> None:
+def test_reference_matched_workflow_runs_reference_scope_audit_without_default_pruning_variant(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
     filtered_osm = tmp_path / "osm" / "reference-scope_filtered.osm.xml.gz"
     visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
-    scope_pruned_net_file = tmp_path / "scope_pruning" / "scope_pruned.net.xml"
     calls: dict[str, object] = {}
 
     def fake_build(**kwargs):
@@ -881,18 +880,7 @@ def test_reference_matched_workflow_runs_reference_scope_audit_and_pruning_varia
         }
 
     def fake_scope_pruning(**kwargs):
-        calls["scope_pruning_net_file"] = kwargs["net_file"]
-        calls["scope_pruning_report"] = kwargs["reference_scope_report"]
-        scope_pruned_net_file.parent.mkdir(parents=True, exist_ok=True)
-        scope_pruned_net_file.write_text("<net/>", encoding="utf-8")
-        return {
-            "status": "pass",
-            "claim_status": "blocked",
-            "scope_pruning_status": "variant_created_for_review",
-            "scope_pruning_removed_edge_count": 4,
-            "scope_pruning_variant_file": str(scope_pruned_net_file),
-            "warnings": ["scope pruning variant requires Netedit/map review before adoption"],
-        }
+        raise AssertionError("scope pruning variant should require an explicit workflow opt-in")
 
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
@@ -957,14 +945,12 @@ def test_reference_matched_workflow_runs_reference_scope_audit_and_pruning_varia
 
     assert calls["scope_reference_net_file"] == reference_net_file
     assert calls["scope_candidate_net_file"] == visual_tls_net_file
-    assert calls["scope_pruning_net_file"] == visual_tls_net_file
-    assert calls["scope_pruning_report"]["prune_candidate_count"] == 4
     assert report["reference_scope_status"] == "needs_pruning_review"
     assert report["reference_scope_prune_candidate_count"] == 4
-    assert report["reference_scope_pruning_status"] == "variant_created_for_review"
-    assert report["reference_scope_pruning_variant_file"] == str(scope_pruned_net_file)
+    assert report["reference_scope_pruning_status"] == "skipped"
+    assert report["reference_scope_pruning_variant_file"] == ""
     assert report["gate_status"]["reference_scope_audit"] == "blocked"
-    assert report["gate_status"]["reference_scope_pruning"] == "blocked"
+    assert report["gate_status"]["reference_scope_pruning"] == "skipped"
 
 
 def test_reference_matched_workflow_runs_reference_hierarchy_audit_on_visual_detail_layer(tmp_path: Path) -> None:
