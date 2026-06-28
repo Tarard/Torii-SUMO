@@ -1009,6 +1009,64 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
             return {
                 **base,
                 "summary_file": str(tmp_path / "post_teacher_tls_connection_repair_delta.json"),
+                "junction_pattern_mismatch_count": 2,
+                "junction_pattern_mismatch_field_counts": {
+                    "control_type": 1,
+                    "internal_function_counts": 2,
+                    "movement_signature_counts": 2,
+                },
+                "junction_pattern_comparisons": [
+                    {
+                        "junction_id": "tls_repair_j1",
+                        "status": "fail",
+                        "mismatch_fields": ["internal_function_counts", "movement_signature_counts"],
+                        "teacher": {
+                            "control_type": "traffic_light",
+                            "has_tls": True,
+                            "internal_function_counts": {
+                                "crossing": 2,
+                                "internal": 8,
+                                "walkingarea": 2,
+                            },
+                        },
+                        "candidate": {
+                            "control_type": "traffic_light",
+                            "has_tls": True,
+                            "internal_function_counts": {
+                                "crossing": 0,
+                                "internal": 5,
+                                "walkingarea": 1,
+                            },
+                        },
+                    },
+                    {
+                        "junction_id": "tls_repair_j2",
+                        "status": "fail",
+                        "mismatch_fields": [
+                            "control_type",
+                            "internal_function_counts",
+                            "movement_signature_counts",
+                        ],
+                        "teacher": {
+                            "control_type": "traffic_light",
+                            "has_tls": True,
+                            "internal_function_counts": {
+                                "crossing": 3,
+                                "internal": 7,
+                                "walkingarea": 2,
+                            },
+                        },
+                        "candidate": {
+                            "control_type": "priority",
+                            "has_tls": True,
+                            "internal_function_counts": {
+                                "crossing": 2,
+                                "internal": 4,
+                                "walkingarea": 1,
+                            },
+                        },
+                    },
+                ],
                 "network_structural_missing_counts": {"connection_count": 4, "crossing_edge_count": 3},
                 "network_structural_extra_counts": {"walkingarea_edge_count": 5},
             }
@@ -1180,6 +1238,30 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert report["post_teacher_tls_connection_repair_status"] == "pass"
     assert report["post_teacher_tls_connection_repair_reference_promotion_status"] == "pass"
     assert report["post_teacher_tls_connection_repair_reference_tls_semantic_delta_score"] == 0
+    assert report["post_teacher_tls_connection_repair_junction_pattern_mismatch_count"] == 2
+    assert report["post_teacher_tls_connection_repair_junction_pattern_mismatch_field_counts"] == {
+        "control_type": 1,
+        "internal_function_counts": 2,
+        "movement_signature_counts": 2,
+    }
+    assert report["post_teacher_tls_connection_repair_internal_function_count_deficits"] == {
+        "crossing": 3,
+        "internal": 6,
+        "walkingarea": 2,
+    }
+    assert report["post_teacher_tls_connection_repair_top_junction_pattern_mismatches"][0] == {
+        "junction_id": "tls_repair_j1",
+        "mismatch_fields": ["internal_function_counts", "movement_signature_counts"],
+        "teacher_control_type": "traffic_light",
+        "candidate_control_type": "traffic_light",
+        "teacher_has_tls": True,
+        "candidate_has_tls": True,
+        "internal_function_count_deficits": {
+            "crossing": 2,
+            "internal": 3,
+            "walkingarea": 1,
+        },
+    }
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
