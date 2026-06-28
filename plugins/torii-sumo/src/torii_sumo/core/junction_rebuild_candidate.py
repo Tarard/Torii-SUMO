@@ -150,6 +150,13 @@ def build_teacher_guided_repair_queue(
     pattern_deltas = _junction_pattern_delta_by_id(reference_join_audit_report)
     pattern_records = _junction_pattern_record_by_id(reference_join_audit_report)
     pattern_templates = _junction_pattern_template_by_key(reference_join_audit_report)
+    same_id_pattern_cases = _same_id_pattern_cases(
+        pattern_deltas,
+        matched_cases,
+        teacher_root,
+        candidate_root,
+    )
+    matched_cases = [*matched_cases, *same_id_pattern_cases]
     matched_cases.sort(
         key=lambda case: _teacher_guided_case_sort_key(case, pattern_records, pattern_templates)
     )
@@ -191,6 +198,7 @@ def build_teacher_guided_repair_queue(
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "matched_case_count": len(matched_cases),
+        "same_id_pattern_candidate_count": len(same_id_pattern_cases),
         "queued_case_count": len(repair_candidates),
         "queue_truncated": len(repair_candidates) < len(matched_cases),
         "queue_order_policy": "largest_vehicle_movement_gap_then_highest_teacher_template_count",
@@ -2274,6 +2282,48 @@ def _junction_pattern_delta_by_id(report: dict[str, Any]) -> dict[str, dict[str,
     return deltas
 
 
+def _same_id_pattern_cases(
+    pattern_deltas: dict[str, dict[str, Any]],
+    matched_cases: list[dict[str, Any]],
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+) -> list[dict[str, Any]]:
+    covered_ids = {
+        key
+        for case in matched_cases
+        for key in _junction_pattern_delta_keys(case)
+    }
+    teacher_junction_ids = _real_junction_ids(teacher_root)
+    candidate_junction_ids = _real_junction_ids(candidate_root)
+    cases = []
+    for junction_id, delta in sorted(pattern_deltas.items()):
+        if delta.get("status") == "pass" or junction_id in covered_ids:
+            continue
+        if junction_id not in teacher_junction_ids or junction_id not in candidate_junction_ids:
+            continue
+        cases.append(
+            {
+                "reference_id": junction_id,
+                "reference_joined_source_nodes": [],
+                "matched_reference_source_node_ids": [],
+                "matched_candidate_node_ids": [junction_id],
+                "learned_rule_basis": "same_id_junction_pattern",
+                "learned_rule": "tum_like_same_id_pattern_candidate",
+            }
+        )
+    return cases
+
+
+def _real_junction_ids(root: ET.Element) -> set[str]:
+    return {
+        junction.attrib["id"]
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+        and not junction.attrib["id"].startswith(":")
+        and junction.attrib.get("type") != "internal"
+    }
+
+
 def _attach_teacher_pattern_template(
     candidate: dict[str, object],
     pattern_records: dict[str, dict[str, Any]],
@@ -2438,6 +2488,7 @@ def _teacher_guided_repair_candidate(
         "reference_joined_source_nodes": reference_source_node_ids,
         "matched_reference_source_node_ids": matched_reference_source_node_ids,
         "matched_candidate_node_ids": candidate_node_ids,
+        "learned_rule_basis": str(case.get("learned_rule_basis", "")),
         "learned_rule": str(case.get("learned_rule", "")),
     }
     if not reference_id:

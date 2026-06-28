@@ -192,7 +192,22 @@ def _evidence_rows(
             f"<td>{escape('; '.join(values) if values else 'no compact status supplied')}</td>"
             "</tr>"
         )
-    template_contexts = (workflow_summary or {}).get("teacher_guided_repair_template_contexts", []) or []
+    pattern_values = []
+    workflow_summary = workflow_summary or {}
+    for key in (
+        "reference_join_junction_pattern_comparison_status",
+        "reference_join_junction_pattern_mismatch_count",
+        "reference_join_junction_pattern_comparison_sample_count",
+    ):
+        if key in workflow_summary:
+            pattern_values.append(f"{key}={workflow_summary[key]}")
+    html_rows.append(
+        "<tr>"
+        "<td>reference_join_patterns</td>"
+        f"<td>{escape('; '.join(pattern_values) if pattern_values else 'no compact status supplied')}</td>"
+        "</tr>"
+    )
+    template_contexts = workflow_summary.get("teacher_guided_repair_template_contexts", []) or []
     template_values = []
     if isinstance(template_contexts, list):
         for context in template_contexts:
