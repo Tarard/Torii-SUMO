@@ -1104,7 +1104,12 @@ def write_teacher_tllogic_net(
         }
     root_children = list(root)
     if target_tl is None:
-        index = next((idx for idx, child in enumerate(root_children) if child.tag == "tlLogic"), len(root_children))
+        index = next((idx for idx, child in enumerate(root_children) if child.tag == "tlLogic"), -1)
+        if index < 0:
+            index = next(
+                (idx for idx, child in enumerate(root_children) if child.tag in {"junction", "connection"}),
+                len(root_children),
+            )
     else:
         index = root_children.index(target_tl)
         root.remove(target_tl)
@@ -1831,6 +1836,12 @@ def write_expanded_scope_plain_inputs(
 
     scope = expanded_rebuild_scope if isinstance(expanded_rebuild_scope, dict) else {}
     seed_node_ids = {str(item) for item in scope.get("junction_ids", []) or [] if str(item)}
+    requested_join_ids = scope.get("join_junction_ids", None)
+    join_seed_node_ids = {
+        str(item)
+        for item in (requested_join_ids if requested_join_ids is not None else scope.get("junction_ids", []) or [])
+        if str(item)
+    }
     blocked_edge_ids = {str(item) for item in scope.get("blocked_teacher_edge_ids", []) or [] if str(item)}
 
     raw_edges = [edge for edge in ET.parse(raw_edge_file).getroot() if edge.tag == "edge"]
@@ -1881,7 +1892,7 @@ def write_expanded_scope_plain_inputs(
     node_root = ET.Element("nodes")
     for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
         node_root.append(copy.deepcopy(raw_nodes[node_id]))
-    join_node_ids = sorted(node_id for node_id in seed_node_ids if node_id in raw_nodes)
+    join_node_ids = sorted(node_id for node_id in join_seed_node_ids if node_id in raw_nodes)
     core_junction_id = str(scope.get("core_junction_id", ""))
     if len(join_node_ids) >= 2:
         join_definition = build_junction_join_definition(
@@ -1949,10 +1960,14 @@ def write_expanded_scope_plain_inputs(
     ]
     missing_node_ids = sorted(node_id for node_id in selected_node_ids if node_id not in raw_nodes)
     missing_blocked_edge_ids = sorted(edge_id for edge_id in blocked_edge_ids if edge_id not in selected_edge_ids)
+    missing_desired_endpoint_ids = {
+        str(item) for item in scope.get("missing_desired_endpoint_ids", []) or [] if str(item)
+    }
     blocking_missing_node_ids = sorted(
         node_id
         for node_id in missing_node_ids
-        if not (joined_scope_junction_id == core_junction_id and node_id in seed_node_ids)
+        if not (joined_scope_junction_id == core_junction_id and node_id in join_seed_node_ids)
+        and node_id not in missing_desired_endpoint_ids
     )
     netconvert_report = _command_report(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
     sumo_command = [
@@ -2002,6 +2017,7 @@ def write_expanded_scope_plain_inputs(
         "join_explicit_join_count": join_definition.get("explicit_join_count", 0),
         "joined_scope_junction_id": joined_scope_junction_id,
         "seed_node_ids": sorted(seed_node_ids),
+        "join_node_ids": sorted(join_seed_node_ids),
         "blocked_edge_ids": sorted(blocked_edge_ids),
         "missing_node_ids": missing_node_ids,
         "blocking_missing_node_ids": blocking_missing_node_ids,
@@ -2607,6 +2623,7 @@ def _teacher_guided_repair_candidate(
                     "recommended_action": "rebuild_plain_xml_scope",
                     "core_junction_id": base["junction_id"],
                     "junction_ids": sorted(dict.fromkeys(scope_node_ids)),
+                    "join_junction_ids": sorted(dict.fromkeys(scope_node_ids)),
                     "blocked_teacher_edge_ids": missing_teacher_edge_ids,
                     "missing_desired_endpoint_ids": [],
                     "reason": "candidate joined junction not found; rebuild from matched candidate source nodes",
@@ -2741,6 +2758,7 @@ def _expanded_rebuild_scope(
             "recommended_action": "rebuild_plain_xml_scope",
             "core_junction_id": core_junction_id,
             "junction_ids": sorted({core_junction_id, *neighbor_ids, *missing_ids}),
+            "join_junction_ids": [core_junction_id] if core_junction_id else [],
             "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
             "missing_desired_endpoint_ids": missing_ids,
             "reason": reason,
@@ -2755,6 +2773,7 @@ def _expanded_rebuild_scope(
         "recommended_action": "rebuild_plain_xml_scope",
         "core_junction_id": core_junction_id,
         "junction_ids": fallback_ids,
+        "join_junction_ids": fallback_ids,
         "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
         "missing_desired_endpoint_ids": [],
         "reason": "missing teacher approach edge cannot be copied safely; rebuild from matched candidate source nodes",
