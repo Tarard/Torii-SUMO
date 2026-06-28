@@ -86,14 +86,15 @@ def build_tls_aggregation_variant(
         }
     representatives = _representatives_for_clusters(clusters, controlled_nodes_by_tls)
     _write_representatives_csv(candidates_file, representatives)
-    tls_join_dist_m = 35.0
+    tls_join_dist_m = 20.0
+    tls_representative_prune_dist_m = 35.0
     representative_node_ids = list(
         dict.fromkeys(row["representative_node_id"] for row in representatives if row["representative_node_id"])
     )
     representative_node_ids, spatially_pruned_representatives = _spatially_prune_representatives(
         representative_node_ids,
         _junction_positions(net_file),
-        tls_join_dist_m,
+        tls_representative_prune_dist_m,
     )
     plan = {
         "tls_aggregation_status": "planned_for_review_variant",
