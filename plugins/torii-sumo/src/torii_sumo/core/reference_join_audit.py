@@ -14,6 +14,7 @@ from .junction_teacher_model import (
     extract_junction_pattern_index,
     summarize_junction_pattern_templates,
 )
+from .detector_demand import lane_allows_passenger
 from .osm_network import _net_xy_to_latlon, _parse_utm_zone, _utm_to_latlon
 from .topology_audit import audit_topology_fragmentation
 
@@ -613,6 +614,12 @@ def _net_structural_summary(net_file: Path) -> dict[str, Any]:
 
 def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junction_ids: set[str]) -> dict[str, Any]:
     tl_logic_ids = [tl.attrib["id"] for tl in root.findall("tlLogic") if tl.attrib.get("id")]
+    passenger_edges = {
+        edge.attrib.get("id", "")
+        for edge in root.findall("edge")
+        if edge.attrib.get("id") and any(lane_allows_passenger(lane) for lane in edge.findall("lane"))
+    }
+    known_edges = {edge.attrib.get("id", "") for edge in root.findall("edge") if edge.attrib.get("id")}
     traffic_light_ids = {
         junction.attrib["id"]
         for junction in root.findall("junction")
@@ -628,12 +635,19 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
     controlled_junctions: set[str] = set()
     linkindex_group_counts: Counter[tuple[str, str]] = Counter()
     linkindexes_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    known_from_edges_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    passenger_from_edges_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
     for connection in connections:
         tl_id = connection.attrib.get("tl", "")
         link_index = connection.attrib.get("linkIndex", "")
         if not tl_id or not link_index:
             continue
         controlled_connection_counts[tl_id] += 1
+        from_edge = connection.attrib.get("from", "")
+        if from_edge in known_edges:
+            known_from_edges_by_tl.setdefault(tl_id, set()).add(from_edge)
+        if from_edge in passenger_edges:
+            passenger_from_edges_by_tl.setdefault(tl_id, set()).add(from_edge)
         linkindex_group_counts[(tl_id, link_index)] += 1
         try:
             linkindexes_by_tl.setdefault(tl_id, set()).add(int(link_index))
@@ -657,6 +671,9 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
                 "controlled_connection_count": int(controlled_connection_counts.get(tl_id, 0)),
                 "controlled_junction_count": len(controlled_junctions_by_tl.get(tl_id, set())),
                 "junction_ids": sorted(controlled_junctions_by_tl.get(tl_id, set())),
+                "controlled_known_from_edge_count": len(known_from_edges_by_tl.get(tl_id, set())),
+                "controlled_passenger_from_edge_count": len(passenger_from_edges_by_tl.get(tl_id, set())),
+                "passenger_from_edge_ids": sorted(passenger_from_edges_by_tl.get(tl_id, set())),
                 "linkindexes": linkindexes,
                 "controlled_linkindex_count": len(linkindexes),
                 "phase_state_length": phase_state_length,
@@ -670,6 +687,14 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
         ),
         "tl_logic_controlled_junction_count_distribution": _count_distribution(
             len(controlled_junctions_by_tl.get(tl_id, set())) for tl_id in tl_logic_ids
+        ),
+        "tl_logic_controlled_passenger_from_edge_count_distribution": _count_distribution(
+            len(passenger_from_edges_by_tl.get(tl_id, set())) for tl_id in tl_logic_ids
+        ),
+        "low_passenger_approach_tl_logic_count": sum(
+            1
+            for tl_id in tl_logic_ids
+            if known_from_edges_by_tl.get(tl_id) and len(passenger_from_edges_by_tl.get(tl_id, set())) <= 2
         ),
         "multi_junction_tl_logic_count": sum(
             1 for tl_id in tl_logic_ids if len(controlled_junctions_by_tl.get(tl_id, set())) > 1
@@ -696,10 +721,30 @@ def _tls_control_review(reference: dict[str, Any], candidate: dict[str, Any]) ->
         reference.get("tl_logic_controlled_junction_count_distribution", {})
     )
     reference_sparse_budget = int(reference.get("tls_sparse_linkindex_tl_logic_count", 0))
+    reference_low_passenger_approach_budget = int(reference.get("low_passenger_approach_tl_logic_count", 0))
     sparse_seen = 0
+    low_passenger_approach_seen = 0
     queue = []
     for record in candidate.get("tl_logic_control_records", []):
         controlled_junction_count = int(record.get("controlled_junction_count", 0))
+        controlled_known_from_edge_count = int(record.get("controlled_known_from_edge_count", 0))
+        controlled_passenger_from_edge_count = int(record.get("controlled_passenger_from_edge_count", 0))
+        if controlled_known_from_edge_count and controlled_passenger_from_edge_count <= 2:
+            low_passenger_approach_seen += 1
+            if low_passenger_approach_seen > reference_low_passenger_approach_budget:
+                queue.append(
+                    {
+                        "repair_category": "tls_reality_review",
+                        "review_type": "downgrade_low_vehicle_approach_tls",
+                        "tl_id": record.get("tl_id", ""),
+                        "controlled_connection_count": int(record.get("controlled_connection_count", 0)),
+                        "controlled_known_from_edge_count": controlled_known_from_edge_count,
+                        "controlled_passenger_from_edge_count": controlled_passenger_from_edge_count,
+                        "reference_low_passenger_approach_tl_logic_count": reference_low_passenger_approach_budget,
+                        "passenger_from_edge_ids": list(record.get("passenger_from_edge_ids", [])),
+                        "reason": "candidate tlLogic has few passenger from-edges beyond the reference low-approach budget",
+                    }
+                )
         if controlled_junction_count > reference_max_junction_count:
             queue.append(
                 {

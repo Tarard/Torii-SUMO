@@ -253,6 +253,8 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "tl_connection_missing_linkindex_count": 0,
         "tl_logic_controlled_connection_count_distribution": {"1": 1},
         "tl_logic_controlled_junction_count_distribution": {"1": 1},
+        "tl_logic_controlled_passenger_from_edge_count_distribution": {"1": 1},
+        "low_passenger_approach_tl_logic_count": 1,
         "multi_junction_tl_logic_count": 0,
         "traffic_light_junction_without_tls_connection_count": 0,
         "traffic_light_junction_without_tls_connection_ids": [],
@@ -264,6 +266,9 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
                 "controlled_connection_count": 1,
                 "controlled_junction_count": 1,
                 "junction_ids": ["cluster_a_b"],
+                "controlled_known_from_edge_count": 1,
+                "controlled_passenger_from_edge_count": 1,
+                "passenger_from_edge_ids": ["west_in"],
                 "linkindexes": [0],
                 "controlled_linkindex_count": 1,
                 "phase_state_length": 1,
@@ -287,6 +292,8 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "tl_connection_missing_linkindex_count": 0,
         "tl_logic_controlled_connection_count_distribution": {},
         "tl_logic_controlled_junction_count_distribution": {},
+        "tl_logic_controlled_passenger_from_edge_count_distribution": {},
+        "low_passenger_approach_tl_logic_count": 0,
         "multi_junction_tl_logic_count": 0,
         "traffic_light_junction_without_tls_connection_count": 0,
         "traffic_light_junction_without_tls_connection_ids": [],
@@ -497,6 +504,56 @@ def test_reference_join_audit_builds_tls_control_review_queue(tmp_path: Path) ->
     assert queue[1]["controlled_linkindex_count"] == 2
     assert queue[1]["linkindexes"] == [0, 3]
     assert queue[2]["junction_id"] == "j5"
+
+
+def test_reference_join_audit_queues_extra_low_vehicle_approach_tls(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id="r_in" from="ra" to="rj"><lane id="r_in_0" index="0" allow="passenger"/></edge>
+  <edge id="r_out" from="rj" to="rb"><lane id="r_out_0" index="0" allow="passenger"/></edge>
+  <edge id=":rj_0" function="internal"><lane id=":rj_0_0" index="0"/></edge>
+  <junction id="rj" type="traffic_light"/>
+  <connection from="r_in" to="r_out" tl="tlRef" linkIndex="0" via=":rj_0_0"/>
+  <tlLogic id="tlRef" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="c1_in" from="c1a" to="c1"><lane id="c1_in_0" index="0" allow="passenger"/></edge>
+  <edge id="c1_out" from="c1" to="c1b"><lane id="c1_out_0" index="0" allow="passenger"/></edge>
+  <edge id="c2_in" from="c2a" to="c2"><lane id="c2_in_0" index="0" allow="passenger"/></edge>
+  <edge id="c2_out" from="c2" to="c2b"><lane id="c2_out_0" index="0" allow="passenger"/></edge>
+  <edge id=":c1_0" function="internal"><lane id=":c1_0_0" index="0"/></edge>
+  <edge id=":c2_0" function="internal"><lane id=":c2_0_0" index="0"/></edge>
+  <junction id="c1" type="traffic_light"/>
+  <junction id="c2" type="traffic_light"/>
+  <connection from="c1_in" to="c1_out" tl="tlKeep" linkIndex="0" via=":c1_0_0"/>
+  <connection from="c2_in" to="c2_out" tl="tlExtra" linkIndex="0" via=":c2_0_0"/>
+  <tlLogic id="tlKeep" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <tlLogic id="tlExtra" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        structural_only=True,
+    )
+
+    assert report["reference_network_structural_summary"]["low_passenger_approach_tl_logic_count"] == 1
+    assert report["candidate_network_structural_summary"]["low_passenger_approach_tl_logic_count"] == 2
+    queue = report["tls_control_review_queue"]
+    assert len(queue) == 1
+    assert queue[0]["repair_category"] == "tls_reality_review"
+    assert queue[0]["review_type"] == "downgrade_low_vehicle_approach_tls"
+    assert queue[0]["tl_id"] == "tlExtra"
+    assert queue[0]["controlled_passenger_from_edge_count"] == 1
+    assert queue[0]["reference_low_passenger_approach_tl_logic_count"] == 1
 
 
 def test_reference_join_audit_queues_missing_reference_tls_semantics(tmp_path: Path) -> None:
