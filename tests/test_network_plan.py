@@ -980,9 +980,14 @@ def test_reference_matched_workflow_keeps_raw_visual_detail_when_tls_aggregation
     assert calls["rejected_tls_delta_candidate_net_file"] == visual_tls_net_file
     assert calls["rejected_tls_delta_structural_only"] is True
     assert report["reference_visual_detail_comparison_net_file"] == str(raw_visual_detail_net_file)
+    assert report["reference_visual_detail_comparison_selection_reason"] == (
+        "tls_aggregation_rejected_controlled_connection_regression"
+    )
     assert report["reference_visual_detail_tls_controlled_connection_preservation_status"] == "fail"
     assert report["reference_visual_detail_tls_controlled_connection_regression_count"] == 12
+    assert report["reference_join_tls_semantic_delta_score"] == 35
     assert report["reference_visual_detail_tls_aggregation_reference_delta_status"] == "fail"
+    assert report["reference_visual_detail_tls_aggregation_reference_tls_semantic_delta_score"] == 390
     assert report["reference_visual_detail_tls_aggregation_reference_delta_missing_counts"] == {
         "tls_controlled_connection_count": 337
     }
