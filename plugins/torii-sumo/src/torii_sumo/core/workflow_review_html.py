@@ -961,6 +961,9 @@ def build_workflow_review_html(
     for key in (
         "teacher_guided_repair_best_variant_file",
         "reference_visual_detail_comparison_net_file",
+        "reference_visual_detail_tls_connection_repair_variant_file",
+        "reference_visual_detail_tls_connection_repair_summary_file",
+        "reference_visual_detail_tls_connection_repair_reference_delta_file",
         "reference_join_junction_teacher_delta_file",
         "reference_join_junction_pattern_comparisons_file",
         "reference_join_junction_pattern_templates_file",
