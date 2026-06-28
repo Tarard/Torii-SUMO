@@ -1103,15 +1103,11 @@ def write_teacher_tllogic_net(
             "tls_replay_status": "not_applicable_no_teacher_tllogic",
         }
     root_children = list(root)
-    if target_tl is None:
-        index = next((idx for idx, child in enumerate(root_children) if child.tag == "tlLogic"), -1)
-        if index < 0:
-            index = next(
-                (idx for idx, child in enumerate(root_children) if child.tag in {"junction", "connection"}),
-                len(root_children),
-            )
-    else:
-        index = root_children.index(target_tl)
+    candidate_indexes = [
+        idx for idx, child in enumerate(root_children) if child.tag == "tlLogic" or child.tag in {"junction", "connection"}
+    ]
+    index = min(candidate_indexes) if candidate_indexes else len(root_children)
+    if target_tl is not None:
         root.remove(target_tl)
     replacement = ET.Element("tlLogic", {str(key): str(value) for key, value in attributes.items()})
     replacement.set("id", junction_id)
@@ -3743,6 +3739,7 @@ def _controlled_link_signatures(
     attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
     tls_id = str(attributes.get("id", "") or model.get("junction_id", "")) if isinstance(attributes, dict) else ""
     connections = model.get(connection_key, []) if isinstance(model.get(connection_key), list) else []
+    origin_x, origin_y = _model_junction_origin(model)
     signatures_by_link_index: dict[str, list[str]] = {}
     for connection in connections:
         if not isinstance(connection, dict) or connection.get("tl") != tls_id or not connection.get("linkIndex"):
@@ -3754,6 +3751,8 @@ def _controlled_link_signatures(
                 edge_map=edge_map,
                 source_junction_id=source_junction_id,
                 target_junction_id=target_junction_id,
+                origin_x=origin_x,
+                origin_y=origin_y,
             )
         )
     return {
@@ -4015,6 +4014,8 @@ def _vehicle_connection_signature(
     edge_map: dict[str, str] | None,
     source_junction_id: str,
     target_junction_id: str,
+    origin_x: str = "",
+    origin_y: str = "",
 ) -> str:
     source = _mapped_internal_ref(
         _mapped_endpoint(str(connection.get("from", "")), edge_map), source_junction_id, target_junction_id
@@ -4030,7 +4031,7 @@ def _vehicle_connection_signature(
         f"uncontrolled={connection.get('uncontrolled', '')}|allow={connection.get('allow', '')}|"
         f"disallow={connection.get('disallow', '')}|keepClear={connection.get('keepClear', '')}|"
         f"contPos={connection.get('contPos', '')}|linkIndex2={connection.get('linkIndex2', '')}|"
-        f"shape={connection.get('shape', '')}"
+        f"shape={_relative_shape(str(connection.get('shape', '')), origin_x, origin_y)}"
     )
 
 
