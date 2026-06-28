@@ -80,6 +80,12 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     repair_queue_csv.write_text("reference_id,junction_pattern_mismatch_fields\ncluster_j,has_tls\n", encoding="utf-8")
     repair_run = tmp_path / "teacher_guided_run.json"
     repair_run.write_text('{"status": "blocked"}', encoding="utf-8")
+    tls_repair_variant = tmp_path / "tls_connection_repaired.net.xml"
+    tls_repair_variant.write_text(TINY_SUMO_NET, encoding="utf-8")
+    tls_repair_summary = tmp_path / "tls_connection_repair.json"
+    tls_repair_summary.write_text('{"status": "pass"}', encoding="utf-8")
+    tls_repair_delta = tmp_path / "tls_connection_repair_delta.json"
+    tls_repair_delta.write_text('{"network_structural_delta_status": "fail"}', encoding="utf-8")
 
     report = build_workflow_review_html(
         output_dir=tmp_path / "review",
@@ -98,6 +104,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "teacher_guided_repair_queue_file": str(repair_queue),
             "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
             "teacher_guided_repair_run_report_file": str(repair_run),
+            "reference_visual_detail_tls_connection_repair_variant_file": str(tls_repair_variant),
+            "reference_visual_detail_tls_connection_repair_summary_file": str(tls_repair_summary),
+            "reference_visual_detail_tls_connection_repair_reference_delta_file": str(tls_repair_delta),
             "teacher_guided_repair_template_contexts": [
                 {
                     "teacher_pattern_key": "three_way|control=right_before_left",
@@ -179,6 +188,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "junction_pattern_comparisons.csv" in html
     assert "junction_pattern_templates.json" in html
     assert "teacher_guided_queue.json" in html
+    assert "tls_connection_repaired.net.xml" in html
+    assert "tls_connection_repair.json" in html
+    assert "tls_connection_repair_delta.json" in html
     assert "copyNeteditCommand" in html
     assert "Aggregate selected junctions" in html
     assert "Network Preview" in html
@@ -237,6 +249,9 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["artifacts"]["netedit_review_sumocfg_file"] == "workflow_netedit_review.sumocfg"
     assert manifest["artifacts"]["teacher_guided_repair_best_variant_file"] == "../teacher_guided_best.net.xml"
     assert manifest["artifacts"]["reference_visual_detail_comparison_net_file"] == "../teacher_guided_best.net.xml"
+    assert manifest["artifacts"]["reference_visual_detail_tls_connection_repair_variant_file"] == "../tls_connection_repaired.net.xml"
+    assert manifest["artifacts"]["reference_visual_detail_tls_connection_repair_summary_file"] == "../tls_connection_repair.json"
+    assert manifest["artifacts"]["reference_visual_detail_tls_connection_repair_reference_delta_file"] == "../tls_connection_repair_delta.json"
     assert manifest["artifacts"]["reference_join_junction_teacher_delta_file"] == "../junction_teacher_delta.json"
     assert manifest["artifacts"]["reference_join_junction_pattern_comparisons_file"] == "../junction_pattern_comparisons.csv"
     assert manifest["artifacts"]["reference_join_junction_pattern_templates_file"] == "../junction_pattern_templates.json"

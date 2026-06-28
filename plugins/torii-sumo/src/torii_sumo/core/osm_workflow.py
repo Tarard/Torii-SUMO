@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import os
+import shutil
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -523,6 +525,102 @@ def _tls_semantic_delta_score(report: Mapping[str, Any] | None) -> int:
     )
 
 
+def _command_result_report(result: Any) -> dict[str, Any]:
+    if hasattr(result, "to_dict"):
+        report = result.to_dict()
+    elif isinstance(result, Mapping):
+        report = dict(result)
+    else:
+        report = {
+            "status": getattr(result, "status", "fail"),
+            "returncode": getattr(result, "returncode", None),
+            "stdout": getattr(result, "stdout", ""),
+            "stderr": getattr(result, "stderr", ""),
+            "error": getattr(result, "error", ""),
+        }
+    if "status" not in report:
+        report["status"] = "pass" if report.get("returncode") == 0 else "fail"
+    return report
+
+
+def _sumo_load_net(
+    net_file: Path,
+    *,
+    output_dir: Path,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+) -> dict[str, Any]:
+    if not net_file.exists():
+        return {"status": "fail", "error": f"net file does not exist: {net_file}"}
+    output_dir.mkdir(parents=True, exist_ok=True)
+    load_net_file = output_dir / "sumo_load_candidate.net.xml"
+    try:
+        if load_net_file.resolve() != net_file.resolve():
+            shutil.copyfile(net_file, load_net_file)
+    except OSError as exc:
+        return {"status": "fail", "error": f"{type(exc).__name__}: {exc}"}
+    command = [
+        sumo_binary,
+        "-n",
+        _command_path_for_cwd(load_net_file, output_dir),
+        "--no-step-log",
+        "true",
+        "--duration-log.disable",
+        "true",
+        "--begin",
+        "0",
+        "--end",
+        "1",
+    ]
+    report = _command_result_report(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
+    report["source_net_file"] = str(net_file)
+    report["load_net_file"] = str(load_net_file)
+    return report
+
+
+def _command_path_for_cwd(path: Path, cwd: Path) -> str:
+    try:
+        return str(Path(os.path.relpath(path.resolve(), cwd.resolve())))
+    except ValueError:
+        return str(path)
+
+
+def _tls_connection_repair_promotion_decision(
+    *,
+    repair_report: Mapping[str, Any] | None,
+    sumo_load_report: Mapping[str, Any] | None,
+    repair_delta_report: Mapping[str, Any] | None,
+    rejected_delta_report: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if repair_report is None or repair_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "repair_not_pass"}
+    variant_file = Path(str(repair_report.get("variant_file", "")))
+    if not variant_file.exists():
+        return {"status": "blocked", "reason": "repair_variant_missing"}
+    if _int_field(repair_report, "skipped_invalid_mapped_linkindex_connection_count") > 0:
+        return {"status": "blocked", "reason": "invalid_mapped_linkindex_skipped"}
+    if sumo_load_report is None or sumo_load_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "sumo_load_not_pass"}
+    if repair_delta_report is None or repair_delta_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "repair_reference_delta_not_pass"}
+    repair_score = _tls_semantic_delta_score(repair_delta_report)
+    rejected_score = _tls_semantic_delta_score(rejected_delta_report)
+    if repair_score > rejected_score:
+        return {
+            "status": "blocked",
+            "reason": "reference_tls_semantic_delta_regressed",
+            "repair_tls_semantic_delta_score": repair_score,
+            "rejected_tls_semantic_delta_score": rejected_score,
+        }
+    return {
+        "status": "pass",
+        "reason": "tls_connection_repair_promoted_after_sumo_load_and_reference_delta",
+        "repair_tls_semantic_delta_score": repair_score,
+        "rejected_tls_semantic_delta_score": rejected_score,
+    }
+
+
 def _tls_control_review_category_counts(report: Mapping[str, Any] | None) -> dict[str, int]:
     if report is None:
         return {}
@@ -687,6 +785,7 @@ def run_osm_cleanup_workflow(
     reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
     service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
     review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
+    command_runner: Callable[..., Any] = run_command,
 ) -> dict[str, Any]:
     cleaned_place_name = (place_name or "").strip()
     bbox_input = (bbox or "").strip()
@@ -905,6 +1004,12 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_connection_repair_sumo_load_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_connection_repair_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
     junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
@@ -1155,7 +1260,50 @@ def run_osm_cleanup_workflow(
                             tls_id_map=tls_id_map,
                             copy_unmapped_tls=False,
                             require_target_link_index_capacity=True,
+                            pad_mapped_tllogic_capacity=True,
+                            add_green_phases_for_padded_links=True,
+                            add_yellow_phases_for_generated_green=True,
                         )
+                        repair_variant_value = reference_visual_detail_tls_connection_repair_report.get(
+                            "variant_file", ""
+                        )
+                        repair_variant_file = Path(str(repair_variant_value)) if repair_variant_value else None
+                        if repair_variant_file is not None and repair_variant_file.exists():
+                            reference_visual_detail_tls_connection_repair_sumo_load_report = _sumo_load_net(
+                                repair_variant_file,
+                                output_dir=output_dir / "reference_visual_detail_tls_connection_repair",
+                                sumo_binary=sumo_binary,
+                                timeout_seconds=timeout_seconds,
+                                command_runner=command_runner,
+                            )
+                            reference_visual_detail_tls_connection_repair_reference_delta_report = (
+                                reference_join_audit_func(
+                                    reference_net_file=reference_net_file,
+                                    candidate_net_file=repair_variant_file,
+                                    output_dir=output_dir
+                                    / "reference_visual_detail_tls_connection_repair_reference_delta",
+                                    prefix=f"{prefix}_reference_visual_detail_tls_connection_repair_reference_delta",
+                                    candidate_cluster_radius_m=topology_cluster_radius_m,
+                                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                    structural_only=True,
+                                )
+                            )
+                        reference_visual_detail_tls_connection_repair_promotion_report = (
+                            _tls_connection_repair_promotion_decision(
+                                repair_report=reference_visual_detail_tls_connection_repair_report,
+                                sumo_load_report=reference_visual_detail_tls_connection_repair_sumo_load_report,
+                                repair_delta_report=reference_visual_detail_tls_connection_repair_reference_delta_report,
+                                rejected_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+                            )
+                        )
+                        if (
+                            reference_visual_detail_tls_connection_repair_promotion_report.get("status") == "pass"
+                            and repair_variant_file is not None
+                        ):
+                            reference_visual_detail_comparison_net_file = repair_variant_file
+                            reference_visual_detail_comparison_selection_reason = str(
+                                reference_visual_detail_tls_connection_repair_promotion_report.get("reason", "")
+                            )
     raw_connectivity_report = connectivity_func(net_file)
     connectivity_report = raw_connectivity_report
     connectivity_quality = _connectivity_quality(connectivity_report)
@@ -1405,6 +1553,8 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_tls_report or {},
         reference_visual_detail_tls_aggregation_report or {},
         reference_visual_detail_tls_connection_repair_report or {},
+        reference_visual_detail_tls_connection_repair_sumo_load_report or {},
+        reference_visual_detail_tls_connection_repair_reference_delta_report or {},
         raw_connectivity_report,
         connected_core_report or {},
         connected_core_connectivity_report or {},
@@ -2026,6 +2176,36 @@ def run_osm_cleanup_workflow(
         else reference_visual_detail_tls_connection_repair_report.get(
             "skipped_invalid_mapped_linkindex_connection_count", 0
         ),
+        "reference_visual_detail_tls_connection_repair_promotion_status": str(
+            reference_visual_detail_tls_connection_repair_promotion_report.get("status", "skipped")
+        ),
+        "reference_visual_detail_tls_connection_repair_promotion_reason": str(
+            reference_visual_detail_tls_connection_repair_promotion_report.get("reason", "")
+        ),
+        "reference_visual_detail_tls_connection_repair_sumo_load_status": "skipped"
+        if reference_visual_detail_tls_connection_repair_sumo_load_report is None
+        else str(reference_visual_detail_tls_connection_repair_sumo_load_report.get("status", "fail")),
+        "reference_visual_detail_tls_connection_repair_reference_delta_status": "skipped"
+        if reference_visual_detail_tls_connection_repair_reference_delta_report is None
+        else reference_visual_detail_tls_connection_repair_reference_delta_report.get(
+            "network_structural_delta_status", "fail"
+        ),
+        "reference_visual_detail_tls_connection_repair_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            reference_visual_detail_tls_connection_repair_reference_delta_report
+        ),
+        "reference_visual_detail_tls_connection_repair_reference_delta_missing_counts": {}
+        if reference_visual_detail_tls_connection_repair_reference_delta_report is None
+        else reference_visual_detail_tls_connection_repair_reference_delta_report.get(
+            "network_structural_missing_counts", {}
+        ),
+        "reference_visual_detail_tls_connection_repair_reference_delta_extra_counts": {}
+        if reference_visual_detail_tls_connection_repair_reference_delta_report is None
+        else reference_visual_detail_tls_connection_repair_reference_delta_report.get(
+            "network_structural_extra_counts", {}
+        ),
+        "reference_visual_detail_tls_connection_repair_reference_delta_file": ""
+        if reference_visual_detail_tls_connection_repair_reference_delta_report is None
+        else str(reference_visual_detail_tls_connection_repair_reference_delta_report.get("summary_file", "")),
         "reference_visual_detail_tls_connection_repair_summary_file": ""
         if reference_visual_detail_tls_connection_repair_report is None
         else str(reference_visual_detail_tls_connection_repair_report.get("summary_file", "")),
@@ -2051,6 +2231,11 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_connection_repair": reference_visual_detail_tls_connection_repair_report or {},
         "reference_visual_detail_tls_aggregation_reference_delta": reference_visual_detail_tls_aggregation_reference_delta_report
         or {},
+        "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
+        or {},
+        "reference_visual_detail_tls_connection_repair_reference_delta": reference_visual_detail_tls_connection_repair_reference_delta_report
+        or {},
+        "reference_visual_detail_tls_connection_repair_promotion": reference_visual_detail_tls_connection_repair_promotion_report,
         "raw_connectivity": raw_connectivity_report,
         "connected_core": connected_core_report or {},
         "connected_core_connectivity": connected_core_connectivity_report or {},
