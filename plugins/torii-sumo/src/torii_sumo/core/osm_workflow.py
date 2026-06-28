@@ -1257,6 +1257,7 @@ def run_osm_cleanup_workflow(
                 output_dir=output_dir / "reference_visual_detail_tls_aggregation",
                 prefix=f"{prefix}_reference_visual_detail_tls_aggregation",
                 timeout_seconds=timeout_seconds,
+                tls_guess_signals_dist_m=35.0,
             )
             visual_tls_variant_value = reference_visual_detail_tls_aggregation_report.get(
                 "tls_aggregation_variant_file", ""

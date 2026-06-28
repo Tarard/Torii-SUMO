@@ -956,6 +956,7 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
         }
 
     def fake_tls_aggregation(**_kwargs):
+        calls["tls_aggregation_guess_signals_dist"] = _kwargs.get("tls_guess_signals_dist_m")
         visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
         visual_tls_net_file.write_text("<net/>", encoding="utf-8")
         representatives_file.write_text(
@@ -1198,6 +1199,7 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
         }
 
     def fake_tls_aggregation(**_kwargs):
+        calls["tls_aggregation_guess_signals_dist"] = _kwargs.get("tls_guess_signals_dist_m")
         visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
         visual_tls_net_file.write_text("<net/>", encoding="utf-8")
         return {
@@ -1359,6 +1361,7 @@ def test_reference_matched_workflow_promotes_signal_grouping_when_reference_delt
         }
 
     def fake_tls_aggregation(**_kwargs):
+        calls["tls_aggregation_guess_signals_dist"] = _kwargs.get("tls_guess_signals_dist_m")
         visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
         visual_tls_net_file.write_text("<net/>", encoding="utf-8")
         return {
@@ -1475,6 +1478,7 @@ def test_reference_matched_workflow_promotes_signal_grouping_when_reference_delt
     )
 
     assert calls["signal_grouping_max_shared_linkindex_groups"] == 40
+    assert calls["tls_aggregation_guess_signals_dist"] == 35.0
     assert calls["signal_grouping_sumo_command"][0] == "sumo"
     assert calls["signal_grouping_delta_candidate_net_file"] == signal_grouped_net_file
     assert calls["reference_join_candidate_net_file"] == signal_grouped_net_file

@@ -67,6 +67,7 @@ def build_tls_aggregation_variant(
     timeout_seconds: float = 240.0,
     command_runner: Callable[..., Any] = run_command,
     controlled_nodes_by_tls_func: Callable[[Path], dict[str, list[str]]] | None = None,
+    tls_guess_signals_dist_m: float | None = None,
 ) -> dict[str, Any]:
     if not net_file.exists():
         return _failure(f"net file does not exist: {net_file}")
@@ -153,6 +154,7 @@ def build_tls_aggregation_variant(
         "tls_set_representative_count": len(representative_node_ids),
         "tls_set_spatially_pruned_count": len(spatially_pruned_representatives),
         "tls_set_spatially_pruned_representatives": spatially_pruned_representatives,
+        "tls_guess_signals_dist_m": tls_guess_signals_dist_m,
         "tls_program_policy": "discard_loaded_programs_rebuild_tls_set",
         **source_tls_counts,
         "review_policy": (
@@ -187,6 +189,12 @@ def build_tls_aggregation_variant(
         "--output-file",
         _command_path(variant_file, output_dir),
     ]
+    if tls_guess_signals_dist_m is not None:
+        command[command.index("--output-file") : command.index("--output-file")] = [
+            "--tls.guess-signals",
+            "--tls.guess-signals.dist",
+            str(int(tls_guess_signals_dist_m)),
+        ]
     command_record.write_text(" ".join(command) + "\n", encoding="utf-8")
     try:
         result = _result_to_dict(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
@@ -237,6 +245,7 @@ def build_tls_aggregation_variant(
         "tls_set_representative_count": len(representative_node_ids),
         "tls_set_spatially_pruned_count": len(spatially_pruned_representatives),
         "tls_set_spatially_pruned_representatives": spatially_pruned_representatives,
+        "tls_guess_signals_dist_m": tls_guess_signals_dist_m,
         **source_tls_counts,
         **tls_program_preservation,
         **tls_orphan_cleanup,
