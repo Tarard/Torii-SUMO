@@ -363,6 +363,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
 
     def fake_reference_join_audit(**kwargs):
         calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+        calls["reference_join_structural_only"] = kwargs["structural_only"]
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -572,6 +573,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
 
     visual_detail_net_file = tmp_path / "sumo" / "reference-join_reference_visual_detail.net.xml"
     assert calls["reference_join_candidate_net_file"] == visual_detail_net_file
+    assert calls["reference_join_structural_only"] is True
     assert calls["aggregation_candidate_net_file"] == visual_detail_net_file
     assert calls["teacher_guided_candidate_net_file"] == tmp_path / "aggregated.net.xml"
     assert calls["teacher_guided_queue_max_ready_candidates"] == 80
@@ -587,6 +589,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert Path(calls["workflow_review_net_file"]) == tmp_path / "aggregated.net.xml"
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
+    assert report["reference_join_audit_mode"] == "full"
     assert report["reference_join_audit_candidate_net_file"] == str(visual_detail_net_file)
     assert report["reference_join_audit"]["junction_pattern_index"] == [{"junction_id": "cluster_a_b"}]
     assert report["reference_join_junction_teacher_delta_file"] == str(tmp_path / "junction_teacher_delta.json")
@@ -741,9 +744,11 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
 
     def fake_reference_join_audit(**kwargs):
         calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+        calls["reference_join_structural_only"] = kwargs["structural_only"]
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
+            "audit_mode": "structural_only",
             "reference_case_count": 1,
             "matched_case_count": 1,
             "unmatched_case_count": 0,
@@ -751,6 +756,12 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
             "cases_file": str(tmp_path / "reference_join_cases.csv"),
             "warnings": [],
         }
+
+    def fail_reference_join_aggregation(**_kwargs):
+        raise AssertionError("structural-only audit should not trigger reference join aggregation")
+
+    def fail_teacher_guided_repair_queue(**_kwargs):
+        raise AssertionError("structural-only audit should not trigger teacher-guided repair queue")
 
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
@@ -795,16 +806,13 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
             "warnings": [],
         },
         reference_join_audit_func=fake_reference_join_audit,
-        reference_join_aggregation_func=lambda **_kwargs: {
-            "status": "pass",
-            "claim_status": "diagnostic-demo",
-            "junction_aggregation_status": "not_needed",
-            "junction_aggregation_candidate_count": 0,
-            "warnings": [],
-        },
+        reference_join_aggregation_func=fail_reference_join_aggregation,
+        teacher_guided_repair_queue_func=fail_teacher_guided_repair_queue,
     )
 
     assert calls["reference_join_candidate_net_file"] == visual_tls_net_file
+    assert calls["reference_join_structural_only"] is True
+    assert report["reference_join_audit_mode"] == "structural_only"
     assert report["reference_visual_detail_net_file"] == str(tmp_path / "sumo" / "reference-tls_reference_visual_detail.net.xml")
     assert report["reference_visual_detail_comparison_net_file"] == str(visual_tls_net_file)
     assert report["reference_visual_detail_tls_aggregation_status"] == "variant_created_for_review"
