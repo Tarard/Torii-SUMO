@@ -96,6 +96,7 @@ def audit_reference_join_patterns(
         reference_network_structural_summary,
         candidate_network_structural_summary,
     )
+    tls_control_review = _tls_control_review(reference_network_structural_summary, candidate_network_structural_summary)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -158,6 +159,9 @@ def audit_reference_join_patterns(
         "network_structural_extra_counts": network_structural_delta["extra_counts"],
         "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
         "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
+        "tls_control_review_status": tls_control_review["status"],
+        "tls_control_review_queue_count": tls_control_review["queue_count"],
+        "tls_control_review_queue": tls_control_review["queue"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -204,6 +208,9 @@ def audit_reference_join_patterns(
         "network_structural_extra_counts": network_structural_delta["extra_counts"],
         "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
         "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
+        "tls_control_review_status": tls_control_review["status"],
+        "tls_control_review_queue_count": tls_control_review["queue_count"],
+        "tls_control_review_queue": tls_control_review["queue"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -240,6 +247,7 @@ def _structural_only_report(
         reference_network_structural_summary,
         candidate_network_structural_summary,
     )
+    tls_control_review = _tls_control_review(reference_network_structural_summary, candidate_network_structural_summary)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
@@ -276,6 +284,9 @@ def _structural_only_report(
         "network_structural_extra_counts": network_structural_delta["extra_counts"],
         "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
         "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
+        "tls_control_review_status": tls_control_review["status"],
+        "tls_control_review_queue_count": tls_control_review["queue_count"],
+        "tls_control_review_queue": tls_control_review["queue"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": [],
@@ -307,6 +318,9 @@ def _structural_only_report(
                 "network_structural_junction_type_extra_counts": network_structural_delta[
                     "junction_type_extra_counts"
                 ],
+                "tls_control_review_status": tls_control_review["status"],
+                "tls_control_review_queue_count": tls_control_review["queue_count"],
+                "tls_control_review_queue": tls_control_review["queue"],
                 "reference_network_structural_summary": reference_network_structural_summary,
                 "candidate_network_structural_summary": candidate_network_structural_summary,
                 "junction_pattern_comparisons": [],
@@ -629,6 +643,27 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
         if junction_id:
             controlled_junctions_by_tl.setdefault(tl_id, set()).add(junction_id)
             controlled_junctions.add(junction_id)
+    shared_linkindex_groups_by_tl: Counter[str] = Counter()
+    for (tl_id, _link_index), count in linkindex_group_counts.items():
+        if count > 1:
+            shared_linkindex_groups_by_tl[tl_id] += 1
+    tl_logic_control_records = []
+    for tl_id in tl_logic_ids:
+        linkindexes = sorted(linkindexes_by_tl.get(tl_id, set()))
+        phase_state_length = int(phase_state_lengths.get(tl_id, 0))
+        tl_logic_control_records.append(
+            {
+                "tl_id": tl_id,
+                "controlled_connection_count": int(controlled_connection_counts.get(tl_id, 0)),
+                "controlled_junction_count": len(controlled_junctions_by_tl.get(tl_id, set())),
+                "junction_ids": sorted(controlled_junctions_by_tl.get(tl_id, set())),
+                "linkindexes": linkindexes,
+                "controlled_linkindex_count": len(linkindexes),
+                "phase_state_length": phase_state_length,
+                "shared_linkindex_group_count": int(shared_linkindex_groups_by_tl.get(tl_id, 0)),
+                "sparse_linkindex": bool(linkindexes and phase_state_length > len(linkindexes)),
+            }
+        )
     return {
         "tl_logic_controlled_connection_count_distribution": _count_distribution(
             controlled_connection_counts.get(tl_id, 0) for tl_id in tl_logic_ids
@@ -640,6 +675,7 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
             1 for tl_id in tl_logic_ids if len(controlled_junctions_by_tl.get(tl_id, set())) > 1
         ),
         "traffic_light_junction_without_tls_connection_count": len(traffic_light_ids - controlled_junctions),
+        "traffic_light_junction_without_tls_connection_ids": sorted(traffic_light_ids - controlled_junctions),
         "tls_shared_linkindex_group_count": sum(1 for count in linkindex_group_counts.values() if count > 1),
         "tls_sparse_linkindex_tl_logic_count": sum(
             1
@@ -647,11 +683,106 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
             if linkindexes_by_tl.get(tl_id)
             and int(phase_state_lengths.get(tl_id, 0)) > len(linkindexes_by_tl.get(tl_id, set()))
         ),
+        "tl_logic_control_records": tl_logic_control_records,
     }
 
 
 def _count_distribution(values: Any) -> dict[str, int]:
     return dict(sorted(Counter(str(value) for value in values).items(), key=lambda item: int(item[0])))
+
+
+def _tls_control_review(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    reference_max_junction_count = _max_distribution_key(
+        reference.get("tl_logic_controlled_junction_count_distribution", {})
+    )
+    reference_sparse_budget = int(reference.get("tls_sparse_linkindex_tl_logic_count", 0))
+    sparse_seen = 0
+    queue = []
+    for record in candidate.get("tl_logic_control_records", []):
+        controlled_junction_count = int(record.get("controlled_junction_count", 0))
+        if controlled_junction_count > reference_max_junction_count:
+            queue.append(
+                {
+                    "repair_category": "tls_controller_cardinality_repair",
+                    "review_type": "split_multi_junction_tls",
+                    "tl_id": record.get("tl_id", ""),
+                    "controlled_connection_count": int(record.get("controlled_connection_count", 0)),
+                    "controlled_junction_count": controlled_junction_count,
+                    "reference_max_controlled_junction_count": reference_max_junction_count,
+                    "junction_ids": list(record.get("junction_ids", [])),
+                    "reason": "candidate tlLogic controls more junctions than the reference maximum",
+                }
+            )
+        if bool(record.get("sparse_linkindex", False)):
+            sparse_seen += 1
+            if sparse_seen > reference_sparse_budget:
+                queue.append(
+                    {
+                        "repair_category": "tls_linkindex_phase_repair",
+                        "review_type": "inspect_sparse_linkindex",
+                        "tl_id": record.get("tl_id", ""),
+                        "controlled_connection_count": int(record.get("controlled_connection_count", 0)),
+                        "controlled_linkindex_count": int(record.get("controlled_linkindex_count", 0)),
+                        "phase_state_length": int(record.get("phase_state_length", 0)),
+                        "linkindexes": list(record.get("linkindexes", [])),
+                        "reason": "candidate tlLogic phase state has more positions than controlled linkIndexes",
+                    }
+                )
+    for junction_id in candidate.get("traffic_light_junction_without_tls_connection_ids", []):
+        queue.append(
+            {
+                "repair_category": "tls_controller_cardinality_repair",
+                "review_type": "bind_or_downgrade_uncontrolled_traffic_light_junction",
+                "junction_id": junction_id,
+                "reason": "traffic_light junction has no controlled connection",
+            }
+        )
+    for key, review_type, repair_category, reason in (
+        (
+            "tls_controlled_connection_count",
+            "restore_tls_controlled_connections",
+            "tls_controller_cardinality_repair",
+            "candidate has fewer TLS-controlled connections than the reference",
+        ),
+        (
+            "multi_junction_tl_logic_count",
+            "restore_reference_multi_junction_tls_scope",
+            "tls_controller_cardinality_repair",
+            "candidate has fewer reference-style multi-junction tlLogic scopes",
+        ),
+        (
+            "tls_shared_linkindex_group_count",
+            "restore_shared_linkindex_groups",
+            "tls_linkindex_phase_repair",
+            "candidate has fewer shared linkIndex groups than the reference",
+        ),
+        (
+            "tls_sparse_linkindex_tl_logic_count",
+            "inspect_reference_sparse_linkindex_programs",
+            "tls_linkindex_phase_repair",
+            "candidate has fewer reference-style sparse linkIndex programs",
+        ),
+    ):
+        reference_count = int(reference.get(key, 0))
+        candidate_count = int(candidate.get(key, 0))
+        if reference_count > candidate_count:
+            queue.append(
+                {
+                    "repair_category": repair_category,
+                    "review_type": review_type,
+                    "reference_count": reference_count,
+                    "candidate_count": candidate_count,
+                    "missing_count": reference_count - candidate_count,
+                    "reason": reason,
+                }
+            )
+    return {"status": "needs_review" if queue else "pass", "queue_count": len(queue), "queue": queue}
+
+
+def _max_distribution_key(distribution: Any) -> int:
+    if not isinstance(distribution, dict) or not distribution:
+        return 1
+    return max((int(key) for key in distribution), default=1)
 
 
 def _connection_junction_id(connection: ET.Element, junction_ids: set[str]) -> str:

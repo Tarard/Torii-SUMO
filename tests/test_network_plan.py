@@ -400,6 +400,12 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
                 "crossing_edge_count": 0,
                 "walkingarea_edge_count": 0,
             },
+            "tls_control_review_status": "needs_review",
+            "tls_control_review_queue_count": 2,
+            "tls_control_review_queue": [
+                {"repair_category": "tls_controller_cardinality_repair", "review_type": "split_multi_junction_tls"},
+                {"repair_category": "tls_linkindex_phase_repair", "review_type": "restore_shared_linkindex_groups"},
+            ],
             "warnings": [],
         }
 
@@ -626,6 +632,12 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_candidate_network_structural_summary"] == {
         "crossing_edge_count": 0,
         "walkingarea_edge_count": 0,
+    }
+    assert report["reference_join_tls_control_review_status"] == "needs_review"
+    assert report["reference_join_tls_control_review_queue_count"] == 2
+    assert report["reference_join_tls_control_review_category_counts"] == {
+        "tls_controller_cardinality_repair": 1,
+        "tls_linkindex_phase_repair": 1,
     }
     assert report["reference_join_matched_case_count"] == 2
     assert report["reference_join_unmatched_case_count"] == 1

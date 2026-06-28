@@ -518,6 +518,19 @@ def _tls_semantic_delta_score(report: Mapping[str, Any] | None) -> int:
     )
 
 
+def _tls_control_review_category_counts(report: Mapping[str, Any] | None) -> dict[str, int]:
+    if report is None:
+        return {}
+    counts: dict[str, int] = {}
+    for entry in report.get("tls_control_review_queue", []) or []:
+        if not isinstance(entry, Mapping):
+            continue
+        category = str(entry.get("repair_category", ""))
+        if category:
+            counts[category] = counts.get(category, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def _delta_count_score(counts: Any) -> int:
     if not isinstance(counts, Mapping):
         return 0
@@ -1677,6 +1690,15 @@ def run_osm_cleanup_workflow(
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_extra_counts", {}),
         "reference_join_tls_semantic_delta_score": _tls_semantic_delta_score(reference_join_audit_report),
+        "reference_join_tls_control_review_status": "skipped"
+        if reference_join_audit_report is None
+        else str(reference_join_audit_report.get("tls_control_review_status", "skipped")),
+        "reference_join_tls_control_review_queue_count": 0
+        if reference_join_audit_report is None
+        else int(reference_join_audit_report.get("tls_control_review_queue_count", 0) or 0),
+        "reference_join_tls_control_review_category_counts": _tls_control_review_category_counts(
+            reference_join_audit_report
+        ),
         "reference_join_network_structural_junction_type_missing_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_junction_type_missing_counts", {}),
