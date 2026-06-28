@@ -240,6 +240,83 @@ def _teacher_guided_movement_gap_stats(report: Mapping[str, Any] | None) -> tupl
     return len(gaps), int(gaps[0]["vehicle_movement_matrix_missing_count"]) if gaps else 0, missing_plan_total, gaps[:5]
 
 
+def _intish(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _junction_pattern_residual_stats(report: Mapping[str, Any] | None) -> dict[str, Any]:
+    if report is None:
+        return {
+            "case_count": 0,
+            "failed_case_count": 0,
+            "mismatch_field_counts": {},
+            "internal_function_count_deficits": {},
+            "top_junction_pattern_mismatches": [],
+        }
+    comparisons = report.get("junction_pattern_comparisons", []) or []
+    if not isinstance(comparisons, list):
+        comparisons = []
+    field_counts = report.get("junction_pattern_mismatch_field_counts", {}) or {}
+    mismatch_field_counts = (
+        {str(key): _intish(value) for key, value in field_counts.items()} if isinstance(field_counts, Mapping) else {}
+    )
+    internal_deficits: dict[str, int] = {}
+    failed_examples: list[dict[str, Any]] = []
+    for comparison in comparisons:
+        if not isinstance(comparison, Mapping) or comparison.get("status") != "fail":
+            continue
+        fields = comparison.get("mismatch_fields", []) or []
+        mismatch_fields = (
+            [field for field in fields.split(";") if field]
+            if isinstance(fields, str)
+            else [str(field) for field in fields]
+        )
+        if not mismatch_field_counts:
+            for field in mismatch_fields:
+                mismatch_field_counts[field] = mismatch_field_counts.get(field, 0) + 1
+
+        teacher = comparison.get("teacher", {})
+        candidate = comparison.get("candidate", {})
+        teacher_counts = teacher.get("internal_function_counts", {}) if isinstance(teacher, Mapping) else {}
+        candidate_counts = candidate.get("internal_function_counts", {}) if isinstance(candidate, Mapping) else {}
+        if not isinstance(teacher_counts, Mapping):
+            teacher_counts = {}
+        if not isinstance(candidate_counts, Mapping):
+            candidate_counts = {}
+        example_deficits = {}
+        for function_name, teacher_count in teacher_counts.items():
+            deficit = _intish(teacher_count) - _intish(candidate_counts.get(function_name, 0))
+            if deficit <= 0:
+                continue
+            key = str(function_name)
+            example_deficits[key] = deficit
+            internal_deficits[key] = internal_deficits.get(key, 0) + deficit
+
+        failed_examples.append(
+            {
+                "junction_id": str(comparison.get("junction_id", "")),
+                "mismatch_fields": mismatch_fields,
+                "teacher_control_type": teacher.get("control_type", "") if isinstance(teacher, Mapping) else "",
+                "candidate_control_type": candidate.get("control_type", "") if isinstance(candidate, Mapping) else "",
+                "teacher_has_tls": teacher.get("has_tls", "") if isinstance(teacher, Mapping) else "",
+                "candidate_has_tls": candidate.get("has_tls", "") if isinstance(candidate, Mapping) else "",
+                "internal_function_count_deficits": example_deficits,
+            }
+        )
+
+    failed_case_count = _int_field(report, "junction_pattern_mismatch_count")
+    return {
+        "case_count": len(comparisons),
+        "failed_case_count": failed_case_count if failed_case_count > 0 else len(failed_examples),
+        "mismatch_field_counts": mismatch_field_counts,
+        "internal_function_count_deficits": internal_deficits,
+        "top_junction_pattern_mismatches": failed_examples[:5],
+    }
+
+
 def _class_set(value: Any) -> set[str]:
     if value is None:
         return set()
@@ -2510,6 +2587,9 @@ def run_osm_cleanup_workflow(
         teacher_guided_missing_movement_plan_count,
         teacher_guided_top_movement_gaps,
     ) = _teacher_guided_movement_gap_stats(teacher_guided_repair_queue_report)
+    post_teacher_tls_connection_repair_residual_stats = _junction_pattern_residual_stats(
+        post_teacher_tls_connection_repair_reference_delta_report
+    )
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -2803,6 +2883,21 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_connection_repair_reference_delta_file": ""
         if post_teacher_tls_connection_repair_reference_delta_report is None
         else str(post_teacher_tls_connection_repair_reference_delta_report.get("summary_file", "")),
+        "post_teacher_tls_connection_repair_junction_pattern_case_count": post_teacher_tls_connection_repair_residual_stats[
+            "case_count"
+        ],
+        "post_teacher_tls_connection_repair_junction_pattern_mismatch_count": post_teacher_tls_connection_repair_residual_stats[
+            "failed_case_count"
+        ],
+        "post_teacher_tls_connection_repair_junction_pattern_mismatch_field_counts": post_teacher_tls_connection_repair_residual_stats[
+            "mismatch_field_counts"
+        ],
+        "post_teacher_tls_connection_repair_internal_function_count_deficits": post_teacher_tls_connection_repair_residual_stats[
+            "internal_function_count_deficits"
+        ],
+        "post_teacher_tls_connection_repair_top_junction_pattern_mismatches": post_teacher_tls_connection_repair_residual_stats[
+            "top_junction_pattern_mismatches"
+        ],
         "post_teacher_tls_connection_repair_reference_promotion_status": str(
             post_teacher_tls_connection_repair_reference_promotion_report.get("status", "skipped")
         ),
