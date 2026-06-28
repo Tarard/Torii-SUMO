@@ -43,6 +43,15 @@ TLS_CONNECTION_REPAIR_ATTRS = (
     "contPos",
 )
 
+GEOMETRY_RESTORE_LANE_ATTRS = (
+    "shape",
+    "length",
+    "width",
+    "endOffset",
+    "customShape",
+    "outlineShape",
+)
+
 
 def build_rebuild_candidate(
     *,
@@ -868,6 +877,7 @@ def write_teacher_target_internal_replay_net(
     ]
     copied_boundary_edges = []
     skipped_boundary_edges = []
+    replaced_boundary_edge_ids: set[str] = set()
     boundary_insert_offset = 0
     teacher_edges = {edge.attrib["id"]: edge for edge in teacher_root.findall("edge") if edge.attrib.get("id")}
     teacher_junctions = {
@@ -879,7 +889,7 @@ def write_teacher_target_internal_replay_net(
         junction.attrib["id"] for junction in candidate_root.findall("junction") if junction.attrib.get("id")
     }
     copied_boundary_junctions = []
-    for edge_id in _needed_unmapped_teacher_boundary_edges(
+    needed_boundary_edge_ids = _needed_unmapped_teacher_boundary_edges(
         teacher_root.findall("connection"),
         teacher_edges,
         replay_edge_map,
@@ -889,7 +899,51 @@ def write_teacher_target_internal_replay_net(
         junction_id,
         dx,
         dy,
-    ):
+    )
+    teacher_boundary_edge_ids = []
+    for connection in teacher_root.findall("connection"):
+        if not _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id):
+            continue
+        for attr in ("from", "to"):
+            edge_id = connection.attrib.get(attr, "")
+            teacher_edge = teacher_edges.get(edge_id)
+            if (
+                edge_id
+                and not edge_id.startswith(teacher_internal_prefix)
+                and teacher_edge is not None
+                and teacher_junction_id in (teacher_edge.attrib.get("from"), teacher_edge.attrib.get("to"))
+            ):
+                teacher_boundary_edge_ids.append(edge_id)
+    teacher_boundary_edge_ids = list(dict.fromkeys(teacher_boundary_edge_ids))
+    teacher_boundary_edge_id_set = set(teacher_boundary_edge_ids)
+    teacher_boundary_mapped_counts = Counter(replay_edge_map.get(edge_id, edge_id) for edge_id in teacher_boundary_edge_ids)
+    needed_boundary_edge_ids = list(
+        dict.fromkeys(
+            [
+                *needed_boundary_edge_ids,
+                *[
+                    edge_id
+                    for edge_id in teacher_boundary_edge_ids
+                    if (
+                        replay_edge_map.get(edge_id, edge_id) in teacher_boundary_edge_id_set
+                        and replay_edge_map.get(edge_id, edge_id) != edge_id
+                    )
+                    or teacher_boundary_mapped_counts[replay_edge_map.get(edge_id, edge_id)] > 1
+                ],
+            ]
+        )
+    )
+    needed_boundary_edge_id_set = set(needed_boundary_edge_ids)
+    mapped_boundary_counts = Counter(replay_edge_map.get(edge_id, edge_id) for edge_id in needed_boundary_edge_ids)
+    preserved_colliding_boundary_edges = []
+    for edge_id in needed_boundary_edge_ids:
+        mapped_edge_id = replay_edge_map.get(edge_id, edge_id)
+        if mapped_edge_id == edge_id:
+            continue
+        if mapped_edge_id in needed_boundary_edge_id_set or mapped_boundary_counts[mapped_edge_id] > 1:
+            replay_edge_map[edge_id] = edge_id
+            preserved_colliding_boundary_edges.append(edge_id)
+    for edge_id in needed_boundary_edge_ids:
         teacher_edge = teacher_edges[edge_id]
         mapped_from = junction_id if teacher_edge.attrib.get("from") == teacher_junction_id else teacher_edge.attrib.get("from", "")
         mapped_to = junction_id if teacher_edge.attrib.get("to") == teacher_junction_id else teacher_edge.attrib.get("to", "")
@@ -937,6 +991,7 @@ def write_teacher_target_internal_replay_net(
             _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
             candidate_root.remove(replaced_edge)
             candidate_edge_ids.remove(copied_edge_id)
+            replaced_boundary_edge_ids.add(copied_edge_id)
         candidate_root.insert(insert_at, copied_edge)
         if replaced_edge is None:
             boundary_insert_offset += 1
@@ -982,6 +1037,35 @@ def write_teacher_target_internal_replay_net(
         candidate_junction.remove(child)
     for request in teacher_junction.findall("request"):
         candidate_junction.append(ET.Element("request", dict(request.attrib)))
+
+    edge_endpoints = {
+        edge.attrib.get("id", ""): (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    removed_stale_replaced_edge_connections = []
+    for connection in list(candidate_root.findall("connection")):
+        from_edge_id = connection.attrib.get("from", "")
+        to_edge_id = connection.attrib.get("to", "")
+        connection_edge_ids = {from_edge_id, to_edge_id}
+        source_endpoint = edge_endpoints.get(from_edge_id)
+        target_endpoint = edge_endpoints.get(to_edge_id)
+        shared_endpoint = (
+            source_endpoint[1]
+            if source_endpoint and target_endpoint and source_endpoint[1] and source_endpoint[1] == target_endpoint[0]
+            else ""
+        )
+        via_edge_id = connection.attrib.get("via", "")
+        stale_via = bool(via_edge_id and shared_endpoint and not via_edge_id.startswith(f":{shared_endpoint}_"))
+        if (
+            not _touches_target_internal_subgraph(connection, internal_prefix, junction_id)
+            and not from_edge_id.startswith(":")
+            and not to_edge_id.startswith(":")
+            and connection_edge_ids & replaced_boundary_edge_ids
+            and (not shared_endpoint or stale_via)
+        ):
+            removed_stale_replaced_edge_connections.append(dict(connection.attrib))
+            candidate_root.remove(connection)
 
     removed_connections = 0
     for connection in list(candidate_root.findall("connection")):
@@ -1045,6 +1129,10 @@ def write_teacher_target_internal_replay_net(
         "copied_internal_edge_count": len(teacher_internal_edges),
         "copied_boundary_edge_count": len(copied_boundary_edges),
         "copied_boundary_edges": copied_boundary_edges,
+        "preserved_colliding_boundary_edge_count": len(preserved_colliding_boundary_edges),
+        "preserved_colliding_boundary_edges": preserved_colliding_boundary_edges,
+        "removed_stale_replaced_edge_connection_count": len(removed_stale_replaced_edge_connections),
+        "removed_stale_replaced_edge_connections": removed_stale_replaced_edge_connections,
         "copied_boundary_junction_count": len(copied_boundary_junctions),
         "copied_boundary_junctions": copied_boundary_junctions,
         "skipped_boundary_edge_count": len(skipped_boundary_edges),
@@ -1056,6 +1144,7 @@ def write_teacher_target_internal_replay_net(
         "skipped_connection_count": len(skipped_connections),
         "skipped_connections": skipped_connections,
         "copied_request_count": len(teacher_junction.findall("request")),
+        "effective_edge_map": dict(sorted(replay_edge_map.items())),
     }
 
 
@@ -1343,6 +1432,43 @@ def build_teacher_guided_junction_variant(
         and isinstance(target_internal_replay_report, dict)
         and target_internal_replay_report.get("status") == "pass"
     ):
+        target_internal_normalize_command = [
+            netconvert_binary,
+            "--sumo-net-file",
+            _command_path(target_internal_replay_file, output_dir),
+            "--output-file",
+            _command_path(target_internal_normalized_net_file, output_dir),
+        ]
+        target_internal_normalize_report = _command_report(
+            command_runner(target_internal_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+        )
+        if target_internal_normalize_report.get("status") == "pass":
+            target_internal_normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
+                source_file=target_internal_replay_file,
+                target_file=target_internal_normalized_net_file,
+                junction_id=junction_id,
+            )
+            normalized_tl_logic_report = write_teacher_tllogic_net(
+                candidate_net_file=target_internal_normalized_net_file,
+                output_file=final_net_file,
+                junction_id=junction_id,
+                teacher_model=teacher_model,
+            )
+            target_internal_normalize_report["tl_logic"] = normalized_tl_logic_report
+            if normalized_tl_logic_report.get("status") == "pass":
+                normalized_sumo_report = _command_report(
+                    command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+                )
+                target_internal_normalize_report["sumo_load"] = normalized_sumo_report
+                if normalized_sumo_report.get("status") == "pass":
+                    tl_logic_report = normalized_tl_logic_report
+                    sumo_report = normalized_sumo_report
+    if (
+        sumo_report.get("status") != "pass"
+        and replay_target_internal_subgraph
+        and isinstance(target_internal_replay_report, dict)
+        and target_internal_replay_report.get("status") == "pass"
+    ):
         target_internal_replay_fallback_tl_logic_report = write_teacher_tllogic_net(
             candidate_net_file=vehicle_attrs_net_file,
             output_file=fallback_net_file,
@@ -1372,10 +1498,17 @@ def build_teacher_guided_junction_variant(
                 tl_logic_report = target_internal_replay_fallback_tl_logic_report
                 sumo_report = target_internal_replay_fallback_sumo_report
     final_model = extract_teacher_junction_model(final_net_file, junction_id)
+    comparison_edge_map = edge_map
+    if (
+        replay_target_internal_subgraph
+        and not target_internal_replay_fallback
+        and isinstance(target_internal_replay_report, dict)
+    ):
+        comparison_edge_map = _valid_edge_map(target_internal_replay_report.get("effective_edge_map", {})) or edge_map
     parity = _compare_teacher_models(
         teacher_model,
         final_model,
-        edge_map=edge_map,
+        edge_map=comparison_edge_map,
         teacher_junction_id=teacher_junction_id,
         candidate_junction_id=junction_id,
     )
@@ -1383,7 +1516,7 @@ def build_teacher_guided_junction_variant(
     approach_endpoint_rebuild_plan = _approach_endpoint_rebuild_plan(
         teacher_model,
         final_model,
-        edge_map=edge_map,
+        edge_map=comparison_edge_map,
         teacher_junction_id=teacher_junction_id,
         candidate_junction_id=junction_id,
         candidate_junction_ids=_net_junction_ids(final_net_file),
@@ -3329,6 +3462,79 @@ def _touches_target_internal_subgraph(connection: ET.Element, internal_prefix: s
         or connection.attrib.get("via", "").startswith(internal_prefix)
         or connection.attrib.get("tl", "") == junction_id
     )
+
+
+def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, junction_id: str) -> dict[str, object]:
+    if not source_file.exists():
+        return _failure(f"source net file does not exist: {source_file}")
+    if not target_file.exists():
+        return _failure(f"target net file does not exist: {target_file}")
+
+    internal_prefix = f":{junction_id}_"
+    source_root = ET.parse(source_file).getroot()
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    restored_edge_ids = {
+        edge.attrib.get("id", "")
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id", "").startswith(internal_prefix)
+    }
+    for connection in source_root.findall("connection"):
+        if not _touches_target_internal_subgraph(connection, internal_prefix, junction_id):
+            continue
+        for attr in ("from", "to"):
+            edge_id = connection.attrib.get(attr, "")
+            if edge_id:
+                restored_edge_ids.add(edge_id)
+        via_edge_id = _via_lane_edge_id(connection.attrib.get("via", ""))
+        if via_edge_id:
+            restored_edge_ids.add(via_edge_id)
+
+    source_edges = {edge.attrib.get("id", ""): edge for edge in source_root.findall("edge") if edge.attrib.get("id")}
+    target_edges = {edge.attrib.get("id", ""): edge for edge in target_root.findall("edge") if edge.attrib.get("id")}
+    missing_edge_ids = []
+    restored_lane_count = 0
+    for edge_id in sorted(edge_id for edge_id in restored_edge_ids if edge_id):
+        source_edge = source_edges.get(edge_id)
+        target_edge = target_edges.get(edge_id)
+        if source_edge is None or target_edge is None:
+            missing_edge_ids.append(edge_id)
+            continue
+        target_lanes = {lane.attrib.get("index", ""): lane for lane in target_edge.findall("lane")}
+        for source_lane in source_edge.findall("lane"):
+            target_lane = target_lanes.get(source_lane.attrib.get("index", ""))
+            if target_lane is None:
+                continue
+            before = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
+            for attr in GEOMETRY_RESTORE_LANE_ATTRS:
+                if attr in source_lane.attrib:
+                    target_lane.set(attr, source_lane.attrib[attr])
+                else:
+                    target_lane.attrib.pop(attr, None)
+            after = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
+            if before != after:
+                restored_lane_count += 1
+
+    ET.indent(target_root, space="    ")
+    target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "source_file": str(source_file),
+        "target_file": str(target_file),
+        "restored_edge_count": len(restored_edge_ids) - len(missing_edge_ids),
+        "restored_lane_count": restored_lane_count,
+        "missing_edge_count": len(missing_edge_ids),
+        "missing_edge_ids": missing_edge_ids,
+    }
+
+
+def _via_lane_edge_id(via_lane_id: str) -> str:
+    if not via_lane_id:
+        return ""
+    if via_lane_id.startswith(":") and "_" in via_lane_id:
+        return via_lane_id.rsplit("_", 1)[0]
+    return via_lane_id
 
 
 def _translate_shape(shape: str, dx: float, dy: float) -> str:
