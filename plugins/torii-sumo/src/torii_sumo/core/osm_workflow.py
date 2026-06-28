@@ -1279,6 +1279,7 @@ def run_osm_cleanup_workflow(
         "status": "skipped",
         "reason": "not_run",
     }
+    post_teacher_tls_connection_repair_movement_rebuild_queue_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
@@ -2333,6 +2334,29 @@ def run_osm_cleanup_workflow(
                                                     "reason", ""
                                                 )
                                             )
+                                            if (
+                                                _int_field(
+                                                    post_teacher_tls_connection_repair_reference_delta_report,
+                                                    "junction_pattern_mismatch_count",
+                                                )
+                                                > 0
+                                            ):
+                                                post_teacher_tls_connection_repair_movement_rebuild_queue_report = (
+                                                    teacher_guided_repair_queue_func(
+                                                        teacher_net_file=reference_net_file,
+                                                        candidate_net_file=connection_repair_variant_file,
+                                                        reference_join_audit_report=(
+                                                            post_teacher_tls_connection_repair_reference_delta_report
+                                                        ),
+                                                        output_dir=output_dir
+                                                        / "post_teacher_tls_connection_repair_movement_rebuild_queue",
+                                                        prefix=(
+                                                            f"{prefix}_post_teacher_tls_connection_repair_"
+                                                            "movement_rebuild"
+                                                        ),
+                                                        max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                                                    )
+                                                )
                                     else:
                                         post_teacher_tls_connection_repair_reference_promotion_report = {
                                             "status": "blocked",
@@ -2432,6 +2456,7 @@ def run_osm_cleanup_workflow(
         post_teacher_tls_low_vehicle_control_reference_delta_report or {},
         post_teacher_tls_signal_grouping_reference_delta_report or {},
         post_teacher_tls_connection_repair_reference_delta_report or {},
+        post_teacher_tls_connection_repair_movement_rebuild_queue_report or {},
         reference_visual_detail_tls_connection_repair_reference_delta_report or {},
         raw_connectivity_report,
         connected_core_report or {},
@@ -2590,6 +2615,12 @@ def run_osm_cleanup_workflow(
     post_teacher_tls_connection_repair_residual_stats = _junction_pattern_residual_stats(
         post_teacher_tls_connection_repair_reference_delta_report
     )
+    (
+        post_teacher_tls_connection_repair_movement_gap_candidate_count,
+        post_teacher_tls_connection_repair_movement_max_gap_count,
+        _post_teacher_tls_connection_repair_missing_movement_plan_count,
+        _post_teacher_tls_connection_repair_top_movement_gaps,
+    ) = _teacher_guided_movement_gap_stats(post_teacher_tls_connection_repair_movement_rebuild_queue_report)
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -2898,6 +2929,23 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_connection_repair_top_junction_pattern_mismatches": post_teacher_tls_connection_repair_residual_stats[
             "top_junction_pattern_mismatches"
         ],
+        "post_teacher_tls_connection_repair_movement_rebuild_queue_status": "skipped"
+        if post_teacher_tls_connection_repair_movement_rebuild_queue_report is None
+        else str(post_teacher_tls_connection_repair_movement_rebuild_queue_report.get("status", "fail")),
+        "post_teacher_tls_connection_repair_movement_rebuild_candidate_count": 0
+        if post_teacher_tls_connection_repair_movement_rebuild_queue_report is None
+        else post_teacher_tls_connection_repair_movement_rebuild_queue_report.get("repair_candidate_count", 0),
+        "post_teacher_tls_connection_repair_movement_rebuild_ready_candidate_count": 0
+        if post_teacher_tls_connection_repair_movement_rebuild_queue_report is None
+        else post_teacher_tls_connection_repair_movement_rebuild_queue_report.get("ready_candidate_count", 0),
+        "post_teacher_tls_connection_repair_movement_rebuild_expanded_scope_candidate_count": 0
+        if post_teacher_tls_connection_repair_movement_rebuild_queue_report is None
+        else post_teacher_tls_connection_repair_movement_rebuild_queue_report.get("expanded_scope_candidate_count", 0),
+        "post_teacher_tls_connection_repair_movement_rebuild_gap_candidate_count": post_teacher_tls_connection_repair_movement_gap_candidate_count,
+        "post_teacher_tls_connection_repair_movement_rebuild_max_gap_count": post_teacher_tls_connection_repair_movement_max_gap_count,
+        "post_teacher_tls_connection_repair_movement_rebuild_queue_file": ""
+        if post_teacher_tls_connection_repair_movement_rebuild_queue_report is None
+        else str(post_teacher_tls_connection_repair_movement_rebuild_queue_report.get("queue_file", "")),
         "post_teacher_tls_connection_repair_reference_promotion_status": str(
             post_teacher_tls_connection_repair_reference_promotion_report.get("status", "skipped")
         ),
@@ -3362,6 +3410,9 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_connection_repair_reference_delta": post_teacher_tls_connection_repair_reference_delta_report
         or {},
         "post_teacher_tls_connection_repair_reference_promotion": post_teacher_tls_connection_repair_reference_promotion_report,
+        "post_teacher_tls_connection_repair_movement_rebuild_queue": (
+            post_teacher_tls_connection_repair_movement_rebuild_queue_report or {}
+        ),
         "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
         or {},
         "reference_visual_detail_tls_connection_repair_reference_delta": reference_visual_detail_tls_connection_repair_reference_delta_report

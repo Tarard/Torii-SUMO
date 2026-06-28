@@ -919,7 +919,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     low_vehicle_net = tmp_path / "post_teacher_tls_low_vehicle" / "tls_low_vehicle_control_review.net.xml"
     signal_grouped_net = tmp_path / "post_teacher_tls_signal_grouping" / "tls_signal_grouped.net.xml"
     tls_connection_repaired_net = tmp_path / "post_teacher_tls_connection_repair" / "repaired.net.xml"
-    calls: dict[str, object] = {"reference_join_candidate_net_files": []}
+    calls: dict[str, object] = {"reference_join_candidate_net_files": [], "teacher_guided_queue_calls": []}
 
     def fake_build(**kwargs):
         current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
@@ -1072,7 +1072,29 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
             }
         return base
 
-    def fake_teacher_guided_repair_queue(**_kwargs):
+    def fake_teacher_guided_repair_queue(**kwargs):
+        calls["teacher_guided_queue_calls"].append(kwargs)
+        if kwargs["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild"):
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "repair_candidate_count": 2,
+                "ready_candidate_count": 1,
+                "expanded_scope_candidate_count": 1,
+                "queue_file": str(tmp_path / "post_repair_movement_queue.json"),
+                "queue_csv_file": str(tmp_path / "post_repair_movement_queue.csv"),
+                "repair_candidates": [
+                    {
+                        "reference_id": "tls_repair_j1",
+                        "junction_id": "tls_repair_j1",
+                        "candidate_status": "ready_for_teacher_guided_variant",
+                        "vehicle_movement_matrix_missing_count": 3,
+                        "missing_teacher_movement_plan_count": 2,
+                        "netedit_review_actions": ["rebuild_vehicle_movement_matrix"],
+                    }
+                ],
+                "warnings": [],
+            }
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -1210,6 +1232,12 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert calls["post_teacher_tls_connection_repair_source_net_file"] == reference_net_file
     assert calls["post_teacher_tls_connection_repair_candidate_net_file"] == signal_grouped_net
     assert calls["post_teacher_tls_connection_repair_copy_unmapped_tls"] is True
+    assert len(calls["teacher_guided_queue_calls"]) == 2
+    post_repair_queue_call = calls["teacher_guided_queue_calls"][1]
+    assert post_repair_queue_call["candidate_net_file"] == tls_connection_repaired_net
+    assert post_repair_queue_call["reference_join_audit_report"]["summary_file"] == str(
+        tmp_path / "post_teacher_tls_connection_repair_delta.json"
+    )
     assert report["reference_visual_detail_comparison_net_file"] == str(tls_connection_repaired_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
         "post_teacher_tls_connection_repair_promoted_by_reference_delta"
@@ -1262,6 +1290,15 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
             "walkingarea": 1,
         },
     }
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_queue_status"] == "pass"
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_candidate_count"] == 2
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_ready_candidate_count"] == 1
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_expanded_scope_candidate_count"] == 1
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_gap_candidate_count"] == 1
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_max_gap_count"] == 3
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_queue_file"] == str(
+        tmp_path / "post_repair_movement_queue.json"
+    )
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
