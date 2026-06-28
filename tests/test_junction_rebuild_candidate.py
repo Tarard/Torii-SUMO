@@ -3033,6 +3033,36 @@ def test_write_teacher_tllogic_net_replaces_only_target_program(tmp_path: Path) 
     assert report["controlled_link_count"] == 2
 
 
+def test_write_teacher_tllogic_net_moves_existing_late_program_before_connections(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <junction id="j" type="traffic_light"/>
+  <connection from="a" to="b" tl="j" linkIndex="0"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "traffic_light": {
+            "attributes": {"id": "j", "type": "actuated", "programID": "0", "offset": "0"},
+            "phases": [{"duration": "30", "state": "G"}],
+        }
+    }
+
+    report = write_teacher_tllogic_net(
+        candidate_net_file=candidate_net,
+        output_file=tmp_path / "teacher_tls.net.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+    )
+
+    children = [child.tag for child in ET.parse(report["net_file"]).getroot()]
+    assert report["status"] == "pass"
+    assert children.index("tlLogic") < children.index("connection")
+
+
 def test_write_teacher_tllogic_net_inserts_missing_target_program(tmp_path: Path) -> None:
     candidate_net = tmp_path / "candidate.net.xml"
     candidate_net.write_text(
@@ -3783,6 +3813,68 @@ def test_teacher_parity_fails_on_mapped_controlled_link_signature_mismatch() -> 
     assert gate["failures"] == [
         {"report": "parity", "field": "controlled_vehicle_link_signature_mismatch_count", "count": 1}
     ]
+
+
+def test_teacher_parity_normalizes_controlled_link_shape_by_junction_origin() -> None:
+    teacher_model = {
+        "junction_id": "teacher_j",
+        "junction": {"x": "100", "y": "200"},
+        "summary": {},
+        "vehicle_connections": [
+            {
+                "from": "teacher_in",
+                "to": "teacher_out",
+                "fromLane": "0",
+                "toLane": "0",
+                "via": ":teacher_j_0_0",
+                "tl": "teacher_j",
+                "linkIndex": "3",
+                "dir": "s",
+                "state": "O",
+                "shape": "100,200 101,201",
+            }
+        ],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "teacher_j", "type": "actuated"}, "phases": [{"state": "G"}]},
+    }
+    candidate_model = {
+        "junction_id": "candidate_j",
+        "junction": {"x": "10", "y": "20"},
+        "summary": {},
+        "vehicle_connections": [
+            {
+                "from": "cand_in",
+                "to": "cand_out",
+                "fromLane": "0",
+                "toLane": "0",
+                "via": ":candidate_j_0_0",
+                "tl": "candidate_j",
+                "linkIndex": "3",
+                "dir": "s",
+                "state": "O",
+                "shape": "10,20 11,21",
+            }
+        ],
+        "pedestrian_connections": [],
+        "traffic_light": {"attributes": {"id": "candidate_j", "type": "actuated"}, "phases": [{"state": "G"}]},
+    }
+
+    parity = _compare_teacher_models(
+        teacher_model,
+        candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+    )
+
+    expected = (
+        "from=cand_in|to=cand_out|fromLane=0|toLane=0|dir=s|state=O|"
+        "via=:candidate_j_0_0|pass=|uncontrolled=|allow=|disallow=|keepClear=|"
+        "contPos=|linkIndex2=|shape=0.00,0.00 1.00,1.00"
+    )
+    assert parity["teacher"]["controlled_vehicle_link_signatures"] == {"3": expected}
+    assert parity["candidate"]["controlled_vehicle_link_signatures"] == {"3": expected}
+    assert "controlled_vehicle_link_signature_mismatch_count" not in parity["delta"]
 
 
 def test_teacher_parity_fails_on_duplicate_controlled_link_signature_mismatch() -> None:
