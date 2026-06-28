@@ -300,9 +300,15 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "reference_visual_detail_comparison_net_file": str(tmp_path / "teacher_guided_best.net.xml"),
             "teacher_guided_repair_best_variant_file": str(tmp_path / "teacher_guided_best.net.xml"),
             "teacher_guided_repair_run_report_file": str(tmp_path / "teacher_guided_run.json"),
+            "teacher_guided_repair_run_status": "pass",
+            "teacher_guided_repair_parity_gate_status": "pass",
             "teacher_guided_repair_application_scope": "single_best_variant",
             "teacher_guided_repair_applied_candidate_count": 1,
             "teacher_guided_repair_unapplied_pass_candidate_count": 4,
+            "workflow_review_html_status": "pass",
+            "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
+            "reference_join_post_teacher_audit_status": "pass",
+            "routeability_audit_status": "pass",
             "reference_join_audit": {"junction_pattern_index": [{"junction_id": "cluster_a_b"}]},
             "gate_status": {
                 "reference_join_audit": "pass",
@@ -334,6 +340,15 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["reference_matched_semantics_workflow"]["application_scope"] == "single_best_variant"
     assert report["reference_matched_semantics_workflow"]["applied_candidate_count"] == 1
     assert report["reference_matched_semantics_workflow"]["unapplied_pass_candidate_count"] == 4
+    assert report["workflow_review_html_status"] == "pass"
+    assert report["workflow_review_html_file"] == str(tmp_path / "workflow_review.html")
+    assert report["teacher_guided_repair_run_status"] == "pass"
+    assert report["teacher_guided_repair_parity_gate_status"] == "pass"
+    assert report["teacher_guided_repair_application_scope"] == "single_best_variant"
+    assert report["teacher_guided_repair_best_variant_file"] == str(tmp_path / "teacher_guided_best.net.xml")
+    assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
+    assert report["reference_join_post_teacher_audit_status"] == "pass"
+    assert report["routeability_audit_status"] == "pass"
     assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]
