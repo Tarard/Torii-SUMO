@@ -1188,6 +1188,13 @@ def run_osm_cleanup_workflow(
         "status": "skipped",
         "reason": "not_run",
     }
+    post_teacher_tls_signal_grouping_report: dict[str, Any] | None = None
+    post_teacher_tls_signal_grouping_sumo_load_report: dict[str, Any] | None = None
+    post_teacher_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
+    post_teacher_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
     reference_join_aggregation_report: dict[str, Any] | None = None
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
@@ -2088,6 +2095,76 @@ def run_osm_cleanup_workflow(
                                 reference_visual_detail_comparison_selection_reason = str(
                                     post_teacher_tls_low_vehicle_control_reference_promotion_report.get("reason", "")
                                 )
+                            signal_grouping_baseline_report = (
+                                post_teacher_tls_low_vehicle_control_reference_delta_report
+                                or reference_join_post_teacher_audit_report
+                            )
+                            signal_grouping_source_net_file = (
+                                reference_visual_detail_comparison_net_file or teacher_guided_repair_best_variant_file
+                            )
+                            signal_grouping_missing_counts = signal_grouping_baseline_report.get(
+                                "network_structural_missing_counts", {}
+                            )
+                            if not isinstance(signal_grouping_missing_counts, Mapping):
+                                signal_grouping_missing_counts = {}
+                            missing_shared_groups = int(
+                                signal_grouping_missing_counts.get("tls_shared_linkindex_group_count", 0) or 0
+                            )
+                            if missing_shared_groups > 0 and signal_grouping_source_net_file is not None:
+                                signal_grouping_output_dir = output_dir / "post_teacher_tls_signal_grouping"
+                                post_teacher_tls_signal_grouping_report = tls_signal_grouping_func(
+                                    source_net_file=signal_grouping_source_net_file,
+                                    output_dir=signal_grouping_output_dir,
+                                    prefix=f"{prefix}_post_teacher_tls_signal_grouping",
+                                    max_shared_linkindex_groups=missing_shared_groups,
+                                )
+                                signal_grouping_variant_value = post_teacher_tls_signal_grouping_report.get(
+                                    "tls_signal_grouping_variant_file", ""
+                                )
+                                signal_grouping_variant_file = (
+                                    Path(str(signal_grouping_variant_value)) if signal_grouping_variant_value else None
+                                )
+                                if signal_grouping_variant_file is not None and signal_grouping_variant_file.exists():
+                                    post_teacher_tls_signal_grouping_sumo_load_report = _sumo_load_net(
+                                        signal_grouping_variant_file,
+                                        output_dir=signal_grouping_output_dir,
+                                        sumo_binary=sumo_binary,
+                                        timeout_seconds=timeout_seconds,
+                                        command_runner=command_runner,
+                                    )
+                                    if post_teacher_tls_signal_grouping_sumo_load_report.get("status") == "pass":
+                                        post_teacher_tls_signal_grouping_reference_delta_report = reference_join_audit_func(
+                                            reference_net_file=reference_net_file,
+                                            candidate_net_file=signal_grouping_variant_file,
+                                            output_dir=output_dir
+                                            / "post_teacher_tls_signal_grouping_reference_delta",
+                                            prefix=f"{prefix}_post_teacher_tls_signal_grouping_reference_delta",
+                                            candidate_cluster_radius_m=topology_cluster_radius_m,
+                                            candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                            structural_only=True,
+                                        )
+                                        post_teacher_tls_signal_grouping_reference_promotion_report = (
+                                            _reference_delta_promotion_decision(
+                                                candidate_delta_report=post_teacher_tls_signal_grouping_reference_delta_report,
+                                                baseline_delta_report=signal_grouping_baseline_report,
+                                                reason="post_teacher_tls_signal_grouping_promoted_by_reference_delta",
+                                            )
+                                        )
+                                        if (
+                                            post_teacher_tls_signal_grouping_reference_promotion_report.get("status")
+                                            == "pass"
+                                        ):
+                                            reference_visual_detail_comparison_net_file = signal_grouping_variant_file
+                                            reference_visual_detail_comparison_selection_reason = str(
+                                                post_teacher_tls_signal_grouping_reference_promotion_report.get(
+                                                    "reason", ""
+                                                )
+                                            )
+                                    else:
+                                        post_teacher_tls_signal_grouping_reference_promotion_report = {
+                                            "status": "blocked",
+                                            "reason": "sumo_load_not_pass",
+                                        }
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
@@ -2168,14 +2245,17 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_tls_signal_grouping_report or {},
         reference_visual_detail_tls_low_vehicle_control_report or {},
         post_teacher_tls_low_vehicle_control_report or {},
+        post_teacher_tls_signal_grouping_report or {},
         reference_visual_detail_tls_connection_repair_report or {},
         reference_visual_detail_raw_reference_delta_report or {},
         reference_visual_detail_tls_signal_grouping_sumo_load_report or {},
         reference_visual_detail_tls_low_vehicle_control_sumo_load_report or {},
         post_teacher_tls_low_vehicle_control_sumo_load_report or {},
+        post_teacher_tls_signal_grouping_sumo_load_report or {},
         reference_visual_detail_tls_connection_repair_sumo_load_report or {},
         reference_visual_detail_tls_low_vehicle_control_reference_delta_report or {},
         post_teacher_tls_low_vehicle_control_reference_delta_report or {},
+        post_teacher_tls_signal_grouping_reference_delta_report or {},
         reference_visual_detail_tls_connection_repair_reference_delta_report or {},
         raw_connectivity_report,
         connected_core_report or {},
@@ -2560,6 +2640,33 @@ def run_osm_cleanup_workflow(
         ),
         "post_teacher_tls_low_vehicle_control_reference_promotion_reason": str(
             post_teacher_tls_low_vehicle_control_reference_promotion_report.get("reason", "")
+        ),
+        "post_teacher_tls_signal_grouping_status": "skipped"
+        if post_teacher_tls_signal_grouping_report is None
+        else str(post_teacher_tls_signal_grouping_report.get("status", "fail")),
+        "post_teacher_tls_signal_grouping_variant_file": ""
+        if post_teacher_tls_signal_grouping_report is None
+        else str(post_teacher_tls_signal_grouping_report.get("tls_signal_grouping_variant_file", "")),
+        "post_teacher_tls_signal_grouping_merged_group_count": 0
+        if post_teacher_tls_signal_grouping_report is None
+        else post_teacher_tls_signal_grouping_report.get("tls_signal_grouping_merged_group_count", 0),
+        "post_teacher_tls_signal_grouping_remapped_connection_count": 0
+        if post_teacher_tls_signal_grouping_report is None
+        else post_teacher_tls_signal_grouping_report.get("tls_signal_grouping_remapped_connection_count", 0),
+        "post_teacher_tls_signal_grouping_sumo_load_status": "skipped"
+        if post_teacher_tls_signal_grouping_sumo_load_report is None
+        else str(post_teacher_tls_signal_grouping_sumo_load_report.get("status", "fail")),
+        "post_teacher_tls_signal_grouping_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            post_teacher_tls_signal_grouping_reference_delta_report
+        ),
+        "post_teacher_tls_signal_grouping_reference_delta_file": ""
+        if post_teacher_tls_signal_grouping_reference_delta_report is None
+        else str(post_teacher_tls_signal_grouping_reference_delta_report.get("summary_file", "")),
+        "post_teacher_tls_signal_grouping_reference_promotion_status": str(
+            post_teacher_tls_signal_grouping_reference_promotion_report.get("status", "skipped")
+        ),
+        "post_teacher_tls_signal_grouping_reference_promotion_reason": str(
+            post_teacher_tls_signal_grouping_reference_promotion_report.get("reason", "")
         ),
         "reference_join_tls_semantic_delta_score": _tls_semantic_delta_score(reference_join_audit_report),
         "reference_join_tls_control_review_status": "skipped"
@@ -3009,6 +3116,11 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_low_vehicle_control_reference_delta": post_teacher_tls_low_vehicle_control_reference_delta_report
         or {},
         "post_teacher_tls_low_vehicle_control_reference_promotion": post_teacher_tls_low_vehicle_control_reference_promotion_report,
+        "post_teacher_tls_signal_grouping": post_teacher_tls_signal_grouping_report or {},
+        "post_teacher_tls_signal_grouping_sumo_load": post_teacher_tls_signal_grouping_sumo_load_report or {},
+        "post_teacher_tls_signal_grouping_reference_delta": post_teacher_tls_signal_grouping_reference_delta_report
+        or {},
+        "post_teacher_tls_signal_grouping_reference_promotion": post_teacher_tls_signal_grouping_reference_promotion_report,
         "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
         or {},
         "reference_visual_detail_tls_connection_repair_reference_delta": reference_visual_detail_tls_connection_repair_reference_delta_report
