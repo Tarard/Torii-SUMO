@@ -251,6 +251,12 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "traffic_light_junction_count": 1,
         "tls_controlled_connection_count": 1,
         "tl_connection_missing_linkindex_count": 0,
+        "tl_logic_controlled_connection_count_distribution": {"1": 1},
+        "tl_logic_controlled_junction_count_distribution": {"1": 1},
+        "multi_junction_tl_logic_count": 0,
+        "traffic_light_junction_without_tls_connection_count": 0,
+        "tls_shared_linkindex_group_count": 0,
+        "tls_sparse_linkindex_tl_logic_count": 0,
         "junction_type_counts": {"traffic_light": 1},
         "edge_function_counts": {"crossing": 1, "internal": 1, "plain": 6, "walkingarea": 1},
     }
@@ -265,6 +271,12 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "traffic_light_junction_count": 0,
         "tls_controlled_connection_count": 0,
         "tl_connection_missing_linkindex_count": 0,
+        "tl_logic_controlled_connection_count_distribution": {},
+        "tl_logic_controlled_junction_count_distribution": {},
+        "multi_junction_tl_logic_count": 0,
+        "traffic_light_junction_without_tls_connection_count": 0,
+        "tls_shared_linkindex_group_count": 0,
+        "tls_sparse_linkindex_tl_logic_count": 0,
         "junction_type_counts": {"priority": 1},
         "edge_function_counts": {"internal": 1, "plain": 6},
     }
@@ -361,6 +373,45 @@ def test_reference_join_audit_structural_only_reports_extra_network_structure(tm
     }
     assert report["network_structural_junction_type_missing_counts"] == {}
     assert report["network_structural_junction_type_extra_counts"] == {"traffic_light": 1}
+
+
+def test_reference_join_audit_summarizes_tls_control_semantics(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id=":j1_0" function="internal"><lane id=":j1_0_0" index="0"/></edge>
+  <edge id=":j2_0" function="internal"><lane id=":j2_0_0" index="0"/></edge>
+  <edge id=":j2_1" function="internal"><lane id=":j2_1_0" index="0"/></edge>
+  <junction id="j1" type="traffic_light"/>
+  <junction id="j2" type="traffic_light"/>
+  <junction id="j3" type="traffic_light"/>
+  <connection from="a" to="b" tl="tlA" linkIndex="0" via=":j1_0_0"/>
+  <connection from="c" to="d" tl="tlA" linkIndex="0" via=":j2_0_0"/>
+  <connection from="e" to="f" tl="tlA" linkIndex="3" via=":j2_1_0"/>
+  <tlLogic id="tlA" type="actuated" programID="0"><phase duration="30" state="rrrr"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text("<net/>", encoding="utf-8")
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        structural_only=True,
+    )
+    summary = report["reference_network_structural_summary"]
+
+    assert summary["tl_logic_controlled_connection_count_distribution"] == {"3": 1}
+    assert summary["tl_logic_controlled_junction_count_distribution"] == {"2": 1}
+    assert summary["multi_junction_tl_logic_count"] == 1
+    assert summary["traffic_light_junction_without_tls_connection_count"] == 1
+    assert summary["tls_shared_linkindex_group_count"] == 1
+    assert summary["tls_sparse_linkindex_tl_logic_count"] == 1
+    assert report["network_structural_missing_counts"]["multi_junction_tl_logic_count"] == 1
+    assert report["network_structural_missing_counts"]["tls_shared_linkindex_group_count"] == 1
+    assert report["network_structural_missing_counts"]["tls_sparse_linkindex_tl_logic_count"] == 1
 
 
 def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, tmp_path: Path) -> None:
