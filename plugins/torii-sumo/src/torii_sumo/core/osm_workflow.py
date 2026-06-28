@@ -1626,9 +1626,15 @@ def run_osm_cleanup_workflow(
         "reference_join_network_structural_missing_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_missing_counts", {}),
+        "reference_join_network_structural_extra_counts": {}
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("network_structural_extra_counts", {}),
         "reference_join_network_structural_junction_type_missing_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_junction_type_missing_counts", {}),
+        "reference_join_network_structural_junction_type_extra_counts": {}
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("network_structural_junction_type_extra_counts", {}),
         "reference_join_reference_network_structural_summary": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("reference_network_structural_summary", {}),
