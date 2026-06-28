@@ -7,6 +7,7 @@ from torii_sumo.core.osm_workflow import (
     _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
     _teacher_guided_application_stats,
+    _teacher_guided_best_variant_file,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
     run_osm_cleanup_workflow,
@@ -61,6 +62,52 @@ def test_teacher_guided_application_stats_reports_single_variant_scope(tmp_path:
         "teacher_guided_repair_applied_candidate_count": 1,
         "teacher_guided_repair_unapplied_pass_candidate_count": 2,
     }
+
+
+def test_teacher_guided_application_stats_reports_sequential_composite_scope(tmp_path: Path) -> None:
+    composite_net = tmp_path / "composite_teacher_guided.net.xml"
+    composite_net.write_text("<net/>", encoding="utf-8")
+
+    stats = _teacher_guided_application_stats(
+        {
+            "status": "pass",
+            "parity_gate_status": "pass",
+            "pass_candidate_count": 5,
+            "composite_applied_candidate_count": 3,
+            "composite_net_file": str(composite_net),
+        },
+        composite_net,
+    )
+
+    assert stats == {
+        "teacher_guided_repair_application_scope": "sequential_composite",
+        "teacher_guided_repair_applied_candidate_count": 3,
+        "teacher_guided_repair_unapplied_pass_candidate_count": 2,
+    }
+
+
+def test_teacher_guided_best_variant_file_prefers_composite_net(tmp_path: Path) -> None:
+    first_variant = tmp_path / "candidate_001_teacher_guided.net.xml"
+    composite_net = tmp_path / "candidate_002_teacher_guided.net.xml"
+    first_variant.write_text("<net/>", encoding="utf-8")
+    composite_net.write_text("<net/>", encoding="utf-8")
+
+    best = _teacher_guided_best_variant_file(
+        {
+            "status": "pass",
+            "parity_gate_status": "pass",
+            "composite_net_file": str(composite_net),
+            "variant_reports": [
+                {
+                    "status": "pass",
+                    "parity_gate_status": "pass",
+                    "final_net_file": str(first_variant),
+                }
+            ],
+        }
+    )
+
+    assert best == composite_net
 
 
 def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_path: Path) -> None:
@@ -617,6 +664,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         calls["teacher_guided_run_netconvert_binary"] = kwargs["netconvert_binary"]
         calls["teacher_guided_run_sumo_binary"] = kwargs["sumo_binary"]
         calls["teacher_guided_run_max_ready_candidates"] = kwargs["max_ready_candidates"]
+        calls["teacher_guided_run_sequential_accept_passed_variants"] = kwargs["sequential_accept_passed_variants"]
+        calls["teacher_guided_run_plain_exporter"] = kwargs["plain_exporter"]
         best_expanded = tmp_path / "expanded_scope.net.xml"
         best_expanded.write_text("<net/>", encoding="utf-8")
         return {
@@ -731,6 +780,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["teacher_guided_run_netconvert_binary"] == "netconvert-test"
     assert calls["teacher_guided_run_sumo_binary"] == "sumo-test"
     assert calls["teacher_guided_run_max_ready_candidates"] == 80
+    assert calls["teacher_guided_run_sequential_accept_passed_variants"] is True
+    assert calls["teacher_guided_run_plain_exporter"] is fake_teacher_guided_plain_export
     assert Path(calls["workflow_review_net_file"]) == tmp_path / "aggregated.net.xml"
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"

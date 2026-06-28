@@ -1466,6 +1466,8 @@ def run_teacher_guided_repair_queue(
     timeout_seconds: float = 240.0,
     command_runner: Any = run_command,
     variant_builder: Any = build_teacher_guided_junction_variant,
+    sequential_accept_passed_variants: bool = False,
+    plain_exporter: Any | None = None,
 ) -> dict[str, object]:
     teacher_net_value = queue_report.get("teacher_net_file")
     candidate_net_value = queue_report.get("candidate_net_file")
@@ -1501,6 +1503,17 @@ def run_teacher_guided_repair_queue(
     variant_reports = []
     expanded_scope_reports = []
     skipped_candidates = []
+    sequential_plain_export_reports = []
+    current_raw_node_file = raw_node_file
+    current_raw_edge_file = raw_edge_file
+    current_raw_connection_file = raw_connection_file
+    current_raw_type_file = raw_type_file
+    current_candidate_net_file = candidate_net_file
+    composite_applied_candidate_count = 0
+    composite_net_file = ""
+    applied_candidate_edge_ids: set[str] = set()
+    applied_candidate_node_ids: set[str] = set()
+    sequential_blocked_reason = ""
     attempted_ready_count = 0
     for index, candidate in enumerate(candidates):
         if not isinstance(candidate, dict):
@@ -1509,13 +1522,40 @@ def run_teacher_guided_repair_queue(
         junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
         teacher_junction_id = str(candidate.get("reference_id") or junction_id)
         edge_map = _valid_edge_map(candidate.get("edge_map", {}))
+        candidate_node_ids = {str(item) for item in candidate.get("matched_candidate_node_ids", []) or [] if str(item)}
+        if junction_id:
+            candidate_node_ids.add(junction_id)
+        candidate_edge_ids = {str(item) for item in edge_map.values() if str(item)}
+        if sequential_accept_passed_variants and sequential_blocked_reason:
+            skipped_candidates.append(
+                {
+                    "index": index,
+                    "junction_id": junction_id,
+                    "candidate_status": "sequential_plain_export_failed",
+                    "reason": sequential_blocked_reason,
+                }
+            )
+            continue
+        if sequential_accept_passed_variants and (
+            candidate_edge_ids & applied_candidate_edge_ids or candidate_node_ids & applied_candidate_node_ids
+        ):
+            skipped_candidates.append(
+                {
+                    "index": index,
+                    "junction_id": junction_id,
+                    "candidate_status": "sequential_candidate_overlap",
+                    "overlap_edge_ids": sorted(candidate_edge_ids & applied_candidate_edge_ids),
+                    "overlap_node_ids": sorted(candidate_node_ids & applied_candidate_node_ids),
+                }
+            )
+            continue
         if candidate.get("candidate_status") == "needs_expanded_rebuild_scope" and junction_id:
             safe_junction_id = _queue_candidate_dir(index, junction_id)
             scope_report = _attach_candidate_template_context(
                 write_expanded_scope_plain_inputs(
-                    raw_node_file=raw_node_file,
-                    raw_edge_file=raw_edge_file,
-                    raw_connection_file=raw_connection_file,
+                    raw_node_file=current_raw_node_file,
+                    raw_edge_file=current_raw_edge_file,
+                    raw_connection_file=current_raw_connection_file,
                     output_dir=output_dir / safe_junction_id,
                     expanded_rebuild_scope=candidate.get("expanded_rebuild_scope", {}),
                     approach_endpoint_rebuild_plan=candidate.get("approach_endpoint_rebuild_plan", {}),
@@ -1592,7 +1632,7 @@ def run_teacher_guided_repair_queue(
                         raw_node_file=replay_node_file,
                         raw_edge_file=replay_edge_file,
                         raw_connection_file=Path(str(scope_report.get("connection_file", ""))),
-                        raw_type_file=raw_type_file,
+                        raw_type_file=current_raw_type_file,
                         teacher_net_file=teacher_net_file,
                         candidate_net_file=Path(str(scope_report.get("net_file", ""))),
                         junction_id=joined_scope_junction_id,
@@ -1647,12 +1687,12 @@ def run_teacher_guided_repair_queue(
         attempted_ready_count += 1
         try:
             variant_report = variant_builder(
-                raw_node_file=raw_node_file,
-                raw_edge_file=raw_edge_file,
-                raw_connection_file=raw_connection_file,
-                raw_type_file=raw_type_file,
+                raw_node_file=current_raw_node_file,
+                raw_edge_file=current_raw_edge_file,
+                raw_connection_file=current_raw_connection_file,
+                raw_type_file=current_raw_type_file,
                 teacher_net_file=teacher_net_file,
-                candidate_net_file=candidate_net_file,
+                candidate_net_file=current_candidate_net_file,
                 junction_id=junction_id,
                 output_dir=output_dir / safe_junction_id,
                 edge_map=edge_map,
@@ -1667,7 +1707,39 @@ def run_teacher_guided_repair_queue(
             )
         except Exception as exc:
             variant_report = _variant_exception_report(exc, junction_id)
-        variant_reports.append(_attach_candidate_template_context(variant_report, candidate))
+        attached_report = _attach_candidate_template_context(variant_report, candidate)
+        variant_reports.append(attached_report)
+        final_net_file = Path(str(attached_report.get("final_net_file", "")))
+        if (
+            sequential_accept_passed_variants
+            and attached_report.get("status") == "pass"
+            and attached_report.get("parity_gate_status") == "pass"
+            and final_net_file.exists()
+        ):
+            composite_applied_candidate_count += 1
+            composite_net_file = str(final_net_file)
+            applied_candidate_edge_ids.update(candidate_edge_ids)
+            applied_candidate_node_ids.update(candidate_node_ids)
+            current_candidate_net_file = final_net_file
+            if plain_exporter is not None and index < len(candidates) - 1:
+                export_report = plain_exporter(
+                    net_file=final_net_file,
+                    output_dir=output_dir / safe_junction_id / "sequential_plain",
+                    prefix=f"{variant_prefix}_sequential",
+                    netconvert_binary=netconvert_binary,
+                    timeout_seconds=timeout_seconds,
+                )
+                sequential_plain_export_reports.append(export_report)
+                if export_report.get("status") == "pass":
+                    current_raw_node_file = Path(str(export_report["raw_node_file"]))
+                    current_raw_edge_file = Path(str(export_report["raw_edge_file"]))
+                    current_raw_connection_file = Path(str(export_report["raw_connection_file"]))
+                    raw_type_value = str(export_report.get("raw_type_file", ""))
+                    current_raw_type_file = Path(raw_type_value) if raw_type_value else None
+                else:
+                    sequential_blocked_reason = str(
+                        export_report.get("error", "plain export failed after accepted variant")
+                    )
 
     attempted_count = len(variant_reports)
     pass_count = sum(1 for report in variant_reports if report.get("status") == "pass")
@@ -1722,6 +1794,13 @@ def run_teacher_guided_repair_queue(
         "expanded_scope_candidate_count": len(expanded_scope_reports),
         "expanded_scope_pass_candidate_count": expanded_scope_pass_count,
         "best_expanded_scope_net_file": best_expanded_scope_net_file,
+        "sequential_accept_passed_variants": sequential_accept_passed_variants,
+        "sequential_plain_export_status": "skipped"
+        if not sequential_accept_passed_variants or not sequential_plain_export_reports
+        else ("pass" if all(report.get("status") == "pass" for report in sequential_plain_export_reports) else "fail"),
+        "sequential_plain_export_reports": sequential_plain_export_reports,
+        "composite_applied_candidate_count": composite_applied_candidate_count,
+        "composite_net_file": composite_net_file,
         "expanded_scope_reports": expanded_scope_reports,
         "run_report_file": str(run_report_file),
         "variant_reports": variant_reports,

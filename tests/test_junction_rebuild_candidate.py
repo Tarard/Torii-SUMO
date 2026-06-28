@@ -1493,6 +1493,87 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     assert variant_report["teacher_pattern_template_count"] == 127
 
 
+def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plain_export(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    variant_calls = []
+    export_calls = []
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    def fake_plain_exporter(**kwargs):
+        export_calls.append(kwargs)
+        output_dir = kwargs["output_dir"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        prefix = output_dir / kwargs["prefix"]
+        node_file = Path(f"{prefix}.nod.xml")
+        edge_file = Path(f"{prefix}.edg.xml")
+        connection_file = Path(f"{prefix}.con.xml")
+        type_file = Path(f"{prefix}.typ.xml")
+        for path in (node_file, edge_file, connection_file, type_file):
+            path.write_text("<xml/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "raw_node_file": str(node_file),
+            "raw_edge_file": str(edge_file),
+            "raw_connection_file": str(connection_file),
+            "raw_type_file": str(type_file),
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in_a"},
+                },
+                {
+                    "junction_id": "cluster_c_d",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in_c"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        plain_exporter=fake_plain_exporter,
+        variant_builder=fake_variant,
+    )
+
+    first_final = Path(report["variant_reports"][0]["final_net_file"])
+    assert report["status"] == "pass"
+    assert report["composite_applied_candidate_count"] == 2
+    assert report["composite_net_file"] == report["variant_reports"][1]["final_net_file"]
+    assert export_calls[0]["net_file"] == first_final
+    assert variant_calls[1]["candidate_net_file"] == first_final
+    plain_export = report["sequential_plain_export_reports"][0]
+    assert variant_calls[1]["raw_node_file"] == Path(plain_export["raw_node_file"])
+    assert variant_calls[1]["raw_edge_file"] == Path(plain_export["raw_edge_file"])
+    assert variant_calls[1]["raw_connection_file"] == Path(plain_export["raw_connection_file"])
+
+
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
