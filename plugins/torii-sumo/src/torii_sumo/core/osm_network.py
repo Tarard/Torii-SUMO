@@ -368,6 +368,33 @@ def _failure(error_message: str, *, artifacts: dict[str, Any] | None = None) -> 
     return payload
 
 
+def _netconvert_profile_options(profile: str | None) -> list[str]:
+    normalized = (profile or "vehicle_core").strip().lower().replace("-", "_")
+    if normalized in {"", "default", "vehicle", "vehicle_core"}:
+        return []
+    if normalized in {"reference_visual_detail", "reference_matched_visual_detail"}:
+        return [
+            "--osm.bike-access",
+            "--osm.sidewalks",
+            "--osm.crossings",
+            "--osm.turn-lanes",
+            "--crossings.guess",
+            "--walkingareas",
+            "--tls.guess-signals",
+            "--tls.rebuild",
+            "--tls.default-type",
+            "actuated",
+        ]
+    raise ValueError(f"unsupported netconvert_profile: {profile}")
+
+
+def _normalized_netconvert_profile(profile: str | None) -> str:
+    normalized = (profile or "vehicle_core").strip().lower().replace("-", "_")
+    if normalized in {"", "default", "vehicle"}:
+        return "vehicle_core"
+    return normalized
+
+
 def build_osm_network(
     *,
     bbox: str,
@@ -384,6 +411,7 @@ def build_osm_network(
     retry_pause_seconds: float = 5.0,
     command_runner: Callable[..., Any] = run_command,
     download_func: Callable[..., bytes] = download_osm,
+    netconvert_profile: str | None = "vehicle_core",
 ) -> dict[str, Any]:
     try:
         parsed_bbox = parse_bbox(bbox)
@@ -392,6 +420,8 @@ def build_osm_network(
             timeout=int(timeout_seconds),
             historical_date=historical_date,
         )
+        profile_options = _netconvert_profile_options(netconvert_profile)
+        normalized_profile = _normalized_netconvert_profile(netconvert_profile)
     except ValueError as exc:
         return _failure(str(exc))
 
@@ -447,6 +477,7 @@ def build_osm_network(
             "--tls.join",
             "--tls.join-dist",
             "35",
+            *profile_options,
             "--verbose",
         ]
         _write_text(
@@ -461,6 +492,8 @@ def build_osm_network(
                     f"overpass_strategy={overpass_report['strategy'] if overpass_report else 'source-osm'}",
                     f"overpass_tile_count={overpass_report['tile_count'] if overpass_report else 0}",
                     f"overpass_retry_count={overpass_report['retry_count'] if overpass_report else 0}",
+                    f"netconvert_profile={normalized_profile}",
+                    "netconvert_profile_options=" + " ".join(profile_options),
                     "netconvert_command=" + " ".join(command),
                     "",
                 ]
@@ -502,6 +535,8 @@ def build_osm_network(
         "netconvert_log": str(netconvert_log),
         "filter_stats": filter_stats,
         "overpass": overpass_report,
+        "netconvert_profile": normalized_profile,
+        "netconvert_profile_options": profile_options,
         "netconvert": result,
         "warnings": warnings,
     }
