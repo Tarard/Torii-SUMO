@@ -10,6 +10,54 @@ import xml.etree.ElementTree as ET
 from .command_runner import run_command
 
 
+def build_tls_signal_grouping_variant(
+    *,
+    source_net_file: Path,
+    output_dir: Path,
+    prefix: str = "tls_signal_grouping",
+    max_shared_linkindex_groups: int,
+) -> dict[str, Any]:
+    if not source_net_file.exists():
+        return _failure(f"net file does not exist: {source_net_file}")
+    if max_shared_linkindex_groups <= 0:
+        return {
+            "status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "tls_signal_grouping_status": "not_needed",
+            "tls_signal_grouping_variant_file": "",
+            "tls_signal_grouping_max_shared_linkindex_groups": max_shared_linkindex_groups,
+            "warnings": [],
+        }
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    variant_file = output_dir / "tls_signal_grouped.net.xml"
+    plan_file = output_dir / f"{prefix}_plan.json"
+    variant_file.write_bytes(source_net_file.read_bytes())
+    compression = _compress_identical_tls_signal_columns(
+        variant_file,
+        max_shared_linkindex_groups=max_shared_linkindex_groups,
+    )
+    counts = _tls_counts(variant_file)
+    plan = {
+        "source_net_file": str(source_net_file),
+        "variant_file": str(variant_file),
+        "tls_signal_grouping_max_shared_linkindex_groups": max_shared_linkindex_groups,
+        **compression,
+    }
+    plan_file.write_text(json.dumps(plan, indent=2), encoding="utf-8")
+    return {
+        "status": "pass",
+        "claim_status": "blocked",
+        "tls_signal_grouping_status": "variant_created_for_review",
+        "tls_signal_grouping_plan_file": str(plan_file),
+        "tls_signal_grouping_variant_file": str(variant_file),
+        "tls_signal_grouping_max_shared_linkindex_groups": max_shared_linkindex_groups,
+        **compression,
+        **counts,
+        "warnings": ["TLS signal grouping variant requires SUMO load and Netedit review before adoption"],
+    }
+
+
 def build_tls_aggregation_variant(
     *,
     net_file: Path,
@@ -386,6 +434,83 @@ def _tls_program_compatible(source: ET.Element, target: ET.Element) -> bool:
     source_lengths = {len(phase.attrib.get("state", "")) for phase in source.findall("phase") if phase.attrib.get("state")}
     target_lengths = {len(phase.attrib.get("state", "")) for phase in target.findall("phase") if phase.attrib.get("state")}
     return bool(source_lengths) and source_lengths == target_lengths
+
+
+def _compress_identical_tls_signal_columns(net_file: Path, *, max_shared_linkindex_groups: int) -> dict[str, int]:
+    tree = ET.parse(net_file)
+    root = tree.getroot()
+    tl_ids = {tl_logic.attrib["id"] for tl_logic in root.findall("tlLogic") if tl_logic.attrib.get("id")}
+    connections_by_tl: dict[str, list[tuple[ET.Element, int]]] = {tl_id: [] for tl_id in tl_ids}
+    for connection in root.findall("connection"):
+        tl_id = connection.attrib.get("tl", "")
+        if tl_id not in tl_ids or not connection.attrib.get("linkIndex"):
+            continue
+        try:
+            connections_by_tl.setdefault(tl_id, []).append((connection, int(connection.attrib["linkIndex"])))
+        except ValueError:
+            continue
+
+    candidates: list[tuple[int, str, list[list[int]]]] = []
+    for tl_logic in root.findall("tlLogic"):
+        tl_id = tl_logic.attrib.get("id", "")
+        phases = tl_logic.findall("phase")
+        used_linkindexes = sorted({link_index for _, link_index in connections_by_tl.get(tl_id, [])})
+        if len(used_linkindexes) < 2 or not phases:
+            continue
+        phase_states = [phase.attrib.get("state", "") for phase in phases]
+        if any(max(used_linkindexes) >= len(state) for state in phase_states):
+            continue
+        groups_by_signature: dict[tuple[str, ...], list[int]] = {}
+        for old_index in used_linkindexes:
+            signature = tuple(state[old_index] for state in phase_states)
+            groups_by_signature.setdefault(signature, []).append(old_index)
+        groups = [group for group in groups_by_signature.values() if len(group) > 1]
+        if groups:
+            candidates.append((sum(len(group) - 1 for group in groups), tl_id, groups))
+    candidates.sort(reverse=True)
+
+    groups_by_tl: dict[str, list[list[int]]] = {}
+    remaining = max_shared_linkindex_groups
+    for _, tl_id, groups in candidates:
+        for group in groups:
+            if remaining <= 0:
+                break
+            groups_by_tl.setdefault(tl_id, []).append(group)
+            remaining -= 1
+        if remaining <= 0:
+            break
+
+    remapped_connections = 0
+    for tl_logic in root.findall("tlLogic"):
+        tl_id = tl_logic.attrib.get("id", "")
+        if tl_id not in groups_by_tl:
+            continue
+        phases = tl_logic.findall("phase")
+        phase_states = [phase.attrib.get("state", "") for phase in phases]
+        old_target_index: dict[int, int] = {}
+        for group in groups_by_tl[tl_id]:
+            target = min(group)
+            for old_index in group:
+                old_target_index[old_index] = target
+        kept_old_indexes = sorted({old_target_index.get(index, index) for _, index in connections_by_tl[tl_id]})
+        new_index_by_old = {old_index: new_index for new_index, old_index in enumerate(kept_old_indexes)}
+        for connection, old_index in connections_by_tl[tl_id]:
+            new_index = new_index_by_old[old_target_index.get(old_index, old_index)]
+            if str(new_index) != connection.attrib.get("linkIndex"):
+                connection.set("linkIndex", str(new_index))
+                remapped_connections += 1
+        for phase, state in zip(phases, phase_states):
+            phase.set("state", "".join(state[index] for index in kept_old_indexes))
+
+    merged_groups = sum(len(groups) for groups in groups_by_tl.values())
+    if groups_by_tl:
+        ET.indent(root, space="    ")
+        tree.write(net_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "tls_signal_grouping_compressed_tllogic_count": len(groups_by_tl),
+        "tls_signal_grouping_merged_group_count": merged_groups,
+        "tls_signal_grouping_remapped_connection_count": remapped_connections,
+    }
 
 
 def _demote_uncontrolled_tls_artifacts(net_file: Path) -> dict[str, Any]:

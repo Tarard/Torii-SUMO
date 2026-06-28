@@ -29,7 +29,7 @@ from .road_scope import (
 )
 from .routeability_audit import run_routeability_audit
 from .sumo_gui import launch_sumo_gui
-from .tls_aggregation import build_tls_aggregation_variant
+from .tls_aggregation import build_tls_aggregation_variant, build_tls_signal_grouping_variant
 from .topology_audit import audit_topology_fragmentation
 from .workflow_review_html import build_workflow_review_html
 
@@ -795,6 +795,7 @@ def run_osm_cleanup_workflow(
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
+    tls_signal_grouping_func: Callable[..., dict[str, Any]] = build_tls_signal_grouping_variant,
     tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
     junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
@@ -1029,6 +1030,7 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_netedit_report: dict[str, Any] = {}
     reference_visual_detail_tls_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_signal_grouping_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_report: dict[str, Any] | None = None
     reference_visual_detail_raw_reference_delta_report: dict[str, Any] | None = None
     reference_visual_detail_tls_aggregation_reference_delta_report: dict[str, Any] | None = None
@@ -1036,6 +1038,12 @@ def run_osm_cleanup_workflow(
         "status": "skipped",
         "reason": "not_run",
     }
+    reference_visual_detail_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
+    reference_visual_detail_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    reference_visual_detail_tls_signal_grouping_sumo_load_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_reference_delta_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_sumo_load_report: dict[str, Any] | None = None
     reference_visual_detail_tls_connection_repair_promotion_report: dict[str, Any] = {
@@ -1303,6 +1311,70 @@ def run_osm_cleanup_workflow(
                         reference_visual_detail_comparison_selection_reason = str(
                             reference_visual_detail_tls_aggregation_reference_promotion_report.get("reason", "")
                         )
+                        missing_counts = (
+                            reference_visual_detail_tls_aggregation_reference_delta_report.get(
+                                "network_structural_missing_counts", {}
+                            )
+                            if reference_visual_detail_tls_aggregation_reference_delta_report
+                            else {}
+                        )
+                        missing_shared_groups = int(missing_counts.get("tls_shared_linkindex_group_count", 0) or 0)
+                        if missing_shared_groups > 0:
+                            reference_visual_detail_tls_signal_grouping_report = tls_signal_grouping_func(
+                                source_net_file=candidate_visual_tls_net_file,
+                                output_dir=output_dir / "reference_visual_detail_tls_signal_grouping",
+                                prefix=f"{prefix}_reference_visual_detail_tls_signal_grouping",
+                                max_shared_linkindex_groups=missing_shared_groups,
+                            )
+                            signal_grouping_variant_value = reference_visual_detail_tls_signal_grouping_report.get(
+                                "tls_signal_grouping_variant_file", ""
+                            )
+                            signal_grouping_variant_file = (
+                                Path(str(signal_grouping_variant_value)) if signal_grouping_variant_value else None
+                            )
+                            if signal_grouping_variant_file is not None and signal_grouping_variant_file.exists():
+                                reference_visual_detail_tls_signal_grouping_sumo_load_report = _sumo_load_net(
+                                    signal_grouping_variant_file,
+                                    output_dir=output_dir / "reference_visual_detail_tls_signal_grouping",
+                                    sumo_binary=sumo_binary,
+                                    timeout_seconds=timeout_seconds,
+                                    command_runner=command_runner,
+                                )
+                                if reference_visual_detail_tls_signal_grouping_sumo_load_report.get("status") == "pass":
+                                    reference_visual_detail_tls_signal_grouping_reference_delta_report = (
+                                        reference_join_audit_func(
+                                            reference_net_file=reference_net_file,
+                                            candidate_net_file=signal_grouping_variant_file,
+                                            output_dir=output_dir
+                                            / "reference_visual_detail_tls_signal_grouping_reference_delta",
+                                            prefix=f"{prefix}_reference_visual_detail_tls_signal_grouping_reference_delta",
+                                            candidate_cluster_radius_m=topology_cluster_radius_m,
+                                            candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                            structural_only=True,
+                                        )
+                                    )
+                                    reference_visual_detail_tls_signal_grouping_reference_promotion_report = (
+                                        _reference_delta_promotion_decision(
+                                            candidate_delta_report=reference_visual_detail_tls_signal_grouping_reference_delta_report,
+                                            baseline_delta_report=reference_visual_detail_tls_aggregation_reference_delta_report,
+                                            reason="tls_signal_grouping_promoted_by_reference_delta",
+                                        )
+                                    )
+                                else:
+                                    reference_visual_detail_tls_signal_grouping_reference_promotion_report = {
+                                        "status": "blocked",
+                                        "reason": "sumo_load_not_pass",
+                                    }
+                                if (
+                                    reference_visual_detail_tls_signal_grouping_reference_promotion_report.get("status")
+                                    == "pass"
+                                ):
+                                    reference_visual_detail_comparison_net_file = signal_grouping_variant_file
+                                    reference_visual_detail_comparison_selection_reason = str(
+                                        reference_visual_detail_tls_signal_grouping_reference_promotion_report.get(
+                                            "reason", ""
+                                        )
+                                    )
                     tls_id_map = (
                         {}
                         if reference_visual_detail_tls_aggregation_reference_promotion_report.get("status") == "pass"
@@ -1606,8 +1678,10 @@ def run_osm_cleanup_workflow(
         tls_aggregation_report or {},
         reference_visual_detail_tls_report or {},
         reference_visual_detail_tls_aggregation_report or {},
+        reference_visual_detail_tls_signal_grouping_report or {},
         reference_visual_detail_tls_connection_repair_report or {},
         reference_visual_detail_raw_reference_delta_report or {},
+        reference_visual_detail_tls_signal_grouping_sumo_load_report or {},
         reference_visual_detail_tls_connection_repair_sumo_load_report or {},
         reference_visual_detail_tls_connection_repair_reference_delta_report or {},
         raw_connectivity_report,
@@ -2219,6 +2293,24 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_aggregation_reference_promotion_reason": str(
             reference_visual_detail_tls_aggregation_reference_promotion_report.get("reason", "")
         ),
+        "reference_visual_detail_tls_signal_grouping_status": "skipped"
+        if reference_visual_detail_tls_signal_grouping_report is None
+        else str(reference_visual_detail_tls_signal_grouping_report.get("tls_signal_grouping_status", "failed")),
+        "reference_visual_detail_tls_signal_grouping_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            reference_visual_detail_tls_signal_grouping_reference_delta_report
+        ),
+        "reference_visual_detail_tls_signal_grouping_reference_delta_file": ""
+        if reference_visual_detail_tls_signal_grouping_reference_delta_report is None
+        else str(reference_visual_detail_tls_signal_grouping_reference_delta_report.get("summary_file", "")),
+        "reference_visual_detail_tls_signal_grouping_sumo_load_status": "skipped"
+        if reference_visual_detail_tls_signal_grouping_sumo_load_report is None
+        else str(reference_visual_detail_tls_signal_grouping_sumo_load_report.get("status", "fail")),
+        "reference_visual_detail_tls_signal_grouping_reference_promotion_status": str(
+            reference_visual_detail_tls_signal_grouping_reference_promotion_report.get("status", "skipped")
+        ),
+        "reference_visual_detail_tls_signal_grouping_reference_promotion_reason": str(
+            reference_visual_detail_tls_signal_grouping_reference_promotion_report.get("reason", "")
+        ),
         "reference_visual_detail_tls_connection_repair_status": "skipped"
         if reference_visual_detail_tls_connection_repair_report is None
         else str(reference_visual_detail_tls_connection_repair_report.get("status", "fail")),
@@ -2296,10 +2388,16 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_audit": reference_visual_detail_tls_report or {},
         "reference_visual_detail_tls_aggregation": reference_visual_detail_tls_aggregation_report or {},
         "reference_visual_detail_tls_connection_repair": reference_visual_detail_tls_connection_repair_report or {},
+        "reference_visual_detail_tls_signal_grouping": reference_visual_detail_tls_signal_grouping_report or {},
         "reference_visual_detail_raw_reference_delta": reference_visual_detail_raw_reference_delta_report or {},
         "reference_visual_detail_tls_aggregation_reference_delta": reference_visual_detail_tls_aggregation_reference_delta_report
         or {},
         "reference_visual_detail_tls_aggregation_reference_promotion": reference_visual_detail_tls_aggregation_reference_promotion_report,
+        "reference_visual_detail_tls_signal_grouping_reference_delta": reference_visual_detail_tls_signal_grouping_reference_delta_report
+        or {},
+        "reference_visual_detail_tls_signal_grouping_sumo_load": reference_visual_detail_tls_signal_grouping_sumo_load_report
+        or {},
+        "reference_visual_detail_tls_signal_grouping_reference_promotion": reference_visual_detail_tls_signal_grouping_reference_promotion_report,
         "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
         or {},
         "reference_visual_detail_tls_connection_repair_reference_delta": reference_visual_detail_tls_connection_repair_reference_delta_report

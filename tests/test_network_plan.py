@@ -1321,6 +1321,173 @@ def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delt
     assert report["reference_join_tls_semantic_delta_score"] == 211
 
 
+def test_reference_matched_workflow_promotes_signal_grouping_when_reference_delta_improves(
+    tmp_path: Path,
+) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-signal_filtered.osm.xml.gz"
+    visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
+    signal_grouped_net_file = tmp_path / "tls_signal_grouping" / "signal_grouped.net.xml"
+    calls: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_tls(**kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 2,
+            "tls_cluster_count": 1 if "reference_visual_detail" in Path(kwargs["net_file"]).name else 0,
+            "clusters_file": str(tmp_path / "visual_tls_clusters.csv"),
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**_kwargs):
+        visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
+        visual_tls_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_aggregation_variant_file": str(visual_tls_net_file),
+            "tls_controlled_connection_preservation_status": "fail",
+            "warnings": [],
+        }
+
+    def fake_signal_grouping(**kwargs):
+        calls["signal_grouping_max_shared_linkindex_groups"] = kwargs["max_shared_linkindex_groups"]
+        signal_grouped_net_file.parent.mkdir(parents=True, exist_ok=True)
+        signal_grouped_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_signal_grouping_status": "variant_created_for_review",
+            "tls_signal_grouping_variant_file": str(signal_grouped_net_file),
+            "tls_signal_grouping_merged_group_count": kwargs["max_shared_linkindex_groups"],
+            "warnings": [],
+        }
+
+    def fake_command_runner(command, **_kwargs):
+        calls["signal_grouping_sumo_command"] = command
+        return {"status": "pass", "returncode": 0, "stdout": "", "stderr": ""}
+
+    raw_visual_detail_net_file = tmp_path / "sumo" / "reference-signal_reference_visual_detail.net.xml"
+
+    def fake_reference_join_audit(**kwargs):
+        candidate_net_file = Path(kwargs["candidate_net_file"])
+        output_dir = str(kwargs["output_dir"])
+        if candidate_net_file == visual_tls_net_file and "tls_aggregation_reference_delta" in output_dir:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_missing_counts": {
+                    "tls_controlled_connection_count": 160,
+                    "tls_shared_linkindex_group_count": 40,
+                },
+                "network_structural_extra_counts": {"traffic_light_junction_count": 46, "tl_logic_count": 41},
+                "summary_file": str(tmp_path / "aggregation_delta.json"),
+                "warnings": [],
+            }
+        if candidate_net_file == raw_visual_detail_net_file and "raw_reference_delta" in output_dir:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_missing_counts": {"tls_shared_linkindex_group_count": 40},
+                "network_structural_extra_counts": {"traffic_light_junction_count": 354},
+                "summary_file": str(tmp_path / "raw_delta.json"),
+                "warnings": [],
+            }
+        if candidate_net_file == signal_grouped_net_file and "tls_signal_grouping_reference_delta" in output_dir:
+            calls["signal_grouping_delta_candidate_net_file"] = kwargs["candidate_net_file"]
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 160},
+                "network_structural_extra_counts": {
+                    "traffic_light_junction_count": 46,
+                    "tl_logic_count": 41,
+                    "multi_junction_tl_logic_count": 5,
+                    "tls_sparse_linkindex_tl_logic_count": 3,
+                },
+                "summary_file": str(tmp_path / "signal_grouping_delta.json"),
+                "warnings": [],
+            }
+        calls["reference_join_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "structural_only",
+            "network_structural_missing_counts": {"tls_controlled_connection_count": 160},
+            "network_structural_extra_counts": {
+                "traffic_light_junction_count": 46,
+                "tl_logic_count": 41,
+                "multi_junction_tl_logic_count": 5,
+                "tls_sparse_linkindex_tl_logic_count": 3,
+            },
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-signal",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        tls_aggregation_func=fake_tls_aggregation,
+        tls_signal_grouping_func=fake_signal_grouping,
+        command_runner=fake_command_runner,
+        tls_connection_repair_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("signal grouping promotion should skip TLS repair")
+        ),
+        connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "warnings": []},
+        topology_audit_func=lambda **_kwargs: {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []},
+        routeability_audit_func=lambda **_kwargs: {"status": "pass", "routeability_status": "pass", "warnings": []},
+        netedit_func=lambda _path: {"status": "blocked", "netedit_status": "skipped", "warnings": []},
+        sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "skipped", "warnings": []},
+        reference_join_audit_func=fake_reference_join_audit,
+        reference_join_aggregation_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("structural-only audit should not trigger aggregation")
+        ),
+        teacher_guided_repair_queue_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("structural-only audit should not trigger teacher queue")
+        ),
+    )
+
+    assert calls["signal_grouping_max_shared_linkindex_groups"] == 40
+    assert calls["signal_grouping_sumo_command"][0] == "sumo"
+    assert calls["signal_grouping_delta_candidate_net_file"] == signal_grouped_net_file
+    assert calls["reference_join_candidate_net_file"] == signal_grouped_net_file
+    assert report["reference_visual_detail_comparison_net_file"] == str(signal_grouped_net_file)
+    assert report["reference_visual_detail_comparison_selection_reason"] == (
+        "tls_signal_grouping_promoted_by_reference_delta"
+    )
+    assert report["reference_visual_detail_tls_signal_grouping_reference_promotion_status"] == "pass"
+    assert report["reference_visual_detail_tls_signal_grouping_sumo_load_status"] == "pass"
+    assert report["reference_visual_detail_tls_signal_grouping_reference_tls_semantic_delta_score"] == 255
+    assert report["reference_join_tls_semantic_delta_score"] == 255
+
+
 def test_reference_matched_workflow_runs_reference_scope_audit_without_default_pruning_variant(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
