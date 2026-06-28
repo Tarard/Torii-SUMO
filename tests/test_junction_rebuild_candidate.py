@@ -7,6 +7,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _compare_teacher_models,
     _netedit_review_actions,
+    _restore_replayed_geometry_attrs,
     _teacher_guided_semantics_gate,
     _stage_file,
     build_rebuild_candidate,
@@ -4731,6 +4732,103 @@ def test_write_teacher_target_internal_replay_net_maps_referenced_tls_logic(tmp_
     assert target_tls.find("phase").attrib["state"] == "G"
 
 
+def test_write_teacher_target_internal_replay_net_preserves_colliding_teacher_boundary_edges(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="main#2" from="a" to="j"><lane id="main#2_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="main#3" from="j" to="b"><lane id="main#3_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="10,0 11,0"/></edge>
+  <junction id="a" x="0" y="0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="main#2_0" intLanes=":j_0_0"/>
+  <junction id="b" x="20" y="0" incLanes="main#3_0"/>
+  <connection from="main#2" to="main#3" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="main#2" from="x" to="y"><lane id="main#2_0" index="0" shape="-20,0 -10,0"/></edge>
+  <edge id="main#3" from="a" to="j"><lane id="main#3_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="prev" from="p" to="y"><lane id="prev_0" index="0" shape="-30,0 -20,0"/></edge>
+  <edge id="out" from="j" to="q"><lane id="out_0" index="0" shape="10,0 20,0"/></edge>
+  <junction id="a" x="0" y="0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="main#3_0" intLanes=""/>
+  <junction id="p" x="-30" y="0"/>
+  <junction id="q" x="20" y="0"/>
+  <junction id="x" x="-20" y="0"/>
+  <junction id="y" x="-10" y="0" incLanes="main#2_0 prev_0"/>
+  <connection from="prev" to="main#2" fromLane="0" toLane="0" dir="s"/>
+  <connection from="main#2" to="out" fromLane="0" toLane="0" via=":y_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"main#2": "main#3", "main#3": "main#3"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert report["status"] == "pass"
+    assert root.find("edge[@id='main#2']").attrib["to"] == "j"
+    assert root.find("edge[@id='main#3']").attrib["from"] == "j"
+    assert root.find("connection[@from='main#2'][@to='main#3']") is not None
+    assert root.find("connection[@from='main#3'][@to='main#3']") is None
+    assert root.find("connection[@from='prev'][@to='main#2']") is None
+    assert root.find("connection[@from='main#2'][@to='out']") is None
+    assert report["removed_stale_replaced_edge_connection_count"] == 2
+
+
+def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_local(tmp_path: Path) -> None:
+    replayed = tmp_path / "replayed.net.xml"
+    replayed.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="0,0 10,0" length="10.00"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="10,0 20,0" length="10.00"/></edge>
+  <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="50,0 60,0"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-1 9,1" outlineShape="8,-1 10,-1 10,1 8,1"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="in_0" intLanes=":j_c0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0"/>
+  <connection from=":j_c0" to="out" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    normalized = tmp_path / "normalized.net.xml"
+    normalized.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="0,0 11,0" length="11.00"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="11,0 20,0" length="9.00"/></edge>
+  <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="51,0 60,0"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-2 9,2" outlineShape="bad"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="in_0" intLanes=":j_c0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0"/>
+  <connection from=":j_c0" to="out" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _restore_replayed_geometry_attrs(
+        source_file=replayed,
+        target_file=normalized,
+        junction_id="j",
+    )
+
+    root = ET.parse(normalized).getroot()
+    assert report["status"] == "pass"
+    assert root.find("edge[@id='in']/lane").attrib["shape"] == "0,0 10,0"
+    assert root.find("edge[@id='out']/lane").attrib["length"] == "10.00"
+    assert root.find("edge[@id=':j_c0']/lane").attrib["outlineShape"] == "8,-1 10,-1 10,1 8,1"
+    assert root.find("edge[@id='remote']/lane").attrib["shape"] == "51,0 60,0"
+
+
 def test_write_teacher_target_internal_replay_net_copies_missing_boundary_edge(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -5164,6 +5262,197 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert [call[0] for call in calls] == ["netconvert", "sumo"]
 
 
+def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j" type="highway.primary"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="j" to="b" type="highway.primary"><lane id="teacher_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    calls: list[list[str]] = []
+    normalized = False
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        nonlocal normalized
+        calls.append(command)
+
+        def command_path(flag: str) -> Path:
+            value = Path(command[command.index(flag) + 1])
+            return value if value.is_absolute() else Path(cwd) / value
+
+        if command[0] == "netconvert" and "--node-files" in command:
+            output_file = command_path("--output-file")
+            connection_file = command_path("--connection-files")
+            output_file.write_text(
+                """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>
+""",
+                encoding="utf-8",
+            )
+            root = ET.parse(output_file).getroot()
+            for connection in ET.parse(connection_file).getroot().findall("connection"):
+                root.append(connection)
+            ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+        elif command[0] == "netconvert" and "--sumo-net-file" in command:
+            normalized = True
+            command_path("--output-file").write_text(
+                command_path("--sumo-net-file").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+        class Result:
+            status = "pass"
+            returncode = 0
+
+            def to_dict(self):
+                status = "pass"
+                if command[0] == "sumo" and not normalized:
+                    status = "fail"
+                return {
+                    "command": command,
+                    "cwd": str(cwd) if cwd else None,
+                    "status": status,
+                    "returncode": 0 if status == "pass" else 1,
+                    "stderr": "" if status == "pass" else "replay load failed before normalization",
+                }
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        prefix="demo",
+        replay_target_internal_subgraph=True,
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["target_internal_replay_fallback"] is False
+    assert report["target_internal_normalize"]["status"] == "pass"
+    assert report["sumo_load"]["status"] == "pass"
+    assert report["final_net_file"].endswith("demo_teacher_guided.net.xml")
+    assert [call[0] for call in calls] == ["netconvert", "sumo", "netconvert", "sumo"]
+
+
+def test_build_teacher_guided_junction_variant_compares_replay_effective_edge_map(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="main#2" from="a" to="j"><lane id="main#2_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="main#3" from="j" to="b"><lane id="main#3_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="10,0 11,0"/></edge>
+  <junction id="a" x="0" y="0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="main#2_0" intLanes=":j_0_0"/>
+  <junction id="b" x="20" y="0" incLanes="main#3_0"/>
+  <connection from="main#2" to="main#3" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_text = """<net>
+  <edge id="main#2" from="x" to="y"><lane id="main#2_0" index="0" shape="-20,0 -10,0"/></edge>
+  <edge id="main#3" from="a" to="j"><lane id="main#3_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="a" x="0" y="0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="main#3_0" intLanes=""/>
+  <junction id="x" x="-20" y="0"/>
+  <junction id="y" x="-10" y="0" incLanes="main#2_0"/>
+</net>
+"""
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(candidate_text, encoding="utf-8")
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text('<nodes><node id="a" x="0" y="0"/><node id="j" x="10" y="0"/><node id="b" x="20" y="0"/></nodes>', encoding="utf-8")
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="main#2" from="x" to="y"><lane index="0"/></edge>
+  <edge id="main#3" from="a" to="j"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert" and "--node-files" in command:
+            output_file = Path(command[command.index("--output-file") + 1])
+            if not output_file.is_absolute():
+                output_file = Path(cwd) / output_file
+            output_file.write_text(candidate_text, encoding="utf-8")
+
+        class Result:
+            status = "pass"
+            returncode = 0
+
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd) if cwd else None, "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"main#2": "main#3", "main#3": "main#3"},
+        prefix="demo",
+        replay_target_internal_subgraph=True,
+        command_runner=fake_runner,
+    )
+
+    assert report["target_internal_replay"]["effective_edge_map"]["main#2"] == "main#2"
+    assert report["status"] == "pass"
+    assert report["parity_gate_status"] == "pass"
+
+
 def test_build_teacher_guided_junction_variant_falls_back_when_target_internal_replay_fails_load(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -5204,7 +5493,7 @@ def test_build_teacher_guided_junction_variant_falls_back_when_target_internal_r
     raw_connections.write_text("<connections/>\n", encoding="utf-8")
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
-        if command[0] == "netconvert":
+        if command[0] == "netconvert" and "--node-files" in command:
             output_file = Path(cwd) / command[command.index("--output-file") + 1]
             connection_file = Path(cwd) / command[command.index("--connection-files") + 1]
             output_file.write_text(
@@ -5220,6 +5509,10 @@ def test_build_teacher_guided_junction_variant_falls_back_when_target_internal_r
             for connection in ET.parse(connection_file).getroot().findall("connection"):
                 root.append(connection)
             ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+        elif command[0] == "netconvert" and "--sumo-net-file" in command:
+            input_file = Path(cwd) / command[command.index("--sumo-net-file") + 1]
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(input_file.read_text(encoding="utf-8"), encoding="utf-8")
 
         class Result:
             status = "pass"
