@@ -35,6 +35,12 @@ def test_infer_place_name_from_one_prompt_osm_request() -> None:
 def test_detect_workflow_routes_common_one_sentence_requests() -> None:
     assert detect_workflow("download the Altstadt map from OSM and open it in SUMO") == "osm_to_sumo"
     assert detect_workflow("generate a TUM-like SUMO network from OSM with TLS and connection semantics") == "osm_to_sumo"
+    assert (
+        detect_workflow(
+            "clean the Ingolstadt city-center network from OSM, compare it with the TUM cleaned network, and open it in Netedit"
+        )
+        == "osm_to_sumo"
+    )
     assert detect_workflow("audit the traffic lights in this SUMO network") == "tls_review"
     assert detect_workflow("create a TLS audit for this SUMO network") == "tls_review"
     assert detect_workflow("create an HTML review cockpit for this partial SUMO network") == "network_review"
@@ -151,6 +157,36 @@ def test_auto_workflow_extracts_bbox_from_osm_map_url(tmp_path: Path) -> None:
     assert captured["place_name"] is None
 
 
+def test_auto_workflow_passes_local_osm_file_to_cleanup(tmp_path: Path) -> None:
+    captured = {}
+    reference_net_file = tmp_path / "reference.net.xml"
+    osm_file = tmp_path / "local.osm.xml"
+    _write_reference_net(reference_net_file)
+    osm_file.write_text("<osm/>", encoding="utf-8")
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "net_file": str(tmp_path / "local.net.xml"),
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to generate a TUM-like SUMO network from this local OSM extract",
+        output_dir=tmp_path,
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        osm_file=osm_file,
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert report["execution_status"] == "executed"
+    assert captured["source_osm_path"] == osm_file
+    assert captured["bbox"] is None
+
+
 def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp_path: Path) -> None:
     def fake_resolver(_place_name: str):
         return {
@@ -226,6 +262,7 @@ def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_pa
     assert captured["network_profile"] == "reference_matched"
     assert captured["reference_net_file"] == reference_net_file
     assert captured["service_passenger_policy"] == "reference_match"
+    assert captured["reference_join_audit_structural_only"] is False
     assert "service" not in captured["highway_classes"]
     assert "cycleway" not in captured["highway_classes"]
 

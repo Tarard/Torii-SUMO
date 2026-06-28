@@ -98,6 +98,8 @@ def detect_workflow(user_request: str) -> str:
     text = _normalized(user_request)
     if any(token in text for token in ("waiting time", "got worse", "teleport", "tripinfo", "summary disagree", "debug")):
         return "debug_bad_run"
+    if _looks_like_osm_generation(text):
+        return "osm_to_sumo"
     if any(token in text for token in ("compare", "baseline", "fixed-time", "fixed time", "max-pressure", "controller")):
         return "experiment_audit"
     if (
@@ -105,8 +107,6 @@ def detect_workflow(user_request: str) -> str:
         and any(token in text for token in ("sumo network", "partial sumo network", "network", ".net.xml", "net.xml"))
     ):
         return "network_review"
-    if _looks_like_osm_generation(text):
-        return "osm_to_sumo"
     if any(token in text for token in ("traffic light", "traffic lights", "tls", "signal")):
         return "tls_review"
     if any(token in text for token in ("osm", "map", "network", "netconvert", "open it in sumo", "build a sumo")):
@@ -259,6 +259,7 @@ def run_auto_workflow(
             reference_net_file=reference_net_file,
             reference_policy_report=reference_policy_report,
             service_passenger_policy=service_passenger_policy,
+            source_osm_path=osm_file,
             autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
             cleanup_workflow_func=cleanup_workflow_func,
@@ -324,6 +325,7 @@ def _run_osm_to_sumo(
     reference_net_file: Path | None,
     reference_policy_report: str | Path | dict[str, Any] | None,
     service_passenger_policy: str | None,
+    source_osm_path: Path | None,
     autonomy_mode: str,
     place_resolver: Callable[[str], dict[str, Any]],
     cleanup_workflow_func: Callable[..., dict[str, Any]],
@@ -337,7 +339,7 @@ def _run_osm_to_sumo(
     inferred = (place_name or "").strip() or infer_place_name(user_request)
     if inferred:
         report["inferred_place_name"] = inferred
-    if not bbox and not inferred:
+    if not bbox and not inferred and source_osm_path is None:
         return _blocked(
             report,
             execution_status="needs_area",
@@ -345,7 +347,7 @@ def _run_osm_to_sumo(
             next_question="Which OSM place name or bbox should Torii use?",
         )
     candidate: dict[str, Any] | None = None
-    if not confirmed_area and not bbox:
+    if not confirmed_area and not bbox and source_osm_path is None:
         candidate = place_resolver(inferred)
         report.update(candidate)
         if autonomy_mode != "ask-first":
@@ -399,6 +401,8 @@ def _run_osm_to_sumo(
         "place_name": inferred or None,
         "confirmed_area": confirmed_area,
     }
+    if _supports_keyword(cleanup_workflow_func, "source_osm_path"):
+        cleanup_kwargs["source_osm_path"] = source_osm_path
     if _supports_keyword(cleanup_workflow_func, "highway_classes"):
         cleanup_kwargs["highway_classes"] = selected_highway_classes
     if _supports_keyword(cleanup_workflow_func, "traffic_layers"):
@@ -411,6 +415,11 @@ def _run_osm_to_sumo(
         cleanup_kwargs["reference_policy_report"] = reference_policy_report
     if _supports_keyword(cleanup_workflow_func, "service_passenger_policy"):
         cleanup_kwargs["service_passenger_policy"] = network_plan.get("service_passenger_policy")
+    if (
+        network_plan.get("network_profile") == "reference_matched"
+        and _supports_keyword(cleanup_workflow_func, "reference_join_audit_structural_only")
+    ):
+        cleanup_kwargs["reference_join_audit_structural_only"] = False
     if _supports_keyword(cleanup_workflow_func, "run_routeability_audit_after_build"):
         cleanup_kwargs["run_routeability_audit_after_build"] = True
     workflow_report = cleanup_workflow_func(**cleanup_kwargs)

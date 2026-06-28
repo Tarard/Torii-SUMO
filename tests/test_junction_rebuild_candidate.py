@@ -1590,6 +1590,80 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
     assert variant_calls[1]["raw_connection_file"] == Path(plain_export["raw_connection_file"])
 
 
+def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_parity_failed_candidate(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    variant_calls = []
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        if len(variant_calls) == 1:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "junction_id": kwargs["junction_id"],
+                "final_net_file": str(final_net),
+                "parity_gate_status": "fail",
+                "semantic_replay_gate": {
+                    "status": "fail",
+                    "failures": [
+                        {"report": "parity", "field": "vehicle_movement_matrix_missing_count", "count": 1}
+                    ],
+                },
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in_a": "cand_in_a"},
+                },
+                {
+                    "junction_id": "cluster_c_d",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in_c": "cand_in_c"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    assert report["parity_gate_status"] == "pass"
+    assert report["attempted_candidate_count"] == 2
+    assert report["failed_candidate_count"] == 0
+    assert report["parity_pass_candidate_count"] == 1
+    assert report["composite_applied_candidate_count"] == 1
+    assert report["composite_net_file"] == report["variant_reports"][1]["final_net_file"]
+    assert report["semantic_failure_counts"] == {"parity:vehicle_movement_matrix_missing_count": 1}
+
+
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
