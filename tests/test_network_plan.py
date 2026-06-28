@@ -916,6 +916,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
     filtered_osm = tmp_path / "osm" / "reference-post-teacher_filtered.osm.xml.gz"
+    low_vehicle_net = tmp_path / "post_teacher_tls_low_vehicle" / "tls_low_vehicle_control_review.net.xml"
     calls: dict[str, object] = {"reference_join_candidate_net_files": []}
 
     def fake_build(**kwargs):
@@ -963,6 +964,27 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
                 "junction_pattern_mismatch_count": 1,
                 "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
                 "network_structural_missing_counts": {"connection_count": 4, "crossing_edge_count": 3},
+                "network_structural_extra_counts": {
+                    "tl_logic_count": 6,
+                    "tls_controlled_connection_count": 10,
+                    "traffic_light_junction_count": 9,
+                    "walkingarea_edge_count": 5,
+                },
+                "tls_control_review_queue": [
+                    {
+                        "repair_category": "tls_reality_review",
+                        "review_type": "downgrade_low_vehicle_approach_tls",
+                        "tl_id": "low_tls",
+                        "controlled_connection_count": 10,
+                        "controlled_passenger_from_edge_count": 1,
+                    }
+                ],
+            }
+        if kwargs["candidate_net_file"] == low_vehicle_net:
+            return {
+                **base,
+                "summary_file": str(tmp_path / "post_teacher_tls_low_vehicle_delta.json"),
+                "network_structural_missing_counts": {"connection_count": 4, "crossing_edge_count": 3},
                 "network_structural_extra_counts": {"walkingarea_edge_count": 5},
             }
         return base
@@ -1006,6 +1028,21 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
             "warnings": [],
         }
 
+    def fake_low_vehicle_control(**kwargs):
+        calls["post_teacher_low_vehicle_source_net_file"] = kwargs["source_net_file"]
+        calls["post_teacher_low_vehicle_queue_count"] = len(kwargs["tls_control_review_queue"])
+        low_vehicle_net.parent.mkdir(parents=True, exist_ok=True)
+        low_vehicle_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_low_vehicle_control_status": "variant_created_for_review",
+            "tls_low_vehicle_control_variant_file": str(low_vehicle_net),
+            "tls_low_vehicle_control_selected_tllogic_count": 1,
+            "tls_low_vehicle_control_removed_connection_count": 10,
+            "warnings": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="11.413800,48.755391,11.433800,48.775391",
         output_dir=tmp_path,
@@ -1024,6 +1061,8 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
         teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
         teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
         teacher_guided_repair_run_func=fake_teacher_guided_repair_run,
+        tls_low_vehicle_control_func=fake_low_vehicle_control,
+        command_runner=lambda command, **_kwargs: {"status": "pass", "returncode": 0, "stdout": "", "stderr": ""},
         review_html_func=lambda **kwargs: {
             "status": "pass",
             "workflow_review_html_status": "pass",
@@ -1034,7 +1073,17 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
         },
     )
 
-    assert calls["reference_join_candidate_net_files"][-1] == tmp_path / "teacher_guided_composite.net.xml"
+    assert tmp_path / "teacher_guided_composite.net.xml" in calls["reference_join_candidate_net_files"]
+    assert low_vehicle_net in calls["reference_join_candidate_net_files"]
+    assert calls["reference_join_candidate_net_files"].index(tmp_path / "teacher_guided_composite.net.xml") < calls[
+        "reference_join_candidate_net_files"
+    ].index(low_vehicle_net)
+    assert calls["post_teacher_low_vehicle_source_net_file"] == tmp_path / "teacher_guided_composite.net.xml"
+    assert calls["post_teacher_low_vehicle_queue_count"] == 1
+    assert report["reference_visual_detail_comparison_net_file"] == str(low_vehicle_net)
+    assert report["reference_visual_detail_comparison_selection_reason"] == (
+        "post_teacher_tls_low_vehicle_promoted_by_reference_delta"
+    )
     assert report["reference_join_post_teacher_audit_status"] == "pass"
     assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 1
     assert report["reference_join_post_teacher_junction_pattern_mismatch_field_counts"] == {
@@ -1044,7 +1093,15 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
         "connection_count": 4,
         "crossing_edge_count": 3,
     }
-    assert report["reference_join_post_teacher_network_structural_extra_counts"] == {"walkingarea_edge_count": 5}
+    assert report["reference_join_post_teacher_network_structural_extra_counts"] == {
+        "tl_logic_count": 6,
+        "tls_controlled_connection_count": 10,
+        "traffic_light_junction_count": 9,
+        "walkingarea_edge_count": 5,
+    }
+    assert report["post_teacher_tls_low_vehicle_control_status"] == "pass"
+    assert report["post_teacher_tls_low_vehicle_control_reference_promotion_status"] == "pass"
+    assert report["post_teacher_tls_low_vehicle_control_reference_tls_semantic_delta_score"] == 0
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
