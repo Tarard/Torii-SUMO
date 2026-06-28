@@ -3065,6 +3065,42 @@ def test_write_teacher_connection_plan_ignores_edges_missing_from_patched_edge_f
     assert report["removed_target_children"] == 2
 
 
+def test_write_teacher_connection_plan_removes_crossings_with_missing_patched_edges(tmp_path: Path) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <crossing node="other_j" edges="ghost other"/>
+  <crossing node="kept_j" edges="other"/>
+</connections>
+""",
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+  <edge id="other" from="x" to="y"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "teacher.con.xml",
+        junction_id="j",
+        teacher_model={"vehicle_connections": [], "crossings": []},
+        candidate_model={"approaches": {"incoming": [], "outgoing": []}},
+        edge_map={},
+        candidate_edge_file=candidate_edges,
+    )
+
+    root = ET.parse(report["connection_file"]).getroot()
+    assert [item.attrib["node"] for item in root.findall("crossing")] == ["kept_j"]
+    assert report["removed_target_children"] == 1
+
+
 def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_without_replacing_edge_geometry(
     tmp_path: Path,
 ) -> None:

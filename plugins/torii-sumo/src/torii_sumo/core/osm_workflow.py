@@ -1289,6 +1289,9 @@ def run_osm_cleanup_workflow(
         "reason": "not_run",
     }
     post_teacher_tls_connection_repair_movement_rebuild_queue_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_movement_rebuild_plain_export_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_movement_rebuild_run_report: dict[str, Any] | None = None
+    post_teacher_tls_connection_repair_movement_rebuild_best_variant_file: Path | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
@@ -2366,6 +2369,122 @@ def run_osm_cleanup_workflow(
                                                         max_ready_candidates=teacher_guided_repair_max_ready_candidates,
                                                     )
                                                 )
+                                                if (
+                                                    _int_field(
+                                                        post_teacher_tls_connection_repair_movement_rebuild_queue_report,
+                                                        "ready_candidate_count",
+                                                    )
+                                                    > 0
+                                                    or _int_field(
+                                                        post_teacher_tls_connection_repair_movement_rebuild_queue_report,
+                                                        "expanded_scope_candidate_count",
+                                                    )
+                                                    > 0
+                                                ):
+                                                    post_teacher_tls_connection_repair_movement_rebuild_plain_export_report = (
+                                                        teacher_guided_plain_export_func(
+                                                            net_file=connection_repair_variant_file,
+                                                            output_dir=output_dir
+                                                            / "post_teacher_tls_connection_repair_movement_rebuild_plain",
+                                                            prefix=(
+                                                                f"{prefix}_post_teacher_tls_connection_repair_"
+                                                                "movement_rebuild"
+                                                            ),
+                                                            netconvert_binary=netconvert_binary,
+                                                            timeout_seconds=timeout_seconds,
+                                                        )
+                                                    )
+                                                    if (
+                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report.get(
+                                                            "status"
+                                                        )
+                                                        == "pass"
+                                                    ):
+                                                        raw_type_value = str(
+                                                            post_teacher_tls_connection_repair_movement_rebuild_plain_export_report.get(
+                                                                "raw_type_file", ""
+                                                            )
+                                                        )
+                                                        queue_file_value = str(
+                                                            post_teacher_tls_connection_repair_movement_rebuild_queue_report.get(
+                                                                "queue_file", ""
+                                                            )
+                                                        )
+                                                        post_teacher_tls_connection_repair_movement_rebuild_run_report = (
+                                                            teacher_guided_repair_run_func(
+                                                                queue_report=post_teacher_tls_connection_repair_movement_rebuild_queue_report,
+                                                                raw_node_file=Path(
+                                                                    str(
+                                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report[
+                                                                            "raw_node_file"
+                                                                        ]
+                                                                    )
+                                                                ),
+                                                                raw_edge_file=Path(
+                                                                    str(
+                                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report[
+                                                                            "raw_edge_file"
+                                                                        ]
+                                                                    )
+                                                                ),
+                                                                raw_connection_file=Path(
+                                                                    str(
+                                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report[
+                                                                            "raw_connection_file"
+                                                                        ]
+                                                                    )
+                                                                ),
+                                                                raw_type_file=Path(raw_type_value)
+                                                                if raw_type_value
+                                                                else None,
+                                                                output_dir=output_dir
+                                                                / "post_teacher_tls_connection_repair_movement_rebuild_execution",
+                                                                prefix=(
+                                                                    f"{prefix}_post_teacher_tls_connection_repair_"
+                                                                    "movement_rebuild"
+                                                                ),
+                                                                queue_base_dir=Path(queue_file_value).resolve().parent
+                                                                if queue_file_value
+                                                                else None,
+                                                                replay_target_internal_subgraph=True,
+                                                                max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                                                                netconvert_binary=netconvert_binary,
+                                                                sumo_binary=sumo_binary,
+                                                                timeout_seconds=timeout_seconds,
+                                                                sequential_accept_passed_variants=True,
+                                                                plain_exporter=teacher_guided_plain_export_func,
+                                                            )
+                                                        )
+                                                        post_teacher_tls_connection_repair_movement_rebuild_best_variant_file = (
+                                                            _teacher_guided_best_variant_file(
+                                                                post_teacher_tls_connection_repair_movement_rebuild_run_report
+                                                            )
+                                                        )
+                                                        if (
+                                                            post_teacher_tls_connection_repair_movement_rebuild_best_variant_file
+                                                            is not None
+                                                        ):
+                                                            reference_visual_detail_comparison_net_file = (
+                                                                post_teacher_tls_connection_repair_movement_rebuild_best_variant_file
+                                                            )
+                                                            reference_visual_detail_comparison_selection_reason = (
+                                                                "post_teacher_tls_connection_repair_movement_rebuild_promoted"
+                                                            )
+                                                            reference_join_post_teacher_audit_report = (
+                                                                reference_join_audit_func(
+                                                                    reference_net_file=reference_net_file,
+                                                                    candidate_net_file=post_teacher_tls_connection_repair_movement_rebuild_best_variant_file,
+                                                                    output_dir=output_dir
+                                                                    / "post_teacher_tls_connection_repair_movement_rebuild_reference_delta",
+                                                                    prefix=(
+                                                                        f"{prefix}_post_teacher_tls_connection_repair_"
+                                                                        "movement_rebuild_reference_delta"
+                                                                    ),
+                                                                    candidate_cluster_radius_m=topology_cluster_radius_m,
+                                                                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                                                    structural_only=True,
+                                                                )
+                                                            )
                                     else:
                                         post_teacher_tls_connection_repair_reference_promotion_report = {
                                             "status": "blocked",
@@ -2466,6 +2585,8 @@ def run_osm_cleanup_workflow(
         post_teacher_tls_signal_grouping_reference_delta_report or {},
         post_teacher_tls_connection_repair_reference_delta_report or {},
         post_teacher_tls_connection_repair_movement_rebuild_queue_report or {},
+        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report or {},
+        post_teacher_tls_connection_repair_movement_rebuild_run_report or {},
         reference_visual_detail_tls_connection_repair_reference_delta_report or {},
         raw_connectivity_report,
         connected_core_report or {},
@@ -2955,6 +3076,21 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_connection_repair_movement_rebuild_queue_file": ""
         if post_teacher_tls_connection_repair_movement_rebuild_queue_report is None
         else str(post_teacher_tls_connection_repair_movement_rebuild_queue_report.get("queue_file", "")),
+        "post_teacher_tls_connection_repair_movement_rebuild_plain_export_status": "skipped"
+        if post_teacher_tls_connection_repair_movement_rebuild_plain_export_report is None
+        else str(post_teacher_tls_connection_repair_movement_rebuild_plain_export_report.get("status", "fail")),
+        "post_teacher_tls_connection_repair_movement_rebuild_run_status": "skipped"
+        if post_teacher_tls_connection_repair_movement_rebuild_run_report is None
+        else str(post_teacher_tls_connection_repair_movement_rebuild_run_report.get("status", "fail")),
+        "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status": "skipped"
+        if post_teacher_tls_connection_repair_movement_rebuild_run_report is None
+        else str(post_teacher_tls_connection_repair_movement_rebuild_run_report.get("parity_gate_status", "fail")),
+        "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file": ""
+        if post_teacher_tls_connection_repair_movement_rebuild_best_variant_file is None
+        else str(post_teacher_tls_connection_repair_movement_rebuild_best_variant_file),
+        "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count": 0
+        if post_teacher_tls_connection_repair_movement_rebuild_run_report is None
+        else post_teacher_tls_connection_repair_movement_rebuild_run_report.get("composite_applied_candidate_count", 0),
         "post_teacher_tls_connection_repair_reference_promotion_status": str(
             post_teacher_tls_connection_repair_reference_promotion_report.get("status", "skipped")
         ),
@@ -3421,6 +3557,12 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_connection_repair_reference_promotion": post_teacher_tls_connection_repair_reference_promotion_report,
         "post_teacher_tls_connection_repair_movement_rebuild_queue": (
             post_teacher_tls_connection_repair_movement_rebuild_queue_report or {}
+        ),
+        "post_teacher_tls_connection_repair_movement_rebuild_plain_export": (
+            post_teacher_tls_connection_repair_movement_rebuild_plain_export_report or {}
+        ),
+        "post_teacher_tls_connection_repair_movement_rebuild_run": (
+            post_teacher_tls_connection_repair_movement_rebuild_run_report or {}
         ),
         "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
         or {},
