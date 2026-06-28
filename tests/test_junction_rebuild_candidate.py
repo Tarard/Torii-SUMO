@@ -1908,6 +1908,102 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert variant_calls[0]["edge_map"] == {"teacher_in": "approach_in"}
 
 
+def test_run_teacher_guided_repair_queue_replays_no_join_expanded_scope_on_full_network(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-10" y="0"/>
+  <node id="j" x="0" y="0"/>
+  <node id="b" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (teacher_net, candidate_net):
+        path.write_text("<net/>", encoding="utf-8")
+
+    variant_calls = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "j",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {"teacher_in": "cand_in", "teacher_out": "cand_out"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "core_junction_id": "j",
+                        "junction_ids": ["j"],
+                        "join_junction_ids": ["j"],
+                        "blocked_teacher_edge_ids": [],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+        variant_builder=fake_variant,
+        sequential_accept_passed_variants=True,
+    )
+
+    assert report["status"] == "pass"
+    assert report["composite_applied_candidate_count"] == 1
+    assert report["composite_net_file"] == report["variant_reports"][0]["final_net_file"]
+    assert report["expanded_scope_reports"][0]["join_explicit_join_count"] == 0
+    assert variant_calls[0]["raw_node_file"] == raw_nodes
+    assert variant_calls[0]["raw_edge_file"] == raw_edges
+    assert variant_calls[0]["raw_connection_file"] == raw_connections
+    assert variant_calls[0]["candidate_net_file"] == candidate_net
+    assert variant_calls[0]["junction_id"] == "j"
+    assert variant_calls[0]["teacher_junction_id"] == "teacher_j"
+
+
 def test_run_teacher_guided_repair_queue_derives_expanded_edge_map_from_endpoint_plan(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
@@ -5079,7 +5175,9 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="10,0 20,0" length="10.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="50,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-1 9,1" outlineShape="8,-1 10,-1 10,1 8,1"/></edge>
-  <junction id="j" type="traffic_light" x="10" y="0" incLanes="in_0" intLanes=":j_c0_0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" shape="9,-1 11,-1 11,1 9,1" incLanes="in_0" intLanes=":j_c0_0">
+    <request index="0" response="101" foes="111" cont="1"/>
+  </junction>
   <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0"/>
   <connection from=":j_c0" to="out" fromLane="0" toLane="0"/>
 </net>
@@ -5093,7 +5191,9 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="11,0 20,0" length="9.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="51,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-2 9,2" outlineShape="bad"/></edge>
-  <junction id="j" type="traffic_light" x="10" y="0" incLanes="in_0" intLanes=":j_c0_0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" shape="bad" incLanes="in_0" intLanes=":j_c0_0">
+    <request index="0" response="100" foes="111" cont="1"/>
+  </junction>
   <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0"/>
   <connection from=":j_c0" to="out" fromLane="0" toLane="0"/>
 </net>
@@ -5113,6 +5213,10 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert root.find("edge[@id='out']/lane").attrib["length"] == "10.00"
     assert root.find("edge[@id=':j_c0']/lane").attrib["outlineShape"] == "8,-1 10,-1 10,1 8,1"
     assert root.find("edge[@id='remote']/lane").attrib["shape"] == "51,0 60,0"
+    assert root.find("junction[@id='j']").attrib["shape"] == "9,-1 11,-1 11,1 9,1"
+    assert root.find("junction[@id='j']/request").attrib["response"] == "101"
+    assert report["restored_junction_attr_count"] == 1
+    assert report["restored_request_count"] == 1
 
 
 def test_write_teacher_target_internal_replay_net_copies_missing_boundary_edge(tmp_path: Path) -> None:

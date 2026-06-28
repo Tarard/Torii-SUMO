@@ -1727,6 +1727,12 @@ def run_teacher_guided_repair_queue(
                     scope_report["derived_edge_map"] = replay_edge_map
                 except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
                     replay_edge_map = {}
+            use_full_network_replay = (
+                not str(scope_report.get("join_nodes_patch_file", ""))
+                and not scope_report.get("missing_node_ids")
+                and not scope_report.get("blocking_missing_node_ids")
+                and not scope_report.get("missing_blocked_edge_ids")
+            )
             if (
                 scope_report.get("status") == "pass"
                 and (scope_report.get("netconvert") or {}).get("status") == "pass"
@@ -1740,22 +1746,35 @@ def run_teacher_guided_repair_queue(
                 )
             ):
                 variant_prefix = f"{_safe_stage_name(prefix, max_len=12)}_{index + 1:03d}"
-                replay_node_file = _write_replay_node_file(
-                    Path(str(scope_report.get("node_file", ""))),
-                    Path(str(scope_report.get("join_nodes_patch_file", ""))),
-                    output_dir / safe_junction_id / "expanded_scope_replay.nod.xml",
-                )
-                (
-                    replay_edge_file,
-                    replay_edge_endpoint_rewrite_count,
-                    replay_dropped_self_loop_edges,
-                    replay_blocking_self_loop_edge_drops,
-                ) = _write_joined_endpoint_edge_file(
-                    Path(str(scope_report.get("edge_file", ""))),
-                    Path(str(scope_report.get("join_nodes_patch_file", ""))),
-                    joined_scope_junction_id,
-                    output_dir / safe_junction_id / "expanded_scope_replay.edg.xml",
-                )
+                if use_full_network_replay:
+                    replay_node_file = current_raw_node_file
+                    replay_edge_file = current_raw_edge_file
+                    replay_connection_file = current_raw_connection_file
+                    replay_candidate_net_file = current_candidate_net_file
+                    replay_blocking_self_loop_edge_drops = []
+                    replay_dropped_self_loop_edges = []
+                    replay_edge_endpoint_rewrite_count = 0
+                    scope_report["replay_scope"] = "full_network"
+                else:
+                    replay_node_file = _write_replay_node_file(
+                        Path(str(scope_report.get("node_file", ""))),
+                        Path(str(scope_report.get("join_nodes_patch_file", ""))),
+                        output_dir / safe_junction_id / "expanded_scope_replay.nod.xml",
+                    )
+                    (
+                        replay_edge_file,
+                        replay_edge_endpoint_rewrite_count,
+                        replay_dropped_self_loop_edges,
+                        replay_blocking_self_loop_edge_drops,
+                    ) = _write_joined_endpoint_edge_file(
+                        Path(str(scope_report.get("edge_file", ""))),
+                        Path(str(scope_report.get("join_nodes_patch_file", ""))),
+                        joined_scope_junction_id,
+                        output_dir / safe_junction_id / "expanded_scope_replay.edg.xml",
+                    )
+                    replay_connection_file = Path(str(scope_report.get("connection_file", "")))
+                    replay_candidate_net_file = Path(str(scope_report.get("net_file", "")))
+                    scope_report["replay_scope"] = "expanded_scope"
                 scope_report["replay_node_file"] = str(replay_node_file)
                 scope_report["replay_edge_file"] = str(replay_edge_file)
                 scope_report["replay_edge_endpoint_rewrite_count"] = replay_edge_endpoint_rewrite_count
@@ -1778,10 +1797,10 @@ def run_teacher_guided_repair_queue(
                     variant_report = variant_builder(
                         raw_node_file=replay_node_file,
                         raw_edge_file=replay_edge_file,
-                        raw_connection_file=Path(str(scope_report.get("connection_file", ""))),
+                        raw_connection_file=replay_connection_file,
                         raw_type_file=current_raw_type_file,
                         teacher_net_file=teacher_net_file,
-                        candidate_net_file=Path(str(scope_report.get("net_file", ""))),
+                        candidate_net_file=replay_candidate_net_file,
                         junction_id=joined_scope_junction_id,
                         output_dir=output_dir / safe_junction_id / "teacher_replay",
                         edge_map=replay_edge_map,
@@ -1797,9 +1816,40 @@ def run_teacher_guided_repair_queue(
                     )
                 except Exception as exc:
                     variant_report = _variant_exception_report(exc, joined_scope_junction_id)
-                variant_reports.append(
-                    _attach_candidate_template_context(variant_report, candidate),
-                )
+                attached_report = _attach_candidate_template_context(variant_report, candidate)
+                variant_reports.append(attached_report)
+                final_net_file = Path(str(attached_report.get("final_net_file", "")))
+                if (
+                    use_full_network_replay
+                    and sequential_accept_passed_variants
+                    and attached_report.get("status") == "pass"
+                    and attached_report.get("parity_gate_status") == "pass"
+                    and final_net_file.exists()
+                ):
+                    composite_applied_candidate_count += 1
+                    composite_net_file = str(final_net_file)
+                    applied_candidate_edge_ids.update(candidate_edge_ids)
+                    applied_candidate_node_ids.update(candidate_node_ids)
+                    current_candidate_net_file = final_net_file
+                    if plain_exporter is not None and index < len(candidates) - 1:
+                        export_report = plain_exporter(
+                            net_file=final_net_file,
+                            output_dir=output_dir / safe_junction_id / "sequential_plain",
+                            prefix=f"{variant_prefix}_sequential",
+                            netconvert_binary=netconvert_binary,
+                            timeout_seconds=timeout_seconds,
+                        )
+                        sequential_plain_export_reports.append(export_report)
+                        if export_report.get("status") == "pass":
+                            current_raw_node_file = Path(str(export_report["raw_node_file"]))
+                            current_raw_edge_file = Path(str(export_report["raw_edge_file"]))
+                            current_raw_connection_file = Path(str(export_report["raw_connection_file"]))
+                            raw_type_value = str(export_report.get("raw_type_file", ""))
+                            current_raw_type_file = Path(raw_type_value) if raw_type_value else None
+                        else:
+                            sequential_blocked_reason = str(
+                                export_report.get("error", "plain export failed after accepted variant")
+                            )
             else:
                 skipped_candidates.append(
                     {
@@ -3584,6 +3634,21 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
             after = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
             if before != after:
                 restored_lane_count += 1
+    restored_request_count = 0
+    restored_junction_attr_count = 0
+    source_junction = source_root.find(f"junction[@id='{junction_id}']")
+    target_junction = target_root.find(f"junction[@id='{junction_id}']")
+    if source_junction is not None and target_junction is not None and source_junction.attrib.get("shape"):
+        before_shape = target_junction.attrib.get("shape")
+        target_junction.set("shape", source_junction.attrib["shape"])
+        restored_junction_attr_count = 1 if before_shape != source_junction.attrib["shape"] else 0
+    source_requests = source_junction.findall("request") if source_junction is not None else []
+    if source_requests and target_junction is not None:
+        for request in list(target_junction.findall("request")):
+            target_junction.remove(request)
+        for request in source_requests:
+            target_junction.append(ET.Element("request", dict(request.attrib)))
+        restored_request_count = len(source_requests)
 
     ET.indent(target_root, space="    ")
     target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
@@ -3594,6 +3659,8 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
         "target_file": str(target_file),
         "restored_edge_count": len(restored_edge_ids) - len(missing_edge_ids),
         "restored_lane_count": restored_lane_count,
+        "restored_junction_attr_count": restored_junction_attr_count,
+        "restored_request_count": restored_request_count,
         "missing_edge_count": len(missing_edge_ids),
         "missing_edge_ids": missing_edge_ids,
     }
