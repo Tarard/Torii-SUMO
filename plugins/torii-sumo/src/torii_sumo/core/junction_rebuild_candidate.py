@@ -227,6 +227,7 @@ def build_tls_connection_repair_variant(
     copy_unmapped_tls: bool = True,
     require_target_link_index_capacity: bool = False,
     pad_mapped_tllogic_capacity: bool = False,
+    add_green_phases_for_padded_links: bool = False,
 ) -> dict[str, object]:
     if not source_net_file.exists():
         return _failure(f"source net file does not exist: {source_net_file}")
@@ -263,6 +264,7 @@ def build_tls_connection_repair_variant(
     skipped_invalid_mapped_linkindex_connections = 0
     invalid_mapped_linkindex_capacity_gaps: dict[str, dict[str, object]] = {}
     required_tllogic_lengths: dict[str, int] = {}
+    padded_tllogic_link_indices: dict[str, set[int]] = {}
     copied_tls_ids: set[str] = set()
     updated_keys: list[dict[str, str]] = []
 
@@ -300,6 +302,7 @@ def build_tls_connection_repair_variant(
                 required_tllogic_lengths.get(target_tls_id, 0),
                 _connection_max_link_index(source_connection) + 1,
             )
+            padded_tllogic_link_indices.setdefault(target_tls_id, set()).update(_connection_link_indices(source_connection))
         if key in source_duplicate_keys or key in candidate_duplicate_keys:
             ambiguous_connections += 1
             continue
@@ -324,6 +327,11 @@ def build_tls_connection_repair_variant(
 
     tl_logic_report = _copy_referenced_tllogics(source_root, candidate_root, copied_tls_ids)
     padding_report = _pad_tllogic_state_lengths(candidate_root, required_tllogic_lengths)
+    green_phase_report = (
+        _add_green_phases_for_links(candidate_root, padded_tllogic_link_indices)
+        if add_green_phases_for_padded_links
+        else {"added_green_phase_count": 0, "added_green_phase_tllogic_count": 0, "added_green_phase_tllogics": []}
+    )
     candidate_controlled_after = _controlled_tls_connection_count(candidate_root)
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(variant_file, encoding="utf-8", xml_declaration=True)
@@ -352,9 +360,11 @@ def build_tls_connection_repair_variant(
         "copy_unmapped_tls": copy_unmapped_tls,
         "require_target_link_index_capacity": require_target_link_index_capacity,
         "pad_mapped_tllogic_capacity": pad_mapped_tllogic_capacity,
+        "add_green_phases_for_padded_links": add_green_phases_for_padded_links,
         "updated_connection_keys": updated_keys,
         **tl_logic_report,
         **padding_report,
+        **green_phase_report,
         "review_policy": (
             "diagnostic variant only: run SUMO load and NetEdit connection-mode review before adoption; "
             "this repair copies TLS control attributes without changing edge, junction, via, or shape geometry"
@@ -4067,6 +4077,18 @@ def _connection_max_link_index(connection: ET.Element) -> int:
     return max(values) if values else 0
 
 
+def _connection_link_indices(connection: ET.Element) -> set[int]:
+    indices = set()
+    for attr in ("linkIndex", "linkIndex2"):
+        value = connection.attrib.get(attr, "")
+        if value:
+            try:
+                indices.add(int(value))
+            except ValueError:
+                pass
+    return indices
+
+
 def _capacity_gap_records(gaps: dict[str, dict[str, object]]) -> list[dict[str, object]]:
     records = []
     for record in gaps.values():
@@ -4083,6 +4105,40 @@ def _capacity_gap_records(gaps: dict[str, dict[str, object]]) -> list[dict[str, 
             }
         )
     return sorted(records, key=lambda item: (-int(item["skipped_connection_count"]), str(item["target_tls"])))
+
+
+def _add_green_phases_for_links(root: ET.Element, indices_by_tls: dict[str, set[int]]) -> dict[str, object]:
+    added_by_tls = []
+    added_count = 0
+    for tl_logic in root.findall("tlLogic"):
+        tls_id = tl_logic.attrib.get("id", "")
+        indices = sorted(indices_by_tls.get(tls_id, set()))
+        if not indices:
+            continue
+        phases = tl_logic.findall("phase")
+        state_length = max((len(phase.attrib.get("state", "")) for phase in phases), default=0)
+        added_for_tls = 0
+        for index in indices:
+            if index < 0 or index >= state_length or _phase_has_green_for_index(phases, index):
+                continue
+            state = "r" * index + "G" + "r" * (state_length - index - 1)
+            ET.SubElement(tl_logic, "phase", {"duration": "4", "state": state})
+            added_for_tls += 1
+        if added_for_tls:
+            added_by_tls.append({"tls": tls_id, "added_green_phase_count": added_for_tls})
+            added_count += added_for_tls
+    return {
+        "added_green_phase_count": added_count,
+        "added_green_phase_tllogic_count": len(added_by_tls),
+        "added_green_phase_tllogics": added_by_tls,
+    }
+
+
+def _phase_has_green_for_index(phases: list[ET.Element], index: int) -> bool:
+    return any(
+        len(phase.attrib.get("state", "")) > index and phase.attrib.get("state", "")[index] in {"G", "g"}
+        for phase in phases
+    )
 
 
 def _pad_tllogic_state_lengths(root: ET.Element, required_lengths: dict[str, int]) -> dict[str, object]:
