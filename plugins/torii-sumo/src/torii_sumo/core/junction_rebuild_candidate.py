@@ -1220,8 +1220,6 @@ def build_teacher_guided_junction_variant(
         _command_path(sidewalks_net_file, output_dir),
         "--walkingareas",
         "true",
-        "--sidewalks.guess",
-        "true",
     ]
     if raw_type_file is not None:
         netconvert_command[5:5] = ["--type-files", _command_path(raw_type_file, output_dir)]
