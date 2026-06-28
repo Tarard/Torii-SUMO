@@ -226,6 +226,7 @@ def build_tls_connection_repair_variant(
     tls_id_map: dict[str, str] | None = None,
     copy_unmapped_tls: bool = True,
     require_target_link_index_capacity: bool = False,
+    pad_mapped_tllogic_capacity: bool = False,
 ) -> dict[str, object]:
     if not source_net_file.exists():
         return _failure(f"source net file does not exist: {source_net_file}")
@@ -261,6 +262,7 @@ def build_tls_connection_repair_variant(
     skipped_missing_mapped_tllogic_connections = 0
     skipped_invalid_mapped_linkindex_connections = 0
     invalid_mapped_linkindex_capacity_gaps: dict[str, dict[str, object]] = {}
+    required_tllogic_lengths: dict[str, int] = {}
     copied_tls_ids: set[str] = set()
     updated_keys: list[dict[str, str]] = []
 
@@ -283,7 +285,6 @@ def build_tls_connection_repair_variant(
                 target_tllogic_capacities.get(target_tls_id),
             )
         ):
-            skipped_invalid_mapped_linkindex_connections += 1
             _record_linkindex_capacity_gap(
                 invalid_mapped_linkindex_capacity_gaps,
                 source_connection=source_connection,
@@ -291,7 +292,14 @@ def build_tls_connection_repair_variant(
                 target_tls_id=target_tls_id,
                 capacity=target_tllogic_capacities.get(target_tls_id),
             )
-            continue
+            capacity = target_tllogic_capacities.get(target_tls_id)
+            if not pad_mapped_tllogic_capacity or capacity is None:
+                skipped_invalid_mapped_linkindex_connections += 1
+                continue
+            required_tllogic_lengths[target_tls_id] = max(
+                required_tllogic_lengths.get(target_tls_id, 0),
+                _connection_max_link_index(source_connection) + 1,
+            )
         if key in source_duplicate_keys or key in candidate_duplicate_keys:
             ambiguous_connections += 1
             continue
@@ -315,6 +323,7 @@ def build_tls_connection_repair_variant(
             updated_keys.append(_connection_key_record(key))
 
     tl_logic_report = _copy_referenced_tllogics(source_root, candidate_root, copied_tls_ids)
+    padding_report = _pad_tllogic_state_lengths(candidate_root, required_tllogic_lengths)
     candidate_controlled_after = _controlled_tls_connection_count(candidate_root)
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(variant_file, encoding="utf-8", xml_declaration=True)
@@ -342,8 +351,10 @@ def build_tls_connection_repair_variant(
         "tls_id_map_count": len(tls_id_map),
         "copy_unmapped_tls": copy_unmapped_tls,
         "require_target_link_index_capacity": require_target_link_index_capacity,
+        "pad_mapped_tllogic_capacity": pad_mapped_tllogic_capacity,
         "updated_connection_keys": updated_keys,
         **tl_logic_report,
+        **padding_report,
         "review_policy": (
             "diagnostic variant only: run SUMO load and NetEdit connection-mode review before adoption; "
             "this repair copies TLS control attributes without changing edge, junction, via, or shape geometry"
@@ -4072,6 +4083,32 @@ def _capacity_gap_records(gaps: dict[str, dict[str, object]]) -> list[dict[str, 
             }
         )
     return sorted(records, key=lambda item: (-int(item["skipped_connection_count"]), str(item["target_tls"])))
+
+
+def _pad_tllogic_state_lengths(root: ET.Element, required_lengths: dict[str, int]) -> dict[str, object]:
+    padded_tls = []
+    padded_phases = 0
+    if not required_lengths:
+        return {"padded_tllogic_count": 0, "padded_tllogic_phase_count": 0, "padded_tllogics": []}
+    for tl_logic in root.findall("tlLogic"):
+        tls_id = tl_logic.attrib.get("id", "")
+        required_length = required_lengths.get(tls_id, 0)
+        if required_length <= 0:
+            continue
+        phase_count = 0
+        for phase in tl_logic.findall("phase"):
+            state = phase.attrib.get("state", "")
+            if state and len(state) < required_length:
+                phase.set("state", state + ("r" * (required_length - len(state))))
+                phase_count += 1
+        if phase_count:
+            padded_tls.append({"tls": tls_id, "required_state_length": required_length, "padded_phase_count": phase_count})
+            padded_phases += phase_count
+    return {
+        "padded_tllogic_count": len(padded_tls),
+        "padded_tllogic_phase_count": padded_phases,
+        "padded_tllogics": padded_tls,
+    }
 
 
 def _copy_referenced_tllogics(
