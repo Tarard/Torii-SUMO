@@ -22,7 +22,7 @@ from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .reference_bbox import derive_reference_net_bbox
-from .reference_hierarchy import audit_reference_hierarchy
+from .reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
 from .reference_join_audit import audit_reference_join_patterns
 from .reference_scope import audit_reference_scope, build_scope_pruning_variant
 from .road_scope import (
@@ -1240,6 +1240,7 @@ def run_osm_cleanup_workflow(
     tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
     junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
+    reference_hierarchy_type_repair_func: Callable[..., dict[str, Any]] = build_reference_hierarchy_type_repair_variant,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
@@ -1545,6 +1546,13 @@ def run_osm_cleanup_workflow(
     reference_hierarchy_audit_report: dict[str, Any] | None = None
     reference_hierarchy_audit_candidate_layer = "not_applicable"
     reference_hierarchy_audit_candidate_net_file: Path | None = None
+    reference_hierarchy_type_repair_report: dict[str, Any] | None = None
+    reference_hierarchy_type_repair_sumo_load_report: dict[str, Any] | None = None
+    reference_hierarchy_type_repair_audit_report: dict[str, Any] | None = None
+    reference_hierarchy_type_repair_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
     reference_scope_audit_report: dict[str, Any] | None = None
     reference_scope_pruning_report: dict[str, Any] | None = None
     reference_scope_candidate_layer = "not_applicable"
@@ -2710,6 +2718,81 @@ def run_osm_cleanup_workflow(
                 output_dir=output_dir / "final_reference_hierarchy_audit",
                 prefix=f"{prefix}_final_reference_hierarchy_audit",
             )
+        if (
+            str(network_plan.get("network_profile", "")) == "reference_matched"
+            and reference_net_file is not None
+            and run_reference_hierarchy_audit_after_build
+            and reference_hierarchy_audit_report is not None
+            and _int_field(reference_hierarchy_audit_report, "high_hierarchy_issue_count") > 0
+        ):
+            reference_hierarchy_type_repair_report = reference_hierarchy_type_repair_func(
+                candidate_net_file=reference_visual_detail_comparison_net_file,
+                reference_hierarchy_report=reference_hierarchy_audit_report,
+                output_dir=output_dir / "reference_hierarchy_type_repair",
+                prefix=f"{prefix}_reference_hierarchy_type_repair",
+            )
+            type_repair_variant_value = reference_hierarchy_type_repair_report.get(
+                "reference_hierarchy_type_repair_variant_file", ""
+            )
+            type_repair_variant_file = Path(str(type_repair_variant_value)) if type_repair_variant_value else None
+            if (
+                reference_hierarchy_type_repair_report.get("status") == "pass"
+                and type_repair_variant_file is not None
+                and type_repair_variant_file.exists()
+            ):
+                reference_hierarchy_type_repair_sumo_load_report = _sumo_load_net(
+                    type_repair_variant_file,
+                    output_dir=output_dir / "reference_hierarchy_type_repair_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                if reference_hierarchy_type_repair_sumo_load_report.get("status") == "pass":
+                    reference_hierarchy_type_repair_audit_report = reference_hierarchy_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=type_repair_variant_file,
+                        output_dir=output_dir / "reference_hierarchy_type_repair_audit",
+                        prefix=f"{prefix}_reference_hierarchy_type_repair_audit",
+                    )
+                    if _reference_hierarchy_gate(reference_hierarchy_type_repair_audit_report) == "pass":
+                        reference_visual_detail_comparison_net_file = type_repair_variant_file
+                        reference_visual_detail_comparison_selection_reason = "reference_hierarchy_type_repair_promoted"
+                        reference_hierarchy_audit_report = reference_hierarchy_type_repair_audit_report
+                        reference_hierarchy_audit_candidate_net_file = type_repair_variant_file
+                        reference_hierarchy_audit_candidate_layer = "reference_visual_detail"
+                        reference_hierarchy_type_repair_promotion_report = {
+                            "status": "pass",
+                            "reason": "reference_hierarchy_type_repair_promoted_after_sumo_load_and_audit",
+                        }
+                        if run_topology_audit_after_build:
+                            topology_audit_report = topology_audit_func(
+                                net_file=reference_visual_detail_comparison_net_file,
+                                output_dir=output_dir / "reference_hierarchy_type_repair_topology_audit",
+                                prefix=f"{prefix}_reference_hierarchy_type_repair_topology_audit",
+                                cluster_radius_m=topology_cluster_radius_m,
+                                min_cluster_nodes=topology_min_cluster_nodes,
+                                osm_file=osm_file,
+                            )
+                    else:
+                        reference_hierarchy_type_repair_promotion_report = {
+                            "status": "blocked",
+                            "reason": "reference_hierarchy_type_repair_audit_not_pass",
+                        }
+                else:
+                    reference_hierarchy_type_repair_promotion_report = {
+                        "status": "blocked",
+                        "reason": "sumo_load_not_pass",
+                    }
+            elif reference_hierarchy_type_repair_report.get("reference_hierarchy_type_repair_status") == "not_needed":
+                reference_hierarchy_type_repair_promotion_report = {
+                    "status": "skipped",
+                    "reason": "not_needed",
+                }
+            else:
+                reference_hierarchy_type_repair_promotion_report = {
+                    "status": "blocked",
+                    "reason": "type_repair_variant_not_created",
+                }
 
     routeability_report = None
     if key_edge_queries:
@@ -2826,6 +2909,10 @@ def run_osm_cleanup_workflow(
         reference_scope_pruning_report or {},
         reference_join_audit_report or {},
         reference_join_aggregation_report or {},
+        reference_hierarchy_type_repair_report or {},
+        reference_hierarchy_type_repair_sumo_load_report or {},
+        reference_hierarchy_type_repair_audit_report or {},
+        reference_hierarchy_type_repair_promotion_report,
         routeability_audit_report or {},
         netedit_report,
         reference_visual_detail_netedit_report,
@@ -3557,6 +3644,45 @@ def run_osm_cleanup_workflow(
         "reference_hierarchy_audit_report_file": ""
         if reference_hierarchy_audit_report is None
         else str(reference_hierarchy_audit_report.get("summary_file", "")),
+        "reference_hierarchy_type_repair_status": "skipped"
+        if reference_hierarchy_type_repair_report is None
+        else str(
+            reference_hierarchy_type_repair_report.get(
+                "reference_hierarchy_type_repair_status",
+                reference_hierarchy_type_repair_report.get("status", "fail"),
+            )
+        ),
+        "reference_hierarchy_type_repair_count": 0
+        if reference_hierarchy_type_repair_report is None
+        else reference_hierarchy_type_repair_report.get("reference_hierarchy_type_repair_count", 0),
+        "reference_hierarchy_type_repair_variant_file": ""
+        if reference_hierarchy_type_repair_report is None
+        else str(reference_hierarchy_type_repair_report.get("reference_hierarchy_type_repair_variant_file", "")),
+        "reference_hierarchy_type_repair_plan_file": ""
+        if reference_hierarchy_type_repair_report is None
+        else str(reference_hierarchy_type_repair_report.get("reference_hierarchy_type_repair_plan_file", "")),
+        "reference_hierarchy_type_repair_repairs_file": ""
+        if reference_hierarchy_type_repair_report is None
+        else str(reference_hierarchy_type_repair_report.get("reference_hierarchy_type_repair_repairs_file", "")),
+        "reference_hierarchy_type_repair_sumo_load_status": "skipped"
+        if reference_hierarchy_type_repair_sumo_load_report is None
+        else str(reference_hierarchy_type_repair_sumo_load_report.get("status", "fail")),
+        "reference_hierarchy_type_repair_audit_status": "skipped"
+        if reference_hierarchy_type_repair_audit_report is None
+        else str(
+            reference_hierarchy_type_repair_audit_report.get(
+                "reference_hierarchy_status", reference_hierarchy_type_repair_audit_report.get("status", "fail")
+            )
+        ),
+        "reference_hierarchy_type_repair_issue_count": 0
+        if reference_hierarchy_type_repair_audit_report is None
+        else reference_hierarchy_type_repair_audit_report.get("high_hierarchy_issue_count", 0),
+        "reference_hierarchy_type_repair_promotion_status": str(
+            reference_hierarchy_type_repair_promotion_report.get("status", "skipped")
+        ),
+        "reference_hierarchy_type_repair_promotion_reason": str(
+            reference_hierarchy_type_repair_promotion_report.get("reason", "")
+        ),
         "reference_scope_status": "skipped"
         if reference_scope_audit_report is None
         else reference_scope_audit_report.get("reference_scope_status", reference_scope_audit_report.get("status", "fail")),
@@ -3856,6 +3982,10 @@ def run_osm_cleanup_workflow(
         "reference_topology_audit": reference_topology_audit_report or {},
         "junction_aggregation": junction_aggregation_report or {},
         "reference_hierarchy_audit": reference_hierarchy_audit_report or {},
+        "reference_hierarchy_type_repair": reference_hierarchy_type_repair_report or {},
+        "reference_hierarchy_type_repair_sumo_load": reference_hierarchy_type_repair_sumo_load_report or {},
+        "reference_hierarchy_type_repair_audit": reference_hierarchy_type_repair_audit_report or {},
+        "reference_hierarchy_type_repair_promotion": reference_hierarchy_type_repair_promotion_report,
         "reference_scope_audit": reference_scope_audit_report or {},
         "reference_scope_pruning": reference_scope_pruning_report or {},
         "reference_join_audit": reference_join_audit_report or {},
