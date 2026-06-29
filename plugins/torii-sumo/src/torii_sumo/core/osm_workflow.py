@@ -487,6 +487,12 @@ def _teacher_guided_parity_gate(report: Mapping[str, Any] | None) -> str:
     return "blocked"
 
 
+def _teacher_guided_queue_has_replay_candidates(report: Mapping[str, Any] | None) -> bool:
+    if report is None:
+        return False
+    return _int_field(report, "ready_candidate_count") > 0 or _int_field(report, "expanded_scope_candidate_count") > 0
+
+
 def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
     if report is None:
         return None
@@ -510,6 +516,55 @@ def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path 
         if final_net_file and Path(final_net_file).exists():
             return Path(final_net_file)
     return None
+
+
+def _run_teacher_guided_queue_replay(
+    *,
+    queue_report: dict[str, Any] | None,
+    source_net_file: Path,
+    plain_output_dir: Path,
+    run_output_dir: Path,
+    prefix: str,
+    netconvert_binary: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    max_ready_candidates: int | None,
+    plain_export_func: Callable[..., dict[str, Any]],
+    repair_run_func: Callable[..., dict[str, Any]],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, Path | None]:
+    if not _teacher_guided_queue_has_replay_candidates(queue_report):
+        return None, None, None
+
+    plain_export_report = plain_export_func(
+        net_file=source_net_file,
+        output_dir=plain_output_dir,
+        prefix=prefix,
+        netconvert_binary=netconvert_binary,
+        timeout_seconds=timeout_seconds,
+    )
+    if plain_export_report.get("status") != "pass":
+        return plain_export_report, None, None
+
+    raw_type_value = str(plain_export_report.get("raw_type_file", ""))
+    queue_file_value = str(queue_report.get("queue_file", "")) if queue_report is not None else ""
+    run_report = repair_run_func(
+        queue_report=queue_report,
+        raw_node_file=Path(str(plain_export_report["raw_node_file"])),
+        raw_edge_file=Path(str(plain_export_report["raw_edge_file"])),
+        raw_connection_file=Path(str(plain_export_report["raw_connection_file"])),
+        raw_type_file=Path(raw_type_value) if raw_type_value else None,
+        output_dir=run_output_dir,
+        prefix=prefix,
+        queue_base_dir=Path(queue_file_value).resolve().parent if queue_file_value else None,
+        replay_target_internal_subgraph=True,
+        max_ready_candidates=max_ready_candidates,
+        netconvert_binary=netconvert_binary,
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        sequential_accept_passed_variants=True,
+        plain_exporter=plain_export_func,
+    )
+    return plain_export_report, run_report, _teacher_guided_best_variant_file(run_report)
 
 
 def _teacher_guided_application_stats(
@@ -2127,10 +2182,7 @@ def run_osm_cleanup_workflow(
                 prefix=f"{prefix}_teacher_guided_repair",
                 max_ready_candidates=teacher_guided_repair_max_ready_candidates,
             )
-            if (
-                _int_field(teacher_guided_repair_queue_report, "ready_candidate_count") > 0
-                or _int_field(teacher_guided_repair_queue_report, "expanded_scope_candidate_count") > 0
-            ):
+            if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
                 teacher_guided_plain_export_report = teacher_guided_plain_export_func(
                     net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
                     output_dir=output_dir / "teacher_guided_repair_plain",
@@ -2464,137 +2516,66 @@ def run_osm_cleanup_workflow(
                                             post_teacher_tls_connection_repair_reference_promotion_report.get("status")
                                             == "pass"
                                         ):
-                                            reference_visual_detail_comparison_net_file = (
-                                                connection_repair_variant_file
-                                            )
+                                            reference_visual_detail_comparison_net_file = connection_repair_variant_file
                                             reference_visual_detail_comparison_selection_reason = str(
                                                 post_teacher_tls_connection_repair_reference_promotion_report.get(
                                                     "reason", ""
                                                 )
                                             )
-                                            if (
+                                        if (
+                                            post_teacher_tls_connection_repair_movement_rebuild_run_report is None
+                                            and _teacher_guided_queue_has_replay_candidates(
                                                 post_teacher_tls_connection_repair_movement_rebuild_queue_report
-                                                is not None
-                                            ):
-                                                if (
-                                                    _int_field(
-                                                        post_teacher_tls_connection_repair_movement_rebuild_queue_report,
-                                                        "ready_candidate_count",
-                                                    )
-                                                    > 0
-                                                    or _int_field(
-                                                        post_teacher_tls_connection_repair_movement_rebuild_queue_report,
-                                                        "expanded_scope_candidate_count",
-                                                    )
-                                                    > 0
-                                                ):
-                                                    post_teacher_tls_connection_repair_movement_rebuild_plain_export_report = (
-                                                        teacher_guided_plain_export_func(
-                                                            net_file=connection_repair_variant_file,
-                                                            output_dir=output_dir
-                                                            / "post_teacher_tls_connection_repair_movement_rebuild_plain",
-                                                            prefix=(
-                                                                f"{prefix}_post_teacher_tls_connection_repair_"
-                                                                "movement_rebuild"
-                                                            ),
-                                                            netconvert_binary=netconvert_binary,
-                                                            timeout_seconds=timeout_seconds,
-                                                        )
-                                                    )
-                                                    if (
-                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report.get(
-                                                            "status"
-                                                        )
-                                                        == "pass"
-                                                    ):
-                                                        raw_type_value = str(
-                                                            post_teacher_tls_connection_repair_movement_rebuild_plain_export_report.get(
-                                                                "raw_type_file", ""
-                                                            )
-                                                        )
-                                                        queue_file_value = str(
-                                                            post_teacher_tls_connection_repair_movement_rebuild_queue_report.get(
-                                                                "queue_file", ""
-                                                            )
-                                                        )
-                                                        post_teacher_tls_connection_repair_movement_rebuild_run_report = (
-                                                            teacher_guided_repair_run_func(
-                                                                queue_report=post_teacher_tls_connection_repair_movement_rebuild_queue_report,
-                                                                raw_node_file=Path(
-                                                                    str(
-                                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report[
-                                                                            "raw_node_file"
-                                                                        ]
-                                                                    )
-                                                                ),
-                                                                raw_edge_file=Path(
-                                                                    str(
-                                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report[
-                                                                            "raw_edge_file"
-                                                                        ]
-                                                                    )
-                                                                ),
-                                                                raw_connection_file=Path(
-                                                                    str(
-                                                                        post_teacher_tls_connection_repair_movement_rebuild_plain_export_report[
-                                                                            "raw_connection_file"
-                                                                        ]
-                                                                    )
-                                                                ),
-                                                                raw_type_file=Path(raw_type_value)
-                                                                if raw_type_value
-                                                                else None,
-                                                                output_dir=output_dir
-                                                                / "post_teacher_tls_connection_repair_movement_rebuild_execution",
-                                                                prefix=(
-                                                                    f"{prefix}_post_teacher_tls_connection_repair_"
-                                                                    "movement_rebuild"
-                                                                ),
-                                                                queue_base_dir=Path(queue_file_value).resolve().parent
-                                                                if queue_file_value
-                                                                else None,
-                                                                replay_target_internal_subgraph=True,
-                                                                max_ready_candidates=teacher_guided_repair_max_ready_candidates,
-                                                                netconvert_binary=netconvert_binary,
-                                                                sumo_binary=sumo_binary,
-                                                                timeout_seconds=timeout_seconds,
-                                                                sequential_accept_passed_variants=True,
-                                                                plain_exporter=teacher_guided_plain_export_func,
-                                                            )
-                                                        )
-                                                        post_teacher_tls_connection_repair_movement_rebuild_best_variant_file = (
-                                                            _teacher_guided_best_variant_file(
-                                                                post_teacher_tls_connection_repair_movement_rebuild_run_report
-                                                            )
-                                                        )
-                                                        if (
-                                                            post_teacher_tls_connection_repair_movement_rebuild_best_variant_file
-                                                            is not None
-                                                        ):
-                                                            reference_visual_detail_comparison_net_file = (
-                                                                post_teacher_tls_connection_repair_movement_rebuild_best_variant_file
-                                                            )
-                                                            reference_visual_detail_comparison_selection_reason = (
-                                                                "post_teacher_tls_connection_repair_movement_rebuild_promoted"
-                                                            )
-                                                            reference_join_post_teacher_audit_report = (
-                                                                reference_join_audit_func(
-                                                                    reference_net_file=reference_net_file,
-                                                                    candidate_net_file=post_teacher_tls_connection_repair_movement_rebuild_best_variant_file,
-                                                                    output_dir=output_dir
-                                                                    / "post_teacher_tls_connection_repair_movement_rebuild_reference_delta",
-                                                                    prefix=(
-                                                                        f"{prefix}_post_teacher_tls_connection_repair_"
-                                                                        "movement_rebuild_reference_delta"
-                                                                    ),
-                                                                    candidate_cluster_radius_m=topology_cluster_radius_m,
-                                                                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                                                                    structural_only=True,
-                                                                    equivalent_approach_edge_map=_teacher_guided_equivalent_approach_edge_map(
-                                                                        post_teacher_tls_connection_repair_movement_rebuild_run_report
-                                                                    ),
-                                                                )
-                                                            )
+                                            )
+                                        ):
+                                            (
+                                                post_teacher_tls_connection_repair_movement_rebuild_plain_export_report,
+                                                post_teacher_tls_connection_repair_movement_rebuild_run_report,
+                                                post_teacher_tls_connection_repair_movement_rebuild_best_variant_file,
+                                            ) = _run_teacher_guided_queue_replay(
+                                                queue_report=post_teacher_tls_connection_repair_movement_rebuild_queue_report,
+                                                source_net_file=connection_repair_variant_file,
+                                                plain_output_dir=output_dir
+                                                / "post_teacher_tls_connection_repair_movement_rebuild_plain",
+                                                run_output_dir=output_dir
+                                                / "post_teacher_tls_connection_repair_movement_rebuild_execution",
+                                                prefix=(
+                                                    f"{prefix}_post_teacher_tls_connection_repair_"
+                                                    "movement_rebuild"
+                                                ),
+                                                netconvert_binary=netconvert_binary,
+                                                sumo_binary=sumo_binary,
+                                                timeout_seconds=timeout_seconds,
+                                                max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                                                plain_export_func=teacher_guided_plain_export_func,
+                                                repair_run_func=teacher_guided_repair_run_func,
+                                            )
+                                        if (
+                                            post_teacher_tls_connection_repair_movement_rebuild_best_variant_file
+                                            is not None
+                                        ):
+                                            reference_visual_detail_comparison_net_file = (
+                                                post_teacher_tls_connection_repair_movement_rebuild_best_variant_file
+                                            )
+                                            reference_visual_detail_comparison_selection_reason = (
+                                                "post_teacher_tls_connection_repair_movement_rebuild_promoted"
+                                            )
+                                            reference_join_post_teacher_audit_report = reference_join_audit_func(
+                                                reference_net_file=reference_net_file,
+                                                candidate_net_file=post_teacher_tls_connection_repair_movement_rebuild_best_variant_file,
+                                                output_dir=output_dir
+                                                / "post_teacher_tls_connection_repair_movement_rebuild_reference_delta",
+                                                prefix=(
+                                                    f"{prefix}_post_teacher_tls_connection_repair_"
+                                                    "movement_rebuild_reference_delta"
+                                                ),
+                                                candidate_cluster_radius_m=topology_cluster_radius_m,
+                                                candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                                structural_only=True,
+                                                equivalent_approach_edge_map=_teacher_guided_equivalent_approach_edge_map(
+                                                    post_teacher_tls_connection_repair_movement_rebuild_run_report
+                                                ),
+                                            )
                                     else:
                                         post_teacher_tls_connection_repair_reference_promotion_report = {
                                             "status": "blocked",
