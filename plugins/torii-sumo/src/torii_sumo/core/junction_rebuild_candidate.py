@@ -414,6 +414,7 @@ def write_teacher_connection_plan(
     edge_map: dict[str, str],
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     candidate_edge_file: Path | None = None,
+    emit_crossings: bool = True,
 ) -> dict[str, object]:
     crossing_edge_overrides = crossing_edge_overrides or {}
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -511,23 +512,24 @@ def write_teacher_connection_plan(
 
     emitted_crossings = 0
     skipped_crossings = []
-    for crossing in teacher_model.get("crossings", []) or []:
-        if not isinstance(crossing, dict):
-            continue
-        crossing_id = str(crossing.get("edge_id", ""))
-        crossing_edges = crossing_edge_overrides.get(crossing_id)
-        if crossing_edges is None:
-            crossing_edges = [edge_map.get(str(edge), "") for edge in crossing.get("crossingEdges", []) or []]
-        if isinstance(crossing_edges, str):
-            crossing_edges = [crossing_edges]
-        crossing_edges = [edge for edge in crossing_edges if edge]
-        if present_candidate_edges is not None:
-            crossing_edges = [edge for edge in crossing_edges if edge in present_candidate_edges]
-        if not crossing_edges:
-            skipped_crossings.append(crossing_id)
-            continue
-        ET.SubElement(root, "crossing", {"node": junction_id, "edges": " ".join(crossing_edges), "priority": "1", "width": "4.00"})
-        emitted_crossings += 1
+    if emit_crossings:
+        for crossing in teacher_model.get("crossings", []) or []:
+            if not isinstance(crossing, dict):
+                continue
+            crossing_id = str(crossing.get("edge_id", ""))
+            crossing_edges = crossing_edge_overrides.get(crossing_id)
+            if crossing_edges is None:
+                crossing_edges = [edge_map.get(str(edge), "") for edge in crossing.get("crossingEdges", []) or []]
+            if isinstance(crossing_edges, str):
+                crossing_edges = [crossing_edges]
+            crossing_edges = [edge for edge in crossing_edges if edge]
+            if present_candidate_edges is not None:
+                crossing_edges = [edge for edge in crossing_edges if edge in present_candidate_edges]
+            if not crossing_edges:
+                skipped_crossings.append(crossing_id)
+                continue
+            ET.SubElement(root, "crossing", {"node": junction_id, "edges": " ".join(crossing_edges), "priority": "1", "width": "4.00"})
+            emitted_crossings += 1
 
     ET.indent(root, space="    ")
     ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
@@ -541,6 +543,7 @@ def write_teacher_connection_plan(
         "emitted_uncontrolled_connection_count": emitted_uncontrolled_connections,
         "emitted_delete_count": emitted_deletes,
         "emitted_crossing_count": emitted_crossings,
+        "emit_crossings": emit_crossings,
         "skipped_crossings": skipped_crossings,
         "lane_clamp_count": len(lane_clamps),
         "lane_clamps": lane_clamps,
@@ -557,6 +560,7 @@ def write_teacher_lane_patch_edges(
     boundary_node_ids: set[str] | None = None,
     prune_unmapped_boundary_edges: bool = False,
     lane_shape_delta: tuple[float, float] | None = None,
+    preserve_lane_shapes: bool = True,
 ) -> dict[str, object]:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     teacher_edges = {
@@ -609,12 +613,14 @@ def write_teacher_lane_patch_edges(
         for attr in ("allow", "disallow", "width"):
             if teacher_edge.attrib.get(attr):
                 edge.set(attr, teacher_edge.attrib[attr])
+        if not preserve_lane_shapes:
+            edge.attrib.pop("shape", None)
         for lane in teacher_lanes:
             lane_attrs = {"index": lane.attrib.get("index", "0")}
             for attr in ("allow", "disallow", "width", "speed"):
                 if lane.attrib.get(attr):
                     lane_attrs[attr] = lane.attrib[attr]
-            if lane_shape_delta is not None and lane.attrib.get("shape"):
+            if preserve_lane_shapes and lane_shape_delta is not None and lane.attrib.get("shape"):
                 lane_attrs["shape"] = _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
             ET.SubElement(edge, "lane", lane_attrs)
         patched.append({"candidate_edge_id": edge.attrib.get("id", ""), "teacher_edge_id": teacher_edge.attrib.get("id", ""), "lane_count": len(teacher_lanes)})
@@ -630,6 +636,7 @@ def write_teacher_lane_patch_edges(
         "pruned_boundary_edge_count": len(pruned_boundary_edges),
         "pruned_boundary_edges": pruned_boundary_edges,
         "lane_shape_translation_applied": lane_shape_delta is not None,
+        "preserve_lane_shapes": preserve_lane_shapes,
     }
 
 
@@ -1297,6 +1304,8 @@ def build_teacher_guided_junction_variant(
     raw_type_file: Path | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     replay_target_internal_subgraph: bool = False,
+    preserve_teacher_lane_shapes: bool = True,
+    emit_teacher_crossings: bool = True,
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
@@ -1346,6 +1355,7 @@ def build_teacher_guided_junction_variant(
         boundary_node_ids=_joined_source_node_ids(raw_node_file, junction_id),
         prune_unmapped_boundary_edges=True,
         lane_shape_delta=_model_shape_delta(teacher_model, candidate_model),
+        preserve_lane_shapes=preserve_teacher_lane_shapes,
     )
     connection_report = write_teacher_connection_plan(
         raw_connection_file=raw_connection_file,
@@ -1356,6 +1366,7 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         crossing_edge_overrides=crossing_edge_overrides,
         candidate_edge_file=patched_edge_file,
+        emit_crossings=emit_teacher_crossings,
     )
 
     netconvert_command = [
@@ -1843,6 +1854,7 @@ def run_teacher_guided_repair_queue(
                 and not scope_report.get("blocking_missing_node_ids")
                 and not scope_report.get("missing_blocked_edge_ids")
             )
+            join_patch_file = Path(str(scope_report.get("join_nodes_patch_file", "")))
             if replay_edge_map:
                 missing_blocked_edge_ids = [
                     str(edge_id) for edge_id in scope_report.get("missing_blocked_edge_ids", []) or [] if str(edge_id)
@@ -1902,6 +1914,24 @@ def run_teacher_guided_repair_queue(
                         if copyable_missing_blocked_edge_ids
                         else "mapped_by_replay_edge_map"
                     )
+            use_full_network_join_patch_replay = (
+                sequential_accept_passed_variants
+                and join_patch_file.is_file()
+                and not scope_report.get("blocking_missing_node_ids")
+                and not scope_report.get("blocking_missing_blocked_edge_ids")
+                and not scope_report.get("blocking_missing_joined_scope_junction_ids")
+            )
+            if use_full_network_join_patch_replay and joined_scope_junction_id in _plain_node_ids(current_raw_node_file):
+                skipped_candidates.append(
+                    {
+                        "index": index,
+                        "junction_id": junction_id,
+                        "candidate_status": "sequential_candidate_overlap",
+                        "overlap_edge_ids": [],
+                        "overlap_node_ids": [joined_scope_junction_id],
+                    }
+                )
+                continue
             if (
                 scope_report.get("status") == "pass"
                 and (scope_report.get("netconvert") or {}).get("status") == "pass"
@@ -1924,10 +1954,48 @@ def run_teacher_guided_repair_queue(
                     replay_dropped_self_loop_edges = []
                     replay_edge_endpoint_rewrite_count = 0
                     scope_report["replay_scope"] = "full_network"
+                elif use_full_network_join_patch_replay:
+                    replay_node_file = _write_replay_node_file(
+                        current_raw_node_file,
+                        join_patch_file,
+                        output_dir / safe_junction_id / "full_network_join_replay.nod.xml",
+                    )
+                    replay_edge_file = current_raw_edge_file
+                    replay_connection_file = current_raw_connection_file
+                    replay_edge_endpoint_rewrite_count = 0
+                    replay_dropped_self_loop_edges = []
+                    replay_blocking_self_loop_edge_drops = []
+                    replay_candidate_net_file = output_dir / safe_junction_id / "full_network_join_replay.net.xml"
+                    seed_command = [
+                        netconvert_binary,
+                        "--node-files",
+                        _command_path(replay_node_file, output_dir / safe_junction_id),
+                        "--edge-files",
+                        _command_path(replay_edge_file, output_dir / safe_junction_id),
+                        "--connection-files",
+                        _command_path(replay_connection_file, output_dir / safe_junction_id),
+                        "--output-file",
+                        replay_candidate_net_file.name,
+                        "--walkingareas",
+                        "true",
+                        "--tls.ignore-internal-junction-jam",
+                    ]
+                    if current_raw_type_file is not None:
+                        seed_command[5:5] = [
+                            "--type-files",
+                            _command_path(current_raw_type_file, output_dir / safe_junction_id),
+                        ]
+                    seed_report = _command_report(
+                        command_runner(seed_command, cwd=output_dir / safe_junction_id, timeout_seconds=timeout_seconds)
+                    )
+                    scope_report["full_network_join_seed_netconvert"] = seed_report
+                    if seed_report.get("status") != "pass":
+                        scope_report["status"] = "review"
+                    scope_report["replay_scope"] = "full_network_join_patch"
                 else:
                     replay_node_file = _write_replay_node_file(
                         Path(str(scope_report.get("node_file", ""))),
-                        Path(str(scope_report.get("join_nodes_patch_file", ""))),
+                        join_patch_file,
                         output_dir / safe_junction_id / "expanded_scope_replay.nod.xml",
                     )
                     (
@@ -1937,7 +2005,7 @@ def run_teacher_guided_repair_queue(
                         replay_blocking_self_loop_edge_drops,
                     ) = _write_joined_endpoint_edge_file(
                         Path(str(scope_report.get("edge_file", ""))),
-                        Path(str(scope_report.get("join_nodes_patch_file", ""))),
+                        join_patch_file,
                         joined_scope_junction_id,
                         output_dir / safe_junction_id / "expanded_scope_replay.edg.xml",
                     )
@@ -2038,6 +2106,8 @@ def run_teacher_guided_repair_queue(
                         or crossing_edge_overrides_by_junction.get(junction_id)
                         or crossing_edge_overrides_by_junction.get(teacher_junction_id),
                         replay_target_internal_subgraph=replay_target_internal_subgraph,
+                        preserve_teacher_lane_shapes=not use_full_network_join_patch_replay,
+                        emit_teacher_crossings=not use_full_network_join_patch_replay,
                         netconvert_binary=netconvert_binary,
                         sumo_binary=sumo_binary,
                         timeout_seconds=timeout_seconds,
@@ -2048,7 +2118,7 @@ def run_teacher_guided_repair_queue(
                 variant_reports.append(attached_report)
                 final_net_file = Path(str(attached_report.get("final_net_file", "")))
                 if (
-                    use_full_network_replay
+                    (use_full_network_replay or use_full_network_join_patch_replay)
                     and sequential_accept_passed_variants
                     and attached_report.get("status") == "pass"
                     and attached_report.get("parity_gate_status") == "pass"
@@ -2520,9 +2590,11 @@ def _write_joined_endpoint_edge_file(
             continue
         if from_is_join_source:
             edge.set("from", joined_junction_id)
+            edge.attrib.pop("shape", None)
             rewrite_count += 1
         if to_is_join_source:
             edge.set("to", joined_junction_id)
+            edge.attrib.pop("shape", None)
             rewrite_count += 1
     if rewrite_count == 0 and not dropped_self_loop_edges:
         return edge_file, 0, [], []
@@ -2539,6 +2611,17 @@ def _edge_file_ids(edge_file: Path) -> set[str]:
             edge.attrib["id"]
             for edge in ET.parse(edge_file).getroot().findall("edge")
             if edge.attrib.get("id")
+        }
+    except (ET.ParseError, OSError):
+        return set()
+
+
+def _plain_node_ids(node_file: Path) -> set[str]:
+    try:
+        return {
+            node.attrib["id"]
+            for node in ET.parse(node_file).getroot().findall("node")
+            if node.attrib.get("id")
         }
     except (ET.ParseError, OSError):
         return set()
