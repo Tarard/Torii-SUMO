@@ -871,6 +871,43 @@ def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, t
     assert any("structural-only mode" in warning for warning in report["warnings"])
 
 
+def test_reference_join_audit_structural_only_samples_more_than_five_common_tls(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    junctions = "\n".join(
+        f'  <junction id="tls{index}" type="traffic_light" incLanes="edge{index}_0" intLanes=""/>'
+        for index in range(6)
+    )
+    reference.write_text(f"<net>\n{junctions}\n</net>", encoding="utf-8")
+    candidate.write_text(f"<net>\n{junctions}\n</net>", encoding="utf-8")
+    sampled_ids: list[list[str]] = []
+
+    def fake_extract_junction_pattern_index(_net_file: Path, **kwargs):
+        sampled_ids.append(list(kwargs["junction_ids"]))
+        return []
+
+    monkeypatch.setattr(
+        reference_join_audit_module,
+        "extract_junction_pattern_index",
+        fake_extract_junction_pattern_index,
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        prefix="structural",
+        structural_only=True,
+    )
+
+    assert report["status"] == "pass"
+    assert len(sampled_ids[0]) == 6
+    assert not any("sampled 5" in warning for warning in report["warnings"])
+
+
 def test_reference_join_audit_keeps_audit_when_pattern_extraction_fails(tmp_path: Path) -> None:
     reference = tmp_path / "reference.net.xml"
     candidate = tmp_path / "candidate.net.xml"

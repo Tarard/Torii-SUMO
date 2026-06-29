@@ -19,6 +19,9 @@ from .osm_network import _net_xy_to_latlon, _parse_utm_zone, _utm_to_latlon
 from .topology_audit import audit_topology_fragmentation
 
 
+STRUCTURAL_ONLY_PATTERN_SAMPLE_LIMIT = 40
+
+
 def audit_reference_join_patterns(
     *,
     reference_net_file: Path,
@@ -269,7 +272,7 @@ def _structural_only_report(
     pattern_junction_ids, pattern_sample_warning = _structural_only_pattern_junction_ids(
         reference_net_file,
         candidate_net_file,
-        limit=5,
+        limit=STRUCTURAL_ONLY_PATTERN_SAMPLE_LIMIT,
     )
     pattern_warnings = []
     try:
