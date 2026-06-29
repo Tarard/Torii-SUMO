@@ -343,6 +343,10 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
                 tmp_path / "movement_rebuild_best.net.xml"
             ),
             "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count": 4,
+            "final_movement_rebuild_run_status": "pass",
+            "final_movement_rebuild_parity_gate_status": "pass",
+            "final_movement_rebuild_best_variant_file": str(tmp_path / "final_movement_best.net.xml"),
+            "final_movement_rebuild_applied_candidate_count": 1,
             "workflow_review_html_status": "pass",
             "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
             "reference_join_post_teacher_audit_status": "pass",
@@ -372,14 +376,14 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["reference_matched_semantics_workflow"]["claim_status"] == "diagnostic-demo"
     assert report["reference_matched_semantics_workflow"]["batch_repair_tool"] == "sumo_network_teacher_guided_repair_queue"
     assert report["reference_matched_semantics_workflow"]["per_junction_repair_tool"] == "sumo_network_teacher_guided_junction_variant"
-    assert report["reference_matched_semantics_workflow"]["best_variant_file"] == str(tmp_path / "movement_rebuild_best.net.xml")
+    assert report["reference_matched_semantics_workflow"]["best_variant_file"] == str(tmp_path / "final_movement_best.net.xml")
     assert report["reference_matched_semantics_workflow"]["comparison_net_file"] == str(
-        tmp_path / "movement_rebuild_best.net.xml"
+        tmp_path / "final_movement_best.net.xml"
     )
     assert report["reference_matched_semantics_workflow"]["movement_rebuild_best_variant_file"] == str(
-        tmp_path / "movement_rebuild_best.net.xml"
+        tmp_path / "final_movement_best.net.xml"
     )
-    assert report["reference_matched_semantics_workflow"]["movement_rebuild_applied_candidate_count"] == 4
+    assert report["reference_matched_semantics_workflow"]["movement_rebuild_applied_candidate_count"] == 1
     assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["reference_matched_semantics_workflow"]["application_scope"] == "single_best_variant"
     assert report["reference_matched_semantics_workflow"]["applied_candidate_count"] == 1
