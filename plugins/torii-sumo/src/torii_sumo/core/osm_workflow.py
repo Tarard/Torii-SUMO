@@ -2422,6 +2422,29 @@ def run_osm_cleanup_workflow(
                                             )
                                         )
                                         if (
+                                            _int_field(
+                                                post_teacher_tls_connection_repair_reference_delta_report,
+                                                "junction_pattern_mismatch_count",
+                                            )
+                                            > 0
+                                        ):
+                                            post_teacher_tls_connection_repair_movement_rebuild_queue_report = (
+                                                teacher_guided_repair_queue_func(
+                                                    teacher_net_file=reference_net_file,
+                                                    candidate_net_file=connection_repair_variant_file,
+                                                    reference_join_audit_report=(
+                                                        post_teacher_tls_connection_repair_reference_delta_report
+                                                    ),
+                                                    output_dir=output_dir
+                                                    / "post_teacher_tls_connection_repair_movement_rebuild_queue",
+                                                    prefix=(
+                                                        f"{prefix}_post_teacher_tls_connection_repair_"
+                                                        "movement_rebuild"
+                                                    ),
+                                                    max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                                                )
+                                            )
+                                        if (
                                             post_teacher_tls_connection_repair_reference_promotion_report.get("status")
                                             == "pass"
                                         ):
@@ -2434,28 +2457,9 @@ def run_osm_cleanup_workflow(
                                                 )
                                             )
                                             if (
-                                                _int_field(
-                                                    post_teacher_tls_connection_repair_reference_delta_report,
-                                                    "junction_pattern_mismatch_count",
-                                                )
-                                                > 0
+                                                post_teacher_tls_connection_repair_movement_rebuild_queue_report
+                                                is not None
                                             ):
-                                                post_teacher_tls_connection_repair_movement_rebuild_queue_report = (
-                                                    teacher_guided_repair_queue_func(
-                                                        teacher_net_file=reference_net_file,
-                                                        candidate_net_file=connection_repair_variant_file,
-                                                        reference_join_audit_report=(
-                                                            post_teacher_tls_connection_repair_reference_delta_report
-                                                        ),
-                                                        output_dir=output_dir
-                                                        / "post_teacher_tls_connection_repair_movement_rebuild_queue",
-                                                        prefix=(
-                                                            f"{prefix}_post_teacher_tls_connection_repair_"
-                                                            "movement_rebuild"
-                                                        ),
-                                                        max_ready_candidates=teacher_guided_repair_max_ready_candidates,
-                                                    )
-                                                )
                                                 if (
                                                     _int_field(
                                                         post_teacher_tls_connection_repair_movement_rebuild_queue_report,
