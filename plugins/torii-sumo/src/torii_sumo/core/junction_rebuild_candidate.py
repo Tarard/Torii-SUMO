@@ -1716,6 +1716,8 @@ def run_teacher_guided_repair_queue(
                         extract_teacher_junction_model(Path(str(scope_report.get("net_file", ""))), joined_scope_junction_id),
                         teacher_junction_id=teacher_junction_id,
                         candidate_junction_id=joined_scope_junction_id,
+                        drop_endpoint_mismatches=False,
+                        max_bearing_delta=45.0,
                     )
                     if not replay_edge_map:
                         replay_edge_map = _edge_map_from_approach_endpoint_rebuild_plan(
@@ -1742,6 +1744,27 @@ def run_teacher_guided_repair_queue(
                 and not scope_report.get("blocking_missing_node_ids")
                 and not scope_report.get("missing_blocked_edge_ids")
             )
+            if replay_edge_map:
+                missing_blocked_edge_ids = [
+                    str(edge_id) for edge_id in scope_report.get("missing_blocked_edge_ids", []) or [] if str(edge_id)
+                ]
+                resolved_missing_blocked_edge_ids = [
+                    edge_id for edge_id in missing_blocked_edge_ids if edge_id in replay_edge_map
+                ]
+                unresolved_missing_blocked_edge_ids = [
+                    edge_id for edge_id in missing_blocked_edge_ids if edge_id not in replay_edge_map
+                ]
+                scope_report["resolved_missing_blocked_edge_ids"] = resolved_missing_blocked_edge_ids
+                scope_report["unresolved_missing_blocked_edge_ids"] = unresolved_missing_blocked_edge_ids
+                if (
+                    scope_report.get("status") == "review"
+                    and missing_blocked_edge_ids
+                    and not unresolved_missing_blocked_edge_ids
+                    and not scope_report.get("blocking_missing_node_ids")
+                    and not scope_report.get("blocking_missing_joined_scope_junction_ids")
+                ):
+                    scope_report["status"] = "pass"
+                    scope_report["missing_blocked_edge_resolution"] = "mapped_by_replay_edge_map"
             if (
                 scope_report.get("status") == "pass"
                 and (scope_report.get("netconvert") or {}).get("status") == "pass"
@@ -3001,10 +3024,17 @@ def _teacher_candidate_edge_map(
     teacher_junction_id: str = "",
     candidate_junction_id: str = "",
     drop_endpoint_mismatches: bool = True,
+    max_bearing_delta: float = 30.0,
 ) -> dict[str, str]:
     edge_map: dict[str, str] = {}
     for direction in ("incoming", "outgoing"):
-        edge_map.update(match_teacher_approaches(_approaches(teacher_model, direction), _approaches(candidate_model, direction)))
+        edge_map.update(
+            match_teacher_approaches(
+                _approaches(teacher_model, direction),
+                _approaches(candidate_model, direction),
+                max_bearing_delta=max_bearing_delta,
+            )
+        )
     if drop_endpoint_mismatches and teacher_junction_id and candidate_junction_id:
         edge_map = _drop_endpoint_mismatched_edge_map_entries(
             teacher_model,

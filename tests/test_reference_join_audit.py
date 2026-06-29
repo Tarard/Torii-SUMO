@@ -4,6 +4,7 @@ import sys
 import types
 from pathlib import Path
 
+from torii_sumo.core import reference_join_audit as reference_join_audit_module
 from torii_sumo.core.reference_join_audit import _reference_join_cases, audit_reference_join_patterns
 
 
@@ -84,6 +85,117 @@ def test_reference_join_audit_matches_tum_cluster_to_torii_fragment(tmp_path: Pa
     assert Path(report["cases_file"]).is_file()
     assert Path(report["summary_file"]).is_file()
     assert "matched_candidate_internal_edge_count" in Path(report["cases_file"]).read_text(encoding="utf-8").splitlines()[0]
+
+
+def test_reference_join_audit_matches_tum_cluster_by_source_members_without_internal_edges(tmp_path: Path) -> None:
+    reference_net = tmp_path / "tum_reference.net.xml"
+    reference_net.write_text(
+        """<net>
+  <edge id="west" from="w" to="cluster_a_b_c">
+    <lane id="west_0" index="0" length="30" shape="-30,0 0,0"/>
+  </edge>
+  <edge id="east" from="cluster_a_b_c" to="e">
+    <lane id="east_0" index="0" length="30" shape="0,0 30,0"/>
+  </edge>
+  <junction id="w" x="-30" y="0" type="priority"/>
+  <junction id="e" x="30" y="0" type="priority"/>
+  <junction id="cluster_a_b_c" x="0" y="0" type="traffic_light" incLanes="west_0" intLanes=":cluster_a_b_c_0_0" shape="-4,-4 4,-4 4,4 -4,4"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    torii_net = tmp_path / "torii_fragmented.net.xml"
+    torii_net.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="a"><lane id="west_in_0" index="0" length="30" shape="-30,0 0,0"/></edge>
+  <edge id="north_in" from="n" to="b"><lane id="north_in_0" index="0" length="30" shape="0,30 0,0"/></edge>
+  <edge id="east_out" from="c" to="e"><lane id="east_out_0" index="0" length="30" shape="0,0 30,0"/></edge>
+  <junction id="w" x="-30" y="0" type="priority"/>
+  <junction id="n" x="0" y="30" type="priority"/>
+  <junction id="e" x="30" y="0" type="priority"/>
+  <junction id="a" x="0" y="0" type="dead_end"/>
+  <junction id="b" x="40" y="0" type="priority"/>
+  <junction id="c" x="80" y="0" type="dead_end"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference_net,
+        candidate_net_file=torii_net,
+        output_dir=tmp_path / "audit",
+        prefix="case",
+        reference_cluster_prefix="cluster_",
+        candidate_cluster_radius_m=5,
+        match_radius_m=5,
+    )
+
+    assert report["status"] == "pass"
+    assert report["matched_case_count"] == 1
+    case = report["matched_cases"][0]
+    assert case["matched_reference_source_node_ids"] == ["a", "b", "c"]
+    assert case["matched_reference_source_internal_edge_count"] == 0
+    assert case["matched_reference_source_boundary_edge_count"] == 3
+    assert case["matched_candidate_node_ids"] == ["a", "b", "c"]
+    assert case["learned_rule_basis"] == "reference_source_nodes"
+    assert case["learned_rule"] == "tum_like_join_candidate"
+
+
+def test_reference_join_audit_limits_full_pattern_extraction_to_reference_cases(
+    monkeypatch, tmp_path: Path
+) -> None:
+    reference_net = tmp_path / "tum_reference.net.xml"
+    reference_net.write_text(
+        """<net>
+  <edge id="west" from="w" to="cluster_a_b"><lane id="west_0" index="0" shape="-10,0 0,0"/></edge>
+  <junction id="w" x="-10" y="0" type="priority"/>
+  <junction id="cluster_a_b" x="0" y="0" type="traffic_light" incLanes="west_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b"><lane id="ab_0" index="0" shape="0,0 5,0"/></edge>
+  <junction id="a" x="0" y="0" type="priority"/>
+  <junction id="b" x="5" y="0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    calls: list[dict[str, object]] = []
+
+    def fake_extract_junction_pattern_index(net_file: Path, **kwargs):
+        calls.append(
+            {
+                "net_file": Path(net_file).name,
+                "junction_ids": sorted(kwargs.get("junction_ids") or []),
+            }
+        )
+        return []
+
+    monkeypatch.setattr(
+        reference_join_audit_module,
+        "extract_junction_pattern_index",
+        fake_extract_junction_pattern_index,
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "audit",
+        reference_cluster_prefix="cluster_",
+        candidate_cluster_radius_m=20,
+        match_radius_m=20,
+    )
+
+    assert report["status"] == "pass"
+    assert calls == [
+        {"net_file": "tum_reference.net.xml", "junction_ids": ["cluster_a_b"]},
+        {"net_file": "candidate.net.xml", "junction_ids": ["cluster_a_b"]},
+    ]
 
 
 def test_reference_join_cases_use_location_projection_without_sumolib_readnet(monkeypatch, tmp_path: Path) -> None:
