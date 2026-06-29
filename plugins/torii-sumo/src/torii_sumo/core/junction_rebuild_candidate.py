@@ -1094,6 +1094,7 @@ def write_teacher_target_internal_replay_net(
         for edge in candidate_root.findall("edge")
         if edge.attrib.get("id")
     }
+    edge_lane_counts = _net_lane_counts(candidate_root)
     removed_stale_replaced_edge_connections = []
     for connection in list(candidate_root.findall("connection")):
         from_edge_id = connection.attrib.get("from", "")
@@ -1113,7 +1114,11 @@ def write_teacher_target_internal_replay_net(
             and not from_edge_id.startswith(":")
             and not to_edge_id.startswith(":")
             and connection_edge_ids & replaced_boundary_edge_ids
-            and (not shared_endpoint or stale_via)
+            and (
+                not shared_endpoint
+                or stale_via
+                or not _connection_lane_indices_valid(connection, edge_lane_counts)
+            )
         ):
             removed_stale_replaced_edge_connections.append(dict(connection.attrib))
             candidate_root.remove(connection)
@@ -3404,6 +3409,20 @@ def _net_lane_counts(root: ET.Element) -> dict[str, int]:
         if edge_id:
             counts[edge_id] = max(1, len(edge.findall("lane")))
     return counts
+
+
+def _connection_lane_indices_valid(connection: ET.Element, lane_counts: dict[str, int]) -> bool:
+    def _valid(edge_id: str, lane_index: str) -> bool:
+        try:
+            index = int(lane_index or "0")
+        except ValueError:
+            return False
+        return 0 <= index < lane_counts.get(edge_id, 0)
+
+    return _valid(connection.attrib.get("from", ""), connection.attrib.get("fromLane", "0")) and _valid(
+        connection.attrib.get("to", ""),
+        connection.attrib.get("toLane", "0"),
+    )
 
 
 def _command_path(path: Path, cwd: Path) -> str:
