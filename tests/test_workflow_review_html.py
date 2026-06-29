@@ -61,6 +61,32 @@ def test_network_visualization_writes_nonempty_png(tmp_path: Path) -> None:
     assert image.size[1] >= 300
 
 
+def test_network_visualization_skips_out_of_bounds_cluster_points(tmp_path: Path) -> None:
+    from torii_sumo.core.network_visualization import build_network_review_visuals
+
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text(TINY_SUMO_NET, encoding="utf-8")
+    topology = {
+        "suspicious_clusters": [
+            {"cluster_id": "bad", "centroid_x": 1.0e100, "centroid_y": 1.0e100},
+            {"cluster_id": "valid", "centroid_x": 60.0, "centroid_y": 50.0},
+        ]
+    }
+
+    report = build_network_review_visuals(
+        output_dir=tmp_path / "visuals",
+        prefix="review",
+        net_file=net_file,
+        topology_audit_report=topology,
+    )
+
+    assert report["status"] == "pass"
+    assert Path(report["network_overview_png"]).is_file()
+    assert Path(report["problem_overlay_png"]).is_file()
+    assert [cluster["cluster_id"] for cluster in report["cluster_zoom_pngs"]] == ["valid"]
+    assert Path(report["cluster_zoom_pngs"][0]["image_file"]).is_file()
+
+
 def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path) -> None:
     from torii_sumo.core.workflow_review_html import build_workflow_review_html
 
