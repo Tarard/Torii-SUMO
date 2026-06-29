@@ -719,10 +719,20 @@ def export_plain_net_for_teacher_guided_repair(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     plain_prefix, plain_prefix_shortened, plain_prefix_digest = _plain_output_prefix(output_dir, prefix)
+    source_copy = output_dir / "plain_source.net.xml"
+    try:
+        if source_copy.resolve() != net_file.resolve():
+            shutil.copyfile(net_file, source_copy)
+    except OSError as exc:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     command = [
         netconvert_binary,
         "--sumo-net-file",
-        str(net_file),
+        _command_path_for_cwd(source_copy, output_dir),
         "--plain-output-prefix",
         str(plain_prefix),
     ]
@@ -755,6 +765,7 @@ def export_plain_net_for_teacher_guided_repair(
         "status": status,
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "net_file": str(net_file),
+        "plain_source_net_file": str(source_copy),
         "plain_output_prefix": str(plain_prefix),
         "requested_plain_output_prefix": str(output_dir / prefix),
         "plain_output_prefix_shortened": plain_prefix_shortened,

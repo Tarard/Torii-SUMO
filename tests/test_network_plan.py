@@ -683,6 +683,37 @@ def test_export_plain_net_for_teacher_guided_repair_resolves_relative_output_dir
     assert report["raw_node_file"] == str(expected_prefix) + ".nod.xml"
 
 
+def test_export_plain_net_for_teacher_guided_repair_uses_short_source_copy(
+    tmp_path: Path,
+) -> None:
+    long_dir = tmp_path / ("source_" + "x" * 120)
+    net_file = long_dir / ("candidate_" + "y" * 120 + ".net.xml")
+    net_file.parent.mkdir(parents=True)
+    net_file.write_text("<net/>", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    def fake_command(command, **kwargs):
+        calls["command"] = command
+        source_arg = Path(command[2])
+        assert len(str(source_arg)) < 120
+        assert source_arg.name == "plain_source.net.xml"
+        assert (kwargs["cwd"] / source_arg).exists()
+        plain_prefix = Path(command[-1])
+        for suffix in (".nod.xml", ".edg.xml", ".con.xml"):
+            Path(f"{plain_prefix}{suffix}").write_text("<xml/>", encoding="utf-8")
+        return {"status": "pass", "returncode": 0}
+
+    report = export_plain_net_for_teacher_guided_repair(
+        net_file=net_file,
+        output_dir=tmp_path / "plain",
+        prefix="demo",
+        command_runner=fake_command,
+    )
+
+    assert report["status"] == "pass"
+    assert calls["command"][2] == "plain_source.net.xml"
+
+
 def test_export_plain_net_for_teacher_guided_repair_synthesizes_missing_used_edge_types(
     tmp_path: Path,
 ) -> None:
