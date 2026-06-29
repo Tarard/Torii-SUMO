@@ -1926,6 +1926,30 @@ def run_teacher_guided_repair_queue(
                     for edge_id in replay_blocking_self_loop_edge_drops
                     if edge_id in protected_self_loop_edge_ids
                 ]
+                if replay_target_internal_subgraph and replay_blocking_self_loop_edge_drops:
+                    mapped_edge_ids = {str(edge_id) for edge_id in replay_edge_map.values() if str(edge_id)}
+                    surviving_edge_ids = _edge_file_ids(replay_edge_file)
+                    deferred_self_loop_edge_ids = [
+                        edge_id
+                        for edge_id in replay_blocking_self_loop_edge_drops
+                        if edge_id not in mapped_edge_ids
+                        and _join_internal_self_loop_drop_has_witness(
+                            edge_id,
+                            replay_dropped_self_loop_edges,
+                            surviving_edge_ids,
+                        )
+                    ]
+                    if deferred_self_loop_edge_ids:
+                        replay_absorbed_join_internal_edge_ids = [
+                            *replay_absorbed_join_internal_edge_ids,
+                            *deferred_self_loop_edge_ids,
+                        ]
+                        deferred_self_loop_edge_id_set = set(deferred_self_loop_edge_ids)
+                        replay_blocking_self_loop_edge_drops = [
+                            edge_id
+                            for edge_id in replay_blocking_self_loop_edge_drops
+                            if edge_id not in deferred_self_loop_edge_id_set
+                        ]
                 scope_report["replay_node_file"] = str(replay_node_file)
                 scope_report["replay_edge_file"] = str(replay_edge_file)
                 scope_report["replay_edge_endpoint_rewrite_count"] = replay_edge_endpoint_rewrite_count
@@ -2451,6 +2475,36 @@ def _write_joined_endpoint_edge_file(
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(edge_root).write(output_file, encoding="utf-8", xml_declaration=True)
     return output_file, rewrite_count, dropped_self_loop_edges, blocking_self_loop_edge_drops
+
+
+def _edge_file_ids(edge_file: Path) -> set[str]:
+    try:
+        return {
+            edge.attrib["id"]
+            for edge in ET.parse(edge_file).getroot().findall("edge")
+            if edge.attrib.get("id")
+        }
+    except (ET.ParseError, OSError):
+        return set()
+
+
+def _join_internal_self_loop_drop_has_witness(
+    edge_id: str,
+    dropped_edge_ids: list[str],
+    surviving_edge_ids: set[str],
+) -> bool:
+    if _opposite_direction_edge_id(edge_id) in set(dropped_edge_ids):
+        return True
+    edge_family = _edge_family_id(edge_id)
+    return any(_edge_family_id(surviving_edge_id) == edge_family for surviving_edge_id in surviving_edge_ids)
+
+
+def _opposite_direction_edge_id(edge_id: str) -> str:
+    return edge_id[1:] if edge_id.startswith("-") else f"-{edge_id}"
+
+
+def _edge_family_id(edge_id: str) -> str:
+    return edge_id.lstrip("-").split("#", 1)[0]
 
 
 def _edge_drop_requires_review(edge: ET.Element) -> bool:
