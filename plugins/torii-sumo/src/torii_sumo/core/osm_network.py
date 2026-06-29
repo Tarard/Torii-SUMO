@@ -471,6 +471,7 @@ def _netconvert_profile_options(profile: str | None) -> list[str]:
             "--sidewalks.guess.from-permissions",
             "--crossings.guess",
             "--walkingareas",
+            "--tls.guess",
             "--tls.guess-signals",
             "--tls.rebuild",
             "--tls.default-type",

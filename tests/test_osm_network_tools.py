@@ -725,6 +725,7 @@ def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tl
         "--sidewalks.guess.from-permissions",
         "--crossings.guess",
         "--walkingareas",
+        "--tls.guess",
         "--tls.guess-signals",
         "--tls.rebuild",
         "--tls.default-type",
@@ -732,6 +733,7 @@ def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tl
     ]
     for option in report["netconvert_profile_options"]:
         assert option in command
+    assert "--tls.guess.joining" not in command
     assert "--no-turnarounds" not in command
     type_files = command[command.index("--type-files") + 1].split(",")
     assert type_files[:-1] == [
