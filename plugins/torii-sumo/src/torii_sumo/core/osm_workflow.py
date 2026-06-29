@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import gzip
 import hashlib
+import json
 import os
 import shutil
 import xml.etree.ElementTree as ET
@@ -575,13 +576,85 @@ def _teacher_guided_queue_has_replay_candidates(report: Mapping[str, Any] | None
     return _int_field(report, "ready_candidate_count") > 0 or _int_field(report, "expanded_scope_candidate_count") > 0
 
 
+def _filter_teacher_guided_queue_to_mismatch_fields(
+    queue_report: Mapping[str, Any],
+    delta_report: Mapping[str, Any],
+    mismatch_fields: set[str],
+    *,
+    output_dir: Path,
+    prefix: str,
+) -> dict[str, Any]:
+    target_ids = sorted(
+        {
+            str(case.get("junction_id", ""))
+            for case in delta_report.get("junction_pattern_comparisons", []) or []
+            if isinstance(case, Mapping)
+            and {
+                str(field)
+                for field in case.get("mismatch_fields", []) or []
+            }
+            & mismatch_fields
+            and str(case.get("junction_id", ""))
+        }
+    )
+    if not target_ids:
+        return dict(queue_report)
+
+    target_id_set = set(target_ids)
+    candidates = [
+        candidate for candidate in queue_report.get("repair_candidates", []) or [] if isinstance(candidate, Mapping)
+    ]
+    filtered_candidates = [
+        dict(candidate)
+        for candidate in candidates
+        if {str(candidate.get("junction_id", "")), str(candidate.get("reference_id", ""))} & target_id_set
+    ]
+    filtered_report = dict(queue_report)
+    filtered_report["repair_candidates"] = filtered_candidates
+    filtered_report["repair_candidate_count"] = len(filtered_candidates)
+    filtered_report["ready_candidate_count"] = sum(
+        1 for candidate in filtered_candidates if candidate.get("candidate_status") == "ready_for_teacher_guided_variant"
+    )
+    filtered_report["expanded_scope_candidate_count"] = sum(
+        1 for candidate in filtered_candidates if candidate.get("candidate_status") == "needs_expanded_rebuild_scope"
+    )
+    filtered_report["blocked_candidate_count"] = (
+        len(filtered_candidates)
+        - int(filtered_report["ready_candidate_count"])
+        - int(filtered_report["expanded_scope_candidate_count"])
+    )
+    filtered_report["queued_case_count"] = len(filtered_candidates)
+    filtered_report["queue_truncated"] = len(filtered_candidates) < len(candidates)
+    filtered_report["queue_filter_policy"] = "mismatch_fields_only"
+    filtered_report["queue_filter_mismatch_fields"] = sorted(mismatch_fields)
+    filtered_report["queue_filter_target_junction_ids"] = target_ids
+    filtered_report["queue_filter_original_repair_candidate_count"] = len(candidates)
+    filtered_report["queue_filter_source_queue_file"] = str(queue_report.get("queue_file", ""))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    queue_file = output_dir / f"{prefix}_filtered_queue.json"
+    filtered_report["queue_file"] = str(queue_file)
+    filtered_report["queue_csv_file"] = ""
+    queue_file.write_text(json.dumps(filtered_report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return filtered_report
+
+
 def _reference_join_audit_can_seed_teacher_guided_queue(
     report: Mapping[str, Any],
     *,
     structural_only: bool,
 ) -> bool:
     if not structural_only:
-        return True
+        movement_fields = {"movement_signature_counts", "internal_function_counts"}
+        field_counts = report.get("junction_pattern_mismatch_field_counts", {})
+        if isinstance(field_counts, Mapping) and any(
+            int(field_counts.get(field, 0) or 0) > 0 for field in movement_fields
+        ):
+            return True
+        return any(
+            isinstance(comparison, Mapping)
+            and {str(field) for field in comparison.get("mismatch_fields", []) or []} & movement_fields
+            for comparison in report.get("junction_pattern_comparisons", []) or []
+        )
     comparisons = report.get("junction_pattern_comparisons", []) or []
     return any(isinstance(comparison, Mapping) and comparison.get("status") == "fail" for comparison in comparisons)
 
@@ -2472,6 +2545,13 @@ def run_osm_cleanup_workflow(
                 prefix=f"{prefix}_teacher_guided_repair",
                 max_ready_candidates=teacher_guided_repair_max_ready_candidates,
             )
+            teacher_guided_repair_queue_report = _filter_teacher_guided_queue_to_mismatch_fields(
+                teacher_guided_repair_queue_report,
+                reference_join_audit_report,
+                {"movement_signature_counts", "internal_function_counts"},
+                output_dir=output_dir / "teacher_guided_repair_queue",
+                prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
+            )
             if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
                 teacher_guided_plain_export_report = teacher_guided_plain_export_func(
                     net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
@@ -3200,6 +3280,13 @@ def run_osm_cleanup_workflow(
             output_dir=output_dir / "final_movement_rebuild_queue",
             prefix=f"{prefix}_final_movement_rebuild",
             max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+        )
+        final_movement_rebuild_queue_report = _filter_teacher_guided_queue_to_mismatch_fields(
+            final_movement_rebuild_queue_report,
+            final_movement_baseline_report,
+            {"movement_signature_counts", "internal_function_counts"},
+            output_dir=output_dir / "final_movement_rebuild_queue",
+            prefix=f"{prefix}_final_movement_rebuild_movement_mismatches",
         )
         if _teacher_guided_queue_has_replay_candidates(final_movement_rebuild_queue_report):
             (
