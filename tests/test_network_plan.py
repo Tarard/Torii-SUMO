@@ -8,6 +8,7 @@ from torii_sumo.core.osm_workflow import (
     _reference_delta_promotion_decision,
     _teacher_guided_application_stats,
     _teacher_guided_best_variant_file,
+    _teacher_guided_equivalent_approach_edge_map,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
     run_osm_cleanup_workflow,
@@ -126,6 +127,27 @@ def test_teacher_guided_best_variant_file_uses_partial_sequential_composite(tmp_
     )
 
     assert best == composite_net
+
+
+def test_teacher_guided_equivalent_approach_edge_map_collects_passed_replay_maps() -> None:
+    edge_map = _teacher_guided_equivalent_approach_edge_map(
+        {
+            "variant_reports": [
+                {
+                    "status": "fail",
+                    "parity_gate_status": "pass",
+                    "target_internal_replay": {"effective_edge_map": {"ignored": "ignored_candidate"}},
+                },
+                {
+                    "status": "pass",
+                    "parity_gate_status": "pass",
+                    "target_internal_replay": {"effective_edge_map": {"teacher_west": "candidate_west"}},
+                },
+            ]
+        }
+    )
+
+    assert edge_map == {"teacher_west": "candidate_west"}
 
 
 def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp_path: Path) -> None:
@@ -1438,6 +1460,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
                 "network_structural_extra_counts": {"walkingarea_edge_count": 5},
             }
         if kwargs["candidate_net_file"] == post_repair_movement_composite_net:
+            calls["post_repair_movement_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
             return {
                 **base,
                 "summary_file": str(tmp_path / "post_repair_movement_delta.json"),
@@ -1510,7 +1533,15 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
             "pass_candidate_count": 2,
             "composite_applied_candidate_count": 2,
             "composite_net_file": str(composite_net),
-            "variant_reports": [],
+            "variant_reports": [
+                {
+                    "status": "pass",
+                    "parity_gate_status": "pass",
+                    "target_internal_replay": {
+                        "effective_edge_map": {"teacher_west": "candidate_west"}
+                    },
+                }
+            ],
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "warnings": [],
         }
@@ -1633,6 +1664,9 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     )
     assert report["reference_join_post_teacher_audit_status"] == "pass"
     assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 0
+    assert calls["post_repair_movement_equivalent_approach_edge_map"] == {
+        "teacher_west": "candidate_west"
+    }
     assert report["reference_join_post_teacher_junction_pattern_mismatch_field_counts"] == {}
     assert report["reference_join_post_teacher_network_structural_missing_counts"] == {
         "connection_count": 2,

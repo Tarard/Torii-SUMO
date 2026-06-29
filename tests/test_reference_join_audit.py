@@ -466,6 +466,59 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
     assert delta["junction_pattern_comparisons"][0]["teacher"]["control_type"] == "traffic_light"
 
 
+def test_reference_join_audit_accepts_explicit_approach_edge_equivalence(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id="teacher_west" from="w" to="j"><lane id="teacher_west_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_south" from="s" to="j"><lane id="teacher_south_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="teacher_east" from="e" to="j"><lane id="teacher_east_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="teacher_west_out" from="j" to="wo"><lane id="teacher_west_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="teacher_south_out" from="j" to="so"><lane id="teacher_south_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="teacher_east_out" from="j" to="eo"><lane id="teacher_east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="teacher_west_0 teacher_south_0 teacher_east_0" intLanes=""/>
+  <connection from="teacher_west" to="teacher_west_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="r"/>
+  <connection from="teacher_south" to="teacher_south_out" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s"/>
+  <connection from="teacher_east" to="teacher_east_out" fromLane="0" toLane="0" tl="j" linkIndex="2" dir="l"/>
+  <tlLogic id="j" type="static" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="candidate_west" from="w" to="j"><lane id="candidate_west_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="candidate_south" from="s" to="j"><lane id="candidate_south_0" index="0" allow="passenger" shape="0,-10 0,0"/></edge>
+  <edge id="candidate_east" from="e" to="j"><lane id="candidate_east_0" index="0" allow="passenger" shape="10,0 0,0"/></edge>
+  <edge id="candidate_west_out" from="j" to="wo"><lane id="candidate_west_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="candidate_south_out" from="j" to="so"><lane id="candidate_south_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <edge id="candidate_east_out" from="j" to="eo"><lane id="candidate_east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="candidate_west_0 candidate_south_0 candidate_east_0" intLanes=""/>
+  <connection from="candidate_west" to="candidate_west_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="r"/>
+  <connection from="candidate_south" to="candidate_south_out" fromLane="0" toLane="0" tl="j" linkIndex="1" dir="s"/>
+  <connection from="candidate_east" to="candidate_east_out" fromLane="0" toLane="0" tl="j" linkIndex="2" dir="l"/>
+  <tlLogic id="j" type="static" programID="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        structural_only=True,
+        equivalent_approach_edge_map={
+            "teacher_west": "candidate_west",
+            "teacher_south": "candidate_south",
+            "teacher_east": "candidate_east",
+        },
+    )
+
+    assert report["junction_pattern_comparison_status"] == "pass"
+    assert report["junction_pattern_mismatch_count"] == 0
+    assert report["junction_pattern_comparisons"][0]["approach_edge_equivalence_applied"] is True
+
+
 def test_reference_join_audit_structural_only_reports_extra_network_structure(tmp_path: Path) -> None:
     reference = tmp_path / "reference.net.xml"
     candidate = tmp_path / "candidate.net.xml"

@@ -479,7 +479,11 @@ def _bearing_group_count(edges: list[dict[str, Any]], max_delta: float = 20.0) -
     return len(groups) + unknown
 
 
-def compare_junction_pattern_records(teacher: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+def compare_junction_pattern_records(
+    teacher: dict[str, Any],
+    candidate: dict[str, Any],
+    equivalent_approach_edge_map: dict[str, str] | None = None,
+) -> dict[str, Any]:
     fields = [
         "approach_edge_ids",
         "control_type",
@@ -488,12 +492,24 @@ def compare_junction_pattern_records(teacher: dict[str, Any], candidate: dict[st
         "movement_signature_counts",
         "request_bit_lengths_ok",
     ]
-    mismatches = [field for field in fields if teacher.get(field) != candidate.get(field)]
+    equivalent_approach_edge_map = equivalent_approach_edge_map or {}
+    approach_edge_equivalence_applied = False
+    mismatches = []
+    for field in fields:
+        if field == "approach_edge_ids" and equivalent_approach_edge_map:
+            teacher_edges = sorted(equivalent_approach_edge_map.get(edge_id, edge_id) for edge_id in teacher.get(field, []) or [])
+            candidate_edges = sorted(candidate.get(field, []) or [])
+            if teacher_edges == candidate_edges:
+                approach_edge_equivalence_applied = teacher.get(field) != candidate.get(field)
+                continue
+        if teacher.get(field) != candidate.get(field):
+            mismatches.append(field)
     return {
         "status": "fail" if mismatches else "pass",
         "mismatch_fields": mismatches,
         "teacher": {field: teacher.get(field) for field in fields},
         "candidate": {field: candidate.get(field) for field in fields},
+        "approach_edge_equivalence_applied": approach_edge_equivalence_applied,
     }
 
 
