@@ -189,6 +189,7 @@ def _reference_policy_plan(
     movement_layers = sorted(str(item) for item in reference_policy.get("movement_layers", ["passenger", *auxiliary_layers]))
     if "passenger" not in movement_layers:
         movement_layers.insert(0, "passenger")
+    reference_source_way_ids = sorted(str(item) for item in reference_policy.get("reference_source_way_ids", []))
 
     return {
         "status": "pass",
@@ -209,11 +210,14 @@ def _reference_policy_plan(
         "vehicle_core_highway_classes": vehicle_core_highways,
         "reference_visual_detail_highway_classes": visual_detail_highways,
         "reference_visual_detail_only_highway_classes": visual_detail_only_highways,
+        "reference_source_way_ids": reference_source_way_ids,
+        "reference_source_way_id_count": len(reference_source_way_ids),
         "service_passenger_policy": service_passenger_policy
         or str(reference_policy.get("service_passenger_policy", "sumo_default")),
         "cleanup_policy": [
             "derive vehicle road hierarchy from the reference passenger-drivable layer",
             "build a separate reference visual-detail layer for full-reference Netedit comparison",
+            "limit OSM ways to reference source ids when the reference exposes OSM-derived edge ids",
             "record bicycle, pedestrian, and bus layers as auxiliary modal layers",
             "apply reference service-road passenger permissions only when the reference uses them",
         ],

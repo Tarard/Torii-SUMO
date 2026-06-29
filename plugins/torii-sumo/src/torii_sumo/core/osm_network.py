@@ -301,6 +301,7 @@ def filter_osm_by_highways(
     allowed_highways: set[str],
     *,
     bbox: Bbox | None = None,
+    allowed_way_ids: set[str] | None = None,
 ) -> dict[str, int]:
     with _open_xml(source, "rt") as handle:
         root = ET.parse(handle).getroot()
@@ -314,11 +315,15 @@ def filter_osm_by_highways(
     kept_node_refs = set()
     dropped_ways = 0
     dropped_ways_outside_bbox = 0
+    dropped_ways_outside_reference_scope = 0
     dropped_node_refs_outside_bbox = set()
     trimmed_ways = 0
     for way in root.findall("way"):
         highway = _highway_value(way)
         if highway in allowed_highways:
+            if allowed_way_ids is not None and way.attrib.get("id", "") not in allowed_way_ids:
+                dropped_ways_outside_reference_scope += 1
+                continue
             refs = _way_node_refs(way)
             kept_refs = refs if bbox_node_refs is None else [ref for ref in refs if ref in bbox_node_refs]
             if len(kept_refs) < 2:
@@ -378,6 +383,8 @@ def filter_osm_by_highways(
                 "dropped_nodes_outside_bbox": len(dropped_node_refs_outside_bbox),
             }
         )
+    if allowed_way_ids is not None:
+        stats["dropped_ways_outside_reference_scope"] = dropped_ways_outside_reference_scope
     return stats
 
 
@@ -459,6 +466,7 @@ def build_osm_network(
     command_runner: Callable[..., Any] = run_command,
     download_func: Callable[..., bytes] = download_osm,
     netconvert_profile: str | None = "vehicle_core",
+    allowed_way_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     try:
         parsed_bbox = parse_bbox(bbox)
@@ -511,7 +519,13 @@ def build_osm_network(
                     artifacts={"query_file": str(query_file)},
                 )
 
-        filter_stats = filter_osm_by_highways(source_osm, filtered_osm, allowed, bbox=parsed_bbox)
+        filter_stats = filter_osm_by_highways(
+            source_osm,
+            filtered_osm,
+            allowed,
+            bbox=parsed_bbox,
+            allowed_way_ids=allowed_way_ids,
+        )
         command = [
             "netconvert",
             "--osm-files",
@@ -536,6 +550,8 @@ def build_osm_network(
                     f"filtered_osm={filtered_osm}",
                     f"net_file={net_file}",
                     "allowed_highways=" + ",".join(sorted(allowed)),
+                    "allowed_way_ids_count="
+                    + ("not_applied" if allowed_way_ids is None else str(len(allowed_way_ids))),
                     f"overpass_strategy={overpass_report['strategy'] if overpass_report else 'source-osm'}",
                     f"overpass_tile_count={overpass_report['tile_count'] if overpass_report else 0}",
                     f"overpass_retry_count={overpass_report['retry_count'] if overpass_report else 0}",
@@ -574,6 +590,7 @@ def build_osm_network(
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "bbox": bbox,
         "road_classes": sorted(allowed),
+        "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
         "source_osm_file": str(source_osm),
         "filtered_osm_file": str(filtered_osm),
         "net_file": str(net_file),
