@@ -5524,6 +5524,47 @@ def test_write_teacher_target_internal_replay_net_removes_stale_candidate_bounda
     assert report["removed_stale_boundary_edge_connection_count"] == 1
 
 
+def test_write_teacher_target_internal_replay_net_replays_connectionless_boundary_edge(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_out" from="teacher_j" to="teacher_exit" type="cycleway.track|highway.primary"><lane id="teacher_out_0" index="0" shape="10,0 20,0"/></edge>
+  <junction id="teacher_j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_exit" type="priority" x="20" y="0" incLanes="teacher_out_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_short" from="j" to="wrong_exit" type="highway.primary"><lane id="cand_short_0" index="0" shape="10,0 15,0"/></edge>
+  <junction id="j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="wrong_exit" type="priority" x="15" y="0" incLanes="cand_short_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"teacher_out": "cand_short"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    edge = root.find("edge[@id='cand_short']")
+    assert edge.attrib["from"] == "j"
+    assert edge.attrib["to"] == "teacher_exit"
+    assert edge.attrib["type"] == "cycleway.track|highway.primary"
+    assert root.find("junction[@id='teacher_exit']") is not None
+    assert root.find("junction[@id='wrong_exit']").attrib["incLanes"] == ""
+    assert report["copied_boundary_edges"] == ["teacher_out"]
+
+
 def test_write_teacher_target_internal_replay_net_maps_referenced_tls_logic(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(

@@ -911,12 +911,37 @@ def write_teacher_target_internal_replay_net(
         teacher_edges,
         teacher_junction_id,
     )
+    teacher_boundary_edge_ids = list(
+        dict.fromkeys(
+            [
+                *teacher_boundary_edge_ids,
+                *[
+                    edge_id
+                    for edge_id, edge in teacher_edges.items()
+                    if teacher_junction_id in (edge.attrib.get("from"), edge.attrib.get("to"))
+                ],
+            ]
+        )
+    )
     teacher_boundary_edge_id_set = set(teacher_boundary_edge_ids)
     teacher_boundary_mapped_counts = Counter(replay_edge_map.get(edge_id, edge_id) for edge_id in teacher_boundary_edge_ids)
     needed_boundary_edge_ids = list(
         dict.fromkeys(
             [
                 *needed_boundary_edge_ids,
+                *[
+                    edge_id
+                    for edge_id in teacher_boundary_edge_ids
+                    if _teacher_boundary_edge_needs_replay(
+                        teacher_edges[edge_id],
+                        replay_edge_map,
+                        candidate_edges_by_id,
+                        teacher_junction_id,
+                        junction_id,
+                        dx,
+                        dy,
+                    )
+                ],
                 *[
                     edge_id
                     for edge_id in teacher_boundary_edge_ids
@@ -3660,6 +3685,28 @@ def _teacher_boundary_edge_ids_touching_internal_subgraph(
             ):
                 edge_ids.append(edge_id)
     return list(dict.fromkeys(edge_ids))
+
+
+def _teacher_boundary_edge_needs_replay(
+    teacher_edge: ET.Element,
+    edge_map: dict[str, str],
+    candidate_edges_by_id: dict[str, ET.Element],
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+    dx: float,
+    dy: float,
+) -> bool:
+    edge_id = teacher_edge.attrib.get("id", "")
+    mapped_from = candidate_junction_id if teacher_edge.attrib.get("from") == teacher_junction_id else teacher_edge.attrib.get("from", "")
+    mapped_to = candidate_junction_id if teacher_edge.attrib.get("to") == teacher_junction_id else teacher_edge.attrib.get("to", "")
+    candidate_edge = candidate_edges_by_id.get(edge_map.get(edge_id, edge_id))
+    return not (
+        candidate_edge is not None
+        and candidate_edge.attrib.get("from") == mapped_from
+        and candidate_edge.attrib.get("to") == mapped_to
+        and candidate_edge.attrib.get("type", "") == teacher_edge.attrib.get("type", "")
+        and _edge_lane_shapes(candidate_edge) == _translated_edge_lane_shapes(teacher_edge, dx, dy)
+    )
 
 
 def _edge_lane_shapes(edge: ET.Element) -> list[str]:
