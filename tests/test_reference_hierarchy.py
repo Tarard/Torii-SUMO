@@ -123,6 +123,108 @@ def test_reference_hierarchy_audit_passes_when_high_roads_are_aligned(tmp_path: 
     assert report["decision_counts"] == {"aligned": 1}
 
 
+def test_reference_hierarchy_audit_treats_compound_reference_types_as_high_roads(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [
+            (
+                "ref_tertiary_cycle_track",
+                "ra",
+                "rb",
+                "cycleway.track|highway.tertiary",
+                120.0,
+                "0,0 120,0",
+                "Jahnstrasse",
+            )
+        ],
+    )
+    _write_named_net(
+        candidate_net,
+        [
+            (
+                "cand_tertiary",
+                "ca",
+                "cb",
+                "highway.tertiary",
+                118.0,
+                "0,2 118,2",
+                "Jahnstrasse",
+            )
+        ],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="compound_type",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    assert report["status"] == "pass"
+    assert report["reference_high_hierarchy_edge_count"] == 1
+    assert report["decision_counts"] == {"aligned": 1}
+    assert report["type_comparisons"] == [
+        {
+            "edge_type": "highway.tertiary",
+            "reference_count": 1,
+            "candidate_count": 1,
+            "extra_edge_count": 0,
+            "candidate_to_reference_ratio": 1.0,
+            "hierarchy_scope_decision": "reference_aligned",
+        }
+    ]
+
+
+def test_reference_hierarchy_audit_keeps_link_when_reference_has_same_link_type(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [
+            (
+                "ref_link",
+                "ra",
+                "rb",
+                "cycleway.track|highway.primary_link",
+                80.0,
+                "0,0 80,0",
+                "Hindenburgstrasse",
+            )
+        ],
+    )
+    _write_named_net(
+        candidate_net,
+        [
+            (
+                "cand_link",
+                "ca",
+                "cb",
+                "cycleway.track|highway.primary_link",
+                78.0,
+                "0,3 78,3",
+                "Hindenburgstrasse",
+            )
+        ],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="same_link",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    assert report["status"] == "pass"
+    assert report["decision_counts"] == {"aligned": 1}
+    assert report["candidate_cases"][0]["nearest_same_type_reference_edge_id"] == "ref_link"
+
+
 def test_reference_hierarchy_audit_uses_same_road_name_as_corridor_evidence(tmp_path: Path) -> None:
     reference_net = tmp_path / "reference.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
