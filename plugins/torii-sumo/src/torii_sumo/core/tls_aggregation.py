@@ -147,6 +147,54 @@ def build_tls_low_vehicle_control_variant(
     }
 
 
+def build_tls_non_controller_junction_demotion_variant(
+    *,
+    source_net_file: Path,
+    output_dir: Path,
+    prefix: str = "tls_non_controller_junction_demotion",
+) -> dict[str, Any]:
+    if not source_net_file.exists():
+        return _failure(f"net file does not exist: {source_net_file}")
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    variant_file = output_dir / "tls_non_controller_junction_demoted.net.xml"
+    plan_file = output_dir / f"{prefix}_plan.json"
+    variant_file.write_bytes(source_net_file.read_bytes())
+    demotion = _demote_non_controller_traffic_light_junctions(variant_file)
+    if demotion["tls_non_controller_traffic_light_junction_demoted_count"] == 0:
+        return {
+            "status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "tls_non_controller_junction_demotion_status": "not_needed",
+            "tls_non_controller_junction_demotion_variant_file": "",
+            **demotion,
+            "warnings": [],
+        }
+    counts = _tls_counts(variant_file)
+    plan = {
+        "source_net_file": str(source_net_file),
+        "variant_file": str(variant_file),
+        "demotion_policy": (
+            "demote traffic_light junctions whose id is not a tlLogic id and not used as a connection tl id"
+        ),
+        "review_policy": "review-only variant; promote only after SUMO load and reference/map validation",
+        **demotion,
+    }
+    plan_file.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {
+        "status": "pass",
+        "claim_status": "blocked",
+        "tls_non_controller_junction_demotion_status": "variant_created_for_review",
+        "tls_non_controller_junction_demotion_variant_file": str(variant_file),
+        "tls_non_controller_junction_demotion_plan_file": str(plan_file),
+        **demotion,
+        **counts,
+        "warnings": [
+            "Non-controller traffic-light junction demotion requires SUMO load, Netedit, and reference review before adoption"
+        ],
+    }
+
+
 def build_tls_aggregation_variant(
     *,
     net_file: Path,
@@ -652,6 +700,36 @@ def _demote_uncontrolled_tls_artifacts(net_file: Path) -> dict[str, Any]:
         "tls_orphan_traffic_light_junction_demoted_ids": sorted(demoted),
         "tls_uncontrolled_tllogic_removed_count": len(removed_tllogics),
         "tls_uncontrolled_tllogic_removed_ids": sorted(removed_tllogics),
+    }
+
+
+def _demote_non_controller_traffic_light_junctions(net_file: Path) -> dict[str, Any]:
+    tree = ET.parse(net_file)
+    root = tree.getroot()
+    controller_ids = {
+        tl_logic.attrib["id"]
+        for tl_logic in root.findall("tlLogic")
+        if tl_logic.attrib.get("id")
+    }
+    controller_ids.update(
+        connection.attrib["tl"]
+        for connection in root.findall("connection")
+        if connection.attrib.get("tl")
+    )
+
+    demoted = []
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if junction.attrib.get("type") == "traffic_light" and junction_id not in controller_ids:
+            junction.set("type", "priority")
+            demoted.append(junction_id)
+
+    if demoted:
+        ET.indent(root, space="    ")
+        tree.write(net_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "tls_non_controller_traffic_light_junction_demoted_count": len(demoted),
+        "tls_non_controller_traffic_light_junction_demoted_ids": sorted(demoted),
     }
 
 
