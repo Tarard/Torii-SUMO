@@ -2506,6 +2506,15 @@ def test_run_teacher_guided_repair_queue_keeps_direct_missing_pedestrian_boundar
     scope_report = report["expanded_scope_reports"][0]
     assert scope_report["copyable_missing_blocked_edge_ids"] == []
     assert scope_report["blocking_missing_blocked_edge_ids"] == ["teacher_missing"]
+    assert report["skipped_candidates"] == [
+        {
+            "index": 0,
+            "junction_id": "j",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "skip_reason": "missing_blocked_edges_uncopyable",
+            "blocking_missing_blocked_edge_ids": ["teacher_missing"],
+        }
+    ]
 
 
 def test_run_teacher_guided_repair_queue_stops_expanded_scope_after_max_ready_candidates(
@@ -3072,6 +3081,7 @@ def test_run_teacher_guided_repair_queue_blocks_replay_that_would_drop_joined_ve
             "index": 0,
             "junction_id": "j",
             "candidate_status": "unsafe_replay_self_loop_edge_drop",
+            "skip_reason": "protected_self_loop_edge_drop",
             "replay_blocking_self_loop_edge_drops": ["between_join_sources"],
         }
     ]
@@ -3238,6 +3248,7 @@ def test_run_teacher_guided_repair_queue_keeps_singleton_self_loop_drop_for_revi
     assert report["status"] == "blocked"
     assert report["attempted_candidate_count"] == 0
     assert report["skipped_candidates"][0]["candidate_status"] == "unsafe_replay_self_loop_edge_drop"
+    assert report["skipped_candidates"][0]["skip_reason"] == "singleton_or_no_witness_self_loop_drop"
 
 
 def test_target_internal_replay_preserves_replaced_boundary_edge_order(tmp_path: Path) -> None:
@@ -3368,6 +3379,164 @@ def test_run_teacher_guided_repair_queue_skips_review_expanded_scope(tmp_path: P
     assert report["attempted_candidate_count"] == 0
     assert report["skipped_candidate_count"] == 1
     assert report["skipped_candidates"][0]["candidate_status"] == "needs_expanded_rebuild_scope"
+    assert report["skipped_candidates"][0]["skip_reason"] == "edge_map_derivation_gap"
+
+
+def test_run_teacher_guided_repair_queue_labels_expanded_scope_edge_map_derivation_gap(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-10" y="0"/>
+  <node id="j" x="0" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text("<net/>", encoding="utf-8")
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text("<net/>", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "j",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "recommended_action": "rebuild_plain_xml_scope",
+                        "core_junction_id": "j",
+                        "junction_ids": ["j"],
+                        "join_junction_ids": ["j"],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["skipped_candidates"] == [
+        {
+            "index": 0,
+            "junction_id": "j",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "skip_reason": "edge_map_derivation_gap",
+        }
+    ]
+
+
+def test_run_teacher_guided_repair_queue_labels_missing_joined_scope_junction(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="cluster_a_b" x="0" y="0"/>
+  <node id="x" x="-10" y="0"/>
+  <node id="y" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="blocked" from="x" to="y"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text("<net/>", encoding="utf-8")
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text("<net/>", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <junction id="x" type="priority" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="y" type="priority" x="10" y="0" incLanes="blocked_0" intLanes=""/>
+  <edge id="blocked" from="x" to="y"><lane id="blocked_0" index="0"/></edge>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {"teacher_edge": "blocked"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "recommended_action": "rebuild_plain_xml_scope",
+                        "core_junction_id": "cluster_a_b",
+                        "junction_ids": ["a", "b"],
+                        "join_junction_ids": ["a", "b"],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["skipped_candidates"] == [
+        {
+            "index": 0,
+            "junction_id": "cluster_a_b",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "skip_reason": "scope_insufficient_joined_junction_missing",
+            "blocking_missing_joined_scope_junction_ids": ["cluster_a_b"],
+        }
+    ]
 
 
 def test_expanded_scope_reviews_when_joined_junction_missing_from_probe_net(tmp_path: Path) -> None:
