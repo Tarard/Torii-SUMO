@@ -1020,6 +1020,63 @@ def _reference_delta_promotion_decision(
     }
 
 
+def _movement_rebuild_mismatch_score(report: Mapping[str, Any] | None) -> int:
+    if report is None:
+        return 0
+    field_counts = report.get("junction_pattern_mismatch_field_counts", {})
+    if isinstance(field_counts, Mapping) and field_counts:
+        return sum(
+            _intish(field_counts.get(field, 0))
+            for field in ("movement_signature_counts", "internal_function_counts")
+        )
+    return _int_field(report, "junction_pattern_mismatch_count")
+
+
+def _structural_delta_key_count(report: Mapping[str, Any] | None, key: str) -> int:
+    if report is None:
+        return 0
+    total = 0
+    for field in ("network_structural_missing_counts", "network_structural_extra_counts"):
+        counts = report.get(field, {})
+        if isinstance(counts, Mapping):
+            total += _intish(counts.get(key, 0))
+    return total
+
+
+def _movement_rebuild_reference_delta_promotion_decision(
+    *,
+    candidate_delta_report: Mapping[str, Any] | None,
+    baseline_delta_report: Mapping[str, Any] | None,
+    reason: str,
+) -> dict[str, Any]:
+    decision = _reference_delta_promotion_decision(
+        candidate_delta_report=candidate_delta_report,
+        baseline_delta_report=baseline_delta_report,
+        reason=reason,
+    )
+    if decision.get("reason") != "reference_tls_semantic_delta_regressed":
+        return decision
+
+    candidate_movement_score = _movement_rebuild_mismatch_score(candidate_delta_report)
+    baseline_movement_score = _movement_rebuild_mismatch_score(baseline_delta_report)
+    candidate_tls_junction_count = _structural_delta_key_count(candidate_delta_report, "traffic_light_junction_count")
+    baseline_tls_junction_count = _structural_delta_key_count(baseline_delta_report, "traffic_light_junction_count")
+    movement_fields = {
+        "candidate_movement_rebuild_mismatch_score": candidate_movement_score,
+        "baseline_movement_rebuild_mismatch_score": baseline_movement_score,
+        "candidate_traffic_light_junction_delta_count": candidate_tls_junction_count,
+        "baseline_traffic_light_junction_delta_count": baseline_tls_junction_count,
+    }
+    if candidate_movement_score < baseline_movement_score and candidate_tls_junction_count <= baseline_tls_junction_count:
+        return {
+            **decision,
+            **movement_fields,
+            "status": "pass",
+            "reason": reason,
+        }
+    return {**decision, **movement_fields}
+
+
 def _low_vehicle_control_candidate_limits(delta_report: Mapping[str, Any] | None) -> list[dict[str, int | str | None]]:
     if delta_report is None:
         return []
@@ -2909,7 +2966,7 @@ def run_osm_cleanup_workflow(
                                                                 structural_only=True,
                                                                 equivalent_approach_edge_map=followup_edge_map,
                                                             )
-                                                            followup_promotion_report = _reference_delta_promotion_decision(
+                                                            followup_promotion_report = _movement_rebuild_reference_delta_promotion_decision(
                                                                 candidate_delta_report=followup_delta_report,
                                                                 baseline_delta_report=(
                                                                     post_teacher_tls_non_controller_junction_demotion_reference_delta_report

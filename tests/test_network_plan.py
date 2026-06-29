@@ -2198,7 +2198,19 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
             "warnings": [],
         }
 
-    def delta(*, extra_tls_junctions: int, mismatch: int = 0, summary: str) -> dict[str, object]:
+    def delta(
+        *,
+        extra_tls_junctions: int = 0,
+        missing_tls_controlled_connections: int = 0,
+        mismatch: int = 0,
+        summary: str,
+    ) -> dict[str, object]:
+        missing_counts = {}
+        if missing_tls_controlled_connections:
+            missing_counts["tls_controlled_connection_count"] = missing_tls_controlled_connections
+        extra_counts = {}
+        if extra_tls_junctions:
+            extra_counts["traffic_light_junction_count"] = extra_tls_junctions
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -2210,8 +2222,8 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
             "junction_pattern_mismatch_count": mismatch,
             "junction_pattern_mismatch_field_counts": {"movement_signature_counts": mismatch} if mismatch else {},
             "junction_pattern_comparisons": [],
-            "network_structural_missing_counts": {},
-            "network_structural_extra_counts": {"traffic_light_junction_count": extra_tls_junctions},
+            "network_structural_missing_counts": missing_counts,
+            "network_structural_extra_counts": extra_counts,
             "tls_control_review_queue": [],
             "warnings": [],
         }
@@ -2226,7 +2238,10 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
             return delta(extra_tls_junctions=1, mismatch=1, summary="non_controller_demotion_delta.json")
         if candidate == followup_demoted_net:
             calls["followup_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
-            return delta(extra_tls_junctions=0, summary="followup_non_controller_demotion_delta.json")
+            return delta(
+                missing_tls_controlled_connections=24,
+                summary="followup_non_controller_demotion_delta.json",
+            )
         return delta(extra_tls_junctions=6, mismatch=1, summary="initial_delta.json")
 
     def fake_teacher_guided_queue(**kwargs):
@@ -2334,7 +2349,7 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
     assert report["post_teacher_tls_non_controller_junction_demotion_status"] == "pass"
     assert report["post_teacher_tls_non_controller_junction_demotion_sumo_load_status"] == "pass"
     assert report["post_teacher_tls_non_controller_junction_demotion_reference_promotion_status"] == "pass"
-    assert report["post_teacher_tls_non_controller_junction_demotion_reference_tls_semantic_delta_score"] == 0
+    assert report["post_teacher_tls_non_controller_junction_demotion_reference_tls_semantic_delta_score"] == 24
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
