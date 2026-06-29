@@ -376,7 +376,18 @@ def _run_osm_to_sumo(
     inferred = (place_name or "").strip() or infer_place_name(user_request)
     if inferred:
         report["inferred_place_name"] = inferred
-    if not bbox and not inferred and source_osm_path is None:
+
+    network_plan = derive_network_plan(
+        user_request=user_request,
+        highway_classes=highway_classes,
+        traffic_layers=traffic_layers,
+        network_profile=network_profile,
+        reference_net_file=reference_net_file,
+        reference_policy_report=reference_policy_report,
+        service_passenger_policy=service_passenger_policy,
+    )
+    reference_matched_with_net = network_plan.get("network_profile") == "reference_matched" and reference_net_file is not None
+    if not bbox and not inferred and source_osm_path is None and not reference_matched_with_net:
         return _blocked(
             report,
             execution_status="needs_area",
@@ -384,7 +395,7 @@ def _run_osm_to_sumo(
             next_question="Which OSM place name or bbox should Torii use?",
         )
     candidate: dict[str, Any] | None = None
-    if not confirmed_area and not bbox and source_osm_path is None:
+    if not confirmed_area and not bbox and source_osm_path is None and not reference_matched_with_net:
         candidate = place_resolver(inferred)
         report.update(candidate)
         if autonomy_mode != "ask-first":
@@ -404,16 +415,6 @@ def _run_osm_to_sumo(
             report["claim_status"] = "blocked"
             report["next_question"] = "Confirm this OSM area and bbox before network construction?"
             return report
-
-    network_plan = derive_network_plan(
-        user_request=user_request,
-        highway_classes=highway_classes,
-        traffic_layers=traffic_layers,
-        network_profile=network_profile,
-        reference_net_file=reference_net_file,
-        reference_policy_report=reference_policy_report,
-        service_passenger_policy=service_passenger_policy,
-    )
     if network_plan.get("status") == "blocked":
         report.update(network_plan)
         if network_plan.get("network_profile") == "reference_matched":

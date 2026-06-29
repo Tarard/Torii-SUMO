@@ -1109,6 +1109,11 @@ def run_osm_cleanup_workflow(
 
     place_report = None
     reference_bbox_report: dict[str, Any] | None = None
+    if not bbox and source_osm_path is None and reference_net_file is not None:
+        reference_bbox_report = reference_bbox_func(reference_net_file)
+        derived_bbox = str(reference_bbox_report.get("reference_bbox", "")).strip()
+        if reference_bbox_report.get("status") == "pass" and derived_bbox:
+            bbox = derived_bbox
     if cleaned_place_name and not bbox and source_osm_path is None:
         place_report = place_resolver(cleaned_place_name)
         if not confirmed_area:
@@ -1136,11 +1141,6 @@ def run_osm_cleanup_workflow(
                 "warnings": list(place_report.get("warnings", [])) + ["confirmed place_name could not be resolved to a bbox"],
             }
         bbox = resolved_bbox
-    if not bbox and not cleaned_place_name and source_osm_path is None and reference_net_file is not None:
-        reference_bbox_report = reference_bbox_func(reference_net_file)
-        derived_bbox = str(reference_bbox_report.get("reference_bbox", "")).strip()
-        if reference_bbox_report.get("status") == "pass" and derived_bbox:
-            bbox = derived_bbox
     if not bbox:
         reference_bbox_status = (
             str(reference_bbox_report.get("reference_bbox_status", "blocked"))
