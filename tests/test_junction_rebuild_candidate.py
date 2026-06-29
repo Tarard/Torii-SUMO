@@ -1081,6 +1081,50 @@ def test_build_teacher_guided_repair_queue_scopes_missing_joined_candidate_junct
     }
 
 
+def test_build_teacher_guided_repair_queue_marks_no_vehicle_reference_context(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="ped_in" from="p" to="cluster_p_j" type="highway.footway"><lane id="ped_in_0" index="0" allow="pedestrian" shape="-10,0 0,0"/></edge>
+  <edge id=":cluster_p_j_w0" function="walkingarea"><lane id=":cluster_p_j_w0_0" index="0" allow="pedestrian" shape="0,0 1,0"/></edge>
+  <junction id="cluster_p_j" type="dead_end" x="0" y="0" incLanes="ped_in_0" intLanes=""/>
+  <connection from="ped_in" to=":cluster_p_j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <junction id="j1" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_p_j",
+                    "matched_candidate_node_ids": ["j1"],
+                    "learned_rule": "tum_like_join_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert report["ready_candidate_count"] == 0
+    assert report["expanded_scope_candidate_count"] == 0
+    assert report["blocked_candidate_count"] == 1
+    assert candidate["candidate_status"] == "no_vehicle_reference_context"
+    assert candidate["missing_teacher_edge_ids"] == []
+    assert candidate["pedestrian_connection_count"] == 1
+
+
 def test_build_teacher_guided_repair_queue_marks_existing_endpoint_mismatch_as_expanded_scope(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -1766,6 +1810,40 @@ def test_run_teacher_guided_repair_queue_blocks_without_ready_candidates(tmp_pat
     assert report["attempted_candidate_count"] == 0
     assert report["skipped_candidate_count"] == 1
     assert Path(report["run_report_file"]).is_file()
+
+
+def test_run_teacher_guided_repair_queue_labels_no_vehicle_reference_context(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {"junction_id": "ped_context", "candidate_status": "no_vehicle_reference_context", "edge_map": {}},
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+    )
+
+    assert report["status"] == "blocked"
+    assert report["skipped_candidates"] == [
+        {
+            "index": 0,
+            "junction_id": "ped_context",
+            "candidate_status": "no_vehicle_reference_context",
+            "skip_reason": "no_vehicle_reference_context",
+        }
+    ]
 
 
 def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_path: Path) -> None:
