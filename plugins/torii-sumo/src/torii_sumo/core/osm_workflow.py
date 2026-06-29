@@ -547,6 +547,28 @@ def _teacher_guided_parity_gate(report: Mapping[str, Any] | None) -> str:
     return "blocked"
 
 
+def _teacher_guided_junction_parity_gate(
+    report: Mapping[str, Any] | None,
+    semantic_parity_report: Mapping[str, Any] | None,
+) -> str:
+    if (
+        _junction_semantic_gate(
+            semantic_parity_report,
+            {
+                "approach_edge_ids",
+                "control_type",
+                "has_tls",
+                "internal_function_counts",
+                "movement_signature_counts",
+                "request_bit_lengths_ok",
+            },
+        )
+        == "pass"
+    ):
+        return "pass"
+    return _teacher_guided_parity_gate(report)
+
+
 def _teacher_guided_queue_has_replay_candidates(report: Mapping[str, Any] | None) -> bool:
     if report is None:
         return False
@@ -3501,8 +3523,9 @@ def run_osm_cleanup_workflow(
             reference_join_aggregation_gate = "skipped"
         gate_status["reference_join_aggregation"] = reference_join_aggregation_gate
         gate_status["netedit_connection_mode_review"] = "blocked"
-        gate_status["teacher_guided_junction_parity"] = _teacher_guided_parity_gate(
-            teacher_guided_repair_run_report or teacher_guided_plain_export_report or teacher_guided_repair_queue_report
+        gate_status["teacher_guided_junction_parity"] = _teacher_guided_junction_parity_gate(
+            teacher_guided_repair_run_report or teacher_guided_plain_export_report or teacher_guided_repair_queue_report,
+            semantic_parity_report,
         )
     if topology_audit_report is not None:
         gate_status["topology_audit"] = (
