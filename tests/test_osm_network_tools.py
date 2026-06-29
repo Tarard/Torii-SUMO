@@ -670,7 +670,15 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
     ]
 
 
-def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tls_structure(tmp_path: Path) -> None:
+def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tls_structure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    typemap_dir = tmp_path / "sumo_home" / "data" / "typemap"
+    typemap_dir.mkdir(parents=True)
+    for name in ("osmNetconvert.typ.xml", "osmNetconvertBicycle.typ.xml", "osmNetconvertPedestrians.typ.xml"):
+        (typemap_dir / name).write_text("<types/>", encoding="utf-8")
+    monkeypatch.setenv("SUMO_HOME", str(tmp_path / "sumo_home"))
+
     source = tmp_path / "input.osm.xml"
     source.write_text(
         """<osm version="0.6">
@@ -724,6 +732,17 @@ def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tl
     for option in report["netconvert_profile_options"]:
         assert option in command
     assert "--no-turnarounds" not in command
+    type_files = command[command.index("--type-files") + 1].split(",")
+    assert type_files[:-1] == [
+        str(typemap_dir / "osmNetconvert.typ.xml"),
+        str(typemap_dir / "osmNetconvertBicycle.typ.xml"),
+        str(typemap_dir / "osmNetconvertPedestrians.typ.xml"),
+    ]
+    service_type_file = tmp_path / "build" / type_files[-1]
+    assert service_type_file.is_file()
+    service_type_text = service_type_file.read_text(encoding="utf-8")
+    assert 'id="highway.service"' in service_type_text
+    assert 'disallow="pedestrian' in service_type_text
 
 
 def test_build_osm_network_rejects_tum_named_netconvert_profile(tmp_path: Path) -> None:
