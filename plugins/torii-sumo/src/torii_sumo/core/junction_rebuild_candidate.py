@@ -421,7 +421,8 @@ def write_teacher_connection_plan(
 
     incoming = _approach_edges(candidate_model, "incoming")
     outgoing = _approach_edges(candidate_model, "outgoing")
-    candidate_edges_for_cleanup = set(incoming) | set(outgoing)
+    target_incoming_edges = set(incoming)
+    target_outgoing_edges = set(outgoing)
     candidate_lane_counts = _candidate_lane_counts(candidate_model)
     present_candidate_edges: set[str] | None = None
     if candidate_edge_file is not None:
@@ -446,7 +447,8 @@ def write_teacher_connection_plan(
             removed += 1
             continue
         if child.tag == "connection" and (
-            child.attrib.get("from", "") in candidate_edges_for_cleanup or child.attrib.get("to", "") in candidate_edges_for_cleanup
+            child.attrib.get("from", "") in target_incoming_edges
+            and child.attrib.get("to", "") in target_outgoing_edges
         ):
             removed += 1
             continue
@@ -1731,6 +1733,25 @@ def _expanded_scope_skip_entry(
     return entry
 
 
+def _accepted_target_internal_replay_entry(
+    report: dict[str, Any],
+    *,
+    junction_id: str,
+    teacher_junction_id: str,
+) -> dict[str, object] | None:
+    replay = report.get("target_internal_replay", {})
+    if not isinstance(replay, dict) or replay.get("status") != "pass":
+        return None
+    edge_map = _valid_edge_map(replay.get("effective_edge_map", {}))
+    if not edge_map:
+        return None
+    return {
+        "junction_id": junction_id,
+        "teacher_junction_id": teacher_junction_id,
+        "edge_map": edge_map,
+    }
+
+
 def run_teacher_guided_repair_queue(
     *,
     queue_report: dict[str, Any],
@@ -1751,6 +1772,7 @@ def run_teacher_guided_repair_queue(
     variant_builder: Any = build_teacher_guided_junction_variant,
     sequential_accept_passed_variants: bool = False,
     plain_exporter: Any | None = None,
+    final_internal_replay_writer: Any = write_teacher_target_internal_replay_net,
 ) -> dict[str, object]:
     teacher_net_value = queue_report.get("teacher_net_file")
     candidate_net_value = queue_report.get("candidate_net_file")
@@ -1798,6 +1820,7 @@ def run_teacher_guided_repair_queue(
     applied_candidate_node_ids: set[str] = set()
     sequential_blocked_reason = ""
     attempted_ready_count = 0
+    accepted_internal_replays: list[dict[str, object]] = []
     for index, candidate in enumerate(candidates):
         if not isinstance(candidate, dict):
             skipped_candidates.append({"index": index, "candidate_status": "invalid_candidate"})
@@ -2169,6 +2192,13 @@ def run_teacher_guided_repair_queue(
                 ):
                     composite_applied_candidate_count += 1
                     composite_net_file = str(final_net_file)
+                    replay_entry = _accepted_target_internal_replay_entry(
+                        attached_report,
+                        junction_id=joined_scope_junction_id,
+                        teacher_junction_id=teacher_junction_id,
+                    )
+                    if replay_entry is not None:
+                        accepted_internal_replays.append(replay_entry)
                     applied_candidate_edge_ids.update(candidate_edge_ids)
                     applied_candidate_node_ids.update(candidate_node_ids)
                     current_candidate_net_file = final_net_file
@@ -2260,6 +2290,13 @@ def run_teacher_guided_repair_queue(
         ):
             composite_applied_candidate_count += 1
             composite_net_file = str(final_net_file)
+            replay_entry = _accepted_target_internal_replay_entry(
+                attached_report,
+                junction_id=junction_id,
+                teacher_junction_id=teacher_junction_id,
+            )
+            if replay_entry is not None:
+                accepted_internal_replays.append(replay_entry)
             applied_candidate_edge_ids.update(candidate_edge_ids)
             applied_candidate_node_ids.update(candidate_node_ids)
             current_candidate_net_file = final_net_file
@@ -2298,11 +2335,47 @@ def run_teacher_guided_repair_queue(
         if net_file.exists():
             best_expanded_scope_net_file = str(net_file)
             break
+    final_internal_replay_reports = []
+    final_internal_replay_status = "skipped"
+    if (
+        sequential_accept_passed_variants
+        and composite_applied_candidate_count > 0
+        and composite_net_file
+        and Path(composite_net_file).exists()
+        and accepted_internal_replays
+    ):
+        final_internal_replay_status = "pass"
+        current_composite_net_file = Path(composite_net_file)
+        restore_dir = output_dir / "final_internal_replay"
+        restore_dir.mkdir(parents=True, exist_ok=True)
+        for restore_index, replay_entry in enumerate(accepted_internal_replays, start=1):
+            restore_junction_id = str(replay_entry["junction_id"])
+            restore_file = (
+                restore_dir
+                / f"{restore_index:03d}_{_safe_stage_name(restore_junction_id, max_len=32)}_target_internal_replay.net.xml"
+            )
+            replay_report = final_internal_replay_writer(
+                candidate_net_file=current_composite_net_file,
+                teacher_net_file=teacher_net_file,
+                output_file=restore_file,
+                junction_id=restore_junction_id,
+                teacher_junction_id=str(replay_entry["teacher_junction_id"]),
+                edge_map=dict(replay_entry["edge_map"]),
+            )
+            final_internal_replay_reports.append(replay_report)
+            restored_net_file = Path(str(replay_report.get("net_file", "")))
+            if replay_report.get("status") != "pass" or not restored_net_file.exists():
+                final_internal_replay_status = "fail"
+                break
+            current_composite_net_file = restored_net_file
+        if final_internal_replay_status == "pass":
+            composite_net_file = str(current_composite_net_file)
     sequential_composite_ready = (
         sequential_accept_passed_variants
         and composite_applied_candidate_count > 0
         and bool(composite_net_file)
         and Path(composite_net_file).exists()
+        and final_internal_replay_status != "fail"
     )
     if attempted_count == 0:
         status = "blocked"
@@ -2353,6 +2426,11 @@ def run_teacher_guided_repair_queue(
         "sequential_plain_export_reports": sequential_plain_export_reports,
         "composite_applied_candidate_count": composite_applied_candidate_count,
         "composite_net_file": composite_net_file,
+        "final_internal_replay_status": final_internal_replay_status,
+        "final_internal_replay_restored_count": sum(
+            1 for report in final_internal_replay_reports if report.get("status") == "pass"
+        ),
+        "final_internal_replay_reports": final_internal_replay_reports,
         "expanded_scope_reports": expanded_scope_reports,
         "run_report_file": str(run_report_file),
         "variant_reports": variant_reports,

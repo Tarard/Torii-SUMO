@@ -1751,6 +1751,92 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
     assert variant_calls[1]["raw_connection_file"] == Path(plain_export["raw_connection_file"])
 
 
+def test_run_teacher_guided_repair_queue_restores_accepted_internal_replays_after_sequential_plain_roundtrip(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    restore_calls = []
+
+    def fake_variant(**kwargs):
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+            "target_internal_replay": {
+                "status": "pass",
+                "effective_edge_map": {f"teacher_{kwargs['junction_id']}": f"candidate_{kwargs['junction_id']}"},
+            },
+        }
+
+    def fake_plain_exporter(**kwargs):
+        output_dir = kwargs["output_dir"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        prefix = output_dir / kwargs["prefix"]
+        node_file = Path(f"{prefix}.nod.xml")
+        edge_file = Path(f"{prefix}.edg.xml")
+        connection_file = Path(f"{prefix}.con.xml")
+        type_file = Path(f"{prefix}.typ.xml")
+        for path in (node_file, edge_file, connection_file, type_file):
+            path.write_text("<xml/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "raw_node_file": str(node_file),
+            "raw_edge_file": str(edge_file),
+            "raw_connection_file": str(connection_file),
+            "raw_type_file": str(type_file),
+        }
+
+    def fake_restore(**kwargs):
+        restore_calls.append(kwargs)
+        kwargs["output_file"].write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "net_file": str(kwargs["output_file"])}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "j1",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_j1": "candidate_j1"},
+                },
+                {
+                    "junction_id": "j2",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_j2": "candidate_j2"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        plain_exporter=fake_plain_exporter,
+        variant_builder=fake_variant,
+        final_internal_replay_writer=fake_restore,
+    )
+
+    assert [call["junction_id"] for call in restore_calls] == ["j1", "j2"]
+    assert restore_calls[0]["candidate_net_file"] == Path(report["variant_reports"][1]["final_net_file"])
+    assert restore_calls[1]["candidate_net_file"] == restore_calls[0]["output_file"]
+    assert report["final_internal_replay_status"] == "pass"
+    assert report["final_internal_replay_restored_count"] == 2
+    assert report["composite_net_file"] == str(restore_calls[1]["output_file"])
+
+
 def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_parity_failed_candidate(
     tmp_path: Path,
 ) -> None:
@@ -4359,6 +4445,48 @@ def test_write_teacher_connection_plan_preserves_non_target_and_blocks_unlisted_
     assert root.find("crossing").attrib["edges"] == "cand_out"
     assert report["kept_non_target_children"] == 1
     assert report["removed_target_children"] == 2
+
+
+def test_write_teacher_connection_plan_preserves_neighbor_connections_on_shared_boundary_edges(tmp_path: Path) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="prev" to="cand_in" fromLane="0" toLane="0"/>
+  <connection from="cand_in" to="old_out" fromLane="0" toLane="0"/>
+  <connection from="cand_out" to="next" fromLane="0" toLane="0"/>
+</connections>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "vehicle_connections": [{"from": "teacher_in", "to": "teacher_out", "fromLane": "0", "toLane": "0"}],
+        "crossings": [],
+    }
+    candidate_model = {
+        "approaches": {
+            "incoming": [{"edge_id": "cand_in", "lane_count": 1}],
+            "outgoing": [{"edge_id": "cand_out", "lane_count": 1}, {"edge_id": "old_out", "lane_count": 1}],
+        }
+    }
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "teacher.con.xml",
+        junction_id="j",
+        teacher_model=teacher_model,
+        candidate_model=candidate_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    root = ET.parse(report["connection_file"]).getroot()
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [
+        ("prev", "cand_in"),
+        ("cand_out", "next"),
+        ("cand_in", "cand_out"),
+    ]
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("delete")] == [("cand_in", "old_out")]
+    assert report["kept_non_target_children"] == 2
+    assert report["removed_target_children"] == 1
 
 
 def test_write_teacher_connection_plan_marks_teacher_uncontrolled_movements(tmp_path: Path) -> None:
