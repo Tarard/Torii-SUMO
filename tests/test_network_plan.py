@@ -3056,8 +3056,8 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
     assert calls["tls_connection_repair_copy_unmapped_tls"] is False
     assert calls["tls_connection_repair_require_capacity"] is True
     assert calls["tls_connection_repair_pad_capacity"] is True
-    assert calls["tls_connection_repair_add_green"] is False
-    assert calls["tls_connection_repair_add_yellow"] is False
+    assert calls["tls_connection_repair_add_green"] is True
+    assert calls["tls_connection_repair_add_yellow"] is True
     assert calls["repair_tls_delta_candidate_net_file"] == repaired_tls_net_file
     assert calls["repair_tls_delta_structural_only"] is True
     assert calls["reference_join_candidate_net_file"] == repaired_tls_net_file

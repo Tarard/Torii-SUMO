@@ -2368,6 +2368,8 @@ def run_osm_cleanup_workflow(
                         copy_unmapped_tls=False,
                         require_target_link_index_capacity=True,
                         pad_mapped_tllogic_capacity=True,
+                        add_green_phases_for_padded_links=True,
+                        add_yellow_phases_for_generated_green=True,
                     )
                     repair_variant_value = reference_visual_detail_tls_connection_repair_report.get(
                         "variant_file", ""
