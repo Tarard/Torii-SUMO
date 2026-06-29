@@ -268,6 +268,16 @@ def test_reference_join_audit_reports_reusable_junction_patterns(tmp_path: Path)
     templates = json.loads(Path(report["junction_pattern_templates_file"]).read_text(encoding="utf-8"))
     assert templates["reference_templates"] == report["junction_pattern_templates"]
     assert templates["candidate_templates"] == []
+    assert templates["reference_policy_summary"] == {
+        "record_count": 1,
+        "family_counts": {"three_way": 1},
+        "control_counts": {"three_way|right_before_left|no_tls": 1},
+    }
+    assert templates["candidate_policy_summary"] == {
+        "record_count": 0,
+        "family_counts": {},
+        "control_counts": {},
+    }
 
 
 def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path) -> None:

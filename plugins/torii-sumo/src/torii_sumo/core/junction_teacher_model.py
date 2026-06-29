@@ -244,6 +244,29 @@ def summarize_junction_pattern_templates(
     return templates
 
 
+def summarize_junction_pattern_policy(records: list[dict[str, Any]]) -> dict[str, Any]:
+    family_counts = Counter(
+        str(record.get("pattern_family", ""))
+        for record in records
+        if str(record.get("pattern_family", ""))
+    )
+    control_counts = Counter(
+        "|".join(
+            [
+                str(record.get("pattern_family", "")),
+                str(record.get("control_type", "")),
+                "tls" if bool(record.get("has_tls", False)) else "no_tls",
+            ]
+        )
+        for record in records
+    )
+    return {
+        "record_count": len(records),
+        "family_counts": dict(sorted(family_counts.items())),
+        "control_counts": dict(sorted(control_counts.items())),
+    }
+
+
 def extract_junction_pattern_exemplar(net_file: Path, junction_id: str) -> dict[str, Any]:
     model = extract_teacher_junction_model(net_file, junction_id)
     incoming = [edge["edge_id"] for edge in model.get("approaches", {}).get("incoming", [])]

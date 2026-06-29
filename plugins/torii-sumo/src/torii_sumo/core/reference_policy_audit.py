@@ -5,6 +5,11 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
+from .junction_teacher_model import (
+    extract_junction_pattern_index,
+    summarize_junction_pattern_policy,
+    summarize_junction_pattern_templates,
+)
 from .reference_policy import analyze_reference_network_policy
 
 
@@ -37,6 +42,8 @@ def build_reference_policy_report(net_file: Path, cluster_prefix: str = "cluster
         for edge_type, count in policy.get("edge_type_counts", {}).items()
         if edge_type not in passenger_counts
     }
+    junction_pattern_records = extract_junction_pattern_index(net_file)
+    junction_pattern_policy = summarize_junction_pattern_policy(junction_pattern_records)
 
     return {
         **policy,
@@ -48,4 +55,8 @@ def build_reference_policy_report(net_file: Path, cluster_prefix: str = "cluster
         "tls_logic_count": len(root.findall("tlLogic")),
         "top_level_connection_count": top_level_connection_count,
         "support_or_service_type_counts": service_counts,
+        "junction_pattern_record_count": junction_pattern_policy["record_count"],
+        "junction_pattern_family_counts": junction_pattern_policy["family_counts"],
+        "junction_pattern_control_counts": junction_pattern_policy["control_counts"],
+        "junction_pattern_templates": summarize_junction_pattern_templates(junction_pattern_records),
     }
