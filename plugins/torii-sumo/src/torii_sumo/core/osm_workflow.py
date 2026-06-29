@@ -16,6 +16,7 @@ from .junction_aggregation import build_junction_aggregation_variant
 from .junction_rebuild_candidate import (
     build_teacher_guided_repair_queue,
     build_tls_connection_repair_variant,
+    _restore_replayed_geometry_attrs,
     run_teacher_guided_repair_queue,
 )
 from .netedit import launch_netedit
@@ -1075,6 +1076,63 @@ def _movement_rebuild_reference_delta_promotion_decision(
             "reason": reason,
         }
     return {**decision, **movement_fields}
+
+
+def _restore_followup_internal_regressions(
+    *,
+    baseline_delta_report: Mapping[str, Any] | None,
+    followup_delta_report: Mapping[str, Any] | None,
+    baseline_net_file: Path,
+    followup_net_file: Path,
+    output_dir: Path,
+    prefix: str,
+) -> dict[str, Any]:
+    if followup_delta_report is None or followup_delta_report.get("status", "pass") != "pass":
+        return {"status": "skipped", "reason": "followup_delta_not_pass"}
+    baseline_failed = _delta_failed_fields_by_junction(baseline_delta_report)
+    restore_ids = [
+        junction_id
+        for junction_id, fields in _delta_failed_fields_by_junction(followup_delta_report).items()
+        if "internal_function_counts" in fields and "internal_function_counts" not in baseline_failed.get(junction_id, set())
+    ]
+    if not restore_ids:
+        return {"status": "skipped", "reason": "no_internal_regressions", "restored_junction_ids": []}
+    output_dir.mkdir(parents=True, exist_ok=True)
+    restored_net_file = output_dir / f"{prefix}_internal_regressions_restored.net.xml"
+    shutil.copyfile(followup_net_file, restored_net_file)
+    restore_reports = []
+    for junction_id in restore_ids:
+        report = _restore_replayed_geometry_attrs(
+            source_file=baseline_net_file,
+            target_file=restored_net_file,
+            junction_id=junction_id,
+        )
+        restore_reports.append({"junction_id": junction_id, **report})
+        if report.get("status") != "pass":
+            return {
+                "status": "fail",
+                "reason": "internal_regression_restore_failed",
+                "restored_net_file": str(restored_net_file),
+                "restored_junction_ids": restore_ids,
+                "restore_reports": restore_reports,
+            }
+    return {
+        "status": "pass",
+        "reason": "internal_regressions_restored",
+        "restored_net_file": str(restored_net_file),
+        "restored_junction_ids": restore_ids,
+        "restore_reports": restore_reports,
+    }
+
+
+def _delta_failed_fields_by_junction(report: Mapping[str, Any] | None) -> dict[str, set[str]]:
+    if report is None:
+        return {}
+    return {
+        str(case.get("junction_id", "")): {str(field) for field in case.get("mismatch_fields", [])}
+        for case in report.get("junction_pattern_comparisons", []) or []
+        if str(case.get("junction_id", "")) and case.get("mismatch_fields")
+    }
 
 
 def _low_vehicle_control_candidate_limits(delta_report: Mapping[str, Any] | None) -> list[dict[str, int | str | None]]:
@@ -2966,6 +3024,83 @@ def run_osm_cleanup_workflow(
                                                                 structural_only=True,
                                                                 equivalent_approach_edge_map=followup_edge_map,
                                                             )
+                                                            internal_regression_restore_report = (
+                                                                _restore_followup_internal_regressions(
+                                                                    baseline_delta_report=(
+                                                                        post_teacher_tls_non_controller_junction_demotion_reference_delta_report
+                                                                    ),
+                                                                    followup_delta_report=followup_delta_report,
+                                                                    baseline_net_file=non_controller_demotion_variant_file,
+                                                                    followup_net_file=followup_demotion_file,
+                                                                    output_dir=output_dir
+                                                                    / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_internal_regression_restore",
+                                                                    prefix=(
+                                                                        f"{prefix}_post_teacher_tls_non_controller_"
+                                                                        "junction_demotion_movement_rebuild"
+                                                                    ),
+                                                                )
+                                                            )
+                                                            if internal_regression_restore_report.get("status") == "pass":
+                                                                restored_followup_file = Path(
+                                                                    str(
+                                                                        internal_regression_restore_report.get(
+                                                                            "restored_net_file", ""
+                                                                        )
+                                                                    )
+                                                                )
+                                                                restored_sumo_load_report = _sumo_load_net(
+                                                                    restored_followup_file,
+                                                                    output_dir=output_dir
+                                                                    / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_internal_regression_restore_sumo_load",
+                                                                    sumo_binary=sumo_binary,
+                                                                    timeout_seconds=timeout_seconds,
+                                                                    command_runner=command_runner,
+                                                                )
+                                                                if restored_sumo_load_report.get("status") == "pass":
+                                                                    restored_delta_report = reference_join_audit_func(
+                                                                        reference_net_file=reference_net_file,
+                                                                        candidate_net_file=restored_followup_file,
+                                                                        output_dir=output_dir
+                                                                        / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_internal_regression_restore_reference_delta",
+                                                                        prefix=(
+                                                                            f"{prefix}_post_teacher_tls_non_controller_"
+                                                                            "junction_demotion_movement_rebuild_internal_regression_restore_reference_delta"
+                                                                        ),
+                                                                        candidate_cluster_radius_m=topology_cluster_radius_m,
+                                                                        candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                                                        structural_only=True,
+                                                                        equivalent_approach_edge_map=followup_edge_map,
+                                                                    )
+                                                                    restore_promotion_report = _movement_rebuild_reference_delta_promotion_decision(
+                                                                        candidate_delta_report=restored_delta_report,
+                                                                        baseline_delta_report=followup_delta_report,
+                                                                        reason=(
+                                                                            "post_teacher_tls_non_controller_junction_demotion_"
+                                                                            "movement_rebuild_internal_regressions_restored"
+                                                                        ),
+                                                                    )
+                                                                    if restore_promotion_report.get("status") == "pass":
+                                                                        followup_demotion_report = {
+                                                                            **followup_demotion_report,
+                                                                            "tls_non_controller_junction_demotion_variant_file": str(
+                                                                                restored_followup_file
+                                                                            ),
+                                                                            "internal_regression_restore": (
+                                                                                internal_regression_restore_report
+                                                                            ),
+                                                                            "internal_regression_restore_sumo_load": (
+                                                                                restored_sumo_load_report
+                                                                            ),
+                                                                            "internal_regression_restore_reference_delta": (
+                                                                                restored_delta_report
+                                                                            ),
+                                                                            "internal_regression_restore_promotion": (
+                                                                                restore_promotion_report
+                                                                            ),
+                                                                        }
+                                                                        followup_demotion_file = restored_followup_file
+                                                                        followup_sumo_load_report = restored_sumo_load_report
+                                                                        followup_delta_report = restored_delta_report
                                                             followup_promotion_report = _movement_rebuild_reference_delta_promotion_decision(
                                                                 candidate_delta_report=followup_delta_report,
                                                                 baseline_delta_report=(
