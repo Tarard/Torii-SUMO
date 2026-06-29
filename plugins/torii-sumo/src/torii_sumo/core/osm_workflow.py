@@ -2121,6 +2121,7 @@ def run_osm_cleanup_workflow(
                         tls_id_map=tls_id_map,
                         copy_unmapped_tls=False,
                         require_target_link_index_capacity=True,
+                        pad_mapped_tllogic_capacity=True,
                     )
                     repair_variant_value = reference_visual_detail_tls_connection_repair_report.get(
                         "variant_file", ""
