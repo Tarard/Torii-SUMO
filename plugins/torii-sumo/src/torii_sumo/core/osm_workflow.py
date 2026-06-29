@@ -2779,6 +2779,10 @@ def run_osm_cleanup_workflow(
                                                 candidate_cluster_radius_m=topology_cluster_radius_m,
                                                 candidate_min_cluster_nodes=topology_min_cluster_nodes,
                                                 structural_only=True,
+                                                equivalent_approach_edge_map=_teacher_guided_equivalent_approach_edge_map(
+                                                    post_teacher_tls_connection_repair_movement_rebuild_run_report
+                                                    or teacher_guided_repair_run_report
+                                                ),
                                             )
                                         )
                                         post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = (
