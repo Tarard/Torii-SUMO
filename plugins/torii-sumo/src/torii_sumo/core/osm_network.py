@@ -526,6 +526,11 @@ def build_osm_network(
             bbox=parsed_bbox,
             allowed_way_ids=allowed_way_ids,
         )
+        turnaround_options = (
+            []
+            if normalized_profile in {"reference_visual_detail", "reference_matched_visual_detail"}
+            else ["--no-turnarounds"]
+        )
         command = [
             "netconvert",
             "--osm-files",
@@ -533,7 +538,7 @@ def build_osm_network(
             "--output-file",
             _relative_to_root(net_file, root),
             "--proj.utm",
-            "--no-turnarounds",
+            *turnaround_options,
             "--osm.all-attributes",
             "--tls.join",
             "--tls.join-dist",
