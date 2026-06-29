@@ -468,6 +468,7 @@ def _netconvert_profile_options(profile: str | None) -> list[str]:
             "--osm.sidewalks",
             "--osm.crossings",
             "--osm.turn-lanes",
+            "--sidewalks.guess.from-permissions",
             "--crossings.guess",
             "--walkingareas",
             "--tls.guess-signals",
