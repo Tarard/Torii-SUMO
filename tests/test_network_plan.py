@@ -7,6 +7,7 @@ from torii_sumo.core.osm_workflow import (
     _junction_semantic_gate,
     _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
+    _teacher_guided_seed_candidate,
     _reference_join_audit_can_seed_teacher_guided_queue,
     _restore_followup_internal_regressions,
     _filter_teacher_guided_queue_to_mismatch_fields,
@@ -312,6 +313,53 @@ def test_full_reference_join_audit_without_movement_delta_does_not_seed_teacher_
         },
         structural_only=False,
     )
+
+
+def test_teacher_guided_seed_candidate_uses_structural_delta_fallback() -> None:
+    primary = {
+        "audit_mode": "full",
+        "junction_pattern_mismatch_count": 0,
+        "junction_pattern_mismatch_field_counts": {},
+        "junction_pattern_comparisons": [],
+    }
+    structural = {
+        "audit_mode": "structural_only",
+        "junction_pattern_comparisons": [{"junction_id": "1611608462", "status": "fail"}],
+    }
+
+    report, structural_only, requires_promotion, source = _teacher_guided_seed_candidate(
+        primary,
+        primary_structural_only=False,
+        fallback_reports=[("reference_visual_detail_delta", structural)],
+    )
+
+    assert report is structural
+    assert structural_only is True
+    assert requires_promotion is True
+    assert source == "reference_visual_detail_delta"
+
+
+def test_teacher_guided_seed_candidate_keeps_primary_movement_delta() -> None:
+    primary = {
+        "audit_mode": "full",
+        "junction_pattern_mismatch_count": 1,
+        "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
+    }
+    structural = {
+        "audit_mode": "structural_only",
+        "junction_pattern_comparisons": [{"junction_id": "1611608462", "status": "fail"}],
+    }
+
+    report, structural_only, requires_promotion, source = _teacher_guided_seed_candidate(
+        primary,
+        primary_structural_only=False,
+        fallback_reports=[("reference_visual_detail_delta", structural)],
+    )
+
+    assert report is primary
+    assert structural_only is False
+    assert requires_promotion is False
+    assert source == "reference_join_audit"
 
 
 def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp_path: Path) -> None:
