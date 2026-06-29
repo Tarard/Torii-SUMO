@@ -5183,8 +5183,8 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     replayed = tmp_path / "replayed.net.xml"
     replayed.write_text(
         """<net>
-  <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="0,0 10,0" length="10.00"/></edge>
-  <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="10,0 20,0" length="10.00"/></edge>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" speed="8.17" shape="0,0 10,0" length="10.00"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" speed="8.17" shape="10,0 20,0" length="10.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="50,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-1 9,1" outlineShape="8,-1 10,-1 10,1 8,1"/></edge>
   <junction id="j" type="traffic_light" x="10" y="0" shape="9,-1 11,-1 11,1 9,1" incLanes="in_0" intLanes=":j_c0_0">
@@ -5199,8 +5199,8 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     normalized = tmp_path / "normalized.net.xml"
     normalized.write_text(
         """<net>
-  <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="0,0 11,0" length="11.00"/></edge>
-  <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="11,0 20,0" length="9.00"/></edge>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" speed="6.98" shape="0,0 11,0" length="11.00"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" speed="6.98" shape="11,0 20,0" length="9.00"/></edge>
   <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" shape="51,0 60,0"/></edge>
   <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" shape="9,-2 9,2" outlineShape="bad"/></edge>
   <junction id="j" type="traffic_light" x="10" y="0" shape="bad" incLanes="in_0" intLanes=":j_c0_0">
@@ -5222,6 +5222,7 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     root = ET.parse(normalized).getroot()
     assert report["status"] == "pass"
     assert root.find("edge[@id='in']/lane").attrib["shape"] == "0,0 10,0"
+    assert root.find("edge[@id='in']/lane").attrib["speed"] == "8.17"
     assert root.find("edge[@id='out']/lane").attrib["length"] == "10.00"
     assert root.find("edge[@id=':j_c0']/lane").attrib["outlineShape"] == "8,-1 10,-1 10,1 8,1"
     assert root.find("edge[@id='remote']/lane").attrib["shape"] == "51,0 60,0"
@@ -5229,6 +5230,66 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert root.find("junction[@id='j']/request").attrib["response"] == "101"
     assert report["restored_junction_attr_count"] == 1
     assert report["restored_request_count"] == 1
+
+
+def test_restore_replayed_geometry_attrs_restores_missing_internal_subgraph_after_normalize(tmp_path: Path) -> None:
+    replayed = tmp_path / "replayed.net.xml"
+    replayed.write_text(
+        """<net>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="bicycle" speed="5.37" shape="0,0 1,0"/></edge>
+  <edge id=":j_1" function="internal"><lane id=":j_1_0" index="0" allow="bicycle" speed="7.78" shape="1,0 2,0"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" allow="pedestrian" shape="0,1 1,1"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0" intLanes=":j_0_0 :j_1_0 :j_c0_0">
+    <request index="0" response="000" foes="111" cont="0"/>
+  </junction>
+  <junction id=":j_0_0" type="internal" incLanes=":j_0_0" intLanes=":j_1_0 :j_c0_0"/>
+  <junction id=":j_1_0" type="internal" incLanes=":j_1_0" intLanes=":j_c0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0"/>
+  <connection from=":j_0" to=":j_1" fromLane="0" toLane="0" via=":j_1_0"/>
+  <connection from=":j_1" to="out" fromLane="0" toLane="0"/>
+  <connection from="remote" to="far" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    normalized = tmp_path / "normalized.net.xml"
+    normalized.write_text(
+        """<net>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" disallow="pedestrian bicycle" speed="4.00" shape="0,0 0.5,0"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" allow="pedestrian" shape="0,2 1,2"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0" intLanes=":j_0_0 :j_c0_0">
+    <request index="0" response="100" foes="111" cont="1"/>
+  </junction>
+  <junction id=":j_0_0" type="internal" incLanes=":j_0_0" intLanes=":j_c0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0"/>
+  <connection from="remote" to="far" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _restore_replayed_geometry_attrs(
+        source_file=replayed,
+        target_file=normalized,
+        junction_id="j",
+    )
+
+    root = ET.parse(normalized).getroot()
+    restored_lane = root.find("edge[@id=':j_0']/lane")
+    assert report["status"] == "pass"
+    assert restored_lane.attrib["allow"] == "bicycle"
+    assert "disallow" not in restored_lane.attrib
+    assert root.find("edge[@id=':j_1']") is not None
+    assert root.find("junction[@id=':j_1_0']") is not None
+    assert root.find("junction[@id='j']").attrib["intLanes"] == ":j_0_0 :j_1_0 :j_c0_0"
+    assert root.find("connection[@from=':j_0'][@to=':j_1']") is not None
+    assert root.find("connection[@from=':j_1'][@to='out']") is not None
+    assert root.find("connection[@from=':j_0'][@to='out']") is None
+    assert root.find("connection[@from='remote'][@to='far']") is not None
+    assert report["restored_internal_edge_count"] == 3
+    assert report["restored_internal_junction_count"] == 2
+    assert report["restored_connection_count"] == 3
 
 
 def test_write_teacher_target_internal_replay_net_copies_missing_boundary_edge(tmp_path: Path) -> None:
