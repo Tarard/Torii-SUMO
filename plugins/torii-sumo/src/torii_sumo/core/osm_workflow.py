@@ -35,6 +35,7 @@ from .sumo_gui import launch_sumo_gui
 from .tls_aggregation import (
     build_tls_aggregation_variant,
     build_tls_low_vehicle_control_variant,
+    build_tls_non_controller_junction_demotion_variant,
     build_tls_signal_grouping_variant,
 )
 from .topology_audit import audit_topology_fragmentation
@@ -1281,6 +1282,9 @@ def run_osm_cleanup_workflow(
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
     tls_signal_grouping_func: Callable[..., dict[str, Any]] = build_tls_signal_grouping_variant,
     tls_low_vehicle_control_func: Callable[..., dict[str, Any]] = build_tls_low_vehicle_control_variant,
+    tls_non_controller_junction_demotion_func: Callable[
+        ..., dict[str, Any]
+    ] = build_tls_non_controller_junction_demotion_variant,
     tls_connection_repair_func: Callable[..., dict[str, Any]] = build_tls_connection_repair_variant,
     junction_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
     reference_hierarchy_audit_func: Callable[..., dict[str, Any]] = audit_reference_hierarchy,
@@ -1567,6 +1571,13 @@ def run_osm_cleanup_workflow(
     post_teacher_tls_signal_grouping_sumo_load_report: dict[str, Any] | None = None
     post_teacher_tls_signal_grouping_reference_delta_report: dict[str, Any] | None = None
     post_teacher_tls_signal_grouping_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    post_teacher_tls_non_controller_junction_demotion_report: dict[str, Any] | None = None
+    post_teacher_tls_non_controller_junction_demotion_sumo_load_report: dict[str, Any] | None = None
+    post_teacher_tls_non_controller_junction_demotion_reference_delta_report: dict[str, Any] | None = None
+    post_teacher_tls_non_controller_junction_demotion_reference_promotion_report: dict[str, Any] = {
         "status": "skipped",
         "reason": "not_run",
     }
@@ -2698,6 +2709,112 @@ def run_osm_cleanup_workflow(
                                             "status": "blocked",
                                             "reason": "sumo_load_not_pass",
                                         }
+                            non_controller_demotion_baseline_report = reference_join_post_teacher_audit_report
+                            non_controller_demotion_source_net_file = (
+                                reference_visual_detail_comparison_net_file or teacher_guided_repair_best_variant_file
+                            )
+                            non_controller_demotion_extra_counts = (
+                                non_controller_demotion_baseline_report.get("network_structural_extra_counts", {})
+                                if non_controller_demotion_baseline_report is not None
+                                else {}
+                            )
+                            if not isinstance(non_controller_demotion_extra_counts, Mapping):
+                                non_controller_demotion_extra_counts = {}
+                            extra_traffic_light_junctions = int(
+                                non_controller_demotion_extra_counts.get("traffic_light_junction_count", 0) or 0
+                            )
+                            if (
+                                reference_net_file is not None
+                                and non_controller_demotion_baseline_report is not None
+                                and non_controller_demotion_source_net_file is not None
+                                and extra_traffic_light_junctions > 0
+                            ):
+                                non_controller_demotion_output_dir = (
+                                    output_dir / "post_teacher_tls_non_controller_junction_demotion"
+                                )
+                                post_teacher_tls_non_controller_junction_demotion_report = (
+                                    tls_non_controller_junction_demotion_func(
+                                        source_net_file=non_controller_demotion_source_net_file,
+                                        output_dir=non_controller_demotion_output_dir,
+                                        prefix=f"{prefix}_post_teacher_tls_non_controller_junction_demotion",
+                                    )
+                                )
+                                non_controller_demotion_variant_value = (
+                                    post_teacher_tls_non_controller_junction_demotion_report.get(
+                                        "tls_non_controller_junction_demotion_variant_file", ""
+                                    )
+                                )
+                                non_controller_demotion_variant_file = (
+                                    Path(str(non_controller_demotion_variant_value))
+                                    if non_controller_demotion_variant_value
+                                    else None
+                                )
+                                if (
+                                    non_controller_demotion_variant_file is not None
+                                    and non_controller_demotion_variant_file.exists()
+                                ):
+                                    post_teacher_tls_non_controller_junction_demotion_sumo_load_report = _sumo_load_net(
+                                        non_controller_demotion_variant_file,
+                                        output_dir=non_controller_demotion_output_dir,
+                                        sumo_binary=sumo_binary,
+                                        timeout_seconds=timeout_seconds,
+                                        command_runner=command_runner,
+                                    )
+                                    if (
+                                        post_teacher_tls_non_controller_junction_demotion_sumo_load_report.get(
+                                            "status"
+                                        )
+                                        == "pass"
+                                    ):
+                                        post_teacher_tls_non_controller_junction_demotion_reference_delta_report = (
+                                            reference_join_audit_func(
+                                                reference_net_file=reference_net_file,
+                                                candidate_net_file=non_controller_demotion_variant_file,
+                                                output_dir=output_dir
+                                                / "post_teacher_tls_non_controller_junction_demotion_reference_delta",
+                                                prefix=(
+                                                    f"{prefix}_post_teacher_tls_non_controller_junction_demotion_"
+                                                    "reference_delta"
+                                                ),
+                                                candidate_cluster_radius_m=topology_cluster_radius_m,
+                                                candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                                structural_only=True,
+                                            )
+                                        )
+                                        post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = (
+                                            _reference_delta_promotion_decision(
+                                                candidate_delta_report=(
+                                                    post_teacher_tls_non_controller_junction_demotion_reference_delta_report
+                                                ),
+                                                baseline_delta_report=non_controller_demotion_baseline_report,
+                                                reason=(
+                                                    "post_teacher_tls_non_controller_junction_demotion_"
+                                                    "promoted_by_reference_delta"
+                                                ),
+                                            )
+                                        )
+                                        if (
+                                            post_teacher_tls_non_controller_junction_demotion_reference_promotion_report.get(
+                                                "status"
+                                            )
+                                            == "pass"
+                                        ):
+                                            reference_visual_detail_comparison_net_file = (
+                                                non_controller_demotion_variant_file
+                                            )
+                                            reference_visual_detail_comparison_selection_reason = str(
+                                                post_teacher_tls_non_controller_junction_demotion_reference_promotion_report.get(
+                                                    "reason", ""
+                                                )
+                                            )
+                                            reference_join_post_teacher_audit_report = (
+                                                post_teacher_tls_non_controller_junction_demotion_reference_delta_report
+                                            )
+                                    else:
+                                        post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = {
+                                            "status": "blocked",
+                                            "reason": "sumo_load_not_pass",
+                                        }
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
         if (
             run_topology_audit_after_build
@@ -2900,6 +3017,7 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_tls_low_vehicle_control_report or {},
         post_teacher_tls_low_vehicle_control_report or {},
         post_teacher_tls_signal_grouping_report or {},
+        post_teacher_tls_non_controller_junction_demotion_report or {},
         post_teacher_tls_connection_repair_report or {},
         reference_visual_detail_tls_connection_repair_report or {},
         reference_visual_detail_raw_reference_delta_report or {},
@@ -2907,11 +3025,13 @@ def run_osm_cleanup_workflow(
         reference_visual_detail_tls_low_vehicle_control_sumo_load_report or {},
         post_teacher_tls_low_vehicle_control_sumo_load_report or {},
         post_teacher_tls_signal_grouping_sumo_load_report or {},
+        post_teacher_tls_non_controller_junction_demotion_sumo_load_report or {},
         post_teacher_tls_connection_repair_sumo_load_report or {},
         reference_visual_detail_tls_connection_repair_sumo_load_report or {},
         reference_visual_detail_tls_low_vehicle_control_reference_delta_report or {},
         post_teacher_tls_low_vehicle_control_reference_delta_report or {},
         post_teacher_tls_signal_grouping_reference_delta_report or {},
+        post_teacher_tls_non_controller_junction_demotion_reference_delta_report or {},
         post_teacher_tls_connection_repair_reference_delta_report or {},
         post_teacher_tls_connection_repair_movement_rebuild_queue_report or {},
         post_teacher_tls_connection_repair_movement_rebuild_plain_export_report or {},
@@ -3398,6 +3518,36 @@ def run_osm_cleanup_workflow(
         ),
         "post_teacher_tls_signal_grouping_reference_promotion_reason": str(
             post_teacher_tls_signal_grouping_reference_promotion_report.get("reason", "")
+        ),
+        "post_teacher_tls_non_controller_junction_demotion_status": "skipped"
+        if post_teacher_tls_non_controller_junction_demotion_report is None
+        else str(post_teacher_tls_non_controller_junction_demotion_report.get("status", "fail")),
+        "post_teacher_tls_non_controller_junction_demotion_variant_file": ""
+        if post_teacher_tls_non_controller_junction_demotion_report is None
+        else str(
+            post_teacher_tls_non_controller_junction_demotion_report.get(
+                "tls_non_controller_junction_demotion_variant_file", ""
+            )
+        ),
+        "post_teacher_tls_non_controller_traffic_light_junction_demoted_count": 0
+        if post_teacher_tls_non_controller_junction_demotion_report is None
+        else post_teacher_tls_non_controller_junction_demotion_report.get(
+            "tls_non_controller_traffic_light_junction_demoted_count", 0
+        ),
+        "post_teacher_tls_non_controller_junction_demotion_sumo_load_status": "skipped"
+        if post_teacher_tls_non_controller_junction_demotion_sumo_load_report is None
+        else str(post_teacher_tls_non_controller_junction_demotion_sumo_load_report.get("status", "fail")),
+        "post_teacher_tls_non_controller_junction_demotion_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            post_teacher_tls_non_controller_junction_demotion_reference_delta_report
+        ),
+        "post_teacher_tls_non_controller_junction_demotion_reference_delta_file": ""
+        if post_teacher_tls_non_controller_junction_demotion_reference_delta_report is None
+        else str(post_teacher_tls_non_controller_junction_demotion_reference_delta_report.get("summary_file", "")),
+        "post_teacher_tls_non_controller_junction_demotion_reference_promotion_status": str(
+            post_teacher_tls_non_controller_junction_demotion_reference_promotion_report.get("status", "skipped")
+        ),
+        "post_teacher_tls_non_controller_junction_demotion_reference_promotion_reason": str(
+            post_teacher_tls_non_controller_junction_demotion_reference_promotion_report.get("reason", "")
         ),
         "post_teacher_tls_connection_repair_status": "skipped"
         if post_teacher_tls_connection_repair_report is None
@@ -3975,6 +4125,18 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_signal_grouping_reference_delta": post_teacher_tls_signal_grouping_reference_delta_report
         or {},
         "post_teacher_tls_signal_grouping_reference_promotion": post_teacher_tls_signal_grouping_reference_promotion_report,
+        "post_teacher_tls_non_controller_junction_demotion": (
+            post_teacher_tls_non_controller_junction_demotion_report or {}
+        ),
+        "post_teacher_tls_non_controller_junction_demotion_sumo_load": (
+            post_teacher_tls_non_controller_junction_demotion_sumo_load_report or {}
+        ),
+        "post_teacher_tls_non_controller_junction_demotion_reference_delta": (
+            post_teacher_tls_non_controller_junction_demotion_reference_delta_report or {}
+        ),
+        "post_teacher_tls_non_controller_junction_demotion_reference_promotion": (
+            post_teacher_tls_non_controller_junction_demotion_reference_promotion_report
+        ),
         "post_teacher_tls_connection_repair": post_teacher_tls_connection_repair_report or {},
         "post_teacher_tls_connection_repair_sumo_load": post_teacher_tls_connection_repair_sumo_load_report or {},
         "post_teacher_tls_connection_repair_reference_delta": post_teacher_tls_connection_repair_reference_delta_report

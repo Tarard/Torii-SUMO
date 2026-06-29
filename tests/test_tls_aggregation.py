@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.tls_aggregation import (
     build_tls_aggregation_variant,
     build_tls_low_vehicle_control_variant,
+    build_tls_non_controller_junction_demotion_variant,
     build_tls_signal_grouping_variant,
 )
 
@@ -183,6 +184,39 @@ def test_build_tls_aggregation_variant_demotes_traffic_light_junctions_without_c
     assert report["tls_uncontrolled_tllogic_removed_count"] == 1
     assert report["tls_aggregated_traffic_light_junction_count"] == 1
     assert report["tls_aggregated_tl_logic_count"] == 1
+
+
+def test_build_tls_non_controller_junction_demotion_variant_preserves_shared_controller_links(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text(
+        """<net>
+  <junction id="main" type="traffic_light"/>
+  <junction id="secondary" type="traffic_light"/>
+  <edge id=":secondary_0" function="internal"><lane id=":secondary_0_0" index="0"/></edge>
+  <tlLogic id="main" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="main" linkIndex="0" via=":secondary_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_tls_non_controller_junction_demotion_variant(
+        source_net_file=net_file,
+        output_dir=tmp_path / "non_controller",
+    )
+
+    root = ET.parse(report["tls_non_controller_junction_demotion_variant_file"]).getroot()
+    controlled_connection = root.find("connection[@from='a']")
+
+    assert report["status"] == "pass"
+    assert report["tls_non_controller_traffic_light_junction_demoted_count"] == 1
+    assert report["tls_non_controller_traffic_light_junction_demoted_ids"] == ["secondary"]
+    assert root.find("junction[@id='main']").attrib["type"] == "traffic_light"
+    assert root.find("junction[@id='secondary']").attrib["type"] == "priority"
+    assert root.find("tlLogic[@id='main']") is not None
+    assert controlled_connection.attrib["tl"] == "main"
+    assert controlled_connection.attrib["linkIndex"] == "0"
 
 
 def test_build_tls_low_vehicle_control_variant_demotes_review_queue_entries(tmp_path: Path) -> None:
