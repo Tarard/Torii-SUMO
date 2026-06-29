@@ -722,6 +722,7 @@ def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tl
         "--osm.sidewalks",
         "--osm.crossings",
         "--osm.turn-lanes",
+        "--sidewalks.guess.from-permissions",
         "--crossings.guess",
         "--walkingareas",
         "--tls.guess-signals",
