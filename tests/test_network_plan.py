@@ -2217,6 +2217,7 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
         if candidate == teacher_guided_net:
             return delta(extra_tls_junctions=5, summary="post_teacher_delta.json")
         if candidate == demoted_net:
+            calls["non_controller_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
             return delta(extra_tls_junctions=1, summary="non_controller_demotion_delta.json")
         return delta(extra_tls_junctions=6, mismatch=1, summary="initial_delta.json")
 
@@ -2246,7 +2247,15 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
             "composite_applied_candidate_count": 1,
             "composite_net_file": str(write_net(teacher_guided_net)),
             "run_report_file": str(tmp_path / "teacher_run.json"),
-            "variant_reports": [],
+            "variant_reports": [
+                {
+                    "status": "pass",
+                    "parity_gate_status": "pass",
+                    "target_internal_replay": {
+                        "effective_edge_map": {"teacher_edge": "candidate_edge"}
+                    },
+                }
+            ],
         }
 
     def fake_non_controller_demotion(**kwargs):
@@ -2295,6 +2304,7 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
     )
 
     assert calls["non_controller_source_net_file"] == teacher_guided_net
+    assert calls["non_controller_equivalent_approach_edge_map"] == {"teacher_edge": "candidate_edge"}
     assert demoted_net in calls["reference_join_candidate_net_files"]
     assert report["reference_visual_detail_comparison_net_file"] == str(demoted_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
