@@ -1318,9 +1318,11 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     post_repair_movement_composite_net = tmp_path / "post_repair_movement_composite.net.xml"
     calls: dict[str, object] = {
         "reference_join_candidate_net_files": [],
+        "reference_hierarchy_candidate_net_files": [],
         "teacher_guided_queue_calls": [],
         "teacher_guided_queue_reports": [],
         "teacher_guided_run_calls": [],
+        "topology_net_files": [],
     }
 
     def fake_build(**kwargs):
@@ -1559,6 +1561,19 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
             "warnings": [],
         }
 
+    def fake_topology_audit(**kwargs):
+        calls["topology_net_files"].append(kwargs["net_file"])
+        return {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []}
+
+    def fake_reference_hierarchy_audit(**kwargs):
+        calls["reference_hierarchy_candidate_net_files"].append(kwargs["candidate_net_file"])
+        return {
+            "status": "pass",
+            "reference_hierarchy_status": "pass",
+            "high_hierarchy_issue_count": 0,
+            "warnings": [],
+        }
+
     def fake_low_vehicle_control(**kwargs):
         calls["post_teacher_low_vehicle_source_net_file"] = kwargs["source_net_file"]
         calls["post_teacher_low_vehicle_queue_count"] = len(kwargs["tls_control_review_queue"])
@@ -1615,12 +1630,13 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {"status": "pass", "tls_candidate_count": 0, "warnings": []},
         connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "passenger_edge_count": 1},
-        topology_audit_func=lambda **_kwargs: {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []},
+        topology_audit_func=fake_topology_audit,
         routeability_audit_func=lambda **_kwargs: {"status": "pass", "routeability_status": "pass", "warnings": []},
         netedit_func=lambda _path: {"status": "blocked", "netedit_status": "skipped", "warnings": []},
         sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "skipped", "warnings": []},
         reference_join_audit_func=fake_reference_join_audit,
         reference_join_aggregation_func=lambda **_kwargs: {"status": "blocked", "warnings": []},
+        reference_hierarchy_audit_func=fake_reference_hierarchy_audit,
         teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
         teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
         teacher_guided_repair_run_func=fake_teacher_guided_repair_run,
@@ -1659,6 +1675,8 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert calls["post_teacher_tls_connection_repair_source_net_file"] == reference_net_file
     assert calls["post_teacher_tls_connection_repair_candidate_net_file"] == signal_grouped_net
     assert calls["post_teacher_tls_connection_repair_copy_unmapped_tls"] is True
+    assert calls["topology_net_files"][-1] == post_repair_movement_composite_net
+    assert calls["reference_hierarchy_candidate_net_files"][-1] == post_repair_movement_composite_net
     assert len(calls["teacher_guided_queue_calls"]) == 2
     assert len(calls["teacher_guided_queue_reports"]) == 2
     assert len(calls["teacher_guided_run_calls"]) == 2
