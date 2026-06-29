@@ -58,6 +58,26 @@ def _write_reference_net(path: Path) -> None:
     )
 
 
+def _write_osm_highways(path: Path, highways: list[str]) -> None:
+    nodes = "\n".join(
+        f'    <node id="{index}" lat="48.{index:06d}" lon="11.{index:06d}"/>'
+        for index in range(1, len(highways) * 2 + 1)
+    )
+    ways = []
+    for index, highway in enumerate(highways, start=1):
+        start = index * 2 - 1
+        end = index * 2
+        ways.append(
+            f"""    <way id="{1000 + index}">
+        <nd ref="{start}"/>
+        <nd ref="{end}"/>
+        <tag k="highway" v="{highway}"/>
+    </way>"""
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"<osm>\n{nodes}\n{chr(10).join(ways)}\n</osm>", encoding="utf-8")
+
+
 def test_teacher_guided_application_stats_reports_single_variant_scope(tmp_path: Path) -> None:
     best_net = tmp_path / "candidate_001_teacher_guided.net.xml"
     best_net.write_text("<net/>", encoding="utf-8")
@@ -670,7 +690,8 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
     net_file = tmp_path / "sumo" / "reference-matched.net.xml"
-    filtered_osm = tmp_path / "osm" / "reference-matched_filtered.osm.xml.gz"
+    raw_osm = tmp_path / "osm" / "reference-matched_bbox.osm.xml"
+    filtered_osm = tmp_path / "osm" / "reference-matched_filtered.osm.xml"
     build_calls: list[dict[str, object]] = []
 
     def fake_build(**kwargs):
@@ -698,6 +719,7 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     </edge>
 </net>"""
         current_net_file.write_text(net_xml, encoding="utf-8")
+        _write_osm_highways(raw_osm, ["primary", "residential", "service", "cycleway", "footway", "path"])
         filtered_osm.write_text("<osm/>", encoding="utf-8")
         return {
             "status": "pass",
@@ -705,7 +727,7 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
             "bbox": kwargs["bbox"],
             "net_file": str(current_net_file),
             "filtered_osm_file": str(filtered_osm),
-            "source_osm_file": str(filtered_osm),
+            "source_osm_file": str(raw_osm),
             "road_classes": sorted(kwargs["allowed_highways"]),
             "warnings": [],
         }
@@ -779,7 +801,7 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     assert "footway" not in build_calls[0]["allowed_highways"]
     assert "path" not in build_calls[0]["allowed_highways"]
     assert {"cycleway", "footway", "path"} <= build_calls[1]["allowed_highways"]
-    assert build_calls[1]["source_osm_path"] == filtered_osm
+    assert build_calls[1]["source_osm_path"] == raw_osm
     assert service_lane is None
     assert "passenger" in visual_service_lane.attrib["allow"].split()
     assert report["service_passenger_permissions"]["changed_lane_count"] == 0
@@ -877,6 +899,110 @@ def test_reference_matched_workflow_passes_reference_source_way_scope_to_build(t
     assert build_calls[0]["allowed_way_ids"] == {"101", "202", "303"}
     assert build_calls[1]["allowed_way_ids"] == {"101", "202", "303"}
     assert report["reference_source_way_id_count"] == 3
+
+
+def test_reference_visual_detail_redownloads_when_vehicle_core_source_lacks_visual_classes(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    vehicle_only_source = tmp_path / "osm" / "vehicle_core_filtered.osm.xml"
+    _write_osm_highways(vehicle_only_source, ["primary", "residential"])
+    build_calls: list[dict[str, object]] = []
+
+    def fake_build(**kwargs):
+        build_calls.append(
+            {
+                "prefix": kwargs["prefix"],
+                "source_osm_path": kwargs.get("source_osm_path"),
+                "allowed_highways": set(kwargs["allowed_highways"]),
+            }
+        )
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        if "service" in kwargs["allowed_highways"]:
+            current_net_file.write_text(
+                """<net>
+    <edge id="service_a" type="highway.service">
+        <lane id="service_a_0" index="0" allow="passenger pedestrian" speed="5.0" length="25.0"/>
+    </edge>
+</net>""",
+                encoding="utf-8",
+            )
+        else:
+            current_net_file.write_text(
+                """<net>
+    <edge id="primary_a" type="highway.primary">
+        <lane id="primary_a_0" index="0" allow="passenger" speed="13.9" length="25.0"/>
+    </edge>
+</net>""",
+                encoding="utf-8",
+            )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(vehicle_only_source),
+            "source_osm_file": str(kwargs.get("source_osm_path") or vehicle_only_source),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-matched",
+        source_osm_path=vehicle_only_source,
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 1,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 1,
+            "warnings": [],
+        },
+        topology_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "topology_fragmentation_status": "pass",
+            "warnings": [],
+        },
+        routeability_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+    )
+
+    assert report["status"] == "pass"
+    assert len(build_calls) == 2
+    assert build_calls[0]["source_osm_path"] == vehicle_only_source
+    assert {"service", "footway", "path"} <= build_calls[1]["allowed_highways"]
+    assert build_calls[1]["source_osm_path"] is None
 
 
 def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer(tmp_path: Path) -> None:
