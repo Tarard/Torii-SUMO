@@ -2083,11 +2083,13 @@ def run_teacher_guided_repair_queue(
                 )
             continue
         if candidate.get("candidate_status") != "ready_for_teacher_guided_variant" or not junction_id:
+            candidate_status = str(candidate.get("candidate_status", "skipped"))
             skipped_candidates.append(
                 {
                     "index": index,
                     "junction_id": junction_id,
-                    "candidate_status": candidate.get("candidate_status", "skipped"),
+                    "candidate_status": candidate_status,
+                    **({"skip_reason": candidate_status} if candidate_status == "no_vehicle_reference_context" else {}),
                 }
             )
             continue
@@ -3054,6 +3056,19 @@ def _teacher_guided_repair_candidate(
             "edge_map": {},
             "missing_teacher_edge_ids": [],
             "error": f"{type(exc).__name__}: {exc}",
+        }
+    teacher_summary = teacher_model.get("summary", {}) if isinstance(teacher_model.get("summary"), dict) else {}
+    if not any(
+        int(teacher_summary.get(field, 0) or 0)
+        for field in ("incoming_vehicle_edge_count", "outgoing_vehicle_edge_count", "vehicle_connection_count")
+    ):
+        return {
+            **base,
+            "candidate_status": "no_vehicle_reference_context",
+            "edge_map": {},
+            "missing_teacher_edge_ids": [],
+            "pedestrian_connection_count": int(teacher_summary.get("pedestrian_connection_count", 0) or 0),
+            "walkingarea_count": int(teacher_summary.get("walkingarea_count", 0) or 0),
         }
     candidate_model = None
     candidate_error = None
