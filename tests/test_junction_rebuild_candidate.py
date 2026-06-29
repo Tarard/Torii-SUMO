@@ -1081,6 +1081,94 @@ def test_build_teacher_guided_repair_queue_scopes_missing_joined_candidate_junct
     }
 
 
+def test_build_teacher_guided_repair_queue_uses_conservative_join_subset_for_single_source_match(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="cluster_j"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="cluster_j" to="b"><lane id="teacher_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="cluster_j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <junction id="first" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="matched" type="priority" x="1" y="0" incLanes="" intLanes=""/>
+  <junction id="extra" type="priority" x="2" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_j",
+                    "matched_candidate_node_ids": ["first", "matched", "extra"],
+                    "matched_reference_source_node_ids": ["matched"],
+                    "learned_rule": "tum_like_join_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    scope = report["repair_candidates"][0]["expanded_rebuild_scope"]
+    assert scope["junction_ids"] == ["extra", "first", "matched"]
+    assert scope["join_junction_ids"] == ["first", "matched"]
+
+
+def test_build_teacher_guided_repair_queue_uses_first_pair_when_no_source_match(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="cluster_j"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="cluster_j" to="b"><lane id="teacher_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="cluster_j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <junction id="a1" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="a2" type="priority" x="1" y="0" incLanes="" intLanes=""/>
+  <junction id="a3" type="priority" x="2" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_j",
+                    "matched_candidate_node_ids": ["a1", "a2", "a3"],
+                    "matched_reference_source_node_ids": ["missing_ref_node"],
+                    "learned_rule": "tum_like_join_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    scope = report["repair_candidates"][0]["expanded_rebuild_scope"]
+    assert scope["junction_ids"] == ["a1", "a2", "a3"]
+    assert scope["join_junction_ids"] == ["a1", "a2"]
+
+
 def test_build_teacher_guided_repair_queue_marks_no_vehicle_reference_context(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
