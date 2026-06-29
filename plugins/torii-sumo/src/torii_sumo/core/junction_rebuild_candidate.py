@@ -906,21 +906,11 @@ def write_teacher_target_internal_replay_net(
         dx,
         dy,
     )
-    teacher_boundary_edge_ids = []
-    for connection in teacher_root.findall("connection"):
-        if not _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id):
-            continue
-        for attr in ("from", "to"):
-            edge_id = connection.attrib.get(attr, "")
-            teacher_edge = teacher_edges.get(edge_id)
-            if (
-                edge_id
-                and not edge_id.startswith(teacher_internal_prefix)
-                and teacher_edge is not None
-                and teacher_junction_id in (teacher_edge.attrib.get("from"), teacher_edge.attrib.get("to"))
-            ):
-                teacher_boundary_edge_ids.append(edge_id)
-    teacher_boundary_edge_ids = list(dict.fromkeys(teacher_boundary_edge_ids))
+    teacher_boundary_edge_ids = _teacher_boundary_edge_ids_touching_internal_subgraph(
+        teacher_root.findall("connection"),
+        teacher_edges,
+        teacher_junction_id,
+    )
     teacher_boundary_edge_id_set = set(teacher_boundary_edge_ids)
     teacher_boundary_mapped_counts = Counter(replay_edge_map.get(edge_id, edge_id) for edge_id in teacher_boundary_edge_ids)
     needed_boundary_edge_ids = list(
@@ -1006,6 +996,36 @@ def write_teacher_target_internal_replay_net(
         replay_edge_map[edge_id] = copied_edge_id
         _append_edge_lanes_to_destination_junction(candidate_root, copied_edge)
         copied_boundary_edges.append(edge_id)
+
+    removed_stale_boundary_edges = []
+    if teacher_boundary_edge_ids:
+        expected_boundary_edge_ids = {
+            replay_edge_map.get(edge_id, edge_id)
+            for edge_id in teacher_boundary_edge_ids
+            if replay_edge_map.get(edge_id, edge_id)
+        }
+        for edge in list(candidate_root.findall("edge")):
+            edge_id = edge.attrib.get("id", "")
+            if (
+                not edge_id
+                or edge_id in expected_boundary_edge_ids
+                or edge_id.startswith(":")
+                or edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}
+                or junction_id not in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+            ):
+                continue
+            _remove_edge_lanes_from_destination_junction(candidate_root, edge)
+            candidate_root.remove(edge)
+            candidate_edge_ids.discard(edge_id)
+            candidate_edges_by_id.pop(edge_id, None)
+            removed_stale_boundary_edges.append(edge_id)
+    removed_stale_boundary_edge_connections = []
+    if removed_stale_boundary_edges:
+        removed_stale_boundary_edge_id_set = set(removed_stale_boundary_edges)
+        for connection in list(candidate_root.findall("connection")):
+            if {connection.attrib.get("from", ""), connection.attrib.get("to", "")} & removed_stale_boundary_edge_id_set:
+                removed_stale_boundary_edge_connections.append(dict(connection.attrib))
+                candidate_root.remove(connection)
 
     for offset, edge in enumerate(teacher_internal_edges):
         candidate_root.insert(
@@ -1137,6 +1157,10 @@ def write_teacher_target_internal_replay_net(
         "copied_boundary_edges": copied_boundary_edges,
         "preserved_colliding_boundary_edge_count": len(preserved_colliding_boundary_edges),
         "preserved_colliding_boundary_edges": preserved_colliding_boundary_edges,
+        "removed_stale_boundary_edge_count": len(removed_stale_boundary_edges),
+        "removed_stale_boundary_edges": removed_stale_boundary_edges,
+        "removed_stale_boundary_edge_connection_count": len(removed_stale_boundary_edge_connections),
+        "removed_stale_boundary_edge_connections": removed_stale_boundary_edge_connections,
         "removed_stale_replaced_edge_connection_count": len(removed_stale_replaced_edge_connections),
         "removed_stale_replaced_edge_connections": removed_stale_replaced_edge_connections,
         "copied_boundary_junction_count": len(copied_boundary_junctions),
@@ -1754,17 +1778,49 @@ def run_teacher_guided_repair_queue(
                 unresolved_missing_blocked_edge_ids = [
                     edge_id for edge_id in missing_blocked_edge_ids if edge_id not in replay_edge_map
                 ]
+                copyable_missing_blocked_edge_ids: list[str] = []
+                if unresolved_missing_blocked_edge_ids:
+                    try:
+                        teacher_root = ET.parse(teacher_net_file).getroot()
+                        teacher_edges = {
+                            edge.attrib["id"]: edge for edge in teacher_root.findall("edge") if edge.attrib.get("id")
+                        }
+                        teacher_boundary_edge_ids = set(
+                            _teacher_boundary_edge_ids_touching_internal_subgraph(
+                                teacher_root.findall("connection"),
+                                teacher_edges,
+                                teacher_junction_id,
+                            )
+                        )
+                        copyable_missing_blocked_edge_ids = [
+                            edge_id
+                            for edge_id in unresolved_missing_blocked_edge_ids
+                            if edge_id in teacher_boundary_edge_ids
+                        ]
+                    except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
+                        copyable_missing_blocked_edge_ids = []
+                blocking_missing_blocked_edge_ids = [
+                    edge_id
+                    for edge_id in unresolved_missing_blocked_edge_ids
+                    if edge_id not in set(copyable_missing_blocked_edge_ids)
+                ]
                 scope_report["resolved_missing_blocked_edge_ids"] = resolved_missing_blocked_edge_ids
                 scope_report["unresolved_missing_blocked_edge_ids"] = unresolved_missing_blocked_edge_ids
+                scope_report["copyable_missing_blocked_edge_ids"] = copyable_missing_blocked_edge_ids
+                scope_report["blocking_missing_blocked_edge_ids"] = blocking_missing_blocked_edge_ids
                 if (
                     scope_report.get("status") == "review"
                     and missing_blocked_edge_ids
-                    and not unresolved_missing_blocked_edge_ids
+                    and not blocking_missing_blocked_edge_ids
                     and not scope_report.get("blocking_missing_node_ids")
                     and not scope_report.get("blocking_missing_joined_scope_junction_ids")
                 ):
                     scope_report["status"] = "pass"
-                    scope_report["missing_blocked_edge_resolution"] = "mapped_by_replay_edge_map"
+                    scope_report["missing_blocked_edge_resolution"] = (
+                        "copyable_by_teacher_replay"
+                        if copyable_missing_blocked_edge_ids
+                        else "mapped_by_replay_edge_map"
+                    )
             if (
                 scope_report.get("status") == "pass"
                 and (scope_report.get("netconvert") or {}).get("status") == "pass"
@@ -1807,11 +1863,36 @@ def run_teacher_guided_repair_queue(
                     replay_connection_file = Path(str(scope_report.get("connection_file", "")))
                     replay_candidate_net_file = Path(str(scope_report.get("net_file", "")))
                     scope_report["replay_scope"] = "expanded_scope"
+                expanded_rebuild_scope = candidate.get("expanded_rebuild_scope", {})
+                blocked_teacher_edge_ids = (
+                    expanded_rebuild_scope.get("blocked_teacher_edge_ids", [])
+                    if isinstance(expanded_rebuild_scope, dict)
+                    else []
+                )
+                protected_self_loop_edge_ids = {
+                    *{str(edge_id) for edge_id in replay_edge_map.values() if str(edge_id)},
+                    *{
+                        str(edge_id)
+                        for edge_id in blocked_teacher_edge_ids
+                        if str(edge_id)
+                    },
+                }
+                replay_absorbed_join_internal_edge_ids = [
+                    edge_id
+                    for edge_id in replay_blocking_self_loop_edge_drops
+                    if edge_id not in protected_self_loop_edge_ids
+                ]
+                replay_blocking_self_loop_edge_drops = [
+                    edge_id
+                    for edge_id in replay_blocking_self_loop_edge_drops
+                    if edge_id in protected_self_loop_edge_ids
+                ]
                 scope_report["replay_node_file"] = str(replay_node_file)
                 scope_report["replay_edge_file"] = str(replay_edge_file)
                 scope_report["replay_edge_endpoint_rewrite_count"] = replay_edge_endpoint_rewrite_count
                 scope_report["replay_self_loop_edge_drop_count"] = len(replay_dropped_self_loop_edges)
                 scope_report["replay_dropped_self_loop_edges"] = replay_dropped_self_loop_edges
+                scope_report["replay_absorbed_join_internal_edge_ids"] = replay_absorbed_join_internal_edge_ids
                 scope_report["replay_blocking_self_loop_edge_drops"] = replay_blocking_self_loop_edge_drops
                 if replay_blocking_self_loop_edge_drops:
                     scope_report["status"] = "review"
@@ -3547,6 +3628,29 @@ def _needed_unmapped_teacher_boundary_edges(
             seen.add(edge_id)
             needed.append(edge_id)
     return needed
+
+
+def _teacher_boundary_edge_ids_touching_internal_subgraph(
+    connections: list[ET.Element],
+    teacher_edges: dict[str, ET.Element],
+    teacher_junction_id: str,
+) -> list[str]:
+    teacher_internal_prefix = f":{teacher_junction_id}_"
+    edge_ids = []
+    for connection in connections:
+        if not _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id):
+            continue
+        for attr in ("from", "to"):
+            edge_id = connection.attrib.get(attr, "")
+            teacher_edge = teacher_edges.get(edge_id)
+            if (
+                edge_id
+                and not edge_id.startswith(teacher_internal_prefix)
+                and teacher_edge is not None
+                and teacher_junction_id in (teacher_edge.attrib.get("from"), teacher_edge.attrib.get("to"))
+            ):
+                edge_ids.append(edge_id)
+    return list(dict.fromkeys(edge_ids))
 
 
 def _edge_lane_shapes(edge: ET.Element) -> list[str]:
