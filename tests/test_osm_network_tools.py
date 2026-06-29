@@ -1003,7 +1003,7 @@ def test_extract_largest_passenger_component_core_writes_keep_and_discard_record
 
     def fake_command_runner(command, **kwargs):
         calls.append((command, kwargs))
-        output_file = Path(command[command.index("--output-file") + 1])
+        output_file = Path(kwargs["cwd"]) / command[command.index("--output-file") + 1]
         output_file.write_text("<net/>", encoding="utf-8")
         return {"status": "pass", "returncode": 0, "stdout": "Success.", "stderr": "", "error": ""}
 
@@ -1035,6 +1035,41 @@ def test_extract_largest_passenger_component_core_writes_keep_and_discard_record
     assert command[:2] == ["netconvert", "--sumo-net-file"]
     assert "--keep-edges.input-file" in command
     assert "--keep-edges.postload" in command
+
+
+def test_extract_largest_passenger_component_core_uses_cwd_relative_paths(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    net_file = Path("raw.net.xml")
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n0" to="n1"><lane id="a_0" allow="passenger" speed="13.9" length="10.0"/></edge>
+  <edge id="b" from="n1" to="n2"><lane id="b_0" allow="passenger" speed="13.9" length="10.0"/></edge>
+  <edge id="c" from="n3" to="n4"><lane id="c_0" allow="passenger" speed="13.9" length="10.0"/></edge>
+  <connection from="a" to="b"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command_runner(command, **kwargs):
+        cwd = Path(kwargs["cwd"])
+        keep_path = cwd / command[command.index("--keep-edges.input-file") + 1]
+        output_path = cwd / command[command.index("--output-file") + 1]
+        assert keep_path.exists()
+        output_path.write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "returncode": 0, "stdout": "Success.", "stderr": "", "error": ""}
+
+    report = extract_largest_passenger_component_core(
+        net_file,
+        output_dir=Path("core"),
+        prefix="demo",
+        command_runner=fake_command_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert Path(report["connected_core_file"]).exists()
 
 
 def test_launch_netedit_reports_unavailable_when_binary_missing(tmp_path: Path) -> None:
