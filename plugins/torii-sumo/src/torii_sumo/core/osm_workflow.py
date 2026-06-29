@@ -551,6 +551,17 @@ def _teacher_guided_queue_has_replay_candidates(report: Mapping[str, Any] | None
     return _int_field(report, "ready_candidate_count") > 0 or _int_field(report, "expanded_scope_candidate_count") > 0
 
 
+def _reference_join_audit_can_seed_teacher_guided_queue(
+    report: Mapping[str, Any],
+    *,
+    structural_only: bool,
+) -> bool:
+    if not structural_only:
+        return True
+    comparisons = report.get("junction_pattern_comparisons", []) or []
+    return any(isinstance(comparison, Mapping) and comparison.get("status") == "fail" for comparison in comparisons)
+
+
 def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
     if report is None:
         return None
@@ -2275,7 +2286,10 @@ def run_osm_cleanup_workflow(
                 candidate_joined_net_file = Path(str(joined_value))
                 if candidate_joined_net_file.exists():
                     reference_visual_detail_comparison_net_file = candidate_joined_net_file
-        if not reference_join_audit_is_structural_only:
+        if _reference_join_audit_can_seed_teacher_guided_queue(
+            reference_join_audit_report,
+            structural_only=reference_join_audit_is_structural_only,
+        ):
             teacher_guided_repair_queue_report = teacher_guided_repair_queue_func(
                 teacher_net_file=reference_net_file,
                 candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,

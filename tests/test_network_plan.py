@@ -2307,6 +2307,160 @@ def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_ref
     assert report["reference_visual_detail_tls_controlled_connection_regression_count"] == 0
 
 
+def test_reference_matched_structural_only_pattern_mismatch_queues_teacher_guided_repair(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-tls_filtered.osm.xml.gz"
+    visual_tls_net_file = tmp_path / "tls_aggregation" / "reference_visual_detail_tls.net.xml"
+    calls: dict[str, object] = {"teacher_guided_queue_calls": []}
+
+    def fake_build(**kwargs):
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_tls(**kwargs):
+        if "reference_visual_detail" in Path(kwargs["net_file"]).name:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "tls_candidate_count": 2,
+                "tls_cluster_count": 1,
+                "clusters_file": str(tmp_path / "visual_tls_clusters.csv"),
+                "warnings": [],
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**_kwargs):
+        visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
+        visual_tls_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_physical_cluster_count": 1,
+            "tls_aggregation_variant_file": str(visual_tls_net_file),
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**kwargs):
+        calls["reference_join_structural_only"] = kwargs["structural_only"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "structural_only",
+            "reference_case_count": 0,
+            "matched_case_count": 0,
+            "unmatched_case_count": 0,
+            "summary_file": str(tmp_path / "reference_join_audit.json"),
+            "cases_file": str(tmp_path / "reference_join_cases.csv"),
+            "junction_pattern_comparison_status": "fail",
+            "junction_pattern_mismatch_count": 1,
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
+            "junction_pattern_comparisons": [
+                {
+                    "junction_id": "89129103",
+                    "status": "fail",
+                    "mismatch_fields": ["movement_signature_counts"],
+                    "teacher": {"has_tls": True, "control_type": "traffic_light"},
+                    "candidate": {"has_tls": True, "control_type": "traffic_light"},
+                }
+            ],
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_repair_queue(**kwargs):
+        calls["teacher_guided_queue_calls"].append(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "repair_candidate_count": 1,
+            "ready_candidate_count": 0,
+            "expanded_scope_candidate_count": 0,
+            "queue_file": str(tmp_path / "teacher_guided_queue.json"),
+            "queue_csv_file": str(tmp_path / "teacher_guided_queue.csv"),
+            "repair_candidates": [{"reference_id": "89129103", "candidate_status": "blocked"}],
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-structural-pattern",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        tls_aggregation_func=fake_tls_aggregation,
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 100,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 100,
+            "warnings": [],
+        },
+        topology_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "topology_fragmentation_status": "pass",
+            "warnings": [],
+        },
+        routeability_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "routeability_status": "pass",
+            "warnings": [],
+        },
+        netedit_func=lambda _path: {
+            "status": "blocked",
+            "netedit_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        sumo_gui_func=lambda _path, **_kwargs: {
+            "status": "blocked",
+            "sumo_gui_status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "warnings": [],
+        },
+        reference_join_audit_func=fake_reference_join_audit,
+        reference_join_aggregation_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("structural-only audit should not trigger reference join aggregation")
+        ),
+        teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
+    )
+
+    assert calls["reference_join_structural_only"] is True
+    queue_calls = calls["teacher_guided_queue_calls"]
+    assert len(queue_calls) == 1
+    assert queue_calls[0]["candidate_net_file"] == visual_tls_net_file
+    assert queue_calls[0]["reference_join_audit_report"]["audit_mode"] == "structural_only"
+    assert report["teacher_guided_repair_queue_status"] == "pass"
+    assert report["teacher_guided_repair_candidate_count"] == 1
+    assert report["gate_status"]["teacher_guided_junction_parity"] == "blocked"
+
+
 def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pass(
     tmp_path: Path,
 ) -> None:
