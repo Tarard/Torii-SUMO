@@ -7,7 +7,9 @@ from torii_sumo.core.osm_workflow import (
     _junction_semantic_gate,
     _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
+    _reference_join_audit_can_seed_teacher_guided_queue,
     _restore_followup_internal_regressions,
+    _filter_teacher_guided_queue_to_mismatch_fields,
     _teacher_guided_junction_parity_gate,
     _teacher_guided_application_stats,
     _teacher_guided_best_variant_file,
@@ -250,6 +252,68 @@ def test_teacher_guided_equivalent_approach_edge_map_collects_passed_replay_maps
     assert edge_map == {"teacher_west": "candidate_west"}
 
 
+def test_filter_teacher_guided_queue_to_movement_mismatches(tmp_path: Path) -> None:
+    queue_report = {
+        "status": "pass",
+        "queue_file": str(tmp_path / "all_queue.json"),
+        "repair_candidate_count": 3,
+        "ready_candidate_count": 2,
+        "expanded_scope_candidate_count": 1,
+        "blocked_candidate_count": 0,
+        "repair_candidates": [
+            {"reference_id": "cluster_keep", "candidate_status": "ready_for_teacher_guided_variant"},
+            {"reference_id": "cluster_drop", "candidate_status": "ready_for_teacher_guided_variant"},
+            {"junction_id": "cluster_approach", "candidate_status": "needs_expanded_rebuild_scope"},
+        ],
+    }
+    audit_report = {
+        "junction_pattern_comparisons": [
+            {"junction_id": "cluster_keep", "mismatch_fields": ["movement_signature_counts"]},
+            {"junction_id": "cluster_drop", "mismatch_fields": ["approach_edge_ids"]},
+            {"junction_id": "cluster_missing", "mismatch_fields": ["internal_function_counts"]},
+        ]
+    }
+
+    filtered = _filter_teacher_guided_queue_to_mismatch_fields(
+        queue_report,
+        audit_report,
+        {"movement_signature_counts", "internal_function_counts"},
+        output_dir=tmp_path / "filtered",
+        prefix="final_movement",
+    )
+
+    assert filtered["repair_candidate_count"] == 1
+    assert filtered["ready_candidate_count"] == 1
+    assert filtered["expanded_scope_candidate_count"] == 0
+    assert filtered["queue_filter_target_junction_ids"] == ["cluster_keep", "cluster_missing"]
+    assert filtered["queue_filter_original_repair_candidate_count"] == 3
+    assert filtered["repair_candidates"] == [
+        {"reference_id": "cluster_keep", "candidate_status": "ready_for_teacher_guided_variant"}
+    ]
+    assert Path(str(filtered["queue_file"])).exists()
+
+
+def test_full_reference_join_audit_without_movement_delta_does_not_seed_teacher_guided_queue() -> None:
+    assert not _reference_join_audit_can_seed_teacher_guided_queue(
+        {
+            "audit_mode": "full",
+            "matched_case_count": 132,
+            "junction_pattern_mismatch_count": 0,
+            "junction_pattern_mismatch_field_counts": {},
+            "junction_pattern_comparisons": [],
+        },
+        structural_only=False,
+    )
+    assert _reference_join_audit_can_seed_teacher_guided_queue(
+        {
+            "audit_mode": "full",
+            "junction_pattern_mismatch_count": 1,
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
+        },
+        structural_only=False,
+    )
+
+
 def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
@@ -284,6 +348,11 @@ def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp
             "matched_case_count": 1,
             "unmatched_case_count": 0,
             "junction_pattern_index": [{"junction_id": "cluster_a_b"}],
+            "junction_pattern_mismatch_count": 1,
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
+            "junction_pattern_comparisons": [
+                {"junction_id": "cluster_a_b", "status": "fail", "mismatch_fields": ["movement_signature_counts"]}
+            ],
             "summary_file": str(tmp_path / "reference_join_audit.json"),
             "warnings": [],
         }
@@ -297,6 +366,9 @@ def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp
             "ready_candidate_count": 0,
             "expanded_scope_candidate_count": 4,
             "queue_file": str(tmp_path / "teacher_guided_queue.json"),
+            "repair_candidates": [
+                {"reference_id": "cluster_a_b", "candidate_status": "needs_expanded_rebuild_scope"}
+            ],
             "warnings": [],
         }
 
@@ -2142,7 +2214,7 @@ def test_reference_matched_workflow_runs_post_repair_movement_rebuild_when_repai
             return delta(missing=10, mismatch=1, summary="repaired_delta.json")
         if candidate == movement_rebuilt_net:
             return delta(missing=2, summary="movement_rebuilt_delta.json")
-        return delta(missing=12, summary="initial_delta.json")
+        return delta(missing=12, mismatch=1, summary="initial_delta.json")
 
     def fake_teacher_guided_queue(**kwargs):
         calls["queue"].append(kwargs)
@@ -2161,7 +2233,9 @@ def test_reference_matched_workflow_runs_post_repair_movement_rebuild_when_repai
             "ready_candidate_count": 1,
             "expanded_scope_candidate_count": 0,
             "queue_file": str(tmp_path / "teacher_queue.json"),
-            "repair_candidates": [],
+            "repair_candidates": [
+                {"reference_id": "89129103", "candidate_status": "ready_for_teacher_guided_variant"}
+            ],
         }
 
     def fake_plain_export(**_kwargs):
