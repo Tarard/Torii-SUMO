@@ -110,6 +110,24 @@ def test_teacher_guided_best_variant_file_prefers_composite_net(tmp_path: Path) 
     assert best == composite_net
 
 
+def test_teacher_guided_best_variant_file_uses_partial_sequential_composite(tmp_path: Path) -> None:
+    composite_net = tmp_path / "partial_composite_teacher_guided.net.xml"
+    composite_net.write_text("<net/>", encoding="utf-8")
+
+    best = _teacher_guided_best_variant_file(
+        {
+            "status": "fail",
+            "parity_gate_status": "fail",
+            "pass_candidate_count": 33,
+            "parity_pass_candidate_count": 26,
+            "composite_applied_candidate_count": 26,
+            "composite_net_file": str(composite_net),
+        }
+    )
+
+    assert best == composite_net
+
+
 def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
     _write_reference_net(reference_net_file)
@@ -509,6 +527,76 @@ def test_export_plain_net_for_teacher_guided_repair_resolves_relative_output_dir
     assert calls["command"][-1] == str(expected_prefix)
     assert calls["cwd"] == tmp_path / "plain"
     assert report["raw_node_file"] == str(expected_prefix) + ".nod.xml"
+
+
+def test_export_plain_net_for_teacher_guided_repair_synthesizes_missing_used_edge_types(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_command(command, **_kwargs):
+        plain_prefix = Path(command[-1])
+        Path(f"{plain_prefix}.nod.xml").write_text("<nodes/>", encoding="utf-8")
+        Path(f"{plain_prefix}.con.xml").write_text("<connections/>", encoding="utf-8")
+        Path(f"{plain_prefix}.typ.xml").write_text(
+            '<types><type id="highway.residential" priority="3" numLanes="1" speed="13.89"/></types>',
+            encoding="utf-8",
+        )
+        Path(f"{plain_prefix}.edg.xml").write_text(
+            """<edges>
+    <edge id="753083363" from="a" to="b" type="cycleway.lane|highway.unclassified"
+          priority="4" numLanes="4" speed="8.33">
+        <lane index="0" allow="pedestrian" width="2.00"/>
+        <lane index="1" allow="bicycle" width="1.00"/>
+    </edge>
+</edges>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = export_plain_net_for_teacher_guided_repair(
+        net_file=net_file,
+        output_dir=tmp_path / "plain",
+        prefix="demo",
+        command_runner=fake_command,
+    )
+
+    type_root = ET.parse(report["raw_type_file"]).getroot()
+    synthesized = type_root.find("./type[@id='cycleway.lane|highway.unclassified']")
+    assert report["status"] == "pass"
+    assert report["synthesized_edge_type_count"] == 1
+    assert report["synthesized_edge_type_ids"] == ["cycleway.lane|highway.unclassified"]
+    assert synthesized is not None
+    assert synthesized.attrib["priority"] == "4"
+    assert synthesized.attrib["numLanes"] == "4"
+    assert synthesized.attrib["speed"] == "8.33"
+
+
+def test_export_plain_net_for_teacher_guided_repair_shortens_long_plain_prefix(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    long_prefix = "sumo_osm_cleanup_post_teacher_tls_connection_repair_movement_rebuild_" + ("x" * 160)
+
+    def fake_command(command, **_kwargs):
+        plain_prefix = Path(command[-1])
+        assert len(str(plain_prefix.resolve())) + len(".nod.xml") < 240
+        for suffix in (".nod.xml", ".edg.xml", ".con.xml"):
+            Path(f"{plain_prefix}{suffix}").write_text("<xml/>", encoding="utf-8")
+        return {"status": "pass", "returncode": 0}
+
+    report = export_plain_net_for_teacher_guided_repair(
+        net_file=net_file,
+        output_dir=tmp_path / "plain",
+        prefix=long_prefix,
+        command_runner=fake_command,
+    )
+
+    assert report["status"] == "pass"
+    assert report["plain_output_prefix_shortened"] is True
+    assert Path(report["plain_output_prefix"]).name.endswith("_" + report["plain_output_prefix_digest"])
 
 
 def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_path: Path) -> None:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import os
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -486,11 +488,16 @@ def _teacher_guided_parity_gate(report: Mapping[str, Any] | None) -> str:
 
 
 def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
-    if report is None or report.get("status") != "pass" or report.get("parity_gate_status") != "pass":
+    if report is None:
         return None
     composite_net_file = str(report.get("composite_net_file", ""))
-    if composite_net_file and Path(composite_net_file).exists():
+    has_accepted_composite = _int_field(report, "composite_applied_candidate_count") > 0 or (
+        report.get("status") == "pass" and report.get("parity_gate_status") == "pass"
+    )
+    if has_accepted_composite and composite_net_file and Path(composite_net_file).exists():
         return Path(composite_net_file)
+    if report.get("status") != "pass" or report.get("parity_gate_status") != "pass":
+        return None
     for variant in report.get("variant_reports", []) or []:
         if not isinstance(variant, Mapping):
             continue
@@ -547,7 +554,7 @@ def export_plain_net_for_teacher_guided_repair(
         }
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    plain_prefix = output_dir / prefix
+    plain_prefix, plain_prefix_shortened, plain_prefix_digest = _plain_output_prefix(output_dir, prefix)
     command = [
         netconvert_binary,
         "--sumo-net-file",
@@ -573,6 +580,7 @@ def export_plain_net_for_teacher_guided_repair(
     raw_connection_file = Path(f"{plain_prefix}.con.xml")
     raw_type_file = Path(f"{plain_prefix}.typ.xml")
     raw_tllogic_file = Path(f"{plain_prefix}.tll.xml")
+    synthesized_edge_type_ids = _synthesize_missing_plain_edge_types(raw_edge_file, raw_type_file)
     missing_required = [
         str(path)
         for path in (raw_node_file, raw_edge_file, raw_connection_file)
@@ -584,14 +592,83 @@ def export_plain_net_for_teacher_guided_repair(
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "net_file": str(net_file),
         "plain_output_prefix": str(plain_prefix),
+        "requested_plain_output_prefix": str(output_dir / prefix),
+        "plain_output_prefix_shortened": plain_prefix_shortened,
+        "plain_output_prefix_digest": plain_prefix_digest,
         "raw_node_file": str(raw_node_file),
         "raw_edge_file": str(raw_edge_file),
         "raw_connection_file": str(raw_connection_file),
         "raw_type_file": str(raw_type_file) if raw_type_file.exists() else "",
         "raw_tllogic_file": str(raw_tllogic_file) if raw_tllogic_file.exists() else "",
+        "synthesized_edge_type_count": len(synthesized_edge_type_ids),
+        "synthesized_edge_type_ids": synthesized_edge_type_ids,
         "missing_required_plain_files": missing_required,
         "netconvert": netconvert_report,
     }
+
+
+def _plain_output_prefix(output_dir: Path, prefix: str) -> tuple[Path, bool, str]:
+    digest = hashlib.sha1(prefix.encode("utf-8")).hexdigest()[:8]
+    plain_prefix = output_dir / prefix
+    suffix_reserve = len(".nod.xml")
+    path_limit = 239
+    if len(str(plain_prefix.resolve())) + suffix_reserve < path_limit:
+        return plain_prefix, False, digest
+
+    output_dir_text = str(output_dir.resolve())
+    max_name_len = path_limit - suffix_reserve - len(output_dir_text) - 1
+    if max_name_len <= len(digest) + 2:
+        return output_dir / f"p_{digest}", True, digest
+
+    head_len = max_name_len - len(digest) - 1
+    head = prefix[:head_len].strip("._-") or "plain"
+    shortened = f"{head}_{digest}"
+    if len(shortened) > max_name_len:
+        shortened = f"p_{digest}"
+    return output_dir / shortened, True, digest
+
+
+def _synthesize_missing_plain_edge_types(raw_edge_file: Path, raw_type_file: Path) -> list[str]:
+    if not raw_edge_file.exists():
+        return []
+    try:
+        edge_root = ET.parse(raw_edge_file).getroot()
+        if raw_type_file.exists():
+            type_tree = ET.parse(raw_type_file)
+            type_root = type_tree.getroot()
+        else:
+            type_root = ET.Element("types")
+            type_tree = ET.ElementTree(type_root)
+    except ET.ParseError:
+        return []
+
+    known_type_ids = {str(item.get("id")) for item in type_root.findall("type") if item.get("id")}
+    synthesized = []
+    for edge in edge_root.findall("edge"):
+        type_id = str(edge.get("type") or "")
+        if not type_id or type_id in known_type_ids:
+            continue
+        attrs = {"id": type_id}
+        for attr in ("priority", "numLanes", "speed", "allow", "disallow", "oneway", "width"):
+            value = edge.get(attr)
+            if value:
+                attrs[attr] = value
+        if "numLanes" not in attrs:
+            lane_count = len(edge.findall("lane"))
+            if lane_count:
+                attrs["numLanes"] = str(lane_count)
+        if "speed" not in attrs:
+            first_lane = edge.find("lane")
+            if first_lane is not None and first_lane.get("speed"):
+                attrs["speed"] = str(first_lane.get("speed"))
+        ET.SubElement(type_root, "type", attrs)
+        known_type_ids.add(type_id)
+        synthesized.append(type_id)
+
+    if synthesized:
+        raw_type_file.parent.mkdir(parents=True, exist_ok=True)
+        type_tree.write(raw_type_file, encoding="utf-8", xml_declaration=True)
+    return synthesized
 
 
 def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
