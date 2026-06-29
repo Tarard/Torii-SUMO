@@ -3015,6 +3015,16 @@ def _approaches(model: dict[str, object], direction: str) -> list[dict[str, Any]
     return [edge for edge in approaches.get(direction, []) or [] if isinstance(edge, dict)]
 
 
+def _conservative_join_node_ids(candidate_node_ids: list[str], matched_source_node_ids: set[str]) -> list[str]:
+    matched = [node_id for node_id in candidate_node_ids if node_id in matched_source_node_ids]
+    if len(matched) >= 2:
+        return matched
+    if len(matched) == 1:
+        first_other = next((node_id for node_id in candidate_node_ids if node_id != matched[0]), "")
+        return [first_other, matched[0]] if first_other else matched
+    return candidate_node_ids[:2]
+
+
 def _teacher_guided_repair_candidate(
     *,
     case: dict[str, Any],
@@ -3035,6 +3045,7 @@ def _teacher_guided_repair_candidate(
     scope_node_ids = [node_id for node_id in candidate_node_ids if node_id in matched_source_node_set]
     if len(scope_node_ids) < 2:
         scope_node_ids = candidate_node_ids
+    join_node_ids = _conservative_join_node_ids(candidate_node_ids, matched_source_node_set)
     base = {
         "reference_id": reference_id,
         "junction_id": candidate_junction_ids[0] if candidate_junction_ids else reference_id,
@@ -3096,7 +3107,7 @@ def _teacher_guided_repair_candidate(
                     "recommended_action": "rebuild_plain_xml_scope",
                     "core_junction_id": base["junction_id"],
                     "junction_ids": sorted(dict.fromkeys(scope_node_ids)),
-                    "join_junction_ids": sorted(dict.fromkeys(scope_node_ids)),
+                    "join_junction_ids": list(dict.fromkeys(join_node_ids)),
                     "blocked_teacher_edge_ids": missing_teacher_edge_ids,
                     "missing_desired_endpoint_ids": [],
                     "reason": "candidate joined junction not found; rebuild from matched candidate source nodes",
