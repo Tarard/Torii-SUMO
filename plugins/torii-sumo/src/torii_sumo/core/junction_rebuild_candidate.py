@@ -1641,6 +1641,42 @@ def build_teacher_guided_junction_variant(
     )
 
 
+def _string_list(value: Any) -> list[str]:
+    return [str(item) for item in value or [] if str(item)]
+
+
+def _expanded_scope_skip_entry(
+    *,
+    index: int,
+    junction_id: str,
+    candidate_status: str,
+    scope_report: dict[str, Any],
+    replay_edge_map: dict[str, str],
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "index": index,
+        "junction_id": junction_id,
+        "candidate_status": candidate_status,
+    }
+    missing_joined = _string_list(scope_report.get("blocking_missing_joined_scope_junction_ids"))
+    missing_nodes = _string_list(scope_report.get("blocking_missing_node_ids"))
+    missing_blocked = _string_list(scope_report.get("blocking_missing_blocked_edge_ids"))
+    if missing_joined:
+        entry["skip_reason"] = "scope_insufficient_joined_junction_missing"
+        entry["blocking_missing_joined_scope_junction_ids"] = missing_joined
+    elif missing_nodes:
+        entry["skip_reason"] = "scope_insufficient_missing_nodes"
+        entry["blocking_missing_node_ids"] = missing_nodes
+    elif missing_blocked:
+        entry["skip_reason"] = "missing_blocked_edges_uncopyable"
+        entry["blocking_missing_blocked_edge_ids"] = missing_blocked
+    elif not replay_edge_map:
+        entry["skip_reason"] = "edge_map_derivation_gap"
+    else:
+        entry["skip_reason"] = "expanded_scope_review"
+    return entry
+
+
 def run_teacher_guided_repair_queue(
     *,
     queue_report: dict[str, Any],
@@ -1970,6 +2006,9 @@ def run_teacher_guided_repair_queue(
                             "index": index,
                             "junction_id": junction_id,
                             "candidate_status": "unsafe_replay_self_loop_edge_drop",
+                            "skip_reason": "singleton_or_no_witness_self_loop_drop"
+                            if replay_target_internal_subgraph
+                            else "protected_self_loop_edge_drop",
                             "replay_blocking_self_loop_edge_drops": replay_blocking_self_loop_edge_drops,
                         }
                     )
@@ -2034,11 +2073,13 @@ def run_teacher_guided_repair_queue(
                             )
             else:
                 skipped_candidates.append(
-                    {
-                        "index": index,
-                        "junction_id": junction_id,
-                        "candidate_status": candidate.get("candidate_status", "skipped"),
-                    }
+                    _expanded_scope_skip_entry(
+                        index=index,
+                        junction_id=junction_id,
+                        candidate_status=str(candidate.get("candidate_status", "skipped")),
+                        scope_report=scope_report,
+                        replay_edge_map=replay_edge_map,
+                    )
                 )
             continue
         if candidate.get("candidate_status") != "ready_for_teacher_guided_variant" or not junction_id:
