@@ -44,6 +44,7 @@ TLS_CONNECTION_REPAIR_ATTRS = (
 )
 
 GEOMETRY_RESTORE_LANE_ATTRS = (
+    "speed",
     "shape",
     "length",
     "width",
@@ -3602,6 +3603,52 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
     source_root = ET.parse(source_file).getroot()
     target_tree = ET.parse(target_file)
     target_root = target_tree.getroot()
+    source_internal_edges = [
+        edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id", "").startswith(internal_prefix)
+    ]
+    internal_edge_insert_index = None
+    for child in list(target_root):
+        if child.tag == "edge" and child.attrib.get("id", "").startswith(internal_prefix):
+            if internal_edge_insert_index is None:
+                internal_edge_insert_index = list(target_root).index(child)
+            target_root.remove(child)
+    if internal_edge_insert_index is None:
+        internal_edge_insert_index = _first_junction_index(target_root)
+    for offset, edge in enumerate(source_internal_edges):
+        target_root.insert(internal_edge_insert_index + offset, copy.deepcopy(edge))
+
+    source_internal_junctions = [
+        junction
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id", "").startswith(internal_prefix)
+    ]
+    internal_junction_insert_index = None
+    for child in list(target_root):
+        if child.tag == "junction" and child.attrib.get("id", "").startswith(internal_prefix):
+            if internal_junction_insert_index is None:
+                internal_junction_insert_index = list(target_root).index(child)
+            target_root.remove(child)
+    if internal_junction_insert_index is None:
+        internal_junction_insert_index = next(
+            (index for index, child in enumerate(list(target_root)) if child.tag == "connection"),
+            len(list(target_root)),
+        )
+    for offset, junction in enumerate(source_internal_junctions):
+        target_root.insert(internal_junction_insert_index + offset, copy.deepcopy(junction))
+
+    removed_connection_count = 0
+    for connection in list(target_root.findall("connection")):
+        if _touches_target_internal_subgraph(connection, internal_prefix, junction_id):
+            target_root.remove(connection)
+            removed_connection_count += 1
+    restored_connection_count = 0
+    for connection in source_root.findall("connection"):
+        if _touches_target_internal_subgraph(connection, internal_prefix, junction_id):
+            target_root.append(copy.deepcopy(connection))
+            restored_connection_count += 1
+
     restored_edge_ids = {
         edge.attrib.get("id", "")
         for edge in source_root.findall("edge")
@@ -3646,10 +3693,11 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
     restored_junction_attr_count = 0
     source_junction = source_root.find(f"junction[@id='{junction_id}']")
     target_junction = target_root.find(f"junction[@id='{junction_id}']")
-    if source_junction is not None and target_junction is not None and source_junction.attrib.get("shape"):
-        before_shape = target_junction.attrib.get("shape")
-        target_junction.set("shape", source_junction.attrib["shape"])
-        restored_junction_attr_count = 1 if before_shape != source_junction.attrib["shape"] else 0
+    if source_junction is not None and target_junction is not None:
+        before_attrs = dict(target_junction.attrib)
+        target_junction.attrib.clear()
+        target_junction.attrib.update(dict(source_junction.attrib))
+        restored_junction_attr_count = 1 if before_attrs != target_junction.attrib else 0
     source_requests = source_junction.findall("request") if source_junction is not None else []
     if source_requests and target_junction is not None:
         for request in list(target_junction.findall("request")):
@@ -3665,6 +3713,10 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
         "claim_status": "diagnostic-demo",
         "source_file": str(source_file),
         "target_file": str(target_file),
+        "restored_internal_edge_count": len(source_internal_edges),
+        "restored_internal_junction_count": len(source_internal_junctions),
+        "removed_connection_count": removed_connection_count,
+        "restored_connection_count": restored_connection_count,
         "restored_edge_count": len(restored_edge_ids) - len(missing_edge_ids),
         "restored_lane_count": restored_lane_count,
         "restored_junction_attr_count": restored_junction_attr_count,
