@@ -88,6 +88,10 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "teacher_guided_repair_run_report_file",
     "teacher_guided_repair_applied_candidate_count",
     "teacher_guided_repair_unapplied_pass_candidate_count",
+    "post_teacher_tls_connection_repair_movement_rebuild_run_status",
+    "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status",
+    "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file",
+    "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count",
     "reference_join_post_teacher_audit_status",
     "routeability_audit_status",
 )
@@ -177,15 +181,32 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
         "tool_chain": list(REFERENCE_MATCHED_TOOL_CHAIN),
     }
     if workflow_report is not None:
+        movement_best_variant_file = str(
+            workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_best_variant_file", "")
+        )
         semantics.update(
             {
-                "best_variant_file": str(workflow_report.get("teacher_guided_repair_best_variant_file", "")),
-                "comparison_net_file": str(workflow_report.get("reference_visual_detail_comparison_net_file", "")),
+                "best_variant_file": movement_best_variant_file
+                or str(workflow_report.get("teacher_guided_repair_best_variant_file", "")),
+                "comparison_net_file": movement_best_variant_file
+                or str(workflow_report.get("reference_visual_detail_comparison_net_file", "")),
                 "run_report_file": str(workflow_report.get("teacher_guided_repair_run_report_file", "")),
                 "application_scope": str(workflow_report.get("teacher_guided_repair_application_scope", "")),
                 "applied_candidate_count": workflow_report.get("teacher_guided_repair_applied_candidate_count", 0),
                 "unapplied_pass_candidate_count": workflow_report.get(
                     "teacher_guided_repair_unapplied_pass_candidate_count", 0
+                ),
+                "movement_rebuild_best_variant_file": movement_best_variant_file,
+                "movement_rebuild_run_status": str(
+                    workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_run_status", "")
+                ),
+                "movement_rebuild_parity_gate_status": str(
+                    workflow_report.get(
+                        "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status", ""
+                    )
+                ),
+                "movement_rebuild_applied_candidate_count": workflow_report.get(
+                    "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count", 0
                 ),
             }
         )
