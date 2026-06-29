@@ -58,14 +58,25 @@ def audit_reference_join_patterns(
     except (OSError, ET.ParseError, KeyError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
+    pattern_junction_ids = [
+        str(case.get("reference_id", ""))
+        for case in reference_cases
+        if str(case.get("reference_id", ""))
+    ]
     pattern_warnings = []
     try:
-        junction_pattern_index = extract_junction_pattern_index(reference_net_file)
+        junction_pattern_index = extract_junction_pattern_index(
+            reference_net_file,
+            junction_ids=pattern_junction_ids,
+        )
     except (KeyError, TypeError, ValueError) as exc:
         junction_pattern_index = []
         pattern_warnings.append(f"junction pattern extraction failed: {type(exc).__name__}: {exc}")
     try:
-        candidate_junction_pattern_index = extract_junction_pattern_index(candidate_net_file)
+        candidate_junction_pattern_index = extract_junction_pattern_index(
+            candidate_net_file,
+            junction_ids=pattern_junction_ids,
+        )
     except (KeyError, TypeError, ValueError) as exc:
         candidate_junction_pattern_index = []
         pattern_warnings.append(f"candidate junction pattern extraction failed: {type(exc).__name__}: {exc}")
@@ -620,9 +631,11 @@ def _match_reference_sources(reference_case: dict[str, Any], candidate_graph: di
 
 
 def _has_source_join_evidence(source_match: dict[str, Any]) -> bool:
+    if int(source_match.get("matched_reference_source_node_count", 0)) < 2:
+        return False
     return (
-        int(source_match.get("matched_reference_source_node_count", 0)) >= 2
-        and int(source_match.get("matched_reference_source_internal_edge_count", 0)) > 0
+        int(source_match.get("matched_reference_source_internal_edge_count", 0)) > 0
+        or int(source_match.get("matched_reference_source_boundary_edge_count", 0)) >= 2
     )
 
 

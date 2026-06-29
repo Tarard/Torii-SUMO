@@ -8,6 +8,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _compare_teacher_models,
     _netedit_review_actions,
     _restore_replayed_geometry_attrs,
+    _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
     _stage_file,
     build_rebuild_candidate,
@@ -24,6 +25,34 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_vehicle_connection_attrs_net,
 )
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+
+
+def test_teacher_candidate_edge_map_can_use_expanded_scope_bearing_delta() -> None:
+    teacher_model = {
+        "approaches": {
+            "incoming": [
+                {"edge_id": "teacher_in", "bearing": 0.0, "lane_count": 1, "type": "highway.tertiary"}
+            ],
+            "outgoing": [],
+        }
+    }
+    candidate_model = {
+        "approaches": {
+            "incoming": [
+                {"edge_id": "candidate_in", "bearing": 40.0, "lane_count": 1, "type": "highway.tertiary"}
+            ],
+            "outgoing": [],
+        }
+    }
+
+    assert (
+        _teacher_candidate_edge_map(
+            teacher_model,
+            candidate_model,
+            max_bearing_delta=45.0,
+        )
+        == {"teacher_in": "candidate_in"}
+    )
 
 
 def test_build_tls_connection_repair_variant_restores_unique_connection_control_attrs(tmp_path: Path) -> None:
@@ -2130,6 +2159,92 @@ def test_run_teacher_guided_repair_queue_derives_expanded_edge_map_from_endpoint
     }
     assert variant_calls[0]["junction_id"] == "cluster_c_j"
     assert variant_calls[0]["edge_map"] == {"teacher_in": "cand_in", "teacher_out": "cand_out"}
+
+
+def test_run_teacher_guided_repair_queue_replays_expanded_scope_when_missing_blocked_edges_are_mapped(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="x" x="-10" y="0"/>
+  <node id="j" x="0" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="x" to="j" type="highway.primary"><lane index="0" shape="-10,0 0,0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="teacher_j" type="highway.primary"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <junction id="teacher_j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text("<net/>", encoding="utf-8")
+    variant_calls = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <edge id="cand_in" from="x" to="j" type="highway.primary"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo", "parity_gate_status": "pass"}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "j",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "core_junction_id": "j",
+                        "junction_ids": ["j"],
+                        "join_junction_ids": ["j"],
+                        "blocked_teacher_edge_ids": ["teacher_in"],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    scope_report = report["expanded_scope_reports"][0]
+    assert scope_report["status"] == "pass"
+    assert scope_report["missing_blocked_edge_ids"] == ["teacher_in"]
+    assert scope_report["resolved_missing_blocked_edge_ids"] == ["teacher_in"]
+    assert variant_calls[0]["edge_map"] == {"teacher_in": "cand_in"}
 
 
 def test_write_expanded_scope_does_not_block_on_missing_desired_endpoint(tmp_path: Path) -> None:
