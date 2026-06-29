@@ -8,6 +8,7 @@ from torii_sumo.core.osm_workflow import (
     _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
     _restore_followup_internal_regressions,
+    _teacher_guided_junction_parity_gate,
     _teacher_guided_application_stats,
     _teacher_guided_best_variant_file,
     _teacher_guided_equivalent_approach_edge_map,
@@ -28,6 +29,23 @@ def test_junction_semantic_gate_uses_comparison_evidence_when_case_counts_are_ze
     }
 
     assert _junction_semantic_gate(report, {"movement_signature_counts"}) == "pass"
+
+
+def test_teacher_guided_junction_parity_gate_uses_final_semantic_parity() -> None:
+    final_semantic_report = {
+        "status": "pass",
+        "matched_case_count": 1,
+        "junction_pattern_mismatch_count": 0,
+        "junction_pattern_mismatch_field_counts": {},
+        "junction_pattern_comparisons": [{"junction_id": "267517510", "status": "pass", "mismatch_fields": []}],
+    }
+    early_teacher_run = {
+        "status": "fail",
+        "parity_gate_status": "fail",
+        "repair_candidate_count": 132,
+    }
+
+    assert _teacher_guided_junction_parity_gate(early_teacher_run, final_semantic_report) == "pass"
 
 
 def test_restore_followup_internal_regressions_restores_only_new_internal_failures(tmp_path: Path) -> None:
