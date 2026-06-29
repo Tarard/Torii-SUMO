@@ -2766,6 +2766,10 @@ def run_osm_cleanup_workflow(
                                         )
                                         == "pass"
                                     ):
+                                        non_controller_base_edge_map = _teacher_guided_equivalent_approach_edge_map(
+                                            post_teacher_tls_connection_repair_movement_rebuild_run_report
+                                            or teacher_guided_repair_run_report
+                                        )
                                         post_teacher_tls_non_controller_junction_demotion_reference_delta_report = (
                                             reference_join_audit_func(
                                                 reference_net_file=reference_net_file,
@@ -2779,10 +2783,7 @@ def run_osm_cleanup_workflow(
                                                 candidate_cluster_radius_m=topology_cluster_radius_m,
                                                 candidate_min_cluster_nodes=topology_min_cluster_nodes,
                                                 structural_only=True,
-                                                equivalent_approach_edge_map=_teacher_guided_equivalent_approach_edge_map(
-                                                    post_teacher_tls_connection_repair_movement_rebuild_run_report
-                                                    or teacher_guided_repair_run_report
-                                                ),
+                                                equivalent_approach_edge_map=non_controller_base_edge_map,
                                             )
                                         )
                                         post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = (
@@ -2814,6 +2815,132 @@ def run_osm_cleanup_workflow(
                                             reference_join_post_teacher_audit_report = (
                                                 post_teacher_tls_non_controller_junction_demotion_reference_delta_report
                                             )
+                                            if (
+                                                _int_field(
+                                                    post_teacher_tls_non_controller_junction_demotion_reference_delta_report,
+                                                    "junction_pattern_mismatch_count",
+                                                )
+                                                > 0
+                                            ):
+                                                followup_queue_report = teacher_guided_repair_queue_func(
+                                                    teacher_net_file=reference_net_file,
+                                                    candidate_net_file=non_controller_demotion_variant_file,
+                                                    reference_join_audit_report=(
+                                                        post_teacher_tls_non_controller_junction_demotion_reference_delta_report
+                                                    ),
+                                                    output_dir=output_dir
+                                                    / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_queue",
+                                                    prefix=(
+                                                        f"{prefix}_post_teacher_tls_non_controller_junction_demotion_"
+                                                        "movement_rebuild"
+                                                    ),
+                                                    max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                                                )
+                                                (
+                                                    _followup_plain_export_report,
+                                                    followup_run_report,
+                                                    followup_best_variant_file,
+                                                ) = _run_teacher_guided_queue_replay(
+                                                    queue_report=followup_queue_report,
+                                                    source_net_file=non_controller_demotion_variant_file,
+                                                    plain_output_dir=output_dir
+                                                    / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_plain",
+                                                    run_output_dir=output_dir
+                                                    / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_execution",
+                                                    prefix=(
+                                                        f"{prefix}_post_teacher_tls_non_controller_junction_demotion_"
+                                                        "movement_rebuild"
+                                                    ),
+                                                    netconvert_binary=netconvert_binary,
+                                                    sumo_binary=sumo_binary,
+                                                    timeout_seconds=timeout_seconds,
+                                                    max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                                                    plain_export_func=teacher_guided_plain_export_func,
+                                                    repair_run_func=teacher_guided_repair_run_func,
+                                                )
+                                                if followup_best_variant_file is not None:
+                                                    followup_demotion_report = tls_non_controller_junction_demotion_func(
+                                                        source_net_file=followup_best_variant_file,
+                                                        output_dir=output_dir
+                                                        / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_demote",
+                                                        prefix=(
+                                                            f"{prefix}_post_teacher_tls_non_controller_junction_demotion_"
+                                                            "movement_rebuild_demote"
+                                                        ),
+                                                    )
+                                                    followup_demotion_value = followup_demotion_report.get(
+                                                        "tls_non_controller_junction_demotion_variant_file", ""
+                                                    )
+                                                    followup_demotion_file = (
+                                                        Path(str(followup_demotion_value))
+                                                        if followup_demotion_value
+                                                        else None
+                                                    )
+                                                    if (
+                                                        followup_demotion_file is not None
+                                                        and followup_demotion_file.exists()
+                                                    ):
+                                                        followup_sumo_load_report = _sumo_load_net(
+                                                            followup_demotion_file,
+                                                            output_dir=output_dir
+                                                            / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_demote_sumo_load",
+                                                            sumo_binary=sumo_binary,
+                                                            timeout_seconds=timeout_seconds,
+                                                            command_runner=command_runner,
+                                                        )
+                                                        if followup_sumo_load_report.get("status") == "pass":
+                                                            followup_edge_map = {
+                                                                **non_controller_base_edge_map,
+                                                                **_teacher_guided_equivalent_approach_edge_map(
+                                                                    followup_run_report
+                                                                ),
+                                                            }
+                                                            followup_delta_report = reference_join_audit_func(
+                                                                reference_net_file=reference_net_file,
+                                                                candidate_net_file=followup_demotion_file,
+                                                                output_dir=output_dir
+                                                                / "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_reference_delta",
+                                                                prefix=(
+                                                                    f"{prefix}_post_teacher_tls_non_controller_"
+                                                                    "junction_demotion_movement_rebuild_reference_delta"
+                                                                ),
+                                                                candidate_cluster_radius_m=topology_cluster_radius_m,
+                                                                candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                                                structural_only=True,
+                                                                equivalent_approach_edge_map=followup_edge_map,
+                                                            )
+                                                            followup_promotion_report = _reference_delta_promotion_decision(
+                                                                candidate_delta_report=followup_delta_report,
+                                                                baseline_delta_report=(
+                                                                    post_teacher_tls_non_controller_junction_demotion_reference_delta_report
+                                                                ),
+                                                                reason=(
+                                                                    "post_teacher_tls_non_controller_junction_demotion_"
+                                                                    "movement_rebuild_promoted_by_reference_delta"
+                                                                ),
+                                                            )
+                                                            if followup_promotion_report.get("status") == "pass":
+                                                                post_teacher_tls_non_controller_junction_demotion_report = (
+                                                                    followup_demotion_report
+                                                                )
+                                                                post_teacher_tls_non_controller_junction_demotion_sumo_load_report = (
+                                                                    followup_sumo_load_report
+                                                                )
+                                                                post_teacher_tls_non_controller_junction_demotion_reference_delta_report = (
+                                                                    followup_delta_report
+                                                                )
+                                                                post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = (
+                                                                    followup_promotion_report
+                                                                )
+                                                                reference_visual_detail_comparison_net_file = (
+                                                                    followup_demotion_file
+                                                                )
+                                                                reference_visual_detail_comparison_selection_reason = str(
+                                                                    followup_promotion_report.get("reason", "")
+                                                                )
+                                                                reference_join_post_teacher_audit_report = (
+                                                                    followup_delta_report
+                                                                )
                                     else:
                                         post_teacher_tls_non_controller_junction_demotion_reference_promotion_report = {
                                             "status": "blocked",

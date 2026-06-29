@@ -2171,7 +2171,12 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
     filtered_osm = tmp_path / "osm" / "filtered.osm.xml.gz"
     teacher_guided_net = tmp_path / "teacher_guided.net.xml"
     demoted_net = tmp_path / "tls_non_controller_junction_demoted.net.xml"
-    calls: dict[str, object] = {"reference_join_candidate_net_files": []}
+    followup_movement_net = tmp_path / "followup_movement.net.xml"
+    followup_demoted_net = tmp_path / "followup_tls_non_controller_junction_demoted.net.xml"
+    calls: dict[str, object] = {
+        "reference_join_candidate_net_files": [],
+        "teacher_guided_queue_candidate_net_files": [],
+    }
 
     def write_net(path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -2218,16 +2223,21 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
             return delta(extra_tls_junctions=5, summary="post_teacher_delta.json")
         if candidate == demoted_net:
             calls["non_controller_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
-            return delta(extra_tls_junctions=1, summary="non_controller_demotion_delta.json")
+            return delta(extra_tls_junctions=1, mismatch=1, summary="non_controller_demotion_delta.json")
+        if candidate == followup_demoted_net:
+            calls["followup_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
+            return delta(extra_tls_junctions=0, summary="followup_non_controller_demotion_delta.json")
         return delta(extra_tls_junctions=6, mismatch=1, summary="initial_delta.json")
 
-    def fake_teacher_guided_queue(**_kwargs):
+    def fake_teacher_guided_queue(**kwargs):
+        calls["teacher_guided_queue_candidate_net_files"].append(kwargs["candidate_net_file"])
+        is_followup = kwargs["candidate_net_file"] == demoted_net
         return {
             "status": "pass",
             "repair_candidate_count": 1,
             "ready_candidate_count": 1,
             "expanded_scope_candidate_count": 0,
-            "queue_file": str(tmp_path / "teacher_queue.json"),
+            "queue_file": str(tmp_path / ("followup_teacher_queue.json" if is_followup else "teacher_queue.json")),
             "repair_candidates": [{"vehicle_movement_matrix_missing_count": 1}],
         }
 
@@ -2240,32 +2250,37 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
             "raw_type_file": str(tmp_path / "plain.typ.xml"),
         }
 
-    def fake_repair_run(**_kwargs):
+    def fake_repair_run(**kwargs):
+        is_followup = kwargs["queue_report"]["queue_file"].endswith("followup_teacher_queue.json")
         return {
             "status": "pass",
             "parity_gate_status": "pass",
             "composite_applied_candidate_count": 1,
-            "composite_net_file": str(write_net(teacher_guided_net)),
+            "composite_net_file": str(write_net(followup_movement_net if is_followup else teacher_guided_net)),
             "run_report_file": str(tmp_path / "teacher_run.json"),
             "variant_reports": [
                 {
                     "status": "pass",
                     "parity_gate_status": "pass",
                     "target_internal_replay": {
-                        "effective_edge_map": {"teacher_edge": "candidate_edge"}
+                        "effective_edge_map": {
+                            "teacher_edge": "candidate_edge",
+                            **({"followup_teacher_edge": "followup_candidate_edge"} if is_followup else {}),
+                        }
                     },
                 }
             ],
         }
 
     def fake_non_controller_demotion(**kwargs):
-        calls["non_controller_source_net_file"] = kwargs["source_net_file"]
-        write_net(demoted_net)
+        calls.setdefault("non_controller_source_net_files", []).append(kwargs["source_net_file"])
+        variant_file = followup_demoted_net if kwargs["source_net_file"] == followup_movement_net else demoted_net
+        write_net(variant_file)
         return {
             "status": "pass",
             "claim_status": "blocked",
             "tls_non_controller_junction_demotion_status": "variant_created_for_review",
-            "tls_non_controller_junction_demotion_variant_file": str(demoted_net),
+            "tls_non_controller_junction_demotion_variant_file": str(variant_file),
             "tls_non_controller_traffic_light_junction_demoted_count": 4,
             "warnings": [],
         }
@@ -2303,17 +2318,23 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
         },
     )
 
-    assert calls["non_controller_source_net_file"] == teacher_guided_net
+    assert calls["non_controller_source_net_files"] == [teacher_guided_net, followup_movement_net]
     assert calls["non_controller_equivalent_approach_edge_map"] == {"teacher_edge": "candidate_edge"}
+    assert calls["followup_equivalent_approach_edge_map"] == {
+        "teacher_edge": "candidate_edge",
+        "followup_teacher_edge": "followup_candidate_edge",
+    }
     assert demoted_net in calls["reference_join_candidate_net_files"]
-    assert report["reference_visual_detail_comparison_net_file"] == str(demoted_net)
+    assert followup_demoted_net in calls["reference_join_candidate_net_files"]
+    assert calls["teacher_guided_queue_candidate_net_files"][-1] == demoted_net
+    assert report["reference_visual_detail_comparison_net_file"] == str(followup_demoted_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
-        "post_teacher_tls_non_controller_junction_demotion_promoted_by_reference_delta"
+        "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_promoted_by_reference_delta"
     )
     assert report["post_teacher_tls_non_controller_junction_demotion_status"] == "pass"
     assert report["post_teacher_tls_non_controller_junction_demotion_sumo_load_status"] == "pass"
     assert report["post_teacher_tls_non_controller_junction_demotion_reference_promotion_status"] == "pass"
-    assert report["post_teacher_tls_non_controller_junction_demotion_reference_tls_semantic_delta_score"] == 1
+    assert report["post_teacher_tls_non_controller_junction_demotion_reference_tls_semantic_delta_score"] == 0
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
