@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.network_permissions import apply_service_passenger_permissions
 from torii_sumo.core.network_plan import derive_network_plan
 from torii_sumo.core.osm_workflow import (
+    _junction_semantic_gate,
     _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
     _teacher_guided_application_stats,
@@ -14,6 +15,18 @@ from torii_sumo.core.osm_workflow import (
     run_osm_cleanup_workflow,
 )
 from torii_sumo.core.reference_bbox import derive_reference_net_bbox
+
+
+def test_junction_semantic_gate_uses_comparison_evidence_when_case_counts_are_zero() -> None:
+    report = {
+        "status": "pass",
+        "matched_case_count": 0,
+        "junction_pattern_mismatch_count": 0,
+        "junction_pattern_mismatch_field_counts": {},
+        "junction_pattern_comparisons": [{"junction_id": "89129103", "status": "pass", "mismatch_fields": []}],
+    }
+
+    assert _junction_semantic_gate(report, {"movement_signature_counts"}) == "pass"
 
 
 def _write_reference_net(path: Path) -> None:
@@ -1288,8 +1301,8 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["workflow_review_net_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
-    assert report["gate_status"]["connection_semantics_parity"] == "blocked"
-    assert report["gate_status"]["tls_semantics_parity"] == "blocked"
+    assert report["gate_status"]["connection_semantics_parity"] == "pass"
+    assert report["gate_status"]["tls_semantics_parity"] == "pass"
     assert report["gate_status"]["internal_junction_parity"] == "blocked"
     assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
     assert report["gate_status"]["teacher_guided_junction_parity"] == "blocked"
@@ -1664,6 +1677,10 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     )
     assert report["reference_join_post_teacher_audit_status"] == "pass"
     assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 0
+    assert report["gate_status"]["connection_semantics_parity"] == "pass"
+    assert report["gate_status"]["tls_semantics_parity"] == "pass"
+    assert report["gate_status"]["internal_junction_parity"] == "pass"
+    assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
     assert calls["post_repair_movement_equivalent_approach_edge_map"] == {
         "teacher_west": "candidate_west"
     }
@@ -1912,6 +1929,10 @@ def test_reference_matched_workflow_runs_post_repair_movement_rebuild_when_repai
         "post_teacher_tls_connection_repair_movement_rebuild_promoted"
     )
     assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 0
+    assert report["gate_status"]["connection_semantics_parity"] == "pass"
+    assert report["gate_status"]["tls_semantics_parity"] == "pass"
+    assert report["gate_status"]["internal_junction_parity"] == "pass"
+    assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
