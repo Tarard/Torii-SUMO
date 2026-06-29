@@ -249,6 +249,15 @@ def _intish(value: Any) -> int:
         return 0
 
 
+def _same_path_value(left: Any, right: Path | None) -> bool:
+    if not left or right is None:
+        return False
+    try:
+        return Path(str(left)).resolve() == right.resolve()
+    except OSError:
+        return str(left) == str(right)
+
+
 def _junction_pattern_residual_stats(report: Mapping[str, Any] | None) -> dict[str, Any]:
     if report is None:
         return {
@@ -2597,6 +2606,34 @@ def run_osm_cleanup_workflow(
                                             "status": "blocked",
                                             "reason": "sumo_load_not_pass",
                                         }
+    if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
+        if run_topology_audit_after_build and not _same_path_value(
+            None if topology_audit_report is None else topology_audit_report.get("net_file", ""),
+            reference_visual_detail_comparison_net_file,
+        ):
+            topology_audit_report = topology_audit_func(
+                net_file=reference_visual_detail_comparison_net_file,
+                output_dir=output_dir / "final_topology_audit",
+                prefix=f"{prefix}_final_topology_audit",
+                cluster_radius_m=topology_cluster_radius_m,
+                min_cluster_nodes=topology_min_cluster_nodes,
+                osm_file=osm_file,
+            )
+        if (
+            str(network_plan.get("network_profile", "")) == "reference_matched"
+            and reference_net_file is not None
+            and run_reference_hierarchy_audit_after_build
+            and not _same_path_value(reference_hierarchy_audit_candidate_net_file, reference_visual_detail_comparison_net_file)
+        ):
+            reference_hierarchy_audit_candidate_net_file = reference_visual_detail_comparison_net_file
+            reference_hierarchy_audit_candidate_layer = "reference_visual_detail"
+            reference_hierarchy_audit_report = reference_hierarchy_audit_func(
+                reference_net_file=reference_net_file,
+                candidate_net_file=reference_hierarchy_audit_candidate_net_file,
+                output_dir=output_dir / "final_reference_hierarchy_audit",
+                prefix=f"{prefix}_final_reference_hierarchy_audit",
+            )
+
     routeability_report = None
     if key_edge_queries:
         routeability_report = routeability_func(
