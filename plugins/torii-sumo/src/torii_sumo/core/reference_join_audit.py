@@ -716,6 +716,15 @@ def _structural_signature_delta(reference: dict[str, int], candidate: dict[str, 
 def _net_structural_summary(net_file: Path) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
     edge_function_counts = Counter(_edge_function(edge) for edge in root.findall("edge"))
+    plain_edge_type_counts: Counter[str] = Counter()
+    plain_edge_type_pedestrian_lane_counts: Counter[str] = Counter()
+    for edge in root.findall("edge"):
+        if _edge_function(edge) != "plain":
+            continue
+        edge_type = edge.attrib.get("type", "") or "none"
+        plain_edge_type_counts[edge_type] += 1
+        if any("pedestrian" in lane.attrib.get("allow", "").split() for lane in edge.findall("lane")):
+            plain_edge_type_pedestrian_lane_counts[edge_type] += 1
     junction_ids = {
         junction.attrib.get("id", "")
         for junction in root.findall("junction")
@@ -746,6 +755,8 @@ def _net_structural_summary(net_file: Path) -> dict[str, Any]:
         **tls_summary,
         "junction_type_counts": dict(sorted(junction_type_counts.items())),
         "edge_function_counts": dict(sorted(edge_function_counts.items())),
+        "plain_edge_type_counts": dict(sorted(plain_edge_type_counts.items())),
+        "plain_edge_type_pedestrian_lane_counts": dict(sorted(plain_edge_type_pedestrian_lane_counts.items())),
     }
 
 
