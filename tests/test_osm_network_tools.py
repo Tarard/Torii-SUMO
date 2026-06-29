@@ -723,6 +723,7 @@ def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tl
     ]
     for option in report["netconvert_profile_options"]:
         assert option in command
+    assert "--no-turnarounds" not in command
 
 
 def test_build_osm_network_rejects_tum_named_netconvert_profile(tmp_path: Path) -> None:
