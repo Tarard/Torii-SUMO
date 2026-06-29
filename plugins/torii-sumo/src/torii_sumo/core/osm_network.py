@@ -406,6 +406,13 @@ def _relative_to_root(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
 
+def _command_path(path: Path, root: Path) -> str:
+    try:
+        return _relative_to_root(path, root)
+    except ValueError:
+        return str(path)
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -422,11 +429,40 @@ def _failure(error_message: str, *, artifacts: dict[str, Any] | None = None) -> 
     return payload
 
 
+REFERENCE_VISUAL_PROFILES = {"reference_visual_detail", "reference_matched_visual_detail"}
+REFERENCE_VISUAL_SUMO_TYPEMAPS = (
+    "osmNetconvert.typ.xml",
+    "osmNetconvertBicycle.typ.xml",
+    "osmNetconvertPedestrians.typ.xml",
+)
+REFERENCE_VISUAL_SERVICE_TYPE_XML = """<types xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/types_file.xsd">
+    <type id="highway.service" numLanes="1" speed="5.56" priority="1" oneway="false" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship cable_car subway"/>
+    <type id="highway.service|psv" numLanes="1" speed="13.89" priority="1" oneway="false" allow="bus coach"/>
+    <type id="highway.service|bus" numLanes="1" speed="13.89" priority="1" oneway="false" allow="bus coach"/>
+</types>
+"""
+
+
+def _reference_visual_type_options(root: Path, logs_dir: Path, prefix: str) -> tuple[list[str], list[str]]:
+    sumo_home = os.environ.get("SUMO_HOME", "").strip()
+    if not sumo_home:
+        return [], ["SUMO_HOME is not set; reference visual service typemap overlay skipped"]
+    typemap_dir = Path(sumo_home) / "data" / "typemap"
+    base_type_files = [typemap_dir / name for name in REFERENCE_VISUAL_SUMO_TYPEMAPS]
+    missing = [str(path) for path in base_type_files if not path.exists()]
+    if missing:
+        return [], ["SUMO typemap files missing; reference visual service typemap overlay skipped: " + ", ".join(missing)]
+    service_type_file = logs_dir / f"{prefix}_service_no_pedestrian.typ.xml"
+    _write_text(service_type_file, REFERENCE_VISUAL_SERVICE_TYPE_XML)
+    type_files = [*base_type_files, service_type_file]
+    return ["--type-files", ",".join(_command_path(path, root) for path in type_files)], []
+
+
 def _netconvert_profile_options(profile: str | None) -> list[str]:
     normalized = (profile or "vehicle_core").strip().lower().replace("-", "_")
     if normalized in {"", "default", "vehicle", "vehicle_core"}:
         return []
-    if normalized in {"reference_visual_detail", "reference_matched_visual_detail"}:
+    if normalized in REFERENCE_VISUAL_PROFILES:
         return [
             "--osm.bike-access",
             "--osm.sidewalks",
@@ -528,8 +564,13 @@ def build_osm_network(
         )
         turnaround_options = (
             []
-            if normalized_profile in {"reference_visual_detail", "reference_matched_visual_detail"}
+            if normalized_profile in REFERENCE_VISUAL_PROFILES
             else ["--no-turnarounds"]
+        )
+        type_options, type_warnings = (
+            _reference_visual_type_options(root, logs_dir, prefix)
+            if normalized_profile in REFERENCE_VISUAL_PROFILES
+            else ([], [])
         )
         command = [
             "netconvert",
@@ -543,6 +584,7 @@ def build_osm_network(
             "--tls.join",
             "--tls.join-dist",
             "35",
+            *type_options,
             *profile_options,
             "--verbose",
         ]
@@ -562,6 +604,7 @@ def build_osm_network(
                     f"overpass_retry_count={overpass_report['retry_count'] if overpass_report else 0}",
                     f"netconvert_profile={normalized_profile}",
                     "netconvert_profile_options=" + " ".join(profile_options),
+                    "netconvert_type_options=" + " ".join(type_options),
                     "netconvert_command=" + " ".join(command),
                     "",
                 ]
@@ -587,7 +630,7 @@ def build_osm_network(
         )
 
     status = "pass" if result.get("status") == "pass" and net_file.exists() else "fail"
-    warnings = []
+    warnings = list(type_warnings)
     if not net_file.exists():
         warnings.append(f"net file was not created: {net_file}")
     return {
