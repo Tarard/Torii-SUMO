@@ -1831,6 +1831,12 @@ def run_teacher_guided_repair_queue(
                                 teacher_junction_id,
                             )
                         )
+                        teacher_boundary_edge_ids.update(
+                            edge_id
+                            for edge_id, edge in teacher_edges.items()
+                            if teacher_junction_id in (edge.attrib.get("from"), edge.attrib.get("to"))
+                            and not _edge_is_pedestrian_only(edge)
+                        )
                         copyable_missing_blocked_edge_ids = [
                             edge_id
                             for edge_id in unresolved_missing_blocked_edge_ids
@@ -3477,6 +3483,11 @@ def _connection_lane_indices_valid(connection: ET.Element, lane_counts: dict[str
         connection.attrib.get("to", ""),
         connection.attrib.get("toLane", "0"),
     )
+
+
+def _edge_is_pedestrian_only(edge: ET.Element) -> bool:
+    lanes = edge.findall("lane")
+    return bool(lanes) and all(set((lane.attrib.get("allow") or "").split()) == {"pedestrian"} for lane in lanes)
 
 
 def _command_path(path: Path, cwd: Path) -> str:
