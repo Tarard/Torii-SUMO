@@ -1724,7 +1724,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     )
 
 
-def test_reference_matched_workflow_queues_post_repair_movement_rebuild_when_repair_is_not_promoted(
+def test_reference_matched_workflow_runs_post_repair_movement_rebuild_when_repair_is_not_promoted(
     tmp_path: Path,
 ) -> None:
     reference_net_file = tmp_path / "reference.net.xml"
@@ -1733,7 +1733,8 @@ def test_reference_matched_workflow_queues_post_repair_movement_rebuild_when_rep
     teacher_guided_net = tmp_path / "teacher_guided.net.xml"
     signal_grouped_net = tmp_path / "signal_grouped.net.xml"
     repaired_net = tmp_path / "repaired.net.xml"
-    calls: dict[str, list[dict[str, object]]] = {"queue": []}
+    movement_rebuilt_net = tmp_path / "movement_rebuilt.net.xml"
+    calls: dict[str, list[dict[str, object]]] = {"queue": [], "run": []}
 
     def write_net(path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1797,6 +1798,8 @@ def test_reference_matched_workflow_queues_post_repair_movement_rebuild_when_rep
             return delta(missing=4, summary="signal_grouped_delta.json")
         if candidate == repaired_net:
             return delta(missing=10, mismatch=1, summary="repaired_delta.json")
+        if candidate == movement_rebuilt_net:
+            return delta(missing=2, summary="movement_rebuilt_delta.json")
         return delta(missing=12, summary="initial_delta.json")
 
     def fake_teacher_guided_queue(**kwargs):
@@ -1829,7 +1832,9 @@ def test_reference_matched_workflow_queues_post_repair_movement_rebuild_when_rep
         }
 
     def fake_repair_run(**kwargs):
-        net_file = write_net(teacher_guided_net)
+        calls["run"].append(kwargs)
+        is_movement_rebuild = kwargs["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild")
+        net_file = write_net(movement_rebuilt_net if is_movement_rebuild else teacher_guided_net)
         return {
             "status": "pass",
             "parity_gate_status": "pass",
@@ -1895,6 +1900,18 @@ def test_reference_matched_workflow_queues_post_repair_movement_rebuild_when_rep
     )
     assert report["post_teacher_tls_connection_repair_movement_rebuild_queue_status"] == "pass"
     assert calls["queue"][-1]["candidate_net_file"] == repaired_net
+    assert len(calls["run"]) == 2
+    assert calls["run"][-1]["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild")
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_run_status"] == "pass"
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status"] == "pass"
+    assert report["post_teacher_tls_connection_repair_movement_rebuild_best_variant_file"] == str(
+        movement_rebuilt_net
+    )
+    assert report["reference_visual_detail_comparison_net_file"] == str(movement_rebuilt_net)
+    assert report["reference_visual_detail_comparison_selection_reason"] == (
+        "post_teacher_tls_connection_repair_movement_rebuild_promoted"
+    )
+    assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 0
 
 
 def test_reference_matched_workflow_prefers_tls_aggregated_visual_detail_for_reference_join(tmp_path: Path) -> None:
