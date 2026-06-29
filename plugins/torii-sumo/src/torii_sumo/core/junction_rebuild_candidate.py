@@ -932,6 +932,23 @@ def write_teacher_target_internal_replay_net(
             ]
         )
     )
+    for edge_id in teacher_boundary_edge_ids:
+        teacher_edge = teacher_edges.get(edge_id)
+        if (
+            edge_id not in replay_edge_map
+            and teacher_edge is not None
+            and edge_id in candidate_edges_by_id
+            and not _teacher_boundary_edge_needs_replay(
+                teacher_edge,
+                replay_edge_map,
+                candidate_edges_by_id,
+                teacher_junction_id,
+                junction_id,
+                dx,
+                dy,
+            )
+        ):
+            replay_edge_map[edge_id] = edge_id
     teacher_boundary_edge_id_set = set(teacher_boundary_edge_ids)
     teacher_boundary_mapped_counts = Counter(replay_edge_map.get(edge_id, edge_id) for edge_id in teacher_boundary_edge_ids)
     needed_boundary_edge_ids = list(
@@ -1048,7 +1065,7 @@ def write_teacher_target_internal_replay_net(
                 or junction_id not in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
             ):
                 continue
-            _remove_edge_lanes_from_destination_junction(candidate_root, edge)
+            _remove_edge_lanes_from_destination_junction(candidate_root, edge, all_junctions=True)
             candidate_root.remove(edge)
             candidate_edge_ids.discard(edge_id)
             candidate_edges_by_id.pop(edge_id, None)
@@ -1175,7 +1192,15 @@ def write_teacher_target_internal_replay_net(
         )
     if teacher_tllogic is not None:
         target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
-        target_index = list(candidate_root).index(target_tllogic) if target_tllogic is not None else len(list(candidate_root))
+        root_children = list(candidate_root)
+        target_index = (
+            root_children.index(target_tllogic)
+            if target_tllogic is not None
+            else next(
+                (index for index, child in enumerate(root_children) if child.tag == "connection"),
+                len(root_children),
+            )
+        )
         if target_tllogic is not None:
             candidate_root.remove(target_tllogic)
         copied_tllogic = _clone_transformed_net_element(teacher_tllogic, dx, dy, replay_edge_map, teacher_junction_id, junction_id)
@@ -2337,6 +2362,8 @@ def run_teacher_guided_repair_queue(
             break
     final_internal_replay_reports = []
     final_internal_replay_status = "skipped"
+    final_internal_replay_normalize_report = None
+    final_internal_replay_normalized_net_file = ""
     if (
         sequential_accept_passed_variants
         and composite_applied_candidate_count > 0
@@ -2369,7 +2396,58 @@ def run_teacher_guided_repair_queue(
                 break
             current_composite_net_file = restored_net_file
         if final_internal_replay_status == "pass":
-            composite_net_file = str(current_composite_net_file)
+            normalized_composite_net_file = _stage_file(
+                restore_dir,
+                prefix,
+                "final_internal_replay_normalized.net.xml",
+            )
+            final_internal_replay_normalize_command = [
+                netconvert_binary,
+                "--sumo-net-file",
+                _command_path(current_composite_net_file, restore_dir),
+                "--output-file",
+                _command_path(normalized_composite_net_file, restore_dir),
+            ]
+            final_internal_replay_normalize_report = _command_report(
+                command_runner(
+                    final_internal_replay_normalize_command,
+                    cwd=restore_dir,
+                    timeout_seconds=timeout_seconds,
+                )
+            )
+            final_internal_replay_normalize_report["output_file"] = str(normalized_composite_net_file)
+            geometry_restore_reports = []
+            if (
+                final_internal_replay_normalize_report.get("status") == "pass"
+                and normalized_composite_net_file.exists()
+            ):
+                for replay_entry, replay_report in zip(accepted_internal_replays, final_internal_replay_reports):
+                    restored_net_file = Path(str(replay_report.get("net_file", "")))
+                    if replay_report.get("status") != "pass" or not restored_net_file.exists():
+                        continue
+                    geometry_restore_report = _restore_replayed_geometry_attrs(
+                        source_file=restored_net_file,
+                        target_file=normalized_composite_net_file,
+                        junction_id=str(replay_entry["junction_id"]),
+                    )
+                    geometry_restore_reports.append(geometry_restore_report)
+                    if geometry_restore_report.get("status") != "pass":
+                        break
+                final_internal_replay_normalize_report["geometry_restore"] = geometry_restore_reports
+                if all(report.get("status") == "pass" for report in geometry_restore_reports):
+                    final_internal_replay_normalized_net_file = str(normalized_composite_net_file)
+                    composite_net_file = final_internal_replay_normalized_net_file
+                else:
+                    final_internal_replay_status = "fail"
+                    final_internal_replay_normalize_report["status"] = "fail"
+                    final_internal_replay_normalize_report["error"] = "geometry restore failed after normalization"
+            else:
+                final_internal_replay_status = "fail"
+                if final_internal_replay_normalize_report.get("status") == "pass":
+                    final_internal_replay_normalize_report["status"] = "fail"
+                    final_internal_replay_normalize_report["error"] = (
+                        f"normalized output missing: {normalized_composite_net_file}"
+                    )
     sequential_composite_ready = (
         sequential_accept_passed_variants
         and composite_applied_candidate_count > 0
@@ -2427,6 +2505,8 @@ def run_teacher_guided_repair_queue(
         "composite_applied_candidate_count": composite_applied_candidate_count,
         "composite_net_file": composite_net_file,
         "final_internal_replay_status": final_internal_replay_status,
+        "final_internal_replay_normalize": final_internal_replay_normalize_report,
+        "final_internal_replay_normalized_net_file": final_internal_replay_normalized_net_file,
         "final_internal_replay_restored_count": sum(
             1 for report in final_internal_replay_reports if report.get("status") == "pass"
         ),
@@ -4126,18 +4206,32 @@ def _append_edge_lanes_to_destination_junction(root: ET.Element, edge: ET.Elemen
     junction.set("incLanes", " ".join(inc_lanes))
 
 
-def _remove_edge_lanes_from_destination_junction(root: ET.Element, edge: ET.Element) -> None:
-    destination = edge.attrib.get("to", "")
-    if not destination:
-        return
-    junction = next((item for item in root.findall("junction") if item.attrib.get("id") == destination), None)
-    if junction is None:
-        return
+def _remove_edge_lanes_from_destination_junction(
+    root: ET.Element,
+    edge: ET.Element,
+    *,
+    all_junctions: bool = False,
+) -> None:
     lanes = {lane.attrib["id"] for lane in edge.findall("lane") if lane.attrib.get("id")}
     if not lanes:
         return
-    inc_lanes = [lane for lane in _split(junction.attrib.get("incLanes", "")) if lane not in lanes]
-    junction.set("incLanes", " ".join(inc_lanes))
+    if all_junctions:
+        junctions = root.findall("junction")
+    else:
+        destination = edge.attrib.get("to", "")
+        if not destination:
+            return
+        junction = next((item for item in root.findall("junction") if item.attrib.get("id") == destination), None)
+        if junction is None:
+            return
+        junctions = [junction]
+    for junction in junctions:
+        inc_lanes = _split(junction.attrib.get("incLanes", ""))
+        if not inc_lanes:
+            continue
+        filtered = [lane for lane in inc_lanes if lane not in lanes]
+        if len(filtered) != len(inc_lanes):
+            junction.set("incLanes", " ".join(filtered))
 
 
 def _first_junction_index(root: ET.Element) -> int:
