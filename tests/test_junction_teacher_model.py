@@ -88,6 +88,30 @@ def test_teacher_model_extracts_multimodal_junction(tmp_path: Path) -> None:
     assert model["walking_areas"][0]["lanes"][0]["outlineShape"] == "0,1 2,1 2,3 0,3"
 
 
+def test_teacher_model_excludes_pedestrian_only_incoming_from_vehicle_approaches(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="car_in" from="a" to="j"><lane id="car_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="ped_in" from="p" to="j" type="highway.footway"><lane id="ped_in_0" index="0" allow="pedestrian" shape="-5,2 0,2"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="0,2 2,2"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="car_in_0 ped_in_0 :j_w0_0" intLanes=""/>
+  <connection from="car_in" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="ped_in" to=":j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    model = extract_teacher_junction_model(net_file, "j")
+
+    assert [edge["edge_id"] for edge in model["approaches"]["incoming"]] == ["car_in"]
+    assert model["summary"]["incoming_vehicle_edge_count"] == 1
+    assert model["summary"]["vehicle_connection_count"] == 1
+    assert model["summary"]["pedestrian_connection_count"] == 1
+    assert model["pedestrian_connections"][0]["from"] == "ped_in"
+
+
 def test_teacher_model_keeps_junction_requests_internal_connections_and_referenced_tls(tmp_path: Path) -> None:
     net_file = tmp_path / "teacher.net.xml"
     net_file.write_text(

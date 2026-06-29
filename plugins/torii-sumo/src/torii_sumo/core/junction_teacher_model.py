@@ -33,6 +33,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
             if (lane_entry := lane_to_edge.get(lane_id))
             for edge_id, _edge, _lane in [lane_entry]
             if not edge_id.startswith(":")
+            and _edge_allows_non_pedestrian(_edge)
         }
     )
     outgoing_edges = {
