@@ -354,6 +354,11 @@ def test_low_vehicle_control_candidate_limits_include_tls_count_fallback() -> No
             "max_removed_controlled_connections": None,
             "max_selected_tllogic_count": 20,
         },
+        {
+            "label": "tls41",
+            "max_removed_controlled_connections": None,
+            "max_selected_tllogic_count": 41,
+        },
     ]
 
 
@@ -424,6 +429,33 @@ def test_network_plan_derives_reference_policy_from_reference_net(tmp_path: Path
     assert "internal_junction_parity" in plan["validation_gates"]
     assert "netedit_connection_mode_review" in plan["validation_gates"]
     assert "teacher_guided_junction_parity" in plan["validation_gates"]
+
+
+def test_network_plan_derives_reference_source_way_ids_from_osm_edge_ids(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "manual-reference.net.xml"
+    reference_net_file.write_text(
+        """<net>
+    <edge id="12345#0" type="highway.primary">
+        <lane id="12345#0_0" index="0" allow="passenger" speed="13.9" length="25.0"/>
+    </edge>
+    <edge id="-67890#2" type="highway.service">
+        <lane id="-67890#2_0" index="0" allow="passenger pedestrian" speed="5.0" length="25.0"/>
+    </edge>
+    <edge id="synthetic_edge" type="highway.footway">
+        <lane id="synthetic_edge_0" index="0" allow="pedestrian" speed="5.0" length="25.0"/>
+    </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    plan = derive_network_plan(
+        user_request="Generate an OSM network that matches a manually cleaned reference network",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+    )
+
+    assert plan["reference_source_way_ids"] == ["12345", "67890"]
+    assert plan["reference_policy"]["reference_source_way_id_count"] == 2
 
 
 def test_reference_matched_plan_keeps_service_out_of_vehicle_core(tmp_path: Path) -> None:
@@ -720,6 +752,96 @@ def test_osm_cleanup_workflow_uses_reference_net_policy_and_service_policy(tmp_p
     assert report["reference_visual_detail_status"] == "built"
     assert report["reference_visual_detail_net_file"] == str(visual_detail_net_file)
     assert report["reference_visual_detail_build"]["road_classes"] == sorted(build_calls[1]["allowed_highways"])
+
+
+def test_reference_matched_workflow_passes_reference_source_way_scope_to_build(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    reference_net_file.write_text(
+        """<net>
+    <edge id="101#0" type="highway.primary">
+        <lane id="101#0_0" index="0" allow="passenger" speed="13.9" length="25.0"/>
+    </edge>
+    <edge id="-202#1" type="highway.service">
+        <lane id="-202#1_0" index="0" allow="passenger pedestrian" speed="5.0" length="25.0"/>
+    </edge>
+    <edge id="303" type="highway.footway">
+        <lane id="303_0" index="0" allow="pedestrian" speed="5.0" length="25.0"/>
+    </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    source_osm = tmp_path / "source.osm.xml"
+    source_osm.write_text("<osm/>", encoding="utf-8")
+    build_calls: list[dict[str, object]] = []
+
+    def fake_build(**kwargs):
+        build_calls.append(
+            {
+                "prefix": kwargs["prefix"],
+                "allowed_way_ids": set(kwargs["allowed_way_ids"]),
+            }
+        )
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text(
+            """<net>
+    <edge id="101#0" type="highway.primary">
+        <lane id="101#0_0" index="0" allow="passenger" speed="13.9" length="25.0"/>
+    </edge>
+</net>""",
+            encoding="utf-8",
+        )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(source_osm),
+            "source_osm_file": str(source_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-scope",
+        source_osm_path=source_osm,
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 1,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 1,
+            "warnings": [],
+        },
+        run_tls_aggregation_after_build=False,
+        run_topology_audit_after_build=False,
+        run_routeability_audit_after_build=False,
+        run_reference_join_audit_after_build=False,
+        run_reference_hierarchy_audit_after_build=False,
+        run_reference_scope_audit_after_build=False,
+        launch_netedit_after_build=False,
+        launch_sumo_gui_after_build=False,
+    )
+
+    assert report["status"] == "pass"
+    assert len(build_calls) == 2
+    assert build_calls[0]["allowed_way_ids"] == {"101", "202", "303"}
+    assert build_calls[1]["allowed_way_ids"] == {"101", "202", "303"}
+    assert report["reference_source_way_id_count"] == 3
 
 
 def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer(tmp_path: Path) -> None:
@@ -1955,6 +2077,130 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
     assert report["reference_visual_detail_tls_connection_repair_reference_delta_missing_counts"] == {
         "tls_controlled_connection_count": 90
     }
+
+
+def test_reference_matched_workflow_reviews_best_tls_aggregation_when_repair_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-review_filtered.osm.xml.gz"
+    visual_tls_net_file = tmp_path / "reference_visual_detail_tls_aggregation" / "tls_aggregated.net.xml"
+    calls: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text("<net/>", encoding="utf-8")
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_tls(**kwargs):
+        if "reference_visual_detail" not in str(kwargs["net_file"]):
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "tls_candidate_count": 0,
+                "tls_cluster_count": 0,
+                "clusters_file": str(tmp_path / "tls_clusters.csv"),
+                "warnings": [],
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 8,
+            "tls_cluster_count": 2,
+            "clusters_file": str(tmp_path / "visual_tls_clusters.csv"),
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**_kwargs):
+        visual_tls_net_file.parent.mkdir(parents=True, exist_ok=True)
+        visual_tls_net_file.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_aggregation_variant_file": str(visual_tls_net_file),
+            "tls_aggregation_representatives_file": str(tmp_path / "missing_representatives.csv"),
+            "tls_controlled_connection_preservation_status": "fail",
+            "tls_controlled_connection_regression_count": 12,
+            "warnings": ["review variant"],
+        }
+
+    def fake_reference_join_audit(**kwargs):
+        candidate_net_file = Path(kwargs["candidate_net_file"])
+        calls["last_reference_join_candidate_net_file"] = candidate_net_file
+        if candidate_net_file == visual_tls_net_file:
+            calls["aggregation_delta_candidate_net_file"] = candidate_net_file
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "network_structural_delta_status": "fail",
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 50},
+                "network_structural_extra_counts": {"tl_logic_count": 5},
+                "tls_control_review_queue": [],
+                "warnings": [],
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "structural_only",
+            "network_structural_delta_status": "fail",
+            "network_structural_missing_counts": {},
+            "network_structural_extra_counts": {"tl_logic_count": 1},
+            "tls_control_review_queue": [],
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-review",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        tls_aggregation_func=fake_tls_aggregation,
+        tls_connection_repair_func=lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("missing representatives should skip TLS connection repair")
+        ),
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "passenger_edge_count": 100,
+            "passenger_component_count": 1,
+            "largest_component_edge_count": 100,
+            "warnings": [],
+        },
+        run_topology_audit_after_build=False,
+        run_routeability_audit_after_build=False,
+        run_reference_hierarchy_audit_after_build=False,
+        run_reference_scope_audit_after_build=False,
+        run_reference_join_aggregation_after_build=False,
+        launch_netedit_after_build=False,
+        launch_sumo_gui_after_build=False,
+        reference_join_audit_func=fake_reference_join_audit,
+    )
+
+    assert calls["aggregation_delta_candidate_net_file"] == visual_tls_net_file
+    assert calls["last_reference_join_candidate_net_file"] == visual_tls_net_file
+    assert report["reference_visual_detail_comparison_net_file"] == str(visual_tls_net_file)
+    assert report["reference_visual_detail_comparison_selection_reason"] == (
+        "tls_aggregation_rejected_controlled_connection_regression"
+    )
 
 
 def test_reference_matched_workflow_promotes_tls_aggregation_when_reference_delta_improves(

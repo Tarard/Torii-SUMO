@@ -925,6 +925,7 @@ def _low_vehicle_control_candidate_limits(delta_report: Mapping[str, Any] | None
     if extra_tls > 0:
         add_limit(f"tls{max(1, extra_tls // 4)}", max_selected=max(1, extra_tls // 4))
         add_limit(f"tls{max(1, extra_tls // 2)}", max_selected=max(1, extra_tls // 2))
+        add_limit(f"tls{extra_tls}", max_selected=extra_tls)
     return limits[:3]
 
 
@@ -1216,12 +1217,19 @@ def run_osm_cleanup_workflow(
             "warnings": list(network_plan.get("warnings", [])),
         }
     selected_highway_classes = set(network_plan.get("highway_classes", []))
+    reference_source_way_ids = {
+        str(item)
+        for item in network_plan.get("reference_source_way_ids", [])
+        if str(item).strip()
+    }
+    reference_source_way_scope = reference_source_way_ids or None
     build_report = build_func(
         bbox=bbox,
         output_dir=output_dir,
         prefix=prefix,
         source_osm_path=source_osm_path,
         allowed_highways=selected_highway_classes,
+        allowed_way_ids=reference_source_way_scope,
         historical_date=historical_date,
         overpass_url=overpass_url,
         timeout_seconds=timeout_seconds,
@@ -1441,6 +1449,7 @@ def run_osm_cleanup_workflow(
             prefix=f"{prefix}_reference_visual_detail",
             source_osm_path=Path(str(visual_source_osm_value)),
             allowed_highways=reference_visual_detail_highway_classes,
+            allowed_way_ids=reference_source_way_scope,
             historical_date=historical_date,
             overpass_url=overpass_url,
             timeout_seconds=timeout_seconds,
@@ -1728,6 +1737,7 @@ def run_osm_cleanup_workflow(
                     reference_visual_detail_tls_aggregation_reference_promotion_report,
                     candidate_visual_tls_net_file,
                 ) = best_scored_tls_candidate
+                reference_visual_detail_comparison_net_file = candidate_visual_tls_net_file
                 reference_visual_detail_comparison_selection_reason = (
                     "tls_aggregation_rejected_controlled_connection_regression"
                 )
@@ -2854,6 +2864,10 @@ def run_osm_cleanup_workflow(
         "vehicle_core_highway_classes": network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", [])),
         "reference_visual_detail_highway_classes": network_plan.get("reference_visual_detail_highway_classes", []),
         "reference_visual_detail_only_highway_classes": network_plan.get("reference_visual_detail_only_highway_classes", []),
+        "reference_source_way_scope": "reference_source_way_ids"
+        if reference_source_way_scope is not None
+        else "not_applied",
+        "reference_source_way_id_count": len(reference_source_way_ids),
         "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
         "network_plan": network_plan,
         "reference_policy": network_plan.get("reference_policy", {}),

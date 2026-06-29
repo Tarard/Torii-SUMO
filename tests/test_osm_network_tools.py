@@ -573,6 +573,46 @@ def test_filter_osm_by_highways_clips_way_nodes_to_bbox(tmp_path: Path) -> None:
     assert stats["dropped_nodes_outside_bbox"] == 2
 
 
+def test_filter_osm_by_highways_limits_to_reference_way_scope(tmp_path: Path) -> None:
+    source = tmp_path / "source.osm.xml"
+    target = tmp_path / "filtered.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lon="10.0" lat="50.0"/>
+  <node id="2" lon="10.1" lat="50.1"/>
+  <node id="3" lon="10.2" lat="50.2"/>
+  <way id="101">
+    <nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="primary"/>
+  </way>
+  <way id="202">
+    <nd ref="2"/><nd ref="3"/>
+    <tag k="highway" v="primary"/>
+  </way>
+  <relation id="30">
+    <member type="way" ref="101" role="from"/>
+    <member type="way" ref="202" role="to"/>
+    <tag k="type" v="restriction"/>
+  </relation>
+</osm>""",
+        encoding="utf-8",
+    )
+
+    stats = filter_osm_by_highways(
+        source,
+        target,
+        {"primary"},
+        allowed_way_ids={"101"},
+    )
+
+    root = ET.parse(target).getroot()
+    assert [way.attrib["id"] for way in root.findall("way")] == ["101"]
+    assert [node.attrib["id"] for node in root.findall("node")] == ["1", "2"]
+    assert [relation.attrib["id"] for relation in root.findall("relation")] == ["30"]
+    assert stats["kept_ways"] == 1
+    assert stats["dropped_ways_outside_reference_scope"] == 1
+
+
 def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifacts(tmp_path: Path) -> None:
     source = tmp_path / "input.osm.xml"
     source.write_text(
