@@ -429,6 +429,36 @@ def test_compare_junction_pattern_records_flags_movement_signature_template_delt
     assert comparison["teacher"]["movement_signature_counts"] != comparison["candidate"]["movement_signature_counts"]
 
 
+def test_compare_junction_pattern_records_accepts_explicit_approach_edge_equivalence() -> None:
+    teacher = {
+        "approach_edge_ids": ["teacher_west", "teacher_south"],
+        "control_type": "traffic_light",
+        "has_tls": True,
+        "internal_function_counts": {"crossing": 2, "internal": 5, "walkingarea": 2},
+        "request_bit_lengths_ok": True,
+        "movement_signature_counts": {
+            "dir=s|state=o|fromLane=0|toLane=0|controlled=true|via=true": 2,
+        },
+    }
+    candidate = {
+        **teacher,
+        "approach_edge_ids": ["candidate_west", "candidate_south"],
+    }
+
+    comparison = compare_junction_pattern_records(
+        teacher,
+        candidate,
+        equivalent_approach_edge_map={
+            "teacher_west": "candidate_west",
+            "teacher_south": "candidate_south",
+        },
+    )
+
+    assert comparison["status"] == "pass"
+    assert comparison["mismatch_fields"] == []
+    assert comparison["approach_edge_equivalence_applied"] is True
+
+
 def test_extract_junction_pattern_index_keeps_blank_connection_dir(tmp_path: Path) -> None:
     net_file = tmp_path / "teacher.net.xml"
     net_file.write_text(

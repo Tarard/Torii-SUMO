@@ -30,6 +30,7 @@ def audit_reference_join_patterns(
     candidate_min_cluster_nodes: int = 3,
     match_radius_m: float = 45.0,
     structural_only: bool = False,
+    equivalent_approach_edge_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     if match_radius_m <= 0:
         return _failure("match_radius_m must be positive")
@@ -48,6 +49,7 @@ def audit_reference_join_patterns(
                 candidate_cluster_radius_m=candidate_cluster_radius_m,
                 candidate_min_cluster_nodes=candidate_min_cluster_nodes,
                 match_radius_m=match_radius_m,
+                equivalent_approach_edge_map=equivalent_approach_edge_map,
             )
         except (OSError, ET.ParseError, KeyError, ValueError) as exc:
             return _failure(f"{type(exc).__name__}: {exc}")
@@ -83,6 +85,7 @@ def audit_reference_join_patterns(
     junction_pattern_comparisons = _compare_same_id_patterns(
         junction_pattern_index,
         candidate_junction_pattern_index,
+        equivalent_approach_edge_map=equivalent_approach_edge_map,
     )
     junction_pattern_mismatch_count = sum(
         1 for comparison in junction_pattern_comparisons if comparison["status"] != "pass"
@@ -157,6 +160,7 @@ def audit_reference_join_patterns(
         "reference_net_file": str(reference_net_file),
         "candidate_net_file": str(candidate_net_file),
         "reference_cluster_prefix": reference_cluster_prefix,
+        "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
         "junction_pattern_comparison_status": "fail"
         if junction_pattern_mismatch_count
         else ("pass" if junction_pattern_comparisons else "skipped"),
@@ -197,6 +201,7 @@ def audit_reference_join_patterns(
         "candidate_cluster_radius_m": candidate_cluster_radius_m,
         "candidate_min_cluster_nodes": candidate_min_cluster_nodes,
         "match_radius_m": match_radius_m,
+        "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
         "reference_case_count": len(reference_cases),
         "matched_case_count": len(matched),
         "unmatched_case_count": len(matched_cases) - len(matched),
@@ -252,6 +257,7 @@ def _structural_only_report(
     candidate_cluster_radius_m: float,
     candidate_min_cluster_nodes: int,
     match_radius_m: float,
+    equivalent_approach_edge_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     reference_network_structural_summary = _net_structural_summary(reference_net_file)
     candidate_network_structural_summary = _net_structural_summary(candidate_net_file)
@@ -282,6 +288,7 @@ def _structural_only_report(
     junction_pattern_comparisons = _compare_same_id_patterns(
         junction_pattern_index,
         candidate_junction_pattern_index,
+        equivalent_approach_edge_map=equivalent_approach_edge_map,
     )
     junction_pattern_mismatch_count = sum(
         1 for comparison in junction_pattern_comparisons if comparison["status"] != "pass"
@@ -333,6 +340,7 @@ def _structural_only_report(
         "candidate_cluster_radius_m": candidate_cluster_radius_m,
         "candidate_min_cluster_nodes": candidate_min_cluster_nodes,
         "match_radius_m": match_radius_m,
+        "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
         "reference_case_count": 0,
         "matched_case_count": 0,
         "unmatched_case_count": 0,
@@ -383,6 +391,7 @@ def _structural_only_report(
                 "audit_mode": "structural_only",
                 "reference_net_file": str(reference_net_file),
                 "candidate_net_file": str(candidate_net_file),
+                "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
                 "junction_pattern_comparison_status": report["junction_pattern_comparison_status"],
                 "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
                 "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
@@ -1021,6 +1030,8 @@ def _network_structural_delta(reference: dict[str, Any], candidate: dict[str, An
 def _compare_same_id_patterns(
     reference_patterns: list[dict[str, Any]],
     candidate_patterns: list[dict[str, Any]],
+    *,
+    equivalent_approach_edge_map: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     candidates_by_id = {str(pattern.get("junction_id", "")): pattern for pattern in candidate_patterns}
     comparisons = []
@@ -1029,7 +1040,11 @@ def _compare_same_id_patterns(
         candidate = candidates_by_id.get(junction_id)
         if not junction_id or candidate is None:
             continue
-        comparison = compare_junction_pattern_records(reference, candidate)
+        comparison = compare_junction_pattern_records(
+            reference,
+            candidate,
+            equivalent_approach_edge_map=equivalent_approach_edge_map,
+        )
         comparisons.append(
             {
                 "junction_id": junction_id,
@@ -1037,6 +1052,7 @@ def _compare_same_id_patterns(
                 "mismatch_fields": comparison["mismatch_fields"],
                 "teacher": comparison["teacher"],
                 "candidate": comparison["candidate"],
+                "approach_edge_equivalence_applied": comparison["approach_edge_equivalence_applied"],
             }
         )
     return comparisons

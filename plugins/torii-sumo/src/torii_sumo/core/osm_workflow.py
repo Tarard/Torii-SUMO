@@ -535,6 +535,22 @@ def _teacher_guided_application_stats(
     }
 
 
+def _teacher_guided_equivalent_approach_edge_map(report: Mapping[str, Any] | None) -> dict[str, str]:
+    if report is None:
+        return {}
+    edge_map: dict[str, str] = {}
+    for variant in report.get("variant_reports", []) or []:
+        if not isinstance(variant, Mapping):
+            continue
+        if variant.get("status") != "pass" or variant.get("parity_gate_status") != "pass":
+            continue
+        replay = variant.get("target_internal_replay", {})
+        effective = replay.get("effective_edge_map", {}) if isinstance(replay, Mapping) else {}
+        if isinstance(effective, Mapping):
+            edge_map.update({str(key): str(value) for key, value in effective.items() if str(key) and str(value)})
+    return edge_map
+
+
 def export_plain_net_for_teacher_guided_repair(
     *,
     net_file: Path,
@@ -2574,6 +2590,9 @@ def run_osm_cleanup_workflow(
                                                                     candidate_cluster_radius_m=topology_cluster_radius_m,
                                                                     candidate_min_cluster_nodes=topology_min_cluster_nodes,
                                                                     structural_only=True,
+                                                                    equivalent_approach_edge_map=_teacher_guided_equivalent_approach_edge_map(
+                                                                        post_teacher_tls_connection_repair_movement_rebuild_run_report
+                                                                    ),
                                                                 )
                                                             )
                                     else:
