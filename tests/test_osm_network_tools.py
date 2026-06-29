@@ -538,6 +538,41 @@ def test_filter_osm_by_highways_keeps_nodes_and_restrictions_for_kept_ways(tmp_p
     }
 
 
+def test_filter_osm_by_highways_clips_way_nodes_to_bbox(tmp_path: Path) -> None:
+    source = tmp_path / "source.osm.xml"
+    target = tmp_path / "filtered.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lon="10.0" lat="50.0"/>
+  <node id="2" lon="10.5" lat="50.5"/>
+  <node id="3" lon="10.7" lat="50.7"/>
+  <node id="4" lon="12.0" lat="52.0"/>
+  <way id="101">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/>
+    <tag k="highway" v="residential"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+
+    stats = filter_osm_by_highways(
+        source,
+        target,
+        {"residential"},
+        bbox=parse_bbox("10.4,50.4,10.8,50.8"),
+    )
+
+    root = ET.parse(target).getroot()
+    kept_node_ids = [node.attrib["id"] for node in root.findall("node")]
+    kept_refs = [node.attrib["ref"] for node in root.find("way").findall("nd")]
+    assert kept_node_ids == ["2", "3"]
+    assert kept_refs == ["2", "3"]
+    assert stats["kept_nodes"] == 2
+    assert stats["kept_ways"] == 1
+    assert stats["trimmed_ways"] == 1
+    assert stats["dropped_nodes_outside_bbox"] == 2
+
+
 def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifacts(tmp_path: Path) -> None:
     source = tmp_path / "input.osm.xml"
     source.write_text(

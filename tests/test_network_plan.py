@@ -2781,3 +2781,67 @@ def test_reference_matched_workflow_derives_bbox_from_reference_geometry(tmp_pat
     assert report["reference_bbox_source"] == "junction_geometry"
     assert report["reference_bbox_padding_m"] == 75.0
     assert build_calls[0]["bbox"] == derived_bbox
+
+
+def test_reference_matched_workflow_prefers_reference_bbox_over_place_resolution(
+    tmp_path: Path,
+) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    derived_bbox = "11.4062777,48.7483625,11.4382247,48.7803406"
+    build_calls: list[dict[str, object]] = []
+
+    def fake_build(**kwargs):
+        build_calls.append({"bbox": kwargs["bbox"]})
+        current_net_file = tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml"
+        source_osm_file = tmp_path / "osm" / f"{kwargs['prefix']}.osm.xml.gz"
+        current_net_file.parent.mkdir(parents=True, exist_ok=True)
+        source_osm_file.parent.mkdir(parents=True, exist_ok=True)
+        current_net_file.write_text(
+            """<net>
+    <edge id="primary_a" type="highway.primary">
+        <lane id="primary_a_0" index="0" allow="passenger" speed="13.9" length="25.0"/>
+    </edge>
+</net>""",
+            encoding="utf-8",
+        )
+        source_osm_file.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(current_net_file),
+            "filtered_osm_file": str(source_osm_file),
+            "source_osm_file": str(source_osm_file),
+            "warnings": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        place_name="Ingolstadt city center",
+        output_dir=tmp_path,
+        prefix="reference-place-derived-bbox",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        place_resolver=lambda _place: (_ for _ in ()).throw(AssertionError("place resolver should not run")),
+        reference_bbox_func=lambda _path: {
+            "status": "pass",
+            "reference_bbox_status": "derived_from_reference_geometry",
+            "reference_bbox": derived_bbox,
+            "reference_bbox_source": "junction_geometry",
+            "reference_bbox_padding_m": 75.0,
+            "warnings": [],
+        },
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {"status": "pass", "tls_candidate_count": 0, "warnings": []},
+        connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "warnings": []},
+        topology_audit_func=lambda **_kwargs: {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []},
+        routeability_audit_func=lambda **_kwargs: {"status": "pass", "routeability_status": "pass", "warnings": []},
+        netedit_func=lambda _path: {"status": "blocked", "netedit_status": "skipped", "warnings": []},
+        sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "skipped", "warnings": []},
+    )
+
+    assert report["status"] == "pass"
+    assert report["area_input"] == "Ingolstadt city center"
+    assert report["candidate_bbox"] == derived_bbox
+    assert report["reference_bbox_status"] == "derived_from_reference_geometry"
+    assert build_calls[0]["bbox"] == derived_bbox

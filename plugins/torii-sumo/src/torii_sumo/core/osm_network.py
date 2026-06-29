@@ -268,6 +268,25 @@ def _way_node_refs(way: ET.Element) -> list[str]:
     return [node.attrib["ref"] for node in way.findall("nd")]
 
 
+def _node_in_bbox(node: ET.Element, bbox: Bbox) -> bool:
+    try:
+        lon = float(node.attrib.get("lon", ""))
+        lat = float(node.attrib.get("lat", ""))
+    except ValueError:
+        return False
+    return bbox.west <= lon <= bbox.east and bbox.south <= lat <= bbox.north
+
+
+def _copy_way_with_node_refs(way: ET.Element, refs: list[str]) -> ET.Element:
+    clone = ET.Element("way", dict(way.attrib))
+    for ref in refs:
+        ET.SubElement(clone, "nd", {"ref": ref})
+    for child in way:
+        if child.tag != "nd":
+            clone.append(ET.Element(child.tag, dict(child.attrib)))
+    return clone
+
+
 def _relation_way_refs(relation: ET.Element) -> set[str]:
     refs = set()
     for member in relation.findall("member"):
@@ -280,20 +299,39 @@ def filter_osm_by_highways(
     source: Path,
     target: Path,
     allowed_highways: set[str],
+    *,
+    bbox: Bbox | None = None,
 ) -> dict[str, int]:
     with _open_xml(source, "rt") as handle:
         root = ET.parse(handle).getroot()
+
+    bbox_node_refs = None
+    if bbox is not None:
+        bbox_node_refs = {node.attrib["id"] for node in root.findall("node") if _node_in_bbox(node, bbox)}
 
     kept_ways = []
     kept_way_ids = set()
     kept_node_refs = set()
     dropped_ways = 0
+    dropped_ways_outside_bbox = 0
+    dropped_node_refs_outside_bbox = set()
+    trimmed_ways = 0
     for way in root.findall("way"):
         highway = _highway_value(way)
         if highway in allowed_highways:
-            kept_ways.append(way)
+            refs = _way_node_refs(way)
+            kept_refs = refs if bbox_node_refs is None else [ref for ref in refs if ref in bbox_node_refs]
+            if len(kept_refs) < 2:
+                dropped_ways_outside_bbox += 1
+                continue
+            if kept_refs != refs:
+                dropped_node_refs_outside_bbox.update(set(refs) - set(kept_refs))
+                trimmed_ways += 1
+                kept_ways.append(_copy_way_with_node_refs(way, kept_refs))
+            else:
+                kept_ways.append(way)
             kept_way_ids.add(way.attrib["id"])
-            kept_node_refs.update(_way_node_refs(way))
+            kept_node_refs.update(kept_refs)
         elif highway is not None:
             dropped_ways += 1
 
@@ -326,12 +364,21 @@ def filter_osm_by_highways(
     else:
         target.write_bytes(payload)
 
-    return {
+    stats = {
         "kept_nodes": len(kept_nodes),
         "kept_ways": len(kept_ways),
         "dropped_ways": dropped_ways,
         "kept_relations": len(kept_relations),
     }
+    if bbox is not None:
+        stats.update(
+            {
+                "trimmed_ways": trimmed_ways,
+                "dropped_ways_outside_bbox": dropped_ways_outside_bbox,
+                "dropped_nodes_outside_bbox": len(dropped_node_refs_outside_bbox),
+            }
+        )
+    return stats
 
 
 def _result_to_dict(result: Any) -> dict[str, Any]:
@@ -464,7 +511,7 @@ def build_osm_network(
                     artifacts={"query_file": str(query_file)},
                 )
 
-        filter_stats = filter_osm_by_highways(source_osm, filtered_osm, allowed)
+        filter_stats = filter_osm_by_highways(source_osm, filtered_osm, allowed, bbox=parsed_bbox)
         command = [
             "netconvert",
             "--osm-files",

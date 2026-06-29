@@ -267,6 +267,38 @@ def test_auto_workflow_uses_reference_net_file_for_reference_matched_plan(tmp_pa
     assert "cycleway" not in captured["highway_classes"]
 
 
+def test_auto_workflow_reference_match_does_not_pre_resolve_place_bbox(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "manual-reference.net.xml"
+    _write_reference_net(reference_net_file)
+    captured = {}
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "network_profile": "reference_matched",
+            "candidate_bbox": "11.4062777,48.7483625,11.4382247,48.7803406",
+            "reference_bbox_status": "derived_from_reference_geometry",
+        }
+
+    report = run_auto_workflow(
+        user_request="Clean the Ingolstadt city-center network from OSM, compare it with the TUM cleaned network, and generate a TUM-like SUMO network",
+        output_dir=tmp_path,
+        place_name="Ingolstadt city center",
+        reference_net_file=reference_net_file,
+        place_resolver=lambda _place: (_ for _ in ()).throw(AssertionError("place resolver should not run")),
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert report["network_plan"]["network_profile"] == "reference_matched"
+    assert captured["bbox"] is None
+    assert captured["place_name"] == "Ingolstadt city center"
+    assert captured["network_profile"] == "reference_matched"
+    assert captured["reference_net_file"] == reference_net_file
+
+
 def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Path) -> None:
     captured = {}
 
