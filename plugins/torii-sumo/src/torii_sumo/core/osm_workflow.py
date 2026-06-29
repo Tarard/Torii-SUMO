@@ -319,6 +319,22 @@ def _junction_pattern_residual_stats(report: Mapping[str, Any] | None) -> dict[s
     }
 
 
+def _junction_semantic_gate(report: Mapping[str, Any] | None, fields: set[str]) -> str:
+    if report is None:
+        return "skipped"
+    if report.get("status") != "pass":
+        return _gate_value(report)
+    comparisons = report.get("junction_pattern_comparisons", []) or []
+    has_comparison_evidence = isinstance(comparisons, list) and len(comparisons) > 0
+    if _int_field(report, "matched_case_count") == 0 and not has_comparison_evidence:
+        return "skipped"
+    stats = _junction_pattern_residual_stats(report)
+    field_counts = stats["mismatch_field_counts"]
+    if _int_field(report, "junction_pattern_mismatch_count") > 0 and not field_counts:
+        return "blocked"
+    return "blocked" if any(_intish(field_counts.get(field, 0)) > 0 for field in fields) else "pass"
+
+
 def _class_set(value: Any) -> set[str]:
     if value is None:
         return set()
@@ -2787,9 +2803,19 @@ def run_osm_cleanup_workflow(
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
         gate_status["reference_join_aggregation"] = _reference_join_aggregation_gate(reference_join_aggregation_report)
         gate_status["junction_pattern_index"] = _junction_pattern_index_gate(reference_join_audit_report)
-        gate_status["connection_semantics_parity"] = "blocked"
-        gate_status["tls_semantics_parity"] = "blocked"
-        gate_status["internal_junction_parity"] = "blocked"
+        semantic_parity_report = reference_join_post_teacher_audit_report or reference_join_audit_report
+        gate_status["connection_semantics_parity"] = _junction_semantic_gate(
+            semantic_parity_report,
+            {"approach_edge_ids", "movement_signature_counts", "request_bit_lengths_ok"},
+        )
+        gate_status["tls_semantics_parity"] = _junction_semantic_gate(
+            semantic_parity_report,
+            {"control_type", "has_tls", "request_bit_lengths_ok"},
+        )
+        gate_status["internal_junction_parity"] = _junction_semantic_gate(
+            semantic_parity_report,
+            {"internal_function_counts"},
+        )
         gate_status["netedit_connection_mode_review"] = "blocked"
         gate_status["teacher_guided_junction_parity"] = _teacher_guided_parity_gate(
             teacher_guided_repair_run_report or teacher_guided_plain_export_report or teacher_guided_repair_queue_report
