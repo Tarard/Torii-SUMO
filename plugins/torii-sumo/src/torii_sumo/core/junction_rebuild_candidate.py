@@ -1343,6 +1343,7 @@ def build_teacher_guided_junction_variant(
     target_internal_pedring_net_file = _stage_file(output_dir, prefix, "target_internal_pedring.net.xml")
     target_internal_vehicle_attrs_net_file = _stage_file(output_dir, prefix, "target_internal_vehicle_attrs.net.xml")
     final_net_file = _stage_file(output_dir, prefix, "teacher_guided.net.xml")
+    teacher_guided_normalized_net_file = _stage_file(output_dir, "tg", "norm.net.xml")
     fallback_net_file = _stage_file(output_dir, prefix, "teacher_guided_fallback.net.xml")
     report_file = _stage_file(output_dir, prefix, "teacher_guided_report.json")
 
@@ -1423,6 +1424,7 @@ def build_teacher_guided_junction_variant(
     target_internal_replay_fallback_tl_logic_report = None
     target_internal_replay_fallback_sumo_report = None
     target_internal_normalize_report = None
+    teacher_guided_normalize_report = None
     target_internal_pedestrian_ring_report = None
     target_internal_vehicle_attrs_report = None
     tl_logic_input_file = vehicle_attrs_net_file
@@ -1541,6 +1543,43 @@ def build_teacher_guided_junction_variant(
         and isinstance(target_internal_replay_report, dict)
         and target_internal_replay_report.get("status") == "pass"
     ):
+        teacher_guided_normalize_command = [
+            netconvert_binary,
+            "--sumo-net-file",
+            _command_path(final_net_file, output_dir),
+            "--output-file",
+            _command_path(teacher_guided_normalized_net_file, output_dir),
+        ]
+        teacher_guided_normalize_report = _command_report(
+            command_runner(teacher_guided_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+        )
+        if teacher_guided_normalize_report.get("status") == "pass":
+            normalized_final_sumo_command = [
+                sumo_binary,
+                "-n",
+                _command_path(teacher_guided_normalized_net_file, output_dir),
+                "--no-step-log",
+                "true",
+                "--duration-log.disable",
+                "true",
+                "--begin",
+                "0",
+                "--end",
+                "1",
+            ]
+            normalized_final_sumo_report = _command_report(
+                command_runner(normalized_final_sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+            )
+            teacher_guided_normalize_report["sumo_load"] = normalized_final_sumo_report
+            if normalized_final_sumo_report.get("status") == "pass":
+                final_net_file = teacher_guided_normalized_net_file
+                sumo_report = normalized_final_sumo_report
+    if (
+        sumo_report.get("status") != "pass"
+        and replay_target_internal_subgraph
+        and isinstance(target_internal_replay_report, dict)
+        and target_internal_replay_report.get("status") == "pass"
+    ):
         target_internal_replay_fallback_tl_logic_report = write_teacher_tllogic_net(
             candidate_net_file=vehicle_attrs_net_file,
             output_file=fallback_net_file,
@@ -1624,6 +1663,9 @@ def build_teacher_guided_junction_variant(
             "target_internal_normalized_net_file": str(target_internal_normalized_net_file)
             if target_internal_normalize_report
             else "",
+            "teacher_guided_normalized_net_file": str(teacher_guided_normalized_net_file)
+            if teacher_guided_normalize_report
+            else "",
             "target_internal_pedring_net_file": str(target_internal_pedring_net_file)
             if target_internal_pedestrian_ring_report
             else "",
@@ -1640,6 +1682,7 @@ def build_teacher_guided_junction_variant(
             "target_internal_replay_fallback_tl_logic": target_internal_replay_fallback_tl_logic_report,
             "target_internal_replay_fallback_sumo": target_internal_replay_fallback_sumo_report,
             "target_internal_normalize": target_internal_normalize_report,
+            "teacher_guided_normalize": teacher_guided_normalize_report,
             "target_internal_pedestrian_ring": target_internal_pedestrian_ring_report,
             "target_internal_vehicle_connection_attrs": target_internal_vehicle_attrs_report,
             "tl_logic": tl_logic_report,
@@ -3663,11 +3706,32 @@ def _command_path(path: Path, cwd: Path) -> str:
 
 
 def _stage_file(output_dir: Path, prefix: str, suffix: str) -> Path:
-    path = output_dir / f"{prefix}_{suffix}"
-    if len(str(path.resolve())) < 240:
+    def candidate(name: str) -> Path | None:
+        path = output_dir / name
+        return path if len(str(path.resolve())) < 260 else None
+
+    if path := candidate(f"{prefix}_{suffix}"):
         return path
     short_prefix = (prefix[:16].strip("_") or "tg")
-    return output_dir / f"{short_prefix}_{suffix}"
+    if path := candidate(f"{short_prefix}_{suffix}"):
+        return path
+    if path := candidate(suffix):
+        return path
+    suffix_aliases = {
+        "connections.con.xml": "c.con.xml",
+        "lanes.edg.xml": "e.edg.xml",
+        "sidewalks.net.xml": "sw.net.xml",
+        "pedring.net.xml": "pr.net.xml",
+        "vehicle_attrs.net.xml": "va.net.xml",
+        "target_internal_replay.net.xml": "tir.net.xml",
+        "target_internal_normalized.net.xml": "tin.net.xml",
+        "target_internal_pedring.net.xml": "tip.net.xml",
+        "target_internal_vehicle_attrs.net.xml": "tva.net.xml",
+        "teacher_guided.net.xml": "tg.net.xml",
+        "teacher_guided_fallback.net.xml": "tgfb.net.xml",
+        "teacher_guided_report.json": "tgr.json",
+    }
+    return output_dir / suffix_aliases.get(suffix, suffix)
 
 
 def _clone_transformed_net_element(
