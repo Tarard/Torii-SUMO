@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import os
 import shutil
@@ -50,6 +51,38 @@ TLS_SEMANTIC_DELTA_KEYS = {
     "tls_shared_linkindex_group_count",
     "tls_sparse_linkindex_tl_logic_count",
 }
+
+
+def _osm_highway_classes(osm_file: Path) -> set[str] | None:
+    try:
+        if osm_file.suffix == ".gz":
+            with gzip.open(osm_file, "rt", encoding="utf-8") as handle:
+                root = ET.parse(handle).getroot()
+        else:
+            root = ET.parse(osm_file).getroot()
+    except (OSError, ET.ParseError, UnicodeDecodeError):
+        return None
+    return {
+        str(tag.attrib.get("v", "")).strip()
+        for way in root.findall("way")
+        for tag in way.findall("tag")
+        if tag.attrib.get("k") == "highway" and str(tag.attrib.get("v", "")).strip()
+    }
+
+
+def _reference_visual_source_osm_path(
+    build_report: Mapping[str, Any],
+    source_osm_path: Path | None,
+    required_highways: set[str],
+) -> Path | None:
+    source_osm_value = build_report.get("source_osm_file") or source_osm_path
+    if not source_osm_value:
+        return None
+    source = Path(str(source_osm_value))
+    source_highways = _osm_highway_classes(source)
+    if source_highways and not required_highways <= source_highways:
+        return None
+    return source
 
 
 def _candidate_fields(place_report: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -1574,47 +1607,19 @@ def run_osm_cleanup_workflow(
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         reference_visual_detail_status = "same_as_vehicle_core"
     if should_build_reference_visual_detail:
-        visual_source_osm_value = build_report.get("source_osm_file") or source_osm_path
+        visual_source_osm_path = _reference_visual_source_osm_path(
+            build_report,
+            source_osm_path,
+            reference_visual_detail_highway_classes,
+        )
+        visual_source_osm_value = str(visual_source_osm_path) if visual_source_osm_path is not None else None
         if not visual_source_osm_value:
-            return {
-                "status": "fail",
-                "claim_status": "construction-invalid",
-                "area_input": cleaned_place_name or bbox,
-                "area_resolution_status": area_status,
-                **_candidate_fields(place_report),
-                "user_confirmed_area": "yes" if area_status == "confirmed_by_user" else "confirmed_by_input",
-                "network_plan_status": network_plan.get("network_plan_status", "confirmed"),
-                "network_profile": network_plan.get("network_profile", ""),
-                "reference_target": network_plan.get("reference_target", ""),
-                "reference_net_file": network_plan.get("reference_net_file", ""),
-                "network_detail_target": network_plan.get("network_detail_target", ""),
-                "selected_highway_classes": network_plan.get("highway_classes", []),
-                "vehicle_core_highway_classes": sorted(vehicle_core_highway_classes),
-                "reference_visual_detail_highway_classes": sorted(reference_visual_detail_highway_classes),
-                "reference_visual_detail_status": "failed",
-                "network_plan": network_plan,
-                "reference_policy": network_plan.get("reference_policy", {}),
-                "build": build_report,
-                "service_passenger_permissions": service_permission_report,
-                "gate_status": {
-                    "area_confirmation": "pass",
-                    "road_level_scope": "pass",
-                    "network_build": _gate_value(build_report),
-                    "reference_visual_detail": "fail",
-                    "tls_reality_audit": "not_started",
-                    "connectivity": "not_started",
-                    "routeability_audit": "not_started",
-                    "netedit": "not_started",
-                    "sumo_gui": "not_started",
-                },
-                "warnings": list(build_report.get("warnings", []))
-                + ["reference visual-detail network requires a reusable source OSM file"],
-            }
+            visual_source_osm_value = None
         reference_visual_detail_build_report = build_func(
             bbox=bbox,
             output_dir=output_dir,
             prefix=f"{prefix}_reference_visual_detail",
-            source_osm_path=Path(str(visual_source_osm_value)),
+            source_osm_path=Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
             allowed_highways=reference_visual_detail_highway_classes,
             allowed_way_ids=reference_source_way_scope,
             historical_date=historical_date,
