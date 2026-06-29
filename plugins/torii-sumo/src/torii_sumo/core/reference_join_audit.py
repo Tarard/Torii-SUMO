@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from .junction_teacher_model import (
     compare_junction_pattern_records,
     extract_junction_pattern_index,
+    summarize_junction_pattern_policy,
     summarize_junction_pattern_templates,
 )
 from .detector_demand import lane_allows_passenger
@@ -150,6 +151,8 @@ def audit_reference_join_patterns(
                 "schema_version": 1,
                 "reference_net_file": str(reference_net_file),
                 "candidate_net_file": str(candidate_net_file),
+                "reference_policy_summary": summarize_junction_pattern_policy(junction_pattern_index),
+                "candidate_policy_summary": summarize_junction_pattern_policy(candidate_junction_pattern_index),
                 "reference_templates": junction_pattern_templates,
                 "candidate_templates": candidate_junction_pattern_templates,
             },
@@ -324,6 +327,8 @@ def _structural_only_report(
                 "schema_version": 1,
                 "reference_net_file": str(reference_net_file),
                 "candidate_net_file": str(candidate_net_file),
+                "reference_policy_summary": summarize_junction_pattern_policy(junction_pattern_index),
+                "candidate_policy_summary": summarize_junction_pattern_policy(candidate_junction_pattern_index),
                 "reference_templates": junction_pattern_templates,
                 "candidate_templates": candidate_junction_pattern_templates,
             },
