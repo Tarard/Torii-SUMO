@@ -1098,6 +1098,69 @@ def _junction_aggregation_summary(topology_audit_report: Mapping[str, Any] | Non
     }
 
 
+def _topology_metric(report: Mapping[str, Any], key: str) -> int:
+    if key == "junction_aggregation_candidate_count" and key not in report:
+        return int(_junction_aggregation_summary(report)["junction_aggregation_candidate_count"])
+    return _int_field(report, key)
+
+
+def _reference_topology_parity_gate(
+    candidate_report: Mapping[str, Any] | None,
+    reference_report: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if candidate_report is None:
+        return {"status": "skipped", "reason": "candidate_topology_audit_not_run", "metrics": {}}
+
+    candidate_gate = _gate_value(candidate_report)
+    if candidate_gate == "pass":
+        return {"status": "pass", "reason": "candidate_topology_audit_passed", "metrics": {}}
+    if candidate_gate == "fail":
+        return {"status": "fail", "reason": "candidate_topology_audit_failed", "metrics": {}}
+    if reference_report is None:
+        return {
+            "status": candidate_gate,
+            "reason": "reference_topology_audit_not_available",
+            "metrics": {},
+        }
+    if _gate_value(reference_report) == "fail":
+        return {
+            "status": candidate_gate,
+            "reason": "reference_topology_audit_failed",
+            "metrics": {},
+        }
+
+    metric_keys = (
+        "suspicious_cluster_count",
+        "junction_aggregation_candidate_count",
+        "physical_intersection_candidate_count",
+    )
+    metrics = {
+        key: {
+            "candidate": _topology_metric(candidate_report, key),
+            "reference": _topology_metric(reference_report, key),
+        }
+        for key in metric_keys
+    }
+    exceeded = {
+        key: value
+        for key, value in metrics.items()
+        if int(value["candidate"]) > int(value["reference"])
+    }
+    if exceeded:
+        return {
+            "status": "blocked",
+            "reason": "candidate_topology_exceeds_reference",
+            "metrics": metrics,
+            "exceeded_metrics": exceeded,
+        }
+    return {
+        "status": "pass",
+        "reason": "candidate_topology_not_more_fragmented_than_reference",
+        "metrics": metrics,
+        "exceeded_metrics": {},
+    }
+
+
 def _reference_bbox_fields(reference_bbox_report: Mapping[str, Any] | None) -> dict[str, Any]:
     if reference_bbox_report is None:
         return {
@@ -2098,6 +2161,7 @@ def run_osm_cleanup_workflow(
                 connectivity_quality = dict(connected_core_quality)
                 connectivity_quality["network_quality"] = "connected-core"
     topology_audit_report = None
+    reference_topology_audit_report: dict[str, Any] | None = None
     if run_topology_audit_after_build:
         topology_audit_report = topology_audit_func(
             net_file=net_file,
@@ -2607,6 +2671,19 @@ def run_osm_cleanup_workflow(
                                             "reason": "sumo_load_not_pass",
                                         }
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
+        if (
+            run_topology_audit_after_build
+            and str(network_plan.get("network_profile", "")) == "reference_matched"
+            and reference_net_file is not None
+        ):
+            reference_topology_audit_report = topology_audit_func(
+                net_file=reference_net_file,
+                output_dir=output_dir / "reference_topology_audit",
+                prefix=f"{prefix}_reference_topology_audit",
+                cluster_radius_m=topology_cluster_radius_m,
+                min_cluster_nodes=topology_min_cluster_nodes,
+                osm_file=None,
+            )
         if run_topology_audit_after_build and not _same_path_value(
             None if topology_audit_report is None else topology_audit_report.get("net_file", ""),
             reference_visual_detail_comparison_net_file,
@@ -2700,6 +2777,11 @@ def run_osm_cleanup_workflow(
 
     tls_summary = _tls_review_summary(tls_report)
     junction_aggregation_summary = _junction_aggregation_summary(topology_audit_report)
+    topology_reference_parity_report = (
+        _reference_topology_parity_gate(topology_audit_report, reference_topology_audit_report)
+        if str(network_plan.get("network_profile", "")) == "reference_matched"
+        else {"status": "skipped", "reason": "not_reference_matched", "metrics": {}}
+    )
     warnings = []
     for child in (
         reference_bbox_report or {},
@@ -2737,6 +2819,7 @@ def run_osm_cleanup_workflow(
         connected_core_connectivity_report or {},
         connectivity_report,
         topology_audit_report or {},
+        reference_topology_audit_report or {},
         junction_aggregation_report or {},
         reference_hierarchy_audit_report or {},
         reference_scope_audit_report or {},
@@ -2777,7 +2860,15 @@ def run_osm_cleanup_workflow(
     if connectivity_quality["quality_warning"]:
         warnings.append(str(connectivity_quality["quality_warning"]))
     if topology_audit_report is not None and topology_audit_report.get("topology_fragmentation_status") == "needs_review":
-        warnings.append("topology fragmentation audit needs human review before treating the network as clean")
+        if (
+            str(network_plan.get("network_profile", "")) == "reference_matched"
+            and topology_reference_parity_report.get("status") == "pass"
+        ):
+            warnings.append(
+                "topology fragmentation remains diagnostic; candidate topology is not more fragmented than the reference"
+            )
+        else:
+            warnings.append("topology fragmentation audit needs human review before treating the network as clean")
     if (
         reference_hierarchy_audit_report is not None
         and _int_field(reference_hierarchy_audit_report, "high_hierarchy_issue_count") > 0
@@ -2864,7 +2955,11 @@ def run_osm_cleanup_workflow(
             teacher_guided_repair_run_report or teacher_guided_plain_export_report or teacher_guided_repair_queue_report
         )
     if topology_audit_report is not None:
-        gate_status["topology_audit"] = _gate_value(topology_audit_report)
+        gate_status["topology_audit"] = (
+            str(topology_reference_parity_report.get("status", "fail"))
+            if str(network_plan.get("network_profile", "")) == "reference_matched"
+            else _gate_value(topology_audit_report)
+        )
     if junction_aggregation_report is not None:
         gate_status["junction_aggregation"] = (
             "blocked" if junction_aggregation_report.get("status") == "pass" else _gate_value(junction_aggregation_report)
@@ -3002,6 +3097,26 @@ def run_osm_cleanup_workflow(
         "suspicious_topology_cluster_count": 0 if topology_audit_report is None else topology_audit_report.get("suspicious_cluster_count", 0),
         "max_topology_cluster_node_count": 0 if topology_audit_report is None else topology_audit_report.get("max_cluster_node_count", 0),
         "topology_audit_clusters_file": "" if topology_audit_report is None else str(topology_audit_report.get("clusters_file", "")),
+        "reference_topology_fragmentation_status": "skipped"
+        if reference_topology_audit_report is None
+        else reference_topology_audit_report.get(
+            "topology_fragmentation_status", reference_topology_audit_report.get("status", "fail")
+        ),
+        "reference_topology_suspicious_cluster_count": 0
+        if reference_topology_audit_report is None
+        else reference_topology_audit_report.get("suspicious_cluster_count", 0),
+        "reference_topology_junction_aggregation_candidate_count": 0
+        if reference_topology_audit_report is None
+        else _topology_metric(reference_topology_audit_report, "junction_aggregation_candidate_count"),
+        "reference_topology_physical_intersection_candidate_count": 0
+        if reference_topology_audit_report is None
+        else reference_topology_audit_report.get("physical_intersection_candidate_count", 0),
+        "reference_topology_audit_clusters_file": ""
+        if reference_topology_audit_report is None
+        else str(reference_topology_audit_report.get("clusters_file", "")),
+        "topology_reference_parity_status": str(topology_reference_parity_report.get("status", "skipped")),
+        "topology_reference_parity_reason": str(topology_reference_parity_report.get("reason", "")),
+        "topology_reference_parity_metrics": topology_reference_parity_report.get("metrics", {}),
         **junction_aggregation_summary,
         "junction_aggregation_variant_status": "skipped"
         if junction_aggregation_report is None
@@ -3738,6 +3853,7 @@ def run_osm_cleanup_workflow(
         "connected_core_connectivity": connected_core_connectivity_report or {},
         "connectivity": connectivity_report,
         "topology_audit": topology_audit_report or {},
+        "reference_topology_audit": reference_topology_audit_report or {},
         "junction_aggregation": junction_aggregation_report or {},
         "reference_hierarchy_audit": reference_hierarchy_audit_report or {},
         "reference_scope_audit": reference_scope_audit_report or {},

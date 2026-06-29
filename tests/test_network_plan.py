@@ -1563,6 +1563,26 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
 
     def fake_topology_audit(**kwargs):
         calls["topology_net_files"].append(kwargs["net_file"])
+        if kwargs["net_file"] == reference_net_file:
+            return {
+                "status": "blocked",
+                "topology_fragmentation_status": "needs_review",
+                "suspicious_cluster_count": 10,
+                "junction_aggregation_candidate_count": 8,
+                "physical_intersection_candidate_count": 4,
+                "clusters_file": str(tmp_path / "reference_topology_clusters.csv"),
+                "warnings": [],
+            }
+        if kwargs["net_file"] == post_repair_movement_composite_net:
+            return {
+                "status": "blocked",
+                "topology_fragmentation_status": "needs_review",
+                "suspicious_cluster_count": 5,
+                "junction_aggregation_candidate_count": 3,
+                "physical_intersection_candidate_count": 2,
+                "clusters_file": str(tmp_path / "candidate_topology_clusters.csv"),
+                "warnings": [],
+            }
         return {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []}
 
     def fake_reference_hierarchy_audit(**kwargs):
@@ -1675,6 +1695,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert calls["post_teacher_tls_connection_repair_source_net_file"] == reference_net_file
     assert calls["post_teacher_tls_connection_repair_candidate_net_file"] == signal_grouped_net
     assert calls["post_teacher_tls_connection_repair_copy_unmapped_tls"] is True
+    assert reference_net_file in calls["topology_net_files"]
     assert calls["topology_net_files"][-1] == post_repair_movement_composite_net
     assert calls["reference_hierarchy_candidate_net_files"][-1] == post_repair_movement_composite_net
     assert len(calls["teacher_guided_queue_calls"]) == 2
@@ -1698,6 +1719,12 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert report["gate_status"]["connection_semantics_parity"] == "pass"
     assert report["gate_status"]["tls_semantics_parity"] == "pass"
     assert report["gate_status"]["internal_junction_parity"] == "pass"
+    assert report["gate_status"]["topology_audit"] == "pass"
+    assert report["topology_reference_parity_status"] == "pass"
+    assert report["topology_reference_parity_reason"] == "candidate_topology_not_more_fragmented_than_reference"
+    assert report["suspicious_topology_cluster_count"] == 5
+    assert report["reference_topology_suspicious_cluster_count"] == 10
+    assert report["reference_topology_junction_aggregation_candidate_count"] == 8
     assert report["gate_status"]["reference_join_aggregation"] == "skipped"
     assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
     assert calls["post_repair_movement_equivalent_approach_edge_map"] == {
