@@ -6895,7 +6895,21 @@ def test_stage_file_shortens_long_output_names(tmp_path: Path) -> None:
     output_dir.mkdir()
     path = _stage_file(output_dir, "very_long_teacher_guided_prefix", "target_internal_normalized.net.xml")
 
-    assert path.name == "very_long_teache_target_internal_normalized.net.xml"
+    assert path.name == "target_internal_normalized.net.xml"
+    assert len(str(path.resolve())) < 260
+
+
+def test_stage_file_uses_short_alias_when_suffix_only_is_too_long(tmp_path: Path) -> None:
+    output_dir = tmp_path
+    while len(str(output_dir.resolve())) < 245:
+        part_len = min(max(245 - len(str(output_dir.resolve())) - 1, 1), 50)
+        output_dir /= "x" * part_len
+    output_dir.mkdir(parents=True)
+
+    path = _stage_file(output_dir, "very_long_teacher_guided_prefix", "target_internal_normalized.net.xml")
+
+    assert path.name == "tin.net.xml"
+    assert len(str(path.resolve())) < 260
 
 
 def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: Path, monkeypatch) -> None:
@@ -7289,6 +7303,124 @@ def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback
     assert [call[0] for call in calls] == ["netconvert", "sumo", "netconvert", "sumo"]
 
 
+def test_build_teacher_guided_junction_variant_normalizes_final_teacher_guided_net(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j" type="highway.primary"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="j" to="b" type="highway.primary"><lane id="teacher_out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        encoding="utf-8",
+    )
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    sumo_inputs: list[str] = []
+    normalized_outputs: list[str] = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        def command_path(flag: str) -> Path:
+            value = Path(command[command.index(flag) + 1])
+            return value if value.is_absolute() else Path(cwd) / value
+
+        if command[0] == "netconvert" and "--node-files" in command:
+            output_file = command_path("--output-file")
+            connection_file = command_path("--connection-files")
+            output_file.write_text(
+                """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+</net>
+""",
+                encoding="utf-8",
+            )
+            root = ET.parse(output_file).getroot()
+            for connection in ET.parse(connection_file).getroot().findall("connection"):
+                root.append(connection)
+            ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+        elif command[0] == "netconvert" and "--sumo-net-file" in command:
+            output_file = command_path("--output-file")
+            normalized_outputs.append(output_file.name)
+            output_file.write_text(
+                command_path("--sumo-net-file").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+        class Result:
+            status = "pass"
+            returncode = 0
+
+            def to_dict(self):
+                status = "pass"
+                if command[0] == "sumo":
+                    net_file = Path(command[command.index("-n") + 1]).name
+                    sumo_inputs.append(net_file)
+                    status = "pass" if net_file == "tg_norm.net.xml" else "fail"
+                return {
+                    "command": command,
+                    "cwd": str(cwd) if cwd else None,
+                    "status": status,
+                    "returncode": 0 if status == "pass" else 1,
+                    "stderr": "" if status == "pass" else "final teacher-guided load failed before normalization",
+                }
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        prefix="demo",
+        replay_target_internal_subgraph=True,
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["target_internal_replay_fallback"] is False
+    assert report["target_internal_normalize"]["status"] == "pass"
+    assert report["teacher_guided_normalize"]["status"] == "pass"
+    assert report["final_net_file"].endswith("tg_norm.net.xml")
+    assert report["teacher_guided_normalized_net_file"].endswith("tg_norm.net.xml")
+    assert sumo_inputs == ["demo_teacher_guided.net.xml", "demo_teacher_guided.net.xml", "tg_norm.net.xml"]
+    assert normalized_outputs == ["demo_target_internal_normalized.net.xml", "tg_norm.net.xml"]
+
+
 def test_build_teacher_guided_junction_variant_compares_replay_effective_edge_map(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -7435,7 +7567,7 @@ def test_build_teacher_guided_junction_variant_falls_back_when_target_internal_r
 
             def to_dict(self):
                 net_file = command[command.index("-n") + 1] if command[0] == "sumo" else ""
-                status = "fail" if net_file.endswith("teacher_guided.net.xml") else "pass"
+                status = "fail" if net_file.endswith(("teacher_guided.net.xml", "tg_norm.net.xml")) else "pass"
                 return {
                     "command": command,
                     "cwd": str(cwd) if cwd else None,
