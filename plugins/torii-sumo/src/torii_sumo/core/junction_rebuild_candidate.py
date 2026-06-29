@@ -1713,6 +1713,15 @@ def run_teacher_guided_repair_queue(
             )
             continue
         if candidate.get("candidate_status") == "needs_expanded_rebuild_scope" and junction_id:
+            if (
+                max_ready_candidates is not None
+                and max_ready_candidates > 0
+                and attempted_ready_count >= max_ready_candidates
+            ):
+                skipped_candidates.append(
+                    {"index": index, "junction_id": junction_id, "candidate_status": "max_ready_candidates_reached"}
+                )
+                continue
             safe_junction_id = _queue_candidate_dir(index, junction_id)
             scope_report = _attach_candidate_template_context(
                 write_expanded_scope_plain_inputs(
