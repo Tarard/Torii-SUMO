@@ -659,6 +659,25 @@ def _reference_join_audit_can_seed_teacher_guided_queue(
     return any(isinstance(comparison, Mapping) and comparison.get("status") == "fail" for comparison in comparisons)
 
 
+def _teacher_guided_seed_candidate(
+    primary_report: Mapping[str, Any],
+    *,
+    primary_structural_only: bool,
+    fallback_reports: list[tuple[str, Mapping[str, Any] | None]],
+) -> tuple[Mapping[str, Any], bool, bool, str]:
+    if _reference_join_audit_can_seed_teacher_guided_queue(
+        primary_report,
+        structural_only=primary_structural_only,
+    ):
+        return primary_report, primary_structural_only, False, "reference_join_audit"
+    for source, report in fallback_reports:
+        if report is None:
+            continue
+        if _reference_join_audit_can_seed_teacher_guided_queue(report, structural_only=True):
+            return report, True, True, source
+    return primary_report, primary_structural_only, False, "reference_join_audit"
+
+
 def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
     if report is None:
         return None
@@ -1833,6 +1852,12 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_run_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
     teacher_guided_repair_best_expanded_scope_net_file: Path | None = None
+    teacher_guided_repair_seed_source = "skipped"
+    teacher_guided_repair_requires_reference_promotion = False
+    teacher_guided_repair_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
     reference_hierarchy_audit_report: dict[str, Any] | None = None
     reference_hierarchy_audit_candidate_layer = "not_applicable"
     reference_hierarchy_audit_candidate_net_file: Path | None = None
@@ -2535,21 +2560,49 @@ def run_osm_cleanup_workflow(
                 candidate_joined_net_file = Path(str(joined_value))
                 if candidate_joined_net_file.exists():
                     reference_visual_detail_comparison_net_file = candidate_joined_net_file
-        if _reference_join_audit_can_seed_teacher_guided_queue(
+        (
+            teacher_guided_seed_report,
+            teacher_guided_seed_structural_only,
+            teacher_guided_repair_requires_reference_promotion,
+            teacher_guided_repair_seed_source,
+        ) = _teacher_guided_seed_candidate(
             reference_join_audit_report,
-            structural_only=reference_join_audit_is_structural_only,
+            primary_structural_only=reference_join_audit_is_structural_only,
+            fallback_reports=[
+                (
+                    "reference_visual_detail_tls_connection_repair_reference_delta",
+                    reference_visual_detail_tls_connection_repair_reference_delta_report,
+                ),
+                (
+                    "reference_visual_detail_tls_low_vehicle_control_reference_delta",
+                    reference_visual_detail_tls_low_vehicle_control_reference_delta_report,
+                ),
+                (
+                    "reference_visual_detail_tls_signal_grouping_reference_delta",
+                    reference_visual_detail_tls_signal_grouping_reference_delta_report,
+                ),
+                (
+                    "reference_visual_detail_tls_aggregation_reference_delta",
+                    reference_visual_detail_tls_aggregation_reference_delta_report,
+                ),
+                ("reference_visual_detail_raw_reference_delta", reference_visual_detail_raw_reference_delta_report),
+            ],
+        )
+        if _reference_join_audit_can_seed_teacher_guided_queue(
+            teacher_guided_seed_report,
+            structural_only=teacher_guided_seed_structural_only,
         ):
             teacher_guided_repair_queue_report = teacher_guided_repair_queue_func(
                 teacher_net_file=reference_net_file,
                 candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
-                reference_join_audit_report=reference_join_audit_report,
+                reference_join_audit_report=dict(teacher_guided_seed_report),
                 output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair",
                 max_ready_candidates=teacher_guided_repair_max_ready_candidates,
             )
             teacher_guided_repair_queue_report = _filter_teacher_guided_queue_to_mismatch_fields(
                 teacher_guided_repair_queue_report,
-                reference_join_audit_report,
+                teacher_guided_seed_report,
                 {"movement_signature_counts", "internal_function_counts"},
                 output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
@@ -2582,7 +2635,7 @@ def run_osm_cleanup_workflow(
                         sequential_accept_passed_variants=True,
                         plain_exporter=teacher_guided_plain_export_func,
                     )
-                    teacher_guided_repair_best_variant_file = _teacher_guided_best_variant_file(
+                    candidate_teacher_guided_best_variant_file = _teacher_guided_best_variant_file(
                         teacher_guided_repair_run_report
                     )
                     expanded_scope_value = str(teacher_guided_repair_run_report.get("best_expanded_scope_net_file", ""))
@@ -2590,18 +2643,34 @@ def run_osm_cleanup_workflow(
                         expanded_scope_file = Path(expanded_scope_value)
                         if expanded_scope_file.exists():
                             teacher_guided_repair_best_expanded_scope_net_file = expanded_scope_file
-                    if teacher_guided_repair_best_variant_file is not None:
-                        reference_visual_detail_comparison_net_file = teacher_guided_repair_best_variant_file
+                    if candidate_teacher_guided_best_variant_file is not None:
                         reference_join_post_teacher_audit_report = reference_join_audit_func(
                             reference_net_file=reference_net_file,
-                            candidate_net_file=teacher_guided_repair_best_variant_file,
+                            candidate_net_file=candidate_teacher_guided_best_variant_file,
                             output_dir=output_dir / "post_teacher_reference_join_audit",
                             prefix=f"{prefix}_post_teacher_reference_join_audit",
                             candidate_cluster_radius_m=topology_cluster_radius_m,
                             candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                            structural_only=reference_join_audit_structural_only,
+                            structural_only=teacher_guided_seed_structural_only,
                         )
-                        if run_tls_aggregation_after_build:
+                        if teacher_guided_repair_requires_reference_promotion:
+                            teacher_guided_repair_reference_promotion_report = _reference_delta_promotion_decision(
+                                candidate_delta_report=reference_join_post_teacher_audit_report,
+                                baseline_delta_report=teacher_guided_seed_report,
+                                reason="structural_teacher_guided_promoted_by_reference_delta",
+                            )
+                        else:
+                            teacher_guided_repair_reference_promotion_report = {
+                                "status": "pass",
+                                "reason": "full_reference_join_teacher_guided_promoted_by_parity",
+                            }
+                        if teacher_guided_repair_reference_promotion_report.get("status") == "pass":
+                            teacher_guided_repair_best_variant_file = candidate_teacher_guided_best_variant_file
+                            reference_visual_detail_comparison_net_file = teacher_guided_repair_best_variant_file
+                        if (
+                            teacher_guided_repair_reference_promotion_report.get("status") == "pass"
+                            and run_tls_aggregation_after_build
+                        ):
                             selected_low_vehicle_candidate: tuple[
                                 int,
                                 dict[str, Any],
@@ -4381,6 +4450,14 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_queue_csv_file": ""
         if teacher_guided_repair_queue_report is None
         else str(teacher_guided_repair_queue_report.get("queue_csv_file", "")),
+        "teacher_guided_repair_seed_source": teacher_guided_repair_seed_source,
+        "teacher_guided_repair_requires_reference_promotion": teacher_guided_repair_requires_reference_promotion,
+        "teacher_guided_repair_reference_promotion_status": str(
+            teacher_guided_repair_reference_promotion_report.get("status", "skipped")
+        ),
+        "teacher_guided_repair_reference_promotion_reason": str(
+            teacher_guided_repair_reference_promotion_report.get("reason", "")
+        ),
         "teacher_guided_repair_plain_export_status": "skipped"
         if teacher_guided_plain_export_report is None
         else teacher_guided_plain_export_report.get("status", "fail"),
