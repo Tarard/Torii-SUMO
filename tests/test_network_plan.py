@@ -7,6 +7,7 @@ from torii_sumo.core.osm_workflow import (
     _junction_semantic_gate,
     _low_vehicle_control_candidate_limits,
     _reference_delta_promotion_decision,
+    _restore_followup_internal_regressions,
     _teacher_guided_application_stats,
     _teacher_guided_best_variant_file,
     _teacher_guided_equivalent_approach_edge_map,
@@ -27,6 +28,54 @@ def test_junction_semantic_gate_uses_comparison_evidence_when_case_counts_are_ze
     }
 
     assert _junction_semantic_gate(report, {"movement_signature_counts"}) == "pass"
+
+
+def test_restore_followup_internal_regressions_restores_only_new_internal_failures(tmp_path: Path) -> None:
+    baseline_net = tmp_path / "baseline.net.xml"
+    baseline_net.write_text(
+        """<net>
+    <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="0,0 10,0"/></edge>
+    <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="10,0 20,0"/></edge>
+    <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="10,0 11,0"/></edge>
+    <junction id="j" type="priority" x="10" y="0" incLanes="in_0" intLanes=":j_0_0"/>
+    <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+    <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    followup_net = tmp_path / "followup.net.xml"
+    followup_net.write_text(
+        """<net>
+    <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="0,0 10,0"/></edge>
+    <edge id="out" from="j" to="b"><lane id="out_0" index="0" shape="10,0 20,0"/></edge>
+    <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="10,0 11,0"/></edge>
+    <edge id=":j_1" function="internal"><lane id=":j_1_0" index="0" shape="11,0 12,0"/></edge>
+    <junction id="j" type="priority" x="10" y="0" incLanes="in_0" intLanes=":j_1_0"/>
+    <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+    <connection from=":j_0" to="out" fromLane="0" toLane="0" via=":j_1_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = _restore_followup_internal_regressions(
+        baseline_delta_report={"junction_pattern_comparisons": []},
+        followup_delta_report={
+            "junction_pattern_comparisons": [
+                {"junction_id": "j", "mismatch_fields": ["internal_function_counts"]},
+                {"junction_id": "k", "mismatch_fields": ["approach_edge_ids"]},
+            ]
+        },
+        baseline_net_file=baseline_net,
+        followup_net_file=followup_net,
+        output_dir=tmp_path / "restore",
+        prefix="probe",
+    )
+
+    root = ET.parse(report["restored_net_file"]).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_junction_ids"] == ["j"]
+    assert root.find("edge[@id=':j_1']") is None
+    assert root.find("junction[@id='j']").attrib["intLanes"] == ":j_0_0"
 
 
 def _write_reference_net(path: Path) -> None:
