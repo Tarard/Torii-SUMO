@@ -1316,9 +1316,11 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     signal_grouped_net = tmp_path / "post_teacher_tls_signal_grouping" / "tls_signal_grouped.net.xml"
     tls_connection_repaired_net = tmp_path / "post_teacher_tls_connection_repair" / "repaired.net.xml"
     post_repair_movement_composite_net = tmp_path / "post_repair_movement_composite.net.xml"
+    hierarchy_type_repaired_net = tmp_path / "reference_hierarchy_type_repair" / "type_repaired.net.xml"
     calls: dict[str, object] = {
         "reference_join_candidate_net_files": [],
         "reference_hierarchy_candidate_net_files": [],
+        "reference_hierarchy_type_repair_candidate_net_files": [],
         "teacher_guided_queue_calls": [],
         "teacher_guided_queue_reports": [],
         "teacher_guided_run_calls": [],
@@ -1583,14 +1585,56 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
                 "clusters_file": str(tmp_path / "candidate_topology_clusters.csv"),
                 "warnings": [],
             }
+        if kwargs["net_file"] == hierarchy_type_repaired_net:
+            return {
+                "status": "blocked",
+                "topology_fragmentation_status": "needs_review",
+                "suspicious_cluster_count": 4,
+                "junction_aggregation_candidate_count": 2,
+                "physical_intersection_candidate_count": 1,
+                "clusters_file": str(tmp_path / "type_repaired_topology_clusters.csv"),
+                "warnings": [],
+            }
         return {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []}
 
     def fake_reference_hierarchy_audit(**kwargs):
         calls["reference_hierarchy_candidate_net_files"].append(kwargs["candidate_net_file"])
+        if kwargs["candidate_net_file"] == post_repair_movement_composite_net:
+            return {
+                "status": "blocked",
+                "reference_hierarchy_status": "needs_review",
+                "high_hierarchy_issue_count": 2,
+                "candidate_cases": [
+                    {
+                        "candidate_edge_id": "cand_primary",
+                        "candidate_edge_name": "Ringstrasse",
+                        "candidate_edge_type": "highway.primary",
+                        "hierarchy_decision": "type_hierarchy_mismatch",
+                        "same_name_match_status": "matched_by_name",
+                        "same_name_reference_edge_type": "highway.secondary",
+                        "same_name_reference_distance_m": 2.0,
+                    }
+                ],
+                "warnings": [],
+            }
         return {
             "status": "pass",
             "reference_hierarchy_status": "pass",
             "high_hierarchy_issue_count": 0,
+            "warnings": [],
+        }
+
+    def fake_reference_hierarchy_type_repair(**kwargs):
+        calls["reference_hierarchy_type_repair_candidate_net_files"].append(kwargs["candidate_net_file"])
+        hierarchy_type_repaired_net.parent.mkdir(parents=True, exist_ok=True)
+        hierarchy_type_repaired_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "reference_hierarchy_type_repair_status": "variant_created_for_review",
+            "reference_hierarchy_type_repair_count": 1,
+            "reference_hierarchy_type_repair_variant_file": str(hierarchy_type_repaired_net),
+            "reference_hierarchy_type_repair_plan_file": str(tmp_path / "hierarchy_type_repair_plan.json"),
+            "reference_hierarchy_type_repair_repairs_file": str(tmp_path / "hierarchy_type_repair_repairs.csv"),
             "warnings": [],
         }
 
@@ -1657,6 +1701,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
         reference_join_audit_func=fake_reference_join_audit,
         reference_join_aggregation_func=lambda **_kwargs: {"status": "blocked", "warnings": []},
         reference_hierarchy_audit_func=fake_reference_hierarchy_audit,
+        reference_hierarchy_type_repair_func=fake_reference_hierarchy_type_repair,
         teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
         teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
         teacher_guided_repair_run_func=fake_teacher_guided_repair_run,
@@ -1696,8 +1741,12 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert calls["post_teacher_tls_connection_repair_candidate_net_file"] == signal_grouped_net
     assert calls["post_teacher_tls_connection_repair_copy_unmapped_tls"] is True
     assert reference_net_file in calls["topology_net_files"]
-    assert calls["topology_net_files"][-1] == post_repair_movement_composite_net
-    assert calls["reference_hierarchy_candidate_net_files"][-1] == post_repair_movement_composite_net
+    assert calls["topology_net_files"][-1] == hierarchy_type_repaired_net
+    assert calls["reference_hierarchy_candidate_net_files"][-2:] == [
+        post_repair_movement_composite_net,
+        hierarchy_type_repaired_net,
+    ]
+    assert calls["reference_hierarchy_type_repair_candidate_net_files"] == [post_repair_movement_composite_net]
     assert len(calls["teacher_guided_queue_calls"]) == 2
     assert len(calls["teacher_guided_queue_reports"]) == 2
     assert len(calls["teacher_guided_run_calls"]) == 2
@@ -1710,9 +1759,9 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     post_repair_run_call = calls["teacher_guided_run_calls"][1]
     assert post_repair_run_call["queue_report"] is post_repair_queue_report
     assert post_repair_run_call["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild")
-    assert report["reference_visual_detail_comparison_net_file"] == str(post_repair_movement_composite_net)
+    assert report["reference_visual_detail_comparison_net_file"] == str(hierarchy_type_repaired_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
-        "post_teacher_tls_connection_repair_movement_rebuild_promoted"
+        "reference_hierarchy_type_repair_promoted"
     )
     assert report["reference_join_post_teacher_audit_status"] == "pass"
     assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 0
@@ -1722,9 +1771,15 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert report["gate_status"]["topology_audit"] == "pass"
     assert report["topology_reference_parity_status"] == "pass"
     assert report["topology_reference_parity_reason"] == "candidate_topology_not_more_fragmented_than_reference"
-    assert report["suspicious_topology_cluster_count"] == 5
+    assert report["suspicious_topology_cluster_count"] == 4
     assert report["reference_topology_suspicious_cluster_count"] == 10
     assert report["reference_topology_junction_aggregation_candidate_count"] == 8
+    assert report["reference_hierarchy_type_repair_status"] == "variant_created_for_review"
+    assert report["reference_hierarchy_type_repair_count"] == 1
+    assert report["reference_hierarchy_type_repair_sumo_load_status"] == "pass"
+    assert report["reference_hierarchy_type_repair_audit_status"] == "pass"
+    assert report["reference_hierarchy_type_repair_issue_count"] == 0
+    assert report["reference_hierarchy_type_repair_promotion_status"] == "pass"
     assert report["gate_status"]["reference_join_aggregation"] == "skipped"
     assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
     assert calls["post_repair_movement_equivalent_approach_edge_map"] == {
