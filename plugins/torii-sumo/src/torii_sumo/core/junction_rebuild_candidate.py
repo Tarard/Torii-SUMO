@@ -1975,10 +1975,17 @@ def run_teacher_guided_repair_queue(
                         edge_id
                         for edge_id in replay_blocking_self_loop_edge_drops
                         if edge_id not in mapped_edge_ids
-                        and _join_internal_self_loop_drop_has_witness(
-                            edge_id,
-                            replay_dropped_self_loop_edges,
-                            surviving_edge_ids,
+                        and (
+                            _join_internal_self_loop_drop_has_witness(
+                                edge_id,
+                                replay_dropped_self_loop_edges,
+                                surviving_edge_ids,
+                            )
+                            or _teacher_boundary_edge_has_target_junction(
+                                teacher_net_file,
+                                teacher_junction_id,
+                                edge_id,
+                            )
                         )
                     ]
                     if deferred_self_loop_edge_ids:
@@ -2546,6 +2553,14 @@ def _join_internal_self_loop_drop_has_witness(
         return True
     edge_family = _edge_family_id(edge_id)
     return any(_edge_family_id(surviving_edge_id) == edge_family for surviving_edge_id in surviving_edge_ids)
+
+
+def _teacher_boundary_edge_has_target_junction(teacher_net_file: Path, teacher_junction_id: str, edge_id: str) -> bool:
+    try:
+        edge = ET.parse(teacher_net_file).getroot().find(f"edge[@id='{edge_id}']")
+    except (ET.ParseError, OSError):
+        return False
+    return edge is not None and teacher_junction_id in (edge.attrib.get("from"), edge.attrib.get("to"))
 
 
 def _opposite_direction_edge_id(edge_id: str) -> str:
