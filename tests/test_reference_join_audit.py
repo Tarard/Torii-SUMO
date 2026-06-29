@@ -400,6 +400,8 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         ],
         "junction_type_counts": {"traffic_light": 1},
         "edge_function_counts": {"crossing": 1, "internal": 1, "plain": 6, "walkingarea": 1},
+        "plain_edge_type_counts": {"none": 6},
+        "plain_edge_type_pedestrian_lane_counts": {},
     }
     assert report["candidate_network_structural_summary"] == {
         "plain_edge_count": 6,
@@ -424,6 +426,8 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
         "tl_logic_control_records": [],
         "junction_type_counts": {"priority": 1},
         "edge_function_counts": {"internal": 1, "plain": 6},
+        "plain_edge_type_counts": {"none": 6},
+        "plain_edge_type_pedestrian_lane_counts": {},
     }
     assert report["network_structural_delta_status"] == "fail"
     assert report["network_structural_missing_counts"] == {
@@ -879,6 +883,46 @@ def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, t
     assert summary["audit_mode"] == "structural_only"
     assert summary["junction_pattern_comparison_status"] == "fail"
     assert any("structural-only mode" in warning for warning in report["warnings"])
+
+
+def test_reference_join_audit_reports_pedestrian_lane_counts_by_edge_type(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text(
+        """<net>
+  <edge id="street" type="highway.residential" from="a" to="b">
+    <lane id="street_0" index="0" allow="pedestrian"/>
+    <lane id="street_1" index="1" allow="passenger"/>
+  </edge>
+  <junction id="a" type="priority"/>
+  <junction id="b" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="street" type="highway.residential" from="a" to="b">
+    <lane id="street_0" index="0" allow="passenger"/>
+  </edge>
+  <junction id="a" type="priority"/>
+  <junction id="b" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=tmp_path / "audit",
+        prefix="ped_policy",
+        structural_only=True,
+    )
+
+    assert report["reference_network_structural_summary"]["plain_edge_type_counts"] == {"highway.residential": 1}
+    assert report["reference_network_structural_summary"]["plain_edge_type_pedestrian_lane_counts"] == {
+        "highway.residential": 1
+    }
+    assert report["candidate_network_structural_summary"]["plain_edge_type_pedestrian_lane_counts"] == {}
 
 
 def test_reference_join_audit_structural_only_samples_more_than_five_common_tls(
