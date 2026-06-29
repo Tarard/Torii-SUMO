@@ -2271,6 +2271,7 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
     demoted_net = tmp_path / "tls_non_controller_junction_demoted.net.xml"
     followup_movement_net = tmp_path / "followup_movement.net.xml"
     followup_demoted_net = tmp_path / "followup_tls_non_controller_junction_demoted.net.xml"
+    final_movement_net = tmp_path / "final_movement.net.xml"
     calls: dict[str, object] = {
         "reference_join_candidate_net_files": [],
         "teacher_guided_queue_candidate_net_files": [],
@@ -2333,24 +2334,41 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
             return delta(extra_tls_junctions=5, summary="post_teacher_delta.json")
         if candidate == demoted_net:
             calls["non_controller_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
-            return delta(extra_tls_junctions=1, mismatch=1, summary="non_controller_demotion_delta.json")
+            return delta(extra_tls_junctions=1, mismatch=2, summary="non_controller_demotion_delta.json")
         if candidate == followup_demoted_net:
             calls["followup_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
             return delta(
                 missing_tls_controlled_connections=24,
+                mismatch=1,
                 summary="followup_non_controller_demotion_delta.json",
+            )
+        if candidate == final_movement_net:
+            calls["final_equivalent_approach_edge_map"] = kwargs.get("equivalent_approach_edge_map")
+            return delta(
+                missing_tls_controlled_connections=24,
+                summary="final_movement_delta.json",
             )
         return delta(extra_tls_junctions=6, mismatch=1, summary="initial_delta.json")
 
     def fake_teacher_guided_queue(**kwargs):
         calls["teacher_guided_queue_candidate_net_files"].append(kwargs["candidate_net_file"])
         is_followup = kwargs["candidate_net_file"] == demoted_net
+        is_final = kwargs["candidate_net_file"] == followup_demoted_net
         return {
             "status": "pass",
             "repair_candidate_count": 1,
             "ready_candidate_count": 1,
             "expanded_scope_candidate_count": 0,
-            "queue_file": str(tmp_path / ("followup_teacher_queue.json" if is_followup else "teacher_queue.json")),
+            "queue_file": str(
+                tmp_path
+                / (
+                    "final_teacher_queue.json"
+                    if is_final
+                    else "followup_teacher_queue.json"
+                    if is_followup
+                    else "teacher_queue.json"
+                )
+            ),
             "repair_candidates": [{"vehicle_movement_matrix_missing_count": 1}],
         }
 
@@ -2365,11 +2383,14 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
 
     def fake_repair_run(**kwargs):
         is_followup = kwargs["queue_report"]["queue_file"].endswith("followup_teacher_queue.json")
+        is_final = kwargs["queue_report"]["queue_file"].endswith("final_teacher_queue.json")
         return {
             "status": "pass",
             "parity_gate_status": "pass",
             "composite_applied_candidate_count": 1,
-            "composite_net_file": str(write_net(followup_movement_net if is_followup else teacher_guided_net)),
+            "composite_net_file": str(
+                write_net(final_movement_net if is_final else followup_movement_net if is_followup else teacher_guided_net)
+            ),
             "run_report_file": str(tmp_path / "teacher_run.json"),
             "variant_reports": [
                 {
@@ -2379,6 +2400,7 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
                         "effective_edge_map": {
                             "teacher_edge": "candidate_edge",
                             **({"followup_teacher_edge": "followup_candidate_edge"} if is_followup else {}),
+                            **({"final_teacher_edge": "final_candidate_edge"} if is_final else {}),
                         }
                     },
                 }
@@ -2437,12 +2459,15 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
         "teacher_edge": "candidate_edge",
         "followup_teacher_edge": "followup_candidate_edge",
     }
+    assert calls["final_equivalent_approach_edge_map"]["final_teacher_edge"] == "final_candidate_edge"
     assert demoted_net in calls["reference_join_candidate_net_files"]
     assert followup_demoted_net in calls["reference_join_candidate_net_files"]
-    assert calls["teacher_guided_queue_candidate_net_files"][-1] == demoted_net
-    assert report["reference_visual_detail_comparison_net_file"] == str(followup_demoted_net)
+    assert final_movement_net in calls["reference_join_candidate_net_files"]
+    assert demoted_net in calls["teacher_guided_queue_candidate_net_files"]
+    assert calls["teacher_guided_queue_candidate_net_files"][-1] == followup_demoted_net
+    assert report["reference_visual_detail_comparison_net_file"] == str(final_movement_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
-        "post_teacher_tls_non_controller_junction_demotion_movement_rebuild_promoted_by_reference_delta"
+        "final_movement_rebuild_promoted_by_reference_delta"
     )
     assert report["post_teacher_tls_non_controller_junction_demotion_status"] == "pass"
     assert report["post_teacher_tls_non_controller_junction_demotion_sumo_load_status"] == "pass"

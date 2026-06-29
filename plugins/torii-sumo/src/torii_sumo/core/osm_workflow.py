@@ -1740,6 +1740,20 @@ def run_osm_cleanup_workflow(
     post_teacher_tls_connection_repair_movement_rebuild_plain_export_report: dict[str, Any] | None = None
     post_teacher_tls_connection_repair_movement_rebuild_run_report: dict[str, Any] | None = None
     post_teacher_tls_connection_repair_movement_rebuild_best_variant_file: Path | None = None
+    final_movement_rebuild_queue_report: dict[str, Any] | None = None
+    final_movement_rebuild_plain_export_report: dict[str, Any] | None = None
+    final_movement_rebuild_run_report: dict[str, Any] | None = None
+    final_movement_rebuild_best_variant_file: Path | None = None
+    final_movement_rebuild_sumo_load_report: dict[str, Any] | None = None
+    final_movement_rebuild_reference_delta_report: dict[str, Any] | None = None
+    final_movement_rebuild_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    final_movement_rebuild_internal_regression_restore_report: dict[str, Any] | None = None
+    final_movement_rebuild_internal_regression_restore_sumo_load_report: dict[str, Any] | None = None
+    final_movement_rebuild_internal_regression_restore_reference_delta_report: dict[str, Any] | None = None
+    final_movement_rebuild_internal_regression_restore_promotion_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
@@ -3171,6 +3185,132 @@ def run_osm_cleanup_workflow(
                                             "status": "blocked",
                                             "reason": "sumo_load_not_pass",
                                         }
+    if (
+        reference_net_file is not None
+        and reference_visual_detail_comparison_net_file is not None
+        and reference_join_post_teacher_audit_report is not None
+        and _movement_rebuild_mismatch_score(reference_join_post_teacher_audit_report) > 0
+    ):
+        final_movement_source_net_file = reference_visual_detail_comparison_net_file
+        final_movement_baseline_report = reference_join_post_teacher_audit_report
+        final_movement_rebuild_queue_report = teacher_guided_repair_queue_func(
+            teacher_net_file=reference_net_file,
+            candidate_net_file=final_movement_source_net_file,
+            reference_join_audit_report=final_movement_baseline_report,
+            output_dir=output_dir / "final_movement_rebuild_queue",
+            prefix=f"{prefix}_final_movement_rebuild",
+            max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+        )
+        if _teacher_guided_queue_has_replay_candidates(final_movement_rebuild_queue_report):
+            (
+                final_movement_rebuild_plain_export_report,
+                final_movement_rebuild_run_report,
+                final_movement_rebuild_best_variant_file,
+            ) = _run_teacher_guided_queue_replay(
+                queue_report=final_movement_rebuild_queue_report,
+                source_net_file=final_movement_source_net_file,
+                plain_output_dir=output_dir / "final_movement_rebuild_plain",
+                run_output_dir=output_dir / "final_movement_rebuild_execution",
+                prefix=f"{prefix}_final_movement_rebuild",
+                netconvert_binary=netconvert_binary,
+                sumo_binary=sumo_binary,
+                timeout_seconds=timeout_seconds,
+                max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                plain_export_func=teacher_guided_plain_export_func,
+                repair_run_func=teacher_guided_repair_run_func,
+            )
+        if final_movement_rebuild_best_variant_file is not None:
+            final_movement_rebuild_sumo_load_report = _sumo_load_net(
+                final_movement_rebuild_best_variant_file,
+                output_dir=output_dir / "final_movement_rebuild_sumo_load",
+                sumo_binary=sumo_binary,
+                timeout_seconds=timeout_seconds,
+                command_runner=command_runner,
+            )
+            if final_movement_rebuild_sumo_load_report.get("status") == "pass":
+                final_movement_edge_map = _teacher_guided_equivalent_approach_edge_map(
+                    final_movement_rebuild_run_report
+                )
+                final_movement_rebuild_reference_delta_report = reference_join_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=final_movement_rebuild_best_variant_file,
+                    output_dir=output_dir / "final_movement_rebuild_reference_delta",
+                    prefix=f"{prefix}_final_movement_rebuild_reference_delta",
+                    candidate_cluster_radius_m=topology_cluster_radius_m,
+                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                    structural_only=reference_join_audit_structural_only,
+                    equivalent_approach_edge_map=final_movement_edge_map,
+                )
+                final_movement_candidate_file = final_movement_rebuild_best_variant_file
+                final_movement_candidate_delta_report = final_movement_rebuild_reference_delta_report
+                final_movement_rebuild_internal_regression_restore_report = _restore_followup_internal_regressions(
+                    baseline_delta_report=final_movement_baseline_report,
+                    followup_delta_report=final_movement_rebuild_reference_delta_report,
+                    baseline_net_file=final_movement_source_net_file,
+                    followup_net_file=final_movement_rebuild_best_variant_file,
+                    output_dir=output_dir / "final_movement_rebuild_internal_regression_restore",
+                    prefix=f"{prefix}_final_movement_rebuild",
+                )
+                if final_movement_rebuild_internal_regression_restore_report.get("status") == "pass":
+                    restored_final_movement_file = Path(
+                        str(final_movement_rebuild_internal_regression_restore_report.get("restored_net_file", ""))
+                    )
+                    final_movement_rebuild_internal_regression_restore_sumo_load_report = _sumo_load_net(
+                        restored_final_movement_file,
+                        output_dir=output_dir / "final_movement_rebuild_internal_regression_restore_sumo_load",
+                        sumo_binary=sumo_binary,
+                        timeout_seconds=timeout_seconds,
+                        command_runner=command_runner,
+                    )
+                    if final_movement_rebuild_internal_regression_restore_sumo_load_report.get("status") == "pass":
+                        final_movement_rebuild_internal_regression_restore_reference_delta_report = (
+                            reference_join_audit_func(
+                                reference_net_file=reference_net_file,
+                                candidate_net_file=restored_final_movement_file,
+                                output_dir=output_dir
+                                / "final_movement_rebuild_internal_regression_restore_reference_delta",
+                                prefix=(
+                                    f"{prefix}_final_movement_rebuild_internal_regression_restore_"
+                                    "reference_delta"
+                                ),
+                                candidate_cluster_radius_m=topology_cluster_radius_m,
+                                candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                                structural_only=reference_join_audit_structural_only,
+                                equivalent_approach_edge_map=final_movement_edge_map,
+                            )
+                        )
+                        final_movement_rebuild_internal_regression_restore_promotion_report = (
+                            _movement_rebuild_reference_delta_promotion_decision(
+                                candidate_delta_report=(
+                                    final_movement_rebuild_internal_regression_restore_reference_delta_report
+                                ),
+                                baseline_delta_report=final_movement_rebuild_reference_delta_report,
+                                reason="final_movement_rebuild_internal_regressions_restored",
+                            )
+                        )
+                        if final_movement_rebuild_internal_regression_restore_promotion_report.get("status") == "pass":
+                            final_movement_candidate_file = restored_final_movement_file
+                            final_movement_candidate_delta_report = (
+                                final_movement_rebuild_internal_regression_restore_reference_delta_report
+                            )
+                final_movement_rebuild_reference_promotion_report = (
+                    _movement_rebuild_reference_delta_promotion_decision(
+                        candidate_delta_report=final_movement_candidate_delta_report,
+                        baseline_delta_report=final_movement_baseline_report,
+                        reason="final_movement_rebuild_promoted_by_reference_delta",
+                    )
+                )
+                if final_movement_rebuild_reference_promotion_report.get("status") == "pass":
+                    reference_visual_detail_comparison_net_file = final_movement_candidate_file
+                    reference_visual_detail_comparison_selection_reason = str(
+                        final_movement_rebuild_reference_promotion_report.get("reason", "")
+                    )
+                    reference_join_post_teacher_audit_report = final_movement_candidate_delta_report
+            else:
+                final_movement_rebuild_reference_promotion_report = {
+                    "status": "blocked",
+                    "reason": "sumo_load_not_pass",
+                }
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
         if (
             run_topology_audit_after_build
@@ -3590,6 +3730,12 @@ def run_osm_cleanup_workflow(
         _post_teacher_tls_connection_repair_missing_movement_plan_count,
         _post_teacher_tls_connection_repair_top_movement_gaps,
     ) = _teacher_guided_movement_gap_stats(post_teacher_tls_connection_repair_movement_rebuild_queue_report)
+    (
+        final_movement_rebuild_movement_gap_candidate_count,
+        final_movement_rebuild_movement_max_gap_count,
+        _final_movement_rebuild_missing_movement_plan_count,
+        _final_movement_rebuild_top_movement_gaps,
+    ) = _teacher_guided_movement_gap_stats(final_movement_rebuild_queue_report)
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -3984,6 +4130,62 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count": 0
         if post_teacher_tls_connection_repair_movement_rebuild_run_report is None
         else post_teacher_tls_connection_repair_movement_rebuild_run_report.get("composite_applied_candidate_count", 0),
+        "final_movement_rebuild_queue_status": "skipped"
+        if final_movement_rebuild_queue_report is None
+        else str(final_movement_rebuild_queue_report.get("status", "fail")),
+        "final_movement_rebuild_candidate_count": 0
+        if final_movement_rebuild_queue_report is None
+        else final_movement_rebuild_queue_report.get("repair_candidate_count", 0),
+        "final_movement_rebuild_ready_candidate_count": 0
+        if final_movement_rebuild_queue_report is None
+        else final_movement_rebuild_queue_report.get("ready_candidate_count", 0),
+        "final_movement_rebuild_expanded_scope_candidate_count": 0
+        if final_movement_rebuild_queue_report is None
+        else final_movement_rebuild_queue_report.get("expanded_scope_candidate_count", 0),
+        "final_movement_rebuild_gap_candidate_count": final_movement_rebuild_movement_gap_candidate_count,
+        "final_movement_rebuild_max_gap_count": final_movement_rebuild_movement_max_gap_count,
+        "final_movement_rebuild_queue_file": ""
+        if final_movement_rebuild_queue_report is None
+        else str(final_movement_rebuild_queue_report.get("queue_file", "")),
+        "final_movement_rebuild_plain_export_status": "skipped"
+        if final_movement_rebuild_plain_export_report is None
+        else str(final_movement_rebuild_plain_export_report.get("status", "fail")),
+        "final_movement_rebuild_run_status": "skipped"
+        if final_movement_rebuild_run_report is None
+        else str(final_movement_rebuild_run_report.get("status", "fail")),
+        "final_movement_rebuild_parity_gate_status": "skipped"
+        if final_movement_rebuild_run_report is None
+        else str(final_movement_rebuild_run_report.get("parity_gate_status", "fail")),
+        "final_movement_rebuild_best_variant_file": ""
+        if final_movement_rebuild_best_variant_file is None
+        else str(final_movement_rebuild_best_variant_file),
+        "final_movement_rebuild_applied_candidate_count": 0
+        if final_movement_rebuild_run_report is None
+        else final_movement_rebuild_run_report.get("composite_applied_candidate_count", 0),
+        "final_movement_rebuild_sumo_load_status": "skipped"
+        if final_movement_rebuild_sumo_load_report is None
+        else str(final_movement_rebuild_sumo_load_report.get("status", "fail")),
+        "final_movement_rebuild_reference_delta_file": ""
+        if final_movement_rebuild_reference_delta_report is None
+        else str(final_movement_rebuild_reference_delta_report.get("summary_file", "")),
+        "final_movement_rebuild_reference_promotion_status": str(
+            final_movement_rebuild_reference_promotion_report.get("status", "skipped")
+        ),
+        "final_movement_rebuild_reference_promotion_reason": str(
+            final_movement_rebuild_reference_promotion_report.get("reason", "")
+        ),
+        "final_movement_rebuild_internal_regression_restore_status": "skipped"
+        if final_movement_rebuild_internal_regression_restore_report is None
+        else str(final_movement_rebuild_internal_regression_restore_report.get("status", "fail")),
+        "final_movement_rebuild_internal_regression_restore_sumo_load_status": "skipped"
+        if final_movement_rebuild_internal_regression_restore_sumo_load_report is None
+        else str(final_movement_rebuild_internal_regression_restore_sumo_load_report.get("status", "fail")),
+        "final_movement_rebuild_internal_regression_restore_reference_delta_file": ""
+        if final_movement_rebuild_internal_regression_restore_reference_delta_report is None
+        else str(final_movement_rebuild_internal_regression_restore_reference_delta_report.get("summary_file", "")),
+        "final_movement_rebuild_internal_regression_restore_promotion_status": "skipped"
+        if final_movement_rebuild_internal_regression_restore_promotion_report is None
+        else str(final_movement_rebuild_internal_regression_restore_promotion_report.get("status", "fail")),
         "post_teacher_tls_connection_repair_reference_promotion_status": str(
             post_teacher_tls_connection_repair_reference_promotion_report.get("status", "skipped")
         ),
@@ -4507,6 +4709,24 @@ def run_osm_cleanup_workflow(
         ),
         "post_teacher_tls_connection_repair_movement_rebuild_run": (
             post_teacher_tls_connection_repair_movement_rebuild_run_report or {}
+        ),
+        "final_movement_rebuild_queue": final_movement_rebuild_queue_report or {},
+        "final_movement_rebuild_plain_export": final_movement_rebuild_plain_export_report or {},
+        "final_movement_rebuild_run": final_movement_rebuild_run_report or {},
+        "final_movement_rebuild_sumo_load": final_movement_rebuild_sumo_load_report or {},
+        "final_movement_rebuild_reference_delta": final_movement_rebuild_reference_delta_report or {},
+        "final_movement_rebuild_reference_promotion": final_movement_rebuild_reference_promotion_report,
+        "final_movement_rebuild_internal_regression_restore": (
+            final_movement_rebuild_internal_regression_restore_report or {}
+        ),
+        "final_movement_rebuild_internal_regression_restore_sumo_load": (
+            final_movement_rebuild_internal_regression_restore_sumo_load_report or {}
+        ),
+        "final_movement_rebuild_internal_regression_restore_reference_delta": (
+            final_movement_rebuild_internal_regression_restore_reference_delta_report or {}
+        ),
+        "final_movement_rebuild_internal_regression_restore_promotion": (
+            final_movement_rebuild_internal_regression_restore_promotion_report or {}
         ),
         "reference_visual_detail_tls_connection_repair_sumo_load": reference_visual_detail_tls_connection_repair_sumo_load_report
         or {},
