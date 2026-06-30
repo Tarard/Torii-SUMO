@@ -10,6 +10,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _restore_false_traffic_light_junction_types,
     _restore_non_target_internal_artifacts,
     _restore_replayed_geometry_attrs,
+    _semantic_layer_gates,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
     _write_joined_endpoint_edge_file,
@@ -6418,6 +6419,29 @@ def test_teacher_parity_fails_on_mapped_crossing_edge_set_mismatch() -> None:
     ]
 
 
+def test_semantic_layer_gates_route_crossing_and_walkingarea_to_pedestrian_bike() -> None:
+    semantic_gate = {
+        "status": "fail",
+        "failures": [
+            {"report": "parity", "field": "crossing_signature_mismatch_count", "count": 1},
+            {"report": "parity", "field": "walking_area_signature_mismatch_count", "count": 1},
+            {"report": "parity", "field": "controlled_vehicle_link_signature_mismatch_count", "count": 1},
+            {"report": "parity", "field": "internal_edge_signature_mismatch_count", "count": 1},
+        ],
+    }
+
+    layers = _semantic_layer_gates(semantic_gate, {"status": "pass"})
+
+    assert layers["pedestrian_bike"]["status"] == "fail"
+    assert [failure["field"] for failure in layers["pedestrian_bike"]["failures"]] == [
+        "crossing_signature_mismatch_count",
+        "walking_area_signature_mismatch_count",
+    ]
+    assert layers["movement_tls"]["status"] == "fail"
+    assert layers["internal"]["status"] == "fail"
+    assert layers["topology"]["status"] == "pass"
+
+
 def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -> None:
     teacher_model = {
         "junction_id": "teacher_j",
@@ -8277,6 +8301,10 @@ def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(
     assert report["tls_movement_parity"]["candidate_connection_count"] == 1
     assert report["tls_movement_parity"]["movement_signature_equal_after_internal_id_normalization"] is True
     assert report["tls_movement_parity"]["tl_logic_phase_states_equal"] is True
+    assert report["semantic_layer_gates"]["topology"]["status"] == "pass"
+    assert report["semantic_layer_gates"]["movement_tls"]["status"] == "pass"
+    assert report["semantic_layer_gates"]["pedestrian_bike"]["status"] == "pass"
+    assert report["semantic_layer_gates"]["internal"]["status"] == "pass"
 
 
 def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback(
