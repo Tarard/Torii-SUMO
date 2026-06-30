@@ -23,6 +23,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_expanded_scope_plain_inputs,
     write_teacher_target_internal_replay_net,
     write_teacher_connection_plan,
+    write_teacher_endpoint_patch_nodes,
     write_teacher_lane_patch_edges,
     write_teacher_pedestrian_ring_net,
     write_teacher_tllogic_net,
@@ -5369,7 +5370,56 @@ def test_write_teacher_lane_patch_edges_adds_missing_mapped_teacher_edge(tmp_pat
     assert report["added_missing_mapped_edge_count"] == 1
     assert missing is not None
     assert missing.attrib["type"] == "highway.secondary"
+    assert missing.attrib["numLanes"] == "1"
     assert missing.find("lane").attrib == {"index": "0", "speed": "13.9", "shape": "0,0 10,0"}
+
+
+def test_write_teacher_endpoint_patch_nodes_adds_translated_missing_edge_endpoints(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-10" y="20"/>
+  <node id="j" x="10" y="20"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    patched_edges = tmp_path / "patched.edg.xml"
+    patched_edges.write_text(
+        """<edges>
+  <edge id="in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="missing_out" from="j" to="teacher_exit"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <junction id="j" type="priority" x="100" y="200"/>
+  <junction id="teacher_exit" type="priority" x="120" y="205" incLanes="missing_out_0" intLanes="" shape="119,204 121,204"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_endpoint_patch_nodes(
+        raw_node_file=raw_nodes,
+        teacher_net_file=teacher_net,
+        edge_file=patched_edges,
+        output_file=tmp_path / "patched.nod.xml",
+        lane_shape_delta=(-90.0, -180.0),
+    )
+
+    root = ET.parse(report["node_file"]).getroot()
+    assert report["added_missing_endpoint_node_ids"] == ["teacher_exit"]
+    assert report["unresolved_missing_endpoint_node_ids"] == []
+    node = root.find("node[@id='teacher_exit']")
+    assert node is not None
+    assert node.attrib == {
+        "id": "teacher_exit",
+        "x": "30.00",
+        "y": "25.00",
+        "type": "priority",
+        "shape": "29.00,24.00 31.00,24.00",
+    }
 
 
 def test_write_teacher_lane_patch_edges_prunes_unmapped_target_boundary_edges(tmp_path: Path) -> None:
