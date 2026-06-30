@@ -1003,6 +1003,90 @@ def test_build_teacher_guided_repair_queue_allows_turnaround_only_when_teacher_o
     assert candidate["turnaround_only_lane_gaps"] == []
 
 
+def test_build_teacher_guided_repair_queue_seeds_turnaround_only_lane_gap_without_pattern_delta(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="normal_out" from="j" to="e"><lane id="normal_out_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="turn_out" from="j" to="w"><lane id="turn_out_0" index="0" shape="0,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="normal_out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="normal_out" from="j" to="e"><lane id="normal_out_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="turn_out" from="j" to="w"><lane id="turn_out_0" index="0" shape="0,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": []},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["turnaround_only_lane_candidate_count"] == 1
+    candidate = report["repair_candidates"][0]
+    assert candidate["learned_rule"] == "tum_like_turnaround_only_lane_candidate"
+    assert candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+    assert candidate["vehicle_movement_matrix_missing_count"] == 1
+    assert candidate["turnaround_only_lane_gap_count"] == 1
+    assert candidate["netedit_review_actions"] == ["rebuild_vehicle_movement_matrix"]
+
+
+def test_turnaround_only_lane_seed_scopes_missing_normal_target(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="normal_out" from="j" to="e"><lane id="normal_out_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="turn_out" from="j" to="w"><lane id="turn_out_0" index="0" shape="0,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="normal_out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="turn_out" from="j" to="w"><lane id="turn_out_0" index="0" shape="0,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": []},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["learned_rule"] == "tum_like_turnaround_only_lane_candidate"
+    assert candidate["candidate_status"] == "needs_expanded_rebuild_scope"
+    assert candidate["expanded_rebuild_scope"]["blocked_teacher_edge_ids"] == ["normal_out"]
+    assert candidate["expanded_rebuild_scope"]["junction_ids"] == ["e", "j"]
+    assert candidate["expanded_rebuild_scope"]["missing_desired_endpoint_ids"] == ["e"]
+
+
 def test_build_teacher_guided_repair_queue_counts_duplicate_missing_teacher_movements(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -3230,7 +3314,7 @@ def test_run_teacher_guided_repair_queue_replays_copyable_missing_boundary_edge(
     assert scope_report["copyable_missing_blocked_edge_ids"] == ["teacher_missing"]
     assert scope_report["blocking_missing_blocked_edge_ids"] == []
     assert scope_report["missing_blocked_edge_resolution"] == "copyable_by_teacher_replay"
-    assert variant_calls[0]["edge_map"] == {"teacher_in": "cand_in"}
+    assert variant_calls[0]["edge_map"] == {"teacher_in": "cand_in", "teacher_missing": "teacher_missing"}
 
 
 def test_run_teacher_guided_repair_queue_forces_internal_replay_for_topology_fragmented_tls(
@@ -5252,6 +5336,40 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     assert "outlineShape" not in lanes[1].attrib
     assert report["patched_edge_count"] == 1
     assert report["lane_shape_translation_applied"] is True
+
+
+def test_write_teacher_lane_patch_edges_adds_missing_mapped_teacher_edge(tmp_path: Path) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="in" from="a" to="j"><lane index="0" shape="-10,0 0,0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    teacher_edges = tmp_path / "teacher.net.xml"
+    teacher_edges.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="missing_out" from="j" to="b" priority="3" type="highway.secondary" shape="0,0 10,0">
+    <lane id="missing_out_0" index="0" speed="13.9" shape="0,0 10,0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw_edges,
+        teacher_edge_file=teacher_edges,
+        output_file=tmp_path / "patched.edg.xml",
+        edge_map={"in": "in", "missing_out": "missing_out"},
+    )
+
+    root = ET.parse(report["edge_file"]).getroot()
+    missing = root.find("edge[@id='missing_out']")
+    assert report["added_missing_mapped_edge_count"] == 1
+    assert missing is not None
+    assert missing.attrib["type"] == "highway.secondary"
+    assert missing.find("lane").attrib == {"index": "0", "speed": "13.9", "shape": "0,0 10,0"}
 
 
 def test_write_teacher_lane_patch_edges_prunes_unmapped_target_boundary_edges(tmp_path: Path) -> None:

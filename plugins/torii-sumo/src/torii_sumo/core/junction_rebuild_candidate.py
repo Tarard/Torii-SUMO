@@ -178,6 +178,8 @@ def build_teacher_guided_repair_queue(
         candidate_edges_by_id,
     )
     matched_cases = [*matched_cases, *topology_fragmented_tls_cases]
+    turnaround_only_lane_cases = _turnaround_only_lane_cases(matched_cases, teacher_root, candidate_root)
+    matched_cases = [*matched_cases, *turnaround_only_lane_cases]
     matched_cases.sort(
         key=lambda case: _teacher_guided_case_sort_key(case, pattern_records, pattern_templates)
     )
@@ -221,6 +223,7 @@ def build_teacher_guided_repair_queue(
         "matched_case_count": len(matched_cases),
         "same_id_pattern_candidate_count": len(same_id_pattern_cases),
         "topology_fragmented_tls_candidate_count": len(topology_fragmented_tls_cases),
+        "turnaround_only_lane_candidate_count": len(turnaround_only_lane_cases),
         "queued_case_count": len(repair_candidates),
         "queue_truncated": len(repair_candidates) < len(matched_cases),
         "queue_order_policy": "largest_vehicle_movement_gap_then_highest_teacher_template_count",
@@ -585,7 +588,9 @@ def write_teacher_lane_patch_edges(
     teacher_by_candidate = {candidate_id: teacher_edges[teacher_id] for teacher_id, candidate_id in edge_map.items() if teacher_id in teacher_edges}
 
     tree = ET.parse(raw_edge_file)
+    root = tree.getroot()
     patched = []
+    added_missing_mapped_edges = []
     pruned_boundary_edges = []
     remapped_teacher_edges = set(edge_map)
     teacher_same_junction_edges = {
@@ -595,7 +600,7 @@ def write_teacher_lane_patch_edges(
     }
     allowed_boundary_edges = set(edge_map.values()) | teacher_same_junction_edges
     boundary_node_ids = boundary_node_ids or set()
-    for edge in tree.getroot().findall("edge"):
+    for edge in root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
         touches_target = (
             edge.attrib.get("from") == junction_id
@@ -609,7 +614,7 @@ def write_teacher_lane_patch_edges(
             and touches_target
             and edge_id not in allowed_boundary_edges
         ):
-            tree.getroot().remove(edge)
+            root.remove(edge)
             pruned_boundary_edges.append(edge_id)
             continue
         teacher_edge = teacher_by_candidate.get(edge.attrib.get("id", ""))
@@ -639,7 +644,38 @@ def write_teacher_lane_patch_edges(
             ET.SubElement(edge, "lane", lane_attrs)
         patched.append({"candidate_edge_id": edge.attrib.get("id", ""), "teacher_edge_id": teacher_edge.attrib.get("id", ""), "lane_count": len(teacher_lanes)})
 
-    ET.indent(tree.getroot(), space="    ")
+    existing_edge_ids = {edge.attrib.get("id", "") for edge in root.findall("edge")}
+    for teacher_id, candidate_id in sorted(edge_map.items()):
+        if candidate_id in existing_edge_ids:
+            continue
+        teacher_edge = teacher_edges.get(teacher_id)
+        if teacher_edge is None:
+            continue
+        teacher_lanes = teacher_edge.findall("lane")
+        edge_attrs = dict(teacher_edge.attrib)
+        edge_attrs["id"] = candidate_id
+        if preserve_lane_shapes and lane_shape_delta is not None and edge_attrs.get("shape"):
+            edge_attrs["shape"] = _translate_shape(edge_attrs["shape"], lane_shape_delta[0], lane_shape_delta[1])
+        edge = ET.SubElement(root, "edge", edge_attrs)
+        for lane in teacher_lanes:
+            lane_attrs = {"index": lane.attrib.get("index", "0")}
+            for attr in ("allow", "disallow", "width", "speed"):
+                if lane.attrib.get(attr):
+                    lane_attrs[attr] = lane.attrib[attr]
+            if preserve_lane_shapes and lane.attrib.get("shape"):
+                lane_attrs["shape"] = (
+                    _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
+                    if lane_shape_delta is not None
+                    else lane.attrib["shape"]
+                )
+            ET.SubElement(edge, "lane", lane_attrs)
+        added_missing_mapped_edges.append(
+            {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, "lane_count": len(teacher_lanes)}
+        )
+        patched.append(added_missing_mapped_edges[-1])
+        existing_edge_ids.add(candidate_id)
+
+    ET.indent(root, space="    ")
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
     return {
         "status": "pass",
@@ -647,6 +683,8 @@ def write_teacher_lane_patch_edges(
         "edge_file": str(output_file),
         "patched_edge_count": len(patched),
         "patched_edges": patched,
+        "added_missing_mapped_edge_count": len(added_missing_mapped_edges),
+        "added_missing_mapped_edges": added_missing_mapped_edges,
         "pruned_boundary_edge_count": len(pruned_boundary_edges),
         "pruned_boundary_edges": pruned_boundary_edges,
         "lane_shape_translation_applied": lane_shape_delta is not None,
@@ -2143,6 +2181,12 @@ def run_teacher_guided_repair_queue(
                 scope_report["unresolved_missing_blocked_edge_ids"] = unresolved_missing_blocked_edge_ids
                 scope_report["copyable_missing_blocked_edge_ids"] = copyable_missing_blocked_edge_ids
                 scope_report["blocking_missing_blocked_edge_ids"] = blocking_missing_blocked_edge_ids
+                if copyable_missing_blocked_edge_ids:
+                    replay_edge_map = {
+                        **replay_edge_map,
+                        **{edge_id: edge_id for edge_id in copyable_missing_blocked_edge_ids},
+                    }
+                    scope_report["derived_edge_map"] = replay_edge_map
                 if (
                     scope_report.get("status") == "review"
                     and missing_blocked_edge_ids
@@ -3445,6 +3489,52 @@ def _topology_fragmented_tls_cases(
     return cases
 
 
+def _turnaround_only_lane_cases(
+    matched_cases: list[dict[str, Any]],
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+) -> list[dict[str, Any]]:
+    covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
+    teacher_junction_ids = _real_junction_ids(teacher_root)
+    candidate_junction_ids = _real_junction_ids(candidate_root)
+    teacher_by_lane = _root_vehicle_outgoing_by_lane(teacher_root)
+    candidate_by_lane = _root_vehicle_outgoing_by_lane(candidate_root)
+    candidate_edges = {
+        edge.attrib["id"]: edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    cases: dict[str, set[str]] = {}
+    for (edge_id, from_lane), candidate_stats in candidate_by_lane.items():
+        if candidate_stats["non_turnaround_count"] or not candidate_stats["turnaround_count"]:
+            continue
+        teacher_stats = teacher_by_lane.get((edge_id, from_lane))
+        if not teacher_stats or not teacher_stats["non_turnaround_count"]:
+            continue
+        candidate_edge = candidate_edges.get(edge_id)
+        junction_id = candidate_edge.attrib.get("to", "") if candidate_edge is not None else ""
+        if (
+            not junction_id
+            or junction_id in covered_ids
+            or junction_id not in teacher_junction_ids
+            or junction_id not in candidate_junction_ids
+        ):
+            continue
+        cases.setdefault(junction_id, set()).add(f"{edge_id}_{from_lane}")
+    return [
+        {
+            "reference_id": junction_id,
+            "reference_joined_source_nodes": [],
+            "matched_reference_source_node_ids": [],
+            "matched_candidate_node_ids": [junction_id],
+            "turnaround_only_source_lanes": sorted(source_lanes),
+            "learned_rule_basis": "turnaround_only_lane_gap",
+            "learned_rule": "tum_like_turnaround_only_lane_candidate",
+        }
+        for junction_id, source_lanes in sorted(cases.items())
+    ]
+
+
 def _teacher_junction_has_tls(
     root: ET.Element,
     junction_id: str,
@@ -3775,6 +3865,26 @@ def _teacher_guided_repair_candidate(
         blocked_teacher_edge_ids=uncopyable_missing,
         fallback_junction_ids=scope_node_ids,
     )
+    if str(case.get("learned_rule", "")) == "tum_like_turnaround_only_lane_candidate" and missing:
+        missing_endpoint_ids = sorted(
+            {
+                endpoint
+                for edge_id in missing
+                if (edge := teacher_edges.get(edge_id)) is not None
+                for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+                if endpoint and endpoint != reference_id
+            }
+        )
+        expanded_rebuild_scope = {
+            "status": "review",
+            "recommended_action": "rebuild_plain_xml_scope",
+            "core_junction_id": candidate_junction_id,
+            "junction_ids": sorted({candidate_junction_id, *missing_endpoint_ids}) if candidate_junction_id else missing_endpoint_ids,
+            "join_junction_ids": [candidate_junction_id] if candidate_junction_id else [],
+            "blocked_teacher_edge_ids": missing,
+            "missing_desired_endpoint_ids": missing_endpoint_ids,
+            "reason": "turnaround-only lane is missing a normal teacher movement target edge",
+        }
     candidate_status = "ready_for_teacher_guided_variant"
     if expanded_rebuild_scope["status"] == "review":
         candidate_status = "needs_expanded_rebuild_scope"
@@ -4131,6 +4241,33 @@ def _vehicle_outgoing_by_lane(model: dict[str, object]) -> dict[tuple[str, str],
             target = str(connection.get("to", ""))
             if target:
                 stats["non_turnaround_targets"].add(target)
+    return by_lane
+
+
+def _root_vehicle_outgoing_by_lane(root: ET.Element) -> dict[tuple[str, str], dict[str, object]]:
+    edges = {
+        edge.attrib["id"]: edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    by_lane: dict[tuple[str, str], dict[str, object]] = {}
+    for connection in root.findall("connection"):
+        source = connection.attrib.get("from", "")
+        target = connection.attrib.get("to", "")
+        if source not in edges or target not in edges:
+            continue
+        if _edge_is_pedestrian_only(edges[source]) or _edge_is_pedestrian_only(edges[target]):
+            continue
+        lane = connection.attrib.get("fromLane", "")
+        stats = by_lane.setdefault(
+            (source, lane),
+            {"turnaround_count": 0, "non_turnaround_count": 0, "non_turnaround_targets": set()},
+        )
+        if _is_turnaround_connection(connection.attrib):
+            stats["turnaround_count"] = int(stats["turnaround_count"]) + 1
+        else:
+            stats["non_turnaround_count"] = int(stats["non_turnaround_count"]) + 1
+            stats["non_turnaround_targets"].add(target)
     return by_lane
 
 
