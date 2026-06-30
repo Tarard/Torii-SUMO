@@ -135,11 +135,26 @@ def compare_tls_movement_signatures(
     candidate_tls_id: str,
     *,
     teacher_edge_map: dict[str, str] | None = None,
+    teacher_internal_scope_id: str | None = None,
+    candidate_internal_scope_id: str | None = None,
 ) -> dict[str, Any]:
     teacher_root = ET.parse(teacher_net_file).getroot()
     candidate_root = ET.parse(candidate_net_file).getroot()
-    teacher_signatures = Counter(_tls_movement_signatures(teacher_root, teacher_tls_id, teacher_edge_map))
-    candidate_signatures = Counter(_tls_movement_signatures(candidate_root, candidate_tls_id))
+    teacher_signatures = Counter(
+        _tls_movement_signatures(
+            teacher_root,
+            teacher_tls_id,
+            teacher_edge_map,
+            internal_scope_id=teacher_internal_scope_id,
+        )
+    )
+    candidate_signatures = Counter(
+        _tls_movement_signatures(
+            candidate_root,
+            candidate_tls_id,
+            internal_scope_id=candidate_internal_scope_id,
+        )
+    )
     teacher_only = teacher_signatures - candidate_signatures
     candidate_only = candidate_signatures - teacher_signatures
 
@@ -156,6 +171,10 @@ def compare_tls_movement_signatures(
         "candidate_tls_id": candidate_tls_id,
         "teacher_edge_map": dict(sorted((teacher_edge_map or {}).items())),
         "normalized_internal_ids": True,
+        "scoped_internal_ids": {
+            "teacher": teacher_internal_scope_id or "",
+            "candidate": candidate_internal_scope_id or "",
+        },
         "compared_fields": TLS_MOVEMENT_SIGNATURE_FIELDS,
         "teacher_connection_count": teacher_signatures.total(),
         "candidate_connection_count": candidate_signatures.total(),
@@ -224,13 +243,19 @@ def _tls_movement_signatures(
     root: ET.Element,
     tls_id: str,
     edge_map: dict[str, str] | None = None,
+    *,
+    internal_scope_id: str | None = None,
 ) -> list[str]:
     signatures = []
+    normalize_internal_id = internal_scope_id or tls_id
+    internal_scope_prefix = f":{internal_scope_id}_" if internal_scope_id else ""
     for connection in root.findall("connection"):
         if connection.attrib.get("tl") != tls_id:
             continue
+        if internal_scope_prefix and not connection.attrib.get("via", "").startswith(internal_scope_prefix):
+            continue
         fields = {
-            field: _normalize_tls_movement_value(field, connection.attrib.get(field, ""), tls_id, edge_map)
+            field: _normalize_tls_movement_value(field, connection.attrib.get(field, ""), normalize_internal_id, edge_map)
             for field in TLS_MOVEMENT_SIGNATURE_FIELDS
         }
         signatures.append("|".join(f"{field}={fields[field]}" for field in TLS_MOVEMENT_SIGNATURE_FIELDS))
