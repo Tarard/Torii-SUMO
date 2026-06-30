@@ -83,6 +83,7 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "workflow_review_html_file",
     "reference_join_audit_mode",
     "teacher_guided_repair_queue_status",
+    "teacher_guided_repair_max_ready_candidates",
     "teacher_guided_repair_run_status",
     "teacher_guided_repair_parity_gate_status",
     "teacher_guided_repair_application_scope",
@@ -189,6 +190,9 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
         **REFERENCE_MATCHED_SEMANTICS_WORKFLOW,
         "tool_chain": list(REFERENCE_MATCHED_TOOL_CHAIN),
     }
+    configured_max_ready_candidates = report.get("teacher_guided_repair_configured_max_ready_candidates", "")
+    if configured_max_ready_candidates != "":
+        semantics["configured_max_ready_candidates"] = configured_max_ready_candidates
     if workflow_report is not None:
         post_repair_movement_best_variant_file = str(
             workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_best_variant_file", "")
@@ -414,6 +418,10 @@ def _run_osm_to_sumo(
         reference_policy_report=reference_policy_report,
         service_passenger_policy=service_passenger_policy,
     )
+    if network_plan.get("network_profile") == "reference_matched":
+        report["teacher_guided_repair_configured_max_ready_candidates"] = (
+            teacher_guided_repair_max_ready_candidates if teacher_guided_repair_max_ready_candidates is not None else ""
+        )
     reference_matched_with_net = network_plan.get("network_profile") == "reference_matched" and reference_net_file is not None
     if not bbox and not inferred and source_osm_path is None and not reference_matched_with_net:
         return _blocked(
