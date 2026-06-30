@@ -12,6 +12,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _restore_replayed_geometry_attrs,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
+    _write_joined_endpoint_edge_file,
     _stage_file,
     build_rebuild_candidate,
     build_teacher_guided_repair_queue,
@@ -1073,6 +1074,36 @@ def test_build_teacher_guided_repair_queue_seeds_fragmented_tls_from_exact_appro
     assert candidate["matched_candidate_node_ids"] == ["frag_e", "frag_n", "frag_s", "frag_w"]
     assert candidate["expanded_rebuild_scope"]["junction_ids"] == ["frag_e", "frag_n", "frag_s", "frag_w"]
     assert candidate["expanded_rebuild_scope"]["join_junction_ids"] == ["frag_e", "frag_n", "frag_s", "frag_w"]
+
+
+def test_joined_endpoint_edge_file_keeps_join_source_endpoints_for_join_patch(tmp_path: Path) -> None:
+    edge_file = tmp_path / "scope.edg.xml"
+    edge_file.write_text(
+        """<edges>
+  <edge id="in" from="outside" to="frag_a" shape="0,0 10,0"/>
+  <edge id="out" from="frag_b" to="outside" shape="10,0 20,0"/>
+  <edge id="inside" from="frag_a" to="frag_b" shape="10,0 11,0"/>
+</edges>""",
+        encoding="utf-8",
+    )
+    join_file = tmp_path / "join.nod.xml"
+    join_file.write_text('<nodes><join nodes="frag_a frag_b"/></nodes>', encoding="utf-8")
+    output_file = tmp_path / "replay.edg.xml"
+
+    written_file, rewrite_count, dropped_self_loops, blocking_self_loops = _write_joined_endpoint_edge_file(
+        edge_file,
+        join_file,
+        "cluster_frag_a_frag_b",
+        output_file,
+    )
+
+    root = ET.parse(written_file).getroot()
+    assert rewrite_count == 0
+    assert dropped_self_loops == ["inside"]
+    assert blocking_self_loops == []
+    assert root.find("edge[@id='inside']") is None
+    assert root.find("edge[@id='in']").attrib == {"id": "in", "from": "outside", "to": "frag_a", "shape": "0,0 10,0"}
+    assert root.find("edge[@id='out']").attrib == {"id": "out", "from": "frag_b", "to": "outside", "shape": "10,0 20,0"}
 
 
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
@@ -2425,10 +2456,10 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert replay_edge_file != Path(scope_report["edge_file"])
     assert replay_edge_file == Path(scope_report["replay_edge_file"])
     replay_edges = ET.parse(replay_edge_file).getroot()
-    assert replay_edges.find("edge[@id='approach_in']").attrib["to"] == "cluster_c_e_j"
+    assert replay_edges.find("edge[@id='approach_in']").attrib["to"] == "j"
     assert replay_edges.find("edge[@id='teacher_out']") is None
     assert replay_edges.find("edge[@id='old_downstream']") is None
-    assert scope_report["replay_edge_endpoint_rewrite_count"] == 1
+    assert scope_report["replay_edge_endpoint_rewrite_count"] == 0
     assert scope_report["replay_self_loop_edge_drop_count"] == 2
     assert scope_report["replay_dropped_self_loop_edges"] == ["teacher_out", "old_downstream"]
     assert variant_calls[0]["raw_connection_file"] == Path(scope_report["connection_file"])
@@ -7771,6 +7802,45 @@ def test_restore_non_target_internal_artifacts_skips_connections_with_missing_ed
     assert report["status"] == "pass"
     assert report["skipped_non_target_internal_connection_missing_edge_count"] == 1
     assert root.find("connection[@to='missing_out']") is None
+
+
+def test_restore_non_target_internal_artifacts_skips_internal_edges_with_missing_normal_endpoints(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id=":other_0" from="missing_normal" to="other" function="internal"><lane id=":other_0_0" index="0"/></edge>
+  <edge id=":missing_owner_0" function="internal"><lane id=":missing_owner_0_0" index="0"/></edge>
+  <junction id="other" type="priority" incLanes="remote_in_0" intLanes=":other_0_0"/>
+  <junction id="missing_owner" type="priority" incLanes="" intLanes=":missing_owner_0_0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <junction id="other" type="priority" incLanes="remote_in_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _restore_non_target_internal_artifacts(
+        source_file=source,
+        target_file=target,
+        exclude_junction_ids=set(),
+    )
+
+    root = ET.parse(target).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_non_target_internal_edge_count"] == 0
+    assert report["skipped_non_target_internal_edge_missing_junction_count"] == 2
+    assert root.find("edge[@id=':other_0']") is None
+    assert root.find("edge[@id=':missing_owner_0']") is None
 
 
 def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_internal_subgraph(
