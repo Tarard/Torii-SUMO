@@ -1411,7 +1411,7 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         crossing_edge_overrides=crossing_edge_overrides,
         candidate_edge_file=patched_edge_file,
-        emit_crossings=emit_teacher_crossings,
+        emit_crossings=emit_teacher_crossings and not replay_target_internal_subgraph,
     )
 
     netconvert_command = [

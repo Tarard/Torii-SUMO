@@ -8069,6 +8069,8 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert report["review_policy"].startswith("diagnostic")
     assert report["target_internal_replay"]["copied_internal_edge_count"] == 2
     assert report["target_internal_replay"]["copied_internal_junction_count"] == 0
+    assert report["connection_plan"]["emit_crossings"] is False
+    assert report["connection_plan"]["emitted_crossing_count"] == 0
     assert report["target_internal_normalize"] is None
     assert report["target_internal_pedestrian_ring"] is None
     assert report["target_internal_vehicle_connection_attrs"] is None
