@@ -2127,6 +2127,7 @@ def run_osm_cleanup_workflow(
         "reason": "not_run",
     }
     final_movement_direct_replay_best_variant_file: Path | None = None
+    final_movement_direct_replay_last_queue_report: dict[str, Any] | None = None
     final_movement_rebuild_internal_regression_restore_report: dict[str, Any] | None = None
     final_movement_rebuild_internal_regression_restore_sumo_load_report: dict[str, Any] | None = None
     final_movement_rebuild_internal_regression_restore_reference_delta_report: dict[str, Any] | None = None
@@ -3935,6 +3936,7 @@ def run_osm_cleanup_workflow(
             and _teacher_guided_queue_has_replay_candidates(final_movement_rebuild_queue_report)
         ):
             current_direct_queue_report = final_movement_rebuild_queue_report
+            final_movement_direct_replay_last_queue_report = current_direct_queue_report
             current_direct_source_net_file = final_movement_source_net_file
             current_direct_baseline_report = final_movement_baseline_report
             max_final_direct_replay_iterations = 4
@@ -3988,6 +3990,7 @@ def run_osm_cleanup_workflow(
                         "movement_mismatches"
                     ),
                 )
+                final_movement_direct_replay_last_queue_report = current_direct_queue_report
                 current_direct_source_net_file = direct_variant_file
                 current_direct_baseline_report = direct_delta_report
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
@@ -4418,6 +4421,12 @@ def run_osm_cleanup_workflow(
         _final_movement_rebuild_missing_movement_plan_count,
         _final_movement_rebuild_top_movement_gaps,
     ) = _teacher_guided_movement_gap_stats(final_movement_rebuild_queue_report)
+    (
+        final_movement_direct_replay_last_queue_movement_gap_candidate_count,
+        final_movement_direct_replay_last_queue_max_gap_count,
+        final_movement_direct_replay_last_queue_missing_movement_plan_count,
+        final_movement_direct_replay_last_queue_top_movement_gaps,
+    ) = _teacher_guided_movement_gap_stats(final_movement_direct_replay_last_queue_report)
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -4886,6 +4895,36 @@ def run_osm_cleanup_workflow(
         "final_movement_direct_replay_reference_promotion_reason": str(
             final_movement_direct_replay_reference_promotion_report.get("reason", "")
         ),
+        "final_movement_direct_replay_last_queue_status": "skipped"
+        if final_movement_direct_replay_last_queue_report is None
+        else str(final_movement_direct_replay_last_queue_report.get("status", "fail")),
+        "final_movement_direct_replay_last_queue_candidate_count": 0
+        if final_movement_direct_replay_last_queue_report is None
+        else _int_field(final_movement_direct_replay_last_queue_report, "repair_candidate_count"),
+        "final_movement_direct_replay_last_queue_ready_candidate_count": 0
+        if final_movement_direct_replay_last_queue_report is None
+        else _int_field(final_movement_direct_replay_last_queue_report, "ready_candidate_count"),
+        "final_movement_direct_replay_last_queue_expanded_scope_candidate_count": 0
+        if final_movement_direct_replay_last_queue_report is None
+        else _int_field(final_movement_direct_replay_last_queue_report, "expanded_scope_candidate_count"),
+        "final_movement_direct_replay_last_queue_blocked_candidate_count": 0
+        if final_movement_direct_replay_last_queue_report is None
+        else _int_field(final_movement_direct_replay_last_queue_report, "blocked_candidate_count"),
+        "final_movement_direct_replay_last_queue_movement_gap_candidate_count": (
+            final_movement_direct_replay_last_queue_movement_gap_candidate_count
+        ),
+        "final_movement_direct_replay_last_queue_max_vehicle_movement_matrix_missing_count": (
+            final_movement_direct_replay_last_queue_max_gap_count
+        ),
+        "final_movement_direct_replay_last_queue_missing_movement_plan_count": (
+            final_movement_direct_replay_last_queue_missing_movement_plan_count
+        ),
+        "final_movement_direct_replay_last_queue_top_movement_gaps": (
+            final_movement_direct_replay_last_queue_top_movement_gaps
+        ),
+        "final_movement_direct_replay_last_queue_file": ""
+        if final_movement_direct_replay_last_queue_report is None
+        else str(final_movement_direct_replay_last_queue_report.get("queue_file", "")),
         "final_movement_rebuild_internal_regression_restore_status": "skipped"
         if final_movement_rebuild_internal_regression_restore_report is None
         else str(final_movement_rebuild_internal_regression_restore_report.get("status", "fail")),

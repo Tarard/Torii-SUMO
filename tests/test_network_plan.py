@@ -924,12 +924,30 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
                 if is_second_iteration
                 else []
             ),
+            *(
+                [
+                    {
+                        "junction_id": "third_expanded",
+                        "reference_id": "j1",
+                        "candidate_status": "needs_expanded_rebuild_scope",
+                        "vehicle_movement_matrix_missing_count": 4,
+                    }
+                ]
+                if is_third_iteration
+                else []
+            ),
         ]
+        ready_count = sum(
+            1 for candidate in repair_candidates if candidate["candidate_status"] == "ready_for_teacher_guided_variant"
+        )
+        expanded_scope_count = sum(
+            1 for candidate in repair_candidates if candidate["candidate_status"] == "needs_expanded_rebuild_scope"
+        )
         return {
             "status": "pass",
             "repair_candidate_count": len(repair_candidates),
-            "ready_candidate_count": len(repair_candidates),
-            "expanded_scope_candidate_count": 0,
+            "ready_candidate_count": ready_count,
+            "expanded_scope_candidate_count": expanded_scope_count,
             "queue_file": str(
                 tmp_path
                 / (
@@ -1056,6 +1074,14 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
     assert report["final_movement_rebuild_junction_pattern_mismatch_count"] == 0
     assert report["final_movement_rebuild_junction_pattern_mismatch_field_counts"] == {}
     assert report["final_movement_rebuild_top_junction_pattern_mismatches"] == []
+    assert report["final_movement_direct_replay_last_queue_status"] == "pass"
+    assert report["final_movement_direct_replay_last_queue_candidate_count"] == 2
+    assert report["final_movement_direct_replay_last_queue_ready_candidate_count"] == 1
+    assert report["final_movement_direct_replay_last_queue_expanded_scope_candidate_count"] == 1
+    assert report["final_movement_direct_replay_last_queue_max_vehicle_movement_matrix_missing_count"] == 4
+    assert str(report["final_movement_direct_replay_last_queue_file"]).endswith(
+        "reference-final-direct_final_movement_rebuild_iteration_003_movement_mismatches_filtered_queue.json"
+    )
 
 
 def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_path: Path) -> None:
