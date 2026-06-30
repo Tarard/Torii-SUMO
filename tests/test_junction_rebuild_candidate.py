@@ -919,6 +919,90 @@ def test_build_teacher_guided_repair_queue_flags_vehicle_movement_matrix_gap(tmp
     assert rows[0]["netedit_review_actions"] == "rebuild_vehicle_movement_matrix"
 
 
+def test_build_teacher_guided_repair_queue_does_not_treat_turnaround_as_route_complete(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j" type="highway.primary"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="normal_out" from="j" to="e" type="highway.primary"><lane id="normal_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="turn_out" from="j" to="w" type="highway.primary"><lane id="turn_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="normal_out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j" type="highway.primary"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="turn_out" from="j" to="w" type="highway.primary"><lane id="turn_out_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": [{"reference_id": "j"}]},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["candidate_status"] == "edge_map_incomplete"
+    assert candidate["vehicle_movement_matrix_missing_count"] == 1
+    assert candidate["turnaround_only_lane_gap_count"] == 1
+    assert candidate["turnaround_only_lane_gaps"] == [
+        {
+            "teacher_from_edge_id": "in",
+            "from_edge_id": "in",
+            "fromLane": "0",
+            "candidate_turnaround_outgoing_count": 1,
+            "candidate_non_turnaround_outgoing_count": 0,
+            "teacher_turnaround_outgoing_count": 1,
+            "teacher_non_turnaround_outgoing_count": 1,
+            "teacher_non_turnaround_targets": ["normal_out"],
+            "match_status": "candidate_turnaround_only_teacher_has_normal_vehicle_movement",
+        }
+    ]
+    assert candidate["netedit_review_actions"] == ["rebuild_vehicle_movement_matrix"]
+
+
+def test_build_teacher_guided_repair_queue_allows_turnaround_only_when_teacher_only_has_turnaround(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="turn_out" from="j" to="w"><lane id="turn_out_0" index="0" shape="0,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(teacher_net.read_text(encoding="utf-8"), encoding="utf-8")
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": [{"reference_id": "j"}]},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["vehicle_movement_matrix_missing_count"] == 0
+    assert candidate["turnaround_only_lane_gap_count"] == 0
+    assert candidate["turnaround_only_lane_gaps"] == []
+
+
 def test_build_teacher_guided_repair_queue_counts_duplicate_missing_teacher_movements(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(

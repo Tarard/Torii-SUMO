@@ -30,6 +30,7 @@ CONNECTION_RECORD_FIELDS = [
 ]
 
 TLS_MOVEMENT_SIGNATURE_FIELDS = ["from", "to", "fromLane", "toLane", "via", "linkIndex", "dir", "state"]
+TURNAROUND_DIR = "t"
 
 
 def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, Any]:
@@ -77,6 +78,8 @@ def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, An
         records.append(record)
 
     top_external = [record for record in records if record["category"] == "top_external"]
+    top_external_turnaround = [record for record in top_external if _is_turnaround_record(record)]
+    top_external_non_turnaround = [record for record in top_external if not _is_turnaround_record(record)]
     controlled_links = [record for record in records if record["tl"] and record["linkIndex"]]
     return {
         "status": "pass",
@@ -89,6 +92,8 @@ def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, An
         "top_external_connection_count": len(top_external),
         "top_external_pair_count": len({(record["from"], record["to"]) for record in top_external}),
         "top_external_dir_counts": dict(Counter(record["dir"] or "blank" for record in top_external)),
+        "top_external_turnaround_connection_count": len(top_external_turnaround),
+        "top_external_non_turnaround_connection_count": len(top_external_non_turnaround),
         "controlled_link_count": len(controlled_links),
         "crossing_count": sum(1 for edge in target_internal_edges if edge.attrib.get("function") == "crossing"),
         "walkingarea_count": sum(1 for edge in target_internal_edges if edge.attrib.get("function") == "walkingarea"),
@@ -202,6 +207,10 @@ def _connection_category(
     if source.startswith(internal_prefix) or target.startswith(internal_prefix):
         return "internal_continuation"
     return "other_related"
+
+
+def _is_turnaround_record(record: dict[str, Any]) -> bool:
+    return str(record.get("dir", "")).lower() == TURNAROUND_DIR
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> None:
