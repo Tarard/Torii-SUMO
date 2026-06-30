@@ -713,6 +713,63 @@ def write_teacher_lane_patch_edges(
     }
 
 
+def write_missing_edge_type_patch(
+    *,
+    raw_type_file: Path | None,
+    edge_file: Path,
+    output_file: Path,
+) -> dict[str, object]:
+    try:
+        edge_root = ET.parse(edge_file).getroot()
+        if raw_type_file is not None and raw_type_file.exists():
+            type_tree = ET.parse(raw_type_file)
+            type_root = type_tree.getroot()
+        else:
+            type_root = ET.Element("types")
+            type_tree = ET.ElementTree(type_root)
+    except (ET.ParseError, OSError) as exc:
+        return _failure(f"could not patch edge types: {exc}")
+
+    known_type_ids = {edge_type.attrib["id"] for edge_type in type_root.findall("type") if edge_type.attrib.get("id")}
+    synthesized = []
+    for edge in edge_root.findall("edge"):
+        type_id = edge.attrib.get("type", "")
+        if not type_id or type_id in known_type_ids:
+            continue
+        attrs = {"id": type_id}
+        for attr in ("priority", "numLanes", "speed", "allow", "disallow", "oneway", "width"):
+            if edge.attrib.get(attr):
+                attrs[attr] = edge.attrib[attr]
+        if "numLanes" not in attrs:
+            lane_count = len(edge.findall("lane"))
+            if lane_count:
+                attrs["numLanes"] = str(lane_count)
+        if "speed" not in attrs:
+            first_lane = edge.find("lane")
+            if first_lane is not None and first_lane.attrib.get("speed"):
+                attrs["speed"] = first_lane.attrib["speed"]
+        ET.SubElement(type_root, "type", attrs)
+        known_type_ids.add(type_id)
+        synthesized.append(type_id)
+
+    if synthesized:
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        ET.indent(type_root, space="    ")
+        type_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+        type_file = output_file
+    else:
+        type_file = raw_type_file if raw_type_file is not None and raw_type_file.exists() else None
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "raw_type_file": str(raw_type_file) if raw_type_file is not None else "",
+        "type_file": str(type_file) if type_file is not None else "",
+        "patched_type_file": str(output_file) if synthesized else "",
+        "synthesized_edge_type_count": len(synthesized),
+        "synthesized_edge_type_ids": synthesized,
+    }
+
+
 def write_teacher_endpoint_patch_nodes(
     *,
     raw_node_file: Path,
@@ -1495,6 +1552,7 @@ def build_teacher_guided_junction_variant(
     lane_shape_delta = _model_shape_delta(teacher_model, candidate_model)
     patched_node_file = _stage_file(output_dir, prefix, "nodes.nod.xml")
     patched_edge_file = _stage_file(output_dir, prefix, "lanes.edg.xml")
+    patched_type_file = _stage_file(output_dir, prefix, "types.typ.xml")
     connection_file = _stage_file(output_dir, prefix, "connections.con.xml")
     sidewalks_net_file = _stage_file(output_dir, prefix, "sidewalks.net.xml")
     pedring_net_file = _stage_file(output_dir, prefix, "pedring.net.xml")
@@ -1530,6 +1588,25 @@ def build_teacher_guided_junction_variant(
         output_file=patched_node_file,
         lane_shape_delta=lane_shape_delta,
     )
+    type_patch_report = write_missing_edge_type_patch(
+        raw_type_file=raw_type_file,
+        edge_file=patched_edge_file,
+        output_file=patched_type_file,
+    )
+    if type_patch_report.get("status") != "pass":
+        return _write_teacher_guided_report(
+            report_file,
+            {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "junction_id": junction_id,
+                "teacher_net_file": str(teacher_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "node_patch": node_patch_report,
+                "lane_patch": lane_patch_report,
+                "type_patch": type_patch_report,
+            },
+        )
     connection_report = write_teacher_connection_plan(
         raw_connection_file=raw_connection_file,
         output_file=connection_file,
@@ -1556,8 +1633,9 @@ def build_teacher_guided_junction_variant(
         "true",
         "--tls.ignore-internal-junction-jam",
     ]
-    if raw_type_file is not None:
-        netconvert_command[5:5] = ["--type-files", _command_path(raw_type_file, output_dir)]
+    type_file = Path(str(type_patch_report.get("type_file", ""))) if type_patch_report.get("type_file") else None
+    if type_file is not None:
+        netconvert_command[5:5] = ["--type-files", _command_path(type_file, output_dir)]
     netconvert_result = command_runner(netconvert_command, cwd=output_dir, timeout_seconds=timeout_seconds)
     netconvert_report = _command_report(netconvert_result)
     if netconvert_report.get("status") != "pass":
@@ -1572,6 +1650,7 @@ def build_teacher_guided_junction_variant(
                 "netconvert": netconvert_report,
                 "node_patch": node_patch_report,
                 "lane_patch": lane_patch_report,
+                "type_patch": type_patch_report,
                 "connection_plan": connection_report,
             },
         )
@@ -1593,6 +1672,7 @@ def build_teacher_guided_junction_variant(
                 "netconvert": netconvert_report,
                 "node_patch": node_patch_report,
                 "lane_patch": lane_patch_report,
+                "type_patch": type_patch_report,
                 "connection_plan": connection_report,
                 "non_target_internal_restore": non_target_internal_restore_report,
             },
@@ -1644,6 +1724,7 @@ def build_teacher_guided_junction_variant(
                     "netconvert": netconvert_report,
                     "node_patch": node_patch_report,
                     "lane_patch": lane_patch_report,
+                    "type_patch": type_patch_report,
                     "connection_plan": connection_report,
                     "pedestrian_ring": pedestrian_ring_report,
                     "vehicle_connection_attrs": vehicle_attrs_report,
@@ -1671,6 +1752,7 @@ def build_teacher_guided_junction_variant(
                 "netconvert": netconvert_report,
                 "node_patch": node_patch_report,
                 "lane_patch": lane_patch_report,
+                "type_patch": type_patch_report,
                 "connection_plan": connection_report,
                 "pedestrian_ring": pedestrian_ring_report,
                 "vehicle_connection_attrs": vehicle_attrs_report,
@@ -1948,6 +2030,7 @@ def build_teacher_guided_junction_variant(
             "report_file": str(report_file),
             "node_patch": node_patch_report,
             "lane_patch": lane_patch_report,
+            "type_patch": type_patch_report,
             "connection_plan": connection_report,
             "netconvert": netconvert_report,
             "non_target_internal_restore": non_target_internal_restore_report,
