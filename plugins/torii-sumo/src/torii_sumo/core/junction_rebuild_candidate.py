@@ -607,6 +607,7 @@ def write_teacher_lane_patch_edges(
         else ""
     )
     rebased_missing_mapped_edges = []
+    skipped_rebased_self_loop_edges = []
     for edge in root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
         touches_target = (
@@ -669,6 +670,11 @@ def write_teacher_lane_patch_edges(
                 if teacher_endpoint == teacher_junction_id:
                     edge_attrs[attr] = join_source_node_id
                     rebased_endpoints[attr] = {"teacher": teacher_endpoint, "candidate": join_source_node_id}
+        if rebased_endpoints and edge_attrs.get("from") and edge_attrs.get("from") == edge_attrs.get("to"):
+            skipped_rebased_self_loop_edges.append(
+                {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, "node": edge_attrs["from"]}
+            )
+            continue
         if preserve_lane_shapes and lane_shape_delta is not None and edge_attrs.get("shape"):
             edge_attrs["shape"] = _translate_shape(edge_attrs["shape"], lane_shape_delta[0], lane_shape_delta[1])
         edge = ET.SubElement(root, "edge", edge_attrs)
@@ -706,6 +712,8 @@ def write_teacher_lane_patch_edges(
         "added_missing_mapped_edges": added_missing_mapped_edges,
         "rebased_missing_mapped_edge_count": len(rebased_missing_mapped_edges),
         "rebased_missing_mapped_edges": rebased_missing_mapped_edges,
+        "skipped_rebased_self_loop_edge_count": len(skipped_rebased_self_loop_edges),
+        "skipped_rebased_self_loop_edges": skipped_rebased_self_loop_edges,
         "pruned_boundary_edge_count": len(pruned_boundary_edges),
         "pruned_boundary_edges": pruned_boundary_edges,
         "lane_shape_translation_applied": lane_shape_delta is not None,
@@ -1323,7 +1331,7 @@ def write_teacher_target_internal_replay_net(
         via_edge_id = connection.attrib.get("via", "")
         stale_via = bool(via_edge_id and shared_endpoint and not via_edge_id.startswith(f":{shared_endpoint}_"))
         if (
-            not _touches_target_internal_subgraph(connection, internal_prefix, junction_id)
+            not _touches_target_replay_scope(connection, internal_prefix, junction_id, candidate_edges_by_id)
             and connection_edge_ids & replaced_boundary_edge_ids
             and (
                 not shared_endpoint
@@ -1336,14 +1344,17 @@ def write_teacher_target_internal_replay_net(
 
     removed_connections = 0
     for connection in list(candidate_root.findall("connection")):
-        if _touches_target_internal_subgraph(connection, internal_prefix, junction_id):
+        if _touches_target_replay_scope(connection, internal_prefix, junction_id, candidate_edges_by_id):
             candidate_root.remove(connection)
             removed_connections += 1
 
     copied_connections = 0
     skipped_connections = []
+    ignored_off_scope_tls_connections = []
     for connection in teacher_root.findall("connection"):
-        if not _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id):
+        if not _touches_target_replay_scope(connection, teacher_internal_prefix, teacher_junction_id, teacher_edges):
+            if connection.attrib.get("tl") == teacher_junction_id:
+                ignored_off_scope_tls_connections.append(dict(connection.attrib))
             continue
         mapped = _mapped_connection_attrs(
             connection,
@@ -1365,7 +1376,7 @@ def write_teacher_target_internal_replay_net(
     teacher_tls_ids = [
         connection.attrib.get("tl", "")
         for connection in teacher_root.findall("connection")
-        if _touches_target_internal_subgraph(connection, teacher_internal_prefix, teacher_junction_id)
+        if _touches_target_replay_scope(connection, teacher_internal_prefix, teacher_junction_id, teacher_edges)
         and connection.attrib.get("tl")
         and connection.attrib.get("linkIndex")
     ]
@@ -1422,6 +1433,8 @@ def write_teacher_target_internal_replay_net(
         "copied_connection_count": copied_connections,
         "skipped_connection_count": len(skipped_connections),
         "skipped_connections": skipped_connections,
+        "ignored_off_scope_tls_connection_count": len(ignored_off_scope_tls_connections),
+        "ignored_off_scope_tls_connections": ignored_off_scope_tls_connections,
         "copied_request_count": len(teacher_junction.findall("request")),
         "effective_edge_map": dict(sorted(replay_edge_map.items())),
     }
@@ -1992,6 +2005,8 @@ def build_teacher_guided_junction_variant(
         teacher_junction_id,
         junction_id,
         teacher_edge_map=comparison_edge_map,
+        teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
+        candidate_internal_scope_id=junction_id if replay_target_internal_subgraph else None,
     )
     semantic_layer_gates = _semantic_layer_gates(semantic_gate, tls_movement_parity)
     parity_gate_status = "pass" if semantic_gate["status"] == "pass" and tls_movement_parity["status"] == "pass" else "fail"
@@ -2507,13 +2522,11 @@ def run_teacher_guided_repair_queue(
                     if edge_id in protected_self_loop_edge_ids
                 ]
                 if candidate_replay_target_internal_subgraph and replay_blocking_self_loop_edge_drops:
-                    mapped_edge_ids = {str(edge_id) for edge_id in replay_edge_map.values() if str(edge_id)}
                     surviving_edge_ids = _edge_file_ids(replay_edge_file)
                     deferred_self_loop_edge_ids = [
                         edge_id
                         for edge_id in replay_blocking_self_loop_edge_drops
-                        if edge_id not in mapped_edge_ids
-                        and (
+                        if (
                             _join_internal_self_loop_drop_has_witness(
                                 edge_id,
                                 replay_dropped_self_loop_edges,
@@ -4989,6 +5002,41 @@ def _touches_target_internal_subgraph(connection: ET.Element, internal_prefix: s
         or connection.attrib.get("to", "").startswith(internal_prefix)
         or connection.attrib.get("via", "").startswith(internal_prefix)
         or connection.attrib.get("tl", "") == junction_id
+    )
+
+
+def _touches_target_replay_scope(
+    connection: ET.Element,
+    internal_prefix: str,
+    junction_id: str,
+    edges_by_id: dict[str, ET.Element],
+) -> bool:
+    if _touches_target_internal_owner(connection, internal_prefix):
+        return True
+    if connection.attrib.get("tl") != junction_id:
+        return False
+    if _touches_other_internal_owner(connection, internal_prefix):
+        return False
+    return any(
+        junction_id in (edge.attrib.get("from"), edge.attrib.get("to"))
+        for edge_id in (connection.attrib.get("from", ""), connection.attrib.get("to", ""))
+        for edge in [edges_by_id.get(edge_id)]
+        if edge is not None
+    )
+
+
+def _touches_target_internal_owner(connection: ET.Element, internal_prefix: str) -> bool:
+    return any(
+        connection.attrib.get(attr, "").startswith(internal_prefix)
+        for attr in ("from", "to", "via")
+    )
+
+
+def _touches_other_internal_owner(connection: ET.Element, internal_prefix: str) -> bool:
+    return any(
+        value.startswith(":") and not value.startswith(internal_prefix)
+        for value in (connection.attrib.get(attr, "") for attr in ("from", "to", "via"))
+        if value
     )
 
 
