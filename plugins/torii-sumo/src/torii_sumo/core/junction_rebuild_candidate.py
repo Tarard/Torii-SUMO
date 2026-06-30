@@ -574,6 +574,7 @@ def write_teacher_lane_patch_edges(
     output_file: Path,
     edge_map: dict[str, str],
     junction_id: str | None = None,
+    teacher_junction_id: str | None = None,
     boundary_node_ids: set[str] | None = None,
     prune_unmapped_boundary_edges: bool = False,
     lane_shape_delta: tuple[float, float] | None = None,
@@ -600,6 +601,12 @@ def write_teacher_lane_patch_edges(
     }
     allowed_boundary_edges = set(edge_map.values()) | teacher_same_junction_edges
     boundary_node_ids = boundary_node_ids or set()
+    join_source_node_id = (
+        sorted(boundary_node_ids)[0]
+        if teacher_junction_id and junction_id and teacher_junction_id != junction_id and boundary_node_ids
+        else ""
+    )
+    rebased_missing_mapped_edges = []
     for edge in root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
         touches_target = (
@@ -655,6 +662,13 @@ def write_teacher_lane_patch_edges(
         edge_attrs = dict(teacher_edge.attrib)
         edge_attrs["id"] = candidate_id
         edge_attrs["numLanes"] = str(len(teacher_lanes))
+        rebased_endpoints = {}
+        if join_source_node_id:
+            for attr in ("from", "to"):
+                teacher_endpoint = edge_attrs.get(attr, "")
+                if teacher_endpoint == teacher_junction_id:
+                    edge_attrs[attr] = join_source_node_id
+                    rebased_endpoints[attr] = {"teacher": teacher_endpoint, "candidate": join_source_node_id}
         if preserve_lane_shapes and lane_shape_delta is not None and edge_attrs.get("shape"):
             edge_attrs["shape"] = _translate_shape(edge_attrs["shape"], lane_shape_delta[0], lane_shape_delta[1])
         edge = ET.SubElement(root, "edge", edge_attrs)
@@ -673,6 +687,10 @@ def write_teacher_lane_patch_edges(
         added_missing_mapped_edges.append(
             {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, "lane_count": len(teacher_lanes)}
         )
+        if rebased_endpoints:
+            rebased_missing_mapped_edges.append(
+                {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, **rebased_endpoints}
+            )
         patched.append(added_missing_mapped_edges[-1])
         existing_edge_ids.add(candidate_id)
 
@@ -686,6 +704,8 @@ def write_teacher_lane_patch_edges(
         "patched_edges": patched,
         "added_missing_mapped_edge_count": len(added_missing_mapped_edges),
         "added_missing_mapped_edges": added_missing_mapped_edges,
+        "rebased_missing_mapped_edge_count": len(rebased_missing_mapped_edges),
+        "rebased_missing_mapped_edges": rebased_missing_mapped_edges,
         "pruned_boundary_edge_count": len(pruned_boundary_edges),
         "pruned_boundary_edges": pruned_boundary_edges,
         "lane_shape_translation_applied": lane_shape_delta is not None,
@@ -1497,6 +1517,7 @@ def build_teacher_guided_junction_variant(
         output_file=patched_edge_file,
         edge_map=edge_map,
         junction_id=junction_id,
+        teacher_junction_id=teacher_junction_id,
         boundary_node_ids=_joined_source_node_ids(raw_node_file, junction_id),
         prune_unmapped_boundary_edges=True,
         lane_shape_delta=lane_shape_delta,
