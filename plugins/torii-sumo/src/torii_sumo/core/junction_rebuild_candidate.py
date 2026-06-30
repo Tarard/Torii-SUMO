@@ -3568,14 +3568,19 @@ def _teacher_guided_candidate_sort_key(candidate: dict[str, object]) -> tuple[in
 
 
 def _limit_ready_repair_candidates(candidates: list[dict[str, object]], max_ready_candidates: int) -> list[dict[str, object]]:
-    selected = []
-    ready_count = 0
+    ready = [
+        candidate
+        for candidate in candidates
+        if candidate.get("candidate_status") == "ready_for_teacher_guided_variant"
+    ][:max_ready_candidates]
+    if len(ready) >= max_ready_candidates:
+        return ready
+    ready_ids = {id(candidate) for candidate in ready}
+    selected = list(ready)
     for candidate in candidates:
+        if id(candidate) in ready_ids:
+            continue
         selected.append(candidate)
-        if candidate.get("candidate_status") == "ready_for_teacher_guided_variant":
-            ready_count += 1
-        if ready_count >= max_ready_candidates:
-            break
     return selected
 
 
