@@ -5411,6 +5411,51 @@ def test_write_teacher_lane_patch_edges_adds_missing_mapped_teacher_edge(tmp_pat
     assert missing.find("lane").attrib == {"index": "0", "speed": "13.9", "shape": "0,0 10,0"}
 
 
+def test_write_teacher_lane_patch_edges_rebases_missing_mapped_teacher_edge_to_join_source(
+    tmp_path: Path,
+) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="in_left" from="a" to="j1"><lane index="0"/></edge>
+  <edge id="in_right" from="b" to="j2"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    teacher_edges = tmp_path / "teacher.net.xml"
+    teacher_edges.write_text(
+        """<net>
+  <edge id="missing_out" from="teacher_j" to="downstream" type="highway.secondary">
+    <lane id="missing_out_0" index="0" speed="13.9"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw_edges,
+        teacher_edge_file=teacher_edges,
+        output_file=tmp_path / "patched.edg.xml",
+        edge_map={"missing_out": "missing_out"},
+        junction_id="cluster_j1_j2",
+        teacher_junction_id="teacher_j",
+        boundary_node_ids={"j2", "j1"},
+    )
+
+    missing = ET.parse(report["edge_file"]).getroot().find("edge[@id='missing_out']")
+    assert missing is not None
+    assert missing.attrib["from"] == "j1"
+    assert missing.attrib["to"] == "downstream"
+    assert report["rebased_missing_mapped_edge_count"] == 1
+    assert report["rebased_missing_mapped_edges"] == [
+        {
+            "candidate_edge_id": "missing_out",
+            "teacher_edge_id": "missing_out",
+            "from": {"teacher": "teacher_j", "candidate": "j1"},
+        }
+    ]
+
+
 def test_write_teacher_endpoint_patch_nodes_adds_translated_missing_edge_endpoints(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
