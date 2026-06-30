@@ -3821,69 +3821,189 @@ def run_osm_cleanup_workflow(
                     "status": "blocked",
                     "reason": "sumo_load_not_pass",
                 }
-        if (
-            final_movement_rebuild_reference_promotion_report.get("status") != "pass"
-            and _teacher_guided_queue_has_replay_candidates(final_movement_rebuild_queue_report)
-        ):
+        def run_final_direct_replay_candidates(
+            queue_report: Mapping[str, Any],
+            *,
+            source_net_file: Path,
+            baseline_delta_report: Mapping[str, Any],
+            iteration_label: str,
+        ) -> tuple[Path | None, dict[str, Any] | None, dict[str, Any], dict[str, Any] | None]:
             final_direct_candidates = [
                 candidate
-                for candidate in final_movement_rebuild_queue_report.get("repair_candidates", []) or []
+                for candidate in queue_report.get("repair_candidates", []) or []
                 if isinstance(candidate, Mapping)
                 and candidate.get("candidate_status") == "ready_for_teacher_guided_variant"
             ]
+            selected_variant_file: Path | None = None
+            selected_delta_report: dict[str, Any] | None = None
+            selected_replay_report: dict[str, Any] | None = None
+            selected_promotion_report: dict[str, Any] = {
+                "status": "skipped",
+                "reason": "no_replay_candidates",
+            }
+            selected_rank: tuple[int, int, int, int, int] | None = None
             for direct_index, candidate in enumerate(final_direct_candidates, start=1):
-                trial_queue_report = dict(final_movement_rebuild_queue_report)
+                trial_queue_report = dict(queue_report)
                 trial_queue_report["repair_candidates"] = [dict(candidate)]
                 trial_queue_report["repair_candidate_count"] = 1
                 trial_queue_report["ready_candidate_count"] = 1
                 trial_queue_report["expanded_scope_candidate_count"] = 0
-                final_movement_direct_replay_report = teacher_guided_direct_replay_func(
+                replay_output_dir = output_dir / "final_movement_direct_replay" / f"attempt_{direct_index:03d}"
+                delta_output_dir = (
+                    output_dir / "final_movement_direct_replay_reference_delta" / f"attempt_{direct_index:03d}"
+                )
+                delta_prefix = f"{prefix}_final_movement_direct_replay_reference_delta_{direct_index:03d}"
+                if iteration_label != "iteration_001":
+                    replay_output_dir = (
+                        output_dir
+                        / "final_movement_direct_replay"
+                        / iteration_label
+                        / f"attempt_{direct_index:03d}"
+                    )
+                    delta_output_dir = (
+                        output_dir
+                        / "final_movement_direct_replay_reference_delta"
+                        / iteration_label
+                        / f"attempt_{direct_index:03d}"
+                    )
+                    delta_prefix = (
+                        f"{prefix}_final_movement_direct_replay_{iteration_label}_"
+                        f"reference_delta_{direct_index:03d}"
+                    )
+                replay_report = teacher_guided_direct_replay_func(
                     queue_report=trial_queue_report,
-                    source_net_file=final_movement_source_net_file,
-                    output_dir=output_dir / "final_movement_direct_replay" / f"attempt_{direct_index:03d}",
+                    source_net_file=source_net_file,
+                    output_dir=replay_output_dir,
                     prefix=f"{prefix}_final_movement_rebuild_direct_replay",
                     netconvert_binary=netconvert_binary,
                     sumo_binary=sumo_binary,
                     timeout_seconds=timeout_seconds,
                     command_runner=command_runner,
                 )
-                direct_variant_value = str(final_movement_direct_replay_report.get("variant_file", ""))
+                last_replay_report = replay_report
+                direct_variant_value = str(replay_report.get("variant_file", ""))
                 direct_variant_file = Path(direct_variant_value) if direct_variant_value else None
                 if direct_variant_file is None or not direct_variant_file.exists():
+                    if selected_replay_report is None:
+                        selected_replay_report = last_replay_report
                     continue
-                final_movement_direct_replay_reference_delta_report = reference_join_audit_func(
+                delta_report = reference_join_audit_func(
                     reference_net_file=reference_net_file,
                     candidate_net_file=direct_variant_file,
-                    output_dir=output_dir / "final_movement_direct_replay_reference_delta" / f"attempt_{direct_index:03d}",
-                    prefix=f"{prefix}_final_movement_direct_replay_reference_delta_{direct_index:03d}",
+                    output_dir=delta_output_dir,
+                    prefix=delta_prefix,
                     candidate_cluster_radius_m=topology_cluster_radius_m,
                     candidate_min_cluster_nodes=topology_min_cluster_nodes,
                     structural_only=reference_join_audit_structural_only,
                 )
-                final_movement_direct_replay_reference_promotion_report = (
-                    _movement_rebuild_reference_delta_promotion_decision(
-                        candidate_delta_report=final_movement_direct_replay_reference_delta_report,
-                        baseline_delta_report=final_movement_baseline_report,
-                        structural_guard_delta_report=(
-                            teacher_guided_seed_report if teacher_guided_repair_requires_reference_promotion else None
-                        ),
-                        reason="final_direct_local_teacher_replay_promoted_by_reference_delta",
-                    )
+                promotion_report = _movement_rebuild_reference_delta_promotion_decision(
+                    candidate_delta_report=delta_report,
+                    baseline_delta_report=baseline_delta_report,
+                    structural_guard_delta_report=(
+                        teacher_guided_seed_report if teacher_guided_repair_requires_reference_promotion else None
+                    ),
+                    reason="final_direct_local_teacher_replay_promoted_by_reference_delta",
                 )
-                if final_movement_direct_replay_reference_promotion_report.get("status") != "pass":
+                if promotion_report.get("status") != "pass":
+                    if selected_rank is None:
+                        selected_delta_report = delta_report
+                        selected_promotion_report = promotion_report
+                        selected_replay_report = last_replay_report
                     continue
+                candidate_rank = (
+                    _movement_rebuild_mismatch_score(delta_report),
+                    _int_field(delta_report, "junction_pattern_mismatch_count"),
+                    _total_structural_delta_score(delta_report),
+                    _tls_semantic_delta_score(delta_report),
+                    direct_index,
+                )
+                if selected_rank is None or candidate_rank < selected_rank:
+                    selected_rank = candidate_rank
+                    selected_variant_file = direct_variant_file
+                    selected_delta_report = delta_report
+                    selected_promotion_report = promotion_report
+                    selected_replay_report = last_replay_report
+            return (
+                selected_variant_file,
+                selected_delta_report,
+                selected_promotion_report,
+                selected_replay_report,
+            )
+
+        if (
+            final_movement_rebuild_reference_promotion_report.get("status") != "pass"
+            and _teacher_guided_queue_has_replay_candidates(final_movement_rebuild_queue_report)
+        ):
+            (
+                direct_variant_file,
+                direct_delta_report,
+                direct_promotion_report,
+                direct_replay_report,
+            ) = run_final_direct_replay_candidates(
+                final_movement_rebuild_queue_report,
+                source_net_file=final_movement_source_net_file,
+                baseline_delta_report=final_movement_baseline_report,
+                iteration_label="iteration_001",
+            )
+            if direct_replay_report is not None:
+                final_movement_direct_replay_report = direct_replay_report
+            if direct_delta_report is not None:
+                final_movement_direct_replay_reference_delta_report = direct_delta_report
+            final_movement_direct_replay_reference_promotion_report = direct_promotion_report
+            if direct_variant_file is not None and direct_promotion_report.get("status") == "pass":
                 final_movement_direct_replay_best_variant_file = direct_variant_file
                 final_movement_rebuild_best_variant_file = direct_variant_file
-                final_movement_rebuild_reference_delta_report = final_movement_direct_replay_reference_delta_report
-                final_movement_rebuild_reference_promotion_report = (
-                    final_movement_direct_replay_reference_promotion_report
-                )
+                final_movement_rebuild_reference_delta_report = direct_delta_report
+                final_movement_rebuild_reference_promotion_report = direct_promotion_report
                 reference_visual_detail_comparison_net_file = direct_variant_file
-                reference_visual_detail_comparison_selection_reason = str(
-                    final_movement_direct_replay_reference_promotion_report.get("reason", "")
-                )
-                reference_join_post_teacher_audit_report = final_movement_direct_replay_reference_delta_report
-                break
+                reference_visual_detail_comparison_selection_reason = str(direct_promotion_report.get("reason", ""))
+                reference_join_post_teacher_audit_report = direct_delta_report
+                if direct_delta_report is not None and _movement_rebuild_mismatch_score(direct_delta_report) > 0:
+                    final_movement_followup_queue_report = teacher_guided_repair_queue_func(
+                        teacher_net_file=reference_net_file,
+                        candidate_net_file=direct_variant_file,
+                        reference_join_audit_report=direct_delta_report,
+                        output_dir=output_dir / "final_movement_rebuild_queue_iteration_002",
+                        prefix=f"{prefix}_final_movement_rebuild_iteration_002",
+                        max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                    )
+                    final_movement_followup_queue_report = _filter_teacher_guided_queue_to_mismatch_fields(
+                        final_movement_followup_queue_report,
+                        direct_delta_report,
+                        {"movement_signature_counts", "internal_function_counts"},
+                        output_dir=output_dir / "final_movement_rebuild_queue_iteration_002",
+                        prefix=f"{prefix}_final_movement_rebuild_iteration_002_movement_mismatches",
+                    )
+                    if _teacher_guided_queue_has_replay_candidates(final_movement_followup_queue_report):
+                        (
+                            second_direct_variant_file,
+                            second_direct_delta_report,
+                            second_direct_promotion_report,
+                            second_direct_replay_report,
+                        ) = run_final_direct_replay_candidates(
+                            final_movement_followup_queue_report,
+                            source_net_file=direct_variant_file,
+                            baseline_delta_report=direct_delta_report,
+                            iteration_label="iteration_002",
+                        )
+                        if second_direct_replay_report is not None:
+                            final_movement_direct_replay_report = second_direct_replay_report
+                        if second_direct_delta_report is not None:
+                            final_movement_direct_replay_reference_delta_report = second_direct_delta_report
+                        final_movement_direct_replay_reference_promotion_report = second_direct_promotion_report
+                        if (
+                            second_direct_variant_file is not None
+                            and second_direct_promotion_report.get("status") == "pass"
+                        ):
+                            final_movement_direct_replay_best_variant_file = second_direct_variant_file
+                            final_movement_rebuild_best_variant_file = second_direct_variant_file
+                            final_movement_rebuild_reference_delta_report = second_direct_delta_report
+                            final_movement_rebuild_reference_promotion_report = second_direct_promotion_report
+                            reference_visual_detail_comparison_net_file = second_direct_variant_file
+                            reference_visual_detail_comparison_selection_reason = str(
+                                second_direct_promotion_report.get("reason", "")
+                            )
+                            reference_join_post_teacher_audit_report = second_direct_delta_report
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
         if (
             run_topology_audit_after_build
