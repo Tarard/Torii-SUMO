@@ -489,7 +489,16 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
     teacher_net_file = tmp_path / "teacher.net.xml"
     candidate_net_file = tmp_path / "candidate.net.xml"
     raw_type_file = tmp_path / "raw.typ.xml"
-    for path in (raw_node_file, raw_edge_file, raw_connection_file, teacher_net_file, candidate_net_file, raw_type_file):
+    raw_tllogic_file = tmp_path / "raw.tll.xml"
+    for path in (
+        raw_node_file,
+        raw_edge_file,
+        raw_connection_file,
+        teacher_net_file,
+        candidate_net_file,
+        raw_type_file,
+        raw_tllogic_file,
+    ):
         path.write_text("<xml/>", encoding="utf-8")
 
     def fake_builder(**kwargs):
@@ -497,6 +506,7 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         assert kwargs["raw_edge_file"] == raw_edge_file
         assert kwargs["raw_connection_file"] == raw_connection_file
         assert kwargs["raw_type_file"] == raw_type_file
+        assert kwargs["raw_tllogic_file"] == raw_tllogic_file
         assert kwargs["teacher_net_file"] == teacher_net_file
         assert kwargs["candidate_net_file"] == candidate_net_file
         assert kwargs["teacher_junction_id"] == "teacher_j"
@@ -517,6 +527,7 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         raw_edge_file=str(raw_edge_file),
         raw_connection_file=str(raw_connection_file),
         raw_type_file=str(raw_type_file),
+        raw_tllogic_file=str(raw_tllogic_file),
         teacher_net_file=str(teacher_net_file),
         candidate_net_file=str(candidate_net_file),
         junction_id="j",
@@ -570,7 +581,8 @@ def test_sumo_network_teacher_guided_repair_queue_tool_returns_json_compatible_r
     raw_edge_file = tmp_path / "raw.edg.xml"
     raw_connection_file = tmp_path / "raw.con.xml"
     raw_type_file = tmp_path / "raw.typ.xml"
-    for path in (raw_node_file, raw_edge_file, raw_connection_file, raw_type_file):
+    raw_tllogic_file = tmp_path / "raw.tll.xml"
+    for path in (raw_node_file, raw_edge_file, raw_connection_file, raw_type_file, raw_tllogic_file):
         path.write_text("<xml/>", encoding="utf-8")
     queue_file = tmp_path / "queue.json"
     queue_file.write_text(
@@ -590,6 +602,7 @@ def test_sumo_network_teacher_guided_repair_queue_tool_returns_json_compatible_r
         assert kwargs["raw_edge_file"] == raw_edge_file
         assert kwargs["raw_connection_file"] == raw_connection_file
         assert kwargs["raw_type_file"] == raw_type_file
+        assert kwargs["raw_tllogic_file"] == raw_tllogic_file
         assert kwargs["output_dir"] == tmp_path / "queue-run"
         assert kwargs["queue_base_dir"] == queue_file.resolve().parent
         assert kwargs["replay_target_internal_subgraph"] is True
@@ -608,6 +621,7 @@ def test_sumo_network_teacher_guided_repair_queue_tool_returns_json_compatible_r
         raw_edge_file=str(raw_edge_file),
         raw_connection_file=str(raw_connection_file),
         raw_type_file=str(raw_type_file),
+        raw_tllogic_file=str(raw_tllogic_file),
         output_dir=str(tmp_path / "queue-run"),
         replay_target_internal_subgraph=True,
     )

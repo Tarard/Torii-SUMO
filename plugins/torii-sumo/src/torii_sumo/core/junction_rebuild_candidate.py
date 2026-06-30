@@ -1329,6 +1329,7 @@ def build_teacher_guided_junction_variant(
     prefix: str = "teacher_guided_junction",
     teacher_junction_id: str | None = None,
     raw_type_file: Path | None = None,
+    raw_tllogic_file: Path | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     replay_target_internal_subgraph: bool = False,
     preserve_teacher_lane_shapes: bool = True,
@@ -1346,6 +1347,8 @@ def build_teacher_guided_junction_variant(
     ]
     if raw_type_file is not None and not raw_type_file.exists():
         missing.append(str(raw_type_file))
+    if raw_tllogic_file is not None and not raw_tllogic_file.exists():
+        missing.append(str(raw_tllogic_file))
     if missing:
         return _failure(f"missing input file(s): {', '.join(missing)}")
 
@@ -1355,6 +1358,7 @@ def build_teacher_guided_junction_variant(
     teacher_net_file = teacher_net_file.resolve()
     candidate_net_file = candidate_net_file.resolve()
     raw_type_file = raw_type_file.resolve() if raw_type_file is not None else None
+    raw_tllogic_file = raw_tllogic_file.resolve() if raw_tllogic_file is not None else None
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
@@ -1413,6 +1417,8 @@ def build_teacher_guided_junction_variant(
     ]
     if raw_type_file is not None:
         netconvert_command[5:5] = ["--type-files", _command_path(raw_type_file, output_dir)]
+    if raw_tllogic_file is not None:
+        netconvert_command[5:5] = ["--tllogic-files", _command_path(raw_tllogic_file, output_dir)]
     netconvert_result = command_runner(netconvert_command, cwd=output_dir, timeout_seconds=timeout_seconds)
     netconvert_report = _command_report(netconvert_result)
     if netconvert_report.get("status") != "pass":
@@ -1801,6 +1807,7 @@ def run_teacher_guided_repair_queue(
     prefix: str = "teacher_guided_repair",
     queue_base_dir: Path | None = None,
     raw_type_file: Path | None = None,
+    raw_tllogic_file: Path | None = None,
     crossing_edge_overrides_by_junction: dict[str, dict[str, str | list[str]]] | None = None,
     replay_target_internal_subgraph: bool = False,
     max_ready_candidates: int | None = None,
@@ -1835,6 +1842,8 @@ def run_teacher_guided_repair_queue(
     ]
     if raw_type_file is not None and not raw_type_file.exists():
         missing.append(str(raw_type_file))
+    if raw_tllogic_file is not None and not raw_tllogic_file.exists():
+        missing.append(str(raw_tllogic_file))
     if missing:
         return _failure(f"missing input file(s): {', '.join(missing)}")
 
@@ -1852,6 +1861,7 @@ def run_teacher_guided_repair_queue(
     current_raw_edge_file = raw_edge_file
     current_raw_connection_file = raw_connection_file
     current_raw_type_file = raw_type_file
+    current_raw_tllogic_file = raw_tllogic_file
     current_candidate_net_file = candidate_net_file
     composite_applied_candidate_count = 0
     composite_net_file = ""
@@ -2090,6 +2100,11 @@ def run_teacher_guided_repair_queue(
                             "--type-files",
                             _command_path(current_raw_type_file, output_dir / safe_junction_id),
                         ]
+                    if current_raw_tllogic_file is not None:
+                        seed_command[5:5] = [
+                            "--tllogic-files",
+                            _command_path(current_raw_tllogic_file, output_dir / safe_junction_id),
+                        ]
                     seed_report = _command_report(
                         command_runner(seed_command, cwd=output_dir / safe_junction_id, timeout_seconds=timeout_seconds)
                     )
@@ -2200,6 +2215,7 @@ def run_teacher_guided_repair_queue(
                         raw_edge_file=replay_edge_file,
                         raw_connection_file=replay_connection_file,
                         raw_type_file=current_raw_type_file,
+                        raw_tllogic_file=current_raw_tllogic_file,
                         teacher_net_file=teacher_net_file,
                         candidate_net_file=replay_candidate_net_file,
                         junction_id=joined_scope_junction_id,
@@ -2256,6 +2272,8 @@ def run_teacher_guided_repair_queue(
                             current_raw_connection_file = Path(str(export_report["raw_connection_file"]))
                             raw_type_value = str(export_report.get("raw_type_file", ""))
                             current_raw_type_file = Path(raw_type_value) if raw_type_value else None
+                            raw_tllogic_value = str(export_report.get("raw_tllogic_file", ""))
+                            current_raw_tllogic_file = Path(raw_tllogic_value) if raw_tllogic_value else None
                         else:
                             sequential_blocked_reason = str(
                                 export_report.get("error", "plain export failed after accepted variant")
@@ -2302,6 +2320,7 @@ def run_teacher_guided_repair_queue(
                 raw_edge_file=current_raw_edge_file,
                 raw_connection_file=current_raw_connection_file,
                 raw_type_file=current_raw_type_file,
+                raw_tllogic_file=current_raw_tllogic_file,
                 teacher_net_file=teacher_net_file,
                 candidate_net_file=current_candidate_net_file,
                 junction_id=junction_id,
@@ -2354,6 +2373,8 @@ def run_teacher_guided_repair_queue(
                     current_raw_connection_file = Path(str(export_report["raw_connection_file"]))
                     raw_type_value = str(export_report.get("raw_type_file", ""))
                     current_raw_type_file = Path(raw_type_value) if raw_type_value else None
+                    raw_tllogic_value = str(export_report.get("raw_tllogic_file", ""))
+                    current_raw_tllogic_file = Path(raw_tllogic_value) if raw_tllogic_value else None
                 else:
                     sequential_blocked_reason = str(
                         export_report.get("error", "plain export failed after accepted variant")
@@ -2502,6 +2523,7 @@ def run_teacher_guided_repair_queue(
         "raw_edge_file": str(raw_edge_file),
         "raw_connection_file": str(raw_connection_file),
         "raw_type_file": str(raw_type_file) if raw_type_file is not None else "",
+        "raw_tllogic_file": str(raw_tllogic_file) if raw_tllogic_file is not None else "",
         "candidate_count": len(candidates),
         "max_ready_candidates": max_ready_candidates if max_ready_candidates is not None else "",
         "attempted_candidate_count": attempted_count,

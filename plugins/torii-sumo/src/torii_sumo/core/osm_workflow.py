@@ -735,6 +735,7 @@ def _run_teacher_guided_queue_replay(
         return plain_export_report, None, None
 
     raw_type_value = str(plain_export_report.get("raw_type_file", ""))
+    raw_tllogic_value = str(plain_export_report.get("raw_tllogic_file", ""))
     queue_file_value = str(queue_report.get("queue_file", "")) if queue_report is not None else ""
     run_report = repair_run_func(
         queue_report=queue_report,
@@ -742,6 +743,7 @@ def _run_teacher_guided_queue_replay(
         raw_edge_file=Path(str(plain_export_report["raw_edge_file"])),
         raw_connection_file=Path(str(plain_export_report["raw_connection_file"])),
         raw_type_file=Path(raw_type_value) if raw_type_value else None,
+        raw_tllogic_file=Path(raw_tllogic_value) if raw_tllogic_value else None,
         output_dir=run_output_dir,
         prefix=prefix,
         queue_base_dir=Path(queue_file_value).resolve().parent if queue_file_value else None,
@@ -2972,6 +2974,7 @@ def run_osm_cleanup_workflow(
                 )
                 if teacher_guided_plain_export_report.get("status") == "pass":
                     raw_type_value = str(teacher_guided_plain_export_report.get("raw_type_file", ""))
+                    raw_tllogic_value = str(teacher_guided_plain_export_report.get("raw_tllogic_file", ""))
                     queue_file_value = str(teacher_guided_repair_queue_report.get("queue_file", ""))
                     teacher_guided_repair_run_report = teacher_guided_repair_run_func(
                         queue_report=teacher_guided_repair_queue_report,
@@ -2979,6 +2982,7 @@ def run_osm_cleanup_workflow(
                         raw_edge_file=Path(str(teacher_guided_plain_export_report["raw_edge_file"])),
                         raw_connection_file=Path(str(teacher_guided_plain_export_report["raw_connection_file"])),
                         raw_type_file=Path(raw_type_value) if raw_type_value else None,
+                        raw_tllogic_file=Path(raw_tllogic_value) if raw_tllogic_value else None,
                         output_dir=output_dir / "teacher_guided_repair_execution",
                         prefix=f"{prefix}_teacher_guided_repair",
                         queue_base_dir=Path(queue_file_value).resolve().parent if queue_file_value else None,

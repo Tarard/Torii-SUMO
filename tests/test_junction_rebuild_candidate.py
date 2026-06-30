@@ -1640,9 +1640,10 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
     raw_connections = tmp_path / "raw.con.xml"
+    raw_tllogics = tmp_path / "raw.tll.xml"
     teacher_net = tmp_path / "teacher.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
-    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+    for path in (raw_nodes, raw_edges, raw_connections, raw_tllogics, teacher_net, candidate_net):
         path.write_text("<xml/>", encoding="utf-8")
     calls = []
 
@@ -1720,9 +1721,10 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
     raw_connections = tmp_path / "raw.con.xml"
+    raw_tllogics = tmp_path / "raw.tll.xml"
     teacher_net = tmp_path / "teacher.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
-    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+    for path in (raw_nodes, raw_edges, raw_connections, raw_tllogics, teacher_net, candidate_net):
         path.write_text("<xml/>", encoding="utf-8")
     variant_calls = []
     export_calls = []
@@ -1749,7 +1751,8 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
         edge_file = Path(f"{prefix}.edg.xml")
         connection_file = Path(f"{prefix}.con.xml")
         type_file = Path(f"{prefix}.typ.xml")
-        for path in (node_file, edge_file, connection_file, type_file):
+        tllogic_file = Path(f"{prefix}.tll.xml")
+        for path in (node_file, edge_file, connection_file, type_file, tllogic_file):
             path.write_text("<xml/>", encoding="utf-8")
         return {
             "status": "pass",
@@ -1757,6 +1760,7 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
             "raw_edge_file": str(edge_file),
             "raw_connection_file": str(connection_file),
             "raw_type_file": str(type_file),
+            "raw_tllogic_file": str(tllogic_file),
         }
 
     report = run_teacher_guided_repair_queue(
@@ -1779,6 +1783,7 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
         raw_node_file=raw_nodes,
         raw_edge_file=raw_edges,
         raw_connection_file=raw_connections,
+        raw_tllogic_file=raw_tllogics,
         output_dir=tmp_path / "run",
         sequential_accept_passed_variants=True,
         plain_exporter=fake_plain_exporter,
@@ -1790,11 +1795,13 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
     assert report["composite_applied_candidate_count"] == 2
     assert report["composite_net_file"] == report["variant_reports"][1]["final_net_file"]
     assert export_calls[0]["net_file"] == first_final
+    assert variant_calls[0]["raw_tllogic_file"] == raw_tllogics
     assert variant_calls[1]["candidate_net_file"] == first_final
     plain_export = report["sequential_plain_export_reports"][0]
     assert variant_calls[1]["raw_node_file"] == Path(plain_export["raw_node_file"])
     assert variant_calls[1]["raw_edge_file"] == Path(plain_export["raw_edge_file"])
     assert variant_calls[1]["raw_connection_file"] == Path(plain_export["raw_connection_file"])
+    assert variant_calls[1]["raw_tllogic_file"] == Path(plain_export["raw_tllogic_file"])
 
 
 def test_run_teacher_guided_repair_queue_restores_accepted_internal_replays_after_sequential_plain_roundtrip(
@@ -7255,6 +7262,8 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
     )
     raw_connections = Path("raw.con.xml")
     raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    raw_tllogics = Path("raw.tll.xml")
+    raw_tllogics.write_text('<tlLogics><tlLogic id="j" type="static" programID="0" offset="0"/></tlLogics>', encoding="utf-8")
     calls: list[list[str]] = []
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
@@ -7262,6 +7271,8 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
         if command[0] == "netconvert":
             assert "--sidewalks.guess" not in command
             assert "--tls.ignore-internal-junction-jam" in command
+            assert "--tllogic-files" in command
+            assert Path(command[command.index("--tllogic-files") + 1]) == raw_tllogics.resolve()
             assert Path(command[command.index("--node-files") + 1]).is_absolute()
             for flag in ("--edge-files", "--connection-files", "--output-file"):
                 assert not Path(command[command.index(flag) + 1]).is_absolute()
@@ -7305,6 +7316,7 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
         raw_node_file=raw_nodes,
         raw_edge_file=raw_edges,
         raw_connection_file=raw_connections,
+        raw_tllogic_file=raw_tllogics,
         teacher_net_file=teacher_net,
         candidate_net_file=candidate_net,
         junction_id="j",
