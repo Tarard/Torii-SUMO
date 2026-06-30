@@ -1552,6 +1552,50 @@ def test_export_plain_net_for_teacher_guided_repair_synthesizes_missing_used_edg
     assert synthesized.attrib["speed"] == "8.33"
 
 
+def test_export_plain_net_for_teacher_guided_repair_restores_false_tls_plain_nodes(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text(
+        """<net>
+    <junction id="j_false" type="priority"/>
+    <junction id="j_real" type="traffic_light"/>
+    <tlLogic id="j_real" type="static" programID="0" offset="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command(command, **_kwargs):
+        plain_prefix = Path(command[-1])
+        Path(f"{plain_prefix}.nod.xml").write_text(
+            """<nodes>
+    <node id="j_false" type="traffic_light" x="0" y="0"/>
+    <node id="j_real" type="traffic_light" x="1" y="0"/>
+</nodes>""",
+            encoding="utf-8",
+        )
+        Path(f"{plain_prefix}.edg.xml").write_text("<edges/>", encoding="utf-8")
+        Path(f"{plain_prefix}.con.xml").write_text("<connections/>", encoding="utf-8")
+        Path(f"{plain_prefix}.tll.xml").write_text(
+            '<tlLogics><tlLogic id="j_real" type="static" programID="0" offset="0"/></tlLogics>',
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = export_plain_net_for_teacher_guided_repair(
+        net_file=net_file,
+        output_dir=tmp_path / "plain",
+        prefix="demo",
+        command_runner=fake_command,
+    )
+
+    node_root = ET.parse(report["raw_node_file"]).getroot()
+    assert report["restored_false_traffic_light_plain_node_count"] == 1
+    assert report["restored_false_traffic_light_plain_node_ids"] == ["j_false"]
+    assert node_root.find("./node[@id='j_false']").attrib["type"] == "priority"
+    assert node_root.find("./node[@id='j_real']").attrib["type"] == "traffic_light"
+
+
 def test_export_plain_net_for_teacher_guided_repair_shortens_long_plain_prefix(
     tmp_path: Path,
 ) -> None:

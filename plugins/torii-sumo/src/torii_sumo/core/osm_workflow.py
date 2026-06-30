@@ -1076,12 +1076,22 @@ def export_plain_net_for_teacher_guided_repair(
     raw_type_file = Path(f"{plain_prefix}.typ.xml")
     raw_tllogic_file = Path(f"{plain_prefix}.tll.xml")
     synthesized_edge_type_ids = _synthesize_missing_plain_edge_types(raw_edge_file, raw_type_file)
+    false_tls_plain_node_restore_report = _restore_false_traffic_light_plain_node_types(
+        source_net_file=net_file,
+        node_file=raw_node_file,
+    )
     missing_required = [
         str(path)
         for path in (raw_node_file, raw_edge_file, raw_connection_file)
         if not path.exists()
     ]
-    status = "pass" if netconvert_report.get("status") == "pass" and not missing_required else "fail"
+    status = (
+        "pass"
+        if netconvert_report.get("status") == "pass"
+        and not missing_required
+        and false_tls_plain_node_restore_report.get("status") == "pass"
+        else "fail"
+    )
     return {
         "status": status,
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
@@ -1098,8 +1108,55 @@ def export_plain_net_for_teacher_guided_repair(
         "raw_tllogic_file": str(raw_tllogic_file) if raw_tllogic_file.exists() else "",
         "synthesized_edge_type_count": len(synthesized_edge_type_ids),
         "synthesized_edge_type_ids": synthesized_edge_type_ids,
+        "false_traffic_light_plain_node_restore": false_tls_plain_node_restore_report,
+        "restored_false_traffic_light_plain_node_count": false_tls_plain_node_restore_report.get(
+            "restored_false_traffic_light_plain_node_count", 0
+        ),
+        "restored_false_traffic_light_plain_node_ids": false_tls_plain_node_restore_report.get(
+            "restored_false_traffic_light_plain_node_ids", []
+        ),
         "missing_required_plain_files": missing_required,
         "netconvert": netconvert_report,
+    }
+
+
+def _restore_false_traffic_light_plain_node_types(*, source_net_file: Path, node_file: Path) -> dict[str, Any]:
+    if not node_file.exists():
+        return {
+            "status": "skipped",
+            "reason": "node_file_missing",
+            "restored_false_traffic_light_plain_node_count": 0,
+            "restored_false_traffic_light_plain_node_ids": [],
+        }
+    try:
+        source_root = ET.parse(source_net_file).getroot()
+        node_tree = ET.parse(node_file)
+    except (OSError, ET.ParseError) as exc:
+        return {
+            "status": "fail",
+            "reason": f"{type(exc).__name__}: {exc}",
+            "restored_false_traffic_light_plain_node_count": 0,
+            "restored_false_traffic_light_plain_node_ids": [],
+        }
+    source_types = {
+        junction.attrib["id"]: junction.attrib.get("type", "")
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    restored_ids = []
+    for node in node_tree.getroot().findall("node"):
+        node_id = node.attrib.get("id", "")
+        source_type = source_types.get(node_id, "")
+        if node.attrib.get("type") == "traffic_light" and source_type not in {"", "traffic_light"}:
+            node.set("type", source_type)
+            restored_ids.append(node_id)
+    if restored_ids:
+        ET.indent(node_tree.getroot(), space="    ")
+        node_tree.write(node_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "restored_false_traffic_light_plain_node_count": len(restored_ids),
+        "restored_false_traffic_light_plain_node_ids": restored_ids,
     }
 
 
