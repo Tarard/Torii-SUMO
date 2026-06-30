@@ -1945,6 +1945,7 @@ def test_run_teacher_guided_repair_queue_restores_accepted_internal_replays_afte
     candidate_net = tmp_path / "candidate.net.xml"
     for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
         path.write_text("<xml/>", encoding="utf-8")
+    candidate_net.write_text('<net><junction id="j1"/><junction id="j2"/></net>', encoding="utf-8")
     restore_calls = []
     normalize_calls = []
 
@@ -2037,13 +2038,14 @@ def test_run_teacher_guided_repair_queue_restores_accepted_internal_replays_afte
     assert restore_calls[1]["candidate_net_file"] == restore_calls[0]["output_file"]
     assert report["final_internal_replay_status"] == "pass"
     assert report["final_internal_replay_restored_count"] == 2
-    assert len(normalize_calls) == 1
+    assert len(normalize_calls) == 2
     assert report["final_internal_replay_normalize"]["status"] == "pass"
     assert [item["status"] for item in report["final_internal_replay_normalize"]["geometry_restore"]] == [
         "pass",
         "pass",
     ]
-    assert report["final_internal_replay_normalized_net_file"].endswith("final_internal_replay_normalized.net.xml")
+    assert report["final_internal_replay_normalize"]["canonicalize"]["status"] == "pass"
+    assert report["final_internal_replay_normalized_net_file"].endswith("final_internal_replay_canonical.net.xml")
     assert report["composite_net_file"] == report["final_internal_replay_normalized_net_file"]
 
 
@@ -2057,6 +2059,7 @@ def test_run_teacher_guided_repair_queue_replays_unrestored_normalized_variants_
     candidate_net = tmp_path / "candidate.net.xml"
     for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
         path.write_text("<xml/>", encoding="utf-8")
+    candidate_net.write_text('<net><junction id="j1"/><junction id="j2"/></net>', encoding="utf-8")
     restore_calls = []
 
     def fake_variant(**kwargs):
@@ -2115,6 +2118,80 @@ def test_run_teacher_guided_repair_queue_replays_unrestored_normalized_variants_
     assert report["final_internal_replay_status"] == "pass"
     assert restore_calls[0]["candidate_net_file"] == candidate_net
     assert restore_calls[1]["candidate_net_file"] == restore_calls[0]["output_file"]
+
+
+def test_run_teacher_guided_repair_queue_uses_composite_base_for_joined_unrestored_replay(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    candidate_net.write_text('<net><junction id="source_a"/></net>', encoding="utf-8")
+    restore_calls = []
+
+    def fake_variant(**kwargs):
+        final_net = kwargs["output_dir"] / "joined.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text('<net><junction id="cluster_joined"/></net>', encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+            "target_internal_replay": {
+                "status": "pass",
+                "effective_edge_map": {"teacher_in": "candidate_in"},
+            },
+            "target_internal_normalize": {"unrestored_sumo_load": {"status": "pass"}},
+        }
+
+    def fake_restore(**kwargs):
+        restore_calls.append(kwargs)
+        if kwargs["candidate_net_file"] == candidate_net:
+            return {"status": "fail", "error": "candidate junction not found: cluster_joined"}
+        kwargs["output_file"].write_text('<net><junction id="cluster_joined"/></net>', encoding="utf-8")
+        return {"status": "pass", "net_file": str(kwargs["output_file"])}
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        input_file = Path(cwd) / command[command.index("--sumo-net-file") + 1]
+        output_file = Path(cwd) / command[command.index("--output-file") + 1]
+        output_file.write_text(input_file.read_text(encoding="utf-8"), encoding="utf-8")
+
+        class Result:
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_joined",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "candidate_in"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        variant_builder=fake_variant,
+        final_internal_replay_writer=fake_restore,
+        command_runner=fake_runner,
+    )
+
+    assert report["final_internal_replay_status"] == "pass"
+    assert restore_calls[0]["candidate_net_file"] == Path(report["variant_reports"][0]["final_net_file"])
 
 
 def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_parity_failed_candidate(
@@ -7162,6 +7239,46 @@ def test_write_teacher_target_internal_replay_net_removes_replaced_boundary_conn
     root = ET.parse(report["net_file"]).getroot()
     assert len(root.find("edge[@id='main']").findall("lane")) == 1
     assert root.find("connection[@from='main'][@to='back']") is None
+    assert report["removed_stale_replaced_edge_connection_count"] == 1
+
+
+def test_write_teacher_target_internal_replay_net_removes_internal_replaced_boundary_connection_with_stale_lane_index(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="main" from="teacher_j" to="b"><lane id="main_0" index="0" shape="10,0 20,0"/></edge>
+  <junction id="teacher_j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="main_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="main" from="j" to="b"><lane id="main_0" index="0" shape="10,0 20,0"/><lane id="main_1" index="1" shape="10,1 20,1"/></edge>
+  <edge id=":old_1" function="internal" from="old" to="j"><lane id=":old_1_0" index="0"/><lane id=":old_1_1" index="1"/></edge>
+  <junction id="old" type="priority" x="0" y="0" incLanes="" intLanes=":old_1_0 :old_1_1"/>
+  <junction id="j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="main_0 main_1" intLanes=""/>
+  <connection from=":old_1" to="main" fromLane="1" toLane="1" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"main": "main"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert len(root.find("edge[@id='main']").findall("lane")) == 1
+    assert root.find("connection[@from=':old_1'][@to='main']") is None
     assert report["removed_stale_replaced_edge_connection_count"] == 1
 
 
