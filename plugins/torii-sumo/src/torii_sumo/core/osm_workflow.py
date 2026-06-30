@@ -996,6 +996,17 @@ def _tls_semantic_delta_score(report: Mapping[str, Any] | None) -> int:
     )
 
 
+def _total_structural_delta_score(report: Mapping[str, Any] | None) -> int:
+    if report is None:
+        return 0
+    total = 0
+    for field in ("network_structural_missing_counts", "network_structural_extra_counts"):
+        counts = report.get(field, {})
+        if isinstance(counts, Mapping):
+            total += sum(_intish(value) for value in counts.values())
+    return total
+
+
 def _reference_visual_tls_guess_signal_distances(
     *,
     reference_net_file: Path | None,
@@ -1173,6 +1184,7 @@ def _movement_rebuild_reference_delta_promotion_decision(
     *,
     candidate_delta_report: Mapping[str, Any] | None,
     baseline_delta_report: Mapping[str, Any] | None,
+    structural_guard_delta_report: Mapping[str, Any] | None = None,
     reason: str,
 ) -> dict[str, Any]:
     decision = _reference_delta_promotion_decision(
@@ -1180,20 +1192,43 @@ def _movement_rebuild_reference_delta_promotion_decision(
         baseline_delta_report=baseline_delta_report,
         reason=reason,
     )
-    if decision.get("reason") != "reference_tls_semantic_delta_regressed":
-        return decision
 
     candidate_movement_score = _movement_rebuild_mismatch_score(candidate_delta_report)
     baseline_movement_score = _movement_rebuild_mismatch_score(baseline_delta_report)
     candidate_tls_junction_count = _structural_delta_key_count(candidate_delta_report, "traffic_light_junction_count")
     baseline_tls_junction_count = _structural_delta_key_count(baseline_delta_report, "traffic_light_junction_count")
+    candidate_structural_score = _total_structural_delta_score(candidate_delta_report)
+    baseline_structural_score = _total_structural_delta_score(baseline_delta_report)
+    guard_structural_score = (
+        _total_structural_delta_score(structural_guard_delta_report)
+        if structural_guard_delta_report is not None
+        else baseline_structural_score
+    )
     movement_fields = {
         "candidate_movement_rebuild_mismatch_score": candidate_movement_score,
         "baseline_movement_rebuild_mismatch_score": baseline_movement_score,
         "candidate_traffic_light_junction_delta_count": candidate_tls_junction_count,
         "baseline_traffic_light_junction_delta_count": baseline_tls_junction_count,
+        "candidate_total_structural_delta_score": candidate_structural_score,
+        "baseline_total_structural_delta_score": baseline_structural_score,
+        "guard_total_structural_delta_score": guard_structural_score,
     }
-    if candidate_movement_score < baseline_movement_score and candidate_tls_junction_count <= baseline_tls_junction_count:
+    structural_regression_allowance = 100
+    if candidate_structural_score > guard_structural_score + structural_regression_allowance:
+        return {
+            **decision,
+            **movement_fields,
+            "structural_delta_regression_allowance": structural_regression_allowance,
+            "status": "blocked",
+            "reason": "reference_structural_delta_regressed",
+        }
+    if decision.get("reason") != "reference_tls_semantic_delta_regressed":
+        return {**decision, **movement_fields}
+    if (
+        candidate_movement_score < baseline_movement_score
+        and candidate_tls_junction_count <= baseline_tls_junction_count
+        and candidate_structural_score <= guard_structural_score + structural_regression_allowance
+    ):
         return {
             **decision,
             **movement_fields,
@@ -1852,6 +1887,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_run_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
     teacher_guided_repair_best_expanded_scope_net_file: Path | None = None
+    teacher_guided_seed_report: dict[str, Any] | None = None
     teacher_guided_repair_seed_source = "skipped"
     teacher_guided_repair_requires_reference_promotion = False
     teacher_guided_repair_reference_promotion_report: dict[str, Any] = {
@@ -3455,6 +3491,9 @@ def run_osm_cleanup_workflow(
                     _movement_rebuild_reference_delta_promotion_decision(
                         candidate_delta_report=final_movement_candidate_delta_report,
                         baseline_delta_report=final_movement_baseline_report,
+                        structural_guard_delta_report=(
+                            teacher_guided_seed_report if teacher_guided_repair_requires_reference_promotion else None
+                        ),
                         reason="final_movement_rebuild_promoted_by_reference_delta",
                     )
                 )
