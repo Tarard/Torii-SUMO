@@ -4452,6 +4452,12 @@ def _restore_non_target_internal_artifacts(
     for connection in source_connections:
         target_root.append(copy.deepcopy(connection))
 
+    lane_ids = {
+        lane.attrib["id"]
+        for edge in target_root.findall("edge")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
     restored_normal_junction_attr_count = 0
     restored_request_count = 0
     target_junctions = {
@@ -4464,13 +4470,44 @@ def _restore_non_target_internal_artifacts(
         target_junction = target_junctions.get(junction_id)
         if not junction_id or junction_id in exclude_junction_ids or target_junction is None:
             continue
-        if dict(target_junction.attrib) != dict(source_junction.attrib):
+
+        source_inc_lanes = source_junction.attrib.get("incLanes", "").split()
+        source_int_lanes = source_junction.attrib.get("intLanes", "").split()
+        source_requests = list(source_junction.findall("request"))
+        source_inc_lanes_are_valid = all(lane in lane_ids for lane in source_inc_lanes)
+        source_matrix_is_valid = all(lane in lane_ids for lane in source_int_lanes) and len(source_requests) in {
+            0,
+            len(source_int_lanes),
+        }
+        filtered_target_inc_lanes = [
+            lane for lane in target_junction.attrib.get("incLanes", "").split() if lane in lane_ids
+        ]
+        filtered_target_int_lanes = [
+            lane for lane in target_junction.attrib.get("intLanes", "").split() if lane in lane_ids
+        ]
+        new_attrs = dict(target_junction.attrib)
+        for attr in ("type", "x", "y", "z", "shape"):
+            if attr in source_junction.attrib:
+                new_attrs[attr] = source_junction.attrib[attr]
+        new_attrs["incLanes"] = (
+            source_junction.attrib.get("incLanes", "")
+            if source_inc_lanes_are_valid
+            else " ".join(filtered_target_inc_lanes)
+        )
+        if source_matrix_is_valid:
+            new_attrs["intLanes"] = source_junction.attrib.get("intLanes", "")
+            requests_to_copy = source_requests
+        else:
+            new_attrs["intLanes"] = " ".join(filtered_target_int_lanes)
+            target_requests = list(target_junction.findall("request"))
+            requests_to_copy = target_requests if len(target_requests) in {0, len(filtered_target_int_lanes)} else []
+        if dict(target_junction.attrib) != new_attrs:
             target_junction.attrib.clear()
-            target_junction.attrib.update(source_junction.attrib)
+            target_junction.attrib.update(new_attrs)
             restored_normal_junction_attr_count += 1
         for request in list(target_junction.findall("request")):
             target_junction.remove(request)
-        for request in source_junction.findall("request"):
+        for request in requests_to_copy:
             target_junction.append(ET.Element("request", dict(request.attrib)))
             restored_request_count += 1
 

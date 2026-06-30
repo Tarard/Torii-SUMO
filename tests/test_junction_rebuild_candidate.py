@@ -8,6 +8,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _compare_teacher_models,
     _netedit_review_actions,
     _restore_false_traffic_light_junction_types,
+    _restore_non_target_internal_artifacts,
     _restore_replayed_geometry_attrs,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
@@ -7507,6 +7508,54 @@ def test_build_teacher_guided_junction_variant_restores_non_target_internal_arti
     assert root.find("junction[@id='other']").attrib["intLanes"] == ":other_w0_0"
     assert len(root.find("junction[@id='other']").findall("request")) == 1
     assert root.find("connection[@from='remote_in'][@to=':other_w_extra']") is None
+
+
+def test_restore_non_target_internal_artifacts_filters_stale_incoming_lanes(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="other" to="y"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":other_w0" function="walkingarea"><lane id=":other_w0_0" index="0" allow="pedestrian"/></edge>
+  <junction id="other" type="priority" incLanes="remote_in_0 :stale_missing_0" intLanes=":other_w0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="remote_in" to=":other_w0" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="other" to="y"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":other_w0" function="walkingarea"><lane id=":other_w0_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":other_w_extra" function="walkingarea"><lane id=":other_w_extra_0" index="0" allow="pedestrian"/></edge>
+  <junction id="other" type="traffic_light" incLanes="remote_in_0 :other_w_extra_0" intLanes=":other_w0_0 :other_w_extra_0">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="0"/>
+  </junction>
+  <connection from="remote_in" to=":other_w0" fromLane="0" toLane="0"/>
+  <connection from="remote_in" to=":other_w_extra" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _restore_non_target_internal_artifacts(
+        source_file=source,
+        target_file=target,
+        exclude_junction_ids=set(),
+    )
+
+    root = ET.parse(target).getroot()
+    junction = root.find("junction[@id='other']")
+    assert report["status"] == "pass"
+    assert junction.attrib["type"] == "priority"
+    assert junction.attrib["incLanes"] == "remote_in_0"
+    assert junction.attrib["intLanes"] == ":other_w0_0"
+    assert len(junction.findall("request")) == 1
 
 
 def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_internal_subgraph(
