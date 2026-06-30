@@ -159,6 +159,31 @@ def test_auto_workflow_extracts_bbox_from_osm_map_url(tmp_path: Path) -> None:
     assert captured["place_name"] is None
 
 
+def test_auto_workflow_prefers_explicit_bbox_over_prompt_osm_url(tmp_path: Path) -> None:
+    captured = {}
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo"}
+
+    report = run_auto_workflow(
+        user_request=(
+            "Use Torii to clean the Ingolstadt city-center network around "
+            "https://www.openstreetmap.org/#map=17/48.765391/11.423800 from OSM"
+        ),
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert captured["bbox"] == "11.413800,48.755391,11.433800,48.775391"
+
+
 def test_auto_workflow_passes_local_osm_file_to_cleanup(tmp_path: Path) -> None:
     captured = {}
     reference_net_file = tmp_path / "reference.net.xml"

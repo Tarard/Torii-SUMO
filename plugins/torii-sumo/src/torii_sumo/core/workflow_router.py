@@ -392,7 +392,10 @@ def _run_osm_to_sumo(
     place_resolver: Callable[[str], dict[str, Any]],
     cleanup_workflow_func: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
-    url_bbox = osm_map_url_bbox(bbox or "") or osm_map_url_bbox(place_name or "") or osm_map_url_bbox(user_request)
+    explicit_bbox = (bbox or "").strip()
+    url_bbox = osm_map_url_bbox(explicit_bbox)
+    if not explicit_bbox:
+        url_bbox = osm_map_url_bbox(place_name or "") or osm_map_url_bbox(user_request)
     if url_bbox:
         bbox = url_bbox
         report["area_resolution_status"] = "osm_map_url_bbox"
