@@ -2225,6 +2225,18 @@ def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_par
                         {"report": "parity", "field": "vehicle_movement_matrix_missing_count", "count": 1}
                     ],
                 },
+                "semantic_layer_gates": {
+                    "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                    "movement_tls": {
+                        "status": "fail",
+                        "failure_count": 1,
+                        "failures": [
+                            {"report": "parity", "field": "vehicle_movement_matrix_missing_count", "count": 1}
+                        ],
+                    },
+                    "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                    "internal": {"status": "pass", "failure_count": 0, "failures": []},
+                },
             }
         return {
             "status": "pass",
@@ -2232,6 +2244,12 @@ def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_par
             "junction_id": kwargs["junction_id"],
             "final_net_file": str(final_net),
             "parity_gate_status": "pass",
+            "semantic_layer_gates": {
+                "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
+                "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                "internal": {"status": "pass", "failure_count": 0, "failures": []},
+            },
         }
 
     report = run_teacher_guided_repair_queue(
@@ -2267,6 +2285,12 @@ def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_par
     assert report["composite_applied_candidate_count"] == 1
     assert report["composite_net_file"] == report["variant_reports"][1]["final_net_file"]
     assert report["semantic_failure_counts"] == {"parity:vehicle_movement_matrix_missing_count": 1}
+    assert report["semantic_layer_gate_counts"] == {
+        "topology": {"pass": 2, "fail": 0, "failure_count": 0},
+        "movement_tls": {"pass": 1, "fail": 1, "failure_count": 1},
+        "pedestrian_bike": {"pass": 2, "fail": 0, "failure_count": 0},
+        "internal": {"pass": 2, "fail": 0, "failure_count": 0},
+    }
 
 
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:

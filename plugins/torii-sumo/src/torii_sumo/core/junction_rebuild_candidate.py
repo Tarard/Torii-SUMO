@@ -2510,6 +2510,7 @@ def run_teacher_guided_repair_queue(
     failed_count = attempted_count - pass_count
     parity_pass_count = sum(1 for report in variant_reports if report.get("parity_gate_status") == "pass")
     semantic_failure_counts = _semantic_failure_counts(variant_reports)
+    semantic_layer_gate_counts = _semantic_layer_gate_counts(variant_reports)
     approach_integrity_failure_counts = _approach_integrity_failure_counts(semantic_failure_counts)
     expanded_scope_pass_count = sum(1 for report in expanded_scope_reports if report.get("status") == "pass")
     best_expanded_scope_net_file = ""
@@ -2704,6 +2705,7 @@ def run_teacher_guided_repair_queue(
         "failed_candidate_count": failed_count,
         "parity_pass_candidate_count": parity_pass_count,
         "semantic_failure_counts": semantic_failure_counts,
+        "semantic_layer_gate_counts": semantic_layer_gate_counts,
         "approach_integrity_status": _approach_integrity_status(
             parity_gate_status=parity_gate_status,
             attempted_count=attempted_count,
@@ -3130,6 +3132,25 @@ def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[s
             if key != ":":
                 counts[key] = counts.get(key, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def _semantic_layer_gate_counts(variant_reports: list[dict[str, object]]) -> dict[str, dict[str, int]]:
+    counts: dict[str, dict[str, int]] = {}
+    for report in variant_reports:
+        layers = report.get("semantic_layer_gates")
+        if not isinstance(layers, dict):
+            continue
+        for layer_name, layer in layers.items():
+            if not isinstance(layer, dict):
+                continue
+            layer_counts = counts.setdefault(str(layer_name), {"pass": 0, "fail": 0, "failure_count": 0})
+            status = "pass" if layer.get("status") == "pass" else "fail"
+            layer_counts[status] += 1
+            try:
+                layer_counts["failure_count"] += int(layer.get("failure_count", 0) or 0)
+            except (TypeError, ValueError):
+                layer_counts["failure_count"] += 1 if status == "fail" else 0
+    return {key: counts[key] for key in sorted(counts)}
 
 
 def _approach_integrity_failure_counts(semantic_failure_counts: dict[str, int]) -> dict[str, int]:
