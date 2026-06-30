@@ -15,6 +15,7 @@ from torii_sumo.core.osm_workflow import (
     _teacher_guided_junction_parity_gate,
     _teacher_guided_application_stats,
     _teacher_guided_best_variant_file,
+    _teacher_guided_direct_replay_needed,
     _teacher_guided_equivalent_approach_edge_map,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
@@ -488,6 +489,319 @@ def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp
     assert report["teacher_guided_repair_applied_candidate_count"] == 4
     assert report["teacher_guided_repair_unapplied_pass_candidate_count"] == 0
     assert calls["reference_join_candidate_net_files"][-1] == composite_net
+
+
+def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_replay_regresses(
+    tmp_path: Path,
+) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+    filtered_osm = tmp_path / "osm" / "reference-direct-replay_filtered.osm.xml.gz"
+    visual_tls_net = tmp_path / "visual_tls_aggregation.net.xml"
+    repaired_tls_net = tmp_path / "visual_tls_connection_repaired.net.xml"
+    heavy_net = tmp_path / "heavy_teacher_replay.net.xml"
+    direct_net = tmp_path / "direct_teacher_replay.net.xml"
+    calls: dict[str, object] = {"reference_join_candidate_net_files": [], "teacher_guided_plain_net_files": []}
+
+    def write_net(path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("<net/>", encoding="utf-8")
+        return path
+
+    def fake_build(**kwargs):
+        net_file = write_net(tmp_path / "sumo" / f"{kwargs['prefix']}.net.xml")
+        filtered_osm.parent.mkdir(parents=True, exist_ok=True)
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(net_file),
+            "filtered_osm_file": str(filtered_osm),
+            "source_osm_file": str(filtered_osm),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def delta(
+        *,
+        connection_extra: int,
+        extra_tls_junctions: int,
+        missing_tls_controlled_connections: int,
+        mismatch: int,
+        summary: str,
+    ) -> dict[str, object]:
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "audit_mode": "structural_only",
+            "summary_file": str(tmp_path / summary),
+            "reference_case_count": 1,
+            "matched_case_count": 1,
+            "unmatched_case_count": 0,
+            "junction_pattern_index": [{"junction_id": "j1"}],
+            "junction_pattern_mismatch_count": mismatch,
+            "junction_pattern_mismatch_field_counts": (
+                {"movement_signature_counts": mismatch} if mismatch else {}
+            ),
+            "junction_pattern_comparisons": [
+                {"junction_id": "j1", "status": "fail", "mismatch_fields": ["movement_signature_counts"]}
+            ]
+            if mismatch
+            else [],
+            "network_structural_missing_counts": {
+                "crossing_edge_count": 145,
+                "tls_controlled_connection_count": missing_tls_controlled_connections,
+            },
+            "network_structural_extra_counts": {
+                "connection_count": connection_extra,
+                "traffic_light_junction_count": extra_tls_junctions,
+            },
+            "tls_control_review_queue": [],
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**kwargs):
+        candidate = kwargs["candidate_net_file"]
+        output_dir = str(kwargs["output_dir"])
+        calls["reference_join_candidate_net_files"].append(candidate)
+        if "reference_visual_detail_raw_reference_delta" in output_dir:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "summary_file": str(tmp_path / "raw_visual_delta.json"),
+                "reference_case_count": 0,
+                "matched_case_count": 0,
+                "unmatched_case_count": 0,
+                "junction_pattern_mismatch_count": 0,
+                "junction_pattern_comparisons": [],
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 10},
+                "network_structural_extra_counts": {"traffic_light_junction_count": 5},
+                "warnings": [],
+            }
+        if candidate == visual_tls_net:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "summary_file": str(tmp_path / "visual_tls_delta.json"),
+                "reference_case_count": 0,
+                "matched_case_count": 0,
+                "unmatched_case_count": 0,
+                "junction_pattern_mismatch_count": 0,
+                "junction_pattern_comparisons": [],
+                "network_structural_missing_counts": {"tls_controlled_connection_count": 337},
+                "network_structural_extra_counts": {"tl_logic_count": 12, "traffic_light_junction_count": 41},
+                "warnings": [],
+            }
+        if candidate == repaired_tls_net and "reference_visual_detail_tls_connection_repair_reference_delta" in output_dir:
+            return delta(
+                connection_extra=1812,
+                extra_tls_junctions=16,
+                missing_tls_controlled_connections=50,
+                mismatch=30,
+                summary="repaired_tls_seed_delta.json",
+            )
+        if candidate == repaired_tls_net:
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "audit_mode": "structural_only",
+                "summary_file": str(tmp_path / "primary_reference_join_delta.json"),
+                "reference_case_count": 0,
+                "matched_case_count": 0,
+                "unmatched_case_count": 0,
+                "junction_pattern_mismatch_count": 0,
+                "junction_pattern_comparisons": [],
+                "network_structural_missing_counts": {},
+                "network_structural_extra_counts": {},
+                "warnings": [],
+            }
+        if candidate == heavy_net:
+            return delta(
+                connection_extra=4100,
+                extra_tls_junctions=30,
+                missing_tls_controlled_connections=90,
+                mismatch=28,
+                summary="heavy_delta.json",
+            )
+        if candidate == direct_net:
+            return delta(
+                connection_extra=1651,
+                extra_tls_junctions=14,
+                missing_tls_controlled_connections=80,
+                mismatch=27,
+                summary="direct_delta.json",
+            )
+        return delta(
+            connection_extra=1812,
+            extra_tls_junctions=16,
+            missing_tls_controlled_connections=50,
+            mismatch=30,
+            summary="seed_delta.json",
+        )
+
+    def fake_teacher_guided_queue(**kwargs):
+        calls["teacher_guided_queue_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "repair_candidate_count": 1,
+            "ready_candidate_count": 1,
+            "expanded_scope_candidate_count": 0,
+            "queue_file": str(tmp_path / "teacher_guided_queue.json"),
+            "repair_candidates": [
+                {
+                    "junction_id": "j1",
+                    "reference_id": "teacher_j1",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_edge": "candidate_edge"},
+                }
+            ],
+            "warnings": [],
+        }
+
+    def fake_tls(**_kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_cluster_count": 1,
+            "tls_candidate_count": 1,
+            "warnings": [],
+        }
+
+    def fake_tls_aggregation(**kwargs):
+        variant = visual_tls_net if "reference_visual_detail" in kwargs["prefix"] else tmp_path / "raw_tls.net.xml"
+        write_net(variant)
+        representatives = tmp_path / f"{kwargs['prefix']}_representatives.csv"
+        representatives.write_text(
+            "cluster_id,representative_node_id,tls_ids,tls_count,google_maps_url\n"
+            "c1,agg_tls,raw_tls;agg_tls,2,\n",
+            encoding="utf-8",
+        )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_aggregation_status": "variant_created_for_review",
+            "tls_aggregation_variant_file": str(variant),
+            "tls_aggregation_representatives_file": str(representatives),
+            "tls_controlled_connection_preservation_status": "fail",
+            "warnings": [],
+        }
+
+    def fake_tls_connection_repair(**kwargs):
+        calls["tls_connection_repair_tls_id_map"] = kwargs["tls_id_map"]
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "variant_file": str(write_net(repaired_tls_net)),
+            "candidate_tls_controlled_connection_count_before": 1,
+            "candidate_tls_controlled_connection_count_after": 1,
+            "updated_connection_count": 1,
+            "skipped_invalid_mapped_linkindex_connection_count": 0,
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_plain_export(**kwargs):
+        calls["teacher_guided_plain_net_file"] = kwargs["net_file"]
+        calls["teacher_guided_plain_net_files"].append(kwargs["net_file"])
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "raw_node_file": str(tmp_path / "plain.nod.xml"),
+            "raw_edge_file": str(tmp_path / "plain.edg.xml"),
+            "raw_connection_file": str(tmp_path / "plain.con.xml"),
+            "warnings": [],
+        }
+
+    def fake_teacher_guided_run(**_kwargs):
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "parity_gate_status": "pass",
+            "attempted_candidate_count": 1,
+            "pass_candidate_count": 1,
+            "composite_applied_candidate_count": 1,
+            "composite_net_file": str(write_net(heavy_net)),
+            "run_report_file": str(tmp_path / "teacher_guided_run.json"),
+            "warnings": [],
+        }
+
+    def fake_direct_replay(**kwargs):
+        calls["direct_replay_source_net_file"] = kwargs["source_net_file"]
+        write_net(direct_net)
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "variant_file": str(direct_net),
+            "candidate_index": 1,
+            "junction_id": "j1",
+            "sumo_load": {"status": "pass"},
+            "variant_reports": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path,
+        prefix="reference-direct-replay",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        run_routeability_audit_after_build=False,
+        run_reference_join_aggregation_after_build=False,
+        run_reference_hierarchy_audit_after_build=False,
+        run_reference_scope_audit_after_build=False,
+        build_func=fake_build,
+        tls_audit_func=fake_tls,
+        tls_aggregation_func=fake_tls_aggregation,
+        tls_connection_repair_func=fake_tls_connection_repair,
+        tls_low_vehicle_control_func=lambda **_kwargs: {"status": "skipped"},
+        tls_signal_grouping_func=lambda **_kwargs: {"status": "skipped"},
+        connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "passenger_edge_count": 1},
+        topology_audit_func=lambda **_kwargs: {"status": "pass", "topology_fragmentation_status": "pass", "warnings": []},
+        netedit_func=lambda _path: {"status": "blocked", "netedit_status": "skipped", "warnings": []},
+        sumo_gui_func=lambda _path, **_kwargs: {"status": "blocked", "sumo_gui_status": "skipped", "warnings": []},
+        reference_join_audit_func=fake_reference_join_audit,
+        teacher_guided_repair_queue_func=fake_teacher_guided_queue,
+        teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
+        teacher_guided_repair_run_func=fake_teacher_guided_run,
+        teacher_guided_direct_replay_func=fake_direct_replay,
+        command_runner=lambda command, **_kwargs: {"status": "pass", "returncode": 0, "stdout": "", "stderr": ""},
+        review_html_func=lambda **kwargs: {
+            "status": "pass",
+            "workflow_review_html_status": "pass",
+            "workflow_review_html_file": str(tmp_path / "review.html"),
+            "workflow_review_net_file": str(kwargs["net_file"]),
+            "workflow_report_file": str(tmp_path / "workflow_report.json"),
+            "warnings": [],
+        },
+    )
+
+    assert calls["direct_replay_source_net_file"] == calls["teacher_guided_plain_net_files"][0]
+    assert calls["direct_replay_source_net_file"] == repaired_tls_net
+    assert calls["tls_connection_repair_tls_id_map"] == {"raw_tls": "agg_tls", "agg_tls": "agg_tls"}
+    assert direct_net in calls["reference_join_candidate_net_files"]
+    assert report["teacher_guided_repair_reference_promotion_status"] == "blocked"
+    assert report["teacher_guided_direct_replay_status"] == "pass"
+    assert report["teacher_guided_direct_replay_reference_promotion_status"] == "pass"
+    assert report["teacher_guided_direct_replay_reference_promotion_reason"] == (
+        "direct_local_teacher_replay_promoted_by_reference_delta"
+    )
+    assert report["reference_visual_detail_comparison_net_file"] == str(direct_net)
+    assert report["reference_visual_detail_comparison_selection_reason"] == (
+        "direct_local_teacher_replay_promoted_by_reference_delta"
+    )
+
+
+def test_teacher_guided_direct_replay_needed_when_composite_run_parity_fails() -> None:
+    assert _teacher_guided_direct_replay_needed(
+        repair_promotion_report={"status": "pass"},
+        repair_run_report={"status": "fail", "parity_gate_status": "fail"},
+    )
+    assert not _teacher_guided_direct_replay_needed(
+        repair_promotion_report={"status": "pass"},
+        repair_run_report={"status": "pass", "parity_gate_status": "pass"},
+    )
 
 
 def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_path: Path) -> None:

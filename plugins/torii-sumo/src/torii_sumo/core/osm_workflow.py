@@ -17,9 +17,13 @@ from .junction_aggregation import build_junction_aggregation_variant
 from .junction_rebuild_candidate import (
     build_teacher_guided_repair_queue,
     build_tls_connection_repair_variant,
+    _restore_false_traffic_light_junction_types,
     _restore_replayed_geometry_attrs,
     run_teacher_guided_repair_queue,
+    write_teacher_target_internal_replay_net,
+    write_teacher_tllogic_net,
 )
+from .junction_teacher_model import extract_teacher_junction_model
 from .netedit import launch_netedit
 from .network_permissions import apply_service_passenger_permissions
 from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
@@ -752,6 +756,219 @@ def _run_teacher_guided_queue_replay(
     return plain_export_report, run_report, _teacher_guided_best_variant_file(run_report)
 
 
+def _safe_path_part(value: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value.strip())
+    return safe[:80] or "junction"
+
+
+def _queue_path_value(queue_report: Mapping[str, Any] | None, key: str) -> Path | None:
+    if queue_report is None:
+        return None
+    value = str(queue_report.get(key, "")).strip()
+    if not value:
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    queue_file = str(queue_report.get("queue_file", "")).strip()
+    if queue_file:
+        return Path(queue_file).resolve().parent / path
+    return path
+
+
+def _normalize_sumo_net(
+    *,
+    net_file: Path,
+    output_file: Path,
+    output_dir: Path,
+    netconvert_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+) -> dict[str, Any]:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        netconvert_binary,
+        "--sumo-net-file",
+        _command_path_for_cwd(net_file, output_dir),
+        "--output-file",
+        _command_path_for_cwd(output_file, output_dir),
+    ]
+    report = _command_result_report(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
+    report["source_net_file"] = str(net_file)
+    report["output_file"] = str(output_file)
+    return report
+
+
+def _run_direct_local_teacher_replay(
+    *,
+    queue_report: dict[str, Any] | None,
+    source_net_file: Path,
+    output_dir: Path,
+    prefix: str,
+    netconvert_binary: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+) -> dict[str, Any]:
+    if not _teacher_guided_queue_has_replay_candidates(queue_report):
+        return {"status": "skipped", "reason": "no_replay_candidates", "variant_reports": []}
+    teacher_net_file = _queue_path_value(queue_report, "teacher_net_file")
+    if teacher_net_file is None or not teacher_net_file.exists():
+        return {"status": "blocked", "reason": "teacher_net_file_missing", "variant_reports": []}
+    if not source_net_file.exists():
+        return {"status": "blocked", "reason": "source_net_file_missing", "variant_reports": []}
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidates = [
+        candidate for candidate in queue_report.get("repair_candidates", []) or [] if isinstance(candidate, Mapping)
+    ]
+    variant_reports: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates, start=1):
+        if candidate.get("candidate_status") != "ready_for_teacher_guided_variant":
+            continue
+        junction_id = str(
+            candidate.get("junction_id")
+            or candidate.get("candidate_junction_id")
+            or candidate.get("candidate_id")
+            or ""
+        ).strip()
+        teacher_junction_id = str(candidate.get("reference_id") or candidate.get("teacher_junction_id") or "").strip()
+        teacher_junction_id = teacher_junction_id or junction_id
+        edge_map_value = candidate.get("edge_map", {})
+        edge_map = {str(key): str(value) for key, value in edge_map_value.items()} if isinstance(edge_map_value, Mapping) else {}
+        variant_dir = output_dir / f"candidate_{index:03d}_{_safe_path_part(junction_id)}"
+        variant_report: dict[str, Any] = {
+            "candidate_index": index,
+            "junction_id": junction_id,
+            "teacher_junction_id": teacher_junction_id,
+        }
+        if not junction_id:
+            variant_report.update({"status": "blocked", "reason": "junction_id_missing"})
+            variant_reports.append(variant_report)
+            continue
+        if not edge_map:
+            variant_report.update({"status": "blocked", "reason": "edge_map_missing"})
+            variant_reports.append(variant_report)
+            continue
+
+        replay_file = variant_dir / f"{prefix}_candidate_{index:03d}_target_internal_replay.net.xml"
+        replay_report = write_teacher_target_internal_replay_net(
+            candidate_net_file=source_net_file,
+            teacher_net_file=teacher_net_file,
+            output_file=replay_file,
+            junction_id=junction_id,
+            teacher_junction_id=teacher_junction_id,
+            edge_map=edge_map,
+        )
+        variant_report["target_internal_replay"] = replay_report
+        if replay_report.get("status") != "pass":
+            variant_report.update({"status": "blocked", "reason": "target_internal_replay_not_pass"})
+            variant_reports.append(variant_report)
+            continue
+
+        teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
+        tllogic_file = variant_dir / f"{prefix}_candidate_{index:03d}_teacher_tllogic.net.xml"
+        tllogic_report = write_teacher_tllogic_net(
+            candidate_net_file=replay_file,
+            output_file=tllogic_file,
+            junction_id=junction_id,
+            teacher_model=teacher_model,
+        )
+        variant_report["tl_logic"] = tllogic_report
+        if tllogic_report.get("status") != "pass":
+            variant_report.update({"status": "blocked", "reason": "teacher_tllogic_not_pass"})
+            variant_reports.append(variant_report)
+            continue
+
+        tllogic_sumo_load = _sumo_load_net(
+            tllogic_file,
+            output_dir=variant_dir / "sumo_load_tllogic",
+            sumo_binary=sumo_binary,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+        )
+        variant_report["tllogic_sumo_load"] = tllogic_sumo_load
+
+        normalized_file = variant_dir / f"{prefix}_candidate_{index:03d}_normalized.net.xml"
+        normalize_report = _normalize_sumo_net(
+            net_file=tllogic_file,
+            output_file=normalized_file,
+            output_dir=variant_dir,
+            netconvert_binary=netconvert_binary,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+        )
+        variant_report["normalize"] = normalize_report
+        if normalize_report.get("status") == "pass" and normalized_file.exists():
+            normalize_report["false_traffic_light_type_restore"] = _restore_false_traffic_light_junction_types(
+                source_file=tllogic_file,
+                target_file=normalized_file,
+                exclude_junction_ids={junction_id},
+            )
+            normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
+                source_file=tllogic_file,
+                target_file=normalized_file,
+                junction_id=junction_id,
+            )
+            normalized_sumo_load = _sumo_load_net(
+                normalized_file,
+                output_dir=variant_dir / "sumo_load_normalized",
+                sumo_binary=sumo_binary,
+                timeout_seconds=timeout_seconds,
+                command_runner=command_runner,
+            )
+            variant_report["sumo_load"] = normalized_sumo_load
+            if normalized_sumo_load.get("status") == "pass":
+                variant_report.update(
+                    {
+                        "status": "pass",
+                        "final_net_file": str(normalized_file),
+                        "variant_file": str(normalized_file),
+                    }
+                )
+                variant_reports.append(variant_report)
+                return {
+                    "status": "pass",
+                    "claim_status": "diagnostic-demo",
+                    "variant_file": str(normalized_file),
+                    "final_net_file": str(normalized_file),
+                    "candidate_index": index,
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "sumo_load": normalized_sumo_load,
+                    "variant_reports": variant_reports,
+                }
+
+        if tllogic_sumo_load.get("status") == "pass":
+            variant_report.update(
+                {
+                    "status": "pass",
+                    "final_net_file": str(tllogic_file),
+                    "variant_file": str(tllogic_file),
+                }
+            )
+            variant_reports.append(variant_report)
+            return {
+                "status": "pass",
+                "claim_status": "diagnostic-demo",
+                "variant_file": str(tllogic_file),
+                "final_net_file": str(tllogic_file),
+                "candidate_index": index,
+                "junction_id": junction_id,
+                "teacher_junction_id": teacher_junction_id,
+                "sumo_load": tllogic_sumo_load,
+                "variant_reports": variant_reports,
+            }
+        variant_report.update({"status": "blocked", "reason": "sumo_load_not_pass"})
+        variant_reports.append(variant_report)
+
+    return {
+        "status": "blocked",
+        "reason": "no_direct_local_replay_candidate_passed",
+        "variant_reports": variant_reports,
+    }
+
+
 def _teacher_guided_application_stats(
     report: Mapping[str, Any] | None, best_variant_file: Path | None
 ) -> dict[str, str | int]:
@@ -773,6 +990,18 @@ def _teacher_guided_application_stats(
         "teacher_guided_repair_applied_candidate_count": applied_count,
         "teacher_guided_repair_unapplied_pass_candidate_count": max(0, pass_count - applied_count),
     }
+
+
+def _teacher_guided_direct_replay_needed(
+    *,
+    repair_promotion_report: Mapping[str, Any],
+    repair_run_report: Mapping[str, Any] | None,
+) -> bool:
+    if repair_promotion_report.get("status") != "pass":
+        return True
+    if repair_run_report is None:
+        return False
+    return repair_run_report.get("status") != "pass" or repair_run_report.get("parity_gate_status") != "pass"
 
 
 def _teacher_guided_equivalent_approach_edge_map(report: Mapping[str, Any] | None) -> dict[str, str]:
@@ -1569,6 +1798,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
     teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
     teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
+    teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
@@ -1886,6 +2116,14 @@ def run_osm_cleanup_workflow(
     teacher_guided_plain_export_report: dict[str, Any] | None = None
     teacher_guided_repair_run_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
+    teacher_guided_replay_source_net_file: Path | None = None
+    teacher_guided_direct_replay_report: dict[str, Any] | None = None
+    teacher_guided_direct_replay_reference_delta_report: dict[str, Any] | None = None
+    teacher_guided_direct_replay_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    teacher_guided_direct_replay_best_variant_file: Path | None = None
     teacher_guided_repair_best_expanded_scope_net_file: Path | None = None
     teacher_guided_seed_report: dict[str, Any] | None = None
     teacher_guided_repair_seed_source = "skipped"
@@ -2644,8 +2882,11 @@ def run_osm_cleanup_workflow(
                 prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
             )
             if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
+                teacher_guided_replay_source_net_file = (
+                    reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file
+                )
                 teacher_guided_plain_export_report = teacher_guided_plain_export_func(
-                    net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
+                    net_file=teacher_guided_replay_source_net_file,
                     output_dir=output_dir / "teacher_guided_repair_plain",
                     prefix=f"{prefix}_teacher_guided_repair",
                     netconvert_binary=netconvert_binary,
@@ -3372,6 +3613,58 @@ def run_osm_cleanup_workflow(
                                             "status": "blocked",
                                             "reason": "sumo_load_not_pass",
                                         }
+            if (
+                _teacher_guided_direct_replay_needed(
+                    repair_promotion_report=teacher_guided_repair_reference_promotion_report,
+                    repair_run_report=teacher_guided_repair_run_report,
+                )
+                and _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report)
+            ):
+                direct_replay_source_net_file = (
+                    teacher_guided_replay_source_net_file
+                    or reference_visual_detail_comparison_net_file
+                    or reference_join_audit_candidate_net_file
+                )
+                if direct_replay_source_net_file is not None:
+                    teacher_guided_direct_replay_report = teacher_guided_direct_replay_func(
+                        queue_report=teacher_guided_repair_queue_report,
+                        source_net_file=direct_replay_source_net_file,
+                        output_dir=output_dir / "teacher_guided_direct_replay",
+                        prefix=f"{prefix}_teacher_guided_direct_replay",
+                        netconvert_binary=netconvert_binary,
+                        sumo_binary=sumo_binary,
+                        timeout_seconds=timeout_seconds,
+                        command_runner=command_runner,
+                    )
+                    direct_variant_value = str(teacher_guided_direct_replay_report.get("variant_file", ""))
+                    direct_variant_file = Path(direct_variant_value) if direct_variant_value else None
+                    if direct_variant_file is not None and direct_variant_file.exists():
+                        teacher_guided_direct_replay_reference_delta_report = reference_join_audit_func(
+                            reference_net_file=reference_net_file,
+                            candidate_net_file=direct_variant_file,
+                            output_dir=output_dir / "teacher_guided_direct_replay_reference_delta",
+                            prefix=f"{prefix}_teacher_guided_direct_replay_reference_delta",
+                            candidate_cluster_radius_m=topology_cluster_radius_m,
+                            candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                            structural_only=teacher_guided_seed_structural_only,
+                        )
+                        teacher_guided_direct_replay_reference_promotion_report = (
+                            _movement_rebuild_reference_delta_promotion_decision(
+                                candidate_delta_report=teacher_guided_direct_replay_reference_delta_report,
+                                baseline_delta_report=teacher_guided_seed_report,
+                                structural_guard_delta_report=teacher_guided_seed_report,
+                                reason="direct_local_teacher_replay_promoted_by_reference_delta",
+                            )
+                        )
+                        if teacher_guided_direct_replay_reference_promotion_report.get("status") == "pass":
+                            teacher_guided_direct_replay_best_variant_file = direct_variant_file
+                            reference_visual_detail_comparison_net_file = direct_variant_file
+                            reference_visual_detail_comparison_selection_reason = str(
+                                teacher_guided_direct_replay_reference_promotion_report.get("reason", "")
+                            )
+                            reference_join_post_teacher_audit_report = (
+                                teacher_guided_direct_replay_reference_delta_report
+                            )
     if (
         reference_net_file is not None
         and reference_visual_detail_comparison_net_file is not None
@@ -4545,6 +4838,27 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_best_variant_file": ""
         if teacher_guided_repair_best_variant_file is None
         else str(teacher_guided_repair_best_variant_file),
+        "teacher_guided_direct_replay_status": "skipped"
+        if teacher_guided_direct_replay_report is None
+        else str(teacher_guided_direct_replay_report.get("status", "fail")),
+        "teacher_guided_direct_replay_variant_file": ""
+        if teacher_guided_direct_replay_best_variant_file is None
+        else str(teacher_guided_direct_replay_best_variant_file),
+        "teacher_guided_direct_replay_candidate_index": ""
+        if teacher_guided_direct_replay_report is None
+        else teacher_guided_direct_replay_report.get("candidate_index", ""),
+        "teacher_guided_direct_replay_junction_id": ""
+        if teacher_guided_direct_replay_report is None
+        else str(teacher_guided_direct_replay_report.get("junction_id", "")),
+        "teacher_guided_direct_replay_reference_delta_file": ""
+        if teacher_guided_direct_replay_reference_delta_report is None
+        else str(teacher_guided_direct_replay_reference_delta_report.get("summary_file", "")),
+        "teacher_guided_direct_replay_reference_promotion_status": str(
+            teacher_guided_direct_replay_reference_promotion_report.get("status", "skipped")
+        ),
+        "teacher_guided_direct_replay_reference_promotion_reason": str(
+            teacher_guided_direct_replay_reference_promotion_report.get("reason", "")
+        ),
         "teacher_guided_repair_best_expanded_scope_net_file": ""
         if teacher_guided_repair_best_expanded_scope_net_file is None
         else str(teacher_guided_repair_best_expanded_scope_net_file),
@@ -4958,6 +5272,9 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
         "teacher_guided_repair_plain_export": teacher_guided_plain_export_report or {},
         "teacher_guided_repair_run": teacher_guided_repair_run_report or {},
+        "teacher_guided_direct_replay": teacher_guided_direct_replay_report or {},
+        "teacher_guided_direct_replay_reference_delta": teacher_guided_direct_replay_reference_delta_report or {},
+        "teacher_guided_direct_replay_reference_promotion": teacher_guided_direct_replay_reference_promotion_report,
         "routeability_audit": routeability_audit_report or {},
         "netedit": netedit_report,
         "reference_visual_detail_netedit": reference_visual_detail_netedit_report,
