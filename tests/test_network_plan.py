@@ -2202,6 +2202,10 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             ],
             "variant_reports": [],
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
+            "semantic_layer_gate_counts": {
+                "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
+                "pedestrian_bike": {"pass": 0, "fail": 1, "failure_count": 2},
+            },
             "warnings": [],
         }
 
@@ -2404,6 +2408,10 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["teacher_guided_repair_applied_candidate_count"] == 0
     assert report["teacher_guided_repair_unapplied_pass_candidate_count"] == 0
     assert report["teacher_guided_repair_semantic_failure_counts"] == {}
+    assert report["teacher_guided_repair_semantic_layer_gate_counts"] == {
+        "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
+        "pedestrian_bike": {"pass": 0, "fail": 1, "failure_count": 2},
+    }
     assert report["teacher_guided_repair_approach_integrity_status"] == "blocked"
     assert report["teacher_guided_repair_approach_integrity_failure_counts"] == {}
     assert report["teacher_guided_repair_template_contexts"] == [

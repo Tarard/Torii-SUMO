@@ -4961,6 +4961,9 @@ def run_osm_cleanup_workflow(
         "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status": "skipped"
         if post_teacher_tls_connection_repair_movement_rebuild_run_report is None
         else str(post_teacher_tls_connection_repair_movement_rebuild_run_report.get("parity_gate_status", "fail")),
+        "post_teacher_tls_connection_repair_movement_rebuild_semantic_layer_gate_counts": {}
+        if post_teacher_tls_connection_repair_movement_rebuild_run_report is None
+        else post_teacher_tls_connection_repair_movement_rebuild_run_report.get("semantic_layer_gate_counts", {}),
         "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file": ""
         if post_teacher_tls_connection_repair_movement_rebuild_best_variant_file is None
         else str(post_teacher_tls_connection_repair_movement_rebuild_best_variant_file),
@@ -4993,6 +4996,9 @@ def run_osm_cleanup_workflow(
         "final_movement_rebuild_parity_gate_status": "skipped"
         if final_movement_rebuild_run_report is None
         else str(final_movement_rebuild_run_report.get("parity_gate_status", "fail")),
+        "final_movement_rebuild_semantic_layer_gate_counts": {}
+        if final_movement_rebuild_run_report is None
+        else final_movement_rebuild_run_report.get("semantic_layer_gate_counts", {}),
         "final_movement_rebuild_best_variant_file": ""
         if final_movement_rebuild_best_variant_file is None
         else str(final_movement_rebuild_best_variant_file),
@@ -5221,6 +5227,9 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_semantic_failure_counts": {}
         if teacher_guided_repair_run_report is None
         else teacher_guided_repair_run_report.get("semantic_failure_counts", {}),
+        "teacher_guided_repair_semantic_layer_gate_counts": {}
+        if teacher_guided_repair_run_report is None
+        else teacher_guided_repair_run_report.get("semantic_layer_gate_counts", {}),
         "teacher_guided_repair_approach_integrity_status": "skipped"
         if teacher_guided_repair_run_report is None
         else teacher_guided_repair_run_report.get("approach_integrity_status", "blocked"),

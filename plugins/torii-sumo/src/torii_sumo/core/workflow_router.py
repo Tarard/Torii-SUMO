@@ -90,14 +90,17 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "teacher_guided_repair_run_report_file",
     "teacher_guided_repair_applied_candidate_count",
     "teacher_guided_repair_unapplied_pass_candidate_count",
+    "teacher_guided_repair_semantic_layer_gate_counts",
     "post_teacher_tls_connection_repair_movement_rebuild_run_status",
     "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status",
     "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file",
     "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count",
+    "post_teacher_tls_connection_repair_movement_rebuild_semantic_layer_gate_counts",
     "final_movement_rebuild_run_status",
     "final_movement_rebuild_parity_gate_status",
     "final_movement_rebuild_best_variant_file",
     "final_movement_rebuild_applied_candidate_count",
+    "final_movement_rebuild_semantic_layer_gate_counts",
     "reference_join_post_teacher_audit_status",
     "routeability_audit_status",
 )
@@ -192,6 +195,12 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
         )
         final_movement_best_variant_file = str(workflow_report.get("final_movement_rebuild_best_variant_file", ""))
         movement_best_variant_file = final_movement_best_variant_file or post_repair_movement_best_variant_file
+        semantic_layer_gate_counts = (
+            workflow_report.get("final_movement_rebuild_semantic_layer_gate_counts")
+            or workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_semantic_layer_gate_counts")
+            or workflow_report.get("teacher_guided_repair_semantic_layer_gate_counts")
+            or {}
+        )
         semantics.update(
             {
                 "best_variant_file": movement_best_variant_file
@@ -220,6 +229,7 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
                     "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count",
                     0,
                 ),
+                "semantic_layer_gate_counts": semantic_layer_gate_counts,
             }
         )
     report["reference_matched_semantics_workflow"] = semantics
