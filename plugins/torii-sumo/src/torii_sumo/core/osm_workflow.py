@@ -4403,6 +4403,9 @@ def run_osm_cleanup_workflow(
     post_teacher_tls_connection_repair_residual_stats = _junction_pattern_residual_stats(
         post_teacher_tls_connection_repair_reference_delta_report
     )
+    final_movement_rebuild_residual_stats = _junction_pattern_residual_stats(
+        final_movement_rebuild_reference_delta_report
+    )
     (
         post_teacher_tls_connection_repair_movement_gap_candidate_count,
         post_teacher_tls_connection_repair_movement_max_gap_count,
@@ -4847,6 +4850,21 @@ def run_osm_cleanup_workflow(
         "final_movement_rebuild_reference_delta_file": ""
         if final_movement_rebuild_reference_delta_report is None
         else str(final_movement_rebuild_reference_delta_report.get("summary_file", "")),
+        "final_movement_rebuild_junction_pattern_case_count": final_movement_rebuild_residual_stats[
+            "case_count"
+        ],
+        "final_movement_rebuild_junction_pattern_mismatch_count": final_movement_rebuild_residual_stats[
+            "failed_case_count"
+        ],
+        "final_movement_rebuild_junction_pattern_mismatch_field_counts": final_movement_rebuild_residual_stats[
+            "mismatch_field_counts"
+        ],
+        "final_movement_rebuild_internal_function_count_deficits": final_movement_rebuild_residual_stats[
+            "internal_function_count_deficits"
+        ],
+        "final_movement_rebuild_top_junction_pattern_mismatches": final_movement_rebuild_residual_stats[
+            "top_junction_pattern_mismatches"
+        ],
         "final_movement_rebuild_reference_promotion_status": str(
             final_movement_rebuild_reference_promotion_report.get("status", "skipped")
         ),
