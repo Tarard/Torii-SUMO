@@ -1053,6 +1053,9 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
         "final_direct_local_teacher_replay_promoted_by_reference_delta"
     )
     assert report["reference_join_post_teacher_junction_pattern_mismatch_count"] == 0
+    assert report["final_movement_rebuild_junction_pattern_mismatch_count"] == 0
+    assert report["final_movement_rebuild_junction_pattern_mismatch_field_counts"] == {}
+    assert report["final_movement_rebuild_top_junction_pattern_mismatches"] == []
 
 
 def test_tls_connection_repair_promotion_blocks_reference_delta_regression(tmp_path: Path) -> None:
