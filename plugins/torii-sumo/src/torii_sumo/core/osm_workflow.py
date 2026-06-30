@@ -3934,23 +3934,32 @@ def run_osm_cleanup_workflow(
             final_movement_rebuild_reference_promotion_report.get("status") != "pass"
             and _teacher_guided_queue_has_replay_candidates(final_movement_rebuild_queue_report)
         ):
-            (
-                direct_variant_file,
-                direct_delta_report,
-                direct_promotion_report,
-                direct_replay_report,
-            ) = run_final_direct_replay_candidates(
-                final_movement_rebuild_queue_report,
-                source_net_file=final_movement_source_net_file,
-                baseline_delta_report=final_movement_baseline_report,
-                iteration_label="iteration_001",
-            )
-            if direct_replay_report is not None:
-                final_movement_direct_replay_report = direct_replay_report
-            if direct_delta_report is not None:
-                final_movement_direct_replay_reference_delta_report = direct_delta_report
-            final_movement_direct_replay_reference_promotion_report = direct_promotion_report
-            if direct_variant_file is not None and direct_promotion_report.get("status") == "pass":
+            current_direct_queue_report = final_movement_rebuild_queue_report
+            current_direct_source_net_file = final_movement_source_net_file
+            current_direct_baseline_report = final_movement_baseline_report
+            max_final_direct_replay_iterations = 4
+            for iteration_number in range(1, max_final_direct_replay_iterations + 1):
+                if not _teacher_guided_queue_has_replay_candidates(current_direct_queue_report):
+                    break
+                iteration_label = f"iteration_{iteration_number:03d}"
+                (
+                    direct_variant_file,
+                    direct_delta_report,
+                    direct_promotion_report,
+                    direct_replay_report,
+                ) = run_final_direct_replay_candidates(
+                    current_direct_queue_report,
+                    source_net_file=current_direct_source_net_file,
+                    baseline_delta_report=current_direct_baseline_report,
+                    iteration_label=iteration_label,
+                )
+                if direct_replay_report is not None:
+                    final_movement_direct_replay_report = direct_replay_report
+                if direct_delta_report is not None:
+                    final_movement_direct_replay_reference_delta_report = direct_delta_report
+                final_movement_direct_replay_reference_promotion_report = direct_promotion_report
+                if direct_variant_file is None or direct_promotion_report.get("status") != "pass":
+                    break
                 final_movement_direct_replay_best_variant_file = direct_variant_file
                 final_movement_rebuild_best_variant_file = direct_variant_file
                 final_movement_rebuild_reference_delta_report = direct_delta_report
@@ -3958,52 +3967,29 @@ def run_osm_cleanup_workflow(
                 reference_visual_detail_comparison_net_file = direct_variant_file
                 reference_visual_detail_comparison_selection_reason = str(direct_promotion_report.get("reason", ""))
                 reference_join_post_teacher_audit_report = direct_delta_report
-                if direct_delta_report is not None and _movement_rebuild_mismatch_score(direct_delta_report) > 0:
-                    final_movement_followup_queue_report = teacher_guided_repair_queue_func(
-                        teacher_net_file=reference_net_file,
-                        candidate_net_file=direct_variant_file,
-                        reference_join_audit_report=direct_delta_report,
-                        output_dir=output_dir / "final_movement_rebuild_queue_iteration_002",
-                        prefix=f"{prefix}_final_movement_rebuild_iteration_002",
-                        max_ready_candidates=teacher_guided_repair_max_ready_candidates,
-                    )
-                    final_movement_followup_queue_report = _filter_teacher_guided_queue_to_mismatch_fields(
-                        final_movement_followup_queue_report,
-                        direct_delta_report,
-                        {"movement_signature_counts", "internal_function_counts"},
-                        output_dir=output_dir / "final_movement_rebuild_queue_iteration_002",
-                        prefix=f"{prefix}_final_movement_rebuild_iteration_002_movement_mismatches",
-                    )
-                    if _teacher_guided_queue_has_replay_candidates(final_movement_followup_queue_report):
-                        (
-                            second_direct_variant_file,
-                            second_direct_delta_report,
-                            second_direct_promotion_report,
-                            second_direct_replay_report,
-                        ) = run_final_direct_replay_candidates(
-                            final_movement_followup_queue_report,
-                            source_net_file=direct_variant_file,
-                            baseline_delta_report=direct_delta_report,
-                            iteration_label="iteration_002",
-                        )
-                        if second_direct_replay_report is not None:
-                            final_movement_direct_replay_report = second_direct_replay_report
-                        if second_direct_delta_report is not None:
-                            final_movement_direct_replay_reference_delta_report = second_direct_delta_report
-                        final_movement_direct_replay_reference_promotion_report = second_direct_promotion_report
-                        if (
-                            second_direct_variant_file is not None
-                            and second_direct_promotion_report.get("status") == "pass"
-                        ):
-                            final_movement_direct_replay_best_variant_file = second_direct_variant_file
-                            final_movement_rebuild_best_variant_file = second_direct_variant_file
-                            final_movement_rebuild_reference_delta_report = second_direct_delta_report
-                            final_movement_rebuild_reference_promotion_report = second_direct_promotion_report
-                            reference_visual_detail_comparison_net_file = second_direct_variant_file
-                            reference_visual_detail_comparison_selection_reason = str(
-                                second_direct_promotion_report.get("reason", "")
-                            )
-                            reference_join_post_teacher_audit_report = second_direct_delta_report
+                if direct_delta_report is None or _movement_rebuild_mismatch_score(direct_delta_report) <= 0:
+                    break
+                next_iteration_number = iteration_number + 1
+                current_direct_queue_report = teacher_guided_repair_queue_func(
+                    teacher_net_file=reference_net_file,
+                    candidate_net_file=direct_variant_file,
+                    reference_join_audit_report=direct_delta_report,
+                    output_dir=output_dir / f"final_movement_rebuild_queue_iteration_{next_iteration_number:03d}",
+                    prefix=f"{prefix}_final_movement_rebuild_iteration_{next_iteration_number:03d}",
+                    max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                )
+                current_direct_queue_report = _filter_teacher_guided_queue_to_mismatch_fields(
+                    current_direct_queue_report,
+                    direct_delta_report,
+                    {"movement_signature_counts", "internal_function_counts"},
+                    output_dir=output_dir / f"final_movement_rebuild_queue_iteration_{next_iteration_number:03d}",
+                    prefix=(
+                        f"{prefix}_final_movement_rebuild_iteration_{next_iteration_number:03d}_"
+                        "movement_mismatches"
+                    ),
+                )
+                current_direct_source_net_file = direct_variant_file
+                current_direct_baseline_report = direct_delta_report
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
         if (
             run_topology_audit_after_build
