@@ -758,9 +758,16 @@ def _run_teacher_guided_queue_replay(
     return plain_export_report, run_report, _teacher_guided_best_variant_file(run_report)
 
 
-def _safe_path_part(value: str) -> str:
+def _safe_path_part(value: str, max_len: int = 16) -> str:
     safe = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value.strip())
-    return safe[:80] or "junction"
+    safe = safe or "junction"
+    if len(safe) <= max_len:
+        return safe
+    digest = hashlib.sha1(safe.encode("utf-8")).hexdigest()[:8]
+    if max_len <= len(digest) + 1:
+        return digest[:max_len]
+    head_len = max_len - len(digest) - 1
+    return f"{safe[:head_len]}_{digest}"
 
 
 def _queue_path_value(queue_report: Mapping[str, Any] | None, key: str) -> Path | None:
