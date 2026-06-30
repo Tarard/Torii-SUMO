@@ -29,6 +29,8 @@ CONNECTION_RECORD_FIELDS = [
     "shape",
 ]
 
+TLS_MOVEMENT_SIGNATURE_FIELDS = ["from", "to", "fromLane", "toLane", "via", "linkIndex", "dir", "state"]
+
 
 def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
@@ -121,6 +123,49 @@ def write_connection_signature(signature: dict[str, Any], output_dir: Path, pref
     }
 
 
+def compare_tls_movement_signatures(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    teacher_tls_id: str,
+    candidate_tls_id: str,
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_signatures = Counter(_tls_movement_signatures(teacher_root, teacher_tls_id))
+    candidate_signatures = Counter(_tls_movement_signatures(candidate_root, candidate_tls_id))
+    teacher_only = teacher_signatures - candidate_signatures
+    candidate_only = candidate_signatures - teacher_signatures
+
+    teacher_phase_states = _tls_phase_states(teacher_root, teacher_tls_id)
+    candidate_phase_states = _tls_phase_states(candidate_root, candidate_tls_id)
+    movement_equal = not teacher_only and not candidate_only
+    phase_equal = teacher_phase_states == candidate_phase_states
+    return {
+        "status": "pass" if movement_equal and phase_equal else "fail",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "teacher_tls_id": teacher_tls_id,
+        "candidate_tls_id": candidate_tls_id,
+        "normalized_internal_ids": True,
+        "compared_fields": TLS_MOVEMENT_SIGNATURE_FIELDS,
+        "teacher_connection_count": teacher_signatures.total(),
+        "candidate_connection_count": candidate_signatures.total(),
+        "movement_signature_equal_after_internal_id_normalization": movement_equal,
+        "teacher_only_normalized_movement_signatures": _counter_elements(teacher_only),
+        "candidate_only_normalized_movement_signatures": _counter_elements(candidate_only),
+        "teacher_phase_states": teacher_phase_states,
+        "candidate_phase_states": candidate_phase_states,
+        "teacher_phase_count": len(teacher_phase_states),
+        "candidate_phase_count": len(candidate_phase_states),
+        "phase_state_lengths": {
+            "teacher": [len(state) for state in teacher_phase_states],
+            "candidate": [len(state) for state in candidate_phase_states],
+        },
+        "tl_logic_phase_states_equal": phase_equal,
+    }
+
+
 def _is_related(
     source: str,
     target: str,
@@ -161,3 +206,36 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) ->
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _tls_movement_signatures(root: ET.Element, tls_id: str) -> list[str]:
+    signatures = []
+    for connection in root.findall("connection"):
+        if connection.attrib.get("tl") != tls_id:
+            continue
+        fields = {
+            field: _normalize_tls_internal_id(connection.attrib.get(field, ""), tls_id)
+            for field in TLS_MOVEMENT_SIGNATURE_FIELDS
+        }
+        signatures.append("|".join(f"{field}={fields[field]}" for field in TLS_MOVEMENT_SIGNATURE_FIELDS))
+    return signatures
+
+
+def _normalize_tls_internal_id(value: str, tls_id: str) -> str:
+    prefix = f":{tls_id}"
+    if value.startswith(prefix):
+        return f":TARGET{value[len(prefix):]}"
+    return value
+
+
+def _tls_phase_states(root: ET.Element, tls_id: str) -> list[str]:
+    states = []
+    for tl_logic in root.findall("tlLogic"):
+        if tl_logic.attrib.get("id") != tls_id:
+            continue
+        states.extend(phase.attrib.get("state", "") for phase in tl_logic.findall("phase"))
+    return states
+
+
+def _counter_elements(counter: Counter[str]) -> list[str]:
+    return sorted(counter.elements())

@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from torii_sumo.core.junction_connection_audit import build_connection_signature, write_connection_signature
+from torii_sumo.core.junction_connection_audit import (
+    build_connection_signature,
+    compare_tls_movement_signatures,
+    write_connection_signature,
+)
 
 
 def test_connection_signature_separates_top_level_and_internal(tmp_path: Path) -> None:
@@ -108,3 +112,104 @@ def test_write_connection_signature_outputs_review_files(tmp_path: Path) -> None
     for field in ("linkIndex2", "pass", "uncontrolled", "allow", "disallow", "keepClear", "contPos", "shape"):
         assert field in records_header
         assert field in top_external_header
+
+
+def test_tls_movement_compare_ignores_internal_id_prefix_when_linkindex_and_phases_match(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <connection from="in" to="out" fromLane="0" toLane="1" via=":teacher_tls_0_0" tl="teacher_tls" linkIndex="3" dir="l" state="m"/>
+  <tlLogic id="teacher_tls" type="static" programID="0" offset="0">
+    <phase duration="42" state="Gr"/>
+    <phase duration="3" state="yr"/>
+  </tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <connection from="in" to="out" fromLane="0" toLane="1" via=":candidate_tls_0_0" tl="candidate_tls" linkIndex="3" dir="l" state="m"/>
+  <tlLogic id="candidate_tls" type="static" programID="0" offset="0">
+    <phase duration="42" state="Gr"/>
+    <phase duration="3" state="yr"/>
+  </tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = compare_tls_movement_signatures(teacher, candidate, "teacher_tls", "candidate_tls")
+
+    assert report["status"] == "pass"
+    assert report["teacher_connection_count"] == 1
+    assert report["candidate_connection_count"] == 1
+    assert report["movement_signature_equal_after_internal_id_normalization"] is True
+    assert report["tl_logic_phase_states_equal"] is True
+    assert report["teacher_only_normalized_movement_signatures"] == []
+    assert report["candidate_only_normalized_movement_signatures"] == []
+
+
+def test_tls_movement_compare_flags_linkindex_delta(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":teacher_tls_0_0" tl="teacher_tls" linkIndex="0" dir="s" state="M"/>
+  <tlLogic id="teacher_tls"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":candidate_tls_0_0" tl="candidate_tls" linkIndex="1" dir="s" state="M"/>
+  <tlLogic id="candidate_tls"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = compare_tls_movement_signatures(teacher, candidate, "teacher_tls", "candidate_tls")
+
+    assert report["status"] == "fail"
+    assert report["movement_signature_equal_after_internal_id_normalization"] is False
+    assert report["tl_logic_phase_states_equal"] is True
+    assert report["teacher_only_normalized_movement_signatures"] == [
+        "from=in|to=out|fromLane=0|toLane=0|via=:TARGET_0_0|linkIndex=0|dir=s|state=M"
+    ]
+    assert report["candidate_only_normalized_movement_signatures"] == [
+        "from=in|to=out|fromLane=0|toLane=0|via=:TARGET_0_0|linkIndex=1|dir=s|state=M"
+    ]
+
+
+def test_tls_movement_compare_flags_phase_state_delta(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":teacher_tls_0_0" tl="teacher_tls" linkIndex="0" dir="s" state="M"/>
+  <tlLogic id="teacher_tls"><phase duration="10" state="G"/><phase duration="3" state="y"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":candidate_tls_0_0" tl="candidate_tls" linkIndex="0" dir="s" state="M"/>
+  <tlLogic id="candidate_tls"><phase duration="10" state="G"/><phase duration="3" state="r"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = compare_tls_movement_signatures(teacher, candidate, "teacher_tls", "candidate_tls")
+
+    assert report["status"] == "fail"
+    assert report["movement_signature_equal_after_internal_id_normalization"] is True
+    assert report["tl_logic_phase_states_equal"] is False
+    assert report["teacher_phase_states"] == ["G", "y"]
+    assert report["candidate_phase_states"] == ["G", "r"]
