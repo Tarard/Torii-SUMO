@@ -456,6 +456,8 @@ def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp
             "composite_applied_candidate_count": 4,
             "composite_net_file": str(composite_net),
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
+            "promotion_gate_status": "pass",
+            "promotion_gate_file": str(tmp_path / "teacher_guided_promotion_gate.json"),
             "warnings": [],
         }
 
@@ -499,6 +501,8 @@ def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp
     assert report["teacher_guided_repair_application_scope"] == "sequential_composite"
     assert report["teacher_guided_repair_applied_candidate_count"] == 4
     assert report["teacher_guided_repair_unapplied_pass_candidate_count"] == 0
+    assert report["teacher_guided_repair_promotion_gate_status"] == "pass"
+    assert report["teacher_guided_repair_promotion_gate_file"] == str(tmp_path / "teacher_guided_promotion_gate.json")
     assert calls["reference_join_candidate_net_files"][-1] == composite_net
 
 

@@ -392,6 +392,8 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "teacher_guided_repair_run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "teacher_guided_repair_run_status": "pass",
             "teacher_guided_repair_parity_gate_status": "pass",
+            "teacher_guided_repair_promotion_gate_status": "pass",
+            "teacher_guided_repair_promotion_gate_file": str(tmp_path / "teacher_guided_promotion_gate.json"),
             "teacher_guided_repair_application_scope": "single_best_variant",
             "teacher_guided_repair_applied_candidate_count": 1,
             "teacher_guided_repair_unapplied_pass_candidate_count": 4,
@@ -461,6 +463,10 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         "pedestrian_bike": {"pass": 0, "fail": 1, "failure_count": 2},
     }
     assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
+    assert report["reference_matched_semantics_workflow"]["promotion_gate_status"] == "pass"
+    assert report["reference_matched_semantics_workflow"]["promotion_gate_file"] == str(
+        tmp_path / "teacher_guided_promotion_gate.json"
+    )
     assert report["reference_matched_semantics_workflow"]["application_scope"] == "single_best_variant"
     assert report["reference_matched_semantics_workflow"]["applied_candidate_count"] == 1
     assert report["reference_matched_semantics_workflow"]["unapplied_pass_candidate_count"] == 4
@@ -468,6 +474,8 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["workflow_review_html_file"] == str(tmp_path / "workflow_review.html")
     assert report["teacher_guided_repair_run_status"] == "pass"
     assert report["teacher_guided_repair_parity_gate_status"] == "pass"
+    assert report["teacher_guided_repair_promotion_gate_status"] == "pass"
+    assert report["teacher_guided_repair_promotion_gate_file"] == str(tmp_path / "teacher_guided_promotion_gate.json")
     assert report["teacher_guided_repair_application_scope"] == "single_best_variant"
     assert report["teacher_guided_repair_best_variant_file"] == str(tmp_path / "teacher_guided_best.net.xml")
     assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")

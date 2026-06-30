@@ -5168,6 +5168,78 @@ def test_run_teacher_guided_repair_queue_summarizes_semantic_failures(tmp_path: 
     }
 
 
+def test_run_teacher_guided_repair_queue_writes_promotion_gate_artifact(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    final_net = tmp_path / "run" / "candidate_001" / "final.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    def fake_variant(**kwargs):
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+            "semantic_layer_gates": {
+                "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
+                "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                "internal": {"status": "pass", "failure_count": 0, "failures": []},
+                "uncategorized": {"status": "pass", "failure_count": 0, "failures": []},
+            },
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "cand_in"},
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fake_variant,
+    )
+
+    gate = json.loads(Path(report["promotion_gate_file"]).read_text(encoding="utf-8"))
+    assert report["promotion_gate_status"] == "pass"
+    assert gate["status"] == "pass"
+    assert gate["claim_status"] == "diagnostic-demo"
+    assert gate["candidate_count"] == 1
+    assert gate["pass_candidate_count"] == 1
+    assert gate["items"] == [
+        {
+            "junction_id": "cluster_a_b",
+            "teacher_junction_id": "teacher_j",
+            "status": "pass",
+            "parity_gate_status": "pass",
+            "final_net_file": str(final_net),
+            "semantic_layer_gates": {
+                "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
+                "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                "internal": {"status": "pass", "failure_count": 0, "failures": []},
+                "uncategorized": {"status": "pass", "failure_count": 0, "failures": []},
+            },
+        }
+    ]
+
+
 def test_run_teacher_guided_repair_queue_resolves_relative_queue_paths(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"

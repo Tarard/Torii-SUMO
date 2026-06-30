@@ -162,6 +162,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "teacher_guided_repair_queue_file": str(repair_queue),
             "teacher_guided_repair_queue_csv_file": str(repair_queue_csv),
             "teacher_guided_repair_run_report_file": str(repair_run),
+            "teacher_guided_repair_promotion_gate_file": str(tmp_path / "teacher_guided_promotion_gate.json"),
             "reference_visual_detail_tls_connection_repair_variant_file": str(tls_repair_variant),
             "reference_visual_detail_tls_connection_repair_summary_file": str(tls_repair_summary),
             "reference_visual_detail_tls_connection_repair_reference_delta_file": str(tls_repair_delta),
@@ -336,6 +337,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["artifacts"]["teacher_guided_repair_queue_file"] == "../teacher_guided_queue.json"
     assert manifest["artifacts"]["teacher_guided_repair_queue_csv_file"] == "../teacher_guided_queue.csv"
     assert manifest["artifacts"]["teacher_guided_repair_run_report_file"] == "../teacher_guided_run.json"
+    assert manifest["artifacts"]["teacher_guided_repair_promotion_gate_file"] == "../teacher_guided_promotion_gate.json"
     assert manifest["netedit_review"]["netedit_command"] == 'netedit --sumocfg-file "workflow_netedit_review.sumocfg"'
     assert manifest["netedit_review"]["selection_file_count"] == 1
     assert manifest["review_app"]["map_layers"]["edges"]

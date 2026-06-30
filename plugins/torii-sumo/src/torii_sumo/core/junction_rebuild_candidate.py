@@ -2663,6 +2663,7 @@ def run_teacher_guided_repair_queue(
                 except Exception as exc:
                     variant_report = _variant_exception_report(exc, joined_scope_junction_id)
                 attached_report = _attach_candidate_template_context(variant_report, candidate)
+                attached_report.setdefault("teacher_junction_id", teacher_junction_id)
                 variant_reports.append(attached_report)
                 final_net_file = Path(str(attached_report.get("final_net_file", "")))
                 if (
@@ -2765,6 +2766,7 @@ def run_teacher_guided_repair_queue(
         except Exception as exc:
             variant_report = _variant_exception_report(exc, junction_id)
         attached_report = _attach_candidate_template_context(variant_report, candidate)
+        attached_report.setdefault("teacher_junction_id", teacher_junction_id)
         variant_reports.append(attached_report)
         final_net_file = Path(str(attached_report.get("final_net_file", "")))
         if (
@@ -2993,6 +2995,22 @@ def run_teacher_guided_repair_queue(
         claim_status = "construction-invalid" if failed_count else "diagnostic-demo"
         parity_gate_status = "pass" if parity_pass_count == attempted_count else "fail"
 
+    approach_integrity_status = _approach_integrity_status(
+        parity_gate_status=parity_gate_status,
+        attempted_count=attempted_count,
+        semantic_failure_counts=semantic_failure_counts,
+        approach_failure_counts=approach_integrity_failure_counts,
+    )
+    promotion_gate_file = output_dir / f"{prefix}_promotion_gate.json"
+    promotion_gate = _write_teacher_guided_promotion_gate(
+        output_file=promotion_gate_file,
+        status=status,
+        claim_status=claim_status,
+        parity_gate_status=parity_gate_status,
+        approach_integrity_status=approach_integrity_status,
+        variant_reports=variant_reports,
+    )
+
     run_report_file = output_dir / f"{prefix}_run_report.json"
     report = {
         "status": status,
@@ -3014,13 +3032,10 @@ def run_teacher_guided_repair_queue(
         "parity_pass_candidate_count": parity_pass_count,
         "semantic_failure_counts": semantic_failure_counts,
         "semantic_layer_gate_counts": semantic_layer_gate_counts,
-        "approach_integrity_status": _approach_integrity_status(
-            parity_gate_status=parity_gate_status,
-            attempted_count=attempted_count,
-            semantic_failure_counts=semantic_failure_counts,
-            approach_failure_counts=approach_integrity_failure_counts,
-        ),
+        "approach_integrity_status": approach_integrity_status,
         "approach_integrity_failure_counts": approach_integrity_failure_counts,
+        "promotion_gate_status": promotion_gate["status"],
+        "promotion_gate_file": str(promotion_gate_file),
         "expanded_scope_candidate_count": len(expanded_scope_reports),
         "expanded_scope_pass_candidate_count": expanded_scope_pass_count,
         "best_expanded_scope_net_file": best_expanded_scope_net_file,
@@ -3459,6 +3474,50 @@ def _semantic_layer_gate_counts(variant_reports: list[dict[str, object]]) -> dic
             except (TypeError, ValueError):
                 layer_counts["failure_count"] += 1 if status == "fail" else 0
     return {key: counts[key] for key in sorted(counts)}
+
+
+def _write_teacher_guided_promotion_gate(
+    *,
+    output_file: Path,
+    status: str,
+    claim_status: str,
+    parity_gate_status: str,
+    approach_integrity_status: str,
+    variant_reports: list[dict[str, object]],
+) -> dict[str, object]:
+    items = [
+        {
+            "junction_id": str(report.get("junction_id", "")),
+            "teacher_junction_id": str(report.get("teacher_junction_id", "")),
+            "status": str(report.get("status", "")),
+            "parity_gate_status": str(report.get("parity_gate_status", "")),
+            "final_net_file": str(report.get("final_net_file", "")),
+            "semantic_layer_gates": report.get("semantic_layer_gates", {})
+            if isinstance(report.get("semantic_layer_gates"), dict)
+            else {},
+        }
+        for report in variant_reports
+    ]
+    gate_status = (
+        "pass"
+        if status == "pass"
+        and parity_gate_status == "pass"
+        and approach_integrity_status == "pass"
+        and items
+        and all(item["status"] == "pass" and item["parity_gate_status"] == "pass" for item in items)
+        else ("blocked" if not items else "fail")
+    )
+    report = {
+        "status": gate_status,
+        "claim_status": claim_status,
+        "parity_gate_status": parity_gate_status,
+        "approach_integrity_status": approach_integrity_status,
+        "candidate_count": len(items),
+        "pass_candidate_count": sum(1 for item in items if item["status"] == "pass"),
+        "items": items,
+    }
+    output_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
 
 
 def _approach_integrity_failure_counts(semantic_failure_counts: dict[str, int]) -> dict[str, int]:

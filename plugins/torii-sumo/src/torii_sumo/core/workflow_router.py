@@ -86,6 +86,8 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "teacher_guided_repair_max_ready_candidates",
     "teacher_guided_repair_run_status",
     "teacher_guided_repair_parity_gate_status",
+    "teacher_guided_repair_promotion_gate_status",
+    "teacher_guided_repair_promotion_gate_file",
     "teacher_guided_repair_application_scope",
     "teacher_guided_repair_best_variant_file",
     "teacher_guided_repair_run_report_file",
@@ -212,6 +214,8 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
                 "comparison_net_file": movement_best_variant_file
                 or str(workflow_report.get("reference_visual_detail_comparison_net_file", "")),
                 "run_report_file": str(workflow_report.get("teacher_guided_repair_run_report_file", "")),
+                "promotion_gate_status": str(workflow_report.get("teacher_guided_repair_promotion_gate_status", "")),
+                "promotion_gate_file": str(workflow_report.get("teacher_guided_repair_promotion_gate_file", "")),
                 "application_scope": str(workflow_report.get("teacher_guided_repair_application_scope", "")),
                 "applied_candidate_count": workflow_report.get("teacher_guided_repair_applied_candidate_count", 0),
                 "unapplied_pass_candidate_count": workflow_report.get(
