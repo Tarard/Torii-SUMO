@@ -1082,6 +1082,10 @@ def export_plain_net_for_teacher_guided_repair(
         source_net_file=net_file,
         node_file=raw_node_file,
     )
+    stale_plain_tllogic_prune_report = _prune_stale_plain_tllogics(
+        node_file=raw_node_file,
+        tllogic_file=raw_tllogic_file,
+    )
     missing_required = [
         str(path)
         for path in (raw_node_file, raw_edge_file, raw_connection_file)
@@ -1092,6 +1096,7 @@ def export_plain_net_for_teacher_guided_repair(
         if netconvert_report.get("status") == "pass"
         and not missing_required
         and false_tls_plain_node_restore_report.get("status") == "pass"
+        and stale_plain_tllogic_prune_report.get("status") in {"pass", "skipped"}
         else "fail"
     )
     return {
@@ -1111,11 +1116,21 @@ def export_plain_net_for_teacher_guided_repair(
         "synthesized_edge_type_count": len(synthesized_edge_type_ids),
         "synthesized_edge_type_ids": synthesized_edge_type_ids,
         "false_traffic_light_plain_node_restore": false_tls_plain_node_restore_report,
+        "stale_plain_tllogic_prune": stale_plain_tllogic_prune_report,
         "restored_false_traffic_light_plain_node_count": false_tls_plain_node_restore_report.get(
             "restored_false_traffic_light_plain_node_count", 0
         ),
         "restored_false_traffic_light_plain_node_ids": false_tls_plain_node_restore_report.get(
             "restored_false_traffic_light_plain_node_ids", []
+        ),
+        "removed_stale_plain_tllogic_count": stale_plain_tllogic_prune_report.get(
+            "removed_stale_plain_tllogic_count", 0
+        ),
+        "removed_stale_plain_tllogic_ids": stale_plain_tllogic_prune_report.get(
+            "removed_stale_plain_tllogic_ids", []
+        ),
+        "removed_stale_plain_tllogic_connection_count": stale_plain_tllogic_prune_report.get(
+            "removed_stale_plain_tllogic_connection_count", 0
         ),
         "missing_required_plain_files": missing_required,
         "netconvert": netconvert_report,
@@ -1159,6 +1174,76 @@ def _restore_false_traffic_light_plain_node_types(*, source_net_file: Path, node
         "status": "pass",
         "restored_false_traffic_light_plain_node_count": len(restored_ids),
         "restored_false_traffic_light_plain_node_ids": restored_ids,
+    }
+
+
+def _prune_stale_plain_tllogics(*, node_file: Path, tllogic_file: Path) -> dict[str, Any]:
+    if not tllogic_file.exists():
+        return {
+            "status": "skipped",
+            "reason": "tllogic_file_missing",
+            "removed_stale_plain_tllogic_count": 0,
+            "removed_stale_plain_tllogic_ids": [],
+            "removed_stale_plain_tllogic_connection_count": 0,
+        }
+    if not node_file.exists():
+        return {
+            "status": "skipped",
+            "reason": "node_file_missing",
+            "removed_stale_plain_tllogic_count": 0,
+            "removed_stale_plain_tllogic_ids": [],
+            "removed_stale_plain_tllogic_connection_count": 0,
+        }
+    try:
+        node_root = ET.parse(node_file).getroot()
+        tllogic_tree = ET.parse(tllogic_file)
+    except (OSError, ET.ParseError) as exc:
+        return {
+            "status": "fail",
+            "reason": f"{type(exc).__name__}: {exc}",
+            "removed_stale_plain_tllogic_count": 0,
+            "removed_stale_plain_tllogic_ids": [],
+            "removed_stale_plain_tllogic_connection_count": 0,
+        }
+
+    valid_tls_ids: set[str] = set()
+    for node in node_root.findall("node"):
+        if not node.attrib.get("type", "").startswith("traffic_light"):
+            continue
+        for attr in ("id", "tl"):
+            value = node.attrib.get(attr)
+            if value:
+                valid_tls_ids.add(value)
+
+    tllogic_root = tllogic_tree.getroot()
+    removed_ids: list[str] = []
+    removed_id_set: set[str] = set()
+    removed_tllogic_count = 0
+    removed_connection_count = 0
+    for child in list(tllogic_root):
+        if child.tag == "tlLogic":
+            tls_id = child.attrib.get("id", "")
+            if tls_id and tls_id not in valid_tls_ids:
+                tllogic_root.remove(child)
+                removed_tllogic_count += 1
+                if tls_id not in removed_id_set:
+                    removed_ids.append(tls_id)
+                    removed_id_set.add(tls_id)
+        elif child.tag == "connection":
+            tls_id = child.attrib.get("tl", "")
+            if tls_id and tls_id not in valid_tls_ids:
+                tllogic_root.remove(child)
+                removed_connection_count += 1
+
+    if removed_tllogic_count or removed_connection_count:
+        ET.indent(tllogic_root, space="    ")
+        tllogic_tree.write(tllogic_file, encoding="utf-8", xml_declaration=True)
+
+    return {
+        "status": "pass",
+        "removed_stale_plain_tllogic_count": removed_tllogic_count,
+        "removed_stale_plain_tllogic_ids": removed_ids,
+        "removed_stale_plain_tllogic_connection_count": removed_connection_count,
     }
 
 
