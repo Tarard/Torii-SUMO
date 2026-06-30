@@ -101,6 +101,45 @@ def test_restore_false_traffic_light_junction_types_only_restores_uncontrolled_n
     assert root.find("junction[@id='already_tls']").attrib["type"] == "traffic_light"
 
 
+def test_restore_false_traffic_light_junction_types_uses_plain_node_fallback_for_polluted_source(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "polluted_source.net.xml"
+    source.write_text(
+        """<net>
+  <junction id="false_tls" type="traffic_light" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="real_tls" type="traffic_light" x="1" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="real_tls" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+  <connection from="e" to="e" fromLane="0" toLane="0" tl="real_tls" linkIndex="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    plain_nodes = tmp_path / "raw.nod.xml"
+    plain_nodes.write_text(
+        """<nodes>
+  <node id="false_tls" type="priority" x="0" y="0"/>
+  <node id="real_tls" type="traffic_light" x="1" y="0"/>
+</nodes>
+""",
+        encoding="utf-8",
+    )
+    normalized = tmp_path / "normalized.net.xml"
+    normalized.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+    report = _restore_false_traffic_light_junction_types(
+        source_file=source,
+        target_file=normalized,
+        fallback_node_file=plain_nodes,
+    )
+
+    root = ET.parse(normalized).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_false_traffic_light_junction_type_count"] == 1
+    assert root.find("junction[@id='false_tls']").attrib["type"] == "priority"
+    assert root.find("junction[@id='real_tls']").attrib["type"] == "traffic_light"
+
+
 def test_build_tls_connection_repair_variant_restores_unique_connection_control_attrs(tmp_path: Path) -> None:
     source_net = tmp_path / "source.net.xml"
     source_net.write_text(
