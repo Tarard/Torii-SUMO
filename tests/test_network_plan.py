@@ -6,6 +6,7 @@ from torii_sumo.core.network_plan import derive_network_plan
 from torii_sumo.core.osm_workflow import (
     _junction_semantic_gate,
     _low_vehicle_control_candidate_limits,
+    _movement_rebuild_reference_delta_promotion_decision,
     _reference_delta_promotion_decision,
     _teacher_guided_seed_candidate,
     _reference_join_audit_can_seed_teacher_guided_queue,
@@ -545,6 +546,64 @@ def test_tls_connection_repair_promotion_blocks_incompatible_tllogic_warning(tmp
 
     assert decision["status"] == "blocked"
     assert decision["reason"] == "sumo_load_tls_incompatible"
+
+
+def test_movement_rebuild_promotion_blocks_large_structural_regression() -> None:
+    decision = _movement_rebuild_reference_delta_promotion_decision(
+        baseline_delta_report={
+            "status": "pass",
+            "junction_pattern_mismatch_field_counts": {
+                "movement_signature_counts": 7,
+                "internal_function_counts": 6,
+            },
+            "network_structural_missing_counts": {"crossing_edge_count": 145},
+            "network_structural_extra_counts": {"connection_count": 570},
+        },
+        candidate_delta_report={
+            "status": "pass",
+            "junction_pattern_mismatch_field_counts": {},
+            "junction_pattern_mismatch_count": 0,
+            "network_structural_missing_counts": {"crossing_edge_count": 147},
+            "network_structural_extra_counts": {"connection_count": 2649},
+        },
+        reason="final_movement_rebuild_promoted_by_reference_delta",
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "reference_structural_delta_regressed"
+
+
+def test_movement_rebuild_promotion_uses_structural_guard_baseline() -> None:
+    decision = _movement_rebuild_reference_delta_promotion_decision(
+        baseline_delta_report={
+            "status": "pass",
+            "junction_pattern_mismatch_field_counts": {
+                "movement_signature_counts": 13,
+            },
+            "network_structural_missing_counts": {"crossing_edge_count": 127},
+            "network_structural_extra_counts": {"connection_count": 2664},
+        },
+        candidate_delta_report={
+            "status": "pass",
+            "junction_pattern_mismatch_field_counts": {},
+            "junction_pattern_mismatch_count": 0,
+            "network_structural_missing_counts": {"crossing_edge_count": 147},
+            "network_structural_extra_counts": {"connection_count": 2649},
+        },
+        structural_guard_delta_report={
+            "status": "pass",
+            "junction_pattern_mismatch_field_counts": {
+                "movement_signature_counts": 30,
+            },
+            "network_structural_missing_counts": {"crossing_edge_count": 145},
+            "network_structural_extra_counts": {"connection_count": 570},
+        },
+        reason="final_movement_rebuild_promoted_by_reference_delta",
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "reference_structural_delta_regressed"
+    assert decision["guard_total_structural_delta_score"] == 715
 
 
 def test_reference_delta_promotion_prefers_candidate_with_lower_tls_semantic_score() -> None:
