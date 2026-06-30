@@ -1596,6 +1596,60 @@ def test_export_plain_net_for_teacher_guided_repair_restores_false_tls_plain_nod
     assert node_root.find("./node[@id='j_real']").attrib["type"] == "traffic_light"
 
 
+def test_export_plain_net_for_teacher_guided_repair_prunes_stale_plain_tllogics(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text(
+        """<net>
+    <junction id="old_tls" type="priority"/>
+    <junction id="cluster_tls" type="traffic_light" tl="cluster_tls"/>
+    <tlLogic id="cluster_tls" type="static" programID="0" offset="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_command(command, **_kwargs):
+        plain_prefix = Path(command[-1])
+        Path(f"{plain_prefix}.nod.xml").write_text(
+            """<nodes>
+    <node id="old_tls" type="traffic_light" x="0" y="0"/>
+    <node id="cluster_tls" type="traffic_light" tl="cluster_tls" x="1" y="0"/>
+</nodes>""",
+            encoding="utf-8",
+        )
+        Path(f"{plain_prefix}.edg.xml").write_text("<edges/>", encoding="utf-8")
+        Path(f"{plain_prefix}.con.xml").write_text("<connections/>", encoding="utf-8")
+        Path(f"{plain_prefix}.tll.xml").write_text(
+            """<tlLogics>
+    <tlLogic id="old_tls" type="static" programID="0" offset="0"/>
+    <tlLogic id="cluster_tls" type="static" programID="0" offset="0"/>
+    <connection from="a" to="b" fromLane="0" toLane="0" tl="old_tls" linkIndex="0"/>
+    <connection from="c" to="d" fromLane="0" toLane="0" tl="cluster_tls" linkIndex="0"/>
+</tlLogics>""",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "returncode": 0}
+
+    report = export_plain_net_for_teacher_guided_repair(
+        net_file=net_file,
+        output_dir=tmp_path / "plain",
+        prefix="demo",
+        command_runner=fake_command,
+    )
+
+    tllogic_root = ET.parse(report["raw_tllogic_file"]).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_false_traffic_light_plain_node_ids"] == ["old_tls"]
+    assert report["removed_stale_plain_tllogic_ids"] == ["old_tls"]
+    assert report["removed_stale_plain_tllogic_count"] == 1
+    assert report["removed_stale_plain_tllogic_connection_count"] == 1
+    assert tllogic_root.find("./tlLogic[@id='old_tls']") is None
+    assert tllogic_root.find("./tlLogic[@id='cluster_tls']") is not None
+    assert tllogic_root.find("./connection[@tl='old_tls']") is None
+    assert tllogic_root.find("./connection[@tl='cluster_tls']") is not None
+
+
 def test_export_plain_net_for_teacher_guided_repair_shortens_long_plain_prefix(
     tmp_path: Path,
 ) -> None:
