@@ -373,9 +373,14 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert "sumo_network_junction_aggregation_variant" in report["tool_chain"]
     assert "sumo_network_teacher_guided_repair_queue" in report["tool_chain"]
     assert "sumo_network_teacher_guided_junction_variant" in report["tool_chain"]
+    assert "sumo_network_tls_warning_parity" in report["tool_chain"]
     assert report["reference_matched_semantics_workflow"]["claim_status"] == "diagnostic-demo"
     assert report["reference_matched_semantics_workflow"]["batch_repair_tool"] == "sumo_network_teacher_guided_repair_queue"
     assert report["reference_matched_semantics_workflow"]["per_junction_repair_tool"] == "sumo_network_teacher_guided_junction_variant"
+    assert (
+        report["reference_matched_semantics_workflow"]["warning_parity_tool"]
+        == "sumo_network_tls_warning_parity"
+    )
     assert report["reference_matched_semantics_workflow"]["best_variant_file"] == str(tmp_path / "final_movement_best.net.xml")
     assert report["reference_matched_semantics_workflow"]["comparison_net_file"] == str(
         tmp_path / "final_movement_best.net.xml"

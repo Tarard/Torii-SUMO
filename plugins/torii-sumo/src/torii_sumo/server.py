@@ -28,6 +28,7 @@ from .tools.osm_tools import (
     sumo_network_teacher_guided_junction_variant,
     sumo_network_teacher_guided_repair_queue,
     sumo_network_tls_aggregation_variant,
+    sumo_network_tls_warning_parity,
     sumo_network_topology_audit,
     sumo_osm_build_network,
     sumo_osm_cleanup_workflow,
@@ -113,6 +114,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Create a separate TLS cleanup review variant with one real SUMO junction set as TLS per physical TLS audit cluster.")(
         sumo_network_tls_aggregation_variant
+    )
+    server.tool(description="Compare mapped TUM/reference and candidate SUMO TLS warnings, separating inherited warnings from candidate-only regressions.")(
+        sumo_network_tls_warning_parity
     )
     server.tool(description="Create an HTML human-review cockpit for a generated or partial SUMO network and available audit artifacts.")(
         sumo_network_review_html

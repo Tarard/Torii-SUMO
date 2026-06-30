@@ -28,6 +28,7 @@ from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 from torii_sumo.core.reference_scope import audit_reference_scope, build_scope_pruning_variant
 from torii_sumo.core.overlapping_junction_audit import audit_overlapping_junctions
+from torii_sumo.core.sumo_warning_audit import compare_mapped_tls_warnings
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.core.workflow_review_html import build_workflow_review_html
 
@@ -317,6 +318,34 @@ def sumo_network_tls_aggregation_variant(
         prefix=prefix,
         timeout_seconds=timeout_seconds,
     )
+
+
+def sumo_network_tls_warning_parity(
+    teacher_sumo_load_report_file: str,
+    candidate_sumo_load_report_file: str,
+    tls_id_map: dict[str, str],
+    output_dir: str,
+    prefix: str = "tls_warning_parity",
+) -> dict[str, Any]:
+    teacher_report = _read_json_report(teacher_sumo_load_report_file) or {}
+    candidate_report = _read_json_report(candidate_sumo_load_report_file) or {}
+    report = compare_mapped_tls_warnings(
+        str(teacher_report.get("stderr_tail", "")),
+        str(candidate_report.get("stderr_tail", "")),
+        tls_id_map,
+    )
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    warning_parity_file = output_path / f"{prefix}_sumo_tls_warning_parity.json"
+    report.update(
+        {
+            "teacher_sumo_load_report_file": str(Path(teacher_sumo_load_report_file)),
+            "candidate_sumo_load_report_file": str(Path(candidate_sumo_load_report_file)),
+            "warning_parity_file": str(warning_parity_file),
+        }
+    )
+    warning_parity_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
 
 
 def sumo_network_teacher_guided_junction_variant(

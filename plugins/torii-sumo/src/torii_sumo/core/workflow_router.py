@@ -63,6 +63,7 @@ REFERENCE_MATCHED_TOOL_CHAIN = [
     "sumo_network_junction_aggregation_variant",
     "sumo_network_teacher_guided_repair_queue",
     "sumo_network_teacher_guided_junction_variant",
+    "sumo_network_tls_warning_parity",
     "sumo_network_review_html",
 ]
 
@@ -73,6 +74,7 @@ REFERENCE_MATCHED_SEMANTICS_WORKFLOW = {
     "connection_policy": "audit connection, TLS, crossing, walkingarea, and internal-junction parity before adoption",
     "batch_repair_tool": "sumo_network_teacher_guided_repair_queue",
     "per_junction_repair_tool": "sumo_network_teacher_guided_junction_variant",
+    "warning_parity_tool": "sumo_network_tls_warning_parity",
     "required_manual_reviews": ["netedit_connection_mode", "map_or_field_imagery"],
 }
 
