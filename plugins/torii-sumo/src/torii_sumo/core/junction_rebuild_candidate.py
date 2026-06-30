@@ -1421,8 +1421,6 @@ def build_teacher_guided_junction_variant(
     ]
     if raw_type_file is not None:
         netconvert_command[5:5] = ["--type-files", _command_path(raw_type_file, output_dir)]
-    if raw_tllogic_file is not None:
-        netconvert_command[5:5] = ["--tllogic-files", _command_path(raw_tllogic_file, output_dir)]
     netconvert_result = command_runner(netconvert_command, cwd=output_dir, timeout_seconds=timeout_seconds)
     netconvert_report = _command_report(netconvert_result)
     if netconvert_report.get("status") != "pass":
@@ -4515,9 +4513,28 @@ def _restore_non_target_internal_artifacts(
         if connection_restored(connection):
             target_root.remove(connection)
             removed_connections += 1
-    source_connections = [connection for connection in source_root.findall("connection") if connection_restored(connection)]
+    target_edge_ids = {edge.attrib["id"] for edge in target_root.findall("edge") if edge.attrib.get("id")}
+    source_connections = []
+    skipped_missing_edge_connections = []
+    for connection in source_root.findall("connection"):
+        if not connection_restored(connection):
+            continue
+        from_edge = connection.attrib.get("from", "")
+        to_edge = connection.attrib.get("to", "")
+        if from_edge not in target_edge_ids or to_edge not in target_edge_ids:
+            skipped_missing_edge_connections.append(
+                {key: connection.attrib.get(key, "") for key in ("from", "to", "via")}
+            )
+            continue
+        source_connections.append(connection)
     for connection in source_connections:
         target_root.append(copy.deepcopy(connection))
+    restored_tls_ids = {
+        connection.attrib.get("tl", "")
+        for connection in source_connections
+        if connection.attrib.get("tl") and connection.attrib.get("tl") not in exclude_junction_ids
+    }
+    tl_logic_report = _copy_referenced_tllogics(source_root, target_root, restored_tls_ids)
 
     lane_ids = {
         lane.attrib["id"]
@@ -4584,6 +4601,8 @@ def _restore_non_target_internal_artifacts(
         or removed_connections
         or restored_normal_junction_attr_count
         or restored_request_count
+        or tl_logic_report["copied_tllogic_count"]
+        or tl_logic_report["replaced_tllogic_count"]
     ):
         ET.indent(target_root, space="    ")
         target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
@@ -4599,8 +4618,15 @@ def _restore_non_target_internal_artifacts(
         "restored_non_target_internal_junction_count": len(source_internal_junctions),
         "removed_non_target_internal_connection_count": removed_connections,
         "restored_non_target_internal_connection_count": len(source_connections),
+        "skipped_non_target_internal_connection_missing_edge_count": len(skipped_missing_edge_connections),
+        "skipped_non_target_internal_connection_missing_edges": skipped_missing_edge_connections,
         "restored_non_target_normal_junction_attr_count": restored_normal_junction_attr_count,
         "restored_non_target_request_count": restored_request_count,
+        "restored_non_target_tllogic_count": (
+            tl_logic_report["copied_tllogic_count"] + tl_logic_report["replaced_tllogic_count"]
+        ),
+        "missing_non_target_tllogic_count": tl_logic_report["missing_source_tllogic_count"],
+        "missing_non_target_tllogic_ids": tl_logic_report["missing_source_tllogic_ids"],
     }
 
 
