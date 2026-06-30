@@ -1410,6 +1410,8 @@ def write_teacher_target_internal_replay_net(
             (tl for tl in teacher_root.findall("tlLogic") if tl.attrib.get("id") in teacher_tls_ids),
             None,
         )
+    removed_stale_tllogic_ids = []
+    uncontrolled_stale_tls_connections = []
     if teacher_tllogic is not None:
         target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
         root_children = list(candidate_root)
@@ -1426,6 +1428,18 @@ def write_teacher_target_internal_replay_net(
         copied_tllogic = _clone_transformed_net_element(teacher_tllogic, dx, dy, replay_edge_map, teacher_junction_id, junction_id)
         copied_tllogic.set("id", junction_id)
         candidate_root.insert(target_index, copied_tllogic)
+    else:
+        target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
+        if target_tllogic is not None:
+            candidate_root.remove(target_tllogic)
+            removed_stale_tllogic_ids.append(junction_id)
+        for connection in candidate_root.findall("connection"):
+            if connection.attrib.get("tl") != junction_id:
+                continue
+            uncontrolled_stale_tls_connections.append(dict(connection.attrib))
+            for attr in ("tl", "linkIndex", "linkIndex2"):
+                connection.attrib.pop(attr, None)
+            connection.set("uncontrolled", "true")
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -1459,6 +1473,10 @@ def write_teacher_target_internal_replay_net(
         "skipped_connections": skipped_connections,
         "ignored_off_scope_tls_connection_count": len(ignored_off_scope_tls_connections),
         "ignored_off_scope_tls_connections": ignored_off_scope_tls_connections,
+        "removed_stale_tllogic_count": len(removed_stale_tllogic_ids),
+        "removed_stale_tllogic_ids": removed_stale_tllogic_ids,
+        "uncontrolled_stale_tls_connection_count": len(uncontrolled_stale_tls_connections),
+        "uncontrolled_stale_tls_connections": uncontrolled_stale_tls_connections,
         "copied_request_count": len(teacher_junction.findall("request")),
         "effective_edge_map": dict(sorted(replay_edge_map.items())),
     }
@@ -2862,6 +2880,12 @@ def run_teacher_guided_repair_queue(
                         source_file=current_composite_net_file,
                         target_file=normalized_composite_net_file,
                         exclude_junction_ids=excluded_replay_junction_ids,
+                    )
+                )
+                final_internal_replay_normalize_report["teacher_non_tls_tllogic_cleanup"] = (
+                    _remove_teacher_non_tls_tllogics(
+                        teacher_net_file=teacher_net_file,
+                        target_file=normalized_composite_net_file,
                     )
                 )
                 final_internal_replay_normalize_report["false_traffic_light_type_restore"] = (
@@ -5437,6 +5461,79 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
         "restored_request_count": restored_request_count,
         "missing_edge_count": len(missing_edge_ids),
         "missing_edge_ids": missing_edge_ids,
+    }
+
+
+def _remove_teacher_non_tls_tllogics(
+    *,
+    teacher_net_file: Path,
+    target_file: Path,
+) -> dict[str, object]:
+    if not teacher_net_file.exists():
+        return _failure(f"teacher net file does not exist: {teacher_net_file}")
+    if not target_file.exists():
+        return _failure(f"target net file does not exist: {target_file}")
+
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    teacher_tl_logic_ids = {
+        tl_logic.attrib.get("id", "")
+        for tl_logic in teacher_root.findall("tlLogic")
+        if tl_logic.attrib.get("id")
+    }
+    teacher_non_tls_types = {
+        junction.attrib.get("id", ""): junction.attrib.get("type", "")
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id")
+        and not junction.attrib.get("id", "").startswith(":")
+        and junction.attrib.get("id", "") not in teacher_tl_logic_ids
+        and junction.attrib.get("type") not in {"", "traffic_light"}
+    }
+    removed_ids = []
+    for tl_logic in list(target_root.findall("tlLogic")):
+        tls_id = tl_logic.attrib.get("id", "")
+        if tls_id not in teacher_non_tls_types:
+            continue
+        target_root.remove(tl_logic)
+        removed_ids.append(tls_id)
+
+    uncontrolled_connections = []
+    removed_id_set = set(removed_ids)
+    for connection in target_root.findall("connection"):
+        if connection.attrib.get("tl") not in removed_id_set:
+            continue
+        uncontrolled_connections.append(dict(connection.attrib))
+        for attr in ("tl", "linkIndex", "linkIndex2"):
+            connection.attrib.pop(attr, None)
+        connection.set("uncontrolled", "true")
+
+    restored_junction_ids = []
+    for junction_id in removed_ids:
+        junction = target_root.find(f"junction[@id='{junction_id}']")
+        if junction is None:
+            continue
+        teacher_type = teacher_non_tls_types[junction_id]
+        if junction.attrib.get("type") == teacher_type:
+            continue
+        junction.set("type", teacher_type)
+        restored_junction_ids.append(junction_id)
+
+    if removed_ids or uncontrolled_connections or restored_junction_ids:
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "target_file": str(target_file),
+        "removed_teacher_non_tls_tllogic_count": len(removed_ids),
+        "removed_teacher_non_tls_tllogic_ids": removed_ids,
+        "uncontrolled_teacher_non_tls_connection_count": len(uncontrolled_connections),
+        "uncontrolled_teacher_non_tls_connections": uncontrolled_connections,
+        "restored_teacher_non_tls_junction_type_count": len(restored_junction_ids),
+        "restored_teacher_non_tls_junction_type_ids": restored_junction_ids,
     }
 
 
