@@ -3309,7 +3309,8 @@ def test_run_teacher_guided_repair_queue_replays_expanded_scope_when_missing_blo
     teacher_net.write_text(
         """<net>
   <edge id="teacher_in" from="a" to="teacher_j" type="highway.primary"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
-  <junction id="teacher_j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <junction id="teacher_j" type="traffic_light" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <tlLogic id="teacher_j" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
 </net>""",
         encoding="utf-8",
     )
@@ -3323,7 +3324,7 @@ def test_run_teacher_guided_repair_queue_replays_expanded_scope_when_missing_blo
             output_file.write_text(
                 """<net>
   <edge id="cand_in" from="x" to="j" type="highway.primary"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
-  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
 </net>""",
                 encoding="utf-8",
             )
@@ -3342,6 +3343,7 @@ def test_run_teacher_guided_repair_queue_replays_expanded_scope_when_missing_blo
                     "reference_id": "teacher_j",
                     "junction_id": "j",
                     "candidate_status": "needs_expanded_rebuild_scope",
+                    "learned_rule": "tum_like_topology_fragmented_tls_candidate",
                     "edge_map": {},
                     "expanded_rebuild_scope": {
                         "status": "review",
@@ -3369,6 +3371,8 @@ def test_run_teacher_guided_repair_queue_replays_expanded_scope_when_missing_blo
     assert scope_report["missing_blocked_edge_ids"] == ["teacher_in"]
     assert scope_report["resolved_missing_blocked_edge_ids"] == ["teacher_in"]
     assert variant_calls[0]["edge_map"] == {"teacher_in": "cand_in"}
+    assert variant_calls[0]["teacher_junction_id"] == "teacher_j"
+    assert variant_calls[0]["replay_target_internal_subgraph"] is True
 
 
 def test_run_teacher_guided_repair_queue_replays_copyable_missing_boundary_edge(
