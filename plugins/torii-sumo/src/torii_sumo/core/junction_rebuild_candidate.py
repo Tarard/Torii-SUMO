@@ -178,6 +178,14 @@ def build_teacher_guided_repair_queue(
         candidate_edges_by_id,
     )
     matched_cases = [*matched_cases, *topology_fragmented_tls_cases]
+    topology_fragmented_non_tls_cases = _topology_fragmented_non_tls_cases(
+        matched_cases,
+        teacher_root,
+        candidate_root,
+        teacher_net_file,
+        candidate_edges_by_id,
+    )
+    matched_cases = [*matched_cases, *topology_fragmented_non_tls_cases]
     turnaround_only_lane_cases = _turnaround_only_lane_cases(matched_cases, teacher_root, candidate_root)
     matched_cases = [*matched_cases, *turnaround_only_lane_cases]
     matched_cases.sort(
@@ -223,6 +231,7 @@ def build_teacher_guided_repair_queue(
         "matched_case_count": len(matched_cases),
         "same_id_pattern_candidate_count": len(same_id_pattern_cases),
         "topology_fragmented_tls_candidate_count": len(topology_fragmented_tls_cases),
+        "topology_fragmented_non_tls_candidate_count": len(topology_fragmented_non_tls_cases),
         "turnaround_only_lane_candidate_count": len(turnaround_only_lane_cases),
         "queued_case_count": len(repair_candidates),
         "queue_truncated": len(repair_candidates) < len(matched_cases),
@@ -2193,7 +2202,10 @@ def _net_contains_normal_junctions(net_file: Path, junction_ids: set[str]) -> bo
 
 
 def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> bool:
-    return str(candidate.get("learned_rule", "")) == "tum_like_topology_fragmented_tls_candidate"
+    return str(candidate.get("learned_rule", "")) in {
+        "tum_like_topology_fragmented_tls_candidate",
+        "tum_like_topology_fragmented_cluster_candidate",
+    }
 
 
 def run_teacher_guided_repair_queue(
@@ -3725,6 +3737,50 @@ def _topology_fragmented_tls_cases(
                 "edge_map": edge_map,
                 "learned_rule_basis": "topology_fragmented_tls_approach_edges",
                 "learned_rule": "tum_like_topology_fragmented_tls_candidate",
+            }
+        )
+    return cases
+
+
+def _topology_fragmented_non_tls_cases(
+    matched_cases: list[dict[str, Any]],
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    teacher_net_file: Path,
+    candidate_edges_by_id: dict[str, ET.Element],
+) -> list[dict[str, Any]]:
+    covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
+    candidate_junction_ids = _real_junction_ids(candidate_root)
+    cases = []
+    for junction in teacher_root.findall("junction"):
+        reference_id = junction.attrib.get("id", "")
+        if (
+            not reference_id
+            or not reference_id.startswith("cluster_")
+            or reference_id in covered_ids
+            or reference_id in candidate_junction_ids
+            or _teacher_junction_has_tls(teacher_root, reference_id, junction)
+        ):
+            continue
+        try:
+            teacher_model = _extract_teacher_junction_model(teacher_root, teacher_net_file, reference_id)
+        except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
+            continue
+        candidate_node_ids, edge_map = _candidate_nodes_from_exact_teacher_approach_edges(
+            teacher_model,
+            candidate_edges_by_id,
+            candidate_junction_ids,
+        )
+        if len(candidate_node_ids) < 2:
+            continue
+        cases.append(
+            {
+                "reference_id": reference_id,
+                "matched_candidate_node_ids": candidate_node_ids,
+                "join_all_candidate_node_ids": True,
+                "edge_map": edge_map,
+                "learned_rule_basis": "topology_fragmented_non_tls_approach_edges",
+                "learned_rule": "tum_like_topology_fragmented_cluster_candidate",
             }
         )
     return cases
