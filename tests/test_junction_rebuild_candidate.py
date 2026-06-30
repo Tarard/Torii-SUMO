@@ -8198,6 +8198,87 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert [call[0] for call in calls] == ["netconvert", "sumo"]
 
 
+def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j" type="highway.primary"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b" type="highway.primary"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j" type="highway.primary"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b" type="highway.primary"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            connection_file = Path(cwd) / command[command.index("--connection-files") + 1]
+            output_file.write_text(candidate_net.read_text(encoding="utf-8"), encoding="utf-8")
+            root = ET.parse(output_file).getroot()
+            for connection in ET.parse(connection_file).getroot().findall("connection"):
+                root.append(connection)
+            ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+
+        class Result:
+            status = "pass"
+            returncode = 0
+
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd) if cwd else None, "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"in": "in", "out": "out"},
+        prefix="demo",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["parity_gate_status"] == "pass"
+    assert report["tls_movement_parity"]["status"] == "pass"
+    assert report["tls_movement_parity"]["teacher_connection_count"] == 1
+    assert report["tls_movement_parity"]["candidate_connection_count"] == 1
+    assert report["tls_movement_parity"]["movement_signature_equal_after_internal_id_normalization"] is True
+    assert report["tls_movement_parity"]["tl_logic_phase_states_equal"] is True
+
+
 def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback(
     tmp_path: Path, monkeypatch
 ) -> None:

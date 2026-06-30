@@ -128,10 +128,12 @@ def compare_tls_movement_signatures(
     candidate_net_file: Path,
     teacher_tls_id: str,
     candidate_tls_id: str,
+    *,
+    teacher_edge_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     teacher_root = ET.parse(teacher_net_file).getroot()
     candidate_root = ET.parse(candidate_net_file).getroot()
-    teacher_signatures = Counter(_tls_movement_signatures(teacher_root, teacher_tls_id))
+    teacher_signatures = Counter(_tls_movement_signatures(teacher_root, teacher_tls_id, teacher_edge_map))
     candidate_signatures = Counter(_tls_movement_signatures(candidate_root, candidate_tls_id))
     teacher_only = teacher_signatures - candidate_signatures
     candidate_only = candidate_signatures - teacher_signatures
@@ -147,6 +149,7 @@ def compare_tls_movement_signatures(
         "candidate_net_file": str(candidate_net_file),
         "teacher_tls_id": teacher_tls_id,
         "candidate_tls_id": candidate_tls_id,
+        "teacher_edge_map": dict(sorted((teacher_edge_map or {}).items())),
         "normalized_internal_ids": True,
         "compared_fields": TLS_MOVEMENT_SIGNATURE_FIELDS,
         "teacher_connection_count": teacher_signatures.total(),
@@ -208,17 +211,32 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) ->
         writer.writerows(rows)
 
 
-def _tls_movement_signatures(root: ET.Element, tls_id: str) -> list[str]:
+def _tls_movement_signatures(
+    root: ET.Element,
+    tls_id: str,
+    edge_map: dict[str, str] | None = None,
+) -> list[str]:
     signatures = []
     for connection in root.findall("connection"):
         if connection.attrib.get("tl") != tls_id:
             continue
         fields = {
-            field: _normalize_tls_internal_id(connection.attrib.get(field, ""), tls_id)
+            field: _normalize_tls_movement_value(field, connection.attrib.get(field, ""), tls_id, edge_map)
             for field in TLS_MOVEMENT_SIGNATURE_FIELDS
         }
         signatures.append("|".join(f"{field}={fields[field]}" for field in TLS_MOVEMENT_SIGNATURE_FIELDS))
     return signatures
+
+
+def _normalize_tls_movement_value(
+    field: str,
+    value: str,
+    tls_id: str,
+    edge_map: dict[str, str] | None,
+) -> str:
+    if field in {"from", "to"} and edge_map and value and not value.startswith(":"):
+        return edge_map.get(value, value)
+    return _normalize_tls_internal_id(value, tls_id)
 
 
 def _normalize_tls_internal_id(value: str, tls_id: str) -> str:

@@ -11,7 +11,7 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
-from .junction_connection_audit import build_connection_signature, write_connection_signature
+from .junction_connection_audit import build_connection_signature, compare_tls_movement_signatures, write_connection_signature
 from .junction_join_definition import build_junction_join_definition
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
 from .junction_teacher_model import (
@@ -1770,7 +1770,14 @@ def build_teacher_guided_junction_variant(
         target_internal_pedestrian_ring=target_internal_pedestrian_ring_report,
         target_internal_vehicle_connection_attrs=target_internal_vehicle_attrs_report,
     )
-    parity_gate_status = semantic_gate["status"]
+    tls_movement_parity = compare_tls_movement_signatures(
+        teacher_net_file,
+        final_net_file,
+        teacher_junction_id,
+        junction_id,
+        teacher_edge_map=comparison_edge_map,
+    )
+    parity_gate_status = "pass" if semantic_gate["status"] == "pass" and tls_movement_parity["status"] == "pass" else "fail"
     status = "pass" if sumo_report.get("status") == "pass" else "fail"
     return _write_teacher_guided_report(
         report_file,
@@ -1821,6 +1828,7 @@ def build_teacher_guided_junction_variant(
             "parity": parity,
             "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
             "semantic_replay_gate": semantic_gate,
+            "tls_movement_parity": tls_movement_parity,
             "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
         },
     )

@@ -153,6 +153,39 @@ def test_tls_movement_compare_ignores_internal_id_prefix_when_linkindex_and_phas
     assert report["candidate_only_normalized_movement_signatures"] == []
 
 
+def test_tls_movement_compare_maps_teacher_external_edges(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="teacher_tls" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="teacher_tls"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <connection from="cand_in" to="cand_out" fromLane="0" toLane="0" tl="candidate_tls" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="candidate_tls"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = compare_tls_movement_signatures(
+        teacher,
+        candidate,
+        "teacher_tls",
+        "candidate_tls",
+        teacher_edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["teacher_only_normalized_movement_signatures"] == []
+    assert report["candidate_only_normalized_movement_signatures"] == []
+
+
 def test_tls_movement_compare_flags_linkindex_delta(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
