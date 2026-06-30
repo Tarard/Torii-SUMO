@@ -2942,14 +2942,9 @@ def _write_joined_endpoint_edge_file(
                 blocking_self_loop_edge_drops.append(edge_id)
             edge_root.remove(edge)
             continue
-        if from_is_join_source:
-            edge.set("from", joined_junction_id)
-            edge.attrib.pop("shape", None)
-            rewrite_count += 1
-        if to_is_join_source:
-            edge.set("to", joined_junction_id)
-            edge.attrib.pop("shape", None)
-            rewrite_count += 1
+        # netconvert applies the <join> patch after reading node ids; rewriting
+        # boundary edges to the future joined id creates edges that reference an
+        # undefined node in plain XML.
     if rewrite_count == 0 and not dropped_self_loop_edges:
         return edge_file, 0, [], []
 
@@ -4565,9 +4560,32 @@ def _restore_non_target_internal_artifacts(
             for attr in ("from", "to", "via")
         )
 
-    source_internal_edges = [
-        edge for edge in source_root.findall("edge") if is_restored_owner(edge.attrib.get("id", ""))
-    ]
+    target_normal_junction_ids = {
+        junction.attrib["id"]
+        for junction in target_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+
+    def has_valid_normal_endpoints(edge: ET.Element) -> bool:
+        internal_owner = owner(edge.attrib.get("id", ""))
+        if internal_owner and internal_owner not in target_normal_junction_ids:
+            return False
+        return all(
+            not node_id or node_id.startswith(":") or node_id in target_normal_junction_ids
+            for node_id in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        )
+
+    skipped_internal_edges_missing_junctions = []
+    source_internal_edges = []
+    for edge in source_root.findall("edge"):
+        if not is_restored_owner(edge.attrib.get("id", "")):
+            continue
+        if not has_valid_normal_endpoints(edge):
+            skipped_internal_edges_missing_junctions.append(
+                {key: edge.attrib.get(key, "") for key in ("id", "from", "to")}
+            )
+            continue
+        source_internal_edges.append(edge)
     target_internal_edge_index = None
     removed_internal_edges = 0
     for child in list(target_root):
@@ -4706,6 +4724,8 @@ def _restore_non_target_internal_artifacts(
         "exclude_junction_ids": sorted(exclude_junction_ids),
         "removed_non_target_internal_edge_count": removed_internal_edges,
         "restored_non_target_internal_edge_count": len(source_internal_edges),
+        "skipped_non_target_internal_edge_missing_junction_count": len(skipped_internal_edges_missing_junctions),
+        "skipped_non_target_internal_edge_missing_junctions": skipped_internal_edges_missing_junctions,
         "removed_non_target_internal_junction_count": removed_internal_junctions,
         "restored_non_target_internal_junction_count": len(source_internal_junctions),
         "removed_non_target_internal_connection_count": removed_connections,
