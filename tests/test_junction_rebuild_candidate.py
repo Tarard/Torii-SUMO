@@ -1004,6 +1004,43 @@ def test_build_teacher_guided_repair_queue_allows_turnaround_only_when_teacher_o
     assert candidate["turnaround_only_lane_gaps"] == []
 
 
+def test_build_teacher_guided_repair_queue_does_not_seed_turnaround_gap_from_different_teacher_endpoint(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="shared" from="w" to="other_j"><lane id="shared_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="normal_out" from="other_j" to="e"><lane id="normal_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="j" type="dead_end" x="20" y="0" incLanes="" intLanes=""/>
+  <junction id="other_j" type="priority" x="0" y="0" incLanes="shared_0" intLanes=""/>
+  <connection from="shared" to="normal_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="shared" from="w" to="j"><lane id="shared_0" index="0" shape="-10,0 20,0"/></edge>
+  <edge id="turn_out" from="j" to="w"><lane id="turn_out_0" index="0" shape="20,0 -10,0"/></edge>
+  <junction id="j" type="priority" x="20" y="0" incLanes="shared_0" intLanes=""/>
+  <connection from="shared" to="turn_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": []},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["turnaround_only_lane_candidate_count"] == 0
+    assert report["repair_candidates"] == []
+
+
 def test_build_teacher_guided_repair_queue_seeds_turnaround_only_lane_gap_without_pattern_delta(
     tmp_path: Path,
 ) -> None:

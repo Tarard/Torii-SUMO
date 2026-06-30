@@ -3579,6 +3579,11 @@ def _turnaround_only_lane_cases(
         for edge in candidate_root.findall("edge")
         if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
     }
+    teacher_edges = {
+        edge.attrib["id"]: edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
     cases: dict[str, set[str]] = {}
     for (edge_id, from_lane), candidate_stats in candidate_by_lane.items():
         if candidate_stats["non_turnaround_count"] or not candidate_stats["turnaround_count"]:
@@ -3594,6 +3599,9 @@ def _turnaround_only_lane_cases(
             or junction_id not in teacher_junction_ids
             or junction_id not in candidate_junction_ids
         ):
+            continue
+        teacher_edge = teacher_edges.get(edge_id)
+        if teacher_edge is None or teacher_edge.attrib.get("to") != junction_id:
             continue
         cases.setdefault(junction_id, set()).add(f"{edge_id}_{from_lane}")
     return [
