@@ -820,6 +820,8 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
     final_heavy_net = tmp_path / "final_heavy.net.xml"
     final_direct_no_gain_net = tmp_path / "final_direct_no_gain.net.xml"
     final_direct_net = tmp_path / "final_direct.net.xml"
+    second_stagnant_net = tmp_path / "second_stagnant.net.xml"
+    second_direct_net = tmp_path / "second_direct.net.xml"
     calls: dict[str, object] = {"direct_sources": [], "reference_join_candidate_net_files": []}
 
     def write_net(path: Path) -> Path:
@@ -871,50 +873,71 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
         if candidate == first_heavy_net:
             return delta(mismatch=2, connection_extra=120, summary="first_heavy_delta.json")
         if candidate == first_direct_net:
-            return delta(mismatch=1, connection_extra=90, summary="first_direct_delta.json")
+            return delta(mismatch=2, connection_extra=90, summary="first_direct_delta.json")
         if candidate == final_heavy_net:
             return delta(mismatch=1, connection_extra=300, summary="final_heavy_delta.json")
         if candidate == final_direct_no_gain_net:
-            return delta(mismatch=1, connection_extra=110, summary="final_direct_no_gain_delta.json")
+            return delta(mismatch=2, connection_extra=110, summary="final_direct_no_gain_delta.json")
         if candidate == final_direct_net:
-            return delta(mismatch=0, connection_extra=95, summary="final_direct_delta.json")
+            return delta(mismatch=1, connection_extra=95, summary="final_direct_delta.json")
+        if candidate == second_stagnant_net:
+            return delta(mismatch=1, connection_extra=94, summary="second_stagnant_delta.json")
+        if candidate == second_direct_net:
+            return delta(mismatch=0, connection_extra=97, summary="second_direct_delta.json")
         return delta(mismatch=2, connection_extra=100, summary="initial_delta.json")
 
     def fake_teacher_guided_queue(**kwargs):
+        is_second_iteration = kwargs["candidate_net_file"] == final_direct_net
         is_final = kwargs["prefix"].endswith("_final_movement_rebuild")
+        repair_candidates = [
+            {
+                "junction_id": "no_gain" if is_final else "stagnant" if is_second_iteration else "j1",
+                "reference_id": "j1",
+                "candidate_status": "ready_for_teacher_guided_variant",
+                "edge_map": {"teacher_edge": "candidate_edge"},
+            },
+            *(
+                [
+                    {
+                        "junction_id": "gain",
+                        "reference_id": "j1",
+                        "candidate_status": "ready_for_teacher_guided_variant",
+                        "edge_map": {"teacher_edge": "candidate_edge"},
+                    }
+                ]
+                if is_final
+                else []
+            ),
+            *(
+                [
+                    {
+                        "junction_id": "second_gain",
+                        "reference_id": "j1",
+                        "candidate_status": "ready_for_teacher_guided_variant",
+                        "edge_map": {"teacher_edge": "candidate_edge"},
+                    }
+                ]
+                if is_second_iteration
+                else []
+            ),
+        ]
         return {
             "status": "pass",
-            "repair_candidate_count": 2 if is_final else 1,
-            "ready_candidate_count": 2 if is_final else 1,
+            "repair_candidate_count": len(repair_candidates),
+            "ready_candidate_count": len(repair_candidates),
             "expanded_scope_candidate_count": 0,
             "queue_file": str(
                 tmp_path
                 / (
+                    "second_teacher_queue.json"
+                    if is_second_iteration
+                    else
                     "final_teacher_queue.json"
                     if is_final
                     else "teacher_queue.json"
                 )
             ),
-            "repair_candidates": [
-                {
-                    "junction_id": "no_gain" if is_final else "j1",
-                    "reference_id": "j1",
-                    "candidate_status": "ready_for_teacher_guided_variant",
-                    "edge_map": {"teacher_edge": "candidate_edge"},
-                },
-                *(
-                    [
-                        {
-                            "junction_id": "gain",
-                            "reference_id": "j1",
-                            "candidate_status": "ready_for_teacher_guided_variant",
-                            "edge_map": {"teacher_edge": "candidate_edge"},
-                        }
-                    ]
-                    if is_final
-                    else []
-                ),
-            ],
+            "repair_candidates": repair_candidates,
         }
 
     def fake_plain_export(**kwargs):
@@ -939,8 +962,14 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
     def fake_direct_replay(**kwargs):
         calls["direct_sources"].append(kwargs["source_net_file"])
         is_final = kwargs["prefix"].endswith("_final_movement_rebuild_direct_replay")
+        is_second_iteration = kwargs["source_net_file"] == final_direct_net
         first_candidate = (kwargs["queue_report"].get("repair_candidates") or [{}])[0]
         variant = (
+            second_stagnant_net
+            if is_second_iteration and first_candidate.get("junction_id") == "stagnant"
+            else second_direct_net
+            if is_second_iteration
+            else
             final_direct_no_gain_net
             if is_final and first_candidate.get("junction_id") == "no_gain"
             else final_direct_net
@@ -994,12 +1023,20 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
         },
     )
 
-    assert calls["direct_sources"] == [calls["reference_join_candidate_net_files"][0], first_direct_net, first_direct_net]
+    assert calls["direct_sources"] == [
+        calls["reference_join_candidate_net_files"][0],
+        first_direct_net,
+        first_direct_net,
+        final_direct_net,
+        final_direct_net,
+    ]
     assert final_direct_no_gain_net in calls["reference_join_candidate_net_files"]
     assert final_direct_net in calls["reference_join_candidate_net_files"]
+    assert second_stagnant_net in calls["reference_join_candidate_net_files"]
+    assert second_direct_net in calls["reference_join_candidate_net_files"]
     assert report["final_movement_direct_replay_status"] == "pass"
     assert report["final_movement_direct_replay_reference_promotion_status"] == "pass"
-    assert report["reference_visual_detail_comparison_net_file"] == str(final_direct_net)
+    assert report["reference_visual_detail_comparison_net_file"] == str(second_direct_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
         "final_direct_local_teacher_replay_promoted_by_reference_delta"
     )
