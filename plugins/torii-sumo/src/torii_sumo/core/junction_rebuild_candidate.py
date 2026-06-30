@@ -1777,6 +1777,7 @@ def build_teacher_guided_junction_variant(
         junction_id,
         teacher_edge_map=comparison_edge_map,
     )
+    semantic_layer_gates = _semantic_layer_gates(semantic_gate, tls_movement_parity)
     parity_gate_status = "pass" if semantic_gate["status"] == "pass" and tls_movement_parity["status"] == "pass" else "fail"
     status = "pass" if sumo_report.get("status") == "pass" else "fail"
     return _write_teacher_guided_report(
@@ -1829,6 +1830,7 @@ def build_teacher_guided_junction_variant(
             "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
             "semantic_replay_gate": semantic_gate,
             "tls_movement_parity": tls_movement_parity,
+            "semantic_layer_gates": semantic_layer_gates,
             "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
         },
     )
@@ -5302,6 +5304,40 @@ def _teacher_guided_semantics_gate(parity: dict[str, Any], **reports: dict[str, 
                 failures.append({"report": report_name, "field": field, "count": count})
 
     return {"status": "fail" if failures else "pass", "failures": failures}
+
+
+def _semantic_layer_gates(
+    semantic_gate: dict[str, Any],
+    tls_movement_parity: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    layers: dict[str, dict[str, Any]] = {
+        name: {"status": "pass", "failure_count": 0, "failures": []}
+        for name in ("topology", "movement_tls", "pedestrian_bike", "internal", "uncategorized")
+    }
+    for failure in semantic_gate.get("failures", []) if isinstance(semantic_gate, dict) else []:
+        if not isinstance(failure, dict):
+            continue
+        layers[_semantic_layer_for_field(str(failure.get("field", "")))]["failures"].append(dict(failure))
+    if isinstance(tls_movement_parity, dict) and tls_movement_parity.get("status") != "pass":
+        layers["movement_tls"]["failures"].append(
+            {"report": "tls_movement_parity", "field": "status", "count": 1}
+        )
+    for layer in layers.values():
+        layer["failure_count"] = len(layer["failures"])
+        layer["status"] = "fail" if layer["failure_count"] else "pass"
+    return layers
+
+
+def _semantic_layer_for_field(field: str) -> str:
+    if field.startswith(("crossing", "walking")) or "pedestrian" in field:
+        return "pedestrian_bike"
+    if field.startswith(("internal", "request")):
+        return "internal"
+    if field.startswith(("tl_", "controlled_", "vehicle_connection", "vehicle_movement")):
+        return "movement_tls"
+    if field.startswith(("approach", "junction", "incoming_vehicle_edge", "outgoing_vehicle_edge")):
+        return "topology"
+    return "uncategorized"
 
 
 def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
