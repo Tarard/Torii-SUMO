@@ -8,6 +8,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _compare_teacher_models,
     _netedit_review_actions,
     _remove_teacher_non_tls_tllogics,
+    _limit_ready_repair_candidates,
     _restore_false_traffic_light_junction_types,
     _restore_non_target_internal_artifacts,
     _restore_replayed_geometry_attrs,
@@ -1858,6 +1859,19 @@ def test_build_teacher_guided_repair_queue_limits_ready_candidates(tmp_path: Pat
     assert report["ready_candidate_count"] == 1
     assert report["max_ready_candidates"] == 1
     assert report["repair_candidates"][0]["matched_candidate_node_ids"] == ["a"]
+
+
+def test_limit_ready_repair_candidates_prioritizes_ready_candidates() -> None:
+    candidates = [
+        {"junction_id": "wide_1", "candidate_status": "needs_expanded_rebuild_scope"},
+        {"junction_id": "ready_1", "candidate_status": "ready_for_teacher_guided_variant"},
+        {"junction_id": "wide_2", "candidate_status": "needs_expanded_rebuild_scope"},
+        {"junction_id": "ready_2", "candidate_status": "ready_for_teacher_guided_variant"},
+    ]
+
+    selected = _limit_ready_repair_candidates(candidates, 2)
+
+    assert [candidate["junction_id"] for candidate in selected] == ["ready_1", "ready_2"]
 
 
 def test_build_teacher_guided_repair_queue_prioritizes_reusable_teacher_templates(tmp_path: Path) -> None:
