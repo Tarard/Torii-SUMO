@@ -8039,6 +8039,47 @@ def test_write_teacher_target_internal_replay_net_removes_internal_replaced_boun
     assert report["removed_stale_replaced_edge_connection_count"] == 1
 
 
+def test_write_teacher_target_internal_replay_net_removes_any_invalid_lane_connection(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="teacher_j"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="teacher_j" to="b"><lane id="teacher_out_0" index="0"/></edge>
+  <junction id="teacher_j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0"/></edge>
+  <edge id="remote_in" from="x" to="y"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="y" to="z"><lane id="remote_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="y" type="priority" x="10" y="0" incLanes="remote_in_0" intLanes=""/>
+  <connection from="remote_in" to="remote_out" fromLane="1" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("connection[@from='remote_in'][@to='remote_out']") is None
+    assert report["removed_invalid_lane_connection_count"] == 1
+
+
 def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_local(tmp_path: Path) -> None:
     replayed = tmp_path / "replayed.net.xml"
     replayed.write_text(

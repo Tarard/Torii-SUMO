@@ -1450,6 +1450,13 @@ def write_teacher_target_internal_replay_net(
                 connection.attrib.pop(attr, None)
             connection.set("uncontrolled", "true")
 
+    removed_invalid_lane_connections = []
+    edge_lane_counts = _net_lane_counts(candidate_root)
+    for connection in list(candidate_root.findall("connection")):
+        if not _connection_lane_indices_valid(connection, edge_lane_counts):
+            removed_invalid_lane_connections.append(dict(connection.attrib))
+            candidate_root.remove(connection)
+
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
     return {
@@ -1470,6 +1477,8 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_boundary_edge_connections": removed_stale_boundary_edge_connections,
         "removed_stale_replaced_edge_connection_count": len(removed_stale_replaced_edge_connections),
         "removed_stale_replaced_edge_connections": removed_stale_replaced_edge_connections,
+        "removed_invalid_lane_connection_count": len(removed_invalid_lane_connections),
+        "removed_invalid_lane_connections": removed_invalid_lane_connections,
         "copied_boundary_junction_count": len(copied_boundary_junctions),
         "copied_boundary_junctions": copied_boundary_junctions,
         "skipped_boundary_edge_count": len(skipped_boundary_edges),
