@@ -1015,6 +1015,66 @@ def test_build_teacher_guided_repair_queue_uses_same_id_pattern_delta_without_jo
     assert candidate["netedit_review_actions"] == ["rebuild_vehicle_movement_matrix", "inspect_tls_control"]
 
 
+def test_build_teacher_guided_repair_queue_seeds_fragmented_tls_from_exact_approach_edges(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="teacher_tls" type="highway.primary"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="north_in" from="n" to="teacher_tls" type="highway.primary"><lane id="north_in_0" index="0" allow="passenger" shape="0,10 0,0"/></edge>
+  <edge id="east_out" from="teacher_tls" to="e" type="highway.primary"><lane id="east_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="south_out" from="teacher_tls" to="s" type="highway.primary"><lane id="south_out_0" index="0" allow="passenger" shape="0,0 0,-10"/></edge>
+  <junction id="teacher_tls" type="traffic_light" x="0" y="0" incLanes="west_in_0 north_in_0" intLanes=""/>
+  <connection from="west_in" to="east_out" fromLane="0" toLane="0" tl="teacher_tls" linkIndex="0" dir="s"/>
+  <connection from="north_in" to="south_out" fromLane="0" toLane="0" tl="teacher_tls" linkIndex="1" dir="s"/>
+  <tlLogic id="teacher_tls" type="actuated" programID="0">
+    <phase duration="30" state="GG"/>
+    <phase duration="5" state="yy"/>
+  </tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="west_in" from="w" to="frag_w" type="highway.primary"><lane id="west_in_0" index="0" allow="passenger" shape="-10,0 -1,0"/></edge>
+  <edge id="north_in" from="n" to="frag_n" type="highway.primary"><lane id="north_in_0" index="0" allow="passenger" shape="0,10 0,1"/></edge>
+  <edge id="east_out" from="frag_e" to="e" type="highway.primary"><lane id="east_out_0" index="0" allow="passenger" shape="1,0 10,0"/></edge>
+  <edge id="south_out" from="frag_s" to="s" type="highway.primary"><lane id="south_out_0" index="0" allow="passenger" shape="0,-1 0,-10"/></edge>
+  <junction id="frag_w" type="priority" x="-1" y="0" incLanes="west_in_0" intLanes=""/>
+  <junction id="frag_n" type="priority" x="0" y="1" incLanes="north_in_0" intLanes=""/>
+  <junction id="frag_e" type="priority" x="1" y="0" incLanes="" intLanes=""/>
+  <junction id="frag_s" type="priority" x="0" y="-1" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": []},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["topology_fragmented_tls_candidate_count"] == 1
+    candidate = report["repair_candidates"][0]
+    assert candidate["reference_id"] == "teacher_tls"
+    assert candidate["candidate_status"] == "needs_expanded_rebuild_scope"
+    assert candidate["learned_rule"] == "tum_like_topology_fragmented_tls_candidate"
+    assert candidate["edge_map"] == {
+        "east_out": "east_out",
+        "north_in": "north_in",
+        "south_out": "south_out",
+        "west_in": "west_in",
+    }
+    assert candidate["missing_teacher_edge_ids"] == []
+    assert candidate["matched_candidate_node_ids"] == ["frag_e", "frag_n", "frag_s", "frag_w"]
+    assert candidate["expanded_rebuild_scope"]["junction_ids"] == ["frag_e", "frag_n", "frag_s", "frag_w"]
+    assert candidate["expanded_rebuild_scope"]["join_junction_ids"] == ["frag_e", "frag_n", "frag_s", "frag_w"]
+
+
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(

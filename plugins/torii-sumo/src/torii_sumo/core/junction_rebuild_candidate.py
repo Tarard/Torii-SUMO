@@ -168,6 +168,14 @@ def build_teacher_guided_repair_queue(
         candidate_root,
     )
     matched_cases = [*matched_cases, *same_id_pattern_cases]
+    topology_fragmented_tls_cases = _topology_fragmented_tls_cases(
+        matched_cases,
+        teacher_root,
+        candidate_root,
+        teacher_net_file,
+        candidate_edges_by_id,
+    )
+    matched_cases = [*matched_cases, *topology_fragmented_tls_cases]
     matched_cases.sort(
         key=lambda case: _teacher_guided_case_sort_key(case, pattern_records, pattern_templates)
     )
@@ -210,6 +218,7 @@ def build_teacher_guided_repair_queue(
         "candidate_net_file": str(candidate_net_file),
         "matched_case_count": len(matched_cases),
         "same_id_pattern_candidate_count": len(same_id_pattern_cases),
+        "topology_fragmented_tls_candidate_count": len(topology_fragmented_tls_cases),
         "queued_case_count": len(repair_candidates),
         "queue_truncated": len(repair_candidates) < len(matched_cases),
         "queue_order_policy": "largest_vehicle_movement_gap_then_highest_teacher_template_count",
@@ -3310,6 +3319,82 @@ def _same_id_pattern_cases(
     return cases
 
 
+def _topology_fragmented_tls_cases(
+    matched_cases: list[dict[str, Any]],
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    teacher_net_file: Path,
+    candidate_edges_by_id: dict[str, ET.Element],
+) -> list[dict[str, Any]]:
+    covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
+    candidate_junction_ids = _real_junction_ids(candidate_root)
+    cases = []
+    for junction in teacher_root.findall("junction"):
+        reference_id = junction.attrib.get("id", "")
+        if (
+            not reference_id
+            or reference_id.startswith(":")
+            or reference_id in covered_ids
+            or reference_id in candidate_junction_ids
+            or not _teacher_junction_has_tls(teacher_root, reference_id, junction)
+        ):
+            continue
+        try:
+            teacher_model = _extract_teacher_junction_model(teacher_root, teacher_net_file, reference_id)
+        except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
+            continue
+        candidate_node_ids, edge_map = _candidate_nodes_from_exact_teacher_approach_edges(
+            teacher_model,
+            candidate_edges_by_id,
+            candidate_junction_ids,
+        )
+        if len(candidate_node_ids) < 2:
+            continue
+        cases.append(
+            {
+                "reference_id": reference_id,
+                "matched_candidate_node_ids": candidate_node_ids,
+                "join_all_candidate_node_ids": True,
+                "edge_map": edge_map,
+                "learned_rule_basis": "topology_fragmented_tls_approach_edges",
+                "learned_rule": "tum_like_topology_fragmented_tls_candidate",
+            }
+        )
+    return cases
+
+
+def _teacher_junction_has_tls(
+    root: ET.Element,
+    junction_id: str,
+    junction: ET.Element,
+) -> bool:
+    return (
+        junction.attrib.get("type") == "traffic_light"
+        or any(tl.attrib.get("id") == junction_id for tl in root.findall("tlLogic"))
+        or any(connection.attrib.get("tl") == junction_id for connection in root.findall("connection"))
+    )
+
+
+def _candidate_nodes_from_exact_teacher_approach_edges(
+    teacher_model: dict[str, object],
+    candidate_edges_by_id: dict[str, ET.Element],
+    candidate_junction_ids: set[str],
+) -> tuple[list[str], dict[str, str]]:
+    node_ids = []
+    edge_map = {}
+    for direction, endpoint_attr in (("incoming", "to"), ("outgoing", "from")):
+        for approach in _approaches(teacher_model, direction):
+            edge_id = str(approach.get("edge_id", ""))
+            candidate_edge = candidate_edges_by_id.get(edge_id)
+            if candidate_edge is None:
+                continue
+            edge_map[edge_id] = edge_id
+            node_id = candidate_edge.attrib.get(endpoint_attr, "")
+            if node_id in candidate_junction_ids:
+                node_ids.append(node_id)
+    return sorted(dict.fromkeys(node_ids)), dict(sorted(edge_map.items()))
+
+
 def _real_junction_ids(root: ET.Element) -> set[str]:
     return {
         junction.attrib["id"]
@@ -3485,10 +3570,15 @@ def _teacher_guided_repair_candidate(
     candidate_node_ids = [str(item) for item in case.get("matched_candidate_node_ids") or case.get("candidate_node_ids") or []]
     candidate_junction_ids = _candidate_junction_id_candidates(reference_id, candidate_node_ids)
     matched_source_node_set = set(matched_reference_source_node_ids or reference_source_node_ids)
+    case_edge_map = _valid_edge_map(case.get("edge_map", {}))
     scope_node_ids = [node_id for node_id in candidate_node_ids if node_id in matched_source_node_set]
     if len(scope_node_ids) < 2:
         scope_node_ids = candidate_node_ids
-    join_node_ids = _conservative_join_node_ids(candidate_node_ids, matched_source_node_set)
+    join_node_ids = (
+        list(dict.fromkeys(candidate_node_ids))
+        if case.get("join_all_candidate_node_ids")
+        else _conservative_join_node_ids(candidate_node_ids, matched_source_node_set)
+    )
     base = {
         "reference_id": reference_id,
         "junction_id": candidate_junction_ids[0] if candidate_junction_ids else reference_id,
@@ -3535,12 +3625,14 @@ def _teacher_guided_repair_candidate(
         except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
             candidate_error = exc
     if candidate_model is None:
-        missing_teacher_edge_ids = _teacher_approach_edge_ids(teacher_model)
+        missing_teacher_edge_ids = [
+            edge_id for edge_id in _teacher_approach_edge_ids(teacher_model) if edge_id not in case_edge_map
+        ]
         if candidate_node_ids:
             return {
                 **base,
                 "candidate_status": "needs_expanded_rebuild_scope",
-                "edge_map": {},
+                "edge_map": case_edge_map,
                 "missing_teacher_edge_ids": missing_teacher_edge_ids,
                 "copyable_missing_teacher_edge_ids": [],
                 "uncopyable_missing_teacher_edge_ids": missing_teacher_edge_ids,
@@ -3560,7 +3652,7 @@ def _teacher_guided_repair_candidate(
         return {
             **base,
             "candidate_status": "needs_joined_candidate_junction",
-            "edge_map": {},
+            "edge_map": case_edge_map,
             "missing_teacher_edge_ids": missing_teacher_edge_ids,
             "error": f"{type(candidate_error).__name__}: {candidate_error}",
         }
