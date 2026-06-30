@@ -398,6 +398,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         output_dir=tmp_path,
         bbox="11.413800,48.755391,11.433800,48.775391",
         reference_net_file=reference_net_file,
+        teacher_guided_repair_max_ready_candidates=1,
         cleanup_workflow_func=fake_cleanup,
     )
 
@@ -423,6 +424,8 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         tmp_path / "final_movement_best.net.xml"
     )
     assert report["reference_matched_semantics_workflow"]["movement_rebuild_applied_candidate_count"] == 1
+    assert report["reference_matched_semantics_workflow"]["configured_max_ready_candidates"] == 1
+    assert report["teacher_guided_repair_configured_max_ready_candidates"] == 1
     assert report["reference_matched_semantics_workflow"]["semantic_layer_gate_counts"] == {
         "topology": {"pass": 1, "fail": 0, "failure_count": 0},
         "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
