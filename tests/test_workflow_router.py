@@ -184,6 +184,31 @@ def test_auto_workflow_prefers_explicit_bbox_over_prompt_osm_url(tmp_path: Path)
     assert captured["bbox"] == "11.413800,48.755391,11.433800,48.775391"
 
 
+def test_auto_workflow_can_disable_gui_launches_for_headless_reference_promotion(tmp_path: Path) -> None:
+    captured = {}
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo"}
+
+    report = run_auto_workflow(
+        user_request="Use Torii to generate a TUM-like SUMO network from OSM using the reference net",
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        launch_netedit_after_build=False,
+        launch_sumo_gui_after_build=False,
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    assert report["status"] == "pass"
+    assert captured["launch_netedit_after_build"] is False
+    assert captured["launch_sumo_gui_after_build"] is False
+
+
 def test_auto_workflow_passes_local_osm_file_to_cleanup(tmp_path: Path) -> None:
     captured = {}
     reference_net_file = tmp_path / "reference.net.xml"
@@ -342,11 +367,15 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         network_profile="reference_matched",
         reference_net_file=str(tmp_path / "reference.net.xml"),
         teacher_guided_repair_max_ready_candidates=2,
+        launch_netedit_after_build=False,
+        launch_sumo_gui_after_build=False,
     )
 
     assert report["status"] == "pass"
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
     assert captured["teacher_guided_repair_max_ready_candidates"] == 2
+    assert captured["launch_netedit_after_build"] is False
+    assert captured["launch_sumo_gui_after_build"] is False
 
 
 def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path) -> None:
