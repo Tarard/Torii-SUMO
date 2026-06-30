@@ -1042,6 +1042,7 @@ def build_workflow_review_html(
         "teacher_guided_repair_queue_file",
         "teacher_guided_repair_queue_csv_file",
         "teacher_guided_repair_run_report_file",
+        "teacher_guided_repair_promotion_gate_file",
     ):
         if workflow_summary.get(key):
             artifacts[key] = _as_path(workflow_summary.get(key))
