@@ -7,6 +7,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _compare_teacher_models,
     _netedit_review_actions,
+    _restore_false_traffic_light_junction_types,
     _restore_replayed_geometry_attrs,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
@@ -53,6 +54,51 @@ def test_teacher_candidate_edge_map_can_use_expanded_scope_bearing_delta() -> No
         )
         == {"teacher_in": "candidate_in"}
     )
+
+
+def test_restore_false_traffic_light_junction_types_only_restores_uncontrolled_noise(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="e1" from="a" to="false_tls"><lane id="e1_0" index="0"/></edge>
+  <edge id="e2" from="real_tls" to="b"><lane id="e2_0" index="0"/></edge>
+  <junction id="false_tls" type="priority" x="0" y="0" incLanes="e1_0" intLanes=""/>
+  <junction id="real_tls" type="traffic_light" x="1" y="0" incLanes="e2_0" intLanes="">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="already_tls" type="traffic_light" x="2" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="real_tls" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+  <connection from="e2" to="e2" fromLane="0" toLane="0" tl="real_tls" linkIndex="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    normalized = tmp_path / "normalized.net.xml"
+    normalized.write_text(
+        """<net>
+  <edge id="e1" from="a" to="false_tls"><lane id="e1_0" index="0"/></edge>
+  <edge id="e2" from="real_tls" to="b"><lane id="e2_0" index="0"/></edge>
+  <junction id="false_tls" type="traffic_light" x="0" y="0" incLanes="e1_0" intLanes="">
+    <request index="9" response="1" foes="1" cont="0"/>
+  </junction>
+  <junction id="real_tls" type="traffic_light" x="1" y="0" incLanes="e2_0" intLanes=""/>
+  <junction id="already_tls" type="traffic_light" x="2" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="real_tls" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+  <connection from="e2" to="e2" fromLane="0" toLane="0" tl="real_tls" linkIndex="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _restore_false_traffic_light_junction_types(source_file=source, target_file=normalized)
+
+    root = ET.parse(normalized).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_false_traffic_light_junction_type_count"] == 1
+    assert root.find("junction[@id='false_tls']").attrib["type"] == "priority"
+    assert root.find("junction[@id='false_tls']/request").attrib["index"] == "9"
+    assert root.find("junction[@id='real_tls']").attrib["type"] == "traffic_light"
+    assert root.find("junction[@id='already_tls']").attrib["type"] == "traffic_light"
 
 
 def test_build_tls_connection_repair_variant_restores_unique_connection_control_attrs(tmp_path: Path) -> None:

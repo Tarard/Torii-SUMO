@@ -1544,6 +1544,13 @@ def build_teacher_guided_junction_variant(
             command_runner(target_internal_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
         )
         if target_internal_normalize_report.get("status") == "pass":
+            target_internal_normalize_report["false_traffic_light_type_restore"] = (
+                _restore_false_traffic_light_junction_types(
+                    source_file=target_internal_replay_file,
+                    target_file=target_internal_normalized_net_file,
+                    exclude_junction_ids={junction_id},
+                )
+            )
             target_internal_normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
                 source_file=target_internal_replay_file,
                 target_file=target_internal_normalized_net_file,
@@ -1581,6 +1588,13 @@ def build_teacher_guided_junction_variant(
             command_runner(teacher_guided_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
         )
         if teacher_guided_normalize_report.get("status") == "pass":
+            teacher_guided_normalize_report["false_traffic_light_type_restore"] = (
+                _restore_false_traffic_light_junction_types(
+                    source_file=final_net_file,
+                    target_file=teacher_guided_normalized_net_file,
+                    exclude_junction_ids={junction_id},
+                )
+            )
             normalized_final_sumo_command = [
                 sumo_binary,
                 "-n",
@@ -2421,6 +2435,15 @@ def run_teacher_guided_repair_queue(
                 final_internal_replay_normalize_report.get("status") == "pass"
                 and normalized_composite_net_file.exists()
             ):
+                final_internal_replay_normalize_report["false_traffic_light_type_restore"] = (
+                    _restore_false_traffic_light_junction_types(
+                        source_file=current_composite_net_file,
+                        target_file=normalized_composite_net_file,
+                        exclude_junction_ids={
+                            str(replay_entry["junction_id"]) for replay_entry in accepted_internal_replays
+                        },
+                    )
+                )
                 for replay_entry, replay_report in zip(accepted_internal_replays, final_internal_replay_reports):
                     restored_net_file = Path(str(replay_report.get("net_file", "")))
                     if replay_report.get("status") != "pass" or not restored_net_file.exists():
@@ -4398,6 +4421,62 @@ def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, ju
         "restored_request_count": restored_request_count,
         "missing_edge_count": len(missing_edge_ids),
         "missing_edge_ids": missing_edge_ids,
+    }
+
+
+def _restore_false_traffic_light_junction_types(
+    *,
+    source_file: Path,
+    target_file: Path,
+    exclude_junction_ids: set[str] | None = None,
+) -> dict[str, object]:
+    if not source_file.exists():
+        return _failure(f"source net file does not exist: {source_file}")
+    if not target_file.exists():
+        return _failure(f"target net file does not exist: {target_file}")
+
+    source_root = ET.parse(source_file).getroot()
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    source_types = {
+        junction.attrib.get("id", ""): junction.attrib.get("type", "")
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib.get("id", "").startswith(":")
+    }
+    tl_logic_ids = {tl.attrib.get("id", "") for tl in target_root.findall("tlLogic") if tl.attrib.get("id")}
+    controlled_tls_ids = {
+        connection.attrib.get("tl", "")
+        for connection in target_root.findall("connection")
+        if connection.attrib.get("tl")
+    }
+    exclude_junction_ids = exclude_junction_ids or set()
+    restored_ids = []
+    for junction in target_root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        source_type = source_types.get(junction_id, "")
+        if (
+            not junction_id
+            or junction_id.startswith(":")
+            or junction_id in exclude_junction_ids
+            or junction.attrib.get("type") != "traffic_light"
+            or source_type in {"", "traffic_light"}
+            or junction_id in tl_logic_ids
+            or junction_id in controlled_tls_ids
+        ):
+            continue
+        junction.set("type", source_type)
+        restored_ids.append(junction_id)
+
+    if restored_ids:
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "source_file": str(source_file),
+        "target_file": str(target_file),
+        "restored_false_traffic_light_junction_type_count": len(restored_ids),
+        "restored_false_traffic_light_junction_ids": restored_ids,
     }
 
 
