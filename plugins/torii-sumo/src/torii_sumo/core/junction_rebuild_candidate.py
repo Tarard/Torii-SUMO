@@ -430,6 +430,7 @@ def write_teacher_connection_plan(
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     candidate_edge_file: Path | None = None,
     emit_crossings: bool = True,
+    teacher_internal_scope_id: str | None = None,
 ) -> dict[str, object]:
     crossing_edge_overrides = crossing_edge_overrides or {}
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -450,6 +451,7 @@ def write_teacher_connection_plan(
     root = ET.Element("connections")
     kept = 0
     removed = 0
+    removed_invalid_lane_connections = []
     for child in ET.parse(raw_connection_file).getroot():
         if (
             child.tag == "connection"
@@ -459,6 +461,14 @@ def write_teacher_connection_plan(
                 or child.attrib.get("to", "") not in present_candidate_edges
             )
         ):
+            removed += 1
+            continue
+        if (
+            child.tag == "connection"
+            and present_candidate_edges is not None
+            and not _connection_lane_indices_valid(child, candidate_lane_counts)
+        ):
+            removed_invalid_lane_connections.append(dict(child.attrib))
             removed += 1
             continue
         if child.tag == "connection" and (
@@ -481,14 +491,22 @@ def write_teacher_connection_plan(
     emitted_connections = 0
     emitted_uncontrolled_connections = 0
     allowed_pairs: set[tuple[str, str]] = set()
+    skipped_off_scope_pairs: set[tuple[str, str]] = set()
     seen_connections: set[tuple[str, str, str, str]] = set()
     lane_clamps = []
+    skipped_off_scope_internal_connections = []
+    teacher_internal_scope_prefix = f":{teacher_internal_scope_id}_" if teacher_internal_scope_id else ""
     for connection in teacher_model.get("vehicle_connections", []) or []:
         if not isinstance(connection, dict):
             continue
         source = edge_map.get(str(connection.get("from", "")))
         target = edge_map.get(str(connection.get("to", "")))
         if not source or not target:
+            continue
+        via = str(connection.get("via", ""))
+        if teacher_internal_scope_prefix and via.startswith(":") and not via.startswith(teacher_internal_scope_prefix):
+            skipped_off_scope_pairs.add((source, target))
+            skipped_off_scope_internal_connections.append(dict(connection))
             continue
         if present_candidate_edges is not None and (source not in present_candidate_edges or target not in present_candidate_edges):
             continue
@@ -524,6 +542,8 @@ def write_teacher_connection_plan(
         for target in sorted(outgoing):
             if (source, target) in allowed_pairs:
                 continue
+            if (source, target) in skipped_off_scope_pairs:
+                continue
             ET.SubElement(root, "delete", {"from": source, "to": target})
             emitted_deletes += 1
 
@@ -556,6 +576,8 @@ def write_teacher_connection_plan(
         "connection_file": str(output_file),
         "kept_non_target_children": kept,
         "removed_target_children": removed,
+        "removed_invalid_lane_connection_count": len(removed_invalid_lane_connections),
+        "removed_invalid_lane_connections": removed_invalid_lane_connections,
         "emitted_connection_count": emitted_connections,
         "emitted_uncontrolled_connection_count": emitted_uncontrolled_connections,
         "emitted_delete_count": emitted_deletes,
@@ -564,6 +586,8 @@ def write_teacher_connection_plan(
         "skipped_crossings": skipped_crossings,
         "lane_clamp_count": len(lane_clamps),
         "lane_clamps": lane_clamps,
+        "skipped_off_scope_internal_connection_count": len(skipped_off_scope_internal_connections),
+        "skipped_off_scope_internal_connections": skipped_off_scope_internal_connections,
     }
 
 
@@ -1630,6 +1654,7 @@ def build_teacher_guided_junction_variant(
         crossing_edge_overrides=crossing_edge_overrides,
         candidate_edge_file=patched_edge_file,
         emit_crossings=emit_teacher_crossings and not replay_target_internal_subgraph,
+        teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
     )
 
     netconvert_command = [
