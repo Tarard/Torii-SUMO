@@ -17,6 +17,7 @@ from torii_sumo.core.osm_workflow import (
     _teacher_guided_best_variant_file,
     _teacher_guided_direct_replay_needed,
     _teacher_guided_equivalent_approach_edge_map,
+    _safe_path_part,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
     run_osm_cleanup_workflow,
@@ -34,6 +35,16 @@ def test_junction_semantic_gate_uses_comparison_evidence_when_case_counts_are_ze
     }
 
     assert _junction_semantic_gate(report, {"movement_signature_counts"}) == "pass"
+
+
+def test_direct_replay_path_part_is_short_and_stable_for_windows() -> None:
+    long_junction_id = "cluster_267395411_270697844_915689881_915690365"
+
+    path_part = _safe_path_part(long_junction_id)
+
+    assert len(path_part) <= 16
+    assert path_part == _safe_path_part(long_junction_id)
+    assert path_part != _safe_path_part(long_junction_id + "_different")
 
 
 def test_teacher_guided_junction_parity_gate_uses_final_semantic_parity() -> None:
