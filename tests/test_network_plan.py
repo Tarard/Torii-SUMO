@@ -500,11 +500,13 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
     visual_tls_net = tmp_path / "visual_tls_aggregation.net.xml"
     repaired_tls_net = tmp_path / "visual_tls_connection_repaired.net.xml"
     heavy_net = tmp_path / "heavy_teacher_replay.net.xml"
-    direct_net = tmp_path / "direct_teacher_replay.net.xml"
+    direct_net_1 = tmp_path / "direct_teacher_replay_1.net.xml"
+    direct_net_2 = tmp_path / "direct_teacher_replay_2.net.xml"
     calls: dict[str, object] = {
         "reference_join_candidate_net_files": [],
         "teacher_guided_plain_net_files": [],
         "direct_replay_source_net_files": [],
+        "initial_direct_replay_candidate_ids": [],
     }
 
     def write_net(path: Path) -> Path:
@@ -543,13 +545,14 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
             "reference_case_count": 1,
             "matched_case_count": 1,
             "unmatched_case_count": 0,
-            "junction_pattern_index": [{"junction_id": "j1"}],
+            "junction_pattern_index": [{"junction_id": "j1"}, {"junction_id": "j2"}],
             "junction_pattern_mismatch_count": mismatch,
             "junction_pattern_mismatch_field_counts": (
                 {"movement_signature_counts": mismatch} if mismatch else {}
             ),
             "junction_pattern_comparisons": [
-                {"junction_id": "j1", "status": "fail", "mismatch_fields": ["movement_signature_counts"]}
+                {"junction_id": "j1", "status": "fail", "mismatch_fields": ["movement_signature_counts"]},
+                {"junction_id": "j2", "status": "fail", "mismatch_fields": ["movement_signature_counts"]},
             ]
             if mismatch
             else [],
@@ -630,13 +633,21 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
                 mismatch=28,
                 summary="heavy_delta.json",
             )
-        if candidate == direct_net:
+        if candidate == direct_net_1:
+            return delta(
+                connection_extra=1900,
+                extra_tls_junctions=20,
+                missing_tls_controlled_connections=90,
+                mismatch=31,
+                summary="direct_delta_1.json",
+            )
+        if candidate == direct_net_2:
             return delta(
                 connection_extra=1651,
                 extra_tls_junctions=14,
                 missing_tls_controlled_connections=80,
                 mismatch=27,
-                summary="direct_delta.json",
+                summary="direct_delta_2.json",
             )
         return delta(
             connection_extra=1812,
@@ -651,8 +662,8 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
-            "repair_candidate_count": 1,
-            "ready_candidate_count": 1,
+            "repair_candidate_count": 2,
+            "ready_candidate_count": 2,
             "expanded_scope_candidate_count": 0,
             "queue_file": str(tmp_path / "teacher_guided_queue.json"),
             "repair_candidates": [
@@ -661,7 +672,13 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
                     "reference_id": "teacher_j1",
                     "candidate_status": "ready_for_teacher_guided_variant",
                     "edge_map": {"teacher_edge": "candidate_edge"},
-                }
+                },
+                {
+                    "junction_id": "j2",
+                    "reference_id": "teacher_j2",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_edge": "candidate_edge"},
+                },
             ],
             "warnings": [],
         }
@@ -735,13 +752,20 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
     def fake_direct_replay(**kwargs):
         calls["direct_replay_source_net_file"] = kwargs["source_net_file"]
         calls["direct_replay_source_net_files"].append(kwargs["source_net_file"])
+        candidate_ids = [
+            str(candidate.get("junction_id", ""))
+            for candidate in kwargs["queue_report"].get("repair_candidates", [])
+        ]
+        if not kwargs["prefix"].endswith("_final_movement_rebuild_direct_replay"):
+            calls["initial_direct_replay_candidate_ids"].append(candidate_ids)
+        direct_net = direct_net_2 if candidate_ids == ["j2"] else direct_net_1
         write_net(direct_net)
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "variant_file": str(direct_net),
-            "candidate_index": 1,
-            "junction_id": "j1",
+            "candidate_index": 2 if direct_net == direct_net_2 else 1,
+            "junction_id": candidate_ids[0] if candidate_ids else "",
             "sumo_load": {"status": "pass"},
             "variant_reports": [],
         }
@@ -785,14 +809,16 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
     assert calls["direct_replay_source_net_files"][0] == calls["teacher_guided_plain_net_files"][0]
     assert calls["direct_replay_source_net_files"][0] == repaired_tls_net
     assert calls["tls_connection_repair_tls_id_map"] == {"raw_tls": "agg_tls", "agg_tls": "agg_tls"}
-    assert direct_net in calls["reference_join_candidate_net_files"]
+    assert calls["initial_direct_replay_candidate_ids"] == [["j1"], ["j2"]]
+    assert direct_net_1 in calls["reference_join_candidate_net_files"]
+    assert direct_net_2 in calls["reference_join_candidate_net_files"]
     assert report["teacher_guided_repair_reference_promotion_status"] == "blocked"
     assert report["teacher_guided_direct_replay_status"] == "pass"
     assert report["teacher_guided_direct_replay_reference_promotion_status"] == "pass"
     assert report["teacher_guided_direct_replay_reference_promotion_reason"] == (
         "direct_local_teacher_replay_promoted_by_reference_delta"
     )
-    assert report["reference_visual_detail_comparison_net_file"] == str(direct_net)
+    assert report["reference_visual_detail_comparison_net_file"] == str(direct_net_2)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
         "direct_local_teacher_replay_promoted_by_reference_delta"
     )
