@@ -14,6 +14,7 @@ from torii_sumo.tools.osm_tools import (
     sumo_network_teacher_guided_junction_variant,
     sumo_network_teacher_guided_repair_queue,
     sumo_network_tls_aggregation_variant,
+    sumo_network_tls_warning_parity,
     sumo_network_topology_audit,
 )
 from torii_sumo.tools.run_tools import sumo_run_minimal_smoke
@@ -475,6 +476,44 @@ def test_sumo_network_tls_aggregation_variant_tool_returns_json_compatible_repor
 
     assert report["status"] == "pass"
     assert report["tls_physical_cluster_count"] == 2
+    json.dumps(report)
+
+
+def test_sumo_network_tls_warning_parity_tool_writes_reference_aware_report(tmp_path: Path) -> None:
+    teacher_report = tmp_path / "teacher_load.json"
+    candidate_report = tmp_path / "candidate_load.json"
+    teacher_report.write_text(
+        json.dumps(
+            {
+                "stderr_tail": "Warning: Unused states in tlLogic '7616444534', program '0' in phase 0 after tl-index 17\n"
+                "Warning: Missing green phase in tlLogic '7616444534', program '0' for tl-index 9.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    candidate_report.write_text(
+        json.dumps(
+            {
+                "stderr_tail": "Warning: Unused states in tlLogic 'cluster_tls', program '0' in phase 0 after tl-index 17\n"
+                "Warning: Missing yellow phase in tlLogic 'cluster_tls', program '0' for tl-index 3 when switching to phase 2.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = sumo_network_tls_warning_parity(
+        teacher_sumo_load_report_file=str(teacher_report),
+        candidate_sumo_load_report_file=str(candidate_report),
+        tls_id_map={"7616444534": "cluster_tls"},
+        output_dir=str(tmp_path / "warning-parity"),
+        prefix="probe",
+    )
+
+    assert report["status"] == "pass"
+    assert report["inherited_warning_count"] == 1
+    assert report["candidate_only_warning_count"] == 1
+    assert report["teacher_only_warning_count"] == 1
+    assert Path(report["warning_parity_file"]).is_file()
     json.dumps(report)
 
 
