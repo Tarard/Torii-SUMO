@@ -282,6 +282,7 @@ def run_auto_workflow(
     reference_net_file: Path | None = None,
     reference_policy_report: str | Path | dict[str, Any] | None = None,
     service_passenger_policy: str | None = None,
+    teacher_guided_repair_max_ready_candidates: int | None = 80,
     net_file: Path | None = None,
     osm_file: Path | None = None,
     official_inventory_csv: Path | None = None,
@@ -318,6 +319,7 @@ def run_auto_workflow(
             reference_net_file=reference_net_file,
             reference_policy_report=reference_policy_report,
             service_passenger_policy=service_passenger_policy,
+            teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
             source_osm_path=osm_file,
             autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
@@ -384,6 +386,7 @@ def _run_osm_to_sumo(
     reference_net_file: Path | None,
     reference_policy_report: str | Path | dict[str, Any] | None,
     service_passenger_policy: str | None,
+    teacher_guided_repair_max_ready_candidates: int | None,
     source_osm_path: Path | None,
     autonomy_mode: str,
     place_resolver: Callable[[str], dict[str, Any]],
@@ -475,6 +478,8 @@ def _run_osm_to_sumo(
         cleanup_kwargs["reference_policy_report"] = reference_policy_report
     if _supports_keyword(cleanup_workflow_func, "service_passenger_policy"):
         cleanup_kwargs["service_passenger_policy"] = network_plan.get("service_passenger_policy")
+    if _supports_keyword(cleanup_workflow_func, "teacher_guided_repair_max_ready_candidates"):
+        cleanup_kwargs["teacher_guided_repair_max_ready_candidates"] = teacher_guided_repair_max_ready_candidates
     if (
         network_plan.get("network_profile") == "reference_matched"
         and _supports_keyword(cleanup_workflow_func, "reference_join_audit_structural_only")

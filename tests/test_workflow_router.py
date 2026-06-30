@@ -111,6 +111,7 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
         user_request="Use Torii to download the Altstadt map in Dresden from OSM, clean it up and open it in SUMO",
         output_dir=tmp_path,
         highway_classes="arterial",
+        teacher_guided_repair_max_ready_candidates=1,
         place_resolver=fake_resolver,
         cleanup_workflow_func=fake_cleanup,
     )
@@ -122,6 +123,7 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     assert captured["place_name"] == "Altstadt, Dresden"
     assert {"primary", "tertiary"} <= captured["highway_classes"]
     assert captured["run_routeability_audit_after_build"] is True
+    assert captured["teacher_guided_repair_max_ready_candidates"] == 1
     assert report["area_resolution_status"] == "candidate_found"
 
 
@@ -314,10 +316,12 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         bbox="11.413800,48.755391,11.433800,48.775391",
         network_profile="reference_matched",
         reference_net_file=str(tmp_path / "reference.net.xml"),
+        teacher_guided_repair_max_ready_candidates=2,
     )
 
     assert report["status"] == "pass"
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
+    assert captured["teacher_guided_repair_max_ready_candidates"] == 2
 
 
 def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path) -> None:
