@@ -54,6 +54,8 @@ GEOMETRY_RESTORE_LANE_ATTRS = (
     "outlineShape",
 )
 
+TURNAROUND_DIR = "t"
+
 
 def build_rebuild_candidate(
     *,
@@ -3787,11 +3789,17 @@ def _teacher_guided_repair_candidate(
         teacher_junction_id=reference_id,
         candidate_junction_id=candidate_junction_id,
     )
+    turnaround_only_lane_gaps = _turnaround_only_lane_gaps(
+        teacher_model,
+        candidate_model,
+        edge_map=edge_map,
+    )
     movement_matrix_missing_count = max(
         0,
         int(candidate_parity.get("vehicle_movement_matrix_missing_count", 0) or 0)
         - int(teacher_parity.get("vehicle_movement_matrix_missing_count", 0) or 0),
         len(missing_teacher_movement_plan),
+        len(turnaround_only_lane_gaps),
     )
     review_actions = ["rebuild_vehicle_movement_matrix"] if movement_matrix_missing_count else []
     return {
@@ -3809,6 +3817,8 @@ def _teacher_guided_repair_candidate(
         "vehicle_movement_matrix_missing_count": movement_matrix_missing_count,
         "missing_teacher_movement_plan_count": len(missing_teacher_movement_plan),
         "missing_teacher_movement_plan": missing_teacher_movement_plan,
+        "turnaround_only_lane_gap_count": len(turnaround_only_lane_gaps),
+        "turnaround_only_lane_gaps": turnaround_only_lane_gaps,
         "netedit_review_actions": review_actions,
         "review_priority": "high" if review_actions else "normal",
         "teacher_incoming_edge_count": len(_approach_edges(teacher_model, "incoming")),
@@ -4058,6 +4068,76 @@ def _missing_teacher_movement_plan(
     return missing
 
 
+def _turnaround_only_lane_gaps(
+    teacher_model: dict[str, object],
+    candidate_model: dict[str, object],
+    *,
+    edge_map: dict[str, str],
+) -> list[dict[str, object]]:
+    teacher_by_lane = _vehicle_outgoing_by_lane(teacher_model)
+    candidate_by_lane = _vehicle_outgoing_by_lane(candidate_model)
+    teacher_by_candidate_edge = {candidate: teacher for teacher, candidate in edge_map.items()}
+    gaps = []
+    for (candidate_edge_id, from_lane), candidate_stats in sorted(candidate_by_lane.items()):
+        if candidate_stats["non_turnaround_count"]:
+            continue
+        if not candidate_stats["turnaround_count"]:
+            continue
+        teacher_edge_id = teacher_by_candidate_edge.get(candidate_edge_id)
+        if not teacher_edge_id and (candidate_edge_id, from_lane) in teacher_by_lane:
+            teacher_edge_id = candidate_edge_id
+        if not teacher_edge_id:
+            continue
+        teacher_stats = teacher_by_lane.get((teacher_edge_id, from_lane))
+        if not teacher_stats or not teacher_stats["non_turnaround_count"]:
+            continue
+        gaps.append(
+            {
+                "teacher_from_edge_id": teacher_edge_id,
+                "from_edge_id": candidate_edge_id,
+                "fromLane": from_lane,
+                "candidate_turnaround_outgoing_count": candidate_stats["turnaround_count"],
+                "candidate_non_turnaround_outgoing_count": candidate_stats["non_turnaround_count"],
+                "teacher_turnaround_outgoing_count": teacher_stats["turnaround_count"],
+                "teacher_non_turnaround_outgoing_count": teacher_stats["non_turnaround_count"],
+                "teacher_non_turnaround_targets": sorted(teacher_stats["non_turnaround_targets"]),
+                "match_status": "candidate_turnaround_only_teacher_has_normal_vehicle_movement",
+            }
+        )
+    return gaps
+
+
+def _vehicle_outgoing_by_lane(model: dict[str, object]) -> dict[tuple[str, str], dict[str, object]]:
+    by_lane: dict[tuple[str, str], dict[str, object]] = {}
+    for connection in model.get("vehicle_connections", []) or []:
+        if not isinstance(connection, dict):
+            continue
+        source = str(connection.get("from", ""))
+        if not source:
+            continue
+        lane = str(connection.get("fromLane", ""))
+        stats = by_lane.setdefault(
+            (source, lane),
+            {
+                "turnaround_count": 0,
+                "non_turnaround_count": 0,
+                "non_turnaround_targets": set(),
+            },
+        )
+        if _is_turnaround_connection(connection):
+            stats["turnaround_count"] = int(stats["turnaround_count"]) + 1
+        else:
+            stats["non_turnaround_count"] = int(stats["non_turnaround_count"]) + 1
+            target = str(connection.get("to", ""))
+            if target:
+                stats["non_turnaround_targets"].add(target)
+    return by_lane
+
+
+def _is_turnaround_connection(connection: dict[str, object]) -> bool:
+    return str(connection.get("dir", "")).lower() == TURNAROUND_DIR
+
+
 def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
@@ -4074,6 +4154,7 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                 "teacher_pattern_template_count",
                 "vehicle_movement_matrix_missing_count",
                 "missing_teacher_movement_plan_count",
+                "turnaround_only_lane_gap_count",
                 "edge_map_size",
                 "missing_teacher_edge_ids",
                 "copyable_missing_teacher_edge_ids",
@@ -4103,6 +4184,7 @@ def _write_teacher_guided_queue_csv(path: Path, rows: list[dict[str, object]]) -
                     "teacher_pattern_template_count": row.get("teacher_pattern_template_count", 0),
                     "vehicle_movement_matrix_missing_count": row.get("vehicle_movement_matrix_missing_count", 0),
                     "missing_teacher_movement_plan_count": row.get("missing_teacher_movement_plan_count", 0),
+                    "turnaround_only_lane_gap_count": row.get("turnaround_only_lane_gap_count", 0),
                     "edge_map_size": len(edge_map) if isinstance(edge_map, dict) else 0,
                     "missing_teacher_edge_ids": ";".join(str(item) for item in row.get("missing_teacher_edge_ids", []) or []),
                     "copyable_missing_teacher_edge_ids": ";".join(

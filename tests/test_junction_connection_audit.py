@@ -36,6 +36,30 @@ def test_connection_signature_separates_top_level_and_internal(tmp_path: Path) -
     assert signature["top_external_pair_count"] == 1
     assert signature["category_counts"]["internal_or_other_to_outgoing"] == 1
     assert signature["top_external_dir_counts"] == {"s": 1}
+    assert signature["top_external_turnaround_connection_count"] == 0
+    assert signature["top_external_non_turnaround_connection_count"] == 1
+
+
+def test_connection_signature_counts_turnaround_separately_from_normal_movements(tmp_path: Path) -> None:
+    net_file = tmp_path / "turnaround.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="back" from="j" to="a"><lane id="back_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <junction id="j" x="0" y="0" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="back" fromLane="0" toLane="0" dir="t"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    signature = build_connection_signature(net_file, "j")
+
+    assert signature["top_external_dir_counts"] == {"s": 1, "t": 1}
+    assert signature["top_external_turnaround_connection_count"] == 1
+    assert signature["top_external_non_turnaround_connection_count"] == 1
 
 
 def test_connection_signature_records_tls_link_indices(tmp_path: Path) -> None:
