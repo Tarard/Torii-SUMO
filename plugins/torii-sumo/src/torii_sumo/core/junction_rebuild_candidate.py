@@ -1147,8 +1147,6 @@ def write_teacher_target_internal_replay_net(
         stale_via = bool(via_edge_id and shared_endpoint and not via_edge_id.startswith(f":{shared_endpoint}_"))
         if (
             not _touches_target_internal_subgraph(connection, internal_prefix, junction_id)
-            and not from_edge_id.startswith(":")
-            and not to_edge_id.startswith(":")
             and connection_edge_ids & replaced_boundary_edge_ids
             and (
                 not shared_endpoint
@@ -1892,6 +1890,21 @@ def _report_used_unrestored_normalized_replay(report: dict[str, Any]) -> bool:
     return isinstance(unrestored_sumo_load, dict) and unrestored_sumo_load.get("status") == "pass"
 
 
+def _net_contains_normal_junctions(net_file: Path, junction_ids: set[str]) -> bool:
+    if not junction_ids:
+        return True
+    try:
+        root = ET.parse(net_file).getroot()
+    except (OSError, ET.ParseError):
+        return False
+    net_junction_ids = {
+        junction.attrib["id"]
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    return junction_ids <= net_junction_ids
+
+
 def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> bool:
     return str(candidate.get("learned_rule", "")) == "tum_like_topology_fragmented_tls_candidate"
 
@@ -2509,9 +2522,14 @@ def run_teacher_guided_repair_queue(
         and accepted_internal_replays
     ):
         final_internal_replay_status = "pass"
+        replay_junction_ids = {str(entry["junction_id"]) for entry in accepted_internal_replays}
+        use_clean_replay_base = (
+            any(entry.get("prefer_clean_replay_base") for entry in accepted_internal_replays)
+            and _net_contains_normal_junctions(candidate_net_file, replay_junction_ids)
+        )
         current_composite_net_file = (
             candidate_net_file
-            if any(entry.get("prefer_clean_replay_base") for entry in accepted_internal_replays)
+            if use_clean_replay_base
             else Path(composite_net_file)
         )
         restore_dir = output_dir / "final_internal_replay"
@@ -2594,8 +2612,37 @@ def run_teacher_guided_repair_queue(
                         break
                 final_internal_replay_normalize_report["geometry_restore"] = geometry_restore_reports
                 if all(report.get("status") == "pass" for report in geometry_restore_reports):
-                    final_internal_replay_normalized_net_file = str(normalized_composite_net_file)
-                    composite_net_file = final_internal_replay_normalized_net_file
+                    canonical_composite_net_file = _stage_file(
+                        restore_dir,
+                        prefix,
+                        "final_internal_replay_canonical.net.xml",
+                    )
+                    final_internal_replay_canonical_command = [
+                        netconvert_binary,
+                        "--sumo-net-file",
+                        _command_path(normalized_composite_net_file, restore_dir),
+                        "--output-file",
+                        _command_path(canonical_composite_net_file, restore_dir),
+                    ]
+                    final_internal_replay_canonical_report = _command_report(
+                        command_runner(
+                            final_internal_replay_canonical_command,
+                            cwd=restore_dir,
+                            timeout_seconds=timeout_seconds,
+                        )
+                    )
+                    final_internal_replay_canonical_report["output_file"] = str(canonical_composite_net_file)
+                    final_internal_replay_normalize_report["canonicalize"] = final_internal_replay_canonical_report
+                    if (
+                        final_internal_replay_canonical_report.get("status") == "pass"
+                        and canonical_composite_net_file.exists()
+                    ):
+                        final_internal_replay_normalized_net_file = str(canonical_composite_net_file)
+                        composite_net_file = final_internal_replay_normalized_net_file
+                    else:
+                        final_internal_replay_status = "fail"
+                        final_internal_replay_normalize_report["status"] = "fail"
+                        final_internal_replay_normalize_report["error"] = "canonicalize failed after geometry restore"
                 else:
                     final_internal_replay_status = "fail"
                     final_internal_replay_normalize_report["status"] = "fail"
