@@ -1956,6 +1956,76 @@ def test_run_teacher_guided_repair_queue_restores_accepted_internal_replays_afte
     assert report["composite_net_file"] == report["final_internal_replay_normalized_net_file"]
 
 
+def test_run_teacher_guided_repair_queue_replays_unrestored_normalized_variants_from_clean_base(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    restore_calls = []
+
+    def fake_variant(**kwargs):
+        final_net = kwargs["output_dir"] / f"{kwargs['junction_id']}.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        report = {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+            "target_internal_replay": {
+                "status": "pass",
+                "effective_edge_map": {f"teacher_{kwargs['junction_id']}": f"candidate_{kwargs['junction_id']}"},
+            },
+        }
+        if kwargs["junction_id"] == "j2":
+            report["target_internal_normalize"] = {"unrestored_sumo_load": {"status": "pass"}}
+        return report
+
+    def fake_restore(**kwargs):
+        restore_calls.append(kwargs)
+        kwargs["output_file"].write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "net_file": str(kwargs["output_file"])}
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        output_file = Path(cwd) / command[command.index("--output-file") + 1]
+        output_file.write_text("<net/>", encoding="utf-8")
+
+        class Result:
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {"junction_id": "j1", "candidate_status": "ready_for_teacher_guided_variant", "edge_map": {"a": "b"}},
+                {"junction_id": "j2", "candidate_status": "ready_for_teacher_guided_variant", "edge_map": {"c": "d"}},
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        variant_builder=fake_variant,
+        final_internal_replay_writer=fake_restore,
+        command_runner=fake_runner,
+    )
+
+    assert report["final_internal_replay_status"] == "pass"
+    assert restore_calls[0]["candidate_net_file"] == candidate_net
+    assert restore_calls[1]["candidate_net_file"] == restore_calls[0]["output_file"]
+
+
 def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_parity_failed_candidate(
     tmp_path: Path,
 ) -> None:
@@ -7813,6 +7883,134 @@ def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback
     assert report["sumo_load"]["status"] == "pass"
     assert report["final_net_file"].endswith("demo_teacher_guided.net.xml")
     assert [call[0] for call in calls] == ["netconvert", "sumo", "netconvert", "sumo"]
+
+
+def test_build_teacher_guided_junction_variant_uses_unrestored_normalized_replay_before_fallback(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j" type="highway.primary"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="j" to="b" type="highway.primary"><lane id="teacher_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <edge id="remote_in" from="x" to="other" type="highway.primary"><lane id="remote_in_0" index="0"/></edge>
+  <edge id=":other_0" function="internal"><lane id=":other_0_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="other" type="priority" x="1" y="1" incLanes="remote_in_0" intLanes=":other_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id=":other_0_0" type="internal" x="1" y="1" incLanes="remote_in_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    sumo_inputs: list[str] = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        def command_path(flag: str) -> Path:
+            value = Path(command[command.index(flag) + 1])
+            return value if value.is_absolute() else Path(cwd) / value
+
+        if command[0] == "netconvert" and "--node-files" in command:
+            output_file = command_path("--output-file")
+            connection_file = command_path("--connection-files")
+            output_file.write_text(
+                """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b" type="highway.primary"><lane id="cand_out_0" index="0"/></edge>
+  <edge id="remote_in" from="x" to="other" type="highway.primary"><lane id="remote_in_0" index="0"/></edge>
+  <edge id=":other_0" function="internal"><lane id=":other_0_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="other" type="priority" x="1" y="1" incLanes="remote_in_0" intLanes=":other_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id=":other_0_0" type="internal" x="1" y="1" incLanes="remote_in_0" intLanes=""/>
+</net>
+""",
+                encoding="utf-8",
+            )
+            root = ET.parse(output_file).getroot()
+            for connection in ET.parse(connection_file).getroot().findall("connection"):
+                root.append(connection)
+            ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+        elif command[0] == "netconvert" and "--sumo-net-file" in command:
+            command_path("--output-file").write_text(
+                command_path("--sumo-net-file").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+        class Result:
+            status = "pass"
+            returncode = 0
+
+            def to_dict(self):
+                status = "pass"
+                if command[0] == "sumo":
+                    net_file = Path(command[command.index("-n") + 1]).name
+                    sumo_inputs.append(net_file)
+                    status = "pass" if sumo_inputs == [
+                        "demo_teacher_guided.net.xml",
+                        "demo_teacher_guided.net.xml",
+                        "demo_teacher_guided.net.xml",
+                    ] else "fail"
+                return {
+                    "command": command,
+                    "cwd": str(cwd) if cwd else None,
+                    "status": status,
+                    "returncode": 0 if status == "pass" else 1,
+                    "stderr": "" if status == "pass" else "restored replay load failed",
+                }
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        prefix="demo",
+        replay_target_internal_subgraph=True,
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["target_internal_replay_fallback"] is False
+    assert report["target_internal_normalize"]["unrestored_sumo_load"]["status"] == "pass"
+    assert report["final_net_file"].endswith("demo_teacher_guided.net.xml")
+    assert sumo_inputs == [
+        "demo_teacher_guided.net.xml",
+        "demo_teacher_guided.net.xml",
+        "demo_teacher_guided.net.xml",
+    ]
 
 
 def test_build_teacher_guided_junction_variant_normalizes_final_teacher_guided_net(

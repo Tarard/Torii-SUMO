@@ -4,6 +4,7 @@ import copy
 import csv
 import hashlib
 import json
+import shutil
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -1371,6 +1372,9 @@ def build_teacher_guided_junction_variant(
     vehicle_attrs_net_file = _stage_file(output_dir, prefix, "vehicle_attrs.net.xml")
     target_internal_replay_file = _stage_file(output_dir, prefix, "target_internal_replay.net.xml")
     target_internal_normalized_net_file = _stage_file(output_dir, prefix, "target_internal_normalized.net.xml")
+    target_internal_normalized_unrestored_net_file = _stage_file(
+        output_dir, prefix, "target_internal_normalized_unrestored.net.xml"
+    )
     target_internal_pedring_net_file = _stage_file(output_dir, prefix, "target_internal_pedring.net.xml")
     target_internal_vehicle_attrs_net_file = _stage_file(output_dir, prefix, "target_internal_vehicle_attrs.net.xml")
     final_net_file = _stage_file(output_dir, prefix, "teacher_guided.net.xml")
@@ -1571,6 +1575,8 @@ def build_teacher_guided_junction_variant(
             command_runner(target_internal_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
         )
         if target_internal_normalize_report.get("status") == "pass":
+            shutil.copyfile(target_internal_normalized_net_file, target_internal_normalized_unrestored_net_file)
+            target_internal_normalize_report["unrestored_net_file"] = str(target_internal_normalized_unrestored_net_file)
             target_internal_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
                 source_file=target_internal_replay_file,
                 target_file=target_internal_normalized_net_file,
@@ -1608,6 +1614,37 @@ def build_teacher_guided_junction_variant(
                 if normalized_sumo_report.get("status") == "pass":
                     tl_logic_report = normalized_tl_logic_report
                     sumo_report = normalized_sumo_report
+                elif _non_target_internal_restore_changed(
+                    target_internal_normalize_report["non_target_internal_restore"]
+                ):
+                    target_internal_normalize_report["unrestored_false_traffic_light_type_restore"] = (
+                        _restore_false_traffic_light_junction_types(
+                            source_file=target_internal_replay_file,
+                            target_file=target_internal_normalized_unrestored_net_file,
+                            fallback_node_file=raw_node_file,
+                            exclude_junction_ids={junction_id},
+                        )
+                    )
+                    target_internal_normalize_report["unrestored_geometry_restore"] = _restore_replayed_geometry_attrs(
+                        source_file=target_internal_replay_file,
+                        target_file=target_internal_normalized_unrestored_net_file,
+                        junction_id=junction_id,
+                    )
+                    unrestored_tl_logic_report = write_teacher_tllogic_net(
+                        candidate_net_file=target_internal_normalized_unrestored_net_file,
+                        output_file=final_net_file,
+                        junction_id=junction_id,
+                        teacher_model=teacher_model,
+                    )
+                    target_internal_normalize_report["unrestored_tl_logic"] = unrestored_tl_logic_report
+                    if unrestored_tl_logic_report.get("status") == "pass":
+                        unrestored_sumo_report = _command_report(
+                            command_runner(sumo_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+                        )
+                        target_internal_normalize_report["unrestored_sumo_load"] = unrestored_sumo_report
+                        if unrestored_sumo_report.get("status") == "pass":
+                            tl_logic_report = unrestored_tl_logic_report
+                            sumo_report = unrestored_sumo_report
     if (
         sumo_report.get("status") != "pass"
         and replay_target_internal_subgraph
@@ -1836,7 +1873,16 @@ def _accepted_target_internal_replay_entry(
         "junction_id": junction_id,
         "teacher_junction_id": teacher_junction_id,
         "edge_map": edge_map,
+        "prefer_clean_replay_base": _report_used_unrestored_normalized_replay(report),
     }
+
+
+def _report_used_unrestored_normalized_replay(report: dict[str, Any]) -> bool:
+    target_internal_normalize = report.get("target_internal_normalize", {})
+    if not isinstance(target_internal_normalize, dict):
+        return False
+    unrestored_sumo_load = target_internal_normalize.get("unrestored_sumo_load", {})
+    return isinstance(unrestored_sumo_load, dict) and unrestored_sumo_load.get("status") == "pass"
 
 
 def run_teacher_guided_repair_queue(
@@ -2449,7 +2495,11 @@ def run_teacher_guided_repair_queue(
         and accepted_internal_replays
     ):
         final_internal_replay_status = "pass"
-        current_composite_net_file = Path(composite_net_file)
+        current_composite_net_file = (
+            candidate_net_file
+            if any(entry.get("prefer_clean_replay_base") for entry in accepted_internal_replays)
+            else Path(composite_net_file)
+        )
         restore_dir = output_dir / "final_internal_replay"
         restore_dir.mkdir(parents=True, exist_ok=True)
         for restore_index, replay_entry in enumerate(accepted_internal_replays, start=1):
@@ -3979,6 +4029,7 @@ def _stage_file(output_dir: Path, prefix: str, suffix: str) -> Path:
         "vehicle_attrs.net.xml": "va.net.xml",
         "target_internal_replay.net.xml": "tir.net.xml",
         "target_internal_normalized.net.xml": "tin.net.xml",
+        "target_internal_normalized_unrestored.net.xml": "tin_raw.net.xml",
         "target_internal_pedring.net.xml": "tip.net.xml",
         "target_internal_vehicle_attrs.net.xml": "tva.net.xml",
         "teacher_guided.net.xml": "tg.net.xml",
@@ -4361,6 +4412,22 @@ def _touches_target_internal_subgraph(connection: ET.Element, internal_prefix: s
         or connection.attrib.get("to", "").startswith(internal_prefix)
         or connection.attrib.get("via", "").startswith(internal_prefix)
         or connection.attrib.get("tl", "") == junction_id
+    )
+
+
+def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
+    return any(
+        int(report.get(key, 0) or 0)
+        for key in (
+            "removed_non_target_internal_edge_count",
+            "restored_non_target_internal_edge_count",
+            "removed_non_target_internal_junction_count",
+            "restored_non_target_internal_junction_count",
+            "removed_non_target_internal_connection_count",
+            "restored_non_target_internal_connection_count",
+            "restored_non_target_normal_junction_attr_count",
+            "restored_non_target_request_count",
+        )
     )
 
 
