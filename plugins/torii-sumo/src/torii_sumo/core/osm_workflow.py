@@ -2107,6 +2107,13 @@ def run_osm_cleanup_workflow(
         "status": "skipped",
         "reason": "not_run",
     }
+    final_movement_direct_replay_report: dict[str, Any] | None = None
+    final_movement_direct_replay_reference_delta_report: dict[str, Any] | None = None
+    final_movement_direct_replay_reference_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    final_movement_direct_replay_best_variant_file: Path | None = None
     final_movement_rebuild_internal_regression_restore_report: dict[str, Any] | None = None
     final_movement_rebuild_internal_regression_restore_sumo_load_report: dict[str, Any] | None = None
     final_movement_rebuild_internal_regression_restore_reference_delta_report: dict[str, Any] | None = None
@@ -3801,6 +3808,54 @@ def run_osm_cleanup_workflow(
                     "status": "blocked",
                     "reason": "sumo_load_not_pass",
                 }
+        if (
+            final_movement_rebuild_reference_promotion_report.get("status") != "pass"
+            and _teacher_guided_queue_has_replay_candidates(final_movement_rebuild_queue_report)
+        ):
+            final_movement_direct_replay_report = teacher_guided_direct_replay_func(
+                queue_report=final_movement_rebuild_queue_report,
+                source_net_file=final_movement_source_net_file,
+                output_dir=output_dir / "final_movement_direct_replay",
+                prefix=f"{prefix}_final_movement_rebuild_direct_replay",
+                netconvert_binary=netconvert_binary,
+                sumo_binary=sumo_binary,
+                timeout_seconds=timeout_seconds,
+                command_runner=command_runner,
+            )
+            direct_variant_value = str(final_movement_direct_replay_report.get("variant_file", ""))
+            direct_variant_file = Path(direct_variant_value) if direct_variant_value else None
+            if direct_variant_file is not None and direct_variant_file.exists():
+                final_movement_direct_replay_reference_delta_report = reference_join_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=direct_variant_file,
+                    output_dir=output_dir / "final_movement_direct_replay_reference_delta",
+                    prefix=f"{prefix}_final_movement_direct_replay_reference_delta",
+                    candidate_cluster_radius_m=topology_cluster_radius_m,
+                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                    structural_only=reference_join_audit_structural_only,
+                )
+                final_movement_direct_replay_reference_promotion_report = (
+                    _movement_rebuild_reference_delta_promotion_decision(
+                        candidate_delta_report=final_movement_direct_replay_reference_delta_report,
+                        baseline_delta_report=final_movement_baseline_report,
+                        structural_guard_delta_report=(
+                            teacher_guided_seed_report if teacher_guided_repair_requires_reference_promotion else None
+                        ),
+                        reason="final_direct_local_teacher_replay_promoted_by_reference_delta",
+                    )
+                )
+                if final_movement_direct_replay_reference_promotion_report.get("status") == "pass":
+                    final_movement_direct_replay_best_variant_file = direct_variant_file
+                    final_movement_rebuild_best_variant_file = direct_variant_file
+                    final_movement_rebuild_reference_delta_report = final_movement_direct_replay_reference_delta_report
+                    final_movement_rebuild_reference_promotion_report = (
+                        final_movement_direct_replay_reference_promotion_report
+                    )
+                    reference_visual_detail_comparison_net_file = direct_variant_file
+                    reference_visual_detail_comparison_selection_reason = str(
+                        final_movement_direct_replay_reference_promotion_report.get("reason", "")
+                    )
+                    reference_join_post_teacher_audit_report = final_movement_direct_replay_reference_delta_report
     if reference_visual_detail_comparison_net_file is not None and reference_visual_detail_comparison_net_file.exists():
         if (
             run_topology_audit_after_build
@@ -4664,6 +4719,21 @@ def run_osm_cleanup_workflow(
         "final_movement_rebuild_reference_promotion_reason": str(
             final_movement_rebuild_reference_promotion_report.get("reason", "")
         ),
+        "final_movement_direct_replay_status": "skipped"
+        if final_movement_direct_replay_report is None
+        else str(final_movement_direct_replay_report.get("status", "fail")),
+        "final_movement_direct_replay_variant_file": ""
+        if final_movement_direct_replay_best_variant_file is None
+        else str(final_movement_direct_replay_best_variant_file),
+        "final_movement_direct_replay_reference_delta_file": ""
+        if final_movement_direct_replay_reference_delta_report is None
+        else str(final_movement_direct_replay_reference_delta_report.get("summary_file", "")),
+        "final_movement_direct_replay_reference_promotion_status": str(
+            final_movement_direct_replay_reference_promotion_report.get("status", "skipped")
+        ),
+        "final_movement_direct_replay_reference_promotion_reason": str(
+            final_movement_direct_replay_reference_promotion_report.get("reason", "")
+        ),
         "final_movement_rebuild_internal_regression_restore_status": "skipped"
         if final_movement_rebuild_internal_regression_restore_report is None
         else str(final_movement_rebuild_internal_regression_restore_report.get("status", "fail")),
@@ -5235,6 +5305,9 @@ def run_osm_cleanup_workflow(
         "final_movement_rebuild_sumo_load": final_movement_rebuild_sumo_load_report or {},
         "final_movement_rebuild_reference_delta": final_movement_rebuild_reference_delta_report or {},
         "final_movement_rebuild_reference_promotion": final_movement_rebuild_reference_promotion_report,
+        "final_movement_direct_replay": final_movement_direct_replay_report or {},
+        "final_movement_direct_replay_reference_delta": final_movement_direct_replay_reference_delta_report or {},
+        "final_movement_direct_replay_reference_promotion": final_movement_direct_replay_reference_promotion_report,
         "final_movement_rebuild_internal_regression_restore": (
             final_movement_rebuild_internal_regression_restore_report or {}
         ),
