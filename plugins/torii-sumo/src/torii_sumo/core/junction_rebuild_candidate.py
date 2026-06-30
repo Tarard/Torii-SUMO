@@ -654,6 +654,7 @@ def write_teacher_lane_patch_edges(
         teacher_lanes = teacher_edge.findall("lane")
         edge_attrs = dict(teacher_edge.attrib)
         edge_attrs["id"] = candidate_id
+        edge_attrs["numLanes"] = str(len(teacher_lanes))
         if preserve_lane_shapes and lane_shape_delta is not None and edge_attrs.get("shape"):
             edge_attrs["shape"] = _translate_shape(edge_attrs["shape"], lane_shape_delta[0], lane_shape_delta[1])
         edge = ET.SubElement(root, "edge", edge_attrs)
@@ -689,6 +690,65 @@ def write_teacher_lane_patch_edges(
         "pruned_boundary_edges": pruned_boundary_edges,
         "lane_shape_translation_applied": lane_shape_delta is not None,
         "preserve_lane_shapes": preserve_lane_shapes,
+    }
+
+
+def write_teacher_endpoint_patch_nodes(
+    *,
+    raw_node_file: Path,
+    teacher_net_file: Path,
+    edge_file: Path,
+    output_file: Path,
+    lane_shape_delta: tuple[float, float] | None = None,
+) -> dict[str, object]:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    tree = ET.parse(raw_node_file)
+    root = tree.getroot()
+    existing_node_ids = {node.attrib.get("id", "") for node in root.findall("node") if node.attrib.get("id")}
+    needed_node_ids = {
+        endpoint
+        for edge in ET.parse(edge_file).getroot().findall("edge")
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        if endpoint and not endpoint.startswith(":")
+    }
+    missing_node_ids = sorted(needed_node_ids - existing_node_ids)
+    teacher_nodes = {
+        junction.attrib["id"]: junction
+        for junction in ET.parse(teacher_net_file).getroot().findall("junction")
+        if junction.attrib.get("id") and junction.attrib.get("type") != "internal"
+    }
+    added_node_ids = []
+    unresolved_node_ids = []
+    safe_attrs = ("id", "x", "y", "type", "shape", "radius", "keepClear", "rightOfWay", "fringe", "tl")
+    dx, dy = lane_shape_delta if lane_shape_delta is not None else (0.0, 0.0)
+
+    for node_id in missing_node_ids:
+        teacher_node = teacher_nodes.get(node_id)
+        if teacher_node is None:
+            unresolved_node_ids.append(node_id)
+            continue
+        attrs = {attr: teacher_node.attrib[attr] for attr in safe_attrs if teacher_node.attrib.get(attr)}
+        attrs["id"] = node_id
+        if lane_shape_delta is not None:
+            if attrs.get("x"):
+                attrs["x"] = _format_xy(float(attrs["x"]) + dx)
+            if attrs.get("y"):
+                attrs["y"] = _format_xy(float(attrs["y"]) + dy)
+            if attrs.get("shape"):
+                attrs["shape"] = _translate_shape(attrs["shape"], dx, dy)
+        ET.SubElement(root, "node", attrs)
+        added_node_ids.append(node_id)
+
+    ET.indent(root, space="    ")
+    tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass" if not unresolved_node_ids else "review",
+        "claim_status": "diagnostic-demo",
+        "node_file": str(output_file),
+        "added_missing_endpoint_node_count": len(added_node_ids),
+        "added_missing_endpoint_node_ids": added_node_ids,
+        "unresolved_missing_endpoint_node_ids": unresolved_node_ids,
+        "node_shape_translation_applied": lane_shape_delta is not None,
     }
 
 
@@ -1412,6 +1472,8 @@ def build_teacher_guided_junction_variant(
     teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
     candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
 
+    lane_shape_delta = _model_shape_delta(teacher_model, candidate_model)
+    patched_node_file = _stage_file(output_dir, prefix, "nodes.nod.xml")
     patched_edge_file = _stage_file(output_dir, prefix, "lanes.edg.xml")
     connection_file = _stage_file(output_dir, prefix, "connections.con.xml")
     sidewalks_net_file = _stage_file(output_dir, prefix, "sidewalks.net.xml")
@@ -1437,8 +1499,15 @@ def build_teacher_guided_junction_variant(
         junction_id=junction_id,
         boundary_node_ids=_joined_source_node_ids(raw_node_file, junction_id),
         prune_unmapped_boundary_edges=True,
-        lane_shape_delta=_model_shape_delta(teacher_model, candidate_model),
+        lane_shape_delta=lane_shape_delta,
         preserve_lane_shapes=preserve_teacher_lane_shapes,
+    )
+    node_patch_report = write_teacher_endpoint_patch_nodes(
+        raw_node_file=raw_node_file,
+        teacher_net_file=teacher_net_file,
+        edge_file=patched_edge_file,
+        output_file=patched_node_file,
+        lane_shape_delta=lane_shape_delta,
     )
     connection_report = write_teacher_connection_plan(
         raw_connection_file=raw_connection_file,
@@ -1455,7 +1524,7 @@ def build_teacher_guided_junction_variant(
     netconvert_command = [
         netconvert_binary,
         "--node-files",
-        _command_path(raw_node_file, output_dir),
+        str(patched_node_file),
         "--edge-files",
         _command_path(patched_edge_file, output_dir),
         "--connection-files",
@@ -1480,6 +1549,7 @@ def build_teacher_guided_junction_variant(
                 "teacher_net_file": str(teacher_net_file),
                 "candidate_net_file": str(candidate_net_file),
                 "netconvert": netconvert_report,
+                "node_patch": node_patch_report,
                 "lane_patch": lane_patch_report,
                 "connection_plan": connection_report,
             },
@@ -1500,6 +1570,7 @@ def build_teacher_guided_junction_variant(
                 "teacher_net_file": str(teacher_net_file),
                 "candidate_net_file": str(candidate_net_file),
                 "netconvert": netconvert_report,
+                "node_patch": node_patch_report,
                 "lane_patch": lane_patch_report,
                 "connection_plan": connection_report,
                 "non_target_internal_restore": non_target_internal_restore_report,
@@ -1550,6 +1621,7 @@ def build_teacher_guided_junction_variant(
                     "teacher_net_file": str(teacher_net_file),
                     "candidate_net_file": str(candidate_net_file),
                     "netconvert": netconvert_report,
+                    "node_patch": node_patch_report,
                     "lane_patch": lane_patch_report,
                     "connection_plan": connection_report,
                     "pedestrian_ring": pedestrian_ring_report,
@@ -1576,6 +1648,7 @@ def build_teacher_guided_junction_variant(
                 "teacher_net_file": str(teacher_net_file),
                 "candidate_net_file": str(candidate_net_file),
                 "netconvert": netconvert_report,
+                "node_patch": node_patch_report,
                 "lane_patch": lane_patch_report,
                 "connection_plan": connection_report,
                 "pedestrian_ring": pedestrian_ring_report,
@@ -1830,6 +1903,7 @@ def build_teacher_guided_junction_variant(
             "teacher_net_file": str(teacher_net_file),
             "candidate_net_file": str(candidate_net_file),
             "final_net_file": str(final_net_file),
+            "patched_node_file": str(patched_node_file),
             "patched_edge_file": str(patched_edge_file),
             "connection_file": str(connection_file),
             "sidewalks_net_file": str(sidewalks_net_file),
@@ -1851,6 +1925,7 @@ def build_teacher_guided_junction_variant(
             if target_internal_vehicle_attrs_report
             else "",
             "report_file": str(report_file),
+            "node_patch": node_patch_report,
             "lane_patch": lane_patch_report,
             "connection_plan": connection_report,
             "netconvert": netconvert_report,
@@ -4411,6 +4486,7 @@ def _stage_file(output_dir: Path, prefix: str, suffix: str) -> Path:
     if path := candidate(suffix):
         return path
     suffix_aliases = {
+        "nodes.nod.xml": "n.nod.xml",
         "connections.con.xml": "c.con.xml",
         "lanes.edg.xml": "e.edg.xml",
         "sidewalks.net.xml": "sw.net.xml",
