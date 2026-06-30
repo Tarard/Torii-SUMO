@@ -794,7 +794,7 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
     )
     assert report["reference_visual_detail_comparison_net_file"] == str(direct_net)
     assert report["reference_visual_detail_comparison_selection_reason"] == (
-        "final_direct_local_teacher_replay_promoted_by_reference_delta"
+        "direct_local_teacher_replay_promoted_by_reference_delta"
     )
 
 
@@ -818,6 +818,7 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
     first_heavy_net = tmp_path / "first_heavy.net.xml"
     first_direct_net = tmp_path / "first_direct.net.xml"
     final_heavy_net = tmp_path / "final_heavy.net.xml"
+    final_direct_no_gain_net = tmp_path / "final_direct_no_gain.net.xml"
     final_direct_net = tmp_path / "final_direct.net.xml"
     calls: dict[str, object] = {"direct_sources": [], "reference_join_candidate_net_files": []}
 
@@ -873,31 +874,46 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
             return delta(mismatch=1, connection_extra=90, summary="first_direct_delta.json")
         if candidate == final_heavy_net:
             return delta(mismatch=1, connection_extra=300, summary="final_heavy_delta.json")
+        if candidate == final_direct_no_gain_net:
+            return delta(mismatch=1, connection_extra=110, summary="final_direct_no_gain_delta.json")
         if candidate == final_direct_net:
             return delta(mismatch=0, connection_extra=95, summary="final_direct_delta.json")
         return delta(mismatch=2, connection_extra=100, summary="initial_delta.json")
 
     def fake_teacher_guided_queue(**kwargs):
+        is_final = kwargs["prefix"].endswith("_final_movement_rebuild")
         return {
             "status": "pass",
-            "repair_candidate_count": 1,
-            "ready_candidate_count": 1,
+            "repair_candidate_count": 2 if is_final else 1,
+            "ready_candidate_count": 2 if is_final else 1,
             "expanded_scope_candidate_count": 0,
             "queue_file": str(
                 tmp_path
                 / (
                     "final_teacher_queue.json"
-                    if kwargs["prefix"].endswith("_final_movement_rebuild")
+                    if is_final
                     else "teacher_queue.json"
                 )
             ),
             "repair_candidates": [
                 {
-                    "junction_id": "j1",
+                    "junction_id": "no_gain" if is_final else "j1",
                     "reference_id": "j1",
                     "candidate_status": "ready_for_teacher_guided_variant",
                     "edge_map": {"teacher_edge": "candidate_edge"},
-                }
+                },
+                *(
+                    [
+                        {
+                            "junction_id": "gain",
+                            "reference_id": "j1",
+                            "candidate_status": "ready_for_teacher_guided_variant",
+                            "edge_map": {"teacher_edge": "candidate_edge"},
+                        }
+                    ]
+                    if is_final
+                    else []
+                ),
             ],
         }
 
@@ -923,7 +939,14 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
     def fake_direct_replay(**kwargs):
         calls["direct_sources"].append(kwargs["source_net_file"])
         is_final = kwargs["prefix"].endswith("_final_movement_rebuild_direct_replay")
-        variant = final_direct_net if is_final else first_direct_net
+        first_candidate = (kwargs["queue_report"].get("repair_candidates") or [{}])[0]
+        variant = (
+            final_direct_no_gain_net
+            if is_final and first_candidate.get("junction_id") == "no_gain"
+            else final_direct_net
+            if is_final
+            else first_direct_net
+        )
         return {
             "status": "pass",
             "variant_file": str(write_net(variant)),
@@ -971,7 +994,8 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
         },
     )
 
-    assert calls["direct_sources"] == [calls["reference_join_candidate_net_files"][0], first_direct_net]
+    assert calls["direct_sources"] == [calls["reference_join_candidate_net_files"][0], first_direct_net, first_direct_net]
+    assert final_direct_no_gain_net in calls["reference_join_candidate_net_files"]
     assert final_direct_net in calls["reference_join_candidate_net_files"]
     assert report["final_movement_direct_replay_status"] == "pass"
     assert report["final_movement_direct_replay_reference_promotion_status"] == "pass"
@@ -1063,6 +1087,27 @@ def test_movement_rebuild_promotion_blocks_large_structural_regression() -> None
 
     assert decision["status"] == "blocked"
     assert decision["reason"] == "reference_structural_delta_regressed"
+
+
+def test_movement_rebuild_promotion_blocks_no_benefit_structural_regression() -> None:
+    decision = _movement_rebuild_reference_delta_promotion_decision(
+        baseline_delta_report={
+            "status": "pass",
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 13},
+            "network_structural_missing_counts": {"crossing_edge_count": 100},
+            "network_structural_extra_counts": {"connection_count": 1861},
+        },
+        candidate_delta_report={
+            "status": "pass",
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 13},
+            "network_structural_missing_counts": {"crossing_edge_count": 100},
+            "network_structural_extra_counts": {"connection_count": 1872},
+        },
+        reason="iterative_direct_local_teacher_replay_promoted_by_reference_delta",
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "movement_rebuild_no_reference_delta_improvement"
 
 
 def test_movement_rebuild_promotion_uses_structural_guard_baseline() -> None:
