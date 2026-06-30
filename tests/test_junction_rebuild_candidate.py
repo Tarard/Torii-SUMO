@@ -7,6 +7,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _compare_teacher_models,
     _netedit_review_actions,
+    _remove_teacher_non_tls_tllogics,
     _restore_false_traffic_light_junction_types,
     _restore_non_target_internal_artifacts,
     _restore_replayed_geometry_attrs,
@@ -142,6 +143,47 @@ def test_restore_false_traffic_light_junction_types_uses_plain_node_fallback_for
     assert report["restored_false_traffic_light_junction_type_count"] == 1
     assert root.find("junction[@id='false_tls']").attrib["type"] == "priority"
     assert root.find("junction[@id='real_tls']").attrib["type"] == "traffic_light"
+
+
+def test_remove_teacher_non_tls_tllogics_demotes_exact_priority_junction(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    teacher.write_text(
+        """<net>
+  <junction id="priority_j" type="priority" x="0" y="0"/>
+  <junction id="real_tls" type="traffic_light" x="1" y="0"/>
+  <tlLogic id="real_tls" type="static" programID="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <junction id="priority_j" type="traffic_light" x="0" y="0"/>
+  <junction id="real_tls" type="traffic_light" x="1" y="0"/>
+  <tlLogic id="priority_j" type="actuated" programID="0"><phase duration="30" state="G"/></tlLogic>
+  <tlLogic id="real_tls" type="static" programID="0"><phase duration="1" state="G"/></tlLogic>
+  <connection from="a" to="b" tl="priority_j" linkIndex="0" linkIndex2="9"/>
+  <connection from="c" to="d" tl="real_tls" linkIndex="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _remove_teacher_non_tls_tllogics(teacher_net_file=teacher, target_file=target)
+
+    root = ET.parse(target).getroot()
+    priority_connection = root.find("connection[@from='a']")
+    assert report["status"] == "pass"
+    assert report["removed_teacher_non_tls_tllogic_ids"] == ["priority_j"]
+    assert root.find("tlLogic[@id='priority_j']") is None
+    assert root.find("tlLogic[@id='real_tls']") is not None
+    assert root.find("junction[@id='priority_j']").attrib["type"] == "priority"
+    assert "tl" not in priority_connection.attrib
+    assert "linkIndex" not in priority_connection.attrib
+    assert "linkIndex2" not in priority_connection.attrib
+    assert priority_connection.attrib["uncontrolled"] == "true"
+    assert root.find("connection[@from='c']").attrib["tl"] == "real_tls"
 
 
 def test_build_tls_connection_repair_variant_restores_unique_connection_control_attrs(tmp_path: Path) -> None:
@@ -7716,6 +7758,57 @@ def test_write_teacher_target_internal_replay_net_maps_referenced_tls_logic(tmp_
     target_tls = root.find("tlLogic[@id='j']")
     assert target_tls.attrib["type"] == "actuated"
     assert target_tls.find("phase").attrib["state"] == "G"
+
+
+def test_write_teacher_target_internal_replay_net_removes_tls_when_teacher_has_no_tls(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="teacher_out" from="j" to="b"><lane id="teacher_out_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="10,0 11,0"/></edge>
+  <junction id="j" type="priority" x="10" y="0" incLanes="teacher_in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id="other_in" from="x" to="y"><lane id="other_in_0" index="0"/></edge>
+  <edge id="other_out" from="y" to="z"><lane id="other_out_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="y" type="priority" x="20" y="0" incLanes="other_in_0" intLanes=""/>
+  <connection from="cand_in" to="cand_out" fromLane="0" toLane="0" tl="j" linkIndex="0" via=":j_old_0_0"/>
+  <connection from="other_in" to="other_out" fromLane="0" toLane="0" tl="j" linkIndex="1" linkIndex2="5"/>
+  <tlLogic id="j" type="actuated" programID="0" offset="0"><phase duration="30" state="GG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    replayed_connection = root.find("connection[@from='cand_in'][@to='cand_out']")
+    off_scope_connection = root.find("connection[@from='other_in'][@to='other_out']")
+    assert root.find("tlLogic[@id='j']") is None
+    assert root.find("junction[@id='j']").attrib["type"] == "priority"
+    assert "tl" not in replayed_connection.attrib
+    assert "linkIndex" not in replayed_connection.attrib
+    assert "tl" not in off_scope_connection.attrib
+    assert "linkIndex" not in off_scope_connection.attrib
+    assert "linkIndex2" not in off_scope_connection.attrib
+    assert off_scope_connection.attrib["uncontrolled"] == "true"
 
 
 def test_write_teacher_target_internal_replay_net_inserts_new_tls_before_connections(tmp_path: Path) -> None:
