@@ -7381,8 +7381,7 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
         if command[0] == "netconvert":
             assert "--sidewalks.guess" not in command
             assert "--tls.ignore-internal-junction-jam" in command
-            assert "--tllogic-files" in command
-            assert Path(command[command.index("--tllogic-files") + 1]) == raw_tllogics.resolve()
+            assert "--tllogic-files" not in command
             assert Path(command[command.index("--node-files") + 1]).is_absolute()
             for flag in ("--edge-files", "--connection-files", "--output-file"):
                 assert not Path(command[command.index(flag) + 1]).is_absolute()
@@ -7628,6 +7627,92 @@ def test_restore_non_target_internal_artifacts_filters_stale_incoming_lanes(tmp_
     assert len(junction.findall("request")) == 1
 
 
+def test_restore_non_target_internal_artifacts_restores_referenced_tllogic_capacity(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="other" to="y"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":other_0" function="internal"><lane id=":other_0_0" index="0"/></edge>
+  <junction id="other" type="traffic_light" incLanes="remote_in_0" intLanes=":other_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="remote_in" to="remote_out" fromLane="0" toLane="0" via=":other_0_0" tl="tls" linkIndex="8"/>
+  <tlLogic id="tls" type="actuated" programID="0" offset="0">
+    <phase duration="5" state="rrrrrrrrG"/>
+  </tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="other" to="y"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":other_0" function="internal"><lane id=":other_0_0" index="0"/></edge>
+  <junction id="other" type="traffic_light" incLanes="remote_in_0" intLanes=":other_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <tlLogic id="tls" type="actuated" programID="0" offset="0">
+    <phase duration="5" state="rr"/>
+  </tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _restore_non_target_internal_artifacts(
+        source_file=source,
+        target_file=target,
+        exclude_junction_ids=set(),
+    )
+
+    root = ET.parse(target).getroot()
+    assert report["status"] == "pass"
+    assert root.find("connection[@tl='tls']").attrib["linkIndex"] == "8"
+    assert root.find("tlLogic[@id='tls']/phase").attrib["state"] == "rrrrrrrrG"
+
+
+def test_restore_non_target_internal_artifacts_skips_connections_with_missing_edges(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id=":other_0" function="internal"><lane id=":other_0_0" index="0"/></edge>
+  <junction id="other" type="priority" incLanes="remote_in_0" intLanes=":other_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="remote_in" to="missing_out" fromLane="0" toLane="0" via=":other_0_0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id=":other_0" function="internal"><lane id=":other_0_0" index="0"/></edge>
+  <junction id="other" type="priority" incLanes="remote_in_0" intLanes=":other_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = _restore_non_target_internal_artifacts(
+        source_file=source,
+        target_file=target,
+        exclude_junction_ids=set(),
+    )
+
+    root = ET.parse(target).getroot()
+    assert report["status"] == "pass"
+    assert report["skipped_non_target_internal_connection_missing_edge_count"] == 1
+    assert root.find("connection[@to='missing_out']") is None
+
+
 def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_internal_subgraph(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -7689,12 +7774,15 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     )
     raw_connections = Path("raw.con.xml")
     raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    raw_tllogics = Path("raw.tll.xml")
+    raw_tllogics.write_text('<tlLogics><tlLogic id="j" type="static" programID="0" offset="0"/></tlLogics>', encoding="utf-8")
     calls: list[list[str]] = []
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         calls.append(command)
         if command[0] == "netconvert" and "--node-files" in command:
             assert Path(command[command.index("--node-files") + 1]).is_absolute()
+            assert "--tllogic-files" not in command
             for flag in ("--edge-files", "--connection-files", "--output-file"):
                 assert not Path(command[command.index(flag) + 1]).is_absolute()
 
@@ -7753,6 +7841,7 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
         output_dir=Path("out"),
         edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out", "teacher_ped": "cand_ped"},
         prefix="demo",
+        raw_tllogic_file=raw_tllogics,
         replay_target_internal_subgraph=True,
         command_runner=fake_runner,
     )
