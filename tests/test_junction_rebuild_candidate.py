@@ -7383,6 +7383,132 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
     assert [call[0] for call in calls] == ["netconvert", "sumo"]
 
 
+def test_build_teacher_guided_junction_variant_restores_non_target_internal_artifacts_after_plain_roundtrip(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    teacher_net = Path("teacher.net.xml")
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="j" to="b"><lane id="teacher_out_0" index="0"/></edge>
+  <junction id="j" type="priority" incLanes="teacher_in_0" intLanes="">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = Path("candidate.net.xml")
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0"/></edge>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="other" to="y"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":other_w0" function="walkingarea"><lane id=":other_w0_0" index="0" allow="pedestrian" speed="1.23"/></edge>
+  <junction id="j" type="priority" incLanes="cand_in_0" intLanes=""/>
+  <junction id="other" type="priority" incLanes="remote_in_0" intLanes=":other_w0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="remote_in" to=":other_w0" fromLane="0" toLane="0"/>
+  <connection from=":other_w0" to="remote_out" fromLane="0" toLane="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_nodes = Path("raw.nod.xml")
+    raw_nodes.write_text('<nodes><node id="a" x="0" y="0"/><node id="j" x="1" y="0"/><node id="b" x="2" y="0"/></nodes>', encoding="utf-8")
+    raw_edges = Path("raw.edg.xml")
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="j"><lane index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0"/></edge>
+  <edge id="remote_in" from="x" to="other"><lane index="0"/></edge>
+  <edge id="remote_out" from="other" to="y"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+    raw_connections = Path("raw.con.xml")
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    sumo_calls = 0
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        nonlocal sumo_calls
+        if command[0] == "netconvert" and "--node-files" in command:
+            output = Path(cwd) / command[command.index("--output-file") + 1]
+            output.write_text(
+                """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0"/></edge>
+  <edge id="remote_in" from="x" to="other"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="other" to="y"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":other_w0" function="walkingarea"><lane id=":other_w0_0" index="0" allow="pedestrian" speed="9.99"/></edge>
+  <edge id=":other_w_extra" function="walkingarea"><lane id=":other_w_extra_0" index="0" allow="pedestrian"/></edge>
+  <junction id="j" type="priority" incLanes="cand_in_0" intLanes=""/>
+  <junction id="other" type="priority" incLanes="remote_in_0" intLanes=":other_w0_0 :other_w_extra_0">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="0"/>
+  </junction>
+  <connection from="remote_in" to=":other_w0" fromLane="0" toLane="0"/>
+  <connection from=":other_w0" to="remote_out" fromLane="0" toLane="0"/>
+  <connection from="remote_in" to=":other_w_extra" fromLane="0" toLane="0"/>
+  <connection from=":other_w_extra" to="remote_out" fromLane="0" toLane="0"/>
+</net>
+""",
+                encoding="utf-8",
+            )
+        elif command[0] == "netconvert" and "--sumo-net-file" in command:
+            input_file = Path(cwd) / command[command.index("--sumo-net-file") + 1]
+            output = Path(cwd) / command[command.index("--output-file") + 1]
+            root = ET.parse(input_file).getroot()
+            root.find("edge[@id=':other_w0']/lane").set("speed", "9.99")
+            root.append(ET.Element("edge", {"id": ":other_w_extra", "function": "walkingarea"}))
+            ET.SubElement(root.find("edge[@id=':other_w_extra']"), "lane", {"id": ":other_w_extra_0", "index": "0", "allow": "pedestrian"})
+            other = root.find("junction[@id='other']")
+            other.set("intLanes", f"{other.attrib.get('intLanes', '')} :other_w_extra_0".strip())
+            ET.SubElement(other, "request", {"index": "1", "response": "00", "foes": "00", "cont": "0"})
+            root.append(ET.Element("connection", {"from": "remote_in", "to": ":other_w_extra", "fromLane": "0", "toLane": "0"}))
+            root.append(ET.Element("connection", {"from": ":other_w_extra", "to": "remote_out", "fromLane": "0", "toLane": "0"}))
+            ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
+        elif command[0] == "sumo":
+            sumo_calls += 1
+
+        class Result:
+            status = "fail" if command[0] == "sumo" and sumo_calls == 1 else "pass"
+            returncode = 1 if status == "fail" else 0
+
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd) if cwd else None, "status": self.status, "returncode": self.returncode}
+
+        return Result()
+
+    report = build_teacher_guided_junction_variant(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        junction_id="j",
+        output_dir=Path("out"),
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        prefix="demo",
+        replay_target_internal_subgraph=True,
+        command_runner=fake_runner,
+    )
+
+    root = ET.parse(report["final_net_file"]).getroot()
+    assert report["status"] == "pass"
+    assert root.find("edge[@id=':other_w0']/lane").attrib["speed"] == "1.23"
+    assert root.find("edge[@id=':other_w_extra']") is None
+    assert root.find("junction[@id='other']").attrib["intLanes"] == ":other_w0_0"
+    assert len(root.find("junction[@id='other']").findall("request")) == 1
+    assert root.find("connection[@from='remote_in'][@to=':other_w_extra']") is None
+
+
 def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_internal_subgraph(
     tmp_path: Path, monkeypatch
 ) -> None:

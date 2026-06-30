@@ -1436,6 +1436,27 @@ def build_teacher_guided_junction_variant(
             },
         )
 
+    non_target_internal_restore_report = _restore_non_target_internal_artifacts(
+        source_file=candidate_net_file,
+        target_file=sidewalks_net_file,
+        exclude_junction_ids={junction_id},
+    )
+    if non_target_internal_restore_report.get("status") != "pass":
+        return _write_teacher_guided_report(
+            report_file,
+            {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "junction_id": junction_id,
+                "teacher_net_file": str(teacher_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "netconvert": netconvert_report,
+                "lane_patch": lane_patch_report,
+                "connection_plan": connection_report,
+                "non_target_internal_restore": non_target_internal_restore_report,
+            },
+        )
+
     pedestrian_ring_report = write_teacher_pedestrian_ring_net(
         candidate_net_file=sidewalks_net_file,
         output_file=pedring_net_file,
@@ -1550,6 +1571,15 @@ def build_teacher_guided_junction_variant(
             command_runner(target_internal_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
         )
         if target_internal_normalize_report.get("status") == "pass":
+            target_internal_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
+                source_file=target_internal_replay_file,
+                target_file=target_internal_normalized_net_file,
+                exclude_junction_ids={junction_id},
+            )
+        if (
+            target_internal_normalize_report.get("status") == "pass"
+            and target_internal_normalize_report["non_target_internal_restore"].get("status") == "pass"
+        ):
             target_internal_normalize_report["false_traffic_light_type_restore"] = (
                 _restore_false_traffic_light_junction_types(
                     source_file=target_internal_replay_file,
@@ -1595,6 +1625,15 @@ def build_teacher_guided_junction_variant(
             command_runner(teacher_guided_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
         )
         if teacher_guided_normalize_report.get("status") == "pass":
+            teacher_guided_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
+                source_file=final_net_file,
+                target_file=teacher_guided_normalized_net_file,
+                exclude_junction_ids={junction_id},
+            )
+        if (
+            teacher_guided_normalize_report.get("status") == "pass"
+            and teacher_guided_normalize_report["non_target_internal_restore"].get("status") == "pass"
+        ):
             teacher_guided_normalize_report["false_traffic_light_type_restore"] = (
                 _restore_false_traffic_light_junction_types(
                     source_file=final_net_file,
@@ -1725,6 +1764,7 @@ def build_teacher_guided_junction_variant(
             "lane_patch": lane_patch_report,
             "connection_plan": connection_report,
             "netconvert": netconvert_report,
+            "non_target_internal_restore": non_target_internal_restore_report,
             "pedestrian_ring": pedestrian_ring_report,
             "vehicle_connection_attrs": vehicle_attrs_report,
             "target_internal_replay": target_internal_replay_report,
@@ -2458,14 +2498,22 @@ def run_teacher_guided_repair_queue(
                 final_internal_replay_normalize_report.get("status") == "pass"
                 and normalized_composite_net_file.exists()
             ):
+                excluded_replay_junction_ids = {
+                    str(replay_entry["junction_id"]) for replay_entry in accepted_internal_replays
+                }
+                final_internal_replay_normalize_report["non_target_internal_restore"] = (
+                    _restore_non_target_internal_artifacts(
+                        source_file=current_composite_net_file,
+                        target_file=normalized_composite_net_file,
+                        exclude_junction_ids=excluded_replay_junction_ids,
+                    )
+                )
                 final_internal_replay_normalize_report["false_traffic_light_type_restore"] = (
                     _restore_false_traffic_light_junction_types(
                         source_file=current_composite_net_file,
                         target_file=normalized_composite_net_file,
                         fallback_node_file=current_raw_node_file,
-                        exclude_junction_ids={
-                            str(replay_entry["junction_id"]) for replay_entry in accepted_internal_replays
-                        },
+                        exclude_junction_ids=excluded_replay_junction_ids,
                     )
                 )
                 for replay_entry, replay_report in zip(accepted_internal_replays, final_internal_replay_reports):
@@ -4314,6 +4362,142 @@ def _touches_target_internal_subgraph(connection: ET.Element, internal_prefix: s
         or connection.attrib.get("via", "").startswith(internal_prefix)
         or connection.attrib.get("tl", "") == junction_id
     )
+
+
+def _restore_non_target_internal_artifacts(
+    *,
+    source_file: Path,
+    target_file: Path,
+    exclude_junction_ids: set[str],
+) -> dict[str, object]:
+    if not source_file.exists():
+        return _failure(f"source net file does not exist: {source_file}")
+    if not target_file.exists():
+        return _failure(f"target net file does not exist: {target_file}")
+
+    source_root = ET.parse(source_file).getroot()
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    junction_ids = {
+        junction.attrib["id"]
+        for root in (source_root, target_root)
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    junction_prefixes = [(f":{junction_id}_", junction_id) for junction_id in sorted(junction_ids, key=len, reverse=True)]
+
+    def owner(value: str) -> str:
+        candidates = (value, _via_lane_edge_id(value))
+        return next(
+            (
+                junction_id
+                for edge_id in candidates
+                for prefix, junction_id in junction_prefixes
+                if edge_id.startswith(prefix)
+            ),
+            "",
+        )
+
+    def is_restored_owner(value: str) -> bool:
+        internal_owner = owner(value)
+        return bool(internal_owner and internal_owner not in exclude_junction_ids)
+
+    def connection_restored(connection: ET.Element) -> bool:
+        return any(
+            is_restored_owner(connection.attrib.get(attr, ""))
+            for attr in ("from", "to", "via")
+        )
+
+    source_internal_edges = [
+        edge for edge in source_root.findall("edge") if is_restored_owner(edge.attrib.get("id", ""))
+    ]
+    target_internal_edge_index = None
+    removed_internal_edges = 0
+    for child in list(target_root):
+        if child.tag == "edge" and is_restored_owner(child.attrib.get("id", "")):
+            if target_internal_edge_index is None:
+                target_internal_edge_index = list(target_root).index(child)
+            target_root.remove(child)
+            removed_internal_edges += 1
+    if target_internal_edge_index is None:
+        target_internal_edge_index = _first_junction_index(target_root)
+    for offset, edge in enumerate(source_internal_edges):
+        target_root.insert(target_internal_edge_index + offset, copy.deepcopy(edge))
+
+    source_internal_junctions = [
+        junction for junction in source_root.findall("junction") if is_restored_owner(junction.attrib.get("id", ""))
+    ]
+    target_internal_junction_index = None
+    removed_internal_junctions = 0
+    for child in list(target_root):
+        if child.tag == "junction" and is_restored_owner(child.attrib.get("id", "")):
+            if target_internal_junction_index is None:
+                target_internal_junction_index = list(target_root).index(child)
+            target_root.remove(child)
+            removed_internal_junctions += 1
+    if target_internal_junction_index is None:
+        target_internal_junction_index = next(
+            (index for index, child in enumerate(list(target_root)) if child.tag == "connection"),
+            len(list(target_root)),
+        )
+    for offset, junction in enumerate(source_internal_junctions):
+        target_root.insert(target_internal_junction_index + offset, copy.deepcopy(junction))
+
+    removed_connections = 0
+    for connection in list(target_root.findall("connection")):
+        if connection_restored(connection):
+            target_root.remove(connection)
+            removed_connections += 1
+    source_connections = [connection for connection in source_root.findall("connection") if connection_restored(connection)]
+    for connection in source_connections:
+        target_root.append(copy.deepcopy(connection))
+
+    restored_normal_junction_attr_count = 0
+    restored_request_count = 0
+    target_junctions = {
+        junction.attrib["id"]: junction
+        for junction in target_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    for source_junction in source_root.findall("junction"):
+        junction_id = source_junction.attrib.get("id", "")
+        target_junction = target_junctions.get(junction_id)
+        if not junction_id or junction_id in exclude_junction_ids or target_junction is None:
+            continue
+        if dict(target_junction.attrib) != dict(source_junction.attrib):
+            target_junction.attrib.clear()
+            target_junction.attrib.update(source_junction.attrib)
+            restored_normal_junction_attr_count += 1
+        for request in list(target_junction.findall("request")):
+            target_junction.remove(request)
+        for request in source_junction.findall("request"):
+            target_junction.append(ET.Element("request", dict(request.attrib)))
+            restored_request_count += 1
+
+    if (
+        removed_internal_edges
+        or removed_internal_junctions
+        or removed_connections
+        or restored_normal_junction_attr_count
+        or restored_request_count
+    ):
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "source_file": str(source_file),
+        "target_file": str(target_file),
+        "exclude_junction_ids": sorted(exclude_junction_ids),
+        "removed_non_target_internal_edge_count": removed_internal_edges,
+        "restored_non_target_internal_edge_count": len(source_internal_edges),
+        "removed_non_target_internal_junction_count": removed_internal_junctions,
+        "restored_non_target_internal_junction_count": len(source_internal_junctions),
+        "removed_non_target_internal_connection_count": removed_connections,
+        "restored_non_target_internal_connection_count": len(source_connections),
+        "restored_non_target_normal_junction_attr_count": restored_normal_junction_attr_count,
+        "restored_non_target_request_count": restored_request_count,
+    }
 
 
 def _restore_replayed_geometry_attrs(*, source_file: Path, target_file: Path, junction_id: str) -> dict[str, object]:
