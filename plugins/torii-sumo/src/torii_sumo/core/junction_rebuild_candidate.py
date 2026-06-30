@@ -1892,6 +1892,10 @@ def _report_used_unrestored_normalized_replay(report: dict[str, Any]) -> bool:
     return isinstance(unrestored_sumo_load, dict) and unrestored_sumo_load.get("status") == "pass"
 
 
+def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> bool:
+    return str(candidate.get("learned_rule", "")) == "tum_like_topology_fragmented_tls_candidate"
+
+
 def run_teacher_guided_repair_queue(
     *,
     queue_report: dict[str, Any],
@@ -1972,6 +1976,9 @@ def run_teacher_guided_repair_queue(
         junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
         teacher_junction_id = str(candidate.get("reference_id") or junction_id)
         edge_map = _valid_edge_map(candidate.get("edge_map", {}))
+        candidate_replay_target_internal_subgraph = (
+            replay_target_internal_subgraph or _candidate_requests_target_internal_replay(candidate)
+        )
         candidate_node_ids = {str(item) for item in candidate.get("matched_candidate_node_ids", []) or [] if str(item)}
         if junction_id:
             candidate_node_ids.add(junction_id)
@@ -2251,7 +2258,7 @@ def run_teacher_guided_repair_queue(
                     for edge_id in replay_blocking_self_loop_edge_drops
                     if edge_id in protected_self_loop_edge_ids
                 ]
-                if replay_target_internal_subgraph and replay_blocking_self_loop_edge_drops:
+                if candidate_replay_target_internal_subgraph and replay_blocking_self_loop_edge_drops:
                     mapped_edge_ids = {str(edge_id) for edge_id in replay_edge_map.values() if str(edge_id)}
                     surviving_edge_ids = _edge_file_ids(replay_edge_file)
                     deferred_self_loop_edge_ids = [
@@ -2297,7 +2304,7 @@ def run_teacher_guided_repair_queue(
                             "junction_id": junction_id,
                             "candidate_status": "unsafe_replay_self_loop_edge_drop",
                             "skip_reason": "singleton_or_no_witness_self_loop_drop"
-                            if replay_target_internal_subgraph
+                            if candidate_replay_target_internal_subgraph
                             else "protected_self_loop_edge_drop",
                             "replay_blocking_self_loop_edge_drops": replay_blocking_self_loop_edge_drops,
                         }
@@ -2321,7 +2328,7 @@ def run_teacher_guided_repair_queue(
                         crossing_edge_overrides=crossing_edge_overrides_by_junction.get(joined_scope_junction_id)
                         or crossing_edge_overrides_by_junction.get(junction_id)
                         or crossing_edge_overrides_by_junction.get(teacher_junction_id),
-                        replay_target_internal_subgraph=replay_target_internal_subgraph,
+                        replay_target_internal_subgraph=candidate_replay_target_internal_subgraph,
                         preserve_teacher_lane_shapes=not use_full_network_join_patch_replay,
                         emit_teacher_crossings=not use_full_network_join_patch_replay,
                         netconvert_binary=netconvert_binary,
@@ -2425,7 +2432,7 @@ def run_teacher_guided_repair_queue(
                 teacher_junction_id=teacher_junction_id,
                 crossing_edge_overrides=crossing_edge_overrides_by_junction.get(junction_id)
                 or crossing_edge_overrides_by_junction.get(teacher_junction_id),
-                replay_target_internal_subgraph=replay_target_internal_subgraph,
+                replay_target_internal_subgraph=candidate_replay_target_internal_subgraph,
                 netconvert_binary=netconvert_binary,
                 sumo_binary=sumo_binary,
                 timeout_seconds=timeout_seconds,
