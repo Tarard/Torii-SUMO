@@ -219,6 +219,68 @@ def compare_road_template_summaries(
     }
 
 
+def compare_net_road_template_parity(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    max_examples: int = 3,
+) -> dict[str, Any]:
+    teacher_lane_templates = summarize_net_road_lane_model_templates(
+        teacher_net_file,
+        max_examples=max_examples,
+    )
+    candidate_lane_templates = summarize_net_road_lane_model_templates(
+        candidate_net_file,
+        max_examples=max_examples,
+    )
+    teacher_connection_templates = summarize_net_road_connection_templates(
+        teacher_net_file,
+        max_examples=max_examples,
+    )
+    candidate_connection_templates = summarize_net_road_connection_templates(
+        candidate_net_file,
+        max_examples=max_examples,
+    )
+    lane_parity = compare_road_template_summaries(
+        teacher_lane_templates,
+        candidate_lane_templates,
+        key_fields=["type", "lane_signature"],
+    )
+    connection_parity = compare_road_template_summaries(
+        teacher_connection_templates,
+        candidate_connection_templates,
+        key_fields=[
+            "dir",
+            "from_type",
+            "from_lane",
+            "from_lane_signature",
+            "to_type",
+            "to_lane",
+            "to_lane_signature",
+        ],
+    )
+    status = "pass" if lane_parity["status"] == connection_parity["status"] == "pass" else "fail"
+    return {
+        "status": status,
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "lane_template_summary": {
+            "teacher_edge_count": _template_count_total(teacher_lane_templates),
+            "candidate_edge_count": _template_count_total(candidate_lane_templates),
+            "teacher_template_count": len(teacher_lane_templates),
+            "candidate_template_count": len(candidate_lane_templates),
+            "parity": lane_parity,
+        },
+        "connection_template_summary": {
+            "teacher_connection_count": _template_count_total(teacher_connection_templates),
+            "candidate_connection_count": _template_count_total(candidate_connection_templates),
+            "teacher_template_count": len(teacher_connection_templates),
+            "candidate_template_count": len(candidate_connection_templates),
+            "parity": connection_parity,
+        },
+    }
+
+
 def summarize_road_lane_model_templates(
     bundle: dict[str, Any],
     *,
@@ -420,6 +482,10 @@ def _sort_templates_by_count(templates: Any) -> list[dict[str, Any]]:
         (dict(template) for template in templates if isinstance(template, dict)),
         key=lambda template: (-int(template.get("count", 0)), _record_key(template)),
     )
+
+
+def _template_count_total(templates: list[dict[str, Any]]) -> int:
+    return sum(int(template.get("count", 0)) for template in templates)
 
 
 def _common_edge_geometry_mismatches(

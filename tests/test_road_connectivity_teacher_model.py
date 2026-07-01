@@ -2,6 +2,7 @@ from pathlib import Path
 
 from torii_sumo.core.road_connectivity_teacher_model import (
     canonical_road_connectivity_bundle,
+    compare_net_road_template_parity,
     compare_road_template_summaries,
     compare_road_connectivity_bundles,
     summarize_net_road_connection_templates,
@@ -332,6 +333,52 @@ def test_compare_road_template_summaries_reports_key_level_parity() -> None:
             {"type": "highway.path", "lane_signature": ["pedestrian bicycle"], "count": 3}
         ],
     }
+
+
+def test_compare_net_road_template_parity_reports_lane_and_connection_delta(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="highway.service">
+    <lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/>
+  </edge>
+  <edge id="b" from="n2" to="n3" type="highway.service">
+    <lane id="b_0" index="0" allow="passenger" shape="10,0 20,0"/>
+  </edge>
+  <edge id="foot" from="n2" to="n4" type="highway.footway">
+    <lane id="foot_0" index="0" allow="pedestrian" shape="10,0 10,5"/>
+  </edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="highway.service">
+    <lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/>
+  </edge>
+  <edge id="b" from="n2" to="n3" type="highway.residential">
+    <lane id="b_0" index="0" allow="passenger" shape="10,0 20,0"/>
+  </edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = compare_net_road_template_parity(teacher_net, candidate_net)
+
+    assert report["status"] == "fail"
+    assert report["lane_template_summary"]["teacher_edge_count"] == 3
+    assert report["lane_template_summary"]["candidate_edge_count"] == 2
+    assert report["lane_template_summary"]["parity"]["missing_template_count"] == 1
+    assert report["lane_template_summary"]["parity"]["extra_template_count"] == 1
+    assert report["lane_template_summary"]["parity"]["common_count_delta_sum"] == 1
+    assert report["connection_template_summary"]["teacher_connection_count"] == 1
+    assert report["connection_template_summary"]["candidate_connection_count"] == 1
+    assert report["connection_template_summary"]["parity"]["missing_template_count"] == 1
+    assert report["connection_template_summary"]["parity"]["extra_template_count"] == 1
+    assert report["connection_template_summary"]["parity"]["common_template_count"] == 0
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
