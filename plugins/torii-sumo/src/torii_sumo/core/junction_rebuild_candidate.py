@@ -1554,12 +1554,15 @@ def write_teacher_target_internal_replay_net(
         candidate_edge_ids.discard(stale_edge_id)
         candidate_edges_by_id.pop(stale_edge_id, None)
         removed_stale_split_fragment_edges.append(stale_edge_id)
+    stale_split_spatial_junction_ids = set(stale_split_remote_junction_ids)
     replayed_stale_split_continuation_edges = []
-    for candidate_edge_id, teacher_edge_id in sorted(stale_split_continuation_replacements.items()):
+    replayed_stale_split_teacher_edge_ids: set[str] = set()
+
+    def replay_stale_split_edge_geometry(candidate_edge_id: str, teacher_edge_id: str) -> bool:
         existing_edge = candidate_edges_by_id.get(candidate_edge_id)
         teacher_edge = teacher_edges.get(teacher_edge_id)
         if existing_edge is None or teacher_edge is None:
-            continue
+            return False
         copied_edge = _clone_transformed_boundary_edge(
             teacher_edge,
             candidate_edge_id,
@@ -1576,14 +1579,52 @@ def write_teacher_target_internal_replay_net(
         candidate_edge_ids.add(candidate_edge_id)
         candidate_edges_by_id[candidate_edge_id] = copied_edge
         _append_edge_lanes_to_destination_junction(candidate_root, copied_edge)
-        replayed_stale_split_continuation_edges.append(candidate_edge_id)
+        for endpoint in (copied_edge.attrib.get("from", ""), copied_edge.attrib.get("to", "")):
+            if endpoint and endpoint != junction_id:
+                stale_split_spatial_junction_ids.add(endpoint)
+        return True
+
+    for candidate_edge_id, teacher_edge_id in sorted(stale_split_continuation_replacements.items()):
+        if replay_stale_split_edge_geometry(candidate_edge_id, teacher_edge_id):
+            replayed_stale_split_continuation_edges.append(candidate_edge_id)
+            replayed_stale_split_teacher_edge_ids.add(teacher_edge_id)
+    replayed_stale_split_followup_edges = []
+    for teacher_edge_id in sorted(replayed_stale_split_teacher_edge_ids):
+        for teacher_connection in teacher_root.findall("connection"):
+            if teacher_connection.attrib.get("dir") == "t":
+                continue
+            from_edge_id = teacher_connection.attrib.get("from", "")
+            to_edge_id = teacher_connection.attrib.get("to", "")
+            if from_edge_id == teacher_edge_id:
+                followup_teacher_edge_id = to_edge_id
+            elif to_edge_id == teacher_edge_id:
+                followup_teacher_edge_id = from_edge_id
+            else:
+                continue
+            if (
+                not followup_teacher_edge_id
+                or followup_teacher_edge_id in replay_edge_map
+                or followup_teacher_edge_id in teacher_boundary_edge_id_set
+                or followup_teacher_edge_id.startswith(":")
+            ):
+                continue
+            followup_teacher_edge = teacher_edges.get(followup_teacher_edge_id)
+            followup_candidate_edge_id = followup_teacher_edge_id
+            if (
+                followup_teacher_edge is None
+                or followup_candidate_edge_id not in candidate_edges_by_id
+                or not _edge_is_vehicle_continuation_candidate(followup_teacher_edge)
+            ):
+                continue
+            replay_edge_map[followup_teacher_edge_id] = followup_candidate_edge_id
+            if replay_stale_split_edge_geometry(followup_candidate_edge_id, followup_teacher_edge_id):
+                replayed_stale_split_followup_edges.append(followup_candidate_edge_id)
     retuned_stale_split_junction_ids = []
-    for remote_junction_id in sorted(stale_split_remote_junction_ids):
+    for remote_junction_id in sorted(stale_split_spatial_junction_ids):
         remote_teacher_junction = teacher_junctions.get(remote_junction_id)
         remote_candidate_junction = candidate_root.find(f"junction[@id='{remote_junction_id}']")
         if remote_teacher_junction is None or remote_candidate_junction is None:
             continue
-        teacher_internal_prefix_remote = f":{remote_junction_id}_"
         mapped_spatial_attrs = _mapped_spatial_attrs(
             remote_teacher_junction.attrib,
             dx,
@@ -1975,6 +2016,8 @@ def write_teacher_target_internal_replay_net(
         "rewired_stale_split_fragment_connections": rewired_stale_split_fragment_connections,
         "replayed_stale_split_continuation_edge_count": len(replayed_stale_split_continuation_edges),
         "replayed_stale_split_continuation_edges": replayed_stale_split_continuation_edges,
+        "replayed_stale_split_followup_edge_count": len(replayed_stale_split_followup_edges),
+        "replayed_stale_split_followup_edges": replayed_stale_split_followup_edges,
         "retuned_stale_split_junction_ids": retuned_stale_split_junction_ids,
         "stripped_stale_split_tls_connection_count": len(stripped_stale_split_tls_connections),
         "stripped_stale_split_tls_connections": stripped_stale_split_tls_connections,
@@ -5623,7 +5666,8 @@ def _edge_is_pedestrian_only(edge: ET.Element) -> bool:
 def _edge_is_vehicle_continuation_candidate(edge: ET.Element) -> bool:
     if edge.attrib.get("function") in {"internal", "crossing", "walkingarea"} or _edge_is_pedestrian_only(edge):
         return False
-    return edge.attrib.get("type", "").startswith("highway.") or any(
+    edge_types = edge.attrib.get("type", "").split("|")
+    return any(edge_type.startswith("highway.") for edge_type in edge_types) or any(
         set((lane.attrib.get("allow") or "").split())
         & {"passenger", "private", "bus", "coach", "truck", "motorcycle", "moped", "taxi", "delivery", "emergency"}
         for lane in edge.findall("lane")
