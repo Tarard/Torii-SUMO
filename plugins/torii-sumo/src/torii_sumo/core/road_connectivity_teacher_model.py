@@ -326,6 +326,29 @@ def build_road_lane_template_edge_subset_repair_candidates(
     )[:max_items]
 
 
+def build_road_lane_template_single_edge_repair_candidates(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    parity_report: dict[str, Any],
+    *,
+    max_items: int = 10,
+) -> list[dict[str, Any]]:
+    candidates = []
+    for candidate in build_road_lane_template_edge_subset_repair_candidates(
+        teacher_net_file,
+        candidate_net_file,
+        parity_report,
+        max_items=max_items,
+    ):
+        for edge_id in candidate.get("edge_ids", []):
+            single_edge_candidate = dict(candidate)
+            single_edge_candidate["edge_ids"] = [str(edge_id)]
+            single_edge_candidate["edge_count"] = 1
+            single_edge_candidate["priority"] = 1
+            candidates.append(single_edge_candidate)
+    return candidates[:max_items]
+
+
 def write_road_lane_template_repair_candidate(
     candidate_net_file: Path,
     output_file: Path,
@@ -431,6 +454,30 @@ def evaluate_road_template_repair_promotion(
     }
 
 
+def _evaluate_road_lane_local_replay_promotion(
+    repair_candidate: dict[str, Any],
+    repair_report: dict[str, Any],
+) -> dict[str, Any]:
+    expected_edges = int(repair_candidate.get("edge_count", len(repair_candidate.get("edge_ids", []))))
+    changed_edges = int(repair_report.get("changed_edge_count", 0))
+    changed_lanes = int(repair_report.get("changed_lane_count", 0))
+    promotion_status = "pass" if expected_edges and changed_edges == expected_edges and changed_lanes else "blocked"
+    return {
+        "status": "pass" if promotion_status == "pass" else "fail",
+        "claim_status": "diagnostic-demo",
+        "metric_scope": "local_lane",
+        "promotion_status": promotion_status,
+        "reason": "road_lane_local_replay_applied"
+        if promotion_status == "pass"
+        else "road_lane_local_replay_not_applied",
+        "before_score": expected_edges,
+        "after_score": max(0, expected_edges - changed_edges),
+        "score_delta": -changed_edges,
+        "improved_metrics": {"changed_edge_count": changed_edges} if changed_edges else {},
+        "worsened_metrics": {},
+    }
+
+
 def run_road_lane_template_repair_probe(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -440,6 +487,7 @@ def run_road_lane_template_repair_probe(
     max_candidates: int = 10,
     max_examples: int = 3,
     use_teacher_edge_subset: bool = True,
+    use_single_edge: bool = False,
     promotion_metric_scope: str = "lane",
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -448,20 +496,28 @@ def run_road_lane_template_repair_probe(
         candidate_net_file,
         max_examples=max_examples,
     )
-    repair_scope = "teacher_edge_subset" if use_teacher_edge_subset else "template"
-    repair_candidates = (
-        build_road_lane_template_edge_subset_repair_candidates(
+    if use_single_edge:
+        repair_scope = "teacher_single_edge"
+        repair_candidates = build_road_lane_template_single_edge_repair_candidates(
             teacher_net_file,
             candidate_net_file,
             before_report,
             max_items=max_candidates,
         )
-        if use_teacher_edge_subset
-        else build_road_lane_template_repair_candidates(
+    elif use_teacher_edge_subset:
+        repair_scope = "teacher_edge_subset"
+        repair_candidates = build_road_lane_template_edge_subset_repair_candidates(
+            teacher_net_file,
+            candidate_net_file,
             before_report,
             max_items=max_candidates,
         )
-    )
+    else:
+        repair_scope = "template"
+        repair_candidates = build_road_lane_template_repair_candidates(
+            before_report,
+            max_items=max_candidates,
+        )
     candidate_reports = []
     for index, repair_candidate in enumerate(repair_candidates, start=1):
         variant_file = output_dir / f"{prefix}_{index:03d}.net.xml"
@@ -475,10 +531,14 @@ def run_road_lane_template_repair_probe(
             variant_file,
             max_examples=max_examples,
         )
-        promotion_gate = evaluate_road_template_repair_promotion(
-            before_report,
-            after_report,
-            metric_scope=promotion_metric_scope,
+        promotion_gate = (
+            _evaluate_road_lane_local_replay_promotion(repair_candidate, repair_report)
+            if promotion_metric_scope == "local_lane"
+            else evaluate_road_template_repair_promotion(
+                before_report,
+                after_report,
+                metric_scope=promotion_metric_scope,
+            )
         )
         candidate_reports.append(
             {

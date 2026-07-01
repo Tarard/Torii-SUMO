@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.road_connectivity_teacher_model import (
     build_road_lane_template_edge_subset_repair_candidates,
     build_road_lane_template_repair_candidates,
+    build_road_lane_template_single_edge_repair_candidates,
     build_road_template_repair_queue,
     canonical_road_connectivity_bundle,
     compare_net_road_template_parity,
@@ -608,6 +609,44 @@ def test_edge_subset_lane_template_repair_only_changes_teacher_confirmed_edges(
     assert untouched_lane.attrib["allow"] == "pedestrian passenger"
 
 
+def test_single_edge_lane_template_repair_splits_teacher_confirmed_edges(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="fix_a" type="highway.service">
+    <lane id="fix_a_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+  <edge id="fix_b" type="highway.service">
+    <lane id="fix_b_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="fix_a" type="highway.service">
+    <lane id="fix_a_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+  <edge id="fix_b" type="highway.service">
+    <lane id="fix_b_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    parity_report = compare_net_road_template_parity(teacher_net, candidate_net)
+
+    repair_candidates = build_road_lane_template_single_edge_repair_candidates(
+        teacher_net,
+        candidate_net,
+        parity_report,
+    )
+
+    assert [candidate["edge_ids"] for candidate in repair_candidates] == [["fix_a"], ["fix_b"]]
+    assert [candidate["edge_count"] for candidate in repair_candidates] == [1, 1]
+    assert [candidate["priority"] for candidate in repair_candidates] == [1, 1]
+
+
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
     before = {
         "gate": {
@@ -766,6 +805,76 @@ def test_run_road_lane_template_repair_probe_promotes_safe_candidate(tmp_path: P
     assert report["candidates"][0]["promotion_gate"]["promotion_status"] == "pass"
     assert report["candidates"][0]["promotion_gate"]["before_score"] == 2
     assert report["candidates"][0]["promotion_gate"]["after_score"] == 0
+
+
+def test_run_road_lane_template_repair_probe_can_use_single_edge_scope(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="service_a" type="highway.service">
+    <lane id="service_a_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="service_a" type="highway.service">
+    <lane id="service_a_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = run_road_lane_template_repair_probe(
+        teacher_net,
+        candidate_net,
+        tmp_path / "probe",
+        prefix="demo",
+        use_single_edge=True,
+    )
+
+    assert report["repair_scope"] == "teacher_single_edge"
+    assert report["candidate_count"] == 1
+    assert report["pass_candidate_count"] == 1
+
+
+def test_run_road_lane_template_repair_probe_can_use_local_lane_gate(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="service_a" type="highway.service">
+    <lane id="service_a_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="service_a" type="highway.service">
+    <lane id="service_a_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = run_road_lane_template_repair_probe(
+        teacher_net,
+        candidate_net,
+        tmp_path / "probe",
+        prefix="demo",
+        use_single_edge=True,
+        promotion_metric_scope="local_lane",
+    )
+
+    gate = report["candidates"][0]["promotion_gate"]
+    assert report["promotion_metric_scope"] == "local_lane"
+    assert report["pass_candidate_count"] == 1
+    assert gate["metric_scope"] == "local_lane"
+    assert gate["promotion_status"] == "pass"
+    assert gate["reason"] == "road_lane_local_replay_applied"
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
