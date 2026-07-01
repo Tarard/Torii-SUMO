@@ -2,6 +2,7 @@ from pathlib import Path
 
 from torii_sumo.core.road_connectivity_teacher_model import (
     canonical_road_connectivity_bundle,
+    compare_road_connectivity_bundles,
     write_road_connectivity_self_replay_net,
 )
 
@@ -37,6 +38,72 @@ def test_canonical_road_connectivity_bundle_extracts_edge_chain_and_connections(
         "junction_count": 4,
         "connection_count": 2,
         "missing_reference_count": 0,
+        "seed_edge_count": 1,
+        "missing_seed_edge_ids": [],
+    }
+
+
+def test_canonical_road_connectivity_bundle_reports_missing_seed_edges(tmp_path: Path) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="dead_end" x="10" y="0" incLanes="a_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    bundle = canonical_road_connectivity_bundle(net_file, seed_edge_ids=["a", "missing"], hop_radius=1)
+
+    assert bundle["summary"]["seed_edge_count"] == 2
+    assert bundle["summary"]["missing_seed_edge_ids"] == ["missing"]
+
+
+def test_compare_road_connectivity_bundles_reports_exact_edge_and_connection_delta(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="b" from="n2" to="n3"><lane id="b_0" index="0" allow="passenger" shape="10,0 20,0"/></edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="priority" x="10" y="0" incLanes="a_0" intLanes=""/>
+  <junction id="n3" type="dead_end" x="20" y="0" incLanes="b_0" intLanes=""/>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="c" from="n2" to="n4"><lane id="c_0" index="0" allow="passenger" shape="10,0 20,1"/></edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="priority" x="10" y="0" incLanes="a_0" intLanes=""/>
+  <junction id="n4" type="dead_end" x="20" y="1" incLanes="c_0" intLanes=""/>
+  <connection from="a" to="c" fromLane="0" toLane="0" dir="r"/>
+</net>""",
+        encoding="utf-8",
+    )
+    teacher = canonical_road_connectivity_bundle(teacher_net, seed_edge_ids=["a", "b"], hop_radius=1)
+    candidate = canonical_road_connectivity_bundle(candidate_net, seed_edge_ids=["a", "b"], hop_radius=1)
+
+    report = compare_road_connectivity_bundles(teacher, candidate)
+
+    assert report == {
+        "status": "fail",
+        "candidate_missing_seed_edge_ids": ["b"],
+        "edge_ids": {"missing_in_candidate": ["b"], "extra_in_candidate": ["c"]},
+        "connections": {
+            "missing_in_candidate": [{"dir": "s", "from": "a", "fromLane": "0", "to": "b", "toLane": "0"}],
+            "extra_in_candidate": [{"dir": "r", "from": "a", "fromLane": "0", "to": "c", "toLane": "0"}],
+        },
+        "summary": {
+            "teacher_edge_count": 2,
+            "candidate_edge_count": 2,
+            "teacher_connection_count": 1,
+            "candidate_connection_count": 1,
+        },
     }
 
 
