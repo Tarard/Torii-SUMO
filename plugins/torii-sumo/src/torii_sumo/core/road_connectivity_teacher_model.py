@@ -13,6 +13,7 @@ def canonical_road_connectivity_bundle(
 ) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
     edges = {edge.attrib["id"]: edge for edge in root.findall("edge") if edge.attrib.get("id")}
+    missing_seed_edge_ids = sorted(edge_id for edge_id in seed_edge_ids if edge_id not in edges)
     selected = {edge_id for edge_id in seed_edge_ids if edge_id in edges and not edge_id.startswith(":")}
     for _ in range(max(0, hop_radius)):
         endpoints = {
@@ -71,6 +72,8 @@ def canonical_road_connectivity_bundle(
         "junction_count": len(bundle["junctions"]),
         "connection_count": len(bundle["connections"]),
         "missing_reference_count": _missing_reference_count(bundle),
+        "seed_edge_count": len(seed_edge_ids),
+        "missing_seed_edge_ids": missing_seed_edge_ids,
     }
     return bundle
 
@@ -115,6 +118,43 @@ def write_road_connectivity_self_replay_net(
         "status": "pass" if not parity_delta else "fail",
         "output_file": str(output_file),
         "parity_delta": parity_delta,
+    }
+
+
+def compare_road_connectivity_bundles(
+    teacher: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    teacher_edge_ids = _record_ids(teacher.get("edges", []))
+    candidate_edge_ids = _record_ids(candidate.get("edges", []))
+    missing_edges = sorted(teacher_edge_ids - candidate_edge_ids)
+    extra_edges = sorted(candidate_edge_ids - teacher_edge_ids)
+    missing_connections = _missing_records(teacher.get("connections", []), candidate.get("connections", []))
+    extra_connections = _missing_records(candidate.get("connections", []), teacher.get("connections", []))
+    candidate_missing_seed_edge_ids = sorted(
+        str(edge_id)
+        for edge_id in candidate.get("summary", {}).get("missing_seed_edge_ids", [])
+    )
+    status = "fail" if any(
+        [candidate_missing_seed_edge_ids, missing_edges, extra_edges, missing_connections, extra_connections]
+    ) else "pass"
+    return {
+        "status": status,
+        "candidate_missing_seed_edge_ids": candidate_missing_seed_edge_ids,
+        "edge_ids": {
+            "missing_in_candidate": missing_edges,
+            "extra_in_candidate": extra_edges,
+        },
+        "connections": {
+            "missing_in_candidate": missing_connections,
+            "extra_in_candidate": extra_connections,
+        },
+        "summary": {
+            "teacher_edge_count": len(teacher.get("edges", [])),
+            "candidate_edge_count": len(candidate.get("edges", [])),
+            "teacher_connection_count": len(teacher.get("connections", [])),
+            "candidate_connection_count": len(candidate.get("connections", [])),
+        },
     }
 
 
@@ -166,6 +206,27 @@ def _neutral_requests(count: int) -> list[dict[str, str]]:
         {"cont": "0", "foes": width, "index": str(index), "response": width}
         for index in range(count)
     ]
+
+
+def _record_ids(records: Any) -> set[str]:
+    return {
+        str(record.get("id", ""))
+        for record in records
+        if isinstance(record, dict) and record.get("id")
+    }
+
+
+def _missing_records(left: Any, right: Any) -> list[dict[str, Any]]:
+    right_keys = {_record_key(record) for record in right if isinstance(record, dict)}
+    return [
+        dict(record)
+        for record in left
+        if isinstance(record, dict) and _record_key(record) not in right_keys
+    ]
+
+
+def _record_key(record: dict[str, Any]) -> str:
+    return "|".join(f"{key}={record[key]}" for key in sorted(record))
 
 
 def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:
