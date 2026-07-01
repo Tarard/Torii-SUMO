@@ -3,6 +3,8 @@ import xml.etree.ElementTree as ET
 
 from torii_sumo.core.road_connectivity_teacher_model import (
     build_internal_movement_replay_audit,
+    build_internal_movement_owner_approach_edge_map,
+    build_internal_movement_owner_internal_lane_map,
     build_road_connection_topology_replay_audit,
     build_road_lane_template_edge_subset_repair_candidates,
     build_road_lane_template_repair_candidates,
@@ -1263,6 +1265,156 @@ def test_write_internal_movement_owner_replay_candidate_skips_nonlocal_candidate
     assert report["added_connection_count"] == 0
     assert report["skipped_nonlocal_edge_connection_count"] == 1
     assert ET.parse(output_net).getroot().find("connection") is None
+
+
+def test_build_internal_movement_owner_approach_edge_map_matches_split_roots(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="j" to="b"><lane id="road#3_0" index="0"/></edge>
+  <edge id="-road#2" from="a" to="j"><lane id="-road#2_0" index="0"/></edge>
+  <edge id="other#0" from="j" to="c"><lane id="other#0_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" from="j" to="b2"><lane id="road#5_0" index="0"/></edge>
+  <edge id="-road#4" from="a2" to="j"><lane id="-road#4_0" index="0"/></edge>
+  <edge id="other#0" from="not_j" to="c"><lane id="other#0_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_approach_edge_map(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+
+    assert report["status"] == "pass"
+    assert report["mapped_edge_count"] == 2
+    assert report["edge_map"] == {"-road#2": "-road#4", "road#3": "road#5"}
+    assert report["unmapped_teacher_edges"] == ["other#0"]
+
+
+def test_write_internal_movement_owner_replay_candidate_applies_teacher_edge_map(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="a" to="j"><lane id="road#3_0" index="0"/></edge>
+  <edge id="out#2" from="j" to="b"><lane id="out#2_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <connection from="road#3" to="out#2" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" from="a2" to="j"><lane id="road#5_0" index="0"/></edge>
+  <edge id="out#4" from="j" to="b2"><lane id="out#4_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5", "out#2": "out#4"},
+    )
+
+    connection = ET.parse(output_net).getroot().find("connection")
+    assert report["added_connection_count"] == 1
+    assert report["mapped_external_edge_count"] == 2
+    assert connection is not None
+    assert connection.attrib["from"] == "road#5"
+    assert connection.attrib["to"] == "out#4"
+
+
+def test_build_internal_movement_owner_internal_lane_map_matches_mapped_movements(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="a" to="j"><lane id="road#3_0" index="0"/></edge>
+  <edge id="out#2" from="j" to="b"><lane id="out#2_0" index="0"/></edge>
+  <edge id=":j_7" function="internal"><lane id=":j_7_0" index="0"/></edge>
+  <connection from="road#3" to="out#2" fromLane="0" toLane="0" via=":j_7_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" from="a2" to="j"><lane id="road#5_0" index="0"/></edge>
+  <edge id="out#4" from="j" to="b2"><lane id="out#4_0" index="0"/></edge>
+  <edge id=":j_11" function="internal"><lane id=":j_11_0" index="0"/></edge>
+  <connection from="road#5" to="out#4" fromLane="0" toLane="0" via=":j_11_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_internal_lane_map(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5", "out#2": "out#4"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["mapped_internal_lane_count"] == 1
+    assert report["internal_lane_map"] == {":j_7_0": ":j_11_0"}
+
+
+def test_write_internal_movement_owner_replay_candidate_applies_internal_lane_map(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="a" to="j"><lane id="road#3_0" index="0"/></edge>
+  <edge id="out#2" from="j" to="b"><lane id="out#2_0" index="0"/></edge>
+  <edge id=":j_7" function="internal"><lane id=":j_7_0" index="0"/></edge>
+  <connection from="road#3" to="out#2" fromLane="0" toLane="0" via=":j_7_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" from="a2" to="j"><lane id="road#5_0" index="0"/></edge>
+  <edge id="out#4" from="j" to="b2"><lane id="out#4_0" index="0"/></edge>
+  <edge id=":j_11" function="internal"><lane id=":j_11_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5", "out#2": "out#4"},
+        teacher_internal_lane_map={":j_7_0": ":j_11_0"},
+    )
+
+    connection = ET.parse(output_net).getroot().find("connection")
+    assert report["added_connection_count"] == 1
+    assert report["mapped_internal_lane_count"] == 1
+    assert connection is not None
+    assert connection.attrib["via"] == ":j_11_0"
 
 
 def test_write_road_connection_topology_replay_candidate_skips_internal_via_by_default(
