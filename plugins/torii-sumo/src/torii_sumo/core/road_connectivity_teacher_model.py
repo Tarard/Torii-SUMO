@@ -377,10 +377,14 @@ def write_road_lane_template_repair_candidate(
     }
 
 
-ROAD_TEMPLATE_GATE_METRICS = (
+LANE_TEMPLATE_GATE_METRICS = (
     "lane_missing_template_count",
     "lane_extra_template_count",
     "lane_common_count_delta_sum",
+)
+
+ROAD_TEMPLATE_GATE_METRICS = (
+    *LANE_TEMPLATE_GATE_METRICS,
     "connection_missing_template_count",
     "connection_extra_template_count",
     "connection_common_count_delta_sum",
@@ -390,12 +394,15 @@ ROAD_TEMPLATE_GATE_METRICS = (
 def evaluate_road_template_repair_promotion(
     before_report: dict[str, Any],
     after_report: dict[str, Any],
+    *,
+    metric_scope: str = "road",
 ) -> dict[str, Any]:
-    before_metrics = _road_template_gate_metrics(before_report)
-    after_metrics = _road_template_gate_metrics(after_report)
+    metrics = LANE_TEMPLATE_GATE_METRICS if metric_scope == "lane" else ROAD_TEMPLATE_GATE_METRICS
+    before_metrics = _road_template_gate_metrics(before_report, metrics)
+    after_metrics = _road_template_gate_metrics(after_report, metrics)
     deltas = {
         key: after_metrics[key] - before_metrics[key]
-        for key in ROAD_TEMPLATE_GATE_METRICS
+        for key in metrics
     }
     improved_metrics = {key: value for key, value in deltas.items() if value < 0}
     worsened_metrics = {key: value for key, value in deltas.items() if value > 0}
@@ -413,6 +420,7 @@ def evaluate_road_template_repair_promotion(
     return {
         "status": "pass" if promotion_status == "pass" else "fail",
         "claim_status": "diagnostic-demo",
+        "metric_scope": metric_scope,
         "promotion_status": promotion_status,
         "reason": reason,
         "before_score": before_score,
@@ -432,6 +440,7 @@ def run_road_lane_template_repair_probe(
     max_candidates: int = 10,
     max_examples: int = 3,
     use_teacher_edge_subset: bool = True,
+    promotion_metric_scope: str = "lane",
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     before_report = compare_net_road_template_parity(
@@ -466,7 +475,11 @@ def run_road_lane_template_repair_probe(
             variant_file,
             max_examples=max_examples,
         )
-        promotion_gate = evaluate_road_template_repair_promotion(before_report, after_report)
+        promotion_gate = evaluate_road_template_repair_promotion(
+            before_report,
+            after_report,
+            metric_scope=promotion_metric_scope,
+        )
         candidate_reports.append(
             {
                 "candidate_index": index,
@@ -496,6 +509,7 @@ def run_road_lane_template_repair_probe(
         "claim_status": "diagnostic-demo",
         "road_lane_template_repair_status": "evaluated" if repair_candidates else "no_candidates",
         "repair_scope": repair_scope,
+        "promotion_metric_scope": promotion_metric_scope,
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "output_dir": str(output_dir),
@@ -802,9 +816,12 @@ def _road_template_gate_summary(
     }
 
 
-def _road_template_gate_metrics(report: dict[str, Any]) -> dict[str, int]:
+def _road_template_gate_metrics(
+    report: dict[str, Any],
+    metrics: tuple[str, ...] = ROAD_TEMPLATE_GATE_METRICS,
+) -> dict[str, int]:
     gate = report.get("gate", {})
-    return {key: int(gate.get(key, 0)) for key in ROAD_TEMPLATE_GATE_METRICS}
+    return {key: int(gate.get(key, 0)) for key in metrics}
 
 
 def _road_lane_template_edge_index(net_file: Path) -> dict[str, tuple[str, tuple[str, ...]]]:
