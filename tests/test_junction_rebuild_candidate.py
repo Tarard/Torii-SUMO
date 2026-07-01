@@ -18,6 +18,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _target_internal_replay_input_file,
     _write_joined_endpoint_edge_file,
     _stage_file,
+    _teacher_guided_candidate_sort_key,
     build_rebuild_candidate,
     build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
@@ -1942,7 +1943,10 @@ def test_build_teacher_guided_repair_queue_limits_ready_candidates(tmp_path: Pat
     assert report["matched_case_count"] == 2
     assert report["queued_case_count"] == 1
     assert report["queue_truncated"] is True
-    assert report["queue_order_policy"] == "largest_vehicle_movement_gap_then_highest_teacher_template_count"
+    assert (
+        report["queue_order_policy"]
+        == "ready_then_same_id_tls_semantics_then_largest_vehicle_movement_gap_then_highest_teacher_template_count"
+    )
     assert report["ready_candidate_count"] == 1
     assert report["max_ready_candidates"] == 1
     assert report["repair_candidates"][0]["matched_candidate_node_ids"] == ["a"]
@@ -1959,6 +1963,25 @@ def test_limit_ready_repair_candidates_prioritizes_ready_candidates() -> None:
     selected = _limit_ready_repair_candidates(candidates, 2)
 
     assert [candidate["junction_id"] for candidate in selected] == ["ready_1", "ready_2"]
+
+
+def test_teacher_guided_candidate_sort_key_prioritizes_same_id_tls_semantics() -> None:
+    candidates = [
+        {
+            "junction_id": "expanded_pattern",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "learned_rule": "tum_like_same_id_pattern_candidate",
+            "vehicle_movement_matrix_missing_count": 10,
+        },
+        {
+            "junction_id": "same_id_tls",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "learned_rule": "tum_like_same_id_tls_candidate",
+            "vehicle_movement_matrix_missing_count": 1,
+        },
+    ]
+
+    assert sorted(candidates, key=_teacher_guided_candidate_sort_key)[0]["junction_id"] == "same_id_tls"
 
 
 def test_build_teacher_guided_repair_queue_prioritizes_reusable_teacher_templates(tmp_path: Path) -> None:
@@ -2007,7 +2030,10 @@ def test_build_teacher_guided_repair_queue_prioritizes_reusable_teacher_template
     )
 
     candidate = report["repair_candidates"][0]
-    assert report["queue_order_policy"] == "largest_vehicle_movement_gap_then_highest_teacher_template_count"
+    assert (
+        report["queue_order_policy"]
+        == "ready_then_same_id_tls_semantics_then_largest_vehicle_movement_gap_then_highest_teacher_template_count"
+    )
     assert candidate["reference_id"] == "cluster_z_high"
     assert candidate["teacher_pattern_key"] == "high_template"
     assert candidate["teacher_pattern_template_count"] == 127
