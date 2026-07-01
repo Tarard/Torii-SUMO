@@ -5530,10 +5530,13 @@ def _restore_non_target_internal_artifacts(
         if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
     }
     junction_prefixes = [(f":{junction_id}_", junction_id) for junction_id in sorted(junction_ids, key=len, reverse=True)]
+    owner_cache: dict[str, str] = {}
 
     def owner(value: str) -> str:
+        if value in owner_cache:
+            return owner_cache[value]
         candidates = (value, _via_lane_edge_id(value))
-        return next(
+        internal_owner = next(
             (
                 junction_id
                 for edge_id in candidates
@@ -5542,6 +5545,8 @@ def _restore_non_target_internal_artifacts(
             ),
             "",
         )
+        owner_cache[value] = internal_owner
+        return internal_owner
 
     def is_restored_owner(value: str) -> bool:
         internal_owner = owner(value)
