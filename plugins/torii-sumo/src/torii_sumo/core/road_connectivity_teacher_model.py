@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
@@ -124,11 +125,20 @@ def write_road_connectivity_self_replay_net(
 def compare_road_connectivity_bundles(
     teacher: dict[str, Any],
     candidate: dict[str, Any],
+    *,
+    geometry_tolerance: float = 0.5,
 ) -> dict[str, Any]:
     teacher_edge_ids = _record_ids(teacher.get("edges", []))
     candidate_edge_ids = _record_ids(candidate.get("edges", []))
+    common_edge_ids = teacher_edge_ids & candidate_edge_ids
     missing_edges = sorted(teacher_edge_ids - candidate_edge_ids)
     extra_edges = sorted(candidate_edge_ids - teacher_edge_ids)
+    geometry_mismatches = _common_edge_geometry_mismatches(
+        teacher,
+        candidate,
+        common_edge_ids,
+        geometry_tolerance,
+    )
     missing_connections = _missing_records(teacher.get("connections", []), candidate.get("connections", []))
     extra_connections = _missing_records(candidate.get("connections", []), teacher.get("connections", []))
     candidate_missing_seed_edge_ids = sorted(
@@ -136,7 +146,14 @@ def compare_road_connectivity_bundles(
         for edge_id in candidate.get("summary", {}).get("missing_seed_edge_ids", [])
     )
     status = "fail" if any(
-        [candidate_missing_seed_edge_ids, missing_edges, extra_edges, missing_connections, extra_connections]
+        [
+            candidate_missing_seed_edge_ids,
+            missing_edges,
+            extra_edges,
+            geometry_mismatches,
+            missing_connections,
+            extra_connections,
+        ]
     ) else "pass"
     return {
         "status": status,
@@ -145,6 +162,7 @@ def compare_road_connectivity_bundles(
             "missing_in_candidate": missing_edges,
             "extra_in_candidate": extra_edges,
         },
+        "common_edge_geometry_mismatches": geometry_mismatches,
         "connections": {
             "missing_in_candidate": missing_connections,
             "extra_in_candidate": extra_connections,
@@ -152,6 +170,8 @@ def compare_road_connectivity_bundles(
         "summary": {
             "teacher_edge_count": len(teacher.get("edges", [])),
             "candidate_edge_count": len(candidate.get("edges", [])),
+            "common_edge_count": len(common_edge_ids),
+            "common_edge_geometry_mismatch_count": len(geometry_mismatches),
             "teacher_connection_count": len(teacher.get("connections", [])),
             "candidate_connection_count": len(candidate.get("connections", [])),
         },
@@ -227,6 +247,82 @@ def _missing_records(left: Any, right: Any) -> list[dict[str, Any]]:
 
 def _record_key(record: dict[str, Any]) -> str:
     return "|".join(f"{key}={record[key]}" for key in sorted(record))
+
+
+def _common_edge_geometry_mismatches(
+    teacher: dict[str, Any],
+    candidate: dict[str, Any],
+    common_edge_ids: set[str],
+    geometry_tolerance: float,
+) -> list[dict[str, Any]]:
+    teacher_edges = {edge["id"]: edge for edge in teacher.get("edges", []) if isinstance(edge, dict) and edge.get("id")}
+    candidate_edges = {edge["id"]: edge for edge in candidate.get("edges", []) if isinstance(edge, dict) and edge.get("id")}
+    teacher_offset = _net_offset(teacher)
+    candidate_offset = _net_offset(candidate)
+    mismatches = []
+    for edge_id in sorted(common_edge_ids):
+        teacher_edge = teacher_edges[edge_id]
+        candidate_edge = candidate_edges[edge_id]
+        endpoint_delta = _edge_endpoint_delta(teacher_edge, teacher_offset, candidate_edge, candidate_offset)
+        teacher_lane_count = len(teacher_edge.get("lanes", []))
+        candidate_lane_count = len(candidate_edge.get("lanes", []))
+        if endpoint_delta > geometry_tolerance or teacher_lane_count != candidate_lane_count:
+            mismatches.append(
+                {
+                    "edge_id": edge_id,
+                    "endpoint_delta": round(endpoint_delta, 6),
+                    "teacher_lane_count": teacher_lane_count,
+                    "candidate_lane_count": candidate_lane_count,
+                }
+            )
+    return mismatches
+
+
+def _net_offset(bundle: dict[str, Any]) -> tuple[float, float]:
+    raw = str(bundle.get("location", {}).get("netOffset", "0,0"))
+    parts = raw.split(",")
+    if len(parts) < 2:
+        return (0.0, 0.0)
+    return (float(parts[0]), float(parts[1]))
+
+
+def _edge_endpoint_delta(
+    teacher_edge: dict[str, Any],
+    teacher_offset: tuple[float, float],
+    candidate_edge: dict[str, Any],
+    candidate_offset: tuple[float, float],
+) -> float:
+    teacher_points = _lane_world_points(teacher_edge, teacher_offset)
+    candidate_points = _lane_world_points(candidate_edge, candidate_offset)
+    if len(teacher_points) < 2 or len(candidate_points) < 2:
+        return 0.0 if teacher_points == candidate_points else math.inf
+    same_direction = _point_distance(teacher_points[0], candidate_points[0]) + _point_distance(
+        teacher_points[-1],
+        candidate_points[-1],
+    )
+    reverse_direction = _point_distance(teacher_points[0], candidate_points[-1]) + _point_distance(
+        teacher_points[-1],
+        candidate_points[0],
+    )
+    return min(same_direction, reverse_direction)
+
+
+def _lane_world_points(edge: dict[str, Any], offset: tuple[float, float]) -> list[tuple[float, float]]:
+    lanes = edge.get("lanes", [])
+    if not lanes:
+        return []
+    shape = str(lanes[0].get("shape", ""))
+    points = []
+    for part in shape.split():
+        coords = part.split(",")
+        if len(coords) < 2:
+            continue
+        points.append((float(coords[0]) - offset[0], float(coords[1]) - offset[1]))
+    return points
+
+
+def _point_distance(left: tuple[float, float], right: tuple[float, float]) -> float:
+    return math.hypot(left[0] - right[0], left[1] - right[1])
 
 
 def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:

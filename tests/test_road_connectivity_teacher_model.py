@@ -94,6 +94,7 @@ def test_compare_road_connectivity_bundles_reports_exact_edge_and_connection_del
         "status": "fail",
         "candidate_missing_seed_edge_ids": ["b"],
         "edge_ids": {"missing_in_candidate": ["b"], "extra_in_candidate": ["c"]},
+        "common_edge_geometry_mismatches": [],
         "connections": {
             "missing_in_candidate": [{"dir": "s", "from": "a", "fromLane": "0", "to": "b", "toLane": "0"}],
             "extra_in_candidate": [{"dir": "r", "from": "a", "fromLane": "0", "to": "c", "toLane": "0"}],
@@ -101,10 +102,53 @@ def test_compare_road_connectivity_bundles_reports_exact_edge_and_connection_del
         "summary": {
             "teacher_edge_count": 2,
             "candidate_edge_count": 2,
+            "common_edge_count": 1,
+            "common_edge_geometry_mismatch_count": 0,
             "teacher_connection_count": 1,
             "candidate_connection_count": 1,
         },
     }
+
+
+def test_compare_road_connectivity_bundles_reports_same_id_geometry_mismatch(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <location netOffset="-100,-100"/>
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" shape="100,100 110,100"/></edge>
+  <junction id="n1" type="dead_end" x="100" y="100" incLanes="" intLanes=""/>
+  <junction id="n2" type="dead_end" x="110" y="100" incLanes="a_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <location netOffset="-200,-200"/>
+  <edge id="a" from="n1" to="n2">
+    <lane id="a_0" index="0" shape="0,0 11,4"/>
+    <lane id="a_1" index="1" shape="0,1 11,5"/>
+  </edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="dead_end" x="11" y="4" incLanes="a_0 a_1" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    teacher = canonical_road_connectivity_bundle(teacher_net, seed_edge_ids=["a"], hop_radius=1)
+    candidate = canonical_road_connectivity_bundle(candidate_net, seed_edge_ids=["a"], hop_radius=1)
+
+    report = compare_road_connectivity_bundles(teacher, candidate, geometry_tolerance=0.5)
+
+    assert report["status"] == "fail"
+    assert report["common_edge_geometry_mismatches"] == [
+        {
+            "edge_id": "a",
+            "endpoint_delta": 4.123106,
+            "teacher_lane_count": 1,
+            "candidate_lane_count": 2,
+        }
+    ]
+    assert report["summary"]["common_edge_geometry_mismatch_count"] == 1
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
