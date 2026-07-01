@@ -584,6 +584,55 @@ def run_road_lane_template_repair_probe(
     }
 
 
+def run_road_lane_template_batch_repair_probe(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    *,
+    max_candidates: int = 30,
+    max_examples: int = 3,
+) -> dict[str, Any]:
+    before_report = compare_net_road_template_parity(
+        teacher_net_file,
+        candidate_net_file,
+        max_examples=max_examples,
+    )
+    repair_candidates = build_road_lane_template_single_edge_repair_candidates(
+        teacher_net_file,
+        candidate_net_file,
+        before_report,
+        max_items=max_candidates,
+    )
+    repair_report = write_road_lane_template_repair_candidate(
+        candidate_net_file,
+        output_file,
+        repair_candidates,
+    )
+    after_report = compare_net_road_template_parity(
+        teacher_net_file,
+        output_file,
+        max_examples=max_examples,
+    )
+    expected_candidate = {
+        "edge_count": sum(int(candidate.get("edge_count", 0)) for candidate in repair_candidates)
+    }
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "repair_scope": "teacher_single_edge_batch",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "selected_candidate_count": len(repair_candidates),
+        "repair_candidates": repair_candidates,
+        "repair_report": repair_report,
+        "promotion_gate": _evaluate_road_lane_local_replay_promotion(expected_candidate, repair_report),
+        "before_gate": before_report["gate"],
+        "after_gate": after_report["gate"],
+        "warnings": [],
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,

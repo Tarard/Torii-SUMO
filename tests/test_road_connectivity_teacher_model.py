@@ -11,6 +11,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     compare_road_template_summaries,
     compare_road_connectivity_bundles,
     evaluate_road_template_repair_promotion,
+    run_road_lane_template_batch_repair_probe,
     run_road_lane_template_repair_probe,
     summarize_net_road_connection_templates,
     summarize_net_road_lane_model_templates,
@@ -875,6 +876,51 @@ def test_run_road_lane_template_repair_probe_can_use_local_lane_gate(tmp_path: P
     assert gate["metric_scope"] == "local_lane"
     assert gate["promotion_status"] == "pass"
     assert gate["reason"] == "road_lane_local_replay_applied"
+
+
+def test_run_road_lane_template_batch_repair_probe_writes_combined_single_edge_candidate(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.batch.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="fix_a" type="highway.service">
+    <lane id="fix_a_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+  <edge id="fix_b" type="highway.service">
+    <lane id="fix_b_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="fix_a" type="highway.service">
+    <lane id="fix_a_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+  <edge id="fix_b" type="highway.service">
+    <lane id="fix_b_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = run_road_lane_template_batch_repair_probe(
+        teacher_net,
+        candidate_net,
+        output_net,
+        max_candidates=2,
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert report["repair_scope"] == "teacher_single_edge_batch"
+    assert report["selected_candidate_count"] == 2
+    assert report["repair_report"]["changed_edge_count"] == 2
+    assert report["promotion_gate"]["promotion_status"] == "pass"
+    assert report["after_gate"]["road_layer_status"] == "pass"
+    assert root.find("./edge[@id='fix_a']/lane").attrib["allow"] == "passenger"
+    assert root.find("./edge[@id='fix_b']/lane").attrib["allow"] == "passenger"
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
