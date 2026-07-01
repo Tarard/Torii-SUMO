@@ -256,6 +256,92 @@ def build_road_template_repair_queue(
     )[:max_items]
 
 
+def build_road_lane_template_repair_candidates(
+    parity_report: dict[str, Any],
+    *,
+    max_items: int = 10,
+) -> list[dict[str, Any]]:
+    parity = parity_report.get("lane_template_summary", {}).get("parity", {})
+    missing_templates = _sort_templates_by_count(parity.get("missing_templates", []))
+    extra_templates = _sort_templates_by_count(parity.get("extra_templates", []))
+    candidates = []
+    for extra in extra_templates:
+        extra_signature = [str(item) for item in extra.get("lane_signature", [])]
+        extra_indexes = _lane_signature_indexes(extra_signature)
+        for missing in missing_templates:
+            missing_signature = [str(item) for item in missing.get("lane_signature", [])]
+            if (
+                str(extra.get("type", "")) != str(missing.get("type", ""))
+                or len(extra_signature) != len(missing_signature)
+                or extra_indexes != _lane_signature_indexes(missing_signature)
+            ):
+                continue
+            candidates.append(
+                {
+                    "action": "replace_lane_signature",
+                    "type": str(extra.get("type", "")),
+                    "priority": min(int(extra.get("count", 0)), int(missing.get("count", 0))),
+                    "candidate_count": int(extra.get("count", 0)),
+                    "teacher_count": int(missing.get("count", 0)),
+                    "from_lane_signature": extra_signature,
+                    "to_lane_signature": missing_signature,
+                }
+            )
+    return sorted(
+        candidates,
+        key=lambda item: (-int(item["priority"]), str(item["type"]), _record_key(item)),
+    )[:max_items]
+
+
+def write_road_lane_template_repair_candidate(
+    candidate_net_file: Path,
+    output_file: Path,
+    repair_candidates: list[dict[str, Any]],
+    *,
+    max_candidates: int | None = None,
+) -> dict[str, Any]:
+    selected_candidates = repair_candidates[:max_candidates] if max_candidates is not None else repair_candidates
+    tree = ET.parse(candidate_net_file)
+    root = tree.getroot()
+    changed_edge_count = 0
+    changed_lane_count = 0
+    applied_candidate_ids: set[int] = set()
+    for edge in root.findall("edge"):
+        if edge.attrib.get("function") == "internal":
+            continue
+        edge_record = _canonical_edge_record(edge)
+        edge_signature = _lane_signature(edge_record)
+        edge_type = str(edge_record.get("type", ""))
+        for candidate_index, candidate in enumerate(selected_candidates):
+            if (
+                str(candidate.get("action", "")) != "replace_lane_signature"
+                or edge_type != str(candidate.get("type", ""))
+                or edge_signature != [str(item) for item in candidate.get("from_lane_signature", [])]
+            ):
+                continue
+            changed_lanes = _apply_lane_signature(edge, [str(item) for item in candidate.get("to_lane_signature", [])])
+            if changed_lanes:
+                changed_edge_count += 1
+                changed_lane_count += changed_lanes
+                applied_candidate_ids.add(candidate_index)
+            break
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(root, space="  ")
+    tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "selected_candidate_count": len(selected_candidates),
+        "applied_candidate_count": len(applied_candidate_ids),
+        "changed_edge_count": changed_edge_count,
+        "changed_lane_count": changed_lane_count,
+        "warnings": [],
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -543,7 +629,42 @@ def _road_template_gate_summary(
         "connection_missing_template_count": int(connection_parity.get("missing_template_count", 0)),
         "lane_extra_template_count": int(lane_parity.get("extra_template_count", 0)),
         "connection_extra_template_count": int(connection_parity.get("extra_template_count", 0)),
+        "lane_common_count_delta_sum": int(lane_parity.get("common_count_delta_sum", 0)),
+        "connection_common_count_delta_sum": int(connection_parity.get("common_count_delta_sum", 0)),
     }
+
+
+def _lane_signature_indexes(signature: list[str]) -> tuple[str, ...]:
+    return tuple(_lane_signature_attrs(item).get("index", "") for item in signature)
+
+
+def _lane_signature_attrs(signature: str) -> dict[str, str]:
+    attrs = {}
+    for part in signature.split("|"):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        attrs[key] = value
+    return attrs
+
+
+def _apply_lane_signature(edge: ET.Element, signature: list[str]) -> int:
+    changed = 0
+    lanes = list(edge.findall("lane"))
+    if len(lanes) != len(signature):
+        return 0
+    for lane, lane_signature in zip(lanes, signature):
+        attrs = _lane_signature_attrs(lane_signature)
+        before = (lane.attrib.get("allow"), lane.attrib.get("disallow"))
+        for attr_name in ("allow", "disallow"):
+            value = attrs.get(attr_name, "")
+            if value:
+                lane.set(attr_name, value)
+            else:
+                lane.attrib.pop(attr_name, None)
+        after = (lane.attrib.get("allow"), lane.attrib.get("disallow"))
+        changed += int(before != after)
+    return changed
 
 
 def _common_edge_geometry_mismatches(

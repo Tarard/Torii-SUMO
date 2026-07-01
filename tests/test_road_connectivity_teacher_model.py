@@ -1,6 +1,8 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from torii_sumo.core.road_connectivity_teacher_model import (
+    build_road_lane_template_repair_candidates,
     build_road_template_repair_queue,
     canonical_road_connectivity_bundle,
     compare_net_road_template_parity,
@@ -9,6 +11,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     summarize_net_road_connection_templates,
     summarize_net_road_lane_model_templates,
     summarize_road_lane_model_templates,
+    write_road_lane_template_repair_candidate,
     write_road_connectivity_self_replay_net,
 )
 
@@ -378,6 +381,8 @@ def test_compare_net_road_template_parity_reports_lane_and_connection_delta(tmp_
         "connection_missing_template_count": 1,
         "lane_extra_template_count": 1,
         "connection_extra_template_count": 1,
+        "lane_common_count_delta_sum": 1,
+        "connection_common_count_delta_sum": 0,
     }
     assert report["lane_template_summary"]["teacher_edge_count"] == 3
     assert report["lane_template_summary"]["candidate_edge_count"] == 2
@@ -455,6 +460,100 @@ def test_build_road_template_repair_queue_prioritizes_road_layer_deltas() -> Non
             },
         },
     ]
+
+
+def test_build_road_lane_template_repair_candidates_pairs_same_type_lane_signatures() -> None:
+    parity_report = {
+        "lane_template_summary": {
+            "parity": {
+                "missing_templates": [
+                    {
+                        "type": "highway.service",
+                        "lane_signature": [
+                            "index=0|allow=|disallow=pedestrian tram rail_urban rail rail_electric rail_fast ship cable_car subway"
+                        ],
+                        "count": 944,
+                    }
+                ],
+                "extra_templates": [
+                    {
+                        "type": "highway.service",
+                        "lane_signature": [
+                            "index=0|allow=pedestrian passenger delivery bicycle|disallow="
+                        ],
+                        "count": 1288,
+                    }
+                ],
+            }
+        }
+    }
+
+    candidates = build_road_lane_template_repair_candidates(parity_report)
+
+    assert candidates == [
+        {
+            "action": "replace_lane_signature",
+            "type": "highway.service",
+            "priority": 944,
+            "candidate_count": 1288,
+            "teacher_count": 944,
+            "from_lane_signature": [
+                "index=0|allow=pedestrian passenger delivery bicycle|disallow="
+            ],
+            "to_lane_signature": [
+                "index=0|allow=|disallow=pedestrian tram rail_urban rail rail_electric rail_fast ship cable_car subway"
+            ],
+        }
+    ]
+
+
+def test_write_road_lane_template_repair_candidate_applies_teacher_lane_signature(
+    tmp_path: Path,
+) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.repaired.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="service_a" type="highway.service">
+    <lane id="service_a_0" index="0" allow="pedestrian passenger delivery bicycle" speed="5.0" length="25.0"/>
+  </edge>
+  <edge id="service_b" type="highway.service">
+    <lane id="service_b_0" index="0" allow="pedestrian passenger delivery bicycle" speed="5.0" length="25.0"/>
+  </edge>
+  <edge id="residential" type="highway.residential">
+    <lane id="residential_0" index="0" allow="pedestrian passenger delivery bicycle" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    repair_candidates = [
+        {
+            "action": "replace_lane_signature",
+            "type": "highway.service",
+            "from_lane_signature": [
+                "index=0|allow=pedestrian passenger delivery bicycle|disallow="
+            ],
+            "to_lane_signature": [
+                "index=0|allow=|disallow=pedestrian tram rail_urban rail rail_electric rail_fast ship cable_car subway"
+            ],
+        }
+    ]
+
+    report = write_road_lane_template_repair_candidate(
+        candidate_net,
+        output_net,
+        repair_candidates,
+    )
+
+    root = ET.parse(output_net).getroot()
+    service_lane = root.find("./edge[@id='service_a']/lane")
+    residential_lane = root.find("./edge[@id='residential']/lane")
+    assert report["status"] == "pass"
+    assert report["changed_edge_count"] == 2
+    assert report["changed_lane_count"] == 2
+    assert service_lane.attrib.get("allow") is None
+    assert service_lane.attrib["disallow"].startswith("pedestrian tram")
+    assert residential_lane.attrib["allow"] == "pedestrian passenger delivery bicycle"
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
