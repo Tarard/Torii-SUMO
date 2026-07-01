@@ -1506,7 +1506,11 @@ def write_teacher_target_internal_replay_net(
                 continue
             stale_split_replacements[candidate_edge_id] = (edge_id, remote_junction_id)
             source_edge = replaced_boundary_source_edges.get(edge_id)
-            if source_edge is not None and _restore_joined_split_edge_geometry(copied_edge, candidate_edge, source_edge):
+            if (
+                source_edge is not None
+                and {candidate_edge_id, edge_id} & geometry_anchor_edge_ids
+                and _restore_joined_split_edge_geometry(copied_edge, candidate_edge, source_edge)
+            ):
                 geometry_anchor_junctions_by_id.update(
                     _geometry_anchor_junctions_by_id(
                         {
@@ -2580,7 +2584,6 @@ def build_teacher_guided_junction_variant(
             junction_id=junction_id,
             edge_map=edge_map,
             teacher_junction_id=teacher_junction_id,
-            geometry_anchor_edge_file=raw_edge_file,
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(

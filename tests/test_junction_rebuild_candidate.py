@@ -6814,6 +6814,58 @@ def test_teacher_target_replay_joins_stale_split_fragment_geometry(tmp_path: Pat
     assert set(report["restored_geometry_anchor_junctions"]) == {"mid", "remote"}
 
 
+def test_teacher_target_replay_keeps_teacher_split_geometry_without_anchor(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="remote" to="tj"><lane id="road#0_0" index="0" shape="0,0 20,0"/></edge>
+  <edge id="out" from="tj" to="dst"><lane id="out_0" index="0" shape="20,0 30,0"/></edge>
+  <edge id=":tj_0" function="internal"><lane id=":tj_0_0" index="0" shape="20,0 21,0"/></edge>
+  <junction id="tj" type="traffic_light" x="20" y="0" incLanes="road#0_0" intLanes=":tj_0_0"/>
+  <junction id="remote" type="priority" x="0" y="0"/>
+  <junction id="dst" type="priority" x="30" y="0"/>
+  <connection from="road#0" to="out" fromLane="0" toLane="0" via=":tj_0_0" tl="tj" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="tj" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#1" from="remote" to="mid"><lane id="road#1_0" index="0" shape="0,1 10,1"/></edge>
+  <edge id="road#0" from="mid" to="cj"><lane id="road#0_0" index="0" shape="10,1 20,1"/></edge>
+  <edge id="out" from="cj" to="dst"><lane id="out_0" index="0" shape="20,1 30,1"/></edge>
+  <junction id="remote" type="priority" x="0" y="1"/>
+  <junction id="mid" type="priority" x="10" y="1" incLanes="road#1_0" intLanes=""/>
+  <junction id="cj" type="traffic_light" x="20" y="1" incLanes="road#0_0" intLanes=""/>
+  <junction id="dst" type="priority" x="30" y="1"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="cj",
+        teacher_junction_id="tj",
+        edge_map={"road#0": "road#0", "out": "out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("edge[@id='road#1']") is None
+    edge = root.find("edge[@id='road#0']")
+    assert edge is not None
+    lane = edge.find("lane")
+    assert lane is not None
+    assert edge.attrib["from"] == "remote"
+    assert edge.attrib["to"] == "cj"
+    assert lane.attrib["shape"] == "0.00,1.00 20.00,1.00"
+    assert report["restored_geometry_anchor_junctions"] == []
+
+
 def test_teacher_target_replay_expands_target_shape_to_raw_approach_endpoints(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
