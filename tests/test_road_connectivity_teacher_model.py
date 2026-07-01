@@ -3,6 +3,7 @@ from pathlib import Path
 from torii_sumo.core.road_connectivity_teacher_model import (
     canonical_road_connectivity_bundle,
     compare_road_connectivity_bundles,
+    summarize_road_lane_model_templates,
     write_road_connectivity_self_replay_net,
 )
 
@@ -157,6 +158,51 @@ def test_compare_road_connectivity_bundles_reports_same_id_geometry_mismatch(tmp
         }
     ]
     assert report["summary"]["common_edge_geometry_mismatch_count"] == 1
+
+
+def test_summarize_road_lane_model_templates_groups_type_and_lane_signature(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="cycleway.track|highway.tertiary">
+    <lane id="a_0" index="0" allow="pedestrian" shape="0,0 10,0"/>
+    <lane id="a_1" index="1" allow="bicycle" shape="0,1 10,1"/>
+  </edge>
+  <edge id="b" from="n2" to="n3" type="cycleway.track|highway.tertiary">
+    <lane id="b_0" index="0" allow="pedestrian" shape="10,0 20,0"/>
+    <lane id="b_1" index="1" allow="bicycle" shape="10,1 20,1"/>
+  </edge>
+  <edge id="c" from="n3" to="n4" type="highway.service">
+    <lane id="c_0" index="0" disallow="tram" shape="20,0 30,0"/>
+  </edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="priority" x="10" y="0" incLanes="a_0 a_1" intLanes=""/>
+  <junction id="n3" type="priority" x="20" y="0" incLanes="b_0 b_1" intLanes=""/>
+  <junction id="n4" type="dead_end" x="30" y="0" incLanes="c_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    bundle = canonical_road_connectivity_bundle(net_file, seed_edge_ids=["b"], hop_radius=1)
+
+    templates = summarize_road_lane_model_templates(bundle)
+
+    assert templates == [
+        {
+            "type": "cycleway.track|highway.tertiary",
+            "lane_signature": [
+                "index=0|allow=pedestrian|disallow=",
+                "index=1|allow=bicycle|disallow=",
+            ],
+            "count": 2,
+            "example_edge_ids": ["a", "b"],
+        },
+        {
+            "type": "highway.service",
+            "lane_signature": ["index=0|allow=|disallow=tram"],
+            "count": 1,
+            "example_edge_ids": ["c"],
+        },
+    ]
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
