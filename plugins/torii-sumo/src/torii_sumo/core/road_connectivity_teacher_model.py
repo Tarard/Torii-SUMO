@@ -271,8 +271,16 @@ def _common_edge_geometry_mismatches(
                 {
                     "edge_id": edge_id,
                     "endpoint_delta": round(endpoint_delta, 6),
+                    "teacher_from": str(teacher_edge.get("from", "")),
+                    "candidate_from": str(candidate_edge.get("from", "")),
+                    "teacher_to": str(teacher_edge.get("to", "")),
+                    "candidate_to": str(candidate_edge.get("to", "")),
+                    "teacher_type": str(teacher_edge.get("type", "")),
+                    "candidate_type": str(candidate_edge.get("type", "")),
                     "teacher_lane_count": teacher_lane_count,
                     "candidate_lane_count": candidate_lane_count,
+                    "teacher_lane_signature": _lane_signature(teacher_edge),
+                    "candidate_lane_signature": _lane_signature(candidate_edge),
                 }
             )
     return mismatches
@@ -319,6 +327,14 @@ def _lane_world_points(edge: dict[str, Any], offset: tuple[float, float]) -> lis
             continue
         points.append((float(coords[0]) - offset[0], float(coords[1]) - offset[1]))
     return points
+
+
+def _lane_signature(edge: dict[str, Any]) -> list[str]:
+    return [
+        f"index={lane.get('index', '')}|allow={lane.get('allow', '')}|disallow={lane.get('disallow', '')}"
+        for lane in edge.get("lanes", [])
+        if isinstance(lane, dict)
+    ]
 
 
 def _point_distance(left: tuple[float, float], right: tuple[float, float]) -> float:

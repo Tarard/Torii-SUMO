@@ -116,7 +116,7 @@ def test_compare_road_connectivity_bundles_reports_same_id_geometry_mismatch(tmp
     teacher_net.write_text(
         """<net>
   <location netOffset="-100,-100"/>
-  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" shape="100,100 110,100"/></edge>
+  <edge id="a" from="n1" to="n2" type="highway.tertiary"><lane id="a_0" index="0" allow="pedestrian" disallow="truck" shape="100,100 110,100"/></edge>
   <junction id="n1" type="dead_end" x="100" y="100" incLanes="" intLanes=""/>
   <junction id="n2" type="dead_end" x="110" y="100" incLanes="a_0" intLanes=""/>
 </net>""",
@@ -125,12 +125,12 @@ def test_compare_road_connectivity_bundles_reports_same_id_geometry_mismatch(tmp
     candidate_net.write_text(
         """<net>
   <location netOffset="-200,-200"/>
-  <edge id="a" from="n1" to="n2">
+  <edge id="a" from="n3" to="n4" type="highway.service">
     <lane id="a_0" index="0" shape="0,0 11,4"/>
-    <lane id="a_1" index="1" shape="0,1 11,5"/>
+    <lane id="a_1" index="1" allow="bicycle" shape="0,1 11,5"/>
   </edge>
-  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
-  <junction id="n2" type="dead_end" x="11" y="4" incLanes="a_0 a_1" intLanes=""/>
+  <junction id="n3" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n4" type="dead_end" x="11" y="4" incLanes="a_0 a_1" intLanes=""/>
 </net>""",
         encoding="utf-8",
     )
@@ -144,8 +144,16 @@ def test_compare_road_connectivity_bundles_reports_same_id_geometry_mismatch(tmp
         {
             "edge_id": "a",
             "endpoint_delta": 4.123106,
+            "teacher_from": "n1",
+            "candidate_from": "n3",
+            "teacher_to": "n2",
+            "candidate_to": "n4",
+            "teacher_type": "highway.tertiary",
+            "candidate_type": "highway.service",
             "teacher_lane_count": 1,
             "candidate_lane_count": 2,
+            "teacher_lane_signature": ["index=0|allow=pedestrian|disallow=truck"],
+            "candidate_lane_signature": ["index=0|allow=|disallow=", "index=1|allow=bicycle|disallow="],
         }
     ]
     assert report["summary"]["common_edge_geometry_mismatch_count"] == 1
