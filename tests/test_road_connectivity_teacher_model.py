@@ -406,6 +406,43 @@ def test_compare_net_road_template_parity_reports_lane_and_connection_delta(tmp_
     }
 
 
+def test_compare_net_road_template_parity_separates_connection_topology_from_lane_signature(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="highway.service">
+    <lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/>
+  </edge>
+  <edge id="b" from="n2" to="n3" type="highway.service">
+    <lane id="b_0" index="0" allow="passenger" shape="10,0 20,0"/>
+  </edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="highway.service">
+    <lane id="a_0" index="0" allow="pedestrian passenger" shape="0,0 10,0"/>
+  </edge>
+  <edge id="b" from="n2" to="n3" type="highway.service">
+    <lane id="b_0" index="0" allow="pedestrian passenger" shape="10,0 20,0"/>
+  </edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = compare_net_road_template_parity(teacher_net, candidate_net)
+
+    assert report["connection_template_summary"]["parity"]["status"] == "fail"
+    assert report["connection_topology_summary"]["parity"]["status"] == "pass"
+    assert report["connection_topology_summary"]["parity"]["common_template_count"] == 1
+
+
 def test_build_road_template_repair_queue_prioritizes_road_layer_deltas() -> None:
     parity_report = {
         "lane_template_summary": {
