@@ -5,6 +5,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     build_internal_movement_replay_audit,
     build_internal_movement_owner_approach_edge_map,
     build_internal_movement_owner_internal_lane_map,
+    build_internal_movement_owner_missing_approach_edge_repair_candidates,
     build_internal_movement_owner_road_lane_repair_candidates,
     build_road_connection_topology_replay_audit,
     build_road_lane_template_edge_subset_repair_candidates,
@@ -25,6 +26,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     write_road_connection_topology_replay_candidate,
     write_internal_movement_owner_replay_candidate,
     write_internal_movement_owner_bundle_replacement_candidate,
+    write_internal_movement_owner_missing_approach_edge_repair_candidate,
     write_road_connectivity_self_replay_net,
 )
 
@@ -738,6 +740,62 @@ def test_owner_road_lane_repair_candidate_replays_mapped_approach_lanes(tmp_path
     assert [lane.attrib["id"] for lane in lanes] == ["road#5_0", "road#5_1"]
     assert lanes[0].attrib["allow"] == "pedestrian"
     assert lanes[1].attrib["disallow"] == "pedestrian bicycle"
+
+
+def test_owner_missing_approach_edge_repair_replays_edge_and_minimal_endpoint(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.missing_edge.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="path#1" type="highway.path" from="stub" to="j">
+    <lane id="path#1_0" index="0" allow="pedestrian bicycle" speed="2.78" length="4.0"/>
+  </edge>
+  <junction id="stub" type="right_before_left" x="1" y="2" incLanes="other_0" intLanes=":stub_0_0" shape="0,0 1,1">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="j" type="priority" x="3" y="4"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <junction id="j" type="priority" x="3" y="4"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    repair_candidates = build_internal_movement_owner_missing_approach_edge_repair_candidates(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+    report = write_internal_movement_owner_missing_approach_edge_repair_candidate(
+        candidate_net,
+        output_net,
+        repair_candidates,
+    )
+
+    root = ET.parse(output_net).getroot()
+    edge = root.find("edge[@id='path#1']")
+    endpoint = root.find("junction[@id='stub']")
+    assert repair_candidates[0]["action"] == "add_missing_approach_edge"
+    assert repair_candidates[0]["edge_id"] == "path#1"
+    assert repair_candidates[0]["edge_map_addition"] == {"path#1": "path#1"}
+    assert report["added_edge_count"] == 1
+    assert report["added_junction_count"] == 1
+    assert edge is not None
+    assert edge.find("lane").attrib["allow"] == "pedestrian bicycle"
+    assert endpoint.attrib == {
+        "id": "stub",
+        "type": "priority",
+        "x": "1",
+        "y": "2",
+        "shape": "0,0 1,1",
+    }
+    assert endpoint.find("request") is None
 
 
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
