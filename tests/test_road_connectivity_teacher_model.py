@@ -635,6 +635,7 @@ def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() 
     assert report == {
         "status": "fail",
         "claim_status": "diagnostic-demo",
+        "metric_scope": "road",
         "promotion_status": "blocked",
         "reason": "road_template_gate_metric_worsened",
         "before_score": 5404,
@@ -686,6 +687,43 @@ def test_evaluate_road_template_repair_promotion_passes_non_worsening_improvemen
     assert report["worsened_metrics"] == {}
 
 
+def test_evaluate_road_template_repair_promotion_lane_scope_ignores_connection_regression() -> None:
+    before = {
+        "gate": {
+            "lane_missing_template_count": 2,
+            "lane_extra_template_count": 1,
+            "lane_common_count_delta_sum": 0,
+            "connection_missing_template_count": 1,
+            "connection_extra_template_count": 0,
+            "connection_common_count_delta_sum": 0,
+        }
+    }
+    after = {
+        "gate": {
+            "lane_missing_template_count": 1,
+            "lane_extra_template_count": 1,
+            "lane_common_count_delta_sum": 0,
+            "connection_missing_template_count": 1,
+            "connection_extra_template_count": 0,
+            "connection_common_count_delta_sum": 5,
+        }
+    }
+
+    road_report = evaluate_road_template_repair_promotion(before, after)
+    lane_report = evaluate_road_template_repair_promotion(before, after, metric_scope="lane")
+
+    assert road_report["promotion_status"] == "blocked"
+    assert road_report["reason"] == "road_template_gate_metric_worsened"
+    assert lane_report["metric_scope"] == "lane"
+    assert lane_report["status"] == "pass"
+    assert lane_report["promotion_status"] == "pass"
+    assert lane_report["reason"] == "road_template_gate_improved"
+    assert lane_report["before_score"] == 3
+    assert lane_report["after_score"] == 2
+    assert lane_report["improved_metrics"] == {"lane_missing_template_count": -1}
+    assert lane_report["worsened_metrics"] == {}
+
+
 def test_run_road_lane_template_repair_probe_promotes_safe_candidate(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
@@ -718,6 +756,7 @@ def test_run_road_lane_template_repair_probe_promotes_safe_candidate(tmp_path: P
     assert report["status"] == "pass"
     assert report["road_lane_template_repair_status"] == "evaluated"
     assert report["repair_scope"] == "teacher_edge_subset"
+    assert report["promotion_metric_scope"] == "lane"
     assert report["candidate_count"] == 1
     assert report["pass_candidate_count"] == 1
     assert report["blocked_candidate_count"] == 0
