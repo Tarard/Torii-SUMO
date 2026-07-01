@@ -1945,7 +1945,7 @@ def test_build_teacher_guided_repair_queue_limits_ready_candidates(tmp_path: Pat
     assert report["queue_truncated"] is True
     assert (
         report["queue_order_policy"]
-        == "ready_then_same_id_tls_semantics_then_largest_vehicle_movement_gap_then_highest_teacher_template_count"
+        == "ready_then_same_id_tls_low_gap_then_largest_vehicle_movement_gap_then_highest_teacher_template_count"
     )
     assert report["ready_candidate_count"] == 1
     assert report["max_ready_candidates"] == 1
@@ -1974,10 +1974,16 @@ def test_teacher_guided_candidate_sort_key_prioritizes_same_id_tls_semantics() -
             "vehicle_movement_matrix_missing_count": 10,
         },
         {
+            "junction_id": "same_id_tls_gap",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "learned_rule": "tum_like_same_id_tls_candidate",
+            "vehicle_movement_matrix_missing_count": 2,
+        },
+        {
             "junction_id": "same_id_tls",
             "candidate_status": "needs_expanded_rebuild_scope",
             "learned_rule": "tum_like_same_id_tls_candidate",
-            "vehicle_movement_matrix_missing_count": 1,
+            "vehicle_movement_matrix_missing_count": 0,
         },
     ]
 
@@ -2032,7 +2038,7 @@ def test_build_teacher_guided_repair_queue_prioritizes_reusable_teacher_template
     candidate = report["repair_candidates"][0]
     assert (
         report["queue_order_policy"]
-        == "ready_then_same_id_tls_semantics_then_largest_vehicle_movement_gap_then_highest_teacher_template_count"
+        == "ready_then_same_id_tls_low_gap_then_largest_vehicle_movement_gap_then_highest_teacher_template_count"
     )
     assert candidate["reference_id"] == "cluster_z_high"
     assert candidate["teacher_pattern_key"] == "high_template"
