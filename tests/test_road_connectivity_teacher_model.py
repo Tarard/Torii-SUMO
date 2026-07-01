@@ -64,3 +64,28 @@ def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Pa
         seed_edge_ids=["a"],
         hop_radius=1,
     ) == canonical_road_connectivity_bundle(replay, seed_edge_ids=["a"], hop_radius=1)
+
+
+def test_road_connectivity_bundle_projects_connections_to_road_level_attrs(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="b" from="n2" to="n3"><lane id="b_0" index="0" allow="passenger" shape="10,0 20,0"/></edge>
+  <edge id=":n2_0" function="internal"><lane id=":n2_0_0" index="0" allow="passenger" shape="10,0 11,0"/></edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="traffic_light" x="10" y="0" incLanes="a_0" intLanes=":n2_0_0"/>
+  <junction id="n3" type="dead_end" x="20" y="0" incLanes="b_0" intLanes=""/>
+  <tlLogic id="n2" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="a" to="b" fromLane="0" toLane="0" via=":n2_0_0" tl="n2" linkIndex="0" state="O" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    bundle = canonical_road_connectivity_bundle(net_file, seed_edge_ids=["a"], hop_radius=1)
+
+    assert bundle["connections"] == [
+        {"dir": "s", "from": "a", "fromLane": "0", "state": "O", "to": "b", "toLane": "0"}
+    ]
+    junctions = {junction["id"]: junction for junction in bundle["junctions"]}
+    assert junctions["n2"]["requests"] == [{"cont": "0", "foes": "0", "index": "0", "response": "0"}]

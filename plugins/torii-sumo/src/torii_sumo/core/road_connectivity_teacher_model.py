@@ -46,16 +46,21 @@ def canonical_road_connectivity_bundle(
         if junction.attrib.get("id")
     }
     connections = [
-        _sorted_attrs(connection)
+        _canonical_road_connection_record(connection)
         for connection in root.findall("connection")
         if connection.attrib.get("from", "") in selected and connection.attrib.get("to", "") in selected
     ]
+    request_counts = _request_counts_by_junction(connections, edges)
     bundle = {
         "net": _sorted_attrs(root),
         "location": _sorted_attrs(root.find("location")),
         "edges": [_canonical_edge_record(edges[edge_id]) for edge_id in sorted(selected)],
         "junctions": [
-            _canonical_junction_record(junctions[junction_id], selected_lane_ids)
+            _canonical_junction_record(
+                junctions[junction_id],
+                selected_lane_ids,
+                request_counts.get(junction_id, 0),
+            )
             for junction_id in sorted(selected_junction_ids)
             if junction_id in junctions
         ],
@@ -92,7 +97,9 @@ def write_road_connectivity_self_replay_net(
         for lane in edge.get("lanes", []):
             ET.SubElement(edge_node, "lane", dict(lane))
     for junction in bundle["junctions"]:
-        ET.SubElement(root, "junction", dict(junction))
+        junction_node = ET.SubElement(root, "junction", _record_attrs(junction, "requests"))
+        for request in junction.get("requests", []):
+            ET.SubElement(junction_node, "request", dict(request))
     for connection in bundle["connections"]:
         ET.SubElement(root, "connection", dict(connection))
 
@@ -118,11 +125,47 @@ def _canonical_edge_record(edge: ET.Element) -> dict[str, Any]:
     }
 
 
-def _canonical_junction_record(junction: ET.Element, selected_lane_ids: set[str]) -> dict[str, str]:
+def _canonical_junction_record(
+    junction: ET.Element,
+    selected_lane_ids: set[str],
+    request_count: int,
+) -> dict[str, Any]:
     record = _sorted_attrs(junction)
     record["incLanes"] = " ".join(lane_id for lane_id in record.get("incLanes", "").split() if lane_id in selected_lane_ids)
     record["intLanes"] = " ".join(lane_id for lane_id in record.get("intLanes", "").split() if lane_id in selected_lane_ids)
+    record["requests"] = _neutral_requests(request_count)
     return record
+
+
+def _canonical_road_connection_record(connection: ET.Element) -> dict[str, str]:
+    return {
+        key: connection.attrib[key]
+        for key in ("dir", "from", "fromLane", "state", "to", "toLane")
+        if key in connection.attrib
+    }
+
+
+def _request_counts_by_junction(
+    connections: list[dict[str, str]],
+    edges: dict[str, ET.Element],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for connection in connections:
+        source_edge = edges.get(connection.get("from", ""))
+        if source_edge is None:
+            continue
+        junction_id = source_edge.attrib.get("to", "")
+        if junction_id:
+            counts[junction_id] = counts.get(junction_id, 0) + 1
+    return counts
+
+
+def _neutral_requests(count: int) -> list[dict[str, str]]:
+    width = "0" * count
+    return [
+        {"cont": "0", "foes": width, "index": str(index), "response": width}
+        for index in range(count)
+    ]
 
 
 def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:
