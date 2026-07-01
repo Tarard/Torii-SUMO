@@ -414,6 +414,8 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             },
             "workflow_review_html_status": "pass",
             "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
+            "workflow_report_file": str(tmp_path / "workflow_report.json"),
+            "review_manifest_file": str(tmp_path / "review_manifest.json"),
             "reference_join_post_teacher_audit_status": "pass",
             "routeability_audit_status": "pass",
             "reference_join_audit": {"junction_pattern_index": [{"junction_id": "cluster_a_b"}]},
@@ -472,6 +474,8 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["reference_matched_semantics_workflow"]["unapplied_pass_candidate_count"] == 4
     assert report["workflow_review_html_status"] == "pass"
     assert report["workflow_review_html_file"] == str(tmp_path / "workflow_review.html")
+    assert report["workflow_report_file"] == str(tmp_path / "workflow_report.json")
+    assert report["review_manifest_file"] == str(tmp_path / "review_manifest.json")
     assert report["teacher_guided_repair_run_status"] == "pass"
     assert report["teacher_guided_repair_parity_gate_status"] == "pass"
     assert report["teacher_guided_repair_promotion_gate_status"] == "pass"
