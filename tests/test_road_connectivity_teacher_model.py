@@ -9,6 +9,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     compare_road_template_summaries,
     compare_road_connectivity_bundles,
     evaluate_road_template_repair_promotion,
+    run_road_lane_template_repair_probe,
     summarize_net_road_connection_templates,
     summarize_net_road_lane_model_templates,
     summarize_road_lane_model_templates,
@@ -633,6 +634,48 @@ def test_evaluate_road_template_repair_promotion_passes_non_worsening_improvemen
     assert report["after_score"] == 5
     assert report["improved_metrics"] == {"lane_missing_template_count": -1}
     assert report["worsened_metrics"] == {}
+
+
+def test_run_road_lane_template_repair_probe_promotes_safe_candidate(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="service_a" type="highway.service">
+    <lane id="service_a_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="service_a" type="highway.service">
+    <lane id="service_a_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = run_road_lane_template_repair_probe(
+        teacher_net,
+        candidate_net,
+        tmp_path / "probe",
+        prefix="demo",
+    )
+
+    best_variant = Path(report["best_variant_file"])
+    repaired_lane = ET.parse(best_variant).getroot().find("./edge[@id='service_a']/lane")
+    assert report["status"] == "pass"
+    assert report["road_lane_template_repair_status"] == "evaluated"
+    assert report["candidate_count"] == 1
+    assert report["pass_candidate_count"] == 1
+    assert report["blocked_candidate_count"] == 0
+    assert report["best_candidate_index"] == 1
+    assert best_variant.name == "demo_001.net.xml"
+    assert repaired_lane.attrib["allow"] == "passenger"
+    assert report["candidates"][0]["promotion_gate"]["promotion_status"] == "pass"
+    assert report["candidates"][0]["promotion_gate"]["before_score"] == 2
+    assert report["candidates"][0]["promotion_gate"]["after_score"] == 0
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:

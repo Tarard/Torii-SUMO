@@ -388,6 +388,81 @@ def evaluate_road_template_repair_promotion(
     }
 
 
+def run_road_lane_template_repair_probe(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_dir: Path,
+    *,
+    prefix: str = "road_lane_template_repair",
+    max_candidates: int = 10,
+    max_examples: int = 3,
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    before_report = compare_net_road_template_parity(
+        teacher_net_file,
+        candidate_net_file,
+        max_examples=max_examples,
+    )
+    repair_candidates = build_road_lane_template_repair_candidates(
+        before_report,
+        max_items=max_candidates,
+    )
+    candidate_reports = []
+    for index, repair_candidate in enumerate(repair_candidates, start=1):
+        variant_file = output_dir / f"{prefix}_{index:03d}.net.xml"
+        repair_report = write_road_lane_template_repair_candidate(
+            candidate_net_file,
+            variant_file,
+            [repair_candidate],
+        )
+        after_report = compare_net_road_template_parity(
+            teacher_net_file,
+            variant_file,
+            max_examples=max_examples,
+        )
+        promotion_gate = evaluate_road_template_repair_promotion(before_report, after_report)
+        candidate_reports.append(
+            {
+                "candidate_index": index,
+                "variant_file": str(variant_file),
+                "repair_candidate": repair_candidate,
+                "repair_report": repair_report,
+                "promotion_gate": promotion_gate,
+                "after_gate": after_report["gate"],
+            }
+        )
+
+    pass_candidates = [
+        item
+        for item in candidate_reports
+        if item["promotion_gate"].get("promotion_status") == "pass"
+    ]
+    best_candidate = min(
+        pass_candidates,
+        key=lambda item: (
+            int(item["promotion_gate"].get("after_score", 0)),
+            int(item["candidate_index"]),
+        ),
+        default=None,
+    )
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "road_lane_template_repair_status": "evaluated" if repair_candidates else "no_candidates",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_dir": str(output_dir),
+        "candidate_count": len(candidate_reports),
+        "pass_candidate_count": len(pass_candidates),
+        "blocked_candidate_count": len(candidate_reports) - len(pass_candidates),
+        "best_candidate_index": 0 if best_candidate is None else int(best_candidate["candidate_index"]),
+        "best_variant_file": "" if best_candidate is None else str(best_candidate["variant_file"]),
+        "before_gate": before_report["gate"],
+        "candidates": candidate_reports,
+        "warnings": [],
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
