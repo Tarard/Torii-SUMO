@@ -633,6 +633,62 @@ def run_road_lane_template_batch_repair_probe(
     }
 
 
+def build_road_connection_topology_replay_audit(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    max_examples: int = 20,
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_lane_ids = {
+        lane.attrib.get("id", "")
+        for edge in candidate_edges.values()
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    existing_topology_keys = {
+        _connection_topology_key(_connection_replay_record(connection))
+        for connection in candidate_root.findall("connection")
+    }
+    already_present_connections = []
+    replayable_connections = []
+    blocked_connections = []
+    for connection in teacher_root.findall("connection"):
+        record = _connection_replay_record(connection)
+        if not record.get("from") or not record.get("to"):
+            continue
+        if _connection_topology_key(record) in existing_topology_keys:
+            already_present_connections.append(record)
+            continue
+        blocking_reason = _connection_replay_blocking_reason(record, candidate_edges, candidate_lane_ids)
+        if blocking_reason:
+            blocked_record = dict(record)
+            blocked_record["blocking_reason"] = blocking_reason
+            blocked_connections.append(blocked_record)
+        else:
+            replayable_connections.append(record)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "teacher_connection_count": len(already_present_connections) + len(replayable_connections) + len(blocked_connections),
+        "already_present_connection_count": len(already_present_connections),
+        "replayable_connection_count": len(replayable_connections),
+        "blocked_connection_count": len(blocked_connections),
+        "already_present_connections": already_present_connections[:max_examples],
+        "replayable_connections": replayable_connections[:max_examples],
+        "blocked_connections": blocked_connections[:max_examples],
+        "warnings": [],
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -862,6 +918,14 @@ def _canonical_road_connection_record(connection: ET.Element) -> dict[str, str]:
     }
 
 
+def _connection_replay_record(connection: ET.Element) -> dict[str, str]:
+    return {
+        key: connection.attrib[key]
+        for key in ("dir", "from", "fromLane", "state", "to", "toLane", "via")
+        if key in connection.attrib
+    }
+
+
 def _request_counts_by_junction(
     connections: list[dict[str, str]],
     edges: dict[str, ET.Element],
@@ -961,6 +1025,40 @@ def _road_lane_template_edge_index(net_file: Path) -> dict[str, tuple[str, tuple
         edge_record = _canonical_edge_record(edge)
         index[edge_id] = (str(edge_record.get("type", "")), tuple(_lane_signature(edge_record)))
     return index
+
+
+def _connection_replay_blocking_reason(
+    connection: dict[str, str],
+    candidate_edges: dict[str, ET.Element],
+    candidate_lane_ids: set[str],
+) -> str:
+    from_edge = candidate_edges.get(connection.get("from", ""))
+    if from_edge is None:
+        return "missing_from_edge"
+    to_edge = candidate_edges.get(connection.get("to", ""))
+    if to_edge is None:
+        return "missing_to_edge"
+    from_lane = from_edge.find(f"./lane[@index='{connection.get('fromLane', '')}']")
+    if from_lane is None:
+        return "missing_from_lane"
+    to_lane = to_edge.find(f"./lane[@index='{connection.get('toLane', '')}']")
+    if to_lane is None:
+        return "missing_to_lane"
+    via_lane = connection.get("via", "")
+    if via_lane and via_lane not in candidate_lane_ids:
+        return "missing_via_lane"
+    return ""
+
+
+def _connection_topology_key(connection: dict[str, str]) -> tuple[str, str, str, str, str, str]:
+    return (
+        connection.get("from", ""),
+        connection.get("to", ""),
+        connection.get("fromLane", ""),
+        connection.get("toLane", ""),
+        connection.get("dir", ""),
+        connection.get("via", ""),
+    )
 
 
 def _lane_signature_indexes(signature: list[str]) -> tuple[str, ...]:
