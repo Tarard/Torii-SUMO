@@ -243,7 +243,7 @@ def build_teacher_guided_repair_queue(
         "turnaround_only_lane_candidate_count": len(turnaround_only_lane_cases),
         "queued_case_count": len(repair_candidates),
         "queue_truncated": len(repair_candidates) < len(matched_cases),
-        "queue_order_policy": "ready_then_same_id_tls_semantics_then_largest_vehicle_movement_gap_then_highest_teacher_template_count",
+        "queue_order_policy": "ready_then_same_id_tls_low_gap_then_largest_vehicle_movement_gap_then_highest_teacher_template_count",
         "max_ready_candidates": max_ready_candidates if max_ready_candidates is not None else "",
         "repair_candidate_count": len(repair_candidates),
         "ready_candidate_count": ready_count,
@@ -3765,8 +3765,10 @@ def _teacher_guided_candidate_sort_key(candidate: dict[str, object]) -> tuple[in
     candidate_nodes = candidate.get("matched_candidate_node_ids")
     candidate_node_count = len(candidate_nodes) if isinstance(candidate_nodes, list) else 1_000_000
     status_rank = 0 if candidate.get("candidate_status") in {"ready_for_teacher_guided_variant", "needs_expanded_rebuild_scope"} else 1
-    semantic_rank = 0 if candidate.get("learned_rule") == "tum_like_same_id_tls_candidate" else 1
-    return (status_rank, semantic_rank, -movement_gap, -template_count, candidate_node_count, str(candidate.get("reference_id", "")))
+    is_same_id_tls = candidate.get("learned_rule") == "tum_like_same_id_tls_candidate"
+    semantic_rank = 0 if is_same_id_tls else 1
+    movement_rank = movement_gap if is_same_id_tls else -movement_gap
+    return (status_rank, semantic_rank, movement_rank, -template_count, candidate_node_count, str(candidate.get("reference_id", "")))
 
 
 def _limit_ready_repair_candidates(candidates: list[dict[str, object]], max_ready_candidates: int) -> list[dict[str, object]]:
