@@ -1777,9 +1777,15 @@ def build_teacher_guided_junction_variant(
     target_internal_pedestrian_ring_report = None
     target_internal_vehicle_attrs_report = None
     tl_logic_input_file = vehicle_attrs_net_file
+    target_internal_replay_input_file = vehicle_attrs_net_file
     if replay_target_internal_subgraph:
+        target_internal_replay_input_file = _target_internal_replay_input_file(
+            vehicle_attrs_net_file=vehicle_attrs_net_file,
+            candidate_net_file=candidate_net_file,
+            junction_id=junction_id,
+        )
         target_internal_replay_report = write_teacher_target_internal_replay_net(
-            candidate_net_file=vehicle_attrs_net_file,
+            candidate_net_file=target_internal_replay_input_file,
             teacher_net_file=teacher_net_file,
             output_file=target_internal_replay_file,
             junction_id=junction_id,
@@ -1802,6 +1808,7 @@ def build_teacher_guided_junction_variant(
                     "connection_plan": connection_report,
                     "pedestrian_ring": pedestrian_ring_report,
                     "vehicle_connection_attrs": vehicle_attrs_report,
+                    "target_internal_replay_input_file": str(target_internal_replay_input_file),
                     "target_internal_replay": target_internal_replay_report,
                     "target_internal_replay_fallback": target_internal_replay_fallback,
                 },
@@ -2088,6 +2095,9 @@ def build_teacher_guided_junction_variant(
             "sidewalks_net_file": str(sidewalks_net_file),
             "pedring_net_file": str(pedring_net_file),
             "vehicle_attrs_net_file": str(vehicle_attrs_net_file),
+            "target_internal_replay_input_file": str(target_internal_replay_input_file)
+            if replay_target_internal_subgraph
+            else "",
             "target_internal_replay_file": str(target_internal_replay_file) if replay_target_internal_subgraph else "",
             "target_internal_replay_fallback": target_internal_replay_fallback,
             "target_internal_replay_fallback_net_file": str(fallback_net_file) if target_internal_replay_fallback else "",
@@ -6748,6 +6758,19 @@ def _net_junction_ids(net_file: Path) -> set[str]:
         for junction in ET.parse(net_file).getroot().findall("junction")
         if junction.attrib.get("id")
     }
+
+
+def _target_internal_replay_input_file(
+    *,
+    vehicle_attrs_net_file: Path,
+    candidate_net_file: Path,
+    junction_id: str,
+) -> Path:
+    if junction_id in _net_junction_ids(vehicle_attrs_net_file):
+        return vehicle_attrs_net_file
+    if junction_id in _net_junction_ids(candidate_net_file):
+        return candidate_net_file
+    return vehicle_attrs_net_file
 
 
 def _unique_connections_by_key(root: ET.Element) -> tuple[dict[tuple[str, str, str, str], ET.Element], set[tuple[str, str, str, str]]]:

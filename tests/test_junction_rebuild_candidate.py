@@ -15,6 +15,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _semantic_layer_gates,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
+    _target_internal_replay_input_file,
     _write_joined_endpoint_edge_file,
     _stage_file,
     build_rebuild_candidate,
@@ -32,6 +33,42 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_vehicle_connection_attrs_net,
 )
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+
+
+def test_target_internal_replay_input_file_uses_seed_net_when_joined_junction_is_missing(
+    tmp_path: Path,
+) -> None:
+    vehicle_attrs_net = tmp_path / "vehicle_attrs.net.xml"
+    vehicle_attrs_net.write_text('<net><junction id="a"/></net>', encoding="utf-8")
+    seed_candidate_net = tmp_path / "full_network_join_replay.net.xml"
+    seed_candidate_net.write_text('<net><junction id="cluster_a_b"/></net>', encoding="utf-8")
+
+    assert (
+        _target_internal_replay_input_file(
+            vehicle_attrs_net_file=vehicle_attrs_net,
+            candidate_net_file=seed_candidate_net,
+            junction_id="cluster_a_b",
+        )
+        == seed_candidate_net
+    )
+
+
+def test_target_internal_replay_input_file_keeps_vehicle_attrs_when_target_exists(
+    tmp_path: Path,
+) -> None:
+    vehicle_attrs_net = tmp_path / "vehicle_attrs.net.xml"
+    vehicle_attrs_net.write_text('<net><junction id="cluster_a_b"/></net>', encoding="utf-8")
+    seed_candidate_net = tmp_path / "full_network_join_replay.net.xml"
+    seed_candidate_net.write_text('<net><junction id="cluster_a_b"/></net>', encoding="utf-8")
+
+    assert (
+        _target_internal_replay_input_file(
+            vehicle_attrs_net_file=vehicle_attrs_net,
+            candidate_net_file=seed_candidate_net,
+            junction_id="cluster_a_b",
+        )
+        == vehicle_attrs_net
+    )
 
 
 def test_teacher_candidate_edge_map_can_use_expanded_scope_bearing_delta() -> None:
