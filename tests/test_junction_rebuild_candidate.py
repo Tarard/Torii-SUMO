@@ -9524,12 +9524,15 @@ def test_write_teacher_target_internal_replay_net_copies_vehicle_continuation_fo
   <edge id="teacher_back" from="n" to="j" type="highway.secondary"><lane id="teacher_back_0" index="0" shape="110,22 100,22"/></edge>
   <edge id="next_out" from="n" to="f" type="highway.secondary"><lane id="next_out_0" index="0" shape="110,20 130,20"/></edge>
   <edge id="next_in" from="f" to="n" type="highway.secondary"><lane id="next_in_0" index="0" shape="130,22 110,22"/></edge>
+  <edge id="detour#0" from="n" to="d" type="highway.secondary"><lane id="detour#0_0" index="0" shape="110,24 130,24"/></edge>
   <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="100,20 101,20"/></edge>
   <junction id="j" type="traffic_light" x="100" y="20" incLanes="teacher_in_0 teacher_back_0" intLanes=":j_0_0"/>
   <junction id="n" type="priority" x="110" y="20" incLanes="teacher_out_0 next_in_0" intLanes=""/>
   <junction id="f" type="priority" x="130" y="20" incLanes="next_out_0" intLanes=""/>
+  <junction id="d" type="priority" x="130" y="24" incLanes="detour#0_0" intLanes=""/>
   <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
   <connection from="teacher_out" to="next_out" fromLane="0" toLane="0" dir="s" state="M"/>
+  <connection from="teacher_out" to="detour#0" fromLane="0" toLane="0" dir="s" state="M"/>
   <connection from="next_in" to="teacher_back" fromLane="0" toLane="0" dir="s" state="M"/>
   <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
 </net>
@@ -9540,7 +9543,10 @@ def test_write_teacher_target_internal_replay_net_copies_vehicle_continuation_fo
     candidate_net.write_text(
         """<net>
   <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,20 10,20"/></edge>
+  <edge id="detour#0" from="off_a" to="off_b"><lane id="detour#0_0" index="0" shape="-100,-100 -110,-100"/></edge>
   <junction id="j" type="traffic_light" x="10" y="20" incLanes="cand_in_0" intLanes=""/>
+  <junction id="off_a" type="priority" x="-100" y="-100" incLanes="" intLanes=""/>
+  <junction id="off_b" type="priority" x="-110" y="-100" incLanes="detour#0_0" intLanes=""/>
 </net>
 """,
         encoding="utf-8",
@@ -9565,6 +9571,10 @@ def test_write_teacher_target_internal_replay_net_copies_vehicle_continuation_fo
     assert root.find("connection[@from='next_in'][@to='teacher_back']") is not None
     assert report["copied_boundary_continuation_edge_count"] == 2
     assert report["copied_boundary_continuation_edges"] == ["next_out", "next_in"]
+    detour_edges = root.findall("edge[@id='detour#0']")
+    assert len(detour_edges) == 1
+    assert detour_edges[0].attrib["from"] == "off_a"
+    assert "detour#0" not in report["effective_edge_map"]
 
 
 def test_write_teacher_target_internal_replay_net_removes_stale_same_family_split_fragment(
@@ -9578,6 +9588,9 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
   <edge id="road#0" from="j" to="mid" type="highway.tertiary"><lane id="road#0_0" index="0" shape="100,102 90,102"/></edge>
   <edge id="road#1" from="mid" to="far" type="highway.tertiary"><lane id="road#1_0" index="0" shape="90,102 80,102"/></edge>
   <edge id="next#0" from="far" to="next_far" type="cycleway.track|highway.tertiary"><lane id="next#0_0" index="0" shape="80,102 70,102"/></edge>
+  <edge id="foot" from="walk" to="next_far" type="highway.path"><lane id="foot_0" index="0" shape="72,110 70,102"/></edge>
+  <edge id="side#0" from="walk" to="side_far" type="highway.residential"><lane id="side#0_0" index="0" shape="72,110 90,112"/></edge>
+  <edge id="detour#0" from="next_far" to="detour_far" type="highway.tertiary"><lane id="detour#0_0" index="0" shape="70,102 60,102"/></edge>
   <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="100,100 101,100"/></edge>
   <junction id="j" type="traffic_light" x="100" y="100" incLanes="-road#0_0" intLanes=":j_0_0">
     <request index="0" response="1" foes="1" cont="0"/>
@@ -9585,9 +9598,13 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
   <junction id="mid" type="priority" x="90" y="100" incLanes="-road#1_0 road#0_0" intLanes=":mid_0_0"/>
   <junction id="far" type="priority" x="80" y="100" incLanes="road#1_0" intLanes=""/>
   <junction id="next_far" type="dead_end" x="70" y="100" incLanes="next#0_0" intLanes=""/>
+  <junction id="walk" type="priority" x="72" y="110" incLanes="" intLanes=""/>
+  <junction id="side_far" type="priority" x="90" y="112" incLanes="side#0_0" intLanes=""/>
+  <junction id="detour_far" type="priority" x="60" y="102" incLanes="detour#0_0" intLanes=""/>
   <connection from="-road#1" to="-road#0" fromLane="0" toLane="0" via=":mid_0_0" dir="s" state="M"/>
   <connection from="road#0" to="road#1" fromLane="0" toLane="0" via=":mid_1_0" dir="s" state="M"/>
   <connection from="road#1" to="next#0" fromLane="0" toLane="0" via=":far_0_0" dir="s" state="M"/>
+  <connection from="next#0" to="detour#0" fromLane="0" toLane="0" via=":next_far_0_0" dir="s" state="M"/>
   <connection from="-road#0" to="road#0" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="t" state="O"/>
   <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
 </net>
@@ -9607,6 +9624,9 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
   <edge id="extra#0" from="next_far" to="beyond"><lane id="extra#0_0" index="0" shape="-90,-38 -100,-38"/></edge>
   <edge id="next#1" from="next_far" to="tail"><lane id="next#1_0" index="0" shape="-90,-38 -100,-38"/></edge>
   <edge id="-next#1" from="tail" to="next_far"><lane id="-next#1_0" index="0" shape="-100,-40 -90,-40"/></edge>
+  <edge id="foot" from="walk" to="next_far" type="highway.path"><lane id="foot_0" index="0" shape="-90,-70 -90,-38"/></edge>
+  <edge id="side#0" from="walk" to="side_far" type="highway.residential"><lane id="side#0_0" index="0" shape="-90,-70 -110,-70"/></edge>
+  <edge id="detour#0" from="off_a" to="off_b" type="highway.tertiary"><lane id="detour#0_0" index="0" shape="-200,-200 -210,-200"/></edge>
   <edge id="side_in" from="far" to="side"><lane id="side_in_0" index="0" shape="-20,4 -10,4"/></edge>
   <edge id="side_out" from="side" to="far"><lane id="side_out_0" index="0" shape="-10,6 -20,6"/></edge>
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="-road#0_0" intLanes=""/>
@@ -9616,6 +9636,10 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
   <junction id="next_far" type="priority" x="-90" y="-40" incLanes="next#0_0" intLanes=":next_far_0_0"/>
   <junction id="beyond" type="priority" x="-100" y="-40" incLanes="extra#0_0" intLanes=""/>
   <junction id="tail" type="priority" x="-100" y="-40" incLanes="next#1_0" intLanes=""/>
+  <junction id="walk" type="priority" x="-90" y="-70" incLanes="" intLanes=""/>
+  <junction id="side_far" type="priority" x="-110" y="-70" incLanes="side#0_0" intLanes=""/>
+  <junction id="off_a" type="priority" x="-200" y="-200" incLanes="" intLanes=""/>
+  <junction id="off_b" type="priority" x="-210" y="-200" incLanes="detour#0_0" intLanes=""/>
   <junction id="side" type="priority" x="-10" y="4" incLanes="side_in_0" intLanes=""/>
   <connection from="-road#2" to="-road#1" fromLane="0" toLane="0" via=":mid_0_0" tl="stale" linkIndex="3" dir="s" state="O"/>
   <connection from="road#1" to="road#2" fromLane="0" toLane="0" via=":mid_1_0" tl="stale" linkIndex="4" dir="s" state="O"/>
@@ -9685,12 +9709,19 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
     assert far_junction.attrib["x"] == "-20.00"
     assert far_junction.attrib["y"] == "0.00"
     assert root.find("edge[@id='next#0']/lane").attrib["shape"] == "-20.00,2.00 -30.00,2.00"
+    assert root.find("edge[@id='foot']/lane").attrib["shape"] == "-28.00,10.00 -30.00,2.00"
+    assert root.find("edge[@id='side#0']/lane").attrib["shape"] == "-28.00,10.00 -10.00,12.00"
+    assert root.find("junction[@id='walk']").attrib["x"] == "-28.00"
+    assert root.find("junction[@id='walk']").attrib["y"] == "10.00"
+    assert root.find("edge[@id='detour#0']").attrib["from"] == "off_a"
+    assert root.find("edge[@id='detour#0']/lane").attrib["shape"] == "-200,-200 -210,-200"
     assert root.find("edge[@id='extra#0']") is None
     assert root.find("connection[@from='next#0'][@to='extra#0']") is None
     next_far_junction = root.find("junction[@id='next_far']")
     assert next_far_junction.attrib["type"] == "dead_end"
     assert next_far_junction.attrib["intLanes"] == ""
     assert report["replayed_stale_split_followup_edges"] == ["next#0"]
+    assert "detour#0" not in report["effective_edge_map"]
     assert report["removed_stale_split_dead_end_edges"] == ["extra#0"]
     assert root.find("edge[@id='next#1']") is None
     assert root.find("edge[@id='-next#1']") is None
