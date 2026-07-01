@@ -227,6 +227,75 @@ def summarize_net_road_lane_model_templates(
     )
 
 
+def summarize_net_road_connection_templates(
+    net_file: Path,
+    *,
+    max_examples: int = 3,
+) -> list[dict[str, Any]]:
+    root = ET.parse(net_file).getroot()
+    edges = {
+        edge.attrib["id"]: _canonical_edge_record(edge)
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+        and not edge.attrib["id"].startswith(":")
+        and edge.attrib.get("function") != "internal"
+    }
+    groups: dict[tuple[str, str, str, tuple[str, ...], str, str, tuple[str, ...]], list[str]] = {}
+    for connection in root.findall("connection"):
+        from_edge = edges.get(connection.attrib.get("from", ""))
+        to_edge = edges.get(connection.attrib.get("to", ""))
+        if from_edge is None or to_edge is None:
+            continue
+        from_lane = connection.attrib.get("fromLane", "")
+        to_lane = connection.attrib.get("toLane", "")
+        key = (
+            connection.attrib.get("dir", ""),
+            str(from_edge.get("type", "")),
+            from_lane,
+            tuple(_lane_signature(from_edge)),
+            str(to_edge.get("type", "")),
+            to_lane,
+            tuple(_lane_signature(to_edge)),
+        )
+        example = f"{connection.attrib.get('from', '')}[{from_lane}]->{connection.attrib.get('to', '')}[{to_lane}]"
+        groups.setdefault(key, []).append(example)
+
+    templates = []
+    for (
+        direction,
+        from_type,
+        from_lane,
+        from_lane_signature,
+        to_type,
+        to_lane,
+        to_lane_signature,
+    ), examples in groups.items():
+        templates.append(
+            {
+                "dir": direction,
+                "from_type": from_type,
+                "from_lane": from_lane,
+                "from_lane_signature": list(from_lane_signature),
+                "to_type": to_type,
+                "to_lane": to_lane,
+                "to_lane_signature": list(to_lane_signature),
+                "count": len(examples),
+                "example_connections": sorted(examples)[:max_examples],
+            }
+        )
+    return sorted(
+        templates,
+        key=lambda item: (
+            -int(item["count"]),
+            str(item["dir"]),
+            str(item["from_type"]),
+            str(item["from_lane"]),
+            str(item["to_type"]),
+            str(item["to_lane"]),
+        ),
+    )
+
+
 def _canonical_edge_record(edge: ET.Element) -> dict[str, Any]:
     return {
         **_sorted_attrs(edge),
