@@ -12,6 +12,82 @@ def extract_teacher_junction_model(net_file: Path, junction_id: str) -> dict[str
     return _extract_teacher_junction_model(root, net_file, junction_id)
 
 
+def canonical_teacher_junction_bundle(net_file: Path, junction_id: str) -> dict[str, Any]:
+    root = ET.parse(net_file).getroot()
+    model = _extract_teacher_junction_model(root, net_file, junction_id)
+    edges = {edge.attrib["id"]: edge for edge in root.findall("edge") if edge.attrib.get("id")}
+    junctions = {
+        junction.attrib["id"]: junction
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    internal_prefix = f":{junction_id}_"
+    selected_edge_ids = {
+        str(edge.get("edge_id", ""))
+        for group in (
+            model["approaches"]["incoming"],
+            model["approaches"]["outgoing"],
+            model["internal_edges"],
+            model["crossings"],
+            model["walking_areas"],
+        )
+        for edge in group
+        if edge.get("edge_id")
+    }
+    selected_junction_ids = {junction_id}
+    selected_junction_ids.update(
+        junction_id
+        for junction_id in junctions
+        if junction_id.startswith(internal_prefix)
+    )
+    for edge_id in selected_edge_ids:
+        edge = edges.get(edge_id)
+        if edge is None or edge_id.startswith(":"):
+            continue
+        selected_junction_ids.update(value for value in (edge.attrib.get("from"), edge.attrib.get("to")) if value)
+
+    connections = []
+    for connection in root.findall("connection"):
+        via = connection.attrib.get("via", "")
+        if (
+            connection.attrib.get("from", "") in selected_edge_ids
+            or connection.attrib.get("to", "") in selected_edge_ids
+            or via.startswith(internal_prefix)
+        ):
+            connections.append(_sorted_attrs(connection))
+
+    tl_ids = {
+        str(model.get("traffic_light", {}).get("attributes", {}).get("id", ""))
+    } - {""}
+
+    return {
+        "junction_id": junction_id,
+        "location": _sorted_attrs(root.find("location")),
+        "junctions": [
+            _canonical_junction_record(junctions[junction_id])
+            for junction_id in sorted(selected_junction_ids)
+            if junction_id in junctions
+        ],
+        "edges": [
+            _canonical_edge_record(edges[edge_id])
+            for edge_id in sorted(selected_edge_ids)
+            if edge_id in edges
+        ],
+        "connections": sorted(connections, key=_canonical_connection_sort_key),
+        "tlLogics": [
+            _canonical_tl_logic_record(tl_logic)
+            for tl_logic in sorted(root.findall("tlLogic"), key=lambda item: item.attrib.get("id", ""))
+            if tl_logic.attrib.get("id", "") in tl_ids
+        ],
+        "summary": {
+            "junction_count": len(selected_junction_ids & set(junctions)),
+            "edge_count": len(selected_edge_ids & set(edges)),
+            "connection_count": len(connections),
+            "tl_logic_count": len(tl_ids),
+        },
+    }
+
+
 def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_id: str) -> dict[str, Any]:
     junction = next((node for node in root.findall("junction") if node.attrib.get("id") == junction_id), None)
     if junction is None:
@@ -582,6 +658,61 @@ def _request_bit_lengths_ok(requests: Any, request_count: int) -> bool:
         if cont and len(cont) != 1:
             return False
     return True
+
+
+def _canonical_edge_record(edge: ET.Element) -> dict[str, Any]:
+    return {
+        **_sorted_attrs(edge),
+        "lanes": [_sorted_attrs(lane) for lane in sorted(edge.findall("lane"), key=_lane_sort_key)],
+    }
+
+
+def _canonical_junction_record(junction: ET.Element) -> dict[str, Any]:
+    return {
+        **_sorted_attrs(junction),
+        "requests": [
+            _sorted_attrs(request)
+            for request in sorted(junction.findall("request"), key=lambda item: item.attrib.get("index", ""))
+        ],
+    }
+
+
+def _canonical_tl_logic_record(tl_logic: ET.Element) -> dict[str, Any]:
+    return {
+        **_sorted_attrs(tl_logic),
+        "phases": [
+            _sorted_attrs(phase)
+            for phase in sorted(
+                tl_logic.findall("phase"),
+                key=lambda item: (
+                    item.attrib.get("duration", ""),
+                    item.attrib.get("state", ""),
+                    item.attrib.get("name", ""),
+                ),
+            )
+        ],
+    }
+
+
+def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:
+    return {} if element is None else dict(sorted(element.attrib.items()))
+
+
+def _lane_sort_key(lane: ET.Element) -> tuple[int, str]:
+    try:
+        index = int(lane.attrib.get("index", "0"))
+    except ValueError:
+        index = 0
+    return (index, lane.attrib.get("id", ""))
+
+
+def _canonical_connection_sort_key(connection: dict[str, str]) -> tuple[str, str, str, str]:
+    return (
+        connection.get("from", ""),
+        connection.get("fromLane", ""),
+        connection.get("to", ""),
+        connection.get("toLane", ""),
+    )
 
 
 def _split(value: str) -> list[str]:
