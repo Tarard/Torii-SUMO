@@ -7199,6 +7199,7 @@ def test_semantic_layer_gates_route_crossing_and_walkingarea_to_pedestrian_bike(
             {"report": "parity", "field": "walking_area_signature_mismatch_count", "count": 1},
             {"report": "parity", "field": "controlled_vehicle_link_signature_mismatch_count", "count": 1},
             {"report": "parity", "field": "internal_edge_signature_mismatch_count", "count": 1},
+            {"report": "target_internal_replay", "field": "removed_stale_replaced_edge_connection_count", "count": 1},
         ],
     }
 
@@ -7211,7 +7212,10 @@ def test_semantic_layer_gates_route_crossing_and_walkingarea_to_pedestrian_bike(
     ]
     assert layers["movement_tls"]["status"] == "fail"
     assert layers["internal"]["status"] == "fail"
-    assert layers["topology"]["status"] == "pass"
+    assert layers["topology"]["status"] == "fail"
+    assert [failure["field"] for failure in layers["topology"]["failures"]] == [
+        "removed_stale_replaced_edge_connection_count"
+    ]
 
 
 def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -> None:
@@ -7687,6 +7691,29 @@ def test_teacher_guided_semantics_gate_ignores_interim_pedestrian_skips_after_in
     )
 
     assert gate == {"status": "pass", "failures": []}
+
+
+def test_teacher_guided_semantics_gate_fails_when_internal_replay_removes_non_target_connections() -> None:
+    gate = _teacher_guided_semantics_gate(
+        {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
+        target_internal_replay={
+            "status": "pass",
+            "skipped_connection_count": 0,
+            "removed_stale_replaced_edge_connection_count": 1,
+            "removed_stale_replaced_edge_connections": [
+                {"from": "main", "to": "neighbor_out", "via": ":neighbor_0_0"}
+            ],
+        },
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["failures"] == [
+        {
+            "report": "target_internal_replay",
+            "field": "removed_stale_replaced_edge_connection_count",
+            "count": 1,
+        }
+    ]
 
 
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:
