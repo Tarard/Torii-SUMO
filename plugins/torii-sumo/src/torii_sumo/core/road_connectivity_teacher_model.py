@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import math
 from collections import Counter
@@ -1025,6 +1026,149 @@ def write_internal_movement_owner_replay_candidate(
     }
 
 
+def write_internal_movement_owner_bundle_replacement_candidate(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    *,
+    owner_id: str,
+    teacher_edge_map: dict[str, str],
+    copy_tls: bool = False,
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    candidate_owner_junction = candidate_root.find(f"junction[@id='{owner_id}']")
+    candidate_owner_type = "" if candidate_owner_junction is None else candidate_owner_junction.attrib.get("type", "")
+    dependency_blockers = _owner_bundle_road_dependency_blockers(
+        teacher_root,
+        candidate_root,
+        owner_id,
+        teacher_edge_map,
+    )
+    if dependency_blockers:
+        return {
+            "status": "blocked",
+            "claim_status": "diagnostic-demo",
+            "repair_scope": "internal_movement_owner_bundle",
+            "blocking_reason": "missing_road_dependencies",
+            "owner_id": owner_id,
+            "copy_tls": copy_tls,
+            "teacher_net_file": str(teacher_net_file),
+            "candidate_net_file": str(candidate_net_file),
+            "output_file": str(output_file),
+            "blocked_dependency_count": len(dependency_blockers),
+            "blocked_dependencies": dependency_blockers[:50],
+            "warnings": ["owner bundle replay requires road-connectivity repair first"],
+        }
+
+    removed_internal_edge_count = _remove_children(
+        candidate_root,
+        lambda child: child.tag == "edge" and _internal_owner_id(child.attrib.get("id", "")) == owner_id,
+    )
+    removed_internal_junction_count = _remove_children(
+        candidate_root,
+        lambda child: child.tag == "junction" and _internal_owner_id(child.attrib.get("id", "")) == owner_id,
+    )
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    removed_connection_count = _remove_children(
+        candidate_root,
+        lambda child: child.tag == "connection"
+        and _connection_touches_owner_bundle(child, owner_id, candidate_edges),
+    )
+
+    added_internal_edge_count = 0
+    for edge in teacher_root.findall("edge"):
+        if _internal_owner_id(edge.attrib.get("id", "")) != owner_id:
+            continue
+        _insert_after_last(candidate_root, "edge", copy.deepcopy(edge))
+        added_internal_edge_count += 1
+
+    teacher_owner_junction = teacher_root.find(f"junction[@id='{owner_id}']")
+    if teacher_owner_junction is not None:
+        target_junction = candidate_root.find(f"junction[@id='{owner_id}']")
+        if target_junction is None:
+            target_junction = ET.Element("junction")
+            _insert_after_last(candidate_root, "junction", target_junction)
+        _replace_junction_contents(
+            target_junction,
+            teacher_owner_junction,
+            teacher_edge_map=teacher_edge_map,
+            copy_tls=copy_tls,
+            fallback_type=candidate_owner_type,
+        )
+
+    added_internal_junction_count = 0
+    for junction in teacher_root.findall("junction"):
+        if _internal_owner_id(junction.attrib.get("id", "")) != owner_id:
+            continue
+        _insert_after_last(
+            candidate_root,
+            "junction",
+            _mapped_junction_copy(
+                junction,
+                teacher_edge_map=teacher_edge_map,
+                copy_tls=copy_tls,
+                fallback_type="",
+            ),
+        )
+        added_internal_junction_count += 1
+
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_lane_ids = {
+        lane.attrib.get("id", "")
+        for edge in candidate_edges.values()
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    added_connection_count = 0
+    skipped_connection_count = 0
+    for connection in teacher_root.findall("connection"):
+        record = _connection_replay_record(connection)
+        if not _record_touches_owner_bundle(record, owner_id):
+            continue
+        record = _mapped_external_connection(record, teacher_edge_map)
+        if _connection_replay_blocking_reason(record, candidate_edges, candidate_lane_ids):
+            skipped_connection_count += 1
+            continue
+        ET.SubElement(
+            candidate_root,
+            "connection",
+            _internal_movement_replay_attrs(record, copy_tls=copy_tls),
+        )
+        added_connection_count += 1
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="  ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "repair_scope": "internal_movement_owner_bundle",
+        "owner_id": owner_id,
+        "copy_tls": copy_tls,
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "removed_internal_edge_count": removed_internal_edge_count,
+        "removed_internal_junction_count": removed_internal_junction_count,
+        "removed_connection_count": removed_connection_count,
+        "added_internal_edge_count": added_internal_edge_count,
+        "added_internal_junction_count": added_internal_junction_count,
+        "added_connection_count": added_connection_count,
+        "skipped_connection_count": skipped_connection_count,
+        "warnings": [],
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -1468,6 +1612,165 @@ def _movement_lane_key(connection: dict[str, str]) -> tuple[str, str, str, str, 
         connection.get("toLane", ""),
         connection.get("dir", ""),
     )
+
+
+def _replace_junction_contents(
+    target: ET.Element,
+    source: ET.Element,
+    *,
+    teacher_edge_map: dict[str, str],
+    copy_tls: bool,
+    fallback_type: str,
+) -> None:
+    copied = _mapped_junction_copy(
+        source,
+        teacher_edge_map=teacher_edge_map,
+        copy_tls=copy_tls,
+        fallback_type=fallback_type,
+    )
+    target.attrib.clear()
+    target.attrib.update(copied.attrib)
+    for child in list(target):
+        target.remove(child)
+    for child in copied:
+        target.append(copy.deepcopy(child))
+
+
+def _mapped_junction_copy(
+    junction: ET.Element,
+    *,
+    teacher_edge_map: dict[str, str],
+    copy_tls: bool,
+    fallback_type: str,
+) -> ET.Element:
+    copied = copy.deepcopy(junction)
+    attrs = _mapped_junction_attrs(copied.attrib, teacher_edge_map)
+    if not copy_tls and attrs.get("type") == "traffic_light":
+        attrs["type"] = fallback_type or "priority"
+    copied.attrib.clear()
+    copied.attrib.update(attrs)
+    return copied
+
+
+def _mapped_junction_attrs(attrs: dict[str, str], teacher_edge_map: dict[str, str]) -> dict[str, str]:
+    mapped = dict(attrs)
+    for key in ("incLanes", "intLanes"):
+        if key in mapped:
+            mapped[key] = " ".join(_mapped_lane_id(token, teacher_edge_map) for token in mapped[key].split())
+    return mapped
+
+
+def _mapped_lane_id(lane_id: str, teacher_edge_map: dict[str, str]) -> str:
+    edge_id, sep, index = lane_id.rpartition("_")
+    if not sep:
+        return lane_id
+    return f"{teacher_edge_map.get(edge_id, edge_id)}_{index}"
+
+
+def _connection_touches_owner_bundle(
+    connection: ET.Element,
+    owner_id: str,
+    edges: dict[str, ET.Element],
+) -> bool:
+    return _record_touches_owner_bundle(_connection_replay_record(connection), owner_id) or (
+        edges.get(connection.attrib.get("from", ""), ET.Element("edge")).attrib.get("to", "") == owner_id
+        and edges.get(connection.attrib.get("to", ""), ET.Element("edge")).attrib.get("from", "") == owner_id
+    )
+
+
+def _record_touches_owner_bundle(connection: dict[str, str], owner_id: str) -> bool:
+    return owner_id in {
+        _internal_owner_id(connection.get("from", "")),
+        _internal_owner_id(connection.get("to", "")),
+        _internal_owner_id(connection.get("via", "")),
+    }
+
+
+def _owner_bundle_road_dependency_blockers(
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    owner_id: str,
+    teacher_edge_map: dict[str, str],
+) -> list[dict[str, str]]:
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    teacher_internal_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in teacher_root.findall("edge")
+        if _internal_owner_id(edge.attrib.get("id", "")) == owner_id
+    }
+    replay_edges = dict(candidate_edges)
+    replay_edges.update(teacher_internal_edges)
+    available_lane_ids = {
+        lane.attrib.get("id", "")
+        for edge in replay_edges.values()
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    blockers: list[dict[str, str]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def append_blocker(blocker: dict[str, str]) -> None:
+        key = tuple(f"{name}={blocker.get(name, '')}" for name in sorted(blocker))
+        if key in seen:
+            return
+        seen.add(key)
+        blockers.append(blocker)
+
+    for junction in teacher_root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if junction_id != owner_id and _internal_owner_id(junction_id) != owner_id:
+            continue
+        mapped_attrs = _mapped_junction_attrs(junction.attrib, teacher_edge_map)
+        for field in ("incLanes", "intLanes"):
+            for lane_id in mapped_attrs.get(field, "").split():
+                if lane_id not in available_lane_ids:
+                    append_blocker(
+                        {
+                            "kind": "missing_junction_lane",
+                            "junction": junction_id,
+                            "field": field,
+                            "lane": lane_id,
+                        }
+                    )
+
+    for connection in teacher_root.findall("connection"):
+        record = _connection_replay_record(connection)
+        if not _record_touches_owner_bundle(record, owner_id):
+            continue
+        mapped_record = _mapped_external_connection(record, teacher_edge_map)
+        reason = _connection_replay_blocking_reason(mapped_record, replay_edges, available_lane_ids)
+        if reason:
+            append_blocker(
+                {
+                    "kind": "missing_connection_dependency",
+                    "reason": reason,
+                    "from": mapped_record.get("from", ""),
+                    "to": mapped_record.get("to", ""),
+                    "via": mapped_record.get("via", ""),
+                    "teacher_from": mapped_record.get("_teacher_from", ""),
+                    "teacher_to": mapped_record.get("_teacher_to", ""),
+                }
+            )
+
+    return blockers
+
+
+def _remove_children(root: ET.Element, predicate: Any) -> int:
+    removed = 0
+    for child in list(root):
+        if predicate(child):
+            root.remove(child)
+            removed += 1
+    return removed
+
+
+def _insert_after_last(root: ET.Element, tag: str, element: ET.Element) -> None:
+    indexes = [index for index, child in enumerate(list(root)) if child.tag == tag]
+    root.insert((indexes[-1] + 1) if indexes else len(root), element)
 
 
 def _internal_movement_connection_is_candidate_local(
