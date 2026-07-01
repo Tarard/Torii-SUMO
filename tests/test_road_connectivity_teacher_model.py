@@ -8,6 +8,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     compare_net_road_template_parity,
     compare_road_template_summaries,
     compare_road_connectivity_bundles,
+    evaluate_road_template_repair_promotion,
     summarize_net_road_connection_templates,
     summarize_net_road_lane_model_templates,
     summarize_road_lane_model_templates,
@@ -554,6 +555,84 @@ def test_write_road_lane_template_repair_candidate_applies_teacher_lane_signatur
     assert service_lane.attrib.get("allow") is None
     assert service_lane.attrib["disallow"].startswith("pedestrian tram")
     assert residential_lane.attrib["allow"] == "pedestrian passenger delivery bicycle"
+
+
+def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
+    before = {
+        "gate": {
+            "lane_missing_template_count": 104,
+            "lane_extra_template_count": 49,
+            "lane_common_count_delta_sum": 1759,
+            "connection_missing_template_count": 1282,
+            "connection_extra_template_count": 822,
+            "connection_common_count_delta_sum": 1388,
+        }
+    }
+    after = {
+        "gate": {
+            "lane_missing_template_count": 103,
+            "lane_extra_template_count": 48,
+            "lane_common_count_delta_sum": 2103,
+            "connection_missing_template_count": 1263,
+            "connection_extra_template_count": 803,
+            "connection_common_count_delta_sum": 1899,
+        }
+    }
+
+    report = evaluate_road_template_repair_promotion(before, after)
+
+    assert report == {
+        "status": "fail",
+        "claim_status": "diagnostic-demo",
+        "promotion_status": "blocked",
+        "reason": "road_template_gate_metric_worsened",
+        "before_score": 5404,
+        "after_score": 6219,
+        "score_delta": 815,
+        "improved_metrics": {
+            "lane_missing_template_count": -1,
+            "lane_extra_template_count": -1,
+            "connection_missing_template_count": -19,
+            "connection_extra_template_count": -19,
+        },
+        "worsened_metrics": {
+            "lane_common_count_delta_sum": 344,
+            "connection_common_count_delta_sum": 511,
+        },
+    }
+
+
+def test_evaluate_road_template_repair_promotion_passes_non_worsening_improvement() -> None:
+    before = {
+        "gate": {
+            "lane_missing_template_count": 2,
+            "lane_extra_template_count": 1,
+            "lane_common_count_delta_sum": 0,
+            "connection_missing_template_count": 3,
+            "connection_extra_template_count": 0,
+            "connection_common_count_delta_sum": 0,
+        }
+    }
+    after = {
+        "gate": {
+            "lane_missing_template_count": 1,
+            "lane_extra_template_count": 1,
+            "lane_common_count_delta_sum": 0,
+            "connection_missing_template_count": 3,
+            "connection_extra_template_count": 0,
+            "connection_common_count_delta_sum": 0,
+        }
+    }
+
+    report = evaluate_road_template_repair_promotion(before, after)
+
+    assert report["status"] == "pass"
+    assert report["promotion_status"] == "pass"
+    assert report["reason"] == "road_template_gate_improved"
+    assert report["before_score"] == 6
+    assert report["after_score"] == 5
+    assert report["improved_metrics"] == {"lane_missing_template_count": -1}
+    assert report["worsened_metrics"] == {}
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:

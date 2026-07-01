@@ -342,6 +342,52 @@ def write_road_lane_template_repair_candidate(
     }
 
 
+ROAD_TEMPLATE_GATE_METRICS = (
+    "lane_missing_template_count",
+    "lane_extra_template_count",
+    "lane_common_count_delta_sum",
+    "connection_missing_template_count",
+    "connection_extra_template_count",
+    "connection_common_count_delta_sum",
+)
+
+
+def evaluate_road_template_repair_promotion(
+    before_report: dict[str, Any],
+    after_report: dict[str, Any],
+) -> dict[str, Any]:
+    before_metrics = _road_template_gate_metrics(before_report)
+    after_metrics = _road_template_gate_metrics(after_report)
+    deltas = {
+        key: after_metrics[key] - before_metrics[key]
+        for key in ROAD_TEMPLATE_GATE_METRICS
+    }
+    improved_metrics = {key: value for key, value in deltas.items() if value < 0}
+    worsened_metrics = {key: value for key, value in deltas.items() if value > 0}
+    before_score = sum(before_metrics.values())
+    after_score = sum(after_metrics.values())
+    if worsened_metrics:
+        promotion_status = "blocked"
+        reason = "road_template_gate_metric_worsened"
+    elif after_score < before_score:
+        promotion_status = "pass"
+        reason = "road_template_gate_improved"
+    else:
+        promotion_status = "blocked"
+        reason = "road_template_gate_not_improved"
+    return {
+        "status": "pass" if promotion_status == "pass" else "fail",
+        "claim_status": "diagnostic-demo",
+        "promotion_status": promotion_status,
+        "reason": reason,
+        "before_score": before_score,
+        "after_score": after_score,
+        "score_delta": after_score - before_score,
+        "improved_metrics": improved_metrics,
+        "worsened_metrics": worsened_metrics,
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -632,6 +678,11 @@ def _road_template_gate_summary(
         "lane_common_count_delta_sum": int(lane_parity.get("common_count_delta_sum", 0)),
         "connection_common_count_delta_sum": int(connection_parity.get("common_count_delta_sum", 0)),
     }
+
+
+def _road_template_gate_metrics(report: dict[str, Any]) -> dict[str, int]:
+    gate = report.get("gate", {})
+    return {key: int(gate.get(key, 0)) for key in ROAD_TEMPLATE_GATE_METRICS}
 
 
 def _lane_signature_indexes(signature: list[str]) -> tuple[str, ...]:
