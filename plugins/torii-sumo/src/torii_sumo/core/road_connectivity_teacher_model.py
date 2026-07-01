@@ -743,6 +743,95 @@ def build_internal_movement_replay_audit(
     }
 
 
+def build_internal_movement_owner_approach_edge_map(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+) -> dict[str, Any]:
+    teacher_edges = _owner_external_approach_edges(ET.parse(teacher_net_file).getroot(), owner_id)
+    candidate_edges = _owner_external_approach_edges(ET.parse(candidate_net_file).getroot(), owner_id)
+    candidate_index: dict[tuple[str, str], list[str]] = {}
+    for edge_id, direction in candidate_edges.items():
+        candidate_index.setdefault((direction, _split_edge_root(edge_id)), []).append(edge_id)
+
+    edge_map = {}
+    ambiguous_teacher_edges = []
+    unmapped_teacher_edges = []
+    for teacher_edge_id, direction in sorted(teacher_edges.items()):
+        matches = sorted(candidate_index.get((direction, _split_edge_root(teacher_edge_id)), []))
+        if len(matches) == 1:
+            edge_map[teacher_edge_id] = matches[0]
+        elif len(matches) > 1:
+            ambiguous_teacher_edges.append(teacher_edge_id)
+        else:
+            unmapped_teacher_edges.append(teacher_edge_id)
+
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "owner_id": owner_id,
+        "mapped_edge_count": len(edge_map),
+        "teacher_edge_count": len(teacher_edges),
+        "candidate_edge_count": len(candidate_edges),
+        "edge_map": edge_map,
+        "ambiguous_teacher_edges": ambiguous_teacher_edges,
+        "unmapped_teacher_edges": unmapped_teacher_edges,
+    }
+
+
+def build_internal_movement_owner_internal_lane_map(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+    teacher_edge_map: dict[str, str],
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    candidate_index: dict[tuple[str, str, str, str, str], list[str]] = {}
+    for connection in candidate_root.findall("connection"):
+        record = _connection_replay_record(connection)
+        via = record.get("via", "")
+        if _internal_owner_id(via) != owner_id:
+            continue
+        candidate_index.setdefault(_movement_lane_key(record), []).append(via)
+
+    internal_lane_map = {}
+    ambiguous_teacher_lanes = []
+    unmapped_teacher_lanes = []
+    for connection in teacher_root.findall("connection"):
+        record = _mapped_external_connection(
+            _connection_replay_record(connection),
+            teacher_edge_map,
+        )
+        via = record.get("via", "")
+        if _internal_owner_id(via) != owner_id:
+            continue
+        matches = sorted(set(candidate_index.get(_movement_lane_key(record), [])))
+        if len(matches) == 1:
+            if matches[0] != via:
+                internal_lane_map[via] = matches[0]
+        elif len(matches) > 1:
+            ambiguous_teacher_lanes.append(via)
+        else:
+            unmapped_teacher_lanes.append(via)
+
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "owner_id": owner_id,
+        "mapped_internal_lane_count": len(internal_lane_map),
+        "internal_lane_map": internal_lane_map,
+        "ambiguous_teacher_lanes": sorted(set(ambiguous_teacher_lanes)),
+        "unmapped_teacher_lanes": sorted(set(unmapped_teacher_lanes)),
+    }
+
+
 def write_road_connection_topology_replay_candidate(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -850,6 +939,8 @@ def write_internal_movement_owner_replay_candidate(
     *,
     owner_id: str,
     copy_tls: bool = True,
+    teacher_edge_map: dict[str, str] | None = None,
+    teacher_internal_lane_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     audit = build_road_connection_topology_replay_audit(
         teacher_net_file,
@@ -863,6 +954,12 @@ def write_internal_movement_owner_replay_candidate(
         for edge in candidate_root.findall("edge")
         if edge.attrib.get("id")
     }
+    candidate_lane_ids = {
+        lane.attrib.get("id", "")
+        for edge in candidate_edges.values()
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
     existing_topology_keys = {
         _connection_topology_key(_connection_replay_record(connection))
         for connection in candidate_root.findall("connection")
@@ -870,10 +967,20 @@ def write_internal_movement_owner_replay_candidate(
     added_connection_count = 0
     skipped_connection_count = 0
     skipped_nonlocal_edge_connection_count = 0
-    for connection in audit["replayable_connections"]:
+    mapped_external_edge_count = 0
+    mapped_internal_lane_count = 0
+    for connection in [*audit["replayable_connections"], *audit["blocked_connections"]]:
         if not _is_internal_movement_connection(connection):
             continue
         if _internal_movement_owner_id(connection) != owner_id:
+            continue
+        connection = _mapped_external_connection(connection, teacher_edge_map or {})
+        mapped_external_edge_count += int(connection.get("from") != connection.get("_teacher_from", connection.get("from")))
+        mapped_external_edge_count += int(connection.get("to") != connection.get("_teacher_to", connection.get("to")))
+        connection = _mapped_internal_lane_connection(connection, teacher_internal_lane_map or {})
+        mapped_internal_lane_count += int(connection.get("via") != connection.get("_teacher_via", connection.get("via")))
+        if _connection_replay_blocking_reason(connection, candidate_edges, candidate_lane_ids):
+            skipped_connection_count += 1
             continue
         if not _internal_movement_connection_is_candidate_local(connection, candidate_edges, owner_id):
             skipped_connection_count += 1
@@ -906,6 +1013,8 @@ def write_internal_movement_owner_replay_candidate(
         "added_connection_count": added_connection_count,
         "skipped_connection_count": skipped_connection_count,
         "skipped_nonlocal_edge_connection_count": skipped_nonlocal_edge_connection_count,
+        "mapped_external_edge_count": mapped_external_edge_count,
+        "mapped_internal_lane_count": mapped_internal_lane_count,
         "source_audit_summary": {
             "teacher_connection_count": audit["teacher_connection_count"],
             "already_present_connection_count": audit["already_present_connection_count"],
@@ -1325,6 +1434,42 @@ def _internal_movement_replay_attrs(connection: dict[str, str], *, copy_tls: boo
     }
 
 
+def _mapped_external_connection(
+    connection: dict[str, str],
+    teacher_edge_map: dict[str, str],
+) -> dict[str, str]:
+    mapped = dict(connection)
+    mapped["_teacher_from"] = mapped.get("from", "")
+    mapped["_teacher_to"] = mapped.get("to", "")
+    for key in ("from", "to"):
+        edge_id = mapped.get(key, "")
+        if edge_id and not _looks_internal_edge_id(edge_id):
+            mapped[key] = teacher_edge_map.get(edge_id, edge_id)
+    return mapped
+
+
+def _mapped_internal_lane_connection(
+    connection: dict[str, str],
+    teacher_internal_lane_map: dict[str, str],
+) -> dict[str, str]:
+    mapped = dict(connection)
+    mapped["_teacher_via"] = mapped.get("via", "")
+    via = mapped.get("via", "")
+    if via:
+        mapped["via"] = teacher_internal_lane_map.get(via, via)
+    return mapped
+
+
+def _movement_lane_key(connection: dict[str, str]) -> tuple[str, str, str, str, str]:
+    return (
+        connection.get("from", ""),
+        connection.get("to", ""),
+        connection.get("fromLane", ""),
+        connection.get("toLane", ""),
+        connection.get("dir", ""),
+    )
+
+
 def _internal_movement_connection_is_candidate_local(
     connection: dict[str, str],
     candidate_edges: dict[str, ET.Element],
@@ -1394,6 +1539,24 @@ def _internal_movement_owner_summary(
         "dir_counts": dict(sorted(dir_counts.items())),
         "example_connections": records[:max_examples],
     }
+
+
+def _owner_external_approach_edges(root: ET.Element, owner_id: str) -> dict[str, str]:
+    edges = {}
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id or _is_internal_edge(edge):
+            continue
+        if edge.attrib.get("to", "") == owner_id:
+            edges[edge_id] = "incoming"
+        elif edge.attrib.get("from", "") == owner_id:
+            edges[edge_id] = "outgoing"
+    return edges
+
+
+def _split_edge_root(edge_id: str) -> str:
+    head, sep, tail = edge_id.rpartition("#")
+    return head if sep and tail.isdigit() else edge_id
 
 
 def _is_internal_edge(edge: ET.Element | None) -> bool:
