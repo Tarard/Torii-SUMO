@@ -1442,6 +1442,7 @@ def write_teacher_target_internal_replay_net(
     removed_stale_split_fragment_edges = []
     rewired_stale_split_fragment_connections = []
     stale_split_replacements: dict[str, tuple[str, str]] = {}
+    stale_split_continuation_replacements: dict[str, str] = {}
     stale_split_remote_junction_ids: set[str] = set()
     stale_split_stale_junction_ids: set[str] = set()
     teacher_connections_by_via = {
@@ -1498,15 +1499,45 @@ def write_teacher_target_internal_replay_net(
             continue
         stale_edge_id = next(iter(touched_stale_edge_ids))
         replacement_edge_id, remote_junction_id = stale_split_replacements[stale_edge_id]
+        original_from = connection.attrib.get("from", "")
+        original_to = connection.attrib.get("to", "")
+        stale_was_from = original_from == stale_edge_id
+        stale_was_to = original_to == stale_edge_id
         if not connection.attrib.get("via", "").startswith(f":{remote_junction_id}_"):
             candidate_root.remove(connection)
             continue
-        if connection.attrib.get("from") == stale_edge_id:
+        if stale_was_from:
             connection.set("from", replacement_edge_id)
-        if connection.attrib.get("to") == stale_edge_id:
+        if stale_was_to:
             connection.set("to", replacement_edge_id)
         teacher_connection = teacher_connections_by_via.get(connection.attrib.get("via", ""))
         if teacher_connection is not None:
+            candidate_continuation_edge_id = original_to if stale_was_from else original_from if stale_was_to else ""
+            teacher_continuation_edge_id = (
+                teacher_connection.attrib.get("to", "")
+                if stale_was_from
+                else teacher_connection.attrib.get("from", "")
+                if stale_was_to
+                else ""
+            )
+            existing_continuation_mapping = replay_edge_map.get(teacher_continuation_edge_id)
+            if (
+                candidate_continuation_edge_id
+                and teacher_continuation_edge_id
+                and candidate_continuation_edge_id != replacement_edge_id
+                and candidate_continuation_edge_id not in stale_split_replacements
+                and not candidate_continuation_edge_id.startswith(":")
+                and candidate_continuation_edge_id in candidate_edges_by_id
+                and teacher_continuation_edge_id in teacher_edges
+                and _signed_edge_family_id(candidate_continuation_edge_id)
+                == _signed_edge_family_id(teacher_continuation_edge_id)
+                and (
+                    existing_continuation_mapping is None
+                    or existing_continuation_mapping == candidate_continuation_edge_id
+                )
+            ):
+                stale_split_continuation_replacements[candidate_continuation_edge_id] = teacher_continuation_edge_id
+                replay_edge_map[teacher_continuation_edge_id] = candidate_continuation_edge_id
             rewritten_from = connection.attrib.get("from", "")
             rewritten_to = connection.attrib.get("to", "")
             connection.attrib.clear()
@@ -1523,15 +1554,68 @@ def write_teacher_target_internal_replay_net(
         candidate_edge_ids.discard(stale_edge_id)
         candidate_edges_by_id.pop(stale_edge_id, None)
         removed_stale_split_fragment_edges.append(stale_edge_id)
+    replayed_stale_split_continuation_edges = []
+    for candidate_edge_id, teacher_edge_id in sorted(stale_split_continuation_replacements.items()):
+        existing_edge = candidate_edges_by_id.get(candidate_edge_id)
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        if existing_edge is None or teacher_edge is None:
+            continue
+        copied_edge = _clone_transformed_boundary_edge(
+            teacher_edge,
+            candidate_edge_id,
+            dx,
+            dy,
+            replay_edge_map,
+            teacher_junction_id,
+            junction_id,
+        )
+        insert_at = list(candidate_root).index(existing_edge)
+        _remove_edge_lanes_from_destination_junction(candidate_root, existing_edge, all_junctions=True)
+        candidate_root.remove(existing_edge)
+        candidate_root.insert(insert_at, copied_edge)
+        candidate_edge_ids.add(candidate_edge_id)
+        candidate_edges_by_id[candidate_edge_id] = copied_edge
+        _append_edge_lanes_to_destination_junction(candidate_root, copied_edge)
+        replayed_stale_split_continuation_edges.append(candidate_edge_id)
     retuned_stale_split_junction_ids = []
     for remote_junction_id in sorted(stale_split_remote_junction_ids):
-        teacher_junction = teacher_junctions.get(remote_junction_id)
-        candidate_junction = candidate_root.find(f"junction[@id='{remote_junction_id}']")
-        if teacher_junction is None or candidate_junction is None:
+        remote_teacher_junction = teacher_junctions.get(remote_junction_id)
+        remote_candidate_junction = candidate_root.find(f"junction[@id='{remote_junction_id}']")
+        if remote_teacher_junction is None or remote_candidate_junction is None:
             continue
-        teacher_type = teacher_junction.attrib.get("type")
-        if teacher_type and candidate_junction.attrib.get("type") != teacher_type:
-            candidate_junction.set("type", teacher_type)
+        teacher_internal_prefix_remote = f":{remote_junction_id}_"
+        mapped_spatial_attrs = _mapped_spatial_attrs(
+            remote_teacher_junction.attrib,
+            dx,
+            dy,
+            replay_edge_map,
+            remote_junction_id,
+            remote_junction_id,
+        )
+        changed = False
+        for attr in (
+            "type",
+            "x",
+            "y",
+            "z",
+            "shape",
+            "outlineShape",
+            "customShape",
+            "radius",
+            "keepClear",
+            "rightOfWay",
+            "fringe",
+            "roundabout",
+            "name",
+            "tlType",
+            "tlLayout",
+        ):
+            if attr not in mapped_spatial_attrs:
+                continue
+            if remote_candidate_junction.attrib.get(attr) != mapped_spatial_attrs[attr]:
+                remote_candidate_junction.set(attr, mapped_spatial_attrs[attr])
+                changed = True
+        if changed:
             retuned_stale_split_junction_ids.append(remote_junction_id)
     stripped_stale_split_tls_connections = []
     for connection in candidate_root.findall("connection"):
@@ -1889,6 +1973,8 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_split_fragment_edges": removed_stale_split_fragment_edges,
         "rewired_stale_split_fragment_connection_count": len(rewired_stale_split_fragment_connections),
         "rewired_stale_split_fragment_connections": rewired_stale_split_fragment_connections,
+        "replayed_stale_split_continuation_edge_count": len(replayed_stale_split_continuation_edges),
+        "replayed_stale_split_continuation_edges": replayed_stale_split_continuation_edges,
         "retuned_stale_split_junction_ids": retuned_stale_split_junction_ids,
         "stripped_stale_split_tls_connection_count": len(stripped_stale_split_tls_connections),
         "stripped_stale_split_tls_connections": stripped_stale_split_tls_connections,
@@ -2406,6 +2492,11 @@ def build_teacher_guided_junction_variant(
                     fallback_node_file=raw_node_file,
                     exclude_junction_ids={junction_id},
                 )
+            )
+            teacher_guided_normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
+                source_file=final_net_file,
+                target_file=teacher_guided_normalized_net_file,
+                junction_id=junction_id,
             )
             normalized_final_sumo_command = [
                 sumo_binary,
