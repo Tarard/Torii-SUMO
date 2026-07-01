@@ -2,6 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.road_connectivity_teacher_model import (
+    build_road_lane_template_edge_subset_repair_candidates,
     build_road_lane_template_repair_candidates,
     build_road_template_repair_queue,
     canonical_road_connectivity_bundle,
@@ -558,6 +559,55 @@ def test_write_road_lane_template_repair_candidate_applies_teacher_lane_signatur
     assert residential_lane.attrib["allow"] == "pedestrian passenger delivery bicycle"
 
 
+def test_edge_subset_lane_template_repair_only_changes_teacher_confirmed_edges(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.edge_subset.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="fix_me" type="highway.service">
+    <lane id="fix_me_0" index="0" allow="passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="fix_me" type="highway.service">
+    <lane id="fix_me_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+  <edge id="leave_me" type="highway.service">
+    <lane id="leave_me_0" index="0" allow="pedestrian passenger" speed="5.0" length="25.0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    parity_report = compare_net_road_template_parity(teacher_net, candidate_net)
+
+    repair_candidates = build_road_lane_template_edge_subset_repair_candidates(
+        teacher_net,
+        candidate_net,
+        parity_report,
+    )
+    report = write_road_lane_template_repair_candidate(
+        candidate_net,
+        output_net,
+        [repair_candidates[0]],
+    )
+
+    root = ET.parse(output_net).getroot()
+    fixed_lane = root.find("./edge[@id='fix_me']/lane")
+    untouched_lane = root.find("./edge[@id='leave_me']/lane")
+    assert repair_candidates[0]["edge_ids"] == ["fix_me"]
+    assert repair_candidates[0]["edge_count"] == 1
+    assert report["changed_edge_count"] == 1
+    assert report["changed_lane_count"] == 1
+    assert fixed_lane.attrib["allow"] == "passenger"
+    assert untouched_lane.attrib["allow"] == "pedestrian passenger"
+
+
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
     before = {
         "gate": {
@@ -667,6 +717,7 @@ def test_run_road_lane_template_repair_probe_promotes_safe_candidate(tmp_path: P
     repaired_lane = ET.parse(best_variant).getroot().find("./edge[@id='service_a']/lane")
     assert report["status"] == "pass"
     assert report["road_lane_template_repair_status"] == "evaluated"
+    assert report["repair_scope"] == "teacher_edge_subset"
     assert report["candidate_count"] == 1
     assert report["pass_candidate_count"] == 1
     assert report["blocked_candidate_count"] == 0

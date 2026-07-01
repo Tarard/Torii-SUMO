@@ -293,6 +293,39 @@ def build_road_lane_template_repair_candidates(
     )[:max_items]
 
 
+def build_road_lane_template_edge_subset_repair_candidates(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    parity_report: dict[str, Any],
+    *,
+    max_items: int = 10,
+) -> list[dict[str, Any]]:
+    teacher_edges = _road_lane_template_edge_index(teacher_net_file)
+    candidate_edges = _road_lane_template_edge_index(candidate_net_file)
+    candidates = []
+    for candidate in build_road_lane_template_repair_candidates(parity_report, max_items=max_items):
+        from_signature = tuple(str(item) for item in candidate.get("from_lane_signature", []))
+        to_signature = tuple(str(item) for item in candidate.get("to_lane_signature", []))
+        edge_type = str(candidate.get("type", ""))
+        edge_ids = [
+            edge_id
+            for edge_id, candidate_record in candidate_edges.items()
+            if candidate_record == (edge_type, from_signature)
+            and teacher_edges.get(edge_id) == (edge_type, to_signature)
+        ]
+        if not edge_ids:
+            continue
+        subset_candidate = dict(candidate)
+        subset_candidate["edge_ids"] = sorted(edge_ids)
+        subset_candidate["edge_count"] = len(edge_ids)
+        subset_candidate["priority"] = len(edge_ids)
+        candidates.append(subset_candidate)
+    return sorted(
+        candidates,
+        key=lambda item: (-int(item["edge_count"]), str(item["type"]), _record_key(item)),
+    )[:max_items]
+
+
 def write_road_lane_template_repair_candidate(
     candidate_net_file: Path,
     output_file: Path,
@@ -313,10 +346,12 @@ def write_road_lane_template_repair_candidate(
         edge_signature = _lane_signature(edge_record)
         edge_type = str(edge_record.get("type", ""))
         for candidate_index, candidate in enumerate(selected_candidates):
+            edge_ids = {str(edge_id) for edge_id in candidate.get("edge_ids", [])}
             if (
                 str(candidate.get("action", "")) != "replace_lane_signature"
                 or edge_type != str(candidate.get("type", ""))
                 or edge_signature != [str(item) for item in candidate.get("from_lane_signature", [])]
+                or (edge_ids and str(edge.attrib.get("id", "")) not in edge_ids)
             ):
                 continue
             changed_lanes = _apply_lane_signature(edge, [str(item) for item in candidate.get("to_lane_signature", [])])
@@ -396,6 +431,7 @@ def run_road_lane_template_repair_probe(
     prefix: str = "road_lane_template_repair",
     max_candidates: int = 10,
     max_examples: int = 3,
+    use_teacher_edge_subset: bool = True,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     before_report = compare_net_road_template_parity(
@@ -403,9 +439,19 @@ def run_road_lane_template_repair_probe(
         candidate_net_file,
         max_examples=max_examples,
     )
-    repair_candidates = build_road_lane_template_repair_candidates(
-        before_report,
-        max_items=max_candidates,
+    repair_scope = "teacher_edge_subset" if use_teacher_edge_subset else "template"
+    repair_candidates = (
+        build_road_lane_template_edge_subset_repair_candidates(
+            teacher_net_file,
+            candidate_net_file,
+            before_report,
+            max_items=max_candidates,
+        )
+        if use_teacher_edge_subset
+        else build_road_lane_template_repair_candidates(
+            before_report,
+            max_items=max_candidates,
+        )
     )
     candidate_reports = []
     for index, repair_candidate in enumerate(repair_candidates, start=1):
@@ -449,6 +495,7 @@ def run_road_lane_template_repair_probe(
         "status": "pass",
         "claim_status": "diagnostic-demo",
         "road_lane_template_repair_status": "evaluated" if repair_candidates else "no_candidates",
+        "repair_scope": repair_scope,
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "output_dir": str(output_dir),
@@ -758,6 +805,18 @@ def _road_template_gate_summary(
 def _road_template_gate_metrics(report: dict[str, Any]) -> dict[str, int]:
     gate = report.get("gate", {})
     return {key: int(gate.get(key, 0)) for key in ROAD_TEMPLATE_GATE_METRICS}
+
+
+def _road_lane_template_edge_index(net_file: Path) -> dict[str, tuple[str, tuple[str, ...]]]:
+    root = ET.parse(net_file).getroot()
+    index = {}
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id or edge_id.startswith(":") or edge.attrib.get("function") == "internal":
+            continue
+        edge_record = _canonical_edge_record(edge)
+        index[edge_id] = (str(edge_record.get("type", "")), tuple(_lane_signature(edge_record)))
+    return index
 
 
 def _lane_signature_indexes(signature: list[str]) -> tuple[str, ...]:
