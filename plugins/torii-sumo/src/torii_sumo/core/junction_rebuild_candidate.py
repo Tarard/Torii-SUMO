@@ -6126,7 +6126,8 @@ def _expand_junction_shape_to_approach_endpoints(
     for edge in root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
         if (
-            edge.attrib.get("function") == "internal"
+            edge_id not in geometry_anchor_edge_ids
+            or edge.attrib.get("function") == "internal"
             or junction_id not in (edge.attrib.get("from"), edge.attrib.get("to"))
         ):
             continue
