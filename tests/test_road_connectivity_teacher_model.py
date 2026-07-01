@@ -1635,6 +1635,57 @@ def test_write_internal_movement_owner_bundle_replacement_candidate_replaces_own
     ]
 
 
+def test_write_internal_movement_owner_bundle_replacement_candidate_copies_owner_tllogic(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_bundle.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="a" to="j"><lane id="road#3_0" index="0"/></edge>
+  <edge id="out#2" from="j" to="b"><lane id="out#2_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <tlLogic id="j" type="actuated" programID="0" offset="0">
+    <phase duration="30" state="G"/>
+  </tlLogic>
+  <junction id="j" type="traffic_light" tl="j" x="0" y="0" incLanes="road#3_0" intLanes=":j_0_0"/>
+  <connection from="road#3" to="out#2" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" from="a2" to="j"><lane id="road#5_0" index="0"/></edge>
+  <edge id="out#4" from="j" to="b2"><lane id="out#4_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_bundle_replacement_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5", "out#2": "out#4"},
+        copy_tls=True,
+    )
+
+    root = ET.parse(output_net).getroot()
+    children = list(root)
+    target_tls = root.find("tlLogic[@id='j']")
+    connection = root.find("connection[@tl='j']")
+    assert report["status"] == "pass"
+    assert report["copied_tl_logic_count"] == 1
+    assert root.find("junction[@id='j']").attrib["type"] == "traffic_light"
+    assert target_tls is not None
+    assert target_tls.find("phase").attrib["state"] == "G"
+    assert connection is not None
+    assert connection.attrib["linkIndex"] == "0"
+    assert children.index(target_tls) < children.index(connection)
+
+
 def test_write_internal_movement_owner_bundle_replacement_candidate_blocks_missing_road_dependencies(
     tmp_path: Path,
 ) -> None:
