@@ -2198,6 +2198,11 @@ def write_teacher_target_internal_replay_net(
             candidate_root.remove(connection)
 
     restored_geometry_anchor_junctions = _restore_geometry_anchor_junctions(candidate_root, geometry_anchor_junctions_by_id)
+    target_shape_anchor_report = _expand_junction_shape_to_approach_endpoints(
+        candidate_root,
+        junction_id,
+        geometry_anchor_edge_ids,
+    )
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -2260,6 +2265,7 @@ def write_teacher_target_internal_replay_net(
         "geometry_anchor_edge_count": len(geometry_anchor_edge_ids),
         "restored_geometry_anchor_junction_count": len(restored_geometry_anchor_junctions),
         "restored_geometry_anchor_junctions": restored_geometry_anchor_junctions,
+        "target_shape_anchor": target_shape_anchor_report,
         "copied_boundary_junction_count": len(copied_boundary_junctions),
         "copied_boundary_junctions": copied_boundary_junctions,
         "skipped_boundary_edge_count": len(skipped_boundary_edges),
@@ -2574,6 +2580,7 @@ def build_teacher_guided_junction_variant(
             junction_id=junction_id,
             edge_map=edge_map,
             teacher_junction_id=teacher_junction_id,
+            geometry_anchor_edge_file=raw_edge_file,
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(
@@ -6101,6 +6108,88 @@ def _restore_geometry_anchor_junctions(
                 junction.attrib.pop(attr, None)
         restored.append(junction_id)
     return restored
+
+
+def _expand_junction_shape_to_approach_endpoints(
+    root: ET.Element,
+    junction_id: str,
+    geometry_anchor_edge_ids: set[str],
+) -> dict[str, object]:
+    if not geometry_anchor_edge_ids:
+        return {"status": "skipped", "reason": "no_geometry_anchor_edges"}
+    junction = root.find(f"junction[@id='{junction_id}']")
+    if junction is None:
+        return {"status": "skipped", "reason": "junction_not_found"}
+    shape_points = _shape_points(junction.attrib.get("shape", ""))
+    endpoint_points: list[tuple[float, float]] = []
+    endpoint_edge_ids: list[str] = []
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if (
+            edge.attrib.get("function") == "internal"
+            or junction_id not in (edge.attrib.get("from"), edge.attrib.get("to"))
+        ):
+            continue
+        use_first = edge.attrib.get("from") == junction_id
+        for lane in edge.findall("lane"):
+            points = _shape_points(lane.attrib.get("shape", "") or edge.attrib.get("shape", ""))
+            if not points:
+                continue
+            endpoint_points.append(points[0] if use_first else points[-1])
+            endpoint_edge_ids.append(edge_id)
+    if not endpoint_points:
+        return {"status": "skipped", "reason": "no_approach_endpoints"}
+    hull_points = _convex_hull([*shape_points, *endpoint_points])
+    if len(hull_points) < 3:
+        return {"status": "skipped", "reason": "insufficient_hull_points"}
+    old_shape = junction.attrib.get("shape", "")
+    new_shape = " ".join(f"{x:.2f},{y:.2f}" for x, y in hull_points)
+    if new_shape == old_shape:
+        return {
+            "status": "unchanged",
+            "approach_endpoint_count": len(endpoint_points),
+            "approach_edge_ids": sorted(set(endpoint_edge_ids)),
+        }
+    junction.set("shape", new_shape)
+    return {
+        "status": "pass",
+        "approach_endpoint_count": len(endpoint_points),
+        "approach_edge_ids": sorted(set(endpoint_edge_ids)),
+        "old_shape_point_count": len(shape_points),
+        "new_shape_point_count": len(hull_points),
+    }
+
+
+def _shape_points(shape: str) -> list[tuple[float, float]]:
+    points = []
+    for point in _split(shape):
+        try:
+            x, y = point.split(",")[:2]
+            points.append((float(x), float(y)))
+        except ValueError:
+            continue
+    return points
+
+
+def _convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    unique = sorted(set(points))
+    if len(unique) <= 1:
+        return unique
+
+    def cross(origin: tuple[float, float], left: tuple[float, float], right: tuple[float, float]) -> float:
+        return (left[0] - origin[0]) * (right[1] - origin[1]) - (left[1] - origin[1]) * (right[0] - origin[0])
+
+    lower: list[tuple[float, float]] = []
+    for point in unique:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+    upper: list[tuple[float, float]] = []
+    for point in reversed(unique):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+    return lower[:-1] + upper[:-1]
 
 
 def _join_shape_text(first: str, second: str) -> str:

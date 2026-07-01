@@ -6814,6 +6814,57 @@ def test_teacher_target_replay_joins_stale_split_fragment_geometry(tmp_path: Pat
     assert set(report["restored_geometry_anchor_junctions"]) == {"mid", "remote"}
 
 
+def test_teacher_target_replay_expands_target_shape_to_raw_approach_endpoints(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="tj"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="tj" to="b"><lane id="teacher_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="tj" type="traffic_light" x="0" y="0" shape="-1,-1 1,-1 1,1 -1,1" incLanes="teacher_in_0" intLanes=""/>
+  <junction id="a" type="priority" x="-10" y="0"/>
+  <junction id="b" type="priority" x="10" y="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="cj"><lane id="cand_in_0" index="0" shape="-20,30 -10,30"/></edge>
+  <edge id="cand_out" from="cj" to="b"><lane id="cand_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="cj" type="traffic_light" x="0" y="0" shape="-1,-1 1,-1 1,1 -1,1" incLanes="cand_in_0" intLanes=""/>
+  <junction id="a" type="priority" x="-20" y="30"/>
+  <junction id="b" type="priority" x="10" y="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="a" to="cj" shape="-20,30 -10,30"/>
+</edges>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="cj",
+        teacher_junction_id="tj",
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        geometry_anchor_edge_file=raw_edges,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    shape = root.find("junction[@id='cj']").attrib["shape"]
+    assert "-10.00,30.00" in shape
+    assert report["target_shape_anchor"]["status"] == "pass"
+    assert report["target_shape_anchor"]["approach_edge_ids"] == ["cand_in", "cand_out"]
+
+
 def test_write_teacher_lane_patch_edges_adds_missing_mapped_teacher_edge(tmp_path: Path) -> None:
     raw_edges = tmp_path / "raw.edg.xml"
     raw_edges.write_text(
