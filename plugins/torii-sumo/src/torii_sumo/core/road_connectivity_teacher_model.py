@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Any
@@ -175,6 +176,46 @@ def compare_road_connectivity_bundles(
             "teacher_connection_count": len(teacher.get("connections", [])),
             "candidate_connection_count": len(candidate.get("connections", [])),
         },
+    }
+
+
+def compare_road_template_summaries(
+    teacher_templates: list[dict[str, Any]],
+    candidate_templates: list[dict[str, Any]],
+    *,
+    key_fields: list[str],
+) -> dict[str, Any]:
+    teacher_by_key = {
+        _template_summary_key(template, key_fields): template
+        for template in teacher_templates
+    }
+    candidate_by_key = {
+        _template_summary_key(template, key_fields): template
+        for template in candidate_templates
+    }
+    common_keys = set(teacher_by_key) & set(candidate_by_key)
+    missing_templates = _sort_templates_by_count(
+        teacher_by_key[key] for key in set(teacher_by_key) - set(candidate_by_key)
+    )
+    extra_templates = _sort_templates_by_count(
+        candidate_by_key[key] for key in set(candidate_by_key) - set(teacher_by_key)
+    )
+    common_count_delta_sum = sum(
+        abs(
+            int(teacher_by_key[key].get("count", 0))
+            - int(candidate_by_key[key].get("count", 0))
+        )
+        for key in common_keys
+    )
+    status = "fail" if missing_templates or extra_templates or common_count_delta_sum else "pass"
+    return {
+        "status": status,
+        "missing_template_count": len(missing_templates),
+        "extra_template_count": len(extra_templates),
+        "common_template_count": len(common_keys),
+        "common_count_delta_sum": common_count_delta_sum,
+        "missing_templates": missing_templates,
+        "extra_templates": extra_templates,
     }
 
 
@@ -365,6 +406,20 @@ def _missing_records(left: Any, right: Any) -> list[dict[str, Any]]:
 
 def _record_key(record: dict[str, Any]) -> str:
     return "|".join(f"{key}={record[key]}" for key in sorted(record))
+
+
+def _template_summary_key(template: dict[str, Any], key_fields: list[str]) -> str:
+    return json.dumps(
+        {field: template.get(field) for field in key_fields},
+        sort_keys=True,
+    )
+
+
+def _sort_templates_by_count(templates: Any) -> list[dict[str, Any]]:
+    return sorted(
+        (dict(template) for template in templates if isinstance(template, dict)),
+        key=lambda template: (-int(template.get("count", 0)), _record_key(template)),
+    )
 
 
 def _common_edge_geometry_mismatches(

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from torii_sumo.core.road_connectivity_teacher_model import (
     canonical_road_connectivity_bundle,
+    compare_road_template_summaries,
     compare_road_connectivity_bundles,
     summarize_net_road_connection_templates,
     summarize_net_road_lane_model_templates,
@@ -300,6 +301,37 @@ def test_summarize_net_road_connection_templates_groups_road_level_movements(tmp
             "example_connections": ["b[0]->a[0]"],
         },
     ]
+
+
+def test_compare_road_template_summaries_reports_key_level_parity() -> None:
+    teacher_templates = [
+        {"type": "highway.service", "lane_signature": ["vehicle"], "count": 10},
+        {"type": "highway.footway", "lane_signature": ["pedestrian"], "count": 4},
+    ]
+    candidate_templates = [
+        {"type": "highway.service", "lane_signature": ["vehicle"], "count": 7},
+        {"type": "highway.path", "lane_signature": ["pedestrian bicycle"], "count": 3},
+    ]
+
+    report = compare_road_template_summaries(
+        teacher_templates,
+        candidate_templates,
+        key_fields=["type", "lane_signature"],
+    )
+
+    assert report == {
+        "status": "fail",
+        "missing_template_count": 1,
+        "extra_template_count": 1,
+        "common_template_count": 1,
+        "common_count_delta_sum": 3,
+        "missing_templates": [
+            {"type": "highway.footway", "lane_signature": ["pedestrian"], "count": 4}
+        ],
+        "extra_templates": [
+            {"type": "highway.path", "lane_signature": ["pedestrian bicycle"], "count": 3}
+        ],
+    }
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
