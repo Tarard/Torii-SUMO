@@ -2,6 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.road_connectivity_teacher_model import (
+    build_road_connection_topology_replay_audit,
     build_road_lane_template_edge_subset_repair_candidates,
     build_road_lane_template_repair_candidates,
     build_road_lane_template_single_edge_repair_candidates,
@@ -958,6 +959,72 @@ def test_run_road_lane_template_batch_repair_probe_writes_combined_single_edge_c
     assert report["after_gate"]["road_layer_status"] == "pass"
     assert root.find("./edge[@id='fix_a']/lane").attrib["allow"] == "passenger"
     assert root.find("./edge[@id='fix_b']/lane").attrib["allow"] == "passenger"
+
+
+def test_build_road_connection_topology_replay_audit_classifies_replayability(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" allow="passenger"/></edge>
+  <edge id="b" from="n2" to="n3"><lane id="b_0" index="0" allow="passenger"/></edge>
+  <edge id="c" from="n2" to="n4"><lane id="c_0" index="0" allow="passenger"/></edge>
+  <edge id="d" from="n2" to="n5"><lane id="d_0" index="0" allow="passenger"/></edge>
+  <edge id=":n2_0" function="internal"><lane id=":n2_0_0" index="0"/></edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+  <connection from="a" to="c" fromLane="0" toLane="0" dir="r"/>
+  <connection from="a" to="d" fromLane="0" toLane="0" via=":n2_0_0" dir="l"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" allow="passenger"/></edge>
+  <edge id="b" from="n2" to="n3"><lane id="b_0" index="0" allow="passenger"/></edge>
+  <edge id="d" from="n2" to="n5"><lane id="d_0" index="0" allow="passenger"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_road_connection_topology_replay_audit(teacher_net, candidate_net)
+
+    assert report["status"] == "pass"
+    assert report["replayable_connection_count"] == 1
+    assert report["blocked_connection_count"] == 2
+    assert report["replayable_connections"] == [
+        {"from": "a", "to": "b", "fromLane": "0", "toLane": "0", "dir": "s"}
+    ]
+    assert [item["blocking_reason"] for item in report["blocked_connections"]] == [
+        "missing_to_edge",
+        "missing_via_lane",
+    ]
+
+
+def test_build_road_connection_topology_replay_audit_ignores_existing_topology(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_road_connection_topology_replay_audit(teacher_net, candidate_net)
+
+    assert report["already_present_connection_count"] == 1
+    assert report["replayable_connection_count"] == 0
+    assert report["blocked_connection_count"] == 0
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
