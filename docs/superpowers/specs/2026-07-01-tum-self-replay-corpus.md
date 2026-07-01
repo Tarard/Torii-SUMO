@@ -16,6 +16,14 @@ This replaces the earlier default of starting directly from a Torii candidate
 and trying to patch it toward TUM. The new first question is: can Torii
 deterministically reproduce the teacher itself?
 
+This spec covers the junction-local replay layer. Road-corridor connectivity
+is a separate teacher layer because TUM-style edge chaining, road splitting,
+boundary continuity, and non-junction connections can differ even when the
+junction-internal movement graph is correct. Use
+`docs/superpowers/specs/2026-07-01-tum-road-connectivity-replay.md` for that
+parallel road layer, then integrate both gates before making full-network
+claims.
+
 ## Control Loop
 
 - target: code-replay TUM junctions so their junction, connection, TLS,
