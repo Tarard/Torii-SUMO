@@ -854,9 +854,11 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
     candidate_net_file: Path,
     *,
     owner_id: str,
+    teacher_edge_map: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     teacher_root = ET.parse(teacher_net_file).getroot()
     candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_edge_map = teacher_edge_map or {}
     candidate_edge_ids = {
         edge.attrib.get("id", "")
         for edge in candidate_root.findall("edge")
@@ -875,7 +877,7 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
     candidates = []
     for edge in teacher_root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
-        if not edge_id or edge_id in candidate_edge_ids or _is_internal_edge(edge):
+        if not edge_id or edge_id in teacher_edge_map or edge_id in candidate_edge_ids or _is_internal_edge(edge):
             continue
         endpoints = (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
         if owner_id not in endpoints:
@@ -957,6 +959,75 @@ def write_internal_movement_owner_missing_approach_edge_repair_candidate(
         "added_edge_count": added_edge_count,
         "added_junction_count": added_junction_count,
         "edge_map_additions": edge_map_additions,
+        "warnings": [],
+    }
+
+
+def write_internal_movement_owner_teacher_replay_candidate(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    *,
+    owner_id: str,
+    copy_tls: bool = False,
+) -> dict[str, Any]:
+    approach_edge_map = build_internal_movement_owner_approach_edge_map(
+        teacher_net_file,
+        candidate_net_file,
+        owner_id=owner_id,
+    )
+    edge_map = dict(approach_edge_map["edge_map"])
+    road_lane_file = output_file.with_name(f"{output_file.stem}_road_lanes{output_file.suffix}")
+    road_lane_candidates = build_internal_movement_owner_road_lane_repair_candidates(
+        teacher_net_file,
+        candidate_net_file,
+        owner_id=owner_id,
+        teacher_edge_map=edge_map,
+    )
+    road_lane_repair = write_road_lane_template_repair_candidate(
+        candidate_net_file,
+        road_lane_file,
+        road_lane_candidates,
+    )
+    missing_approach_file = output_file.with_name(f"{output_file.stem}_missing_approaches{output_file.suffix}")
+    missing_approach_candidates = build_internal_movement_owner_missing_approach_edge_repair_candidates(
+        teacher_net_file,
+        road_lane_file,
+        owner_id=owner_id,
+        teacher_edge_map=edge_map,
+    )
+    missing_approach_repair = write_internal_movement_owner_missing_approach_edge_repair_candidate(
+        road_lane_file,
+        missing_approach_file,
+        missing_approach_candidates,
+    )
+    edge_map.update(missing_approach_repair["edge_map_additions"])
+    bundle_replay = write_internal_movement_owner_bundle_replacement_candidate(
+        teacher_net_file,
+        missing_approach_file,
+        output_file,
+        owner_id=owner_id,
+        teacher_edge_map=edge_map,
+        copy_tls=copy_tls,
+    )
+    return {
+        "status": bundle_replay["status"],
+        "claim_status": "diagnostic-demo",
+        "repair_scope": "internal_movement_owner_teacher_replay",
+        "owner_id": owner_id,
+        "copy_tls": copy_tls,
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "road_lane_file": str(road_lane_file),
+        "missing_approach_file": str(missing_approach_file),
+        "edge_map": edge_map,
+        "approach_edge_map": approach_edge_map,
+        "road_lane_repair_candidate_count": len(road_lane_candidates),
+        "missing_approach_edge_repair_candidate_count": len(missing_approach_candidates),
+        "road_lane_repair": road_lane_repair,
+        "missing_approach_edge_repair": missing_approach_repair,
+        "bundle_replay": bundle_replay,
         "warnings": [],
     }
 

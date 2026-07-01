@@ -27,6 +27,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     write_internal_movement_owner_replay_candidate,
     write_internal_movement_owner_bundle_replacement_candidate,
     write_internal_movement_owner_missing_approach_edge_repair_candidate,
+    write_internal_movement_owner_teacher_replay_candidate,
     write_road_connectivity_self_replay_net,
 )
 
@@ -796,6 +797,56 @@ def test_owner_missing_approach_edge_repair_replays_edge_and_minimal_endpoint(
         "shape": "0,0 1,1",
     }
     assert endpoint.find("request") is None
+
+
+def test_owner_teacher_replay_runs_road_lane_missing_edge_then_bundle(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.teacher_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="a" to="j"><lane id="road#3_0" index="0"/><lane id="road#3_1" index="1"/></edge>
+  <edge id="path#1" from="stub" to="j"><lane id="path#1_0" index="0" allow="pedestrian bicycle"/></edge>
+  <edge id="out#2" from="j" to="b"><lane id="out#2_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="stub" type="priority" x="1" y="2" shape="0,0 1,1"/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="road#3_0 road#3_1 path#1_0" intLanes=":j_0_0"/>
+  <connection from="path#1" to="out#2" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="out#2" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" from="a2" to="j"><lane id="road#5_0" index="0"/></edge>
+  <edge id="out#4" from="j" to="b2"><lane id="out#4_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        copy_tls=False,
+    )
+
+    root = ET.parse(output_net).getroot()
+    road_lanes = root.findall("./edge[@id='road#5']/lane")
+    assert report["status"] == "pass"
+    assert report["edge_map"] == {"out#2": "out#4", "path#1": "path#1", "road#3": "road#5"}
+    assert report["road_lane_repair"]["changed_edge_count"] == 1
+    assert report["missing_approach_edge_repair"]["added_edge_count"] == 1
+    assert report["bundle_replay"]["status"] == "pass"
+    assert root.find("edge[@id='road#3']") is None
+    assert len(road_lanes) == 2
+    assert root.find("edge[@id='path#1']") is not None
+    assert root.find("edge[@id=':j_0']") is not None
+    assert root.find("connection[@from='path#1'][@to='out#4']") is not None
 
 
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
