@@ -3591,21 +3591,26 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
         }
     )
     endpoints_by_edge = _plain_edge_endpoints(raw_edge_file)
-    junction_ids = {
+    raw_endpoint_ids = {endpoint for endpoints in endpoints_by_edge.values() for endpoint in endpoints if endpoint}
+    matched_candidate_node_ids = {
         str(item)
         for item in candidate.get("matched_candidate_node_ids", []) or []
         if str(item)
     }
+    junction_ids = set(matched_candidate_node_ids)
+    join_junction_ids = set(matched_candidate_node_ids)
     existing_scope = candidate.get("expanded_rebuild_scope", {})
     if isinstance(existing_scope, dict):
         junction_ids.update(str(item) for item in existing_scope.get("junction_ids", []) or [] if str(item))
+        join_junction_ids.update(str(item) for item in existing_scope.get("join_junction_ids", []) or [] if str(item))
         missing_desired_endpoint_ids = sorted(
             {str(item) for item in existing_scope.get("missing_desired_endpoint_ids", []) or [] if str(item)}
         )
     else:
         missing_desired_endpoint_ids = []
-    if junction_id:
+    if junction_id and (not raw_endpoint_ids or junction_id in raw_endpoint_ids):
         junction_ids.add(junction_id)
+        join_junction_ids.add(junction_id)
     for edge_id in removed_edge_ids:
         junction_ids.update(endpoint for endpoint in endpoints_by_edge.get(edge_id, ()) if endpoint)
     edge_map = _valid_edge_map(candidate.get("edge_map", {}))
@@ -3626,7 +3631,7 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
                 "recommended_action": "rebuild_plain_xml_scope",
                 "core_junction_id": junction_id,
                 "junction_ids": sorted(junction_ids),
-                "join_junction_ids": sorted(junction_ids),
+                "join_junction_ids": sorted(join_junction_ids),
                 "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
                 "missing_desired_endpoint_ids": missing_desired_endpoint_ids,
                 "reason": "target internal replay removed non-target boundary connections; rebuild expanded scope before movement replay",
@@ -3678,10 +3683,10 @@ def _write_teacher_guided_promotion_gate(
     approach_integrity_status: str,
     variant_reports: list[dict[str, object]],
 ) -> dict[str, object]:
-    gate_reports = [report for report in variant_reports if not report.get("expanded_scope_followup_emitted")]
-    applied_reports = [report for report in gate_reports if report.get("composite_applied")]
-    if applied_reports:
-        gate_reports = applied_reports
+    applied_reports = [report for report in variant_reports if report.get("composite_applied")]
+    gate_reports = applied_reports or [
+        report for report in variant_reports if not report.get("expanded_scope_followup_emitted")
+    ]
     items = [
         {
             "junction_id": str(report.get("junction_id", "")),
@@ -6307,11 +6312,35 @@ def _teacher_guided_semantics_gate(parity: dict[str, Any], **reports: dict[str, 
         ):
             if internal_replay_complete and report_name in {"pedestrian_ring", "vehicle_connection_attrs"}:
                 continue
-            count = int(report.get(field, 0) or 0)
+            count = (
+                _blocking_removed_stale_connection_count(report)
+                if field == "removed_stale_replaced_edge_connection_count"
+                else int(report.get(field, 0) or 0)
+            )
             if count:
                 failures.append({"report": report_name, "field": field, "count": count})
 
     return {"status": "fail" if failures else "pass", "failures": failures}
+
+
+def _blocking_removed_stale_connection_count(report: dict[str, Any]) -> int:
+    count = int(report.get("removed_stale_replaced_edge_connection_count", 0) or 0)
+    removed = report.get("removed_stale_replaced_edge_connections", [])
+    if not isinstance(removed, list):
+        return count
+    blocking = [
+        connection
+        for connection in removed
+        if isinstance(connection, dict) and not _connection_touches_walkingarea_internal(connection)
+    ]
+    return len(blocking)
+
+
+def _connection_touches_walkingarea_internal(connection: dict[str, Any]) -> bool:
+    return any(
+        ref.startswith(":") and "_w" in ref
+        for ref in (str(connection.get(field, "")) for field in ("from", "to", "via"))
+    )
 
 
 def _semantic_layer_gates(
