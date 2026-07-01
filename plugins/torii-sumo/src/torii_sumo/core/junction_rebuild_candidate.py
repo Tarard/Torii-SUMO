@@ -2382,10 +2382,16 @@ def _net_contains_normal_junctions(net_file: Path, junction_ids: set[str]) -> bo
 
 
 def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> bool:
-    return str(candidate.get("learned_rule", "")) in {
+    learned_rule = str(candidate.get("learned_rule", ""))
+    if learned_rule in {
         "tum_like_topology_fragmented_tls_candidate",
         "tum_like_topology_fragmented_cluster_candidate",
-    }
+    }:
+        return True
+    if learned_rule == "tum_like_same_id_pattern_candidate":
+        mismatch_fields = {str(item) for item in candidate.get("junction_pattern_mismatch_fields", []) or []}
+        return bool(mismatch_fields & {"internal_function_counts", "request_signatures", "junction_signature"})
+    return False
 
 
 def run_teacher_guided_repair_queue(
