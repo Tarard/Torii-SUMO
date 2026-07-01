@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
+import json
 import math
 from pathlib import Path
+import subprocess
 from typing import Any, Iterable
 import xml.etree.ElementTree as ET
 
@@ -121,6 +123,55 @@ def write_teacher_self_replay_net(
         "output_file": str(output_file),
         "parity_delta": parity_delta,
     }
+
+
+def build_teacher_self_replay_corpus_report(
+    teacher_net_file: Path,
+    junction_ids: list[str],
+    output_dir: Path,
+    *,
+    run_sumo: bool = True,
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cases = []
+    for junction_id in junction_ids:
+        case_name = _safe_file_stem(junction_id)
+        replay_net_file = output_dir / f"{case_name}_teacher_self_replay.net.xml"
+        bundle_file = output_dir / f"{case_name}_canonical_bundle.json"
+        bundle = canonical_teacher_junction_bundle(teacher_net_file, junction_id)
+        bundle_file.write_text(json.dumps(bundle, indent=2, sort_keys=True), encoding="utf-8")
+        replay_report = write_teacher_self_replay_net(teacher_net_file, junction_id, replay_net_file)
+        sumo_report = _sumo_load_report(replay_net_file) if run_sumo else {
+            "sumo_returncode": None,
+            "sumo_stdout": "",
+            "sumo_stderr": "",
+        }
+        case_status = "pass" if replay_report["status"] == "pass" and (
+            not run_sumo or sumo_report["sumo_returncode"] == 0
+        ) else "fail"
+        cases.append(
+            {
+                "junction_id": junction_id,
+                "status": case_status,
+                "replay_net_file": str(replay_net_file),
+                "canonical_bundle_file": str(bundle_file),
+                "parity_delta": replay_report["parity_delta"],
+                **sumo_report,
+            }
+        )
+
+    report = {
+        "status": "pass" if all(case["status"] == "pass" for case in cases) else "fail",
+        "teacher_net_file": str(teacher_net_file),
+        "output_dir": str(output_dir),
+        "case_count": len(cases),
+        "cases": cases,
+    }
+    (output_dir / "teacher_self_replay_corpus.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return report
 
 
 def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_id: str) -> dict[str, Any]:
@@ -735,6 +786,39 @@ def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:
 
 def _record_attrs(record: dict[str, Any], child_key: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in record.items() if key != child_key}
+
+
+def _safe_file_stem(value: str) -> str:
+    stem = "".join(char if char.isalnum() or char in "-_." else "_" for char in value)
+    return stem or "junction"
+
+
+def _sumo_load_report(net_file: Path) -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            [
+                "sumo",
+                "-n",
+                str(net_file),
+                "--no-step-log",
+                "true",
+                "--duration-log.disable",
+                "true",
+                "--quit-on-end",
+                "true",
+                "-W",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return {"sumo_returncode": -1, "sumo_stdout": "", "sumo_stderr": str(exc)}
+    return {
+        "sumo_returncode": result.returncode,
+        "sumo_stdout": result.stdout,
+        "sumo_stderr": result.stderr,
+    }
 
 
 def _lane_sort_key(lane: ET.Element) -> tuple[int, str]:

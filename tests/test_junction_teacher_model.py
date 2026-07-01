@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from torii_sumo.core.junction_teacher_model import (
+    build_teacher_self_replay_corpus_report,
     canonical_teacher_junction_bundle,
     compare_junction_pattern_records,
     evaluate_netedit_semantics_gate,
@@ -89,6 +90,34 @@ def test_write_teacher_self_replay_net_round_trips_canonical_bundle(tmp_path: Pa
     assert report["status"] == "pass"
     assert replay.exists()
     assert canonical_teacher_junction_bundle(teacher, "j") == canonical_teacher_junction_bundle(replay, "j")
+
+
+def test_build_teacher_self_replay_corpus_report_writes_artifacts(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    out_dir = tmp_path / "corpus"
+    teacher.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="a" type="dead_end" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="dead_end" x="10" y="0" incLanes="out_0" intLanes=""/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_self_replay_corpus_report(
+        teacher,
+        ["j"],
+        out_dir,
+        run_sumo=False,
+    )
+
+    assert report["status"] == "pass"
+    assert report["cases"][0]["junction_id"] == "j"
+    assert Path(report["cases"][0]["replay_net_file"]).exists()
+    assert (out_dir / "teacher_self_replay_corpus.json").exists()
 
 
 def test_netedit_semantics_gate_fails_on_non_same_statuses() -> None:
