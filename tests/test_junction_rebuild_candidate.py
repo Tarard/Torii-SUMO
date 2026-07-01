@@ -1,6 +1,7 @@
 import csv
 import json
 from pathlib import Path
+import time
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.junction_rebuild_candidate import (
@@ -9604,6 +9605,40 @@ def test_restore_non_target_internal_artifacts_filters_stale_incoming_lanes(tmp_
     assert junction.attrib["incLanes"] == "remote_in_0"
     assert junction.attrib["intLanes"] == ":other_w0_0"
     assert len(junction.findall("request")) == 1
+
+
+def test_restore_non_target_internal_artifacts_caches_repeated_internal_owner_lookup(tmp_path: Path) -> None:
+    normal_junctions = "".join(
+        f'<junction id="j{index}" type="priority" x="0" y="0"/>\n'
+        for index in range(1500)
+    )
+    repeated_connections = "".join(
+        '<connection from=":j42_0" to=":j42_0" fromLane="0" toLane="0"/>\n'
+        for _ in range(1500)
+    )
+    net_xml = (
+        "<net>\n"
+        f"{normal_junctions}"
+        '<edge id=":j42_0" function="internal"><lane id=":j42_0_0" index="0"/></edge>\n'
+        '<junction id=":j42_0" type="internal" x="0" y="0" incLanes="" intLanes=""/>\n'
+        f"{repeated_connections}"
+        "</net>"
+    )
+    source_net = tmp_path / "source.net.xml"
+    target_net = tmp_path / "target.net.xml"
+    source_net.write_text(net_xml, encoding="utf-8")
+    target_net.write_text(net_xml, encoding="utf-8")
+
+    start = time.perf_counter()
+    report = _restore_non_target_internal_artifacts(
+        source_file=source_net,
+        target_file=target_net,
+        exclude_junction_ids=set(),
+    )
+    elapsed = time.perf_counter() - start
+
+    assert report["status"] == "pass"
+    assert elapsed < 1.0
 
 
 def test_restore_non_target_internal_artifacts_restores_referenced_tllogic_capacity(tmp_path: Path) -> None:
