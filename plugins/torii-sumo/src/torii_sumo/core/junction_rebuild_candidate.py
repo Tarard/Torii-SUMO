@@ -1614,9 +1614,17 @@ def write_teacher_target_internal_replay_net(
                 continue
             followup_teacher_edge = teacher_edges.get(followup_teacher_edge_id)
             followup_candidate_edge_id = followup_teacher_edge_id
+            followup_candidate_edge = candidate_edges_by_id.get(followup_candidate_edge_id)
             if (
                 followup_teacher_edge is None
-                or followup_candidate_edge_id not in candidate_edges_by_id
+                or followup_candidate_edge is None
+                or not (
+                    {
+                        followup_candidate_edge.attrib.get("from", ""),
+                        followup_candidate_edge.attrib.get("to", ""),
+                    }
+                    & stale_split_spatial_junction_ids
+                )
                 or not _edge_is_vehicle_continuation_candidate(followup_teacher_edge)
             ):
                 continue
@@ -1704,6 +1712,49 @@ def write_teacher_target_internal_replay_net(
                 if endpoint:
                     stale_split_frontier_junction_ids.add(endpoint)
                     stale_split_spatial_junction_ids.add(endpoint)
+    replayed_stale_split_context_edges = []
+    replayed_stale_split_context_edge_ids = {
+        *replayed_stale_split_continuation_edges,
+        *replayed_stale_split_followup_edges,
+    }
+    context_frontier_junction_ids = set(teacher_dead_end_junction_ids)
+    while context_frontier_junction_ids:
+        replayed_context_this_pass = False
+        for teacher_edge_id, teacher_edge in sorted(teacher_edges.items()):
+            candidate_edge_id = replay_edge_map.get(teacher_edge_id, teacher_edge_id)
+            context_candidate_edge = candidate_edges_by_id.get(candidate_edge_id)
+            if (
+                candidate_edge_id in replayed_stale_split_context_edge_ids
+                or context_candidate_edge is None
+                or teacher_edge_id.startswith(":")
+                or teacher_edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}
+                or not (
+                    teacher_edge.attrib.get("from", "") in context_frontier_junction_ids
+                    or teacher_edge.attrib.get("to", "") in context_frontier_junction_ids
+                )
+                or not (
+                    {
+                        context_candidate_edge.attrib.get("from", ""),
+                        context_candidate_edge.attrib.get("to", ""),
+                    }
+                    & context_frontier_junction_ids
+                )
+            ):
+                continue
+            replay_edge_map[teacher_edge_id] = candidate_edge_id
+            if replay_stale_split_edge_geometry(candidate_edge_id, teacher_edge_id):
+                replayed_stale_split_context_edge_ids.add(candidate_edge_id)
+                replayed_stale_split_context_edges.append(candidate_edge_id)
+                copied_edge = candidate_edges_by_id.get(candidate_edge_id)
+                if copied_edge is not None:
+                    for endpoint in (copied_edge.attrib.get("from", ""), copied_edge.attrib.get("to", "")):
+                        if endpoint:
+                            context_frontier_junction_ids.add(endpoint)
+                            stale_split_frontier_junction_ids.add(endpoint)
+                            stale_split_spatial_junction_ids.add(endpoint)
+                replayed_context_this_pass = True
+        if not replayed_context_this_pass:
+            break
     for local_candidate_junction in list(candidate_root.findall("junction")):
         candidate_junction_id = local_candidate_junction.attrib.get("id", "")
         if (
@@ -1810,6 +1861,7 @@ def write_teacher_target_internal_replay_net(
                     continuation_edge is None
                     or boundary_edge is None
                     or continuation_edge_id in stale_split_replacements
+                    or continuation_edge_id in candidate_edges_by_id
                     or continuation_edge_id in teacher_boundary_edge_id_set
                     or continuation_edge_id.startswith(":")
                     or not _edge_is_vehicle_continuation_candidate(continuation_edge)
@@ -2148,6 +2200,8 @@ def write_teacher_target_internal_replay_net(
         "removed_teacher_absent_same_family_continuation_junctions": (
             removed_teacher_absent_same_family_continuation_junctions
         ),
+        "replayed_stale_split_context_edge_count": len(replayed_stale_split_context_edges),
+        "replayed_stale_split_context_edges": replayed_stale_split_context_edges,
         "retuned_stale_split_junction_ids": retuned_stale_split_junction_ids,
         "stripped_stale_split_tls_connection_count": len(stripped_stale_split_tls_connections),
         "stripped_stale_split_tls_connections": stripped_stale_split_tls_connections,
