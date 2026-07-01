@@ -5,6 +5,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     build_internal_movement_replay_audit,
     build_internal_movement_owner_approach_edge_map,
     build_internal_movement_owner_internal_lane_map,
+    build_internal_movement_owner_road_lane_repair_candidates,
     build_road_connection_topology_replay_audit,
     build_road_lane_template_edge_subset_repair_candidates,
     build_road_lane_template_repair_candidates,
@@ -690,6 +691,53 @@ def test_single_edge_lane_template_repair_splits_teacher_confirmed_edges(tmp_pat
     assert [candidate["edge_ids"] for candidate in repair_candidates] == [["fix_a"], ["fix_b"]]
     assert [candidate["edge_count"] for candidate in repair_candidates] == [1, 1]
     assert [candidate["priority"] for candidate in repair_candidates] == [1, 1]
+
+
+def test_owner_road_lane_repair_candidate_replays_mapped_approach_lanes(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.owner_lanes.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" type="highway.primary" from="a" to="j">
+    <lane id="road#3_0" index="0" allow="pedestrian" speed="5.0" length="10.0"/>
+    <lane id="road#3_1" index="1" disallow="pedestrian bicycle" speed="13.9" length="10.0"/>
+  </edge>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" type="highway.primary" from="a2" to="j">
+    <lane id="road#5_0" index="0" disallow="tram" speed="13.9" length="10.0"/>
+  </edge>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    repair_candidates = build_internal_movement_owner_road_lane_repair_candidates(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5"},
+    )
+    report = write_road_lane_template_repair_candidate(
+        candidate_net,
+        output_net,
+        repair_candidates,
+    )
+
+    lanes = ET.parse(output_net).getroot().findall("./edge[@id='road#5']/lane")
+    assert repair_candidates[0]["action"] == "replace_edge_lanes"
+    assert repair_candidates[0]["teacher_edge_id"] == "road#3"
+    assert repair_candidates[0]["edge_ids"] == ["road#5"]
+    assert report["changed_edge_count"] == 1
+    assert report["changed_lane_count"] == 2
+    assert [lane.attrib["id"] for lane in lanes] == ["road#5_0", "road#5_1"]
+    assert lanes[0].attrib["allow"] == "pedestrian"
+    assert lanes[1].attrib["disallow"] == "pedestrian bicycle"
 
 
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:

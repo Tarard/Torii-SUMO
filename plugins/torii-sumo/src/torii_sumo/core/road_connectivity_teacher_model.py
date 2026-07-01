@@ -367,6 +367,20 @@ def write_road_lane_template_repair_candidate(
     for edge in root.findall("edge"):
         if edge.attrib.get("function") == "internal":
             continue
+        edge_id = str(edge.attrib.get("id", ""))
+        for candidate_index, candidate in enumerate(selected_candidates):
+            if str(candidate.get("action", "")) != "replace_edge_lanes":
+                continue
+            edge_ids = {str(edge_id) for edge_id in candidate.get("edge_ids", [])}
+            if edge_id != str(candidate.get("edge_id", "")) and edge_id not in edge_ids:
+                continue
+            changed_lanes = _replace_edge_lanes(edge, candidate.get("lanes", []))
+            if changed_lanes:
+                changed_edge_count += 1
+                changed_lane_count += changed_lanes
+                applied_candidate_ids.add(candidate_index)
+            break
+
         edge_record = _canonical_edge_record(edge)
         edge_signature = _lane_signature(edge_record)
         edge_type = str(edge_record.get("type", ""))
@@ -781,6 +795,58 @@ def build_internal_movement_owner_approach_edge_map(
         "ambiguous_teacher_edges": ambiguous_teacher_edges,
         "unmapped_teacher_edges": unmapped_teacher_edges,
     }
+
+
+def build_internal_movement_owner_road_lane_repair_candidates(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+    teacher_edge_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    teacher_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in ET.parse(teacher_net_file).getroot().findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in ET.parse(candidate_net_file).getroot().findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidates = []
+    for teacher_edge_id, candidate_edge_id in sorted(teacher_edge_map.items()):
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        candidate_edge = candidate_edges.get(candidate_edge_id)
+        if (
+            teacher_edge is None
+            or candidate_edge is None
+            or _is_internal_edge(teacher_edge)
+            or _is_internal_edge(candidate_edge)
+            or owner_id not in (teacher_edge.attrib.get("from", ""), teacher_edge.attrib.get("to", ""))
+        ):
+            continue
+        teacher_signature = _lane_signature(_canonical_edge_record(teacher_edge))
+        candidate_signature = _lane_signature(_canonical_edge_record(candidate_edge))
+        if teacher_signature == candidate_signature:
+            continue
+        candidates.append(
+            {
+                "action": "replace_edge_lanes",
+                "teacher_edge_id": teacher_edge_id,
+                "edge_id": candidate_edge_id,
+                "edge_ids": [candidate_edge_id],
+                "edge_count": 1,
+                "priority": 1,
+                "from_lane_signature": candidate_signature,
+                "to_lane_signature": teacher_signature,
+                "lanes": [
+                    _mapped_edge_lane_attrs(lane.attrib, teacher_edge_id, candidate_edge_id)
+                    for lane in teacher_edge.findall("lane")
+                ],
+            }
+        )
+    return candidates
 
 
 def build_internal_movement_owner_internal_lane_map(
@@ -1899,6 +1965,30 @@ def _apply_lane_signature(edge: ET.Element, signature: list[str]) -> int:
         after = (lane.attrib.get("allow"), lane.attrib.get("disallow"))
         changed += int(before != after)
     return changed
+
+
+def _replace_edge_lanes(edge: ET.Element, lanes: Any) -> int:
+    new_lanes = [dict(lane) for lane in lanes if isinstance(lane, dict)]
+    if not new_lanes:
+        return 0
+    before = [dict(lane.attrib) for lane in edge.findall("lane")]
+    if before == new_lanes:
+        return 0
+    for lane in list(edge.findall("lane")):
+        edge.remove(lane)
+    for lane in new_lanes:
+        ET.SubElement(edge, "lane", lane)
+    return len(new_lanes)
+
+
+def _mapped_edge_lane_attrs(attrs: dict[str, str], teacher_edge_id: str, candidate_edge_id: str) -> dict[str, str]:
+    mapped = dict(attrs)
+    lane_id = mapped.get("id", "")
+    if lane_id:
+        mapped["id"] = _mapped_lane_id(lane_id, {teacher_edge_id: candidate_edge_id})
+    elif mapped.get("index", ""):
+        mapped["id"] = f"{candidate_edge_id}_{mapped['index']}"
+    return mapped
 
 
 def _common_edge_geometry_mismatches(
