@@ -6765,6 +6765,75 @@ def test_write_teacher_pedestrian_ring_net_replays_teacher_ring_and_removes_extr
     assert ":j_wExtra_0" not in junction.attrib["intLanes"]
 
 
+def test_write_teacher_pedestrian_ring_net_copies_uncontrolled_teacher_walkingareas(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0"/></edge>
+  <edge id=":j_c0" function="crossing" crossingEdges="cand_in"><lane id=":j_c0_0" index="0" allow="pedestrian"/></edge>
+  <junction id="j" x="10" y="20" incLanes="cand_in_0" intLanes=":j_c0_0"/>
+  <connection from="cand_in" to="cand_out" fromLane="0" toLane="0" via=":j_0_0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    teacher_model = {
+        "junction": {"id": "teacher_j", "x": "1", "y": "2"},
+        "crossings": [
+            {
+                "edge_id": ":teacher_j_c0",
+                "crossingEdges": ["teacher_in"],
+                "lanes": [{"id": ":teacher_j_c0_0", "index": "0", "allow": "pedestrian", "shape": "1,2 3,2"}],
+            }
+        ],
+        "walking_areas": [
+            {
+                "edge_id": ":teacher_j_w0",
+                "function": "walkingarea",
+                "lanes": [
+                    {
+                        "id": ":teacher_j_w0_0",
+                        "index": "0",
+                        "allow": "pedestrian",
+                        "speed": "2.78",
+                        "length": "3.00",
+                        "width": "4.00",
+                        "shape": "1,2 2,3",
+                    }
+                ],
+            }
+        ],
+        "pedestrian_connections": [
+            {"from": ":teacher_j_c0", "to": ":teacher_j_w0", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
+            {"from": ":teacher_j_w0", "to": "teacher_out", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
+        ],
+    }
+
+    report = write_teacher_pedestrian_ring_net(
+        candidate_net_file=candidate_net,
+        output_file=tmp_path / "pedring.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        teacher_model=teacher_model,
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    walkingarea = root.find("edge[@id=':j_w0']")
+    crossing = root.find("edge[@id=':j_c0']")
+    assert walkingarea is not None
+    assert crossing is not None
+    assert crossing.find("lane").attrib["shape"] == "10.00,20.00 12.00,20.00"
+    assert walkingarea.attrib["function"] == "walkingarea"
+    assert walkingarea.find("lane").attrib["shape"] == "10.00,20.00 11.00,21.00"
+    assert report["copied_walkingarea_count"] == 1
+    assert report["inserted_pedestrian_connection_count"] == 2
+    assert report["skipped_pedestrian_connection_count"] == 0
+    junction = root.find("junction[@id='j']")
+    assert ":j_w0_0" in junction.attrib["incLanes"]
+
+
 def test_write_teacher_tllogic_net_replaces_only_target_program(tmp_path: Path) -> None:
     candidate_net = tmp_path / "candidate.net.xml"
     candidate_net.write_text(

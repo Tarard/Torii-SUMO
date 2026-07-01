@@ -925,6 +925,31 @@ def write_teacher_pedestrian_ring_net(
         walkingarea_map[teacher_walkingarea] = candidate_pair[0]
         crossing_map.setdefault(teacher_crossing, candidate_pair[1])
 
+    copied_walkingareas = []
+    copied_walkingarea_count = 0
+    if not walkingarea_map:
+        copied_walkingareas, copied_walkingarea_count = _copy_teacher_walkingareas(
+            root,
+            junction_id=junction_id,
+            teacher_junction_id=teacher_junction_id,
+            teacher_junction=teacher_model.get("junction", {}),
+            teacher_walkingareas=teacher_model.get("walking_areas", []),
+        )
+        for teacher_edge_id, candidate_edge_id in copied_walkingareas:
+            walkingarea_map[teacher_edge_id] = candidate_edge_id
+
+    pedestrian_geometry_update_count = _apply_teacher_pedestrian_internal_geometry(
+        root,
+        junction_id=junction_id,
+        teacher_junction_id=teacher_junction_id,
+        teacher_junction=teacher_model.get("junction", {}),
+        edge_maps=(crossing_map, walkingarea_map),
+        teacher_edges=(
+            *(teacher_model.get("crossings", []) or []),
+            *(teacher_model.get("walking_areas", []) or []),
+        ),
+    )
+
     kept_walkingareas = set(walkingarea_map.values())
     removed_walkingareas = []
     for edge in list(root.findall("edge")):
@@ -984,6 +1009,8 @@ def write_teacher_pedestrian_ring_net(
         "net_file": str(output_file),
         "crossing_map_count": len(crossing_map),
         "walkingarea_map_count": len(walkingarea_map),
+        "copied_walkingarea_count": copied_walkingarea_count,
+        "pedestrian_geometry_update_count": pedestrian_geometry_update_count,
         "kept_walkingarea_count": len(kept_walkingareas),
         "removed_walkingarea_count": len(removed_walkingareas),
         "removed_pedestrian_connection_count": removed_connections,
@@ -991,6 +1018,132 @@ def write_teacher_pedestrian_ring_net(
         "skipped_pedestrian_connection_count": len(skipped_connections),
         "skipped_pedestrian_connections": skipped_connections,
     }
+
+
+def _copy_teacher_walkingareas(
+    root: ET.Element,
+    *,
+    junction_id: str,
+    teacher_junction_id: str,
+    teacher_junction: object,
+    teacher_walkingareas: object,
+) -> tuple[list[tuple[str, str]], int]:
+    candidate_junction = root.find(f"junction[@id='{junction_id}']")
+    if candidate_junction is None or not isinstance(teacher_junction, dict) or not isinstance(teacher_walkingareas, list):
+        return [], 0
+    try:
+        dx = float(candidate_junction.attrib.get("x", "0")) - float(str(teacher_junction.get("x", "0")))
+        dy = float(candidate_junction.attrib.get("y", "0")) - float(str(teacher_junction.get("y", "0")))
+    except ValueError:
+        dx = dy = 0.0
+
+    copied = []
+    copied_count = 0
+    copied_edge_ids = []
+    existing_edge_ids = {edge.attrib.get("id", "") for edge in root.findall("edge")}
+    insert_index = _first_junction_index(root)
+    for walkingarea in teacher_walkingareas:
+        if not isinstance(walkingarea, dict):
+            continue
+        teacher_edge_id = str(walkingarea.get("edge_id", ""))
+        candidate_edge_id = _mapped_internal_ref(teacher_edge_id, teacher_junction_id, junction_id)
+        if not teacher_edge_id or not candidate_edge_id or candidate_edge_id in existing_edge_ids:
+            if teacher_edge_id and candidate_edge_id and candidate_edge_id in existing_edge_ids:
+                copied.append((teacher_edge_id, candidate_edge_id))
+            continue
+        edge = ET.Element("edge", {"id": candidate_edge_id, "function": "walkingarea"})
+        for lane in walkingarea.get("lanes", []) or []:
+            if not isinstance(lane, dict):
+                continue
+            lane_attrs = {str(key): str(value) for key, value in lane.items() if value not in (None, "")}
+            if lane_attrs.get("id"):
+                lane_attrs["id"] = _mapped_internal_ref(lane_attrs["id"], teacher_junction_id, junction_id)
+            for attr in ("shape", "outlineShape", "customShape"):
+                if lane_attrs.get(attr):
+                    lane_attrs[attr] = _translate_shape(lane_attrs[attr], dx, dy)
+            ET.SubElement(edge, "lane", lane_attrs)
+        root.insert(insert_index, edge)
+        insert_index += 1
+        existing_edge_ids.add(candidate_edge_id)
+        copied_edge_ids.append(candidate_edge_id)
+        copied_count += 1
+        copied.append((teacher_edge_id, candidate_edge_id))
+
+    copied_lane_ids = [
+        lane.attrib["id"]
+        for candidate_edge_id in copied_edge_ids
+        for edge in root.findall(f"edge[@id='{candidate_edge_id}']")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    ]
+    if copied_lane_ids:
+        inc_lanes = _split(candidate_junction.attrib.get("incLanes", ""))
+        candidate_junction.set("incLanes", " ".join([*inc_lanes, *copied_lane_ids]))
+    return copied, copied_count
+
+
+def _apply_teacher_pedestrian_internal_geometry(
+    root: ET.Element,
+    *,
+    junction_id: str,
+    teacher_junction_id: str,
+    teacher_junction: object,
+    edge_maps: tuple[dict[str, str], ...],
+    teacher_edges: object,
+) -> int:
+    if not isinstance(teacher_edges, tuple):
+        return 0
+    dx, dy = _teacher_to_candidate_delta(root, junction_id, teacher_junction)
+    updated = 0
+    for teacher_edge in teacher_edges:
+        if not isinstance(teacher_edge, dict):
+            continue
+        teacher_edge_id = str(teacher_edge.get("edge_id", ""))
+        candidate_edge_id = next((edge_map[teacher_edge_id] for edge_map in edge_maps if teacher_edge_id in edge_map), "")
+        if not candidate_edge_id:
+            candidate_edge_id = _mapped_internal_ref(teacher_edge_id, teacher_junction_id, junction_id)
+        edge = root.find(f"edge[@id='{candidate_edge_id}']")
+        lanes = teacher_edge.get("lanes", [])
+        if edge is None or not isinstance(lanes, list):
+            continue
+        for lane in list(edge.findall("lane")):
+            edge.remove(lane)
+        for lane in lanes:
+            if not isinstance(lane, dict):
+                continue
+            lane_attrs = _translated_lane_attrs(lane, teacher_junction_id, junction_id, dx, dy)
+            ET.SubElement(edge, "lane", lane_attrs)
+        updated += 1
+    return updated
+
+
+def _teacher_to_candidate_delta(root: ET.Element, junction_id: str, teacher_junction: object) -> tuple[float, float]:
+    candidate_junction = root.find(f"junction[@id='{junction_id}']")
+    if candidate_junction is None or not isinstance(teacher_junction, dict):
+        return 0.0, 0.0
+    try:
+        return (
+            float(candidate_junction.attrib.get("x", "0")) - float(str(teacher_junction.get("x", "0"))),
+            float(candidate_junction.attrib.get("y", "0")) - float(str(teacher_junction.get("y", "0"))),
+        )
+    except ValueError:
+        return 0.0, 0.0
+
+
+def _translated_lane_attrs(
+    lane: dict[str, Any],
+    teacher_junction_id: str,
+    junction_id: str,
+    dx: float,
+    dy: float,
+) -> dict[str, str]:
+    lane_attrs = {str(key): str(value) for key, value in lane.items() if value not in (None, "")}
+    if lane_attrs.get("id"):
+        lane_attrs["id"] = _mapped_internal_ref(lane_attrs["id"], teacher_junction_id, junction_id)
+    for attr in ("shape", "outlineShape", "customShape"):
+        if lane_attrs.get(attr):
+            lane_attrs[attr] = _translate_shape(lane_attrs[attr], dx, dy)
+    return lane_attrs
 
 
 def write_teacher_vehicle_connection_attrs_net(
