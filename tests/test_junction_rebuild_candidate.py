@@ -1467,6 +1467,59 @@ def test_build_teacher_guided_repair_queue_seeds_fragmented_tls_from_exact_appro
     assert candidate["expanded_rebuild_scope"]["join_junction_ids"] == ["frag_e", "frag_n", "frag_s", "frag_w"]
 
 
+def test_build_teacher_guided_repair_queue_seeds_fragmented_tls_from_unsplit_candidate_approach_edges(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="32999434#0" from="outer" to="teacher_tls" type="highway.secondary"><lane id="32999434#0_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="-32999434#0" from="teacher_tls" to="outer" type="highway.secondary"><lane id="-32999434#0_0" index="0" allow="passenger" shape="0,0 -10,0"/></edge>
+  <edge id="side_in" from="side" to="teacher_tls" type="highway.secondary"><lane id="side_in_0" index="0" allow="passenger" shape="0,10 0,0"/></edge>
+  <edge id="side_out" from="teacher_tls" to="side" type="highway.secondary"><lane id="side_out_0" index="0" allow="passenger" shape="0,0 0,10"/></edge>
+  <edge id=":teacher_tls_0" function="internal"><lane id=":teacher_tls_0_0" index="0" shape="0,0 0,1"/></edge>
+  <edge id=":teacher_tls_1" function="internal"><lane id=":teacher_tls_1_0" index="0" shape="0,0 1,0"/></edge>
+  <junction id="teacher_tls" type="traffic_light" x="0" y="0" incLanes="32999434#0_0 side_in_0" intLanes=":teacher_tls_0_0 :teacher_tls_1_0"/>
+  <connection from="32999434#0" to="side_out" via=":teacher_tls_0_0" fromLane="0" toLane="0" tl="teacher_tls" linkIndex="0" dir="r"/>
+  <connection from="side_in" to="-32999434#0" via=":teacher_tls_1_0" fromLane="0" toLane="0" tl="teacher_tls" linkIndex="1" dir="l"/>
+  <tlLogic id="teacher_tls" type="actuated" programID="0"><phase duration="30" state="GG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="32999434" from="outer" to="98101394" type="highway.secondary"><lane id="32999434_0" index="0" allow="passenger" shape="-10,0 -1,0"/></edge>
+  <edge id="-32999434" from="98101394" to="outer" type="highway.secondary"><lane id="-32999434_0" index="0" allow="passenger" shape="-1,0 -10,0"/></edge>
+  <edge id="side_in" from="side" to="frag_side" type="highway.secondary"><lane id="side_in_0" index="0" allow="passenger" shape="0,10 0,1"/></edge>
+  <edge id="side_out" from="frag_side" to="side" type="highway.secondary"><lane id="side_out_0" index="0" allow="passenger" shape="0,1 0,10"/></edge>
+  <junction id="98101394" type="priority" x="-1" y="0" incLanes="32999434_0" intLanes=""/>
+  <junction id="frag_side" type="priority" x="0" y="1" incLanes="side_in_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": []},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["topology_fragmented_tls_candidate_count"] == 1
+    candidate = report["repair_candidates"][0]
+    assert candidate["reference_id"] == "teacher_tls"
+    assert candidate["learned_rule"] == "tum_like_topology_fragmented_tls_candidate"
+    assert candidate["edge_map"] == {
+        "-32999434#0": "-32999434",
+        "32999434#0": "32999434",
+        "side_in": "side_in",
+        "side_out": "side_out",
+    }
+    assert candidate["matched_candidate_node_ids"] == ["98101394", "frag_side"]
+
+
 def test_build_teacher_guided_repair_queue_seeds_fragmented_non_tls_cluster_from_exact_approach_edges(
     tmp_path: Path,
 ) -> None:

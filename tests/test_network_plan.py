@@ -324,6 +324,40 @@ def test_filter_teacher_guided_queue_to_movement_mismatches(tmp_path: Path) -> N
     assert Path(str(filtered["queue_file"])).exists()
 
 
+def test_filter_teacher_guided_queue_keeps_topology_fragmented_tls_candidate(tmp_path: Path) -> None:
+    queue_report = {
+        "status": "pass",
+        "queue_file": str(tmp_path / "all_queue.json"),
+        "repair_candidates": [
+            {"reference_id": "cluster_keep", "candidate_status": "ready_for_teacher_guided_variant"},
+            {
+                "reference_id": "teacher_tls",
+                "candidate_status": "needs_expanded_rebuild_scope",
+                "learned_rule": "tum_like_topology_fragmented_tls_candidate",
+            },
+        ],
+    }
+    audit_report = {
+        "junction_pattern_comparisons": [
+            {"junction_id": "cluster_keep", "mismatch_fields": ["movement_signature_counts"]},
+        ]
+    }
+
+    filtered = _filter_teacher_guided_queue_to_mismatch_fields(
+        queue_report,
+        audit_report,
+        {"movement_signature_counts", "internal_function_counts"},
+        output_dir=tmp_path / "filtered",
+        prefix="final_movement",
+    )
+
+    assert [candidate["reference_id"] for candidate in filtered["repair_candidates"]] == [
+        "cluster_keep",
+        "teacher_tls",
+    ]
+    assert filtered["expanded_scope_candidate_count"] == 1
+
+
 def test_full_reference_join_audit_without_movement_delta_does_not_seed_teacher_guided_queue() -> None:
     assert not _reference_join_audit_can_seed_teacher_guided_queue(
         {
