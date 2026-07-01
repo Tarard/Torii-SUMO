@@ -2660,9 +2660,21 @@ def run_teacher_guided_repair_queue(
                         if copyable_missing_blocked_edge_ids
                         else "mapped_by_replay_edge_map"
                     )
+            join_self_loop_edge_ids, join_blocking_self_loop_edge_ids = _joined_endpoint_self_loop_edge_ids(
+                current_raw_edge_file,
+                join_patch_file,
+                joined_scope_junction_id,
+            )
+            if join_self_loop_edge_ids:
+                scope_report["full_network_join_self_loop_edge_drop_candidates"] = join_self_loop_edge_ids
+            if join_blocking_self_loop_edge_ids:
+                scope_report["full_network_join_blocking_self_loop_edge_drop_candidates"] = (
+                    join_blocking_self_loop_edge_ids
+                )
             use_full_network_join_patch_replay = (
-                sequential_accept_passed_variants
-                and join_patch_file.is_file()
+                join_patch_file.is_file()
+                and not scope_report.get("rewritten_endpoint_count")
+                and not join_blocking_self_loop_edge_ids
                 and not scope_report.get("blocking_missing_node_ids")
                 and not scope_report.get("blocking_missing_blocked_edge_ids")
                 and not scope_report.get("blocking_missing_joined_scope_junction_ids")
@@ -3585,6 +3597,30 @@ def _write_join_scope_connection_file(
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(filtered_root).write(output_file, encoding="utf-8", xml_declaration=True)
     return output_file, len(dropped_edge_ids), dropped_edge_ids
+
+
+def _joined_endpoint_self_loop_edge_ids(
+    edge_file: Path,
+    join_patch_file: Path,
+    joined_junction_id: str,
+) -> tuple[list[str], list[str]]:
+    if not join_patch_file.is_file() or not joined_junction_id:
+        return [], []
+    source_node_ids = _joined_source_node_ids(join_patch_file, joined_junction_id)
+    if not source_node_ids:
+        return [], []
+    dropped_self_loop_edges = []
+    blocking_self_loop_edge_drops = []
+    edge_root = ET.parse(edge_file).getroot()
+    for edge in edge_root.findall("edge"):
+        from_is_join_source = edge.attrib.get("from", "") in source_node_ids
+        to_is_join_source = edge.attrib.get("to", "") in source_node_ids
+        if from_is_join_source and to_is_join_source:
+            edge_id = edge.attrib.get("id", "")
+            dropped_self_loop_edges.append(edge_id)
+            if _edge_drop_requires_review(edge):
+                blocking_self_loop_edge_drops.append(edge_id)
+    return dropped_self_loop_edges, blocking_self_loop_edge_drops
 
 
 def _write_joined_endpoint_edge_file(
