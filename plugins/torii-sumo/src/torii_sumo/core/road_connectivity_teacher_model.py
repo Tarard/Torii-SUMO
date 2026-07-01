@@ -260,8 +260,10 @@ def compare_net_road_template_parity(
         ],
     )
     status = "pass" if lane_parity["status"] == connection_parity["status"] == "pass" else "fail"
+    gate = _road_template_gate_summary(lane_parity, connection_parity)
     return {
         "status": status,
+        "gate": gate,
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "lane_template_summary": {
@@ -486,6 +488,23 @@ def _sort_templates_by_count(templates: Any) -> list[dict[str, Any]]:
 
 def _template_count_total(templates: list[dict[str, Any]]) -> int:
     return sum(int(template.get("count", 0)) for template in templates)
+
+
+def _road_template_gate_summary(
+    lane_parity: dict[str, Any],
+    connection_parity: dict[str, Any],
+) -> dict[str, Any]:
+    parity_passed = lane_parity["status"] == connection_parity["status"] == "pass"
+    road_layer_status = "pass" if parity_passed else "fail"
+    return {
+        "road_layer_status": road_layer_status,
+        "can_enter_junction_replay": road_layer_status == "pass",
+        "blocking_reason": "" if road_layer_status == "pass" else "road_template_parity_failed",
+        "lane_missing_template_count": int(lane_parity.get("missing_template_count", 0)),
+        "connection_missing_template_count": int(connection_parity.get("missing_template_count", 0)),
+        "lane_extra_template_count": int(lane_parity.get("extra_template_count", 0)),
+        "connection_extra_template_count": int(connection_parity.get("extra_template_count", 0)),
+    }
 
 
 def _common_edge_geometry_mismatches(
