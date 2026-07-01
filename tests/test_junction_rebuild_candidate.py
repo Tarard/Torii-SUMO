@@ -8616,6 +8616,24 @@ def test_teacher_guided_semantics_gate_allows_teacher_boundary_absorption_cleanu
     assert gate == {"status": "pass", "failures": []}
 
 
+def test_teacher_guided_semantics_gate_allows_mapped_teacher_boundary_absorption_cleanup() -> None:
+    gate = _teacher_guided_semantics_gate(
+        {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
+        target_internal_replay={
+            "status": "pass",
+            "skipped_connection_count": 0,
+            "copied_boundary_edges": ["teacher_absorbed"],
+            "copied_boundary_candidate_edges": ["candidate_absorbed"],
+            "removed_stale_replaced_edge_connection_count": 1,
+            "removed_stale_replaced_edge_connections": [
+                {"from": "old_neighbor", "to": "candidate_absorbed", "via": ":old_neighbor_0_0"}
+            ],
+        },
+    )
+
+    assert gate == {"status": "pass", "failures": []}
+
+
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -8829,6 +8847,51 @@ def test_write_teacher_target_internal_replay_net_maps_referenced_tls_logic(tmp_
     target_tls = root.find("tlLogic[@id='j']")
     assert target_tls.attrib["type"] == "actuated"
     assert target_tls.find("phase").attrib["state"] == "G"
+
+
+def test_write_teacher_target_internal_replay_net_removes_stale_tls_links_beyond_teacher_capacity(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="teacher_out" from="j" to="b"><lane id="teacher_out_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="10,0 11,0"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="teacher_in_0" intLanes=":j_0_0"/>
+  <junction id="y" type="priority" x="30" y="0" incLanes="remote_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s"/>
+  <tlLogic id="j" type="actuated" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane id="cand_out_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id="remote_in" from="x" to="y"><lane id="remote_in_0" index="0" shape="20,0 30,0"/></edge>
+  <edge id="remote_out" from="y" to="z"><lane id="remote_out_0" index="0" shape="30,0 40,0"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="y" type="priority" x="30" y="0" incLanes="remote_in_0" intLanes=""/>
+  <connection from="remote_in" to="remote_out" fromLane="0" toLane="0" tl="j" linkIndex="3" dir="s"/>
+  <tlLogic id="j" type="actuated" programID="0" offset="0"><phase duration="30" state="GGGG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("connection[@from='remote_in'][@to='remote_out']") is None
+    assert report["removed_stale_tls_connection_count"] == 1
+    assert report["removed_stale_tls_connections"][0]["linkIndex"] == "3"
 
 
 def test_write_teacher_target_internal_replay_net_removes_tls_when_teacher_has_no_tls(tmp_path: Path) -> None:
