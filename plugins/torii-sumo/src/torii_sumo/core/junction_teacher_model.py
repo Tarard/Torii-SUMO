@@ -88,6 +88,41 @@ def canonical_teacher_junction_bundle(net_file: Path, junction_id: str) -> dict[
     }
 
 
+def write_teacher_self_replay_net(
+    teacher_net_file: Path,
+    junction_id: str,
+    output_file: Path,
+) -> dict[str, Any]:
+    bundle = canonical_teacher_junction_bundle(teacher_net_file, junction_id)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    root = ET.Element("net")
+    if bundle["location"]:
+        ET.SubElement(root, "location", bundle["location"])
+    for edge in bundle["edges"]:
+        edge_node = ET.SubElement(root, "edge", _record_attrs(edge, "lanes"))
+        for lane in edge.get("lanes", []):
+            ET.SubElement(edge_node, "lane", dict(lane))
+    for junction in bundle["junctions"]:
+        junction_node = ET.SubElement(root, "junction", _record_attrs(junction, "requests"))
+        for request in junction.get("requests", []):
+            ET.SubElement(junction_node, "request", dict(request))
+    for tl_logic in bundle["tlLogics"]:
+        tl_node = ET.SubElement(root, "tlLogic", _record_attrs(tl_logic, "phases"))
+        for phase in tl_logic.get("phases", []):
+            ET.SubElement(tl_node, "phase", dict(phase))
+    for connection in bundle["connections"]:
+        ET.SubElement(root, "connection", dict(connection))
+
+    ET.indent(root, space="  ")
+    ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+    parity_delta = {} if bundle == canonical_teacher_junction_bundle(output_file, junction_id) else {"canonical_bundle": 1}
+    return {
+        "status": "pass" if not parity_delta else "fail",
+        "output_file": str(output_file),
+        "parity_delta": parity_delta,
+    }
+
+
 def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_id: str) -> dict[str, Any]:
     junction = next((node for node in root.findall("junction") if node.attrib.get("id") == junction_id), None)
     if junction is None:
@@ -696,6 +731,10 @@ def _canonical_tl_logic_record(tl_logic: ET.Element) -> dict[str, Any]:
 
 def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:
     return {} if element is None else dict(sorted(element.attrib.items()))
+
+
+def _record_attrs(record: dict[str, Any], child_key: str) -> dict[str, str]:
+    return {str(key): str(value) for key, value in record.items() if key != child_key}
 
 
 def _lane_sort_key(lane: ET.Element) -> tuple[int, str]:
