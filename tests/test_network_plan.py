@@ -277,14 +277,19 @@ def test_filter_teacher_guided_queue_to_movement_mismatches(tmp_path: Path) -> N
     queue_report = {
         "status": "pass",
         "queue_file": str(tmp_path / "all_queue.json"),
-        "repair_candidate_count": 3,
+        "repair_candidate_count": 4,
         "ready_candidate_count": 2,
-        "expanded_scope_candidate_count": 1,
+        "expanded_scope_candidate_count": 2,
         "blocked_candidate_count": 0,
         "repair_candidates": [
             {"reference_id": "cluster_keep", "candidate_status": "ready_for_teacher_guided_variant"},
             {"reference_id": "cluster_drop", "candidate_status": "ready_for_teacher_guided_variant"},
             {"junction_id": "cluster_approach", "candidate_status": "needs_expanded_rebuild_scope"},
+            {
+                "reference_id": "same_id_tls",
+                "candidate_status": "needs_expanded_rebuild_scope",
+                "learned_rule": "tum_like_same_id_tls_candidate",
+            },
         ],
     }
     audit_report = {
@@ -303,13 +308,18 @@ def test_filter_teacher_guided_queue_to_movement_mismatches(tmp_path: Path) -> N
         prefix="final_movement",
     )
 
-    assert filtered["repair_candidate_count"] == 1
+    assert filtered["repair_candidate_count"] == 2
     assert filtered["ready_candidate_count"] == 1
-    assert filtered["expanded_scope_candidate_count"] == 0
+    assert filtered["expanded_scope_candidate_count"] == 1
     assert filtered["queue_filter_target_junction_ids"] == ["cluster_keep", "cluster_missing"]
-    assert filtered["queue_filter_original_repair_candidate_count"] == 3
+    assert filtered["queue_filter_original_repair_candidate_count"] == 4
     assert filtered["repair_candidates"] == [
-        {"reference_id": "cluster_keep", "candidate_status": "ready_for_teacher_guided_variant"}
+        {"reference_id": "cluster_keep", "candidate_status": "ready_for_teacher_guided_variant"},
+        {
+            "reference_id": "same_id_tls",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "learned_rule": "tum_like_same_id_tls_candidate",
+        },
     ]
     assert Path(str(filtered["queue_file"])).exists()
 

@@ -611,7 +611,10 @@ def _filter_teacher_guided_queue_to_mismatch_fields(
     filtered_candidates = [
         dict(candidate)
         for candidate in candidates
-        if {str(candidate.get("junction_id", "")), str(candidate.get("reference_id", ""))} & target_id_set
+        if (
+            {str(candidate.get("junction_id", "")), str(candidate.get("reference_id", ""))} & target_id_set
+            or candidate.get("learned_rule") == "tum_like_same_id_tls_candidate"
+        )
     ]
     filtered_report = dict(queue_report)
     filtered_report["repair_candidates"] = filtered_candidates
