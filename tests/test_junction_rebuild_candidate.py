@@ -3089,6 +3089,7 @@ def test_run_teacher_guided_repair_queue_expands_followup_scope_after_expanded_r
                         "junction_ids": ["a", "j", "n"],
                         "join_junction_ids": ["a", "j", "n"],
                         "blocked_teacher_edge_ids": ["teacher_main", "teacher_neighbor"],
+                        "missing_desired_endpoint_ids": ["missing_endpoint"],
                     },
                 }
             ],
@@ -3108,6 +3109,7 @@ def test_run_teacher_guided_repair_queue_expands_followup_scope_after_expanded_r
     assert followup["expanded_rebuild_scope"]["junction_ids"] == ["a", "j", "n", "q"]
     assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["a", "j", "n", "q"]
     assert followup["expanded_rebuild_scope"]["blocked_teacher_edge_ids"] == ["teacher_far", "teacher_neighbor"]
+    assert followup["expanded_rebuild_scope"]["missing_desired_endpoint_ids"] == ["missing_endpoint"]
 
 
 def test_run_teacher_guided_repair_queue_replays_no_join_expanded_scope_on_full_network(
