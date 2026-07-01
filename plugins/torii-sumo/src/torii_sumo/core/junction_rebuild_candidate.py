@@ -169,7 +169,14 @@ def build_teacher_guided_repair_queue(
         teacher_root,
         candidate_root,
     )
-    matched_cases = [*matched_cases, *same_id_pattern_cases]
+    same_id_tls_cases = _same_id_tls_mismatch_cases(
+        [*matched_cases, *same_id_pattern_cases],
+        teacher_root,
+        candidate_root,
+        teacher_net_file,
+        candidate_net_file,
+    )
+    matched_cases = [*matched_cases, *same_id_pattern_cases, *same_id_tls_cases]
     topology_fragmented_tls_cases = _topology_fragmented_tls_cases(
         matched_cases,
         teacher_root,
@@ -230,6 +237,7 @@ def build_teacher_guided_repair_queue(
         "candidate_net_file": str(candidate_net_file),
         "matched_case_count": len(matched_cases),
         "same_id_pattern_candidate_count": len(same_id_pattern_cases),
+        "same_id_tls_candidate_count": len(same_id_tls_cases),
         "topology_fragmented_tls_candidate_count": len(topology_fragmented_tls_cases),
         "topology_fragmented_non_tls_candidate_count": len(topology_fragmented_non_tls_cases),
         "turnaround_only_lane_candidate_count": len(turnaround_only_lane_cases),
@@ -3881,6 +3889,81 @@ def _same_id_pattern_cases(
             }
         )
     return cases
+
+
+def _same_id_tls_mismatch_cases(
+    matched_cases: list[dict[str, Any]],
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+) -> list[dict[str, Any]]:
+    covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
+    candidate_junctions = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    cases = []
+    for junction in teacher_root.findall("junction"):
+        reference_id = junction.attrib.get("id", "")
+        candidate_junction = candidate_junctions.get(reference_id)
+        if (
+            not reference_id
+            or reference_id.startswith(":")
+            or reference_id in covered_ids
+            or candidate_junction is None
+            or not _teacher_junction_has_tls(teacher_root, reference_id, junction)
+        ):
+            continue
+        if _same_id_tls_matches_teacher(
+            teacher_root,
+            candidate_root,
+            teacher_net_file,
+            candidate_net_file,
+            reference_id,
+            candidate_junction,
+        ):
+            continue
+        cases.append(
+            {
+                "reference_id": reference_id,
+                "reference_joined_source_nodes": [],
+                "matched_reference_source_node_ids": [],
+                "matched_candidate_node_ids": [reference_id],
+                "learned_rule_basis": "same_id_tls_semantic_mismatch",
+                "learned_rule": "tum_like_same_id_tls_candidate",
+            }
+        )
+    return cases
+
+
+def _same_id_tls_matches_teacher(
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    junction_id: str,
+    candidate_junction: ET.Element,
+) -> bool:
+    if not _teacher_junction_has_tls(candidate_root, junction_id, candidate_junction):
+        return False
+    try:
+        teacher_model = _extract_teacher_junction_model(teacher_root, teacher_net_file, junction_id)
+        candidate_model = _extract_teacher_junction_model(candidate_root, candidate_net_file, junction_id)
+    except (ET.ParseError, OSError, KeyError, TypeError, ValueError):
+        return False
+    teacher = _teacher_parity_summary(teacher_model)
+    candidate = _teacher_parity_summary(candidate_model)
+    fields = (
+        "incoming_vehicle_edge_count",
+        "outgoing_vehicle_edge_count",
+        "vehicle_connection_count",
+        "controlled_vehicle_link_count",
+        "controlled_link_index_count",
+        "controlled_duplicate_link_index_count",
+    )
+    return all(teacher.get(field) == candidate.get(field) for field in fields)
 
 
 def _topology_fragmented_tls_cases(
