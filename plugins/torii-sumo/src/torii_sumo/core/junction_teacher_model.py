@@ -405,6 +405,18 @@ def match_teacher_approaches(
         teacher_id = teacher.get("edge_id", "")
         if not teacher_id:
             continue
+        same_id = next(
+            (
+                candidate
+                for candidate in candidate_approaches
+                if candidate.get("edge_id", "") == teacher_id and teacher_id not in used_candidates
+            ),
+            None,
+        )
+        if same_id is not None:
+            matches[teacher_id] = teacher_id
+            used_candidates.add(teacher_id)
+            continue
         exact = _find_same_source_candidate(teacher, candidate_approaches, used_candidates)
         if exact is not None:
             matches[teacher_id] = exact.get("edge_id", "")

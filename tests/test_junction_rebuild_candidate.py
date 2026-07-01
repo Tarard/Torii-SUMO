@@ -103,6 +103,56 @@ def test_teacher_candidate_edge_map_can_use_expanded_scope_bearing_delta() -> No
     )
 
 
+def test_teacher_candidate_edge_map_prefers_exact_edge_id_before_bearing() -> None:
+    teacher_model = {
+        "junction_id": "j",
+        "approaches": {
+            "incoming": [
+                {
+                    "edge_id": "main#3",
+                    "from": "a",
+                    "to": "j",
+                    "bearing": 180.0,
+                    "lane_count": 1,
+                    "type": "highway.path",
+                }
+            ],
+            "outgoing": [],
+        },
+    }
+    candidate_model = {
+        "junction_id": "j",
+        "approaches": {
+            "incoming": [
+                {
+                    "edge_id": "wrong_bearing_match",
+                    "from": "b",
+                    "to": "j",
+                    "bearing": 181.0,
+                    "lane_count": 1,
+                    "type": "highway.path",
+                },
+                {
+                    "edge_id": "main#3",
+                    "from": "a",
+                    "to": "j",
+                    "bearing": 150.0,
+                    "lane_count": 1,
+                    "type": "highway.path",
+                },
+            ],
+            "outgoing": [],
+        },
+    }
+
+    assert _teacher_candidate_edge_map(
+        teacher_model,
+        candidate_model,
+        teacher_junction_id="j",
+        candidate_junction_id="j",
+    ) == {"main#3": "main#3"}
+
+
 def test_restore_false_traffic_light_junction_types_only_restores_uncontrolled_noise(tmp_path: Path) -> None:
     source = tmp_path / "source.net.xml"
     source.write_text(
