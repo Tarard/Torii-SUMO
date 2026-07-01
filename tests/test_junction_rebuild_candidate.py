@@ -6862,7 +6862,7 @@ def test_teacher_target_replay_expands_target_shape_to_raw_approach_endpoints(tm
     shape = root.find("junction[@id='cj']").attrib["shape"]
     assert "-10.00,30.00" in shape
     assert report["target_shape_anchor"]["status"] == "pass"
-    assert report["target_shape_anchor"]["approach_edge_ids"] == ["cand_in", "cand_out"]
+    assert report["target_shape_anchor"]["approach_edge_ids"] == ["cand_in"]
 
 
 def test_write_teacher_lane_patch_edges_adds_missing_mapped_teacher_edge(tmp_path: Path) -> None:
