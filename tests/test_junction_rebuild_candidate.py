@@ -3542,6 +3542,108 @@ def test_run_teacher_guided_repair_queue_replays_joined_expanded_scope_on_full_n
     assert '<join nodes="a b"' in variant_calls[0]["raw_node_file"].read_text(encoding="utf-8")
 
 
+def test_run_teacher_guided_repair_queue_filters_join_scope_dead_end_connections_for_full_network_seed(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="x" x="-10" y="0"/>
+  <node id="a" x="0" y="0"/>
+  <node id="b" x="1" y="0"/>
+  <node id="y" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="x" to="a" shape="-10,0 0,0"><lane index="0"/></edge>
+  <edge id="cand_mid" from="a" to="b" shape="0,0 1,0"><lane index="0"/></edge>
+  <edge id="cand_out" from="b" to="y" shape="1,0 10,0"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="cand_in" to="cand_mid" fromLane="0" toLane="0"/>
+  <connection from="cand_mid"/>
+  <connection from="cand_mid" to="cand_out" fromLane="0" toLane="0"/>
+</connections>
+""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (teacher_net, candidate_net):
+        path.write_text("<net/>", encoding="utf-8")
+
+    seed_connection_files = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            if output_file.name == "full_network_join_replay.net.xml":
+                connection_arg = command[command.index("--connection-files") + 1]
+                seed_connection_files.append(Path(cwd) / connection_arg)
+            output_file.write_text(
+                """<net>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    variant_calls = []
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {"status": "pass", "claim_status": "diagnostic-demo", "parity_gate_status": "pass", "final_net_file": str(final_net)}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "a",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {"teacher_in": "cand_in", "teacher_out": "cand_out"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "core_junction_id": "a",
+                        "junction_ids": ["a", "b"],
+                        "join_junction_ids": ["a", "b"],
+                        "blocked_teacher_edge_ids": [],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+        variant_builder=fake_variant,
+        sequential_accept_passed_variants=True,
+    )
+
+    assert report["status"] == "pass"
+    assert seed_connection_files
+    filtered_connections = [connection.attrib for connection in ET.parse(seed_connection_files[0]).getroot()]
+    assert {"from": "cand_mid"} not in filtered_connections
+    assert {"from": "cand_mid", "to": "cand_out", "fromLane": "0", "toLane": "0"} in filtered_connections
+    assert variant_calls[0]["raw_connection_file"] == seed_connection_files[0]
+    assert report["expanded_scope_reports"][0]["full_network_join_dead_end_connection_drop_count"] == 1
+
+
 def test_run_teacher_guided_repair_queue_skips_joined_expanded_scope_when_seed_netconvert_fails(
     tmp_path: Path,
 ) -> None:

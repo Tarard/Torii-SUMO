@@ -2528,7 +2528,14 @@ def run_teacher_guided_repair_queue(
                         output_dir / safe_junction_id / "full_network_join_replay.nod.xml",
                     )
                     replay_edge_file = current_raw_edge_file
-                    replay_connection_file = current_raw_connection_file
+                    replay_connection_file, dead_end_drop_count, dead_end_drop_edge_ids = _write_join_scope_connection_file(
+                        current_raw_edge_file,
+                        current_raw_connection_file,
+                        {str(node_id) for node_id in scope_report.get("join_node_ids", []) or [] if str(node_id)},
+                        output_dir / safe_junction_id / "full_network_join_replay.con.xml",
+                    )
+                    scope_report["full_network_join_dead_end_connection_drop_count"] = dead_end_drop_count
+                    scope_report["full_network_join_dead_end_connection_drop_edge_ids"] = dead_end_drop_edge_ids
                     replay_edge_endpoint_rewrite_count = 0
                     replay_dropped_self_loop_edges = []
                     replay_blocking_self_loop_edge_drops = []
@@ -3363,6 +3370,41 @@ def _write_replay_node_file(node_file: Path, join_patch_file: Path, output_file:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(node_root).write(output_file, encoding="utf-8", xml_declaration=True)
     return output_file
+
+
+def _write_join_scope_connection_file(
+    edge_file: Path,
+    connection_file: Path,
+    join_node_ids: set[str],
+    output_file: Path,
+) -> tuple[Path, int, list[str]]:
+    if not join_node_ids:
+        return connection_file, 0, []
+    incident_edge_ids = {
+        edge.attrib["id"]
+        for edge in ET.parse(edge_file).getroot().findall("edge")
+        if edge.attrib.get("id") and (edge.attrib.get("from") in join_node_ids or edge.attrib.get("to") in join_node_ids)
+    }
+    if not incident_edge_ids:
+        return connection_file, 0, []
+    connection_root = ET.parse(connection_file).getroot()
+    filtered_root = ET.Element(connection_root.tag, connection_root.attrib)
+    dropped_edge_ids = []
+    for connection in connection_root:
+        if (
+            connection.tag == "connection"
+            and connection.attrib.get("from", "") in incident_edge_ids
+            and not connection.attrib.get("to")
+        ):
+            dropped_edge_ids.append(connection.attrib.get("from", ""))
+            continue
+        filtered_root.append(copy.deepcopy(connection))
+    if not dropped_edge_ids:
+        return connection_file, 0, []
+    ET.indent(filtered_root, space="    ")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(filtered_root).write(output_file, encoding="utf-8", xml_declaration=True)
+    return output_file, len(dropped_edge_ids), dropped_edge_ids
 
 
 def _write_joined_endpoint_edge_file(
