@@ -1280,6 +1280,7 @@ def write_teacher_target_internal_replay_net(
         if edge.attrib.get("id", "").startswith(teacher_internal_prefix)
     ]
     copied_boundary_edges = []
+    copied_boundary_candidate_edges = []
     skipped_boundary_edges = []
     replaced_boundary_edge_ids: set[str] = set()
     boundary_insert_offset = 0
@@ -1436,6 +1437,7 @@ def write_teacher_target_internal_replay_net(
         replay_edge_map[edge_id] = copied_edge_id
         _append_edge_lanes_to_destination_junction(candidate_root, copied_edge)
         copied_boundary_edges.append(edge_id)
+        copied_boundary_candidate_edges.append(copied_edge_id)
 
     removed_stale_boundary_edges = []
     if teacher_boundary_edge_ids:
@@ -1582,6 +1584,7 @@ def write_teacher_target_internal_replay_net(
         )
     removed_stale_tllogic_ids = []
     uncontrolled_stale_tls_connections = []
+    removed_stale_tls_connections = []
     if teacher_tllogic is not None:
         target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
         root_children = list(candidate_root)
@@ -1598,6 +1601,21 @@ def write_teacher_target_internal_replay_net(
         copied_tllogic = _clone_transformed_net_element(teacher_tllogic, dx, dy, replay_edge_map, teacher_junction_id, junction_id)
         copied_tllogic.set("id", junction_id)
         candidate_root.insert(target_index, copied_tllogic)
+        teacher_link_capacity = max(
+            (len(phase.attrib.get("state", "")) for phase in copied_tllogic.findall("phase")),
+            default=0,
+        )
+        for connection in list(candidate_root.findall("connection")):
+            if connection.attrib.get("tl") != junction_id or not teacher_link_capacity:
+                continue
+            link_indices = _connection_link_indices(connection)
+            if (
+                link_indices
+                and max(link_indices) >= teacher_link_capacity
+                and not _touches_target_replay_scope(connection, internal_prefix, junction_id, candidate_edges_by_id)
+            ):
+                removed_stale_tls_connections.append(dict(connection.attrib))
+                candidate_root.remove(connection)
     else:
         target_tllogic = candidate_root.find(f"tlLogic[@id='{junction_id}']")
         if target_tllogic is not None:
@@ -1630,6 +1648,7 @@ def write_teacher_target_internal_replay_net(
         "copied_internal_edge_count": len(teacher_internal_edges),
         "copied_boundary_edge_count": len(copied_boundary_edges),
         "copied_boundary_edges": copied_boundary_edges,
+        "copied_boundary_candidate_edges": copied_boundary_candidate_edges,
         "preserved_colliding_boundary_edge_count": len(preserved_colliding_boundary_edges),
         "preserved_colliding_boundary_edges": preserved_colliding_boundary_edges,
         "removed_stale_boundary_edge_count": len(removed_stale_boundary_edges),
@@ -1656,6 +1675,8 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_tllogic_ids": removed_stale_tllogic_ids,
         "uncontrolled_stale_tls_connection_count": len(uncontrolled_stale_tls_connections),
         "uncontrolled_stale_tls_connections": uncontrolled_stale_tls_connections,
+        "removed_stale_tls_connection_count": len(removed_stale_tls_connections),
+        "removed_stale_tls_connections": removed_stale_tls_connections,
         "copied_request_count": len(teacher_junction.findall("request")),
         "effective_edge_map": dict(sorted(replay_edge_map.items())),
     }
@@ -6487,7 +6508,12 @@ def _blocking_removed_stale_connection_count(report: dict[str, Any]) -> int:
     removed = report.get("removed_stale_replaced_edge_connections", [])
     if not isinstance(removed, list):
         return count
-    copied_boundary_edges = {str(item) for item in report.get("copied_boundary_edges", []) or [] if str(item)}
+    copied_boundary_edges = {
+        str(item)
+        for field in ("copied_boundary_edges", "copied_boundary_candidate_edges")
+        for item in report.get(field, []) or []
+        if str(item)
+    }
     blocking = [
         connection
         for connection in removed
