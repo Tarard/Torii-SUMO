@@ -23,6 +23,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     write_road_lane_template_repair_candidate,
     write_road_connection_topology_replay_candidate,
     write_internal_movement_owner_replay_candidate,
+    write_internal_movement_owner_bundle_replacement_candidate,
     write_road_connectivity_self_replay_net,
 )
 
@@ -1415,6 +1416,122 @@ def test_write_internal_movement_owner_replay_candidate_applies_internal_lane_ma
     assert report["mapped_internal_lane_count"] == 1
     assert connection is not None
     assert connection.attrib["via"] == ":j_11_0"
+
+
+def test_write_internal_movement_owner_bundle_replacement_candidate_replaces_owner_bundle(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_bundle.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="a" to="j"><lane id="road#3_0" index="0"/></edge>
+  <edge id="out#2" from="j" to="b"><lane id="out#2_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="0,0 1,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="road#3_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id=":j_0_0" type="internal" x="0" y="0" incLanes="road#3_0" intLanes=":j_0_0"/>
+  <connection from="road#3" to="out#2" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="out#2" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#5" from="a2" to="j"><lane id="road#5_0" index="0"/></edge>
+  <edge id="out#4" from="j" to="b2"><lane id="out#4_0" index="0"/></edge>
+  <edge id=":j_old" function="internal"><lane id=":j_old_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="road#5_0" intLanes=":j_old_0"/>
+  <connection from="road#5" to="out#4" fromLane="0" toLane="0" via=":j_old_0" dir="s"/>
+  <connection from=":j_old" to="out#4" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_bundle_replacement_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5", "out#2": "out#4"},
+        copy_tls=False,
+    )
+
+    root = ET.parse(output_net).getroot()
+    connections = [connection.attrib for connection in root.findall("connection")]
+    assert report["status"] == "pass"
+    assert report["repair_scope"] == "internal_movement_owner_bundle"
+    assert report["removed_internal_edge_count"] == 1
+    assert report["added_internal_edge_count"] == 1
+    assert report["added_connection_count"] == 2
+    assert root.find("edge[@id=':j_old']") is None
+    assert root.find("edge[@id=':j_0']") is not None
+    assert root.find("junction[@id='j']").attrib["incLanes"] == "road#5_0"
+    assert root.find("junction[@id='j']").attrib["intLanes"] == ":j_0_0"
+    assert root.find("junction[@id='j']/request").attrib["index"] == "0"
+    assert root.find("junction[@id=':j_0_0']").attrib["incLanes"] == "road#5_0"
+    assert connections == [
+        {"from": "road#5", "to": "out#4", "fromLane": "0", "toLane": "0", "via": ":j_0_0", "dir": "s"},
+        {"from": ":j_0", "to": "out#4", "fromLane": "0", "toLane": "0", "dir": "s"},
+    ]
+
+
+def test_write_internal_movement_owner_bundle_replacement_candidate_blocks_missing_road_dependencies(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_bundle.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="a" to="j"><lane id="road#3_0" index="0"/></edge>
+  <edge id="out#2" from="j" to="b"><lane id="out#2_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="road#3_0" intLanes=":j_0_0"/>
+  <connection from="road#3" to="out#2" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="out#4" from="j" to="b2"><lane id="out#4_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_bundle_replacement_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5", "out#2": "out#4"},
+        copy_tls=False,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["blocking_reason"] == "missing_road_dependencies"
+    assert report["blocked_dependency_count"] == 2
+    assert report["blocked_dependencies"] == [
+        {
+            "kind": "missing_junction_lane",
+            "junction": "j",
+            "field": "incLanes",
+            "lane": "road#5_0",
+        },
+        {
+            "kind": "missing_connection_dependency",
+            "reason": "missing_from_edge",
+            "from": "road#5",
+            "to": "out#4",
+            "via": ":j_0_0",
+            "teacher_from": "road#3",
+            "teacher_to": "out#2",
+        },
+    ]
+    assert not output_net.exists()
 
 
 def test_write_road_connection_topology_replay_candidate_skips_internal_via_by_default(
