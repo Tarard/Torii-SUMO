@@ -8441,6 +8441,23 @@ def test_teacher_guided_semantics_gate_allows_non_target_walkingarea_connection_
     assert gate == {"status": "pass", "failures": []}
 
 
+def test_teacher_guided_semantics_gate_allows_teacher_boundary_absorption_cleanup() -> None:
+    gate = _teacher_guided_semantics_gate(
+        {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
+        target_internal_replay={
+            "status": "pass",
+            "skipped_connection_count": 0,
+            "copied_boundary_edges": ["teacher_absorbed"],
+            "removed_stale_replaced_edge_connection_count": 1,
+            "removed_stale_replaced_edge_connections": [
+                {"from": "old_neighbor", "to": "teacher_absorbed", "via": ":old_neighbor_0_0"}
+            ],
+        },
+    )
+
+    assert gate == {"status": "pass", "failures": []}
+
+
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(

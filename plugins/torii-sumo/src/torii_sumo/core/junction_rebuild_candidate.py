@@ -6328,10 +6328,13 @@ def _blocking_removed_stale_connection_count(report: dict[str, Any]) -> int:
     removed = report.get("removed_stale_replaced_edge_connections", [])
     if not isinstance(removed, list):
         return count
+    copied_boundary_edges = {str(item) for item in report.get("copied_boundary_edges", []) or [] if str(item)}
     blocking = [
         connection
         for connection in removed
-        if isinstance(connection, dict) and not _connection_touches_walkingarea_internal(connection)
+        if isinstance(connection, dict)
+        and not _connection_touches_walkingarea_internal(connection)
+        and not _connection_touches_any_edge(connection, copied_boundary_edges)
     ]
     return len(blocking)
 
@@ -6341,6 +6344,10 @@ def _connection_touches_walkingarea_internal(connection: dict[str, Any]) -> bool
         ref.startswith(":") and "_w" in ref
         for ref in (str(connection.get(field, "")) for field in ("from", "to", "via"))
     )
+
+
+def _connection_touches_any_edge(connection: dict[str, Any], edge_ids: set[str]) -> bool:
+    return bool(edge_ids) and any(str(connection.get(field, "")) in edge_ids for field in ("from", "to"))
 
 
 def _semantic_layer_gates(
