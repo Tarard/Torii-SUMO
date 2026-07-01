@@ -6779,6 +6779,15 @@ def test_teacher_target_replay_joins_stale_split_fragment_geometry(tmp_path: Pat
 """,
         encoding="utf-8",
     )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="road#1" from="remote" to="mid" shape="0,1 10,1"/>
+  <edge id="road#0" from="mid" to="cj" shape="10,1 20,1"/>
+</edges>
+""",
+        encoding="utf-8",
+    )
 
     report = write_teacher_target_internal_replay_net(
         candidate_net_file=candidate_net,
@@ -6787,6 +6796,7 @@ def test_teacher_target_replay_joins_stale_split_fragment_geometry(tmp_path: Pat
         junction_id="cj",
         teacher_junction_id="tj",
         edge_map={"road#0": "road#0", "out": "out"},
+        geometry_anchor_edge_file=raw_edges,
     )
 
     root = ET.parse(report["net_file"]).getroot()
@@ -6799,6 +6809,9 @@ def test_teacher_target_replay_joins_stale_split_fragment_geometry(tmp_path: Pat
     assert edge.attrib["to"] == "cj"
     assert lane.attrib["shape"] == "0,1 10,1 20,1"
     assert lane.attrib["length"] == "20.00"
+    assert root.find("junction[@id='remote']").attrib["y"] == "1"
+    assert root.find("junction[@id='mid']").attrib["y"] == "1"
+    assert set(report["restored_geometry_anchor_junctions"]) == {"mid", "remote"}
 
 
 def test_write_teacher_lane_patch_edges_adds_missing_mapped_teacher_edge(tmp_path: Path) -> None:
