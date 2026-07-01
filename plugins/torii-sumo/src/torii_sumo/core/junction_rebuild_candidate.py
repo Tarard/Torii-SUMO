@@ -2275,6 +2275,7 @@ def run_teacher_guided_repair_queue(
     crossing_edge_overrides_by_junction = crossing_edge_overrides_by_junction or {}
     variant_reports = []
     expanded_scope_reports = []
+    expanded_scope_followup_candidates = []
     skipped_candidates = []
     sequential_plain_export_reports = []
     current_raw_node_file = raw_node_file
@@ -2665,6 +2666,14 @@ def run_teacher_guided_repair_queue(
                 attached_report = _attach_candidate_template_context(variant_report, candidate)
                 attached_report.setdefault("teacher_junction_id", teacher_junction_id)
                 variant_reports.append(attached_report)
+                followup_candidate = _expanded_scope_followup_candidate_for_unsafe_internal_replay(
+                    candidate,
+                    attached_report,
+                    replay_edge_file,
+                    junction_id=junction_id,
+                )
+                if followup_candidate is not None:
+                    expanded_scope_followup_candidates.append(followup_candidate)
                 final_net_file = Path(str(attached_report.get("final_net_file", "")))
                 if (
                     (use_full_network_replay or use_full_network_join_patch_replay)
@@ -2768,6 +2777,14 @@ def run_teacher_guided_repair_queue(
         attached_report = _attach_candidate_template_context(variant_report, candidate)
         attached_report.setdefault("teacher_junction_id", teacher_junction_id)
         variant_reports.append(attached_report)
+        followup_candidate = _expanded_scope_followup_candidate_for_unsafe_internal_replay(
+            candidate,
+            attached_report,
+            current_raw_edge_file,
+            junction_id=junction_id,
+        )
+        if followup_candidate is not None:
+            expanded_scope_followup_candidates.append(followup_candidate)
         final_net_file = Path(str(attached_report.get("final_net_file", "")))
         if (
             sequential_accept_passed_variants
@@ -3039,6 +3056,8 @@ def run_teacher_guided_repair_queue(
         "expanded_scope_candidate_count": len(expanded_scope_reports),
         "expanded_scope_pass_candidate_count": expanded_scope_pass_count,
         "best_expanded_scope_net_file": best_expanded_scope_net_file,
+        "expanded_scope_followup_candidate_count": len(expanded_scope_followup_candidates),
+        "expanded_scope_followup_candidates": expanded_scope_followup_candidates,
         "sequential_accept_passed_variants": sequential_accept_passed_variants,
         "sequential_plain_export_status": "skipped"
         if not sequential_accept_passed_variants or not sequential_plain_export_reports
@@ -3455,6 +3474,84 @@ def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[s
             if key != ":":
                 counts[key] = counts.get(key, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
+    candidate: dict[str, Any],
+    variant_report: dict[str, object],
+    raw_edge_file: Path,
+    *,
+    junction_id: str,
+) -> dict[str, object] | None:
+    replay = variant_report.get("target_internal_replay")
+    if not isinstance(replay, dict):
+        return None
+    removed_count = int(replay.get("removed_stale_replaced_edge_connection_count", 0) or 0)
+    if not removed_count:
+        return None
+    removed_connections = [
+        connection
+        for connection in replay.get("removed_stale_replaced_edge_connections", []) or []
+        if isinstance(connection, dict)
+    ]
+    removed_edge_ids = sorted(
+        {
+            str(connection.get(field, ""))
+            for connection in removed_connections
+            for field in ("from", "to")
+            if str(connection.get(field, "")) and not str(connection.get(field, "")).startswith(":")
+        }
+    )
+    endpoints_by_edge = _plain_edge_endpoints(raw_edge_file)
+    junction_ids = {
+        str(item)
+        for item in candidate.get("matched_candidate_node_ids", []) or []
+        if str(item)
+    }
+    existing_scope = candidate.get("expanded_rebuild_scope", {})
+    if isinstance(existing_scope, dict):
+        junction_ids.update(str(item) for item in existing_scope.get("junction_ids", []) or [] if str(item))
+    if junction_id:
+        junction_ids.add(junction_id)
+    for edge_id in removed_edge_ids:
+        junction_ids.update(endpoint for endpoint in endpoints_by_edge.get(edge_id, ()) if endpoint)
+    edge_map = _valid_edge_map(candidate.get("edge_map", {}))
+    blocked_teacher_edge_ids = sorted(
+        teacher_edge_id for teacher_edge_id, candidate_edge_id in edge_map.items() if candidate_edge_id in removed_edge_ids
+    )
+    followup = copy.deepcopy(candidate)
+    followup.update(
+        {
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "followup_reason": "target_internal_replay_removed_non_target_connections",
+            "unsafe_removed_connection_count": removed_count,
+            "unsafe_removed_connections": removed_connections,
+            "unsafe_removed_edge_ids": removed_edge_ids,
+            "expanded_rebuild_scope": {
+                "status": "review",
+                "recommended_action": "rebuild_plain_xml_scope",
+                "core_junction_id": junction_id,
+                "junction_ids": sorted(junction_ids),
+                "join_junction_ids": sorted(junction_ids),
+                "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
+                "missing_desired_endpoint_ids": [],
+                "reason": "target internal replay removed non-target boundary connections; rebuild expanded scope before movement replay",
+            },
+        }
+    )
+    return followup
+
+
+def _plain_edge_endpoints(edge_file: Path) -> dict[str, tuple[str, str]]:
+    try:
+        root = ET.parse(edge_file).getroot()
+    except (ET.ParseError, OSError):
+        return {}
+    return {
+        edge.attrib["id"]: (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+    }
 
 
 def _semantic_layer_gate_counts(variant_reports: list[dict[str, object]]) -> dict[str, dict[str, int]]:
