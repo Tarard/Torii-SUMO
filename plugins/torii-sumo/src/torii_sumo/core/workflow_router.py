@@ -103,6 +103,7 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "post_teacher_tls_connection_repair_movement_rebuild_semantic_layer_gate_counts",
     "final_movement_rebuild_run_status",
     "final_movement_rebuild_parity_gate_status",
+    "final_movement_rebuild_sumo_load_status",
     "final_movement_rebuild_best_variant_file",
     "final_movement_rebuild_applied_candidate_count",
     "final_movement_rebuild_semantic_layer_gate_counts",

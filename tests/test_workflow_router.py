@@ -405,6 +405,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count": 4,
             "final_movement_rebuild_run_status": "pass",
             "final_movement_rebuild_parity_gate_status": "pass",
+            "final_movement_rebuild_sumo_load_status": "pass",
             "final_movement_rebuild_best_variant_file": str(tmp_path / "final_movement_best.net.xml"),
             "final_movement_rebuild_applied_candidate_count": 1,
             "final_movement_rebuild_semantic_layer_gate_counts": {
@@ -489,6 +490,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         tmp_path / "movement_rebuild_best.net.xml"
     )
     assert report["post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count"] == 4
+    assert report["final_movement_rebuild_sumo_load_status"] == "pass"
     assert report["final_movement_rebuild_semantic_layer_gate_counts"]["pedestrian_bike"]["failure_count"] == 2
     assert report["reference_join_post_teacher_audit_status"] == "pass"
     assert report["routeability_audit_status"] == "pass"
