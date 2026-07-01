@@ -4395,14 +4395,30 @@ def _candidate_nodes_from_exact_teacher_approach_edges(
     for direction, endpoint_attr in (("incoming", "to"), ("outgoing", "from")):
         for approach in _approaches(teacher_model, direction):
             edge_id = str(approach.get("edge_id", ""))
-            candidate_edge = candidate_edges_by_id.get(edge_id)
+            candidate_edge_id, candidate_edge = _candidate_edge_by_exact_or_unsplit_id(edge_id, candidate_edges_by_id)
             if candidate_edge is None:
                 continue
-            edge_map[edge_id] = edge_id
+            edge_map[edge_id] = candidate_edge_id
             node_id = candidate_edge.attrib.get(endpoint_attr, "")
             if node_id in candidate_junction_ids:
                 node_ids.append(node_id)
     return sorted(dict.fromkeys(node_ids)), dict(sorted(edge_map.items()))
+
+
+def _candidate_edge_by_exact_or_unsplit_id(
+    edge_id: str,
+    candidate_edges_by_id: dict[str, ET.Element],
+) -> tuple[str, ET.Element | None]:
+    candidate_edge = candidate_edges_by_id.get(edge_id)
+    if candidate_edge is not None:
+        return edge_id, candidate_edge
+    if "#" not in edge_id:
+        return "", None
+    base_edge_id = edge_id.split("#", 1)[0]
+    candidate_edge = candidate_edges_by_id.get(base_edge_id)
+    if candidate_edge is None:
+        return "", None
+    return base_edge_id, candidate_edge
 
 
 def _real_junction_ids(root: ET.Element) -> set[str]:
