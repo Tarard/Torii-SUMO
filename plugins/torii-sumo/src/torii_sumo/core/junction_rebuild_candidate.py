@@ -1248,6 +1248,7 @@ def write_teacher_target_internal_replay_net(
     junction_id: str,
     edge_map: dict[str, str],
     teacher_junction_id: str | None = None,
+    geometry_anchor_edge_file: Path | None = None,
 ) -> dict[str, object]:
     teacher_junction_id = teacher_junction_id or junction_id
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1260,6 +1261,7 @@ def write_teacher_target_internal_replay_net(
     candidate_edges_by_id = {edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
     candidate_edge_ids = set(candidate_edges_by_id)
     replay_edge_map = dict(edge_map)
+    geometry_anchor_edge_ids = _load_geometry_anchor_edge_ids(geometry_anchor_edge_file)
 
     target_candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
     teacher_junction = teacher_root.find(f"junction[@id='{teacher_junction_id}']")
@@ -1306,6 +1308,7 @@ def write_teacher_target_internal_replay_net(
         junction.attrib["id"] for junction in candidate_root.findall("junction") if junction.attrib.get("id")
     }
     copied_boundary_junctions = []
+    replaced_boundary_source_edges: dict[str, ET.Element] = {}
     needed_boundary_edge_ids = _needed_unmapped_teacher_boundary_edges(
         teacher_root.findall("connection"),
         teacher_edges,
@@ -1436,7 +1439,13 @@ def write_teacher_target_internal_replay_net(
         replaced_edge = candidate_edges_by_id.get(copied_edge_id)
         insert_at = insert_index + boundary_insert_offset
         if replaced_edge is not None:
-            _restore_existing_edge_geometry(copied_edge, replaced_edge, candidate_root, max_endpoint_delta=5.0)
+            replaced_boundary_source_edges[copied_edge_id] = copy.deepcopy(replaced_edge)
+            _restore_existing_edge_geometry(
+                copied_edge,
+                replaced_edge,
+                candidate_root,
+                max_endpoint_delta=None if copied_edge_id in geometry_anchor_edge_ids else 5.0,
+            )
             insert_at = list(candidate_root).index(replaced_edge)
             _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
             candidate_root.remove(replaced_edge)
@@ -1494,6 +1503,9 @@ def write_teacher_target_internal_replay_net(
             ):
                 continue
             stale_split_replacements[candidate_edge_id] = (edge_id, remote_junction_id)
+            source_edge = replaced_boundary_source_edges.get(edge_id)
+            if source_edge is not None:
+                _restore_joined_split_edge_geometry(copied_edge, candidate_edge, source_edge)
             stale_split_remote_junction_ids.add(remote_junction_id)
             stale_endpoint_attr = "to" if remote_attr == "from" else "from"
             stale_junction_id = candidate_edge.attrib.get(stale_endpoint_attr, "")
@@ -1585,7 +1597,12 @@ def write_teacher_target_internal_replay_net(
             teacher_junction_id,
             junction_id,
         )
-        _restore_existing_edge_geometry(copied_edge, existing_edge, candidate_root, max_endpoint_delta=5.0)
+        _restore_existing_edge_geometry(
+            copied_edge,
+            existing_edge,
+            candidate_root,
+            max_endpoint_delta=None if candidate_edge_id in geometry_anchor_edge_ids else 5.0,
+        )
         insert_at = list(candidate_root).index(existing_edge)
         _remove_edge_lanes_from_destination_junction(candidate_root, existing_edge, all_junctions=True)
         candidate_root.remove(existing_edge)
@@ -2540,6 +2557,7 @@ def build_teacher_guided_junction_variant(
             junction_id=junction_id,
             edge_map=edge_map,
             teacher_junction_id=teacher_junction_id,
+            geometry_anchor_edge_file=raw_edge_file,
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(
@@ -6012,6 +6030,84 @@ def _restore_existing_edge_geometry(
     for lane in edge.findall("lane"):
         if lane.attrib.get("index", "") in existing_lane_shapes:
             lane.set("shape", existing_lane_shapes[lane.attrib.get("index", "")])
+
+
+def _load_geometry_anchor_edge_ids(edge_file: Path | None) -> set[str]:
+    if edge_file is None:
+        return set()
+    try:
+        root = ET.parse(edge_file).getroot()
+    except (ET.ParseError, OSError):
+        return set()
+    return {
+        edge.attrib["id"]
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+        and edge.attrib.get("function") != "internal"
+        and (edge.attrib.get("shape") or any(lane.attrib.get("shape") for lane in edge.findall("lane")))
+    }
+
+
+def _join_shape_text(first: str, second: str) -> str:
+    joined: list[str] = []
+    for shape in (first, second):
+        for point in _split(shape):
+            if not joined or joined[-1] != point:
+                joined.append(point)
+    return " ".join(joined)
+
+
+def _lanes_by_index(edge: ET.Element) -> dict[str, ET.Element]:
+    return {lane.attrib.get("index", ""): lane for lane in edge.findall("lane") if lane.attrib.get("index", "")}
+
+
+def _joined_lane_length(first_lane: ET.Element, second_lane: ET.Element) -> str | None:
+    try:
+        return f"{float(first_lane.attrib['length']) + float(second_lane.attrib['length']):.2f}"
+    except (KeyError, ValueError):
+        return None
+
+
+def _restore_joined_split_edge_geometry(
+    edge: ET.Element,
+    stale_edge: ET.Element,
+    source_edge: ET.Element,
+) -> bool:
+    if (
+        stale_edge.attrib.get("to") == source_edge.attrib.get("from")
+        and edge.attrib.get("from") == stale_edge.attrib.get("from")
+        and edge.attrib.get("to") == source_edge.attrib.get("to")
+    ):
+        first_edge, second_edge = stale_edge, source_edge
+    elif (
+        source_edge.attrib.get("to") == stale_edge.attrib.get("from")
+        and edge.attrib.get("from") == source_edge.attrib.get("from")
+        and edge.attrib.get("to") == stale_edge.attrib.get("to")
+    ):
+        first_edge, second_edge = source_edge, stale_edge
+    else:
+        return False
+
+    edge_shape = _join_shape_text(_primary_edge_shape(first_edge), _primary_edge_shape(second_edge))
+    if edge_shape:
+        edge.set("shape", edge_shape)
+    first_lanes = _lanes_by_index(first_edge)
+    second_lanes = _lanes_by_index(second_edge)
+    changed = bool(edge_shape)
+    for lane in edge.findall("lane"):
+        lane_index = lane.attrib.get("index", "")
+        first_lane = first_lanes.get(lane_index)
+        second_lane = second_lanes.get(lane_index)
+        if first_lane is None or second_lane is None:
+            continue
+        shape = _join_shape_text(first_lane.attrib.get("shape", ""), second_lane.attrib.get("shape", ""))
+        if shape:
+            lane.set("shape", shape)
+            changed = True
+        length = _joined_lane_length(first_lane, second_lane)
+        if length is not None:
+            lane.set("length", length)
+    return changed
 
 
 def _junction_xy(root: ET.Element, junction_id: str) -> tuple[float, float] | None:
