@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
@@ -689,6 +690,59 @@ def build_road_connection_topology_replay_audit(
     }
 
 
+def build_internal_movement_replay_audit(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    max_examples: int = 5,
+) -> dict[str, Any]:
+    audit = build_road_connection_topology_replay_audit(
+        teacher_net_file,
+        candidate_net_file,
+        max_examples=1_000_000,
+    )
+    owner_records: dict[str, list[dict[str, str]]] = {}
+    for connection in audit["replayable_connections"]:
+        if not _is_internal_movement_connection(connection):
+            continue
+        owner_id = _internal_movement_owner_id(connection)
+        if owner_id:
+            owner_records.setdefault(owner_id, []).append(connection)
+
+    owners = [
+        _internal_movement_owner_summary(owner_id, records, max_examples=max_examples)
+        for owner_id, records in owner_records.items()
+    ]
+    owners.sort(key=lambda item: (-int(item["missing_connection_count"]), str(item["owner_id"])))
+    internal_movement_missing_count = sum(
+        int(owner["missing_connection_count"]) for owner in owners
+    )
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "internal_movement_missing_count": internal_movement_missing_count,
+        "tls_controlled_missing_count": sum(
+            int(owner["tls_controlled_connection_count"]) for owner in owners
+        ),
+        "turnaround_missing_count": sum(
+            int(owner["turnaround_connection_count"]) for owner in owners
+        ),
+        "non_turnaround_missing_count": sum(
+            int(owner["non_turnaround_connection_count"]) for owner in owners
+        ),
+        "owner_count": len(owners),
+        "owners": owners,
+        "source_audit_summary": {
+            "teacher_connection_count": audit["teacher_connection_count"],
+            "already_present_connection_count": audit["already_present_connection_count"],
+            "replayable_connection_count": audit["replayable_connection_count"],
+            "blocked_connection_count": audit["blocked_connection_count"],
+        },
+    }
+
+
 def write_road_connection_topology_replay_candidate(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -1021,7 +1075,18 @@ def _canonical_road_connection_record(connection: ET.Element) -> dict[str, str]:
 def _connection_replay_record(connection: ET.Element) -> dict[str, str]:
     return {
         key: connection.attrib[key]
-        for key in ("dir", "from", "fromLane", "state", "to", "toLane", "via")
+        for key in (
+            "dir",
+            "from",
+            "fromLane",
+            "linkIndex",
+            "linkIndex2",
+            "state",
+            "tl",
+            "to",
+            "toLane",
+            "via",
+        )
         if key in connection.attrib
     }
 
@@ -1166,6 +1231,59 @@ def _road_connection_topology_replay_attrs(connection: dict[str, str]) -> dict[s
         key: connection[key]
         for key in ("from", "to", "fromLane", "toLane", "dir", "state", "via")
         if connection.get(key)
+    }
+
+
+def _is_internal_movement_connection(connection: dict[str, str]) -> bool:
+    return bool(
+        connection.get("via", "")
+        or _looks_internal_edge_id(connection.get("from", ""))
+        or _looks_internal_edge_id(connection.get("to", ""))
+    )
+
+
+def _internal_movement_owner_id(connection: dict[str, str]) -> str:
+    for value in (connection.get("via", ""), connection.get("from", ""), connection.get("to", "")):
+        owner_id = _internal_owner_id(value)
+        if owner_id:
+            return owner_id
+    return ""
+
+
+def _internal_owner_id(edge_or_lane_id: str) -> str:
+    if not edge_or_lane_id.startswith(":"):
+        return ""
+    return edge_or_lane_id[1:].split("_", 1)[0]
+
+
+def _looks_internal_edge_id(edge_id: str) -> bool:
+    return edge_id.startswith(":")
+
+
+def _internal_movement_owner_summary(
+    owner_id: str,
+    records: list[dict[str, str]],
+    *,
+    max_examples: int,
+) -> dict[str, Any]:
+    dir_counts = Counter(record.get("dir", "") or "blank" for record in records)
+    return {
+        "owner_id": owner_id,
+        "missing_connection_count": len(records),
+        "internal_via_connection_count": sum(1 for record in records if record.get("via", "")),
+        "internal_edge_connection_count": sum(
+            1
+            for record in records
+            if _looks_internal_edge_id(record.get("from", ""))
+            or _looks_internal_edge_id(record.get("to", ""))
+        ),
+        "tls_controlled_connection_count": sum(
+            1 for record in records if record.get("tl", "") and record.get("linkIndex", "")
+        ),
+        "turnaround_connection_count": sum(1 for record in records if record.get("dir", "") == "t"),
+        "non_turnaround_connection_count": sum(1 for record in records if record.get("dir", "") != "t"),
+        "dir_counts": dict(sorted(dir_counts.items())),
+        "example_connections": records[:max_examples],
     }
 
 
