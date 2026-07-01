@@ -81,6 +81,8 @@ REFERENCE_MATCHED_SEMANTICS_WORKFLOW = {
 OSM_WORKFLOW_SUMMARY_KEYS = (
     "workflow_review_html_status",
     "workflow_review_html_file",
+    "workflow_report_file",
+    "review_manifest_file",
     "reference_join_audit_mode",
     "teacher_guided_repair_queue_status",
     "teacher_guided_repair_max_ready_candidates",
