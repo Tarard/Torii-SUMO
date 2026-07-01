@@ -2,6 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.road_connectivity_teacher_model import (
+    build_internal_movement_replay_audit,
     build_road_connection_topology_replay_audit,
     build_road_lane_template_edge_subset_repair_candidates,
     build_road_lane_template_repair_candidates,
@@ -1026,6 +1027,56 @@ def test_build_road_connection_topology_replay_audit_ignores_existing_topology(t
     assert report["already_present_connection_count"] == 1
     assert report["replayable_connection_count"] == 0
     assert report["blocked_connection_count"] == 0
+
+
+def test_build_internal_movement_replay_audit_groups_missing_movements_by_owner(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="back" from="j" to="a"><lane id="back_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <edge id=":j_1" function="internal"><lane id=":j_1_0" index="0"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="back" fromLane="0" toLane="0" via=":j_1_0" tl="j" linkIndex="1" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="back" from="j" to="a"><lane id="back_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <edge id=":j_1" function="internal"><lane id=":j_1_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_replay_audit(teacher_net, candidate_net)
+
+    assert report["status"] == "pass"
+    assert report["internal_movement_missing_count"] == 3
+    assert report["tls_controlled_missing_count"] == 2
+    assert report["turnaround_missing_count"] == 1
+    assert report["non_turnaround_missing_count"] == 2
+    assert report["owner_count"] == 1
+    owner = report["owners"][0]
+    assert owner["owner_id"] == "j"
+    assert owner["missing_connection_count"] == 3
+    assert owner["internal_via_connection_count"] == 2
+    assert owner["internal_edge_connection_count"] == 1
+    assert owner["tls_controlled_connection_count"] == 2
+    assert owner["turnaround_connection_count"] == 1
+    assert owner["non_turnaround_connection_count"] == 2
+    assert owner["dir_counts"] == {"s": 2, "t": 1}
+    assert owner["example_connections"][0]["tl"] == "j"
+    assert owner["example_connections"][0]["linkIndex"] == "0"
 
 
 def test_write_road_connection_topology_replay_candidate_adds_safe_missing_connections(
