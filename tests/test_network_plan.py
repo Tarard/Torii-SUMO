@@ -8,6 +8,7 @@ from torii_sumo.core.osm_workflow import (
     _low_vehicle_control_candidate_limits,
     _movement_rebuild_reference_delta_promotion_decision,
     _reference_delta_promotion_decision,
+    _followup_reference_delta_structural_only,
     _teacher_guided_seed_candidate,
     _reference_join_audit_can_seed_teacher_guided_queue,
     _restore_followup_internal_regressions,
@@ -35,6 +36,12 @@ def test_junction_semantic_gate_uses_comparison_evidence_when_case_counts_are_ze
     }
 
     assert _junction_semantic_gate(report, {"movement_signature_counts"}) == "pass"
+
+
+def test_followup_reference_delta_inherits_structural_only_baseline() -> None:
+    assert _followup_reference_delta_structural_only({"audit_mode": "structural_only"}, default=False) is True
+    assert _followup_reference_delta_structural_only({"audit_mode": "full"}, default=False) is False
+    assert _followup_reference_delta_structural_only({"audit_mode": "full"}, default=True) is True
 
 
 def test_direct_replay_path_part_is_short_and_stable_for_windows() -> None:
