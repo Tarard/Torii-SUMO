@@ -843,6 +843,79 @@ def write_road_connection_topology_replay_candidate(
     }
 
 
+def write_internal_movement_owner_replay_candidate(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    *,
+    owner_id: str,
+    copy_tls: bool = True,
+) -> dict[str, Any]:
+    audit = build_road_connection_topology_replay_audit(
+        teacher_net_file,
+        candidate_net_file,
+        max_examples=1_000_000,
+    )
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    existing_topology_keys = {
+        _connection_topology_key(_connection_replay_record(connection))
+        for connection in candidate_root.findall("connection")
+    }
+    added_connection_count = 0
+    skipped_connection_count = 0
+    skipped_nonlocal_edge_connection_count = 0
+    for connection in audit["replayable_connections"]:
+        if not _is_internal_movement_connection(connection):
+            continue
+        if _internal_movement_owner_id(connection) != owner_id:
+            continue
+        if not _internal_movement_connection_is_candidate_local(connection, candidate_edges, owner_id):
+            skipped_connection_count += 1
+            skipped_nonlocal_edge_connection_count += 1
+            continue
+        topology_key = _connection_topology_key(connection)
+        if topology_key in existing_topology_keys:
+            skipped_connection_count += 1
+            continue
+        ET.SubElement(
+            candidate_root,
+            "connection",
+            _internal_movement_replay_attrs(connection, copy_tls=copy_tls),
+        )
+        existing_topology_keys.add(topology_key)
+        added_connection_count += 1
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="  ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "repair_scope": "internal_movement_owner",
+        "owner_id": owner_id,
+        "copy_tls": copy_tls,
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "added_connection_count": added_connection_count,
+        "skipped_connection_count": skipped_connection_count,
+        "skipped_nonlocal_edge_connection_count": skipped_nonlocal_edge_connection_count,
+        "source_audit_summary": {
+            "teacher_connection_count": audit["teacher_connection_count"],
+            "already_present_connection_count": audit["already_present_connection_count"],
+            "replayable_connection_count": audit["replayable_connection_count"],
+            "blocked_connection_count": audit["blocked_connection_count"],
+        },
+        "warnings": [],
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -1232,6 +1305,42 @@ def _road_connection_topology_replay_attrs(connection: dict[str, str]) -> dict[s
         for key in ("from", "to", "fromLane", "toLane", "dir", "state", "via")
         if connection.get(key)
     }
+
+
+def _internal_movement_replay_attrs(connection: dict[str, str], *, copy_tls: bool = True) -> dict[str, str]:
+    tls_fields = ("tl", "linkIndex", "linkIndex2") if copy_tls else ()
+    return {
+        key: connection[key]
+        for key in (
+            "from",
+            "to",
+            "fromLane",
+            "toLane",
+            "via",
+            *tls_fields,
+            "dir",
+            "state",
+        )
+        if connection.get(key)
+    }
+
+
+def _internal_movement_connection_is_candidate_local(
+    connection: dict[str, str],
+    candidate_edges: dict[str, ET.Element],
+    owner_id: str,
+) -> bool:
+    source = connection.get("from", "")
+    target = connection.get("to", "")
+    if not _looks_internal_edge_id(source):
+        source_edge = candidate_edges.get(source)
+        if source_edge is not None and source_edge.attrib.get("to", "") != owner_id:
+            return False
+    if not _looks_internal_edge_id(target):
+        target_edge = candidate_edges.get(target)
+        if target_edge is not None and target_edge.attrib.get("from", "") != owner_id:
+            return False
+    return True
 
 
 def _is_internal_movement_connection(connection: dict[str, str]) -> bool:
