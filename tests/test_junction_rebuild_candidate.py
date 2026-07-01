@@ -9479,6 +9479,60 @@ def test_write_teacher_target_internal_replay_net_copies_missing_boundary_edge(t
     assert report["skipped_connection_count"] == 0
 
 
+def test_write_teacher_target_internal_replay_net_copies_vehicle_continuation_for_new_boundary_junction(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0" shape="90,20 100,20"/></edge>
+  <edge id="teacher_out" from="j" to="n" type="highway.secondary"><lane id="teacher_out_0" index="0" shape="100,20 110,20"/></edge>
+  <edge id="teacher_back" from="n" to="j" type="highway.secondary"><lane id="teacher_back_0" index="0" shape="110,22 100,22"/></edge>
+  <edge id="next_out" from="n" to="f" type="highway.secondary"><lane id="next_out_0" index="0" shape="110,20 130,20"/></edge>
+  <edge id="next_in" from="f" to="n" type="highway.secondary"><lane id="next_in_0" index="0" shape="130,22 110,22"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="100,20 101,20"/></edge>
+  <junction id="j" type="traffic_light" x="100" y="20" incLanes="teacher_in_0 teacher_back_0" intLanes=":j_0_0"/>
+  <junction id="n" type="priority" x="110" y="20" incLanes="teacher_out_0 next_in_0" intLanes=""/>
+  <junction id="f" type="priority" x="130" y="20" incLanes="next_out_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <connection from="teacher_out" to="next_out" fromLane="0" toLane="0" dir="s" state="M"/>
+  <connection from="next_in" to="teacher_back" fromLane="0" toLane="0" dir="s" state="M"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j"><lane id="cand_in_0" index="0" shape="0,20 10,20"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="20" incLanes="cand_in_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"teacher_in": "cand_in"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("edge[@id='teacher_out']").attrib["to"] == "n"
+    assert root.find("edge[@id='teacher_back']").attrib["from"] == "n"
+    assert root.find("edge[@id='next_out']").attrib["from"] == "n"
+    assert root.find("edge[@id='next_in']").attrib["to"] == "n"
+    assert root.find("junction[@id='n']").attrib["type"] == "priority"
+    assert "next_in_0" in root.find("junction[@id='n']").attrib["incLanes"]
+    assert root.find("connection[@from='teacher_out'][@to='next_out']") is not None
+    assert root.find("connection[@from='next_in'][@to='teacher_back']") is not None
+    assert report["copied_boundary_continuation_edge_count"] == 2
+    assert report["copied_boundary_continuation_edges"] == ["next_out", "next_in"]
+
+
 def test_write_teacher_target_internal_replay_net_keeps_existing_same_id_boundary_lane_in_junction(
     tmp_path: Path,
 ) -> None:

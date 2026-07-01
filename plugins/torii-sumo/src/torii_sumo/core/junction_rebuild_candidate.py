@@ -1439,6 +1439,124 @@ def write_teacher_target_internal_replay_net(
         copied_boundary_edges.append(edge_id)
         copied_boundary_candidate_edges.append(copied_edge_id)
 
+    copied_boundary_continuation_edges = []
+    copied_boundary_continuation_connections = []
+    if copied_boundary_edges:
+        copied_boundary_edge_ids = set(copied_boundary_edges)
+        continuation_edge_ids = []
+        for connection in teacher_root.findall("connection"):
+            from_edge_id = connection.attrib.get("from", "")
+            to_edge_id = connection.attrib.get("to", "")
+            for boundary_edge_id, continuation_edge_id in (
+                (from_edge_id, to_edge_id),
+                (to_edge_id, from_edge_id),
+            ):
+                if boundary_edge_id not in copied_boundary_edge_ids:
+                    continue
+                continuation_edge = teacher_edges.get(continuation_edge_id)
+                boundary_edge = teacher_edges.get(boundary_edge_id)
+                if (
+                    continuation_edge is None
+                    or boundary_edge is None
+                    or continuation_edge_id in teacher_boundary_edge_id_set
+                    or continuation_edge_id.startswith(":")
+                    or not _edge_is_vehicle_continuation_candidate(continuation_edge)
+                ):
+                    continue
+                shared_endpoints = {
+                    boundary_edge.attrib.get("from", ""),
+                    boundary_edge.attrib.get("to", ""),
+                } & {
+                    continuation_edge.attrib.get("from", ""),
+                    continuation_edge.attrib.get("to", ""),
+                }
+                if not shared_endpoints or teacher_junction_id in shared_endpoints:
+                    continue
+                continuation_edge_ids.append(continuation_edge_id)
+        continuation_edge_ids = list(dict.fromkeys(continuation_edge_ids))
+        continuation_insert_at = _first_junction_index(candidate_root)
+        for edge_id in continuation_edge_ids:
+            teacher_edge = teacher_edges[edge_id]
+            for endpoint in (teacher_edge.attrib.get("from", ""), teacher_edge.attrib.get("to", "")):
+                if not endpoint or endpoint in candidate_junction_ids:
+                    continue
+                teacher_endpoint_junction = teacher_junctions.get(endpoint)
+                if teacher_endpoint_junction is None:
+                    continue
+                candidate_root.insert(
+                    list(candidate_root).index(candidate_junction),
+                    _clone_transformed_boundary_junction(
+                        teacher_endpoint_junction,
+                        dx,
+                        dy,
+                        replay_edge_map,
+                        teacher_junction_id,
+                        junction_id,
+                    ),
+                )
+                candidate_junction_ids.add(endpoint)
+                copied_boundary_junctions.append(endpoint)
+            if any(
+                endpoint not in candidate_junction_ids
+                for endpoint in (teacher_edge.attrib.get("from", ""), teacher_edge.attrib.get("to", ""))
+            ):
+                continue
+            copied_edge = _clone_transformed_boundary_edge(
+                teacher_edge,
+                edge_id,
+                dx,
+                dy,
+                replay_edge_map,
+                teacher_junction_id,
+                junction_id,
+            )
+            candidate_root.insert(continuation_insert_at, copied_edge)
+            continuation_insert_at += 1
+            candidate_edge_ids.add(edge_id)
+            candidate_edges_by_id[edge_id] = copied_edge
+            replay_edge_map[edge_id] = edge_id
+            _append_edge_lanes_to_destination_junction(candidate_root, copied_edge)
+            copied_boundary_continuation_edges.append(edge_id)
+        continuation_edge_id_set = set(copied_boundary_continuation_edges)
+        existing_connection_keys = {
+            (
+                connection.attrib.get("from", ""),
+                connection.attrib.get("to", ""),
+                connection.attrib.get("fromLane", "0"),
+                connection.attrib.get("toLane", "0"),
+            )
+            for connection in candidate_root.findall("connection")
+        }
+        for connection in teacher_root.findall("connection"):
+            from_edge_id = connection.attrib.get("from", "")
+            to_edge_id = connection.attrib.get("to", "")
+            if not (
+                {from_edge_id, to_edge_id} & copied_boundary_edge_ids
+                and {from_edge_id, to_edge_id} & continuation_edge_id_set
+            ):
+                continue
+            mapped = dict(connection.attrib)
+            mapped["from"] = replay_edge_map.get(from_edge_id, from_edge_id)
+            mapped["to"] = replay_edge_map.get(to_edge_id, to_edge_id)
+            if mapped["from"] not in candidate_edge_ids or mapped["to"] not in candidate_edge_ids:
+                continue
+            mapped.pop("via", None)
+            for attr in ("tl", "linkIndex", "linkIndex2"):
+                mapped.pop(attr, None)
+            if mapped.get("shape"):
+                mapped["shape"] = _translate_shape(mapped["shape"], dx, dy)
+            key = (
+                mapped.get("from", ""),
+                mapped.get("to", ""),
+                mapped.get("fromLane", "0"),
+                mapped.get("toLane", "0"),
+            )
+            if key in existing_connection_keys:
+                continue
+            candidate_root.append(ET.Element("connection", mapped))
+            existing_connection_keys.add(key)
+            copied_boundary_continuation_connections.append(mapped)
+
     removed_stale_boundary_edges = []
     if teacher_boundary_edge_ids:
         expected_boundary_edge_ids = {
@@ -1649,6 +1767,10 @@ def write_teacher_target_internal_replay_net(
         "copied_boundary_edge_count": len(copied_boundary_edges),
         "copied_boundary_edges": copied_boundary_edges,
         "copied_boundary_candidate_edges": copied_boundary_candidate_edges,
+        "copied_boundary_continuation_edge_count": len(copied_boundary_continuation_edges),
+        "copied_boundary_continuation_edges": copied_boundary_continuation_edges,
+        "copied_boundary_continuation_connection_count": len(copied_boundary_continuation_connections),
+        "copied_boundary_continuation_connections": copied_boundary_continuation_connections,
         "preserved_colliding_boundary_edge_count": len(preserved_colliding_boundary_edges),
         "preserved_colliding_boundary_edges": preserved_colliding_boundary_edges,
         "removed_stale_boundary_edge_count": len(removed_stale_boundary_edges),
@@ -5279,6 +5401,16 @@ def _connection_lane_indices_valid(connection: ET.Element, lane_counts: dict[str
 def _edge_is_pedestrian_only(edge: ET.Element) -> bool:
     lanes = edge.findall("lane")
     return bool(lanes) and all(set((lane.attrib.get("allow") or "").split()) == {"pedestrian"} for lane in lanes)
+
+
+def _edge_is_vehicle_continuation_candidate(edge: ET.Element) -> bool:
+    if edge.attrib.get("function") in {"internal", "crossing", "walkingarea"} or _edge_is_pedestrian_only(edge):
+        return False
+    return edge.attrib.get("type", "").startswith("highway.") or any(
+        set((lane.attrib.get("allow") or "").split())
+        & {"passenger", "private", "bus", "coach", "truck", "motorcycle", "moped", "taxi", "delivery", "emergency"}
+        for lane in edge.findall("lane")
+    )
 
 
 def _command_path(path: Path, cwd: Path) -> str:
