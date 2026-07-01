@@ -2719,6 +2719,11 @@ def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_par
     assert report["parity_pass_candidate_count"] == 1
     assert report["composite_applied_candidate_count"] == 1
     assert report["composite_net_file"] == report["variant_reports"][1]["final_net_file"]
+    gate = json.loads(Path(report["promotion_gate_file"]).read_text(encoding="utf-8"))
+    assert report["promotion_gate_status"] == "pass"
+    assert gate["status"] == "pass"
+    assert gate["candidate_count"] == 1
+    assert gate["items"][0]["junction_id"] == "cluster_c_d"
     assert report["semantic_failure_counts"] == {"parity:vehicle_movement_matrix_missing_count": 1}
     assert report["semantic_layer_gate_counts"] == {
         "topology": {"pass": 2, "fail": 0, "failure_count": 0},
