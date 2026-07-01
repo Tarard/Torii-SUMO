@@ -1304,9 +1304,11 @@ def write_teacher_target_internal_replay_net(
         for junction in teacher_root.findall("junction")
         if junction.attrib.get("id")
     }
-    candidate_junction_ids = {
-        junction.attrib["id"] for junction in candidate_root.findall("junction") if junction.attrib.get("id")
+    candidate_junctions_by_id = {
+        junction.attrib["id"]: junction for junction in candidate_root.findall("junction") if junction.attrib.get("id")
     }
+    candidate_junction_ids = set(candidate_junctions_by_id)
+    geometry_anchor_junctions_by_id: dict[str, ET.Element] = {}
     copied_boundary_junctions = []
     replaced_boundary_source_edges: dict[str, ET.Element] = {}
     needed_boundary_edge_ids = _needed_unmapped_teacher_boundary_edges(
@@ -1504,8 +1506,18 @@ def write_teacher_target_internal_replay_net(
                 continue
             stale_split_replacements[candidate_edge_id] = (edge_id, remote_junction_id)
             source_edge = replaced_boundary_source_edges.get(edge_id)
-            if source_edge is not None:
-                _restore_joined_split_edge_geometry(copied_edge, candidate_edge, source_edge)
+            if source_edge is not None and _restore_joined_split_edge_geometry(copied_edge, candidate_edge, source_edge):
+                geometry_anchor_junctions_by_id.update(
+                    _geometry_anchor_junctions_by_id(
+                        {
+                            candidate_edge_id: candidate_edge,
+                            edge_id: source_edge,
+                        },
+                        candidate_junctions_by_id,
+                        {candidate_edge_id, edge_id} & geometry_anchor_edge_ids,
+                        target_junction_id=junction_id,
+                    )
+                )
             stale_split_remote_junction_ids.add(remote_junction_id)
             stale_endpoint_attr = "to" if remote_attr == "from" else "from"
             stale_junction_id = candidate_edge.attrib.get(stale_endpoint_attr, "")
@@ -2185,6 +2197,8 @@ def write_teacher_target_internal_replay_net(
             removed_invalid_lane_connections.append(dict(connection.attrib))
             candidate_root.remove(connection)
 
+    restored_geometry_anchor_junctions = _restore_geometry_anchor_junctions(candidate_root, geometry_anchor_junctions_by_id)
+
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
     return {
@@ -2243,6 +2257,9 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_replaced_edge_connections": removed_stale_replaced_edge_connections,
         "removed_invalid_lane_connection_count": len(removed_invalid_lane_connections),
         "removed_invalid_lane_connections": removed_invalid_lane_connections,
+        "geometry_anchor_edge_count": len(geometry_anchor_edge_ids),
+        "restored_geometry_anchor_junction_count": len(restored_geometry_anchor_junctions),
+        "restored_geometry_anchor_junctions": restored_geometry_anchor_junctions,
         "copied_boundary_junction_count": len(copied_boundary_junctions),
         "copied_boundary_junctions": copied_boundary_junctions,
         "skipped_boundary_edge_count": len(skipped_boundary_edges),
@@ -2557,7 +2574,6 @@ def build_teacher_guided_junction_variant(
             junction_id=junction_id,
             edge_map=edge_map,
             teacher_junction_id=teacher_junction_id,
-            geometry_anchor_edge_file=raw_edge_file,
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(
@@ -6046,6 +6062,45 @@ def _load_geometry_anchor_edge_ids(edge_file: Path | None) -> set[str]:
         and edge.attrib.get("function") != "internal"
         and (edge.attrib.get("shape") or any(lane.attrib.get("shape") for lane in edge.findall("lane")))
     }
+
+
+def _geometry_anchor_junctions_by_id(
+    candidate_edges_by_id: dict[str, ET.Element],
+    candidate_junctions_by_id: dict[str, ET.Element],
+    geometry_anchor_edge_ids: set[str],
+    *,
+    target_junction_id: str,
+) -> dict[str, ET.Element]:
+    anchored: dict[str, ET.Element] = {}
+    for edge_id in geometry_anchor_edge_ids:
+        edge = candidate_edges_by_id.get(edge_id)
+        if edge is None:
+            continue
+        for endpoint_id in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+            if not endpoint_id or endpoint_id == target_junction_id:
+                continue
+            junction = candidate_junctions_by_id.get(endpoint_id)
+            if junction is not None:
+                anchored[endpoint_id] = copy.deepcopy(junction)
+    return anchored
+
+
+def _restore_geometry_anchor_junctions(
+    root: ET.Element,
+    geometry_anchor_junctions_by_id: dict[str, ET.Element],
+) -> list[str]:
+    restored = []
+    for junction_id, source_junction in sorted(geometry_anchor_junctions_by_id.items()):
+        junction = root.find(f"junction[@id='{junction_id}']")
+        if junction is None:
+            continue
+        for attr in ("x", "y", "z", "shape"):
+            if source_junction.attrib.get(attr):
+                junction.set(attr, source_junction.attrib[attr])
+            else:
+                junction.attrib.pop(attr, None)
+        restored.append(junction_id)
+    return restored
 
 
 def _join_shape_text(first: str, second: str) -> str:
