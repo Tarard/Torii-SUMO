@@ -369,6 +369,15 @@ def test_compare_net_road_template_parity_reports_lane_and_connection_delta(tmp_
     report = compare_net_road_template_parity(teacher_net, candidate_net)
 
     assert report["status"] == "fail"
+    assert report["gate"] == {
+        "road_layer_status": "fail",
+        "can_enter_junction_replay": False,
+        "blocking_reason": "road_template_parity_failed",
+        "lane_missing_template_count": 1,
+        "connection_missing_template_count": 1,
+        "lane_extra_template_count": 1,
+        "connection_extra_template_count": 1,
+    }
     assert report["lane_template_summary"]["teacher_edge_count"] == 3
     assert report["lane_template_summary"]["candidate_edge_count"] == 2
     assert report["lane_template_summary"]["parity"]["missing_template_count"] == 1
