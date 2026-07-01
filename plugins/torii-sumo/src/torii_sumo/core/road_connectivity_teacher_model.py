@@ -70,6 +70,47 @@ def canonical_road_connectivity_bundle(
     return bundle
 
 
+def write_road_connectivity_self_replay_net(
+    teacher_net_file: Path,
+    seed_edge_ids: list[str],
+    output_file: Path,
+    *,
+    hop_radius: int = 1,
+) -> dict[str, Any]:
+    bundle = canonical_road_connectivity_bundle(
+        teacher_net_file,
+        seed_edge_ids=seed_edge_ids,
+        hop_radius=hop_radius,
+    )
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    root = ET.Element("net", bundle.get("net", {}))
+    if bundle["location"]:
+        ET.SubElement(root, "location", bundle["location"])
+    for edge in bundle["edges"]:
+        edge_node = ET.SubElement(root, "edge", _record_attrs(edge, "lanes"))
+        for lane in edge.get("lanes", []):
+            ET.SubElement(edge_node, "lane", dict(lane))
+    for junction in bundle["junctions"]:
+        ET.SubElement(root, "junction", dict(junction))
+    for connection in bundle["connections"]:
+        ET.SubElement(root, "connection", dict(connection))
+
+    ET.indent(root, space="  ")
+    ET.ElementTree(root).write(output_file, encoding="utf-8", xml_declaration=True)
+    replay_bundle = canonical_road_connectivity_bundle(
+        output_file,
+        seed_edge_ids=seed_edge_ids,
+        hop_radius=hop_radius,
+    )
+    parity_delta = {} if bundle == replay_bundle else {"canonical_bundle": 1}
+    return {
+        "status": "pass" if not parity_delta else "fail",
+        "output_file": str(output_file),
+        "parity_delta": parity_delta,
+    }
+
+
 def _canonical_edge_record(edge: ET.Element) -> dict[str, Any]:
     return {
         **_sorted_attrs(edge),
@@ -86,6 +127,10 @@ def _canonical_junction_record(junction: ET.Element, selected_lane_ids: set[str]
 
 def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:
     return {} if element is None else dict(sorted(element.attrib.items()))
+
+
+def _record_attrs(record: dict[str, Any], child_key: str) -> dict[str, str]:
+    return {str(key): str(value) for key, value in record.items() if key != child_key}
 
 
 def _missing_reference_count(bundle: dict[str, Any]) -> int:
