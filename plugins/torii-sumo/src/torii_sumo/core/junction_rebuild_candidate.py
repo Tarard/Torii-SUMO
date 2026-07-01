@@ -2288,6 +2288,7 @@ def run_teacher_guided_repair_queue(
     candidates = queue_report.get("repair_candidates", []) or []
     if not isinstance(candidates, list):
         return _failure("queue report repair_candidates must be a list")
+    candidates = list(candidates)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     crossing_edge_overrides_by_junction = crossing_edge_overrides_by_junction or {}
@@ -2313,6 +2314,7 @@ def run_teacher_guided_repair_queue(
         if not isinstance(candidate, dict):
             skipped_candidates.append({"index": index, "candidate_status": "invalid_candidate"})
             continue
+        is_followup_candidate = bool(candidate.get("followup_reason"))
         junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
         teacher_junction_id = str(candidate.get("reference_id") or junction_id)
         edge_map = _valid_edge_map(candidate.get("edge_map", {}))
@@ -2351,6 +2353,7 @@ def run_teacher_guided_repair_queue(
                 max_ready_candidates is not None
                 and max_ready_candidates > 0
                 and attempted_ready_count >= max_ready_candidates
+                and not is_followup_candidate
             ):
                 skipped_candidates.append(
                     {"index": index, "junction_id": junction_id, "candidate_status": "max_ready_candidates_reached"}
@@ -2505,6 +2508,7 @@ def run_teacher_guided_repair_queue(
                     max_ready_candidates is not None
                     and max_ready_candidates > 0
                     and attempted_ready_count >= max_ready_candidates
+                    and not is_followup_candidate
                 )
             ):
                 variant_prefix = f"{_safe_stage_name(prefix, max_len=12)}_{index + 1:03d}"
@@ -2691,7 +2695,9 @@ def run_teacher_guided_repair_queue(
                     junction_id=junction_id,
                 )
                 if followup_candidate is not None:
+                    attached_report["expanded_scope_followup_emitted"] = True
                     expanded_scope_followup_candidates.append(followup_candidate)
+                    candidates.append(followup_candidate)
                 final_net_file = Path(str(attached_report.get("final_net_file", "")))
                 if (
                     (use_full_network_replay or use_full_network_join_patch_replay)
@@ -2760,7 +2766,12 @@ def run_teacher_guided_repair_queue(
                 {"index": index, "junction_id": junction_id, "candidate_status": "invalid_edge_map"}
             )
             continue
-        if max_ready_candidates is not None and max_ready_candidates > 0 and attempted_ready_count >= max_ready_candidates:
+        if (
+            max_ready_candidates is not None
+            and max_ready_candidates > 0
+            and attempted_ready_count >= max_ready_candidates
+            and not is_followup_candidate
+        ):
             skipped_candidates.append(
                 {"index": index, "junction_id": junction_id, "candidate_status": "max_ready_candidates_reached"}
             )
@@ -2802,7 +2813,9 @@ def run_teacher_guided_repair_queue(
             junction_id=junction_id,
         )
         if followup_candidate is not None:
+            attached_report["expanded_scope_followup_emitted"] = True
             expanded_scope_followup_candidates.append(followup_candidate)
+            candidates.append(followup_candidate)
         final_net_file = Path(str(attached_report.get("final_net_file", "")))
         if (
             sequential_accept_passed_variants
@@ -3483,6 +3496,8 @@ def _endpoint_rewrites(approach_endpoint_rebuild_plan: object | None) -> dict[st
 def _semantic_failure_counts(variant_reports: list[dict[str, object]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for report in variant_reports:
+        if report.get("expanded_scope_followup_emitted"):
+            continue
         gate = report.get("semantic_replay_gate")
         failures = gate.get("failures", []) if isinstance(gate, dict) else []
         for failure in failures:
@@ -3501,6 +3516,9 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
     *,
     junction_id: str,
 ) -> dict[str, object] | None:
+    followup_depth = int(candidate.get("followup_depth", 0) or 0)
+    if followup_depth >= 1:
+        return None
     replay = variant_report.get("target_internal_replay")
     if not isinstance(replay, dict):
         return None
@@ -3547,6 +3565,7 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
         {
             "candidate_status": "needs_expanded_rebuild_scope",
             "followup_reason": "target_internal_replay_removed_non_target_connections",
+            "followup_depth": followup_depth + 1,
             "unsafe_removed_connection_count": removed_count,
             "unsafe_removed_connections": removed_connections,
             "unsafe_removed_edge_ids": removed_edge_ids,
@@ -3580,6 +3599,8 @@ def _plain_edge_endpoints(edge_file: Path) -> dict[str, tuple[str, str]]:
 def _semantic_layer_gate_counts(variant_reports: list[dict[str, object]]) -> dict[str, dict[str, int]]:
     counts: dict[str, dict[str, int]] = {}
     for report in variant_reports:
+        if report.get("expanded_scope_followup_emitted"):
+            continue
         layers = report.get("semantic_layer_gates")
         if not isinstance(layers, dict):
             continue
@@ -3617,6 +3638,7 @@ def _write_teacher_guided_promotion_gate(
             else {},
         }
         for report in variant_reports
+        if not report.get("expanded_scope_followup_emitted")
     ]
     gate_status = (
         "pass"
