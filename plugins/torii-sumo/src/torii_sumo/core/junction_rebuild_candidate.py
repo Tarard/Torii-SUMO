@@ -6023,6 +6023,7 @@ def _teacher_guided_semantics_gate(parity: dict[str, Any], **reports: dict[str, 
             "skipped_pedestrian_connection_count",
             "skipped_vehicle_connection_count",
             "skipped_connection_count",
+            "removed_stale_replaced_edge_connection_count",
         ):
             if internal_replay_complete and report_name in {"pedestrian_ring", "vehicle_connection_attrs"}:
                 continue
@@ -6062,6 +6063,8 @@ def _semantic_layer_for_field(field: str) -> str:
         return "internal"
     if field.startswith(("tl_", "controlled_", "vehicle_connection", "vehicle_movement")):
         return "movement_tls"
+    if field.startswith("removed_stale_replaced_edge_connection"):
+        return "topology"
     if field.startswith(("approach", "junction", "incoming_vehicle_edge", "outgoing_vehicle_edge")):
         return "topology"
     return "uncategorized"
