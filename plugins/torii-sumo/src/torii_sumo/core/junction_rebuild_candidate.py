@@ -2563,6 +2563,14 @@ def run_teacher_guided_repair_queue(
                     scope_report["full_network_join_seed_netconvert"] = seed_report
                     if seed_report.get("status") != "pass":
                         scope_report["status"] = "review"
+                        skipped_candidates.append(
+                            {
+                                "index": index,
+                                "junction_id": junction_id,
+                                "candidate_status": "full_network_join_seed_failed",
+                            }
+                        )
+                        continue
                     scope_report["replay_scope"] = "full_network_join_patch"
                 else:
                     replay_node_file = _write_replay_node_file(
