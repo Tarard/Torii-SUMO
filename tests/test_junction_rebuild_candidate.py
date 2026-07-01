@@ -6659,7 +6659,7 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     raw_edges.write_text(
         """<edges>
   <edge id="cand" from="a" to="j" numLanes="1" speed="13.89" shape="0,0 1,0">
-    <lane index="0" speed="13.89" shape="0,0 1,0"/>
+    <lane index="0" speed="13.89" shape="0,0 2,0"/>
   </edge>
 </edges>
 """,
@@ -6691,11 +6691,53 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     lanes = edge.findall("lane")
     assert [lane.attrib.get("allow", "") for lane in lanes] == ["pedestrian", ""]
     assert [lane.attrib.get("disallow", "") for lane in lanes] == ["", "pedestrian bicycle"]
-    assert [lane.attrib.get("shape", "") for lane in lanes] == ["0.00,0.00 1.00,0.00", "0.00,1.00 1.00,1.00"]
+    assert [lane.attrib.get("shape", "") for lane in lanes] == ["0,0 2,0", "0.00,1.00 1.00,1.00"]
     assert "length" not in lanes[0].attrib
     assert "outlineShape" not in lanes[1].attrib
     assert report["patched_edge_count"] == 1
     assert report["lane_shape_translation_applied"] is True
+
+
+def test_teacher_target_replay_preserves_existing_candidate_edge_geometry(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="tj"><lane id="teacher_in_0" index="0" shape="90,50 100,50"/></edge>
+  <edge id="teacher_out" from="tj" to="n"><lane id="teacher_out_0" index="0" shape="100,50 110,50"/></edge>
+  <edge id=":tj_0" function="internal"><lane id=":tj_0_0" index="0" shape="100,50 101,50"/></edge>
+  <junction id="tj" type="traffic_light" x="100" y="50" incLanes="teacher_in_0" intLanes=":tj_0_0"/>
+  <junction id="n" type="priority" x="110" y="50" incLanes="" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":tj_0_0" tl="tj" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="tj" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="cj"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="cand_out" from="cj" to="n" shape="0,0 8,3"><lane id="cand_out_0" index="0" shape="0,0 8,3"/></edge>
+  <junction id="cj" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="n" type="priority" x="8" y="3" incLanes="" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="cj",
+        teacher_junction_id="tj",
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    edge = ET.parse(report["net_file"]).getroot().find("edge[@id='cand_out']")
+    assert edge is not None
+    assert edge.attrib["shape"] == "0,0 8,3"
+    assert edge.find("lane").attrib["shape"] == "0,0 8,3"
 
 
 def test_write_teacher_lane_patch_edges_adds_missing_mapped_teacher_edge(tmp_path: Path) -> None:

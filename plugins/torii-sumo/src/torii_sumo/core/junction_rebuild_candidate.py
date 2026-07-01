@@ -672,6 +672,11 @@ def write_teacher_lane_patch_edges(
         teacher_lanes = teacher_edge.findall("lane")
         if not teacher_lanes:
             continue
+        existing_lane_shapes = {
+            lane.attrib.get("index", ""): lane.attrib["shape"]
+            for lane in edge.findall("lane")
+            if lane.attrib.get("index", "") and lane.attrib.get("shape")
+        }
         for lane in list(edge.findall("lane")):
             edge.remove(lane)
         edge.attrib.pop("allow", None)
@@ -688,8 +693,11 @@ def write_teacher_lane_patch_edges(
             for attr in ("allow", "disallow", "width", "speed"):
                 if lane.attrib.get(attr):
                     lane_attrs[attr] = lane.attrib[attr]
-            if preserve_lane_shapes and lane_shape_delta is not None and lane.attrib.get("shape"):
-                lane_attrs["shape"] = _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
+            if preserve_lane_shapes:
+                if lane.attrib.get("index", "") in existing_lane_shapes:
+                    lane_attrs["shape"] = existing_lane_shapes[lane.attrib.get("index", "")]
+                elif lane_shape_delta is not None and lane.attrib.get("shape"):
+                    lane_attrs["shape"] = _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
             ET.SubElement(edge, "lane", lane_attrs)
         patched.append({"candidate_edge_id": edge.attrib.get("id", ""), "teacher_edge_id": teacher_edge.attrib.get("id", ""), "lane_count": len(teacher_lanes)})
 
@@ -1428,6 +1436,7 @@ def write_teacher_target_internal_replay_net(
         replaced_edge = candidate_edges_by_id.get(copied_edge_id)
         insert_at = insert_index + boundary_insert_offset
         if replaced_edge is not None:
+            _restore_existing_edge_geometry(copied_edge, replaced_edge, candidate_root, max_endpoint_delta=5.0)
             insert_at = list(candidate_root).index(replaced_edge)
             _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
             candidate_root.remove(replaced_edge)
@@ -1576,6 +1585,7 @@ def write_teacher_target_internal_replay_net(
             teacher_junction_id,
             junction_id,
         )
+        _restore_existing_edge_geometry(copied_edge, existing_edge, candidate_root, max_endpoint_delta=5.0)
         insert_at = list(candidate_root).index(existing_edge)
         _remove_edge_lanes_from_destination_junction(candidate_root, existing_edge, all_junctions=True)
         candidate_root.remove(existing_edge)
@@ -5939,6 +5949,79 @@ def _clone_transformed_boundary_edge(
             elif lane.attrib.get("index"):
                 lane.set("id", f"{candidate_prefix}{lane.attrib['index']}")
     return clone
+
+
+def _shape_endpoints(shape: str) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    points = _split(shape)
+    if not points:
+        return None
+    try:
+        first_x, first_y = points[0].split(",")[:2]
+        last_x, last_y = points[-1].split(",")[:2]
+        return (float(first_x), float(first_y)), (float(last_x), float(last_y))
+    except ValueError:
+        return None
+
+
+def _primary_edge_shape(edge: ET.Element) -> str:
+    if edge.attrib.get("shape"):
+        return edge.attrib["shape"]
+    lane = edge.find("lane")
+    return lane.attrib.get("shape", "") if lane is not None else ""
+
+
+def _edge_geometry_matches_current_junctions(
+    root: ET.Element,
+    edge: ET.Element,
+    existing_edge: ET.Element,
+    max_endpoint_delta: float,
+) -> bool:
+    edge_endpoints = _shape_endpoints(_primary_edge_shape(edge))
+    existing_endpoints = _shape_endpoints(_primary_edge_shape(existing_edge))
+    from_xy = _junction_xy(root, edge.attrib.get("from", ""))
+    to_xy = _junction_xy(root, edge.attrib.get("to", ""))
+    if edge_endpoints is None or existing_endpoints is None or from_xy is None or to_xy is None:
+        return False
+    matches_replay = all(
+        ((actual[0] - expected[0]) ** 2 + (actual[1] - expected[1]) ** 2) ** 0.5 <= max_endpoint_delta
+        for actual, expected in zip(existing_endpoints, edge_endpoints)
+    )
+    matches_current_endpoints = all(
+        ((actual[0] - expected[0]) ** 2 + (actual[1] - expected[1]) ** 2) ** 0.5 <= max_endpoint_delta
+        for actual, expected in zip(existing_endpoints, (from_xy, to_xy))
+    )
+    return matches_replay and matches_current_endpoints
+
+
+def _restore_existing_edge_geometry(
+    edge: ET.Element,
+    existing_edge: ET.Element,
+    root: ET.Element,
+    *,
+    max_endpoint_delta: float | None = None,
+) -> None:
+    if max_endpoint_delta is not None and not _edge_geometry_matches_current_junctions(root, edge, existing_edge, max_endpoint_delta):
+        return
+    if existing_edge.attrib.get("shape"):
+        edge.set("shape", existing_edge.attrib["shape"])
+    existing_lane_shapes = {
+        lane.attrib.get("index", ""): lane.attrib["shape"]
+        for lane in existing_edge.findall("lane")
+        if lane.attrib.get("index", "") and lane.attrib.get("shape")
+    }
+    for lane in edge.findall("lane"):
+        if lane.attrib.get("index", "") in existing_lane_shapes:
+            lane.set("shape", existing_lane_shapes[lane.attrib.get("index", "")])
+
+
+def _junction_xy(root: ET.Element, junction_id: str) -> tuple[float, float] | None:
+    junction = next((item for item in root.findall("junction") if item.attrib.get("id") == junction_id), None)
+    if junction is None:
+        return None
+    try:
+        return float(junction.attrib["x"]), float(junction.attrib["y"])
+    except (KeyError, ValueError):
+        return None
 
 
 def _clone_transformed_junction(
