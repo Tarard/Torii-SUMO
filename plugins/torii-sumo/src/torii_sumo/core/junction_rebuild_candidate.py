@@ -716,7 +716,7 @@ def write_teacher_lane_patch_edges(
                 {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, "node": edge_attrs["from"]}
             )
             continue
-        if preserve_lane_shapes and lane_shape_delta is not None and edge_attrs.get("shape"):
+        if lane_shape_delta is not None and edge_attrs.get("shape"):
             edge_attrs["shape"] = _translate_shape(edge_attrs["shape"], lane_shape_delta[0], lane_shape_delta[1])
         edge = ET.SubElement(root, "edge", edge_attrs)
         for lane in teacher_lanes:
