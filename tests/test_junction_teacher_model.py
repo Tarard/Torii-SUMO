@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from torii_sumo.core.junction_teacher_model import (
+    canonical_teacher_junction_bundle,
     compare_junction_pattern_records,
     evaluate_netedit_semantics_gate,
     extract_junction_pattern_exemplar,
@@ -11,6 +12,55 @@ from torii_sumo.core.junction_teacher_model import (
     slot_edge_map_from_exemplar,
     summarize_junction_pattern_templates,
 )
+
+
+def test_canonical_teacher_junction_bundle_keeps_replay_critical_tables(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <location netOffset="0.00,0.00" convBoundary="-10.00,-10.00,10.00,10.00" origBoundary="-10.00,-10.00,10.00,10.00" projParameter="!"/>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" speed="13.89" length="10.00" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" speed="13.89" length="10.00" shape="0,0 10,0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="passenger" shape="0,0 5,0"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="0,2 2,2"/></edge>
+  <junction id="a" type="dead_end" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="dead_end" x="10" y="0" incLanes="out_0" intLanes=""/>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="in_0 :j_w0_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id=":j_0_0" type="internal" x="1" y="0" incLanes=":j_0_0" intLanes=""/>
+  <tlLogic id="j" type="actuated" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    bundle = canonical_teacher_junction_bundle(net_file, "j")
+
+    assert bundle["junction_id"] == "j"
+    assert bundle["junctions"][0]["id"] == ":j_0_0"
+    assert bundle["junctions"][1]["id"] == "a"
+    assert bundle["junctions"][2]["id"] == "b"
+    assert bundle["junctions"][3]["id"] == "j"
+    assert bundle["edges"][0]["id"] == ":j_0"
+    assert bundle["edges"][1]["id"] == ":j_w0"
+    assert bundle["edges"][2]["id"] == "in"
+    assert bundle["edges"][3]["id"] == "out"
+    assert bundle["connections"] == [
+        {
+            "dir": "s",
+            "from": "in",
+            "fromLane": "0",
+            "linkIndex": "0",
+            "state": "O",
+            "tl": "j",
+            "to": "out",
+            "toLane": "0",
+            "via": ":j_0_0",
+        }
+    ]
+    assert bundle["tlLogics"][0]["id"] == "j"
+    assert bundle["summary"]["connection_count"] == 1
 
 
 def test_netedit_semantics_gate_fails_on_non_same_statuses() -> None:
