@@ -9584,7 +9584,7 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
   </junction>
   <junction id="mid" type="priority" x="90" y="100" incLanes="-road#1_0 road#0_0" intLanes=":mid_0_0"/>
   <junction id="far" type="priority" x="80" y="100" incLanes="road#1_0" intLanes=""/>
-  <junction id="next_far" type="priority" x="70" y="100" incLanes="next#0_0" intLanes=""/>
+  <junction id="next_far" type="dead_end" x="70" y="100" incLanes="next#0_0" intLanes=""/>
   <connection from="-road#1" to="-road#0" fromLane="0" toLane="0" via=":mid_0_0" dir="s" state="M"/>
   <connection from="road#0" to="road#1" fromLane="0" toLane="0" via=":mid_1_0" dir="s" state="M"/>
   <connection from="road#1" to="next#0" fromLane="0" toLane="0" via=":far_0_0" dir="s" state="M"/>
@@ -9604,17 +9604,25 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
   <edge id="-road#2" from="far" to="mid"><lane id="-road#2_0" index="0" shape="-80,-40 -30,-40"/></edge>
   <edge id="road#2" from="mid" to="far"><lane id="road#2_0" index="0" shape="-30,-38 -80,-38"/></edge>
   <edge id="next#0" from="far" to="next_far"><lane id="next#0_0" index="0" shape="-80,-38 -90,-38"/></edge>
+  <edge id="extra#0" from="next_far" to="beyond"><lane id="extra#0_0" index="0" shape="-90,-38 -100,-38"/></edge>
+  <edge id="next#1" from="next_far" to="tail"><lane id="next#1_0" index="0" shape="-90,-38 -100,-38"/></edge>
+  <edge id="-next#1" from="tail" to="next_far"><lane id="-next#1_0" index="0" shape="-100,-40 -90,-40"/></edge>
   <edge id="side_in" from="far" to="side"><lane id="side_in_0" index="0" shape="-20,4 -10,4"/></edge>
   <edge id="side_out" from="side" to="far"><lane id="side_out_0" index="0" shape="-10,6 -20,6"/></edge>
   <junction id="j" type="traffic_light" x="0" y="0" incLanes="-road#0_0" intLanes=""/>
   <junction id="mid" type="traffic_light" x="-30" y="-40" incLanes="-road#2_0 road#1_0 road#0_0" intLanes=":candidate_mid_0_0"/>
   <junction id="stale" type="dead_end" x="-5" y="0" incLanes="-road#1_0" intLanes=""/>
   <junction id="far" type="priority" x="-80" y="-40" incLanes="road#2_0" intLanes=""/>
-  <junction id="next_far" type="priority" x="-90" y="-40" incLanes="next#0_0" intLanes=""/>
+  <junction id="next_far" type="priority" x="-90" y="-40" incLanes="next#0_0" intLanes=":next_far_0_0"/>
+  <junction id="beyond" type="priority" x="-100" y="-40" incLanes="extra#0_0" intLanes=""/>
+  <junction id="tail" type="priority" x="-100" y="-40" incLanes="next#1_0" intLanes=""/>
   <junction id="side" type="priority" x="-10" y="4" incLanes="side_in_0" intLanes=""/>
   <connection from="-road#2" to="-road#1" fromLane="0" toLane="0" via=":mid_0_0" tl="stale" linkIndex="3" dir="s" state="O"/>
   <connection from="road#1" to="road#2" fromLane="0" toLane="0" via=":mid_1_0" tl="stale" linkIndex="4" dir="s" state="O"/>
   <connection from="road#2" to="next#0" fromLane="0" toLane="0" via=":far_0_0" dir="s" state="M"/>
+  <connection from="next#0" to="extra#0" fromLane="0" toLane="0" via=":next_far_0_0" dir="s" state="M"/>
+  <connection from="next#0" to="next#1" fromLane="0" toLane="0" via=":next_far_0_0" dir="s" state="M"/>
+  <connection from="-next#1" to="side_out" fromLane="0" toLane="0" via=":next_far_1_0" dir="r" state="m"/>
   <connection from="side_in" to="side_out" fromLane="0" toLane="0" via=":side_0_0" tl="stale" linkIndex="5" dir="s" state="O"/>
   <connection from="-road#1" to=":stale_w0" fromLane="0" toLane="0" dir="s" state="M"/>
   <tlLogic id="stale" type="actuated" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
@@ -9677,7 +9685,18 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
     assert far_junction.attrib["x"] == "-20.00"
     assert far_junction.attrib["y"] == "0.00"
     assert root.find("edge[@id='next#0']/lane").attrib["shape"] == "-20.00,2.00 -30.00,2.00"
+    assert root.find("edge[@id='extra#0']") is None
+    assert root.find("connection[@from='next#0'][@to='extra#0']") is None
+    next_far_junction = root.find("junction[@id='next_far']")
+    assert next_far_junction.attrib["type"] == "dead_end"
+    assert next_far_junction.attrib["intLanes"] == ""
     assert report["replayed_stale_split_followup_edges"] == ["next#0"]
+    assert report["removed_stale_split_dead_end_edges"] == ["extra#0"]
+    assert root.find("edge[@id='next#1']") is None
+    assert root.find("edge[@id='-next#1']") is None
+    assert root.find("junction[@id='tail']") is None
+    assert root.find("connection[@from='next#0'][@to='next#1']") is None
+    assert report["removed_teacher_absent_same_family_continuation_edges"] == ["-next#1", "next#1"]
     assert root.find("tlLogic[@id='stale']") is None
     assert report["removed_stale_split_fragment_edges"] == ["-road#1", "road#1"]
     assert report["rewired_stale_split_fragment_connection_count"] == 2
