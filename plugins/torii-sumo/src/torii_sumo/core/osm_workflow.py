@@ -1549,6 +1549,14 @@ def _movement_rebuild_mismatch_score(report: Mapping[str, Any] | None) -> int:
     return _int_field(report, "junction_pattern_mismatch_count")
 
 
+def _followup_reference_delta_structural_only(
+    baseline_delta_report: Mapping[str, Any] | None,
+    *,
+    default: bool,
+) -> bool:
+    return bool(default or (baseline_delta_report or {}).get("audit_mode") == "structural_only")
+
+
 def _structural_delta_key_count(report: Mapping[str, Any] | None, key: str) -> int:
     if report is None:
         return 0
@@ -3927,7 +3935,10 @@ def run_osm_cleanup_workflow(
                     prefix=f"{prefix}_final_movement_rebuild_reference_delta",
                     candidate_cluster_radius_m=topology_cluster_radius_m,
                     candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                    structural_only=reference_join_audit_structural_only,
+                    structural_only=_followup_reference_delta_structural_only(
+                        final_movement_baseline_report,
+                        default=reference_join_audit_structural_only,
+                    ),
                     equivalent_approach_edge_map=final_movement_edge_map,
                 )
                 final_movement_candidate_file = final_movement_rebuild_best_variant_file
@@ -3964,7 +3975,10 @@ def run_osm_cleanup_workflow(
                                 ),
                                 candidate_cluster_radius_m=topology_cluster_radius_m,
                                 candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                                structural_only=reference_join_audit_structural_only,
+                                structural_only=_followup_reference_delta_structural_only(
+                                    final_movement_rebuild_reference_delta_report,
+                                    default=reference_join_audit_structural_only,
+                                ),
                                 equivalent_approach_edge_map=final_movement_edge_map,
                             )
                         )
@@ -4076,7 +4090,10 @@ def run_osm_cleanup_workflow(
                     prefix=delta_prefix,
                     candidate_cluster_radius_m=topology_cluster_radius_m,
                     candidate_min_cluster_nodes=topology_min_cluster_nodes,
-                    structural_only=reference_join_audit_structural_only,
+                    structural_only=_followup_reference_delta_structural_only(
+                        baseline_delta_report,
+                        default=reference_join_audit_structural_only,
+                    ),
                 )
                 promotion_report = _movement_rebuild_reference_delta_promotion_decision(
                     candidate_delta_report=delta_report,
