@@ -9533,6 +9533,99 @@ def test_write_teacher_target_internal_replay_net_copies_vehicle_continuation_fo
     assert report["copied_boundary_continuation_edges"] == ["next_out", "next_in"]
 
 
+def test_write_teacher_target_internal_replay_net_removes_stale_same_family_split_fragment(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="-road#1" from="far" to="mid" type="highway.tertiary"><lane id="-road#1_0" index="0" shape="-20,0 -10,0"/></edge>
+  <edge id="-road#0" from="mid" to="j" type="highway.tertiary"><lane id="-road#0_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="road#0" from="j" to="mid" type="highway.tertiary"><lane id="road#0_0" index="0" shape="0,2 -10,2"/></edge>
+  <edge id="road#1" from="mid" to="far" type="highway.tertiary"><lane id="road#1_0" index="0" shape="-10,2 -20,2"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="0,0 1,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="-road#0_0" intLanes=":j_0_0"/>
+  <junction id="mid" type="priority" x="-10" y="0" incLanes="-road#1_0 road#0_0" intLanes=""/>
+  <junction id="far" type="priority" x="-20" y="0" incLanes="road#1_0" intLanes=""/>
+  <connection from="-road#1" to="-road#0" fromLane="0" toLane="0" via=":mid_0_0" dir="s" state="M"/>
+  <connection from="road#0" to="road#1" fromLane="0" toLane="0" via=":mid_1_0" dir="s" state="M"/>
+  <connection from="-road#0" to="road#0" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="t" state="O"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="-road#0" from="mid" to="j"><lane id="-road#0_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="-road#1" from="mid" to="stale"><lane id="-road#1_0" index="0" shape="-10,0 -5,0"/></edge>
+  <edge id="road#0" from="j" to="mid"><lane id="road#0_0" index="0" shape="0,2 -10,2"/></edge>
+  <edge id="road#1" from="stale" to="mid"><lane id="road#1_0" index="0" shape="-5,2 -10,2"/></edge>
+  <edge id="-road#2" from="far" to="mid"><lane id="-road#2_0" index="0" shape="-20,0 -10,0"/></edge>
+  <edge id="road#2" from="mid" to="far"><lane id="road#2_0" index="0" shape="-10,2 -20,2"/></edge>
+  <edge id="side_in" from="far" to="side"><lane id="side_in_0" index="0" shape="-20,4 -10,4"/></edge>
+  <edge id="side_out" from="side" to="far"><lane id="side_out_0" index="0" shape="-10,6 -20,6"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="-road#0_0" intLanes=""/>
+  <junction id="mid" type="traffic_light" x="-10" y="0" incLanes="-road#2_0 road#1_0 road#0_0" intLanes=""/>
+  <junction id="stale" type="dead_end" x="-5" y="0" incLanes="-road#1_0" intLanes=""/>
+  <junction id="far" type="priority" x="-20" y="0" incLanes="road#2_0" intLanes=""/>
+  <junction id="side" type="priority" x="-10" y="4" incLanes="side_in_0" intLanes=""/>
+  <connection from="-road#2" to="-road#1" fromLane="0" toLane="0" via=":mid_0_0" tl="stale" linkIndex="3" dir="s" state="O"/>
+  <connection from="road#1" to="road#2" fromLane="0" toLane="0" via=":mid_1_0" tl="stale" linkIndex="4" dir="s" state="O"/>
+  <connection from="side_in" to="side_out" fromLane="0" toLane="0" via=":side_0_0" tl="stale" linkIndex="5" dir="s" state="O"/>
+  <connection from="-road#1" to=":stale_w0" fromLane="0" toLane="0" dir="s" state="M"/>
+  <tlLogic id="stale" type="actuated" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"-road#0": "-road#0", "road#0": "road#0"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("edge[@id='-road#1']") is None
+    assert root.find("edge[@id='road#1']") is None
+    rewired_in = root.find("connection[@from='-road#2'][@to='-road#0']")
+    rewired_out = root.find("connection[@from='road#0'][@to='road#2']")
+    assert rewired_in is not None
+    assert rewired_out is not None
+    assert rewired_in.attrib == {
+        "from": "-road#2",
+        "to": "-road#0",
+        "fromLane": "0",
+        "toLane": "0",
+        "via": ":mid_0_0",
+        "dir": "s",
+        "state": "M",
+    }
+    assert rewired_out.attrib == {
+        "from": "road#0",
+        "to": "road#2",
+        "fromLane": "0",
+        "toLane": "0",
+        "via": ":mid_1_0",
+        "dir": "s",
+        "state": "M",
+    }
+    assert root.find("connection[@from='-road#0'][@to=':stale_w0']") is None
+    side_connection = root.find("connection[@from='side_in'][@to='side_out']")
+    assert side_connection is not None
+    assert "tl" not in side_connection.attrib
+    assert "linkIndex" not in side_connection.attrib
+    assert side_connection.attrib["state"] == "M"
+    assert root.find("junction[@id='mid']").attrib["type"] == "priority"
+    assert root.find("tlLogic[@id='stale']") is None
+    assert report["removed_stale_split_fragment_edges"] == ["-road#1", "road#1"]
+    assert report["rewired_stale_split_fragment_connection_count"] == 2
+
+
 def test_write_teacher_target_internal_replay_net_keeps_existing_same_id_boundary_lane_in_junction(
     tmp_path: Path,
 ) -> None:
