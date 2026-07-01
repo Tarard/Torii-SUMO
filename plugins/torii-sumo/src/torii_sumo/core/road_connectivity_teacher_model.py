@@ -689,6 +689,106 @@ def build_road_connection_topology_replay_audit(
     }
 
 
+def write_road_connection_topology_replay_candidate(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    *,
+    max_connections: int = 100,
+    include_internal_via: bool = False,
+) -> dict[str, Any]:
+    audit = build_road_connection_topology_replay_audit(
+        teacher_net_file,
+        candidate_net_file,
+        max_examples=1_000_000,
+    )
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_junctions = {
+        junction.attrib.get("id", ""): junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    existing_topology_keys = {
+        _connection_topology_key(_connection_replay_record(connection))
+        for connection in candidate_root.findall("connection")
+    }
+    added_connection_count = 0
+    skipped_connection_count = 0
+    skipped_internal_via_connection_count = 0
+    skipped_candidate_internal_junction_connection_count = 0
+    skipped_internal_edge_connection_count = 0
+    skipped_non_adjacent_connection_count = 0
+    selected_connection_count = 0
+    for connection in audit["replayable_connections"]:
+        if added_connection_count >= max(0, max_connections):
+            break
+        selected_connection_count += 1
+        from_edge = candidate_edges.get(connection.get("from", ""))
+        to_edge = candidate_edges.get(connection.get("to", ""))
+        if _is_internal_edge(from_edge) or _is_internal_edge(to_edge):
+            skipped_connection_count += 1
+            skipped_internal_edge_connection_count += 1
+            continue
+        if connection.get("via") and not include_internal_via:
+            skipped_connection_count += 1
+            skipped_internal_via_connection_count += 1
+            continue
+        from_junction_id = "" if from_edge is None else from_edge.attrib.get("to", "")
+        to_junction_id = "" if to_edge is None else to_edge.attrib.get("from", "")
+        if from_junction_id and to_junction_id and from_junction_id != to_junction_id:
+            skipped_connection_count += 1
+            skipped_non_adjacent_connection_count += 1
+            continue
+        candidate_junction = candidate_junctions.get(from_junction_id)
+        if candidate_junction is not None and candidate_junction.attrib.get("intLanes", "").strip():
+            skipped_connection_count += 1
+            skipped_candidate_internal_junction_connection_count += 1
+            continue
+        topology_key = _connection_topology_key(connection)
+        if topology_key in existing_topology_keys:
+            skipped_connection_count += 1
+            continue
+        ET.SubElement(
+            candidate_root,
+            "connection",
+            _road_connection_topology_replay_attrs(connection),
+        )
+        existing_topology_keys.add(topology_key)
+        added_connection_count += 1
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="  ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "repair_scope": "road_connection_topology",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "selected_connection_count": selected_connection_count,
+        "added_connection_count": added_connection_count,
+        "skipped_connection_count": skipped_connection_count,
+        "skipped_internal_via_connection_count": skipped_internal_via_connection_count,
+        "skipped_candidate_internal_junction_connection_count": skipped_candidate_internal_junction_connection_count,
+        "skipped_internal_edge_connection_count": skipped_internal_edge_connection_count,
+        "skipped_non_adjacent_connection_count": skipped_non_adjacent_connection_count,
+        "audit_summary": {
+            "teacher_connection_count": audit["teacher_connection_count"],
+            "already_present_connection_count": audit["already_present_connection_count"],
+            "replayable_connection_count": audit["replayable_connection_count"],
+            "blocked_connection_count": audit["blocked_connection_count"],
+        },
+        "warnings": [],
+    }
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -1058,6 +1158,20 @@ def _connection_topology_key(connection: dict[str, str]) -> tuple[str, str, str,
         connection.get("toLane", ""),
         connection.get("dir", ""),
         connection.get("via", ""),
+    )
+
+
+def _road_connection_topology_replay_attrs(connection: dict[str, str]) -> dict[str, str]:
+    return {
+        key: connection[key]
+        for key in ("from", "to", "fromLane", "toLane", "dir", "state", "via")
+        if connection.get(key)
+    }
+
+
+def _is_internal_edge(edge: ET.Element | None) -> bool:
+    return edge is not None and (
+        edge.attrib.get("id", "").startswith(":") or edge.attrib.get("function") == "internal"
     )
 
 

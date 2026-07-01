@@ -18,6 +18,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     summarize_net_road_lane_model_templates,
     summarize_road_lane_model_templates,
     write_road_lane_template_repair_candidate,
+    write_road_connection_topology_replay_candidate,
     write_road_connectivity_self_replay_net,
 )
 
@@ -1025,6 +1026,197 @@ def test_build_road_connection_topology_replay_audit_ignores_existing_topology(t
     assert report["already_present_connection_count"] == 1
     assert report["replayable_connection_count"] == 0
     assert report["blocked_connection_count"] == 0
+
+
+def test_write_road_connection_topology_replay_candidate_adds_safe_missing_connections(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s" state="M" tl="J" linkIndex="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_road_connection_topology_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+    )
+
+    root = ET.parse(output_net).getroot()
+    connection = root.find("connection")
+    assert report["status"] == "pass"
+    assert report["repair_scope"] == "road_connection_topology"
+    assert report["added_connection_count"] == 1
+    assert connection is not None
+    assert connection.attrib == {
+        "from": "a",
+        "to": "b",
+        "fromLane": "0",
+        "toLane": "0",
+        "dir": "s",
+        "state": "M",
+    }
+
+
+def test_write_road_connection_topology_replay_candidate_skips_internal_via_by_default(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_road_connection_topology_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+    )
+
+    assert report["added_connection_count"] == 0
+    assert report["skipped_internal_via_connection_count"] == 1
+    assert ET.parse(output_net).getroot().find("connection") is None
+
+
+def test_write_road_connection_topology_replay_candidate_collects_road_only_limit(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+  <edge id="c"><lane id="c_0" index="0"/></edge>
+  <edge id="d"><lane id="d_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from="c" to="d" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a"><lane id="a_0" index="0"/></edge>
+  <edge id="b"><lane id="b_0" index="0"/></edge>
+  <edge id="c"><lane id="c_0" index="0"/></edge>
+  <edge id="d"><lane id="d_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_road_connection_topology_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        max_connections=1,
+    )
+
+    connection = ET.parse(output_net).getroot().find("connection")
+    assert report["added_connection_count"] == 1
+    assert report["skipped_internal_via_connection_count"] == 1
+    assert connection is not None
+    assert connection.attrib["from"] == "c"
+    assert connection.attrib["to"] == "d"
+
+
+def test_write_road_connection_topology_replay_candidate_skips_candidate_internal_junctions(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="j"><lane id="a_0" index="0"/></edge>
+  <edge id="b" from="j" to="n2"><lane id="b_0" index="0"/></edge>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="j"><lane id="a_0" index="0"/></edge>
+  <edge id="b" from="j" to="n2"><lane id="b_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="a_0" intLanes=":j_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_road_connection_topology_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+    )
+
+    assert report["added_connection_count"] == 0
+    assert report["skipped_candidate_internal_junction_connection_count"] == 1
+    assert ET.parse(output_net).getroot().find("connection") is None
+
+
+def test_write_road_connection_topology_replay_candidate_skips_internal_edges(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <edge id="b" from="j" to="n2"><lane id="b_0" index="0"/></edge>
+  <connection from=":j_0" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <edge id="b" from="j" to="n2"><lane id="b_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_road_connection_topology_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+    )
+
+    assert report["added_connection_count"] == 0
+    assert report["skipped_internal_edge_connection_count"] == 1
+    assert ET.parse(output_net).getroot().find("connection") is None
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
