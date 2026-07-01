@@ -36,6 +36,24 @@ def canonical_teacher_junction_bundle(net_file: Path, junction_id: str) -> dict[
         for edge in group
         if edge.get("edge_id")
     }
+    incoming_edge_ids = {str(edge.get("edge_id", "")) for edge in model["approaches"]["incoming"]}
+    outgoing_edge_ids = {str(edge.get("edge_id", "")) for edge in model["approaches"]["outgoing"]}
+
+    connections = []
+    for connection in root.findall("connection"):
+        if _is_target_local_connection(
+            connection,
+            incoming_edge_ids=incoming_edge_ids,
+            outgoing_edge_ids=outgoing_edge_ids,
+            internal_prefix=internal_prefix,
+        ):
+            connections.append(_sorted_attrs(connection))
+            selected_edge_ids.update(
+                edge_id
+                for edge_id in (connection.attrib.get("from", ""), connection.attrib.get("to", ""))
+                if edge_id in edges
+            )
+
     selected_junction_ids = {junction_id}
     selected_junction_ids.update(
         junction_id
@@ -47,16 +65,16 @@ def canonical_teacher_junction_bundle(net_file: Path, junction_id: str) -> dict[
         if edge is None or edge_id.startswith(":"):
             continue
         selected_junction_ids.update(value for value in (edge.attrib.get("from"), edge.attrib.get("to")) if value)
-
-    connections = []
-    for connection in root.findall("connection"):
-        via = connection.attrib.get("via", "")
-        if (
-            connection.attrib.get("from", "") in selected_edge_ids
-            or connection.attrib.get("to", "") in selected_edge_ids
-            or via.startswith(internal_prefix)
-        ):
-            connections.append(_sorted_attrs(connection))
+    boundary_inc_lanes: dict[str, list[str]] = {}
+    for edge_id in selected_edge_ids:
+        edge = edges.get(edge_id)
+        if edge is None or edge_id.startswith(":"):
+            continue
+        target = edge.attrib.get("to", "")
+        if target and target != junction_id and not target.startswith(internal_prefix):
+            boundary_inc_lanes.setdefault(target, []).extend(
+                lane.attrib.get("id", "") for lane in edge.findall("lane") if lane.attrib.get("id")
+            )
 
     tl_ids = {
         str(model.get("traffic_light", {}).get("attributes", {}).get("id", ""))
@@ -64,11 +82,16 @@ def canonical_teacher_junction_bundle(net_file: Path, junction_id: str) -> dict[
 
     return {
         "junction_id": junction_id,
+        "net": _sorted_attrs(root),
         "location": _sorted_attrs(root.find("location")),
         "junctions": [
-            _canonical_junction_record(junctions[junction_id])
-            for junction_id in sorted(selected_junction_ids)
-            if junction_id in junctions
+            _canonical_selected_junction_record(
+                junctions[selected_junction_id],
+                full=selected_junction_id == junction_id or selected_junction_id.startswith(internal_prefix),
+                boundary_inc_lanes=boundary_inc_lanes.get(selected_junction_id, []),
+            )
+            for selected_junction_id in sorted(selected_junction_ids)
+            if selected_junction_id in junctions
         ],
         "edges": [
             _canonical_edge_record(edges[edge_id])
@@ -97,7 +120,8 @@ def write_teacher_self_replay_net(
 ) -> dict[str, Any]:
     bundle = canonical_teacher_junction_bundle(teacher_net_file, junction_id)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    root = ET.Element("net")
+    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    root = ET.Element("net", bundle.get("net", {}))
     if bundle["location"]:
         ET.SubElement(root, "location", bundle["location"])
     for edge in bundle["edges"]:
@@ -763,6 +787,21 @@ def _canonical_junction_record(junction: ET.Element) -> dict[str, Any]:
     }
 
 
+def _canonical_selected_junction_record(
+    junction: ET.Element,
+    *,
+    full: bool,
+    boundary_inc_lanes: list[str],
+) -> dict[str, Any]:
+    if full:
+        return _canonical_junction_record(junction)
+    record = _canonical_junction_record(junction)
+    record["incLanes"] = " ".join(sorted(boundary_inc_lanes))
+    record["intLanes"] = ""
+    record["requests"] = []
+    return record
+
+
 def _canonical_tl_logic_record(tl_logic: ET.Element) -> dict[str, Any]:
     return {
         **_sorted_attrs(tl_logic),
@@ -786,6 +825,24 @@ def _sorted_attrs(element: ET.Element | None) -> dict[str, str]:
 
 def _record_attrs(record: dict[str, Any], child_key: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in record.items() if key != child_key}
+
+
+def _is_target_local_connection(
+    connection: ET.Element,
+    *,
+    incoming_edge_ids: set[str],
+    outgoing_edge_ids: set[str],
+    internal_prefix: str,
+) -> bool:
+    source = connection.attrib.get("from", "")
+    target = connection.attrib.get("to", "")
+    via = connection.attrib.get("via", "")
+    return (
+        via.startswith(internal_prefix)
+        or source.startswith(internal_prefix)
+        or target.startswith(internal_prefix)
+        or (source in incoming_edge_ids and target in outgoing_edge_ids)
+    )
 
 
 def _safe_file_stem(value: str) -> str:

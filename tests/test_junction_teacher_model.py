@@ -19,7 +19,7 @@ from torii_sumo.core.junction_teacher_model import (
 def test_canonical_teacher_junction_bundle_keeps_replay_critical_tables(tmp_path: Path) -> None:
     net_file = tmp_path / "teacher.net.xml"
     net_file.write_text(
-        """<net>
+        """<net version="1.20" junctionCornerDetail="5" limitTurnSpeed="5.50">
   <location netOffset="0.00,0.00" convBoundary="-10.00,-10.00,10.00,10.00" origBoundary="-10.00,-10.00,10.00,10.00" projParameter="!"/>
   <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" speed="13.89" length="10.00" shape="-10,0 0,0"/></edge>
   <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" speed="13.89" length="10.00" shape="0,0 10,0"/></edge>
@@ -40,6 +40,7 @@ def test_canonical_teacher_junction_bundle_keeps_replay_critical_tables(tmp_path
     bundle = canonical_teacher_junction_bundle(net_file, "j")
 
     assert bundle["junction_id"] == "j"
+    assert bundle["net"]["version"] == "1.20"
     assert bundle["junctions"][0]["id"] == ":j_0_0"
     assert bundle["junctions"][1]["id"] == "a"
     assert bundle["junctions"][2]["id"] == "b"
@@ -63,6 +64,83 @@ def test_canonical_teacher_junction_bundle_keeps_replay_critical_tables(tmp_path
     ]
     assert bundle["tlLogics"][0]["id"] == "j"
     assert bundle["summary"]["connection_count"] == 1
+
+
+def test_canonical_teacher_junction_bundle_excludes_neighbor_boundary_connections(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="other" from="x" to="a"><lane id="other_0" index="0" allow="passenger" shape="-20,0 -10,0"/></edge>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":a_0" function="internal"><lane id=":a_0_0" index="0" allow="passenger" shape="-12,0 -10,0"/></edge>
+  <junction id="a" type="priority" x="-10" y="0" incLanes="other_0" intLanes=":a_0_0"/>
+  <junction id="b" type="dead_end" x="10" y="0" incLanes="out_0" intLanes=""/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="x" type="dead_end" x="-20" y="0" incLanes="" intLanes=""/>
+  <junction id=":a_0_0" type="internal" x="-11" y="0" incLanes=":a_0_0" intLanes=""/>
+  <connection from="other" to="in" fromLane="0" toLane="0" via=":a_0_0" dir="s"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    bundle = canonical_teacher_junction_bundle(net_file, "j")
+
+    assert bundle["connections"] == [{"dir": "s", "from": "in", "fromLane": "0", "to": "out", "toLane": "0"}]
+
+
+def test_canonical_teacher_junction_bundle_trims_boundary_junction_lane_refs(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="other" from="x" to="a"><lane id="other_0" index="0" allow="passenger" shape="-20,0 -10,0"/></edge>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id=":a_0" function="internal"><lane id=":a_0_0" index="0" allow="passenger" shape="-12,0 -10,0"/></edge>
+  <junction id="a" type="priority" x="-10" y="0" incLanes="other_0" intLanes=":a_0_0"/>
+  <junction id="b" type="dead_end" x="10" y="0" incLanes="out_0" intLanes=""/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="x" type="dead_end" x="-20" y="0" incLanes="" intLanes=""/>
+  <junction id=":a_0_0" type="internal" x="-11" y="0" incLanes=":a_0_0" intLanes=""/>
+  <connection from="other" to="in" fromLane="0" toLane="0" via=":a_0_0" dir="s"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    bundle = canonical_teacher_junction_bundle(net_file, "j")
+    boundary = {junction["id"]: junction for junction in bundle["junctions"]}
+
+    assert boundary["a"]["incLanes"] == ""
+    assert boundary["a"]["intLanes"] == ""
+    assert boundary["b"]["incLanes"] == "out_0"
+
+
+def test_canonical_teacher_junction_bundle_includes_target_modal_connection_edges(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="car_in" from="a" to="j"><lane id="car_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="car_out" from="j" to="b"><lane id="car_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="ped_in" from="p1" to="j" type="highway.footway"><lane id="ped_in_0" index="0" allow="pedestrian" shape="-1,2 0,2"/></edge>
+  <edge id="ped_out" from="j" to="p2" type="highway.footway"><lane id="ped_out_0" index="0" allow="pedestrian" shape="0,2 1,2"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian" shape="0,2 0.5,2"/></edge>
+  <junction id="a" type="dead_end" x="-10" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="dead_end" x="10" y="0" incLanes="car_out_0" intLanes=""/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="car_in_0 ped_in_0" intLanes=""/>
+  <junction id="p1" type="dead_end" x="-1" y="2" incLanes="" intLanes=""/>
+  <junction id="p2" type="dead_end" x="1" y="2" incLanes="ped_out_0" intLanes=""/>
+  <connection from="car_in" to="car_out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="ped_in" to=":j_w0" fromLane="0" toLane="0" dir="s"/>
+  <connection from=":j_w0" to="ped_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    bundle = canonical_teacher_junction_bundle(net_file, "j")
+
+    assert [edge["id"] for edge in bundle["edges"]] == [":j_w0", "car_in", "car_out", "ped_in", "ped_out"]
 
 
 def test_write_teacher_self_replay_net_round_trips_canonical_bundle(tmp_path: Path) -> None:
