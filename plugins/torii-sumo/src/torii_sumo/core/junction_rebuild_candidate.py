@@ -3521,6 +3521,11 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
     existing_scope = candidate.get("expanded_rebuild_scope", {})
     if isinstance(existing_scope, dict):
         junction_ids.update(str(item) for item in existing_scope.get("junction_ids", []) or [] if str(item))
+        missing_desired_endpoint_ids = sorted(
+            {str(item) for item in existing_scope.get("missing_desired_endpoint_ids", []) or [] if str(item)}
+        )
+    else:
+        missing_desired_endpoint_ids = []
     if junction_id:
         junction_ids.add(junction_id)
     for edge_id in removed_edge_ids:
@@ -3544,7 +3549,7 @@ def _expanded_scope_followup_candidate_for_unsafe_internal_replay(
                 "junction_ids": sorted(junction_ids),
                 "join_junction_ids": sorted(junction_ids),
                 "blocked_teacher_edge_ids": blocked_teacher_edge_ids,
-                "missing_desired_endpoint_ids": [],
+                "missing_desired_endpoint_ids": missing_desired_endpoint_ids,
                 "reason": "target internal replay removed non-target boundary connections; rebuild expanded scope before movement replay",
             },
         }
