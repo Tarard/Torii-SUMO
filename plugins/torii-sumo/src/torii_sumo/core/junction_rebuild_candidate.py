@@ -2706,6 +2706,7 @@ def run_teacher_guided_repair_queue(
                     and attached_report.get("parity_gate_status") == "pass"
                     and final_net_file.exists()
                 ):
+                    attached_report["composite_applied"] = True
                     composite_applied_candidate_count += 1
                     composite_net_file = str(final_net_file)
                     replay_entry = _accepted_target_internal_replay_entry(
@@ -2823,6 +2824,7 @@ def run_teacher_guided_repair_queue(
             and attached_report.get("parity_gate_status") == "pass"
             and final_net_file.exists()
         ):
+            attached_report["composite_applied"] = True
             composite_applied_candidate_count += 1
             composite_net_file = str(final_net_file)
             replay_entry = _accepted_target_internal_replay_entry(
@@ -3626,6 +3628,10 @@ def _write_teacher_guided_promotion_gate(
     approach_integrity_status: str,
     variant_reports: list[dict[str, object]],
 ) -> dict[str, object]:
+    gate_reports = [report for report in variant_reports if not report.get("expanded_scope_followup_emitted")]
+    applied_reports = [report for report in gate_reports if report.get("composite_applied")]
+    if applied_reports:
+        gate_reports = applied_reports
     items = [
         {
             "junction_id": str(report.get("junction_id", "")),
@@ -3637,8 +3643,7 @@ def _write_teacher_guided_promotion_gate(
             if isinstance(report.get("semantic_layer_gates"), dict)
             else {},
         }
-        for report in variant_reports
-        if not report.get("expanded_scope_followup_emitted")
+        for report in gate_reports
     ]
     gate_status = (
         "pass"
