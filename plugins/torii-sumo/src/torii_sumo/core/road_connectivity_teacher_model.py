@@ -208,6 +208,25 @@ def summarize_road_lane_model_templates(
     )
 
 
+def summarize_net_road_lane_model_templates(
+    net_file: Path,
+    *,
+    max_examples: int = 3,
+) -> list[dict[str, Any]]:
+    root = ET.parse(net_file).getroot()
+    edges = [
+        _canonical_edge_record(edge)
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+        and not edge.attrib["id"].startswith(":")
+        and edge.attrib.get("function") != "internal"
+    ]
+    return summarize_road_lane_model_templates(
+        {"edges": edges},
+        max_examples=max_examples,
+    )
+
+
 def _canonical_edge_record(edge: ET.Element) -> dict[str, Any]:
     return {
         **_sorted_attrs(edge),

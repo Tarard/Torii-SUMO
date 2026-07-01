@@ -3,6 +3,7 @@ from pathlib import Path
 from torii_sumo.core.road_connectivity_teacher_model import (
     canonical_road_connectivity_bundle,
     compare_road_connectivity_bundles,
+    summarize_net_road_lane_model_templates,
     summarize_road_lane_model_templates,
     write_road_connectivity_self_replay_net,
 )
@@ -199,6 +200,49 @@ def test_summarize_road_lane_model_templates_groups_type_and_lane_signature(tmp_
         {
             "type": "highway.service",
             "lane_signature": ["index=0|allow=|disallow=tram"],
+            "count": 1,
+            "example_edge_ids": ["c"],
+        },
+    ]
+
+
+def test_summarize_net_road_lane_model_templates_excludes_internal_edges(tmp_path: Path) -> None:
+    net_file = tmp_path / "teacher.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="cycleway.track|highway.tertiary">
+    <lane id="a_0" index="0" allow="pedestrian" shape="0,0 10,0"/>
+    <lane id="a_1" index="1" allow="bicycle" shape="0,1 10,1"/>
+  </edge>
+  <edge id="b" from="n2" to="n3" type="cycleway.track|highway.tertiary">
+    <lane id="b_0" index="0" allow="pedestrian" shape="10,0 20,0"/>
+    <lane id="b_1" index="1" allow="bicycle" shape="10,1 20,1"/>
+  </edge>
+  <edge id=":n2_0" function="internal">
+    <lane id=":n2_0_0" index="0" allow="passenger" shape="10,0 11,0"/>
+  </edge>
+  <edge id="c" from="n3" to="n4" type="highway.residential">
+    <lane id="c_0" index="0" allow="passenger" shape="20,0 30,0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    templates = summarize_net_road_lane_model_templates(net_file)
+
+    assert templates == [
+        {
+            "type": "cycleway.track|highway.tertiary",
+            "lane_signature": [
+                "index=0|allow=pedestrian|disallow=",
+                "index=1|allow=bicycle|disallow=",
+            ],
+            "count": 2,
+            "example_edge_ids": ["a", "b"],
+        },
+        {
+            "type": "highway.residential",
+            "lane_signature": ["index=0|allow=passenger|disallow="],
             "count": 1,
             "example_edge_ids": ["c"],
         },
