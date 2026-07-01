@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _compare_teacher_models,
+    _expanded_scope_followup_candidate_for_unsafe_internal_replay,
     _netedit_review_actions,
     _remove_teacher_non_tls_tllogics,
     _limit_ready_repair_candidates,
@@ -17,6 +18,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
     _target_internal_replay_input_file,
+    _write_teacher_guided_promotion_gate,
     _write_joined_endpoint_edge_file,
     _stage_file,
     _teacher_guided_candidate_sort_key,
@@ -3090,7 +3092,7 @@ def test_run_teacher_guided_repair_queue_emits_followup_scope_for_unsafe_interna
     assert followup["candidate_status"] == "needs_expanded_rebuild_scope"
     assert followup["followup_reason"] == "target_internal_replay_removed_non_target_connections"
     assert followup["expanded_rebuild_scope"]["junction_ids"] == ["a", "j", "n"]
-    assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["a", "j", "n"]
+    assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["j"]
     assert followup["expanded_rebuild_scope"]["blocked_teacher_edge_ids"] == ["teacher_main", "teacher_out"]
 
 
@@ -3195,9 +3197,79 @@ def test_run_teacher_guided_repair_queue_expands_followup_scope_after_expanded_r
     assert report["expanded_scope_followup_candidate_count"] == 1
     followup = report["expanded_scope_followup_candidates"][0]
     assert followup["expanded_rebuild_scope"]["junction_ids"] == ["a", "j", "n", "q"]
-    assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["a", "j", "n", "q"]
+    assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["a", "j", "n"]
     assert followup["expanded_rebuild_scope"]["blocked_teacher_edge_ids"] == ["teacher_far", "teacher_neighbor"]
     assert followup["expanded_rebuild_scope"]["missing_desired_endpoint_ids"] == ["missing_endpoint"]
+
+
+def test_expanded_scope_followup_excludes_non_raw_teacher_cluster_from_join_scope(
+    tmp_path: Path,
+) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="main" from="a" to="j"><lane index="0"/></edge>
+  <edge id="neighbor_out" from="j" to="n"><lane index="0"/></edge>
+  <edge id="far_out" from="n" to="q"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+
+    followup = _expanded_scope_followup_candidate_for_unsafe_internal_replay(
+        {
+            "reference_id": "cluster_teacher",
+            "junction_id": "cluster_teacher",
+            "candidate_status": "needs_expanded_rebuild_scope",
+            "edge_map": {"teacher_neighbor": "neighbor_out", "teacher_far": "far_out"},
+            "expanded_rebuild_scope": {
+                "status": "review",
+                "recommended_action": "rebuild_plain_xml_scope",
+                "core_junction_id": "cluster_teacher",
+                "junction_ids": ["a", "j", "n"],
+                "join_junction_ids": ["a", "j", "n"],
+                "blocked_teacher_edge_ids": ["teacher_neighbor"],
+            },
+        },
+        {
+            "target_internal_replay": {
+                "removed_stale_replaced_edge_connection_count": 1,
+                "removed_stale_replaced_edge_connections": [
+                    {"from": "neighbor_out", "to": "far_out", "via": ":q_0_0"}
+                ],
+            }
+        },
+        raw_edges,
+        junction_id="cluster_teacher",
+    )
+
+    assert followup is not None
+    assert followup["expanded_rebuild_scope"]["junction_ids"] == ["a", "j", "n", "q"]
+    assert followup["expanded_rebuild_scope"]["join_junction_ids"] == ["a", "j", "n"]
+    assert "cluster_teacher" not in followup["expanded_rebuild_scope"]["junction_ids"]
+
+
+def test_teacher_guided_promotion_gate_keeps_applied_followup_report(tmp_path: Path) -> None:
+    gate = _write_teacher_guided_promotion_gate(
+        output_file=tmp_path / "promotion.json",
+        status="pass",
+        claim_status="diagnostic-demo",
+        parity_gate_status="pass",
+        approach_integrity_status="pass",
+        variant_reports=[
+            {
+                "junction_id": "cluster_a_b",
+                "teacher_junction_id": "teacher",
+                "status": "pass",
+                "parity_gate_status": "pass",
+                "composite_applied": True,
+                "expanded_scope_followup_emitted": True,
+                "final_net_file": "candidate.net.xml",
+            }
+        ],
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["candidate_count"] == 1
 
 
 def test_run_teacher_guided_repair_queue_replays_expanded_scope_followup_in_same_call(
@@ -8351,6 +8423,22 @@ def test_teacher_guided_semantics_gate_fails_when_internal_replay_removes_non_ta
             "count": 1,
         }
     ]
+
+
+def test_teacher_guided_semantics_gate_allows_non_target_walkingarea_connection_cleanup() -> None:
+    gate = _teacher_guided_semantics_gate(
+        {"delta": {"vehicle_connection_count": 0, "pedestrian_connection_count": 0}},
+        target_internal_replay={
+            "status": "pass",
+            "skipped_connection_count": 0,
+            "removed_stale_replaced_edge_connection_count": 1,
+            "removed_stale_replaced_edge_connections": [
+                {"from": "edge", "to": ":neighbor_w0", "dir": "s", "state": "M"}
+            ],
+        },
+    )
+
+    assert gate == {"status": "pass", "failures": []}
 
 
 def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_subgraph(tmp_path: Path) -> None:
