@@ -673,6 +673,17 @@ def compare_net_road_template_parity(
             "to_lane_signature",
         ],
     )
+    connection_topology_parity = compare_road_template_summaries(
+        teacher_connection_templates,
+        candidate_connection_templates,
+        key_fields=[
+            "dir",
+            "from_type",
+            "from_lane",
+            "to_type",
+            "to_lane",
+        ],
+    )
     status = "pass" if lane_parity["status"] == connection_parity["status"] == "pass" else "fail"
     gate = _road_template_gate_summary(lane_parity, connection_parity)
     report = {
@@ -693,6 +704,13 @@ def compare_net_road_template_parity(
             "teacher_template_count": len(teacher_connection_templates),
             "candidate_template_count": len(candidate_connection_templates),
             "parity": connection_parity,
+        },
+        "connection_topology_summary": {
+            "teacher_connection_count": _template_count_total(teacher_connection_templates),
+            "candidate_connection_count": _template_count_total(candidate_connection_templates),
+            "teacher_template_count": len(teacher_connection_templates),
+            "candidate_template_count": len(candidate_connection_templates),
+            "parity": connection_topology_parity,
         },
     }
     report["repair_queue"] = build_road_template_repair_queue(report)
