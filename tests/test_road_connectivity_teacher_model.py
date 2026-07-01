@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from torii_sumo.core.road_connectivity_teacher_model import canonical_road_connectivity_bundle
+from torii_sumo.core.road_connectivity_teacher_model import (
+    canonical_road_connectivity_bundle,
+    write_road_connectivity_self_replay_net,
+)
 
 
 def test_canonical_road_connectivity_bundle_extracts_edge_chain_and_connections(tmp_path: Path) -> None:
@@ -35,3 +38,29 @@ def test_canonical_road_connectivity_bundle_extracts_edge_chain_and_connections(
         "connection_count": 2,
         "missing_reference_count": 0,
     }
+
+
+def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    replay = tmp_path / "replay.net.xml"
+    teacher.write_text(
+        """<net version="1.20" junctionCornerDetail="5">
+  <edge id="a" from="n1" to="n2"><lane id="a_0" index="0" allow="passenger" speed="13.89" length="10" shape="0,0 10,0"/></edge>
+  <edge id="b" from="n2" to="n3"><lane id="b_0" index="0" allow="passenger" speed="13.89" length="10" shape="10,0 20,0"/></edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="priority" x="10" y="0" incLanes="a_0" intLanes=""/>
+  <junction id="n3" type="dead_end" x="20" y="0" incLanes="b_0" intLanes=""/>
+  <connection from="a" to="b" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_road_connectivity_self_replay_net(teacher, ["a"], replay, hop_radius=1)
+
+    assert report["status"] == "pass"
+    assert replay.exists()
+    assert canonical_road_connectivity_bundle(
+        teacher,
+        seed_edge_ids=["a"],
+        hop_radius=1,
+    ) == canonical_road_connectivity_bundle(replay, seed_edge_ids=["a"], hop_radius=1)
