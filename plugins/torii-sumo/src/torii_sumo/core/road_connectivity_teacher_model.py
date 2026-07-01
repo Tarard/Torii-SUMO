@@ -1367,6 +1367,12 @@ def write_internal_movement_owner_bundle_replacement_candidate(
         )
         added_internal_junction_count += 1
 
+    copied_tl_logic_count = _copy_owner_tl_logics(
+        teacher_root,
+        candidate_root,
+        owner_id,
+    ) if copy_tls else 0
+
     candidate_edges = {
         edge.attrib.get("id", ""): edge
         for edge in candidate_root.findall("edge")
@@ -1412,6 +1418,7 @@ def write_internal_movement_owner_bundle_replacement_candidate(
         "removed_connection_count": removed_connection_count,
         "added_internal_edge_count": added_internal_edge_count,
         "added_internal_junction_count": added_internal_junction_count,
+        "copied_tl_logic_count": copied_tl_logic_count,
         "added_connection_count": added_connection_count,
         "skipped_connection_count": skipped_connection_count,
         "warnings": [],
@@ -1935,6 +1942,34 @@ def _record_touches_owner_bundle(connection: dict[str, str], owner_id: str) -> b
     }
 
 
+def _copy_owner_tl_logics(
+    teacher_root: ET.Element,
+    candidate_root: ET.Element,
+    owner_id: str,
+) -> int:
+    tls_ids = {owner_id}
+    owner_junction = teacher_root.find(f"junction[@id='{owner_id}']")
+    if owner_junction is not None and owner_junction.attrib.get("tl"):
+        tls_ids.add(owner_junction.attrib["tl"])
+    for connection in teacher_root.findall("connection"):
+        record = _connection_replay_record(connection)
+        if _record_touches_owner_bundle(record, owner_id) and record.get("tl"):
+            tls_ids.add(record["tl"])
+
+    copied = 0
+    for tls_id in sorted(tls_ids):
+        teacher_tl_logic = teacher_root.find(f"tlLogic[@id='{tls_id}']")
+        if teacher_tl_logic is None:
+            continue
+        _remove_children(
+            candidate_root,
+            lambda child, target=tls_id: child.tag == "tlLogic" and child.attrib.get("id") == target,
+        )
+        _insert_before_first(candidate_root, "connection", copy.deepcopy(teacher_tl_logic))
+        copied += 1
+    return copied
+
+
 def _owner_bundle_road_dependency_blockers(
     teacher_root: ET.Element,
     candidate_root: ET.Element,
@@ -2020,6 +2055,11 @@ def _remove_children(root: ET.Element, predicate: Any) -> int:
 def _insert_after_last(root: ET.Element, tag: str, element: ET.Element) -> None:
     indexes = [index for index, child in enumerate(list(root)) if child.tag == tag]
     root.insert((indexes[-1] + 1) if indexes else len(root), element)
+
+
+def _insert_before_first(root: ET.Element, tag: str, element: ET.Element) -> None:
+    indexes = [index for index, child in enumerate(list(root)) if child.tag == tag]
+    root.insert(indexes[0] if indexes else len(root), element)
 
 
 def _internal_movement_connection_is_candidate_local(
