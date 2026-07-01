@@ -1439,6 +1439,119 @@ def write_teacher_target_internal_replay_net(
         copied_boundary_edges.append(edge_id)
         copied_boundary_candidate_edges.append(copied_edge_id)
 
+    removed_stale_split_fragment_edges = []
+    rewired_stale_split_fragment_connections = []
+    stale_split_replacements: dict[str, tuple[str, str]] = {}
+    stale_split_remote_junction_ids: set[str] = set()
+    stale_split_stale_junction_ids: set[str] = set()
+    teacher_connections_by_via = {
+        connection.attrib["via"]: connection
+        for connection in teacher_root.findall("connection")
+        if connection.attrib.get("via")
+    }
+    teacher_tllogic_ids = {tllogic.attrib.get("id", "") for tllogic in teacher_root.findall("tlLogic")}
+    replay_boundary_candidate_edge_ids = list(
+        dict.fromkeys(
+            [
+                *copied_boundary_candidate_edges,
+                *[
+                    replay_edge_map.get(edge_id, edge_id)
+                    for edge_id in teacher_boundary_edge_ids
+                    if replay_edge_map.get(edge_id, edge_id) in candidate_edges_by_id
+                ],
+            ]
+        )
+    )
+    for edge_id in replay_boundary_candidate_edge_ids:
+        copied_edge = candidate_edges_by_id.get(edge_id)
+        if copied_edge is None:
+            continue
+        remote_attr = "to" if copied_edge.attrib.get("from") == junction_id else "from"
+        remote_junction_id = copied_edge.attrib.get(remote_attr, "")
+        if not remote_junction_id:
+            continue
+        copied_family = _signed_edge_family_id(edge_id)
+        for candidate_edge_id, candidate_edge in list(candidate_edges_by_id.items()):
+            if (
+                candidate_edge_id == edge_id
+                or candidate_edge_id.startswith(":")
+                or _signed_edge_family_id(candidate_edge_id) != copied_family
+                or candidate_edge.attrib.get(remote_attr) != remote_junction_id
+            ):
+                continue
+            stale_split_replacements[candidate_edge_id] = (edge_id, remote_junction_id)
+            stale_split_remote_junction_ids.add(remote_junction_id)
+            stale_endpoint_attr = "to" if remote_attr == "from" else "from"
+            stale_junction_id = candidate_edge.attrib.get(stale_endpoint_attr, "")
+            if stale_junction_id:
+                stale_split_stale_junction_ids.add(stale_junction_id)
+    for connection in list(candidate_root.findall("connection")):
+        touched_stale_edge_ids = {
+            edge_id
+            for edge_id in (connection.attrib.get("from", ""), connection.attrib.get("to", ""))
+            if edge_id in stale_split_replacements
+        }
+        if not touched_stale_edge_ids:
+            continue
+        if len(touched_stale_edge_ids) != 1:
+            candidate_root.remove(connection)
+            continue
+        stale_edge_id = next(iter(touched_stale_edge_ids))
+        replacement_edge_id, remote_junction_id = stale_split_replacements[stale_edge_id]
+        if not connection.attrib.get("via", "").startswith(f":{remote_junction_id}_"):
+            candidate_root.remove(connection)
+            continue
+        if connection.attrib.get("from") == stale_edge_id:
+            connection.set("from", replacement_edge_id)
+        if connection.attrib.get("to") == stale_edge_id:
+            connection.set("to", replacement_edge_id)
+        teacher_connection = teacher_connections_by_via.get(connection.attrib.get("via", ""))
+        if teacher_connection is not None:
+            rewritten_from = connection.attrib.get("from", "")
+            rewritten_to = connection.attrib.get("to", "")
+            connection.attrib.clear()
+            connection.attrib.update(dict(teacher_connection.attrib))
+            connection.set("from", rewritten_from)
+            connection.set("to", rewritten_to)
+        rewired_stale_split_fragment_connections.append(dict(connection.attrib))
+    for stale_edge_id in stale_split_replacements:
+        stale_edge = candidate_edges_by_id.get(stale_edge_id)
+        if stale_edge is None:
+            continue
+        _remove_edge_lanes_from_destination_junction(candidate_root, stale_edge, all_junctions=True)
+        candidate_root.remove(stale_edge)
+        candidate_edge_ids.discard(stale_edge_id)
+        candidate_edges_by_id.pop(stale_edge_id, None)
+        removed_stale_split_fragment_edges.append(stale_edge_id)
+    retuned_stale_split_junction_ids = []
+    for remote_junction_id in sorted(stale_split_remote_junction_ids):
+        teacher_junction = teacher_junctions.get(remote_junction_id)
+        candidate_junction = candidate_root.find(f"junction[@id='{remote_junction_id}']")
+        if teacher_junction is None or candidate_junction is None:
+            continue
+        teacher_type = teacher_junction.attrib.get("type")
+        if teacher_type and candidate_junction.attrib.get("type") != teacher_type:
+            candidate_junction.set("type", teacher_type)
+            retuned_stale_split_junction_ids.append(remote_junction_id)
+    stripped_stale_split_tls_connections = []
+    for connection in candidate_root.findall("connection"):
+        tl_id = connection.attrib.get("tl", "")
+        if tl_id not in stale_split_stale_junction_ids or tl_id in teacher_tllogic_ids:
+            continue
+        connection.attrib.pop("tl", None)
+        connection.attrib.pop("linkIndex", None)
+        if connection.attrib.get("state") == "O":
+            connection.set("state", "M")
+        elif connection.attrib.get("state") == "o":
+            connection.set("state", "m")
+        stripped_stale_split_tls_connections.append(dict(connection.attrib))
+    removed_stale_split_tllogic_ids = []
+    for tllogic in list(candidate_root.findall("tlLogic")):
+        tllogic_id = tllogic.attrib.get("id", "")
+        if tllogic_id in stale_split_stale_junction_ids and tllogic_id not in teacher_tllogic_ids:
+            candidate_root.remove(tllogic)
+            removed_stale_split_tllogic_ids.append(tllogic_id)
+
     copied_boundary_continuation_edges = []
     copied_boundary_continuation_connections = []
     if copied_boundary_edges:
@@ -1458,6 +1571,7 @@ def write_teacher_target_internal_replay_net(
                 if (
                     continuation_edge is None
                     or boundary_edge is None
+                    or continuation_edge_id in stale_split_replacements
                     or continuation_edge_id in teacher_boundary_edge_id_set
                     or continuation_edge_id.startswith(":")
                     or not _edge_is_vehicle_continuation_candidate(continuation_edge)
@@ -1771,6 +1885,14 @@ def write_teacher_target_internal_replay_net(
         "copied_boundary_continuation_edges": copied_boundary_continuation_edges,
         "copied_boundary_continuation_connection_count": len(copied_boundary_continuation_connections),
         "copied_boundary_continuation_connections": copied_boundary_continuation_connections,
+        "removed_stale_split_fragment_edge_count": len(removed_stale_split_fragment_edges),
+        "removed_stale_split_fragment_edges": removed_stale_split_fragment_edges,
+        "rewired_stale_split_fragment_connection_count": len(rewired_stale_split_fragment_connections),
+        "rewired_stale_split_fragment_connections": rewired_stale_split_fragment_connections,
+        "retuned_stale_split_junction_ids": retuned_stale_split_junction_ids,
+        "stripped_stale_split_tls_connection_count": len(stripped_stale_split_tls_connections),
+        "stripped_stale_split_tls_connections": stripped_stale_split_tls_connections,
+        "removed_stale_split_tllogic_ids": removed_stale_split_tllogic_ids,
         "preserved_colliding_boundary_edge_count": len(preserved_colliding_boundary_edges),
         "preserved_colliding_boundary_edges": preserved_colliding_boundary_edges,
         "removed_stale_boundary_edge_count": len(removed_stale_boundary_edges),
@@ -3830,6 +3952,10 @@ def _opposite_direction_edge_id(edge_id: str) -> str:
 
 def _edge_family_id(edge_id: str) -> str:
     return edge_id.lstrip("-").split("#", 1)[0]
+
+
+def _signed_edge_family_id(edge_id: str) -> str:
+    return edge_id.split("#", 1)[0]
 
 
 def _edge_drop_requires_review(edge: ET.Element) -> bool:
@@ -5905,6 +6031,9 @@ def _restore_non_target_internal_artifacts(
         if value in owner_cache:
             return owner_cache[value]
         candidates = (value, _via_lane_edge_id(value))
+        if not any(edge_id.startswith(":") for edge_id in candidates):
+            owner_cache[value] = ""
+            return ""
         internal_owner = next(
             (
                 junction_id
@@ -5986,10 +6115,14 @@ def _restore_non_target_internal_artifacts(
         target_root.insert(target_internal_junction_index + offset, copy.deepcopy(junction))
 
     removed_connections = 0
-    for connection in list(target_root.findall("connection")):
-        if connection_restored(connection):
-            target_root.remove(connection)
+    retained_children = []
+    for child in list(target_root):
+        if child.tag == "connection" and connection_restored(child):
             removed_connections += 1
+            continue
+        retained_children.append(child)
+    if removed_connections:
+        target_root[:] = retained_children
     target_edge_ids = {edge.attrib["id"] for edge in target_root.findall("edge") if edge.attrib.get("id")}
     source_connections = []
     skipped_missing_edge_connections = []
