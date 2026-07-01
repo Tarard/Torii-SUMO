@@ -178,6 +178,36 @@ def compare_road_connectivity_bundles(
     }
 
 
+def summarize_road_lane_model_templates(
+    bundle: dict[str, Any],
+    *,
+    max_examples: int = 3,
+) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+    for edge in bundle.get("edges", []):
+        if not isinstance(edge, dict):
+            continue
+        key = (str(edge.get("type", "")), tuple(_lane_signature(edge)))
+        edge_id = str(edge.get("id", ""))
+        if edge_id:
+            groups.setdefault(key, []).append(edge_id)
+
+    templates = []
+    for (edge_type, lane_signature), edge_ids in groups.items():
+        templates.append(
+            {
+                "type": edge_type,
+                "lane_signature": list(lane_signature),
+                "count": len(edge_ids),
+                "example_edge_ids": sorted(edge_ids)[:max_examples],
+            }
+        )
+    return sorted(
+        templates,
+        key=lambda item: (-int(item["count"]), str(item["type"]), str(item["lane_signature"])),
+    )
+
+
 def _canonical_edge_record(edge: ET.Element) -> dict[str, Any]:
     return {
         **_sorted_attrs(edge),
