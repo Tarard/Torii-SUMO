@@ -1253,15 +1253,19 @@ def write_teacher_target_internal_replay_net(
     candidate_edge_ids = set(candidate_edges_by_id)
     replay_edge_map = dict(edge_map)
 
-    candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
+    target_candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
     teacher_junction = teacher_root.find(f"junction[@id='{teacher_junction_id}']")
-    if candidate_junction is None:
+    if target_candidate_junction is None:
         return _failure(f"candidate junction not found: {junction_id}")
     if teacher_junction is None:
         return _failure(f"teacher junction not found: {junction_id}")
 
-    dx = float(candidate_junction.attrib.get("x", "0") or 0) - float(teacher_junction.attrib.get("x", "0") or 0)
-    dy = float(candidate_junction.attrib.get("y", "0") or 0) - float(teacher_junction.attrib.get("y", "0") or 0)
+    dx = float(target_candidate_junction.attrib.get("x", "0") or 0) - float(
+        teacher_junction.attrib.get("x", "0") or 0
+    )
+    dy = float(target_candidate_junction.attrib.get("y", "0") or 0) - float(
+        teacher_junction.attrib.get("y", "0") or 0
+    )
 
     removed_internal_edges = []
     insert_index = None
@@ -1401,7 +1405,7 @@ def write_teacher_target_internal_replay_net(
                 teacher_junction_id,
                 junction_id,
             )
-            candidate_root.insert(list(candidate_root).index(candidate_junction), copied_junction)
+            candidate_root.insert(list(candidate_root).index(target_candidate_junction), copied_junction)
             candidate_junction_ids.add(mapped_endpoint)
             copied_boundary_junctions.append(mapped_endpoint)
         if mapped_from not in candidate_junction_ids or mapped_to not in candidate_junction_ids:
@@ -1619,6 +1623,115 @@ def write_teacher_target_internal_replay_net(
             replay_edge_map[followup_teacher_edge_id] = followup_candidate_edge_id
             if replay_stale_split_edge_geometry(followup_candidate_edge_id, followup_teacher_edge_id):
                 replayed_stale_split_followup_edges.append(followup_candidate_edge_id)
+    removed_teacher_absent_same_family_continuation_edges = []
+    removed_teacher_absent_same_family_continuation_connections = []
+    removed_teacher_absent_same_family_continuation_junctions = []
+    replayed_stale_split_family_ids = {
+        _edge_family_id(edge_id)
+        for edge_id in [*replayed_stale_split_continuation_edges, *replayed_stale_split_followup_edges]
+    }
+    protected_candidate_edge_ids = set(replay_edge_map.values()) | {
+        edge_id for edge_id in candidate_edges_by_id if edge_id in teacher_edges
+    }
+    stale_split_frontier_junction_ids = set(stale_split_spatial_junction_ids)
+    removed_stale_split_dead_end_edges = []
+    removed_stale_split_dead_end_connections = []
+    teacher_dead_end_junction_ids = {
+        endpoint
+        for endpoint in stale_split_spatial_junction_ids
+        if teacher_junctions.get(endpoint) is not None and teacher_junctions[endpoint].attrib.get("type") == "dead_end"
+    }
+    for edge_id, edge in list(candidate_edges_by_id.items()):
+        if (
+            edge_id in protected_candidate_edge_ids
+            or edge_id.startswith(":")
+            or edge_id in teacher_edges
+            or _edge_family_id(edge_id) in replayed_stale_split_family_ids
+            or not (
+                edge.attrib.get("from", "") in teacher_dead_end_junction_ids
+                or edge.attrib.get("to", "") in teacher_dead_end_junction_ids
+            )
+        ):
+            continue
+        for connection in list(candidate_root.findall("connection")):
+            if edge_id in (connection.attrib.get("from", ""), connection.attrib.get("to", "")):
+                removed_stale_split_dead_end_connections.append(dict(connection.attrib))
+                candidate_root.remove(connection)
+        _remove_edge_lanes_from_destination_junction(candidate_root, edge, all_junctions=True)
+        candidate_root.remove(edge)
+        candidate_edge_ids.discard(edge_id)
+        candidate_edges_by_id.pop(edge_id, None)
+        removed_stale_split_dead_end_edges.append(edge_id)
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+            if endpoint:
+                stale_split_frontier_junction_ids.add(endpoint)
+                stale_split_spatial_junction_ids.add(endpoint)
+    for endpoint in teacher_dead_end_junction_ids:
+        teacher_dead_end_junction = teacher_junctions.get(endpoint)
+        candidate_dead_end_junction = candidate_root.find(f"junction[@id='{endpoint}']")
+        if teacher_dead_end_junction is not None and candidate_dead_end_junction is not None:
+            candidate_dead_end_junction.set("intLanes", teacher_dead_end_junction.attrib.get("intLanes", ""))
+    while replayed_stale_split_family_ids:
+        removable_edge_ids = [
+            edge_id
+            for edge_id, edge in sorted(candidate_edges_by_id.items())
+            if (
+                edge_id not in protected_candidate_edge_ids
+                and not edge_id.startswith(":")
+                and _edge_family_id(edge_id) in replayed_stale_split_family_ids
+                and (
+                    edge.attrib.get("from", "") in stale_split_frontier_junction_ids
+                    or edge.attrib.get("to", "") in stale_split_frontier_junction_ids
+                )
+            )
+        ]
+        if not removable_edge_ids:
+            break
+        for edge_id in removable_edge_ids:
+            edge = candidate_edges_by_id.get(edge_id)
+            if edge is None:
+                continue
+            for connection in list(candidate_root.findall("connection")):
+                if edge_id in (connection.attrib.get("from", ""), connection.attrib.get("to", "")):
+                    removed_teacher_absent_same_family_continuation_connections.append(dict(connection.attrib))
+                    candidate_root.remove(connection)
+            _remove_edge_lanes_from_destination_junction(candidate_root, edge, all_junctions=True)
+            candidate_root.remove(edge)
+            candidate_edge_ids.discard(edge_id)
+            candidate_edges_by_id.pop(edge_id, None)
+            removed_teacher_absent_same_family_continuation_edges.append(edge_id)
+            for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+                if endpoint:
+                    stale_split_frontier_junction_ids.add(endpoint)
+                    stale_split_spatial_junction_ids.add(endpoint)
+    for local_candidate_junction in list(candidate_root.findall("junction")):
+        candidate_junction_id = local_candidate_junction.attrib.get("id", "")
+        if (
+            not candidate_junction_id
+            or candidate_junction_id == junction_id
+            or candidate_junction_id in teacher_junctions
+            or candidate_junction_id not in stale_split_frontier_junction_ids
+            or any(
+                edge.attrib.get("from") == candidate_junction_id or edge.attrib.get("to") == candidate_junction_id
+                for edge in candidate_edges_by_id.values()
+            )
+        ):
+            continue
+        orphan_internal_prefix = f":{candidate_junction_id}_"
+        for connection in list(candidate_root.findall("connection")):
+            if connection.attrib.get("via", "").startswith(orphan_internal_prefix) or any(
+                value.startswith(orphan_internal_prefix)
+                for value in (connection.attrib.get("from", ""), connection.attrib.get("to", ""))
+            ):
+                candidate_root.remove(connection)
+        for edge_id, edge in list(candidate_edges_by_id.items()):
+            if edge_id.startswith(orphan_internal_prefix):
+                candidate_root.remove(edge)
+                candidate_edge_ids.discard(edge_id)
+                candidate_edges_by_id.pop(edge_id, None)
+        candidate_root.remove(local_candidate_junction)
+        candidate_junction_ids.discard(candidate_junction_id)
+        removed_teacher_absent_same_family_continuation_junctions.append(candidate_junction_id)
     retuned_stale_split_junction_ids = []
     for remote_junction_id in sorted(stale_split_spatial_junction_ids):
         remote_teacher_junction = teacher_junctions.get(remote_junction_id)
@@ -1723,7 +1836,7 @@ def write_teacher_target_internal_replay_net(
                 if teacher_endpoint_junction is None:
                     continue
                 candidate_root.insert(
-                    list(candidate_root).index(candidate_junction),
+                    list(candidate_root).index(target_candidate_junction),
                     _clone_transformed_boundary_junction(
                         teacher_endpoint_junction,
                         dx,
@@ -1841,7 +1954,7 @@ def write_teacher_target_internal_replay_net(
             removed_internal_junctions.append(child.attrib.get("id", ""))
             candidate_root.remove(child)
     if junction_insert_index is None:
-        junction_insert_index = list(candidate_root).index(candidate_junction) + 1
+        junction_insert_index = list(candidate_root).index(target_candidate_junction) + 1
 
     teacher_internal_junctions = [
         junction
@@ -1854,14 +1967,14 @@ def write_teacher_target_internal_replay_net(
             _clone_transformed_junction(junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix),
         )
 
-    candidate_junction.attrib.clear()
-    candidate_junction.attrib.update(
+    target_candidate_junction.attrib.clear()
+    target_candidate_junction.attrib.update(
         _mapped_junction_attrs(teacher_junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix)
     )
-    for child in list(candidate_junction):
-        candidate_junction.remove(child)
+    for child in list(target_candidate_junction):
+        target_candidate_junction.remove(child)
     for request in teacher_junction.findall("request"):
-        candidate_junction.append(ET.Element("request", dict(request.attrib)))
+        target_candidate_junction.append(ET.Element("request", dict(request.attrib)))
 
     edge_endpoints = {
         edge.attrib.get("id", ""): (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
@@ -2018,6 +2131,23 @@ def write_teacher_target_internal_replay_net(
         "replayed_stale_split_continuation_edges": replayed_stale_split_continuation_edges,
         "replayed_stale_split_followup_edge_count": len(replayed_stale_split_followup_edges),
         "replayed_stale_split_followup_edges": replayed_stale_split_followup_edges,
+        "removed_stale_split_dead_end_edge_count": len(removed_stale_split_dead_end_edges),
+        "removed_stale_split_dead_end_edges": removed_stale_split_dead_end_edges,
+        "removed_stale_split_dead_end_connection_count": len(removed_stale_split_dead_end_connections),
+        "removed_stale_split_dead_end_connections": removed_stale_split_dead_end_connections,
+        "removed_teacher_absent_same_family_continuation_edge_count": len(
+            removed_teacher_absent_same_family_continuation_edges
+        ),
+        "removed_teacher_absent_same_family_continuation_edges": removed_teacher_absent_same_family_continuation_edges,
+        "removed_teacher_absent_same_family_continuation_connection_count": len(
+            removed_teacher_absent_same_family_continuation_connections
+        ),
+        "removed_teacher_absent_same_family_continuation_connections": (
+            removed_teacher_absent_same_family_continuation_connections
+        ),
+        "removed_teacher_absent_same_family_continuation_junctions": (
+            removed_teacher_absent_same_family_continuation_junctions
+        ),
         "retuned_stale_split_junction_ids": retuned_stale_split_junction_ids,
         "stripped_stale_split_tls_connection_count": len(stripped_stale_split_tls_connections),
         "stripped_stale_split_tls_connections": stripped_stale_split_tls_connections,
