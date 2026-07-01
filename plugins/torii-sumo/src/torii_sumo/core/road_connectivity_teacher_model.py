@@ -849,6 +849,118 @@ def build_internal_movement_owner_road_lane_repair_candidates(
     return candidates
 
 
+def build_internal_movement_owner_missing_approach_edge_repair_candidates(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+) -> list[dict[str, Any]]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    candidate_edge_ids = {
+        edge.attrib.get("id", "")
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    teacher_junctions = {
+        junction.attrib.get("id", ""): junction
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    candidates = []
+    for edge in teacher_root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id or edge_id in candidate_edge_ids or _is_internal_edge(edge):
+            continue
+        endpoints = (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        if owner_id not in endpoints:
+            continue
+        missing_endpoint_junctions = [
+            _minimal_endpoint_junction_attrs(teacher_junctions[endpoint])
+            for endpoint in endpoints
+            if endpoint and endpoint != owner_id and endpoint not in candidate_junction_ids and endpoint in teacher_junctions
+        ]
+        candidates.append(
+            {
+                "action": "add_missing_approach_edge",
+                "edge_id": edge_id,
+                "edge": _edge_attrs_with_lanes(edge),
+                "edge_map_addition": {edge_id: edge_id},
+                "missing_endpoint_junctions": missing_endpoint_junctions,
+            }
+        )
+    return candidates
+
+
+def write_internal_movement_owner_missing_approach_edge_repair_candidate(
+    candidate_net_file: Path,
+    output_file: Path,
+    repair_candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    tree = ET.parse(candidate_net_file)
+    root = tree.getroot()
+    existing_edge_ids = {
+        edge.attrib.get("id", "")
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    existing_junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    added_edge_count = 0
+    added_junction_count = 0
+    edge_map_additions: dict[str, str] = {}
+    for candidate in repair_candidates:
+        if str(candidate.get("action", "")) != "add_missing_approach_edge":
+            continue
+        for junction_attrs in candidate.get("missing_endpoint_junctions", []):
+            junction_id = str(junction_attrs.get("id", "")) if isinstance(junction_attrs, dict) else ""
+            if not junction_id or junction_id in existing_junction_ids:
+                continue
+            _insert_after_last(root, "junction", ET.Element("junction", dict(junction_attrs)))
+            existing_junction_ids.add(junction_id)
+            added_junction_count += 1
+        edge_record = candidate.get("edge", {})
+        edge_id = str(edge_record.get("id", "")) if isinstance(edge_record, dict) else ""
+        if not edge_id or edge_id in existing_edge_ids:
+            continue
+        edge_node = ET.Element("edge", _record_attrs(edge_record, "lanes"))
+        for lane in edge_record.get("lanes", []):
+            if isinstance(lane, dict):
+                ET.SubElement(edge_node, "lane", dict(lane))
+        _insert_after_last(root, "edge", edge_node)
+        existing_edge_ids.add(edge_id)
+        edge_map_additions.update(
+            {
+                str(key): str(value)
+                for key, value in candidate.get("edge_map_addition", {}).items()
+            }
+        )
+        added_edge_count += 1
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(root, space="  ")
+    tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "selected_candidate_count": len(repair_candidates),
+        "added_edge_count": added_edge_count,
+        "added_junction_count": added_junction_count,
+        "edge_map_additions": edge_map_additions,
+        "warnings": [],
+    }
+
+
 def build_internal_movement_owner_internal_lane_map(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -1989,6 +2101,22 @@ def _mapped_edge_lane_attrs(attrs: dict[str, str], teacher_edge_id: str, candida
     elif mapped.get("index", ""):
         mapped["id"] = f"{candidate_edge_id}_{mapped['index']}"
     return mapped
+
+
+def _edge_attrs_with_lanes(edge: ET.Element) -> dict[str, Any]:
+    record = dict(edge.attrib)
+    record["lanes"] = [dict(lane.attrib) for lane in edge.findall("lane")]
+    return record
+
+
+def _minimal_endpoint_junction_attrs(junction: ET.Element) -> dict[str, str]:
+    attrs = {
+        key: junction.attrib[key]
+        for key in ("id", "x", "y", "shape")
+        if key in junction.attrib
+    }
+    attrs["type"] = "priority"
+    return attrs
 
 
 def _common_edge_geometry_mismatches(
