@@ -219,6 +219,43 @@ def compare_road_template_summaries(
     }
 
 
+def build_road_template_repair_queue(
+    parity_report: dict[str, Any],
+    *,
+    max_items: int = 10,
+) -> list[dict[str, Any]]:
+    items = []
+    for layer, summary_key in (
+        ("lane", "lane_template_summary"),
+        ("connection", "connection_template_summary"),
+    ):
+        parity = parity_report.get(summary_key, {}).get("parity", {})
+        for difference, template_key in (
+            ("missing_teacher_template", "missing_templates"),
+            ("extra_candidate_template", "extra_templates"),
+        ):
+            for template in parity.get(template_key, []):
+                if not isinstance(template, dict):
+                    continue
+                items.append(
+                    {
+                        "layer": layer,
+                        "difference": difference,
+                        "priority": int(template.get("count", 0)),
+                        "template": dict(template),
+                    }
+                )
+    return sorted(
+        items,
+        key=lambda item: (
+            -int(item["priority"]),
+            str(item["layer"]),
+            str(item["difference"]),
+            _record_key(item["template"]),
+        ),
+    )[:max_items]
+
+
 def compare_net_road_template_parity(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -261,7 +298,7 @@ def compare_net_road_template_parity(
     )
     status = "pass" if lane_parity["status"] == connection_parity["status"] == "pass" else "fail"
     gate = _road_template_gate_summary(lane_parity, connection_parity)
-    return {
+    report = {
         "status": status,
         "gate": gate,
         "teacher_net_file": str(teacher_net_file),
@@ -281,6 +318,8 @@ def compare_net_road_template_parity(
             "parity": connection_parity,
         },
     }
+    report["repair_queue"] = build_road_template_repair_queue(report)
+    return report
 
 
 def summarize_road_lane_model_templates(

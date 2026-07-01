@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from torii_sumo.core.road_connectivity_teacher_model import (
+    build_road_template_repair_queue,
     canonical_road_connectivity_bundle,
     compare_net_road_template_parity,
     compare_road_template_summaries,
@@ -388,6 +389,72 @@ def test_compare_net_road_template_parity_reports_lane_and_connection_delta(tmp_
     assert report["connection_template_summary"]["parity"]["missing_template_count"] == 1
     assert report["connection_template_summary"]["parity"]["extra_template_count"] == 1
     assert report["connection_template_summary"]["parity"]["common_template_count"] == 0
+    assert {item["layer"] for item in report["repair_queue"]} == {"lane", "connection"}
+    assert {item["difference"] for item in report["repair_queue"]} == {
+        "missing_teacher_template",
+        "extra_candidate_template",
+    }
+
+
+def test_build_road_template_repair_queue_prioritizes_road_layer_deltas() -> None:
+    parity_report = {
+        "lane_template_summary": {
+            "parity": {
+                "missing_templates": [
+                    {"type": "highway.footway", "lane_signature": ["pedestrian"], "count": 4}
+                ],
+                "extra_templates": [
+                    {"type": "highway.path", "lane_signature": ["bicycle"], "count": 2}
+                ],
+            }
+        },
+        "connection_template_summary": {
+            "parity": {
+                "missing_templates": [
+                    {"dir": "s", "from_type": "highway.service", "to_type": "highway.service", "count": 6}
+                ],
+                "extra_templates": [
+                    {"dir": "t", "from_type": "highway.service", "to_type": "highway.service", "count": 1}
+                ],
+            }
+        },
+    }
+
+    queue = build_road_template_repair_queue(parity_report, max_items=3)
+
+    assert queue == [
+        {
+            "layer": "connection",
+            "difference": "missing_teacher_template",
+            "priority": 6,
+            "template": {
+                "dir": "s",
+                "from_type": "highway.service",
+                "to_type": "highway.service",
+                "count": 6,
+            },
+        },
+        {
+            "layer": "lane",
+            "difference": "missing_teacher_template",
+            "priority": 4,
+            "template": {
+                "type": "highway.footway",
+                "lane_signature": ["pedestrian"],
+                "count": 4,
+            },
+        },
+        {
+            "layer": "lane",
+            "difference": "extra_candidate_template",
+            "priority": 2,
+            "template": {
+                "type": "highway.path",
+                "lane_signature": ["bicycle"],
+                "count": 2,
+            },
+        },
+    ]
 
 
 def test_write_road_connectivity_self_replay_net_round_trips_bundle(tmp_path: Path) -> None:
