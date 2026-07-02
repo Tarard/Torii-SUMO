@@ -41,6 +41,7 @@ def test_plugin_manifest_declares_skill_and_mcp_companion() -> None:
 
     assert manifest["name"] == "torii-sumo"
     assert manifest["version"] == "1.0.2"
+    assert manifest["license"] == "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"
     assert manifest["author"]["name"] == "Torii contributors"
