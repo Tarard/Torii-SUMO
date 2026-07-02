@@ -11734,6 +11734,80 @@ def test_write_teacher_target_internal_replay_net_removes_stale_same_family_spli
     assert report["rewired_stale_split_fragment_connection_count"] == 2
 
 
+def test_write_teacher_target_internal_replay_net_removes_teacher_absent_cluster_member_residuals(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#2" from="north" to="cluster_a_b" type="highway.primary"><lane id="road#2_0" index="0" shape="80,100 100,100"/></edge>
+  <edge id="-road#2" from="cluster_a_b" to="north" type="highway.primary"><lane id="-road#2_0" index="0" shape="100,102 80,102"/></edge>
+  <edge id="road#0" from="cluster_a_b" to="south" type="highway.primary"><lane id="road#0_0" index="0" shape="100,100 120,100"/></edge>
+  <edge id="-road#0" from="south" to="cluster_a_b" type="highway.primary"><lane id="-road#0_0" index="0" shape="120,102 100,102"/></edge>
+  <edge id="side#8" from="west" to="cluster_a_b" type="highway.secondary"><lane id="side#8_0" index="0" shape="90,110 100,100"/></edge>
+  <edge id="-side#8" from="cluster_a_b" to="west" type="highway.secondary"><lane id="-side#8_0" index="0" shape="100,102 90,112"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0" shape="100,100 101,100"/></edge>
+  <junction id="cluster_a_b" type="priority" x="100" y="100" incLanes="road#2_0 -road#0_0 side#8_0" intLanes=":cluster_a_b_0_0"/>
+  <junction id="north" type="priority" x="80" y="100" incLanes="-road#2_0" intLanes=""/>
+  <junction id="south" type="priority" x="120" y="100" incLanes="road#0_0" intLanes=""/>
+  <junction id="west" type="priority" x="90" y="110" incLanes="-side#8_0" intLanes=""/>
+  <connection from="road#2" to="road#0" fromLane="0" toLane="0" via=":cluster_a_b_0_0" dir="s" state="M"/>
+  <connection from="road#2" to="-road#2" fromLane="0" toLane="0" via=":cluster_a_b_1_0" dir="t" state="m"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#2" from="north" to="cluster_a_b" type="highway.primary"><lane id="road#2_0" index="0" shape="-20,0 0,0"/></edge>
+  <edge id="-road#2" from="cluster_a_b" to="north" type="highway.primary"><lane id="-road#2_0" index="0" shape="0,2 -20,2"/></edge>
+  <edge id="road#0" from="cluster_a_b" to="south" type="highway.primary"><lane id="road#0_0" index="0" shape="0,0 20,0"/></edge>
+  <edge id="-road#0" from="south" to="cluster_a_b" type="highway.primary"><lane id="-road#0_0" index="0" shape="20,2 0,2"/></edge>
+  <edge id="road#1" from="a" to="b" type="highway.primary"><lane id="road#1_0" index="0" shape="-1,0 1,0"/></edge>
+  <edge id="-road#1" from="b" to="a" type="highway.primary"><lane id="-road#1_0" index="0" shape="1,2 -1,2"/></edge>
+  <edge id="side#7" from="west" to="a" type="highway.secondary"><lane id="side#7_0" index="0" shape="-10,10 -1,0"/></edge>
+  <edge id="-side#7" from="a" to="west" type="highway.secondary"><lane id="-side#7_0" index="0" shape="-1,2 -10,12"/></edge>
+  <edge id=":a_0" function="internal"><lane id=":a_0_0" index="0" shape="-1,0 0,0"/></edge>
+  <edge id=":b_0" function="internal"><lane id=":b_0_0" index="0" shape="1,0 0,0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="road#2_0 -road#0_0" intLanes=""/>
+  <junction id="a" type="priority" x="-1" y="0" incLanes="-road#1_0 side#7_0" intLanes=":a_0_0"/>
+  <junction id="b" type="priority" x="1" y="0" incLanes="road#1_0" intLanes=":b_0_0"/>
+  <junction id="north" type="priority" x="-20" y="0" incLanes="-road#2_0" intLanes=""/>
+  <junction id="south" type="priority" x="20" y="0" incLanes="road#0_0" intLanes=""/>
+  <junction id="west" type="priority" x="-10" y="10" incLanes="-side#7_0" intLanes=""/>
+  <connection from="-road#1" to="road#1" fromLane="0" toLane="0" via=":a_0_0" dir="t" state="M"/>
+  <connection from="road#1" to="-road#1" fromLane="0" toLane="0" via=":b_0_0" dir="t" state="M"/>
+  <connection from="side#7" to="road#1" fromLane="0" toLane="0" via=":a_1_0" dir="l" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="cluster_a_b",
+        edge_map={"road#2": "road#2", "-road#2": "-road#2", "road#0": "road#0", "-road#0": "-road#0"},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("edge[@id='road#2']") is not None
+    assert root.find("edge[@id='road#0']") is not None
+    assert root.find("edge[@id='side#8']") is not None
+    assert root.find("edge[@id='road#1']") is None
+    assert root.find("edge[@id='-road#1']") is None
+    assert root.find("edge[@id='side#7']") is None
+    assert root.find("edge[@id='-side#7']") is None
+    assert root.find("junction[@id='a']") is None
+    assert root.find("junction[@id='b']") is None
+    assert root.find("connection[@from='road#1']") is None
+    assert root.find("connection[@to='road#1']") is None
+    assert report["removed_cluster_member_residual_edges"] == ["-road#1", "road#1"]
+    assert report["removed_cluster_member_residual_junctions"] == ["a", "b"]
+
+
 def test_write_teacher_target_internal_replay_net_keeps_existing_same_id_boundary_lane_in_junction(
     tmp_path: Path,
 ) -> None:
