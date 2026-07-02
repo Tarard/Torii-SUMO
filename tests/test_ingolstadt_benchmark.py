@@ -22,6 +22,7 @@ def test_ingolstadt_reference_matched_benchmark_files_are_present() -> None:
         "promotion_trace.json",
         "review_load.json",
         "semantic_counts.json",
+        "semantic_gaps.json",
         "summary_table.json",
     }
 
@@ -99,6 +100,36 @@ def test_ingolstadt_semantic_counts_match_committed_networks() -> None:
     assert semantic_counts["networks"]["tum_reference"]["walkingarea_edge_count"] > 0
     assert semantic_counts["networks"]["torii_reference_visual_detail"]["crossing_edge_count"] == 0
     assert semantic_counts["networks"]["torii_reference_visual_detail"]["walkingarea_edge_count"] == 0
+
+
+def test_ingolstadt_semantic_gaps_are_derived_from_counts() -> None:
+    semantic_counts = _read_json(BENCHMARK / "semantic_counts.json")["networks"]
+    semantic_gaps = _read_json(BENCHMARK / "semantic_gaps.json")
+    tum = semantic_counts["tum_reference"]
+    torii = semantic_counts["torii_reference_visual_detail"]
+
+    by_gap = {gap["gap_id"]: gap for gap in semantic_gaps["gaps"]}
+
+    assert semantic_gaps["claim_status"] == "construction-invalid"
+    assert semantic_gaps["candidate_network_id"] == "torii_reference_visual_detail"
+    assert by_gap["walkingarea_crossing"]["status"] == "blocked"
+    assert by_gap["walkingarea_crossing"]["tum"] == {
+        "crossing_edge_count": tum["crossing_edge_count"],
+        "walkingarea_edge_count": tum["walkingarea_edge_count"],
+    }
+    assert by_gap["walkingarea_crossing"]["candidate"] == {
+        "crossing_edge_count": torii["crossing_edge_count"],
+        "walkingarea_edge_count": torii["walkingarea_edge_count"],
+    }
+    assert by_gap["controlled_tls_connections"]["delta"] == {
+        "controlled_connection_count": torii["controlled_connection_count"] - tum["controlled_connection_count"],
+        "tlLogic_phase_count": torii["tlLogic_phase_count"] - tum["tlLogic_phase_count"],
+    }
+    assert by_gap["turnaround_dir_t"]["status"] == "blocked"
+    assert by_gap["turnaround_dir_t"]["delta"] == {
+        "dir_t": torii["connection_dir_counts"]["t"] - tum["connection_dir_counts"]["t"],
+    }
+    assert semantic_gaps["promotion_decision"] == "blocked_semantic_gaps"
 
 
 def _network_semantic_counts(path: Path) -> dict:
