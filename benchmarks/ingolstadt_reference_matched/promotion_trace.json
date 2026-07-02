@@ -93,6 +93,23 @@
       "promotion_decision": "blocked_review_required"
     },
     {
+      "stage_id": "semantic_gap_gate",
+      "before_quality": {},
+      "after_quality": {
+        "tls_semantic_delta": {
+          "walkingarea_crossing": "blocked",
+          "controlled_tls_connections": "blocked",
+          "turnaround_dir_t": "blocked"
+        }
+      },
+      "delta_quality": {
+        "walkingarea_crossing": "replay_or_template pedestrian crossing and walkingarea semantics before NetEdit promotion",
+        "controlled_tls_connections": "compare TLS linkIndex and phase semantics on selected small junction probes",
+        "turnaround_dir_t": "keep dir=t as optional turnaround semantics and audit it separately from ordinary s/l/r route completeness"
+      },
+      "promotion_decision": "blocked_semantic_gaps"
+    },
+    {
       "stage_id": "teacher_guided_repair",
       "before_quality": {},
       "after_quality": {},
