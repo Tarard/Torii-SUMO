@@ -230,8 +230,10 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     netedit_additional = Path(report["netedit_review_additional_file"])
     netedit_sumocfg = Path(report["netedit_review_sumocfg_file"])
     netedit_selection = Path(report["netedit_review_selection_files"][0])
+    netedit_viewsettings = Path(report["netedit_review_viewsettings_files"][0])
     additional_root = ET.parse(netedit_additional).getroot()
     sumocfg_root = ET.parse(netedit_sumocfg).getroot()
+    viewsettings_root = ET.parse(netedit_viewsettings).getroot()
 
     assert "Gate Dashboard" in html
     assert "Torii-SUMO" in html
@@ -254,6 +256,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "Netedit overlay" in html
     assert "workflow_netedit_review.sumocfg" in html
     assert "workflow_netedit_review_c1_selection.txt" in html
+    assert "workflow_netedit_review_c1.view.xml" in html
     assert "teacher_guided_best.net.xml" in html
     assert "junction_teacher_delta.json" in html
     assert "junction_pattern_comparisons.csv" in html
@@ -337,9 +340,12 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert review_data["netedit_review"]["junction_overlay_count"] == 0
     assert review_data["netedit_review"]["selection_file_count"] == 1
     assert review_data["netedit_review"]["cluster_selection_files"][0]["selection_file"] == "workflow_netedit_review_c1_selection.txt"
+    assert review_data["netedit_review"]["cluster_selection_files"][0]["viewsettings_file"] == "workflow_netedit_review_c1.view.xml"
     assert review_data["junctions"][0]["netedit_selection_file"] == "workflow_netedit_review_c1_selection.txt"
+    assert review_data["junctions"][0]["netedit_viewsettings_file"] == "workflow_netedit_review_c1.view.xml"
     assert review_data["junctions"][0]["netedit_command"] == (
         'netedit --sumocfg-file "workflow_netedit_review.sumocfg" '
+        '-g "workflow_netedit_review_c1.view.xml" '
         '--selection-file "workflow_netedit_review_c1_selection.txt"'
     )
     assert manifest["visualizations"]["network_overview_png"]
@@ -361,6 +367,7 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["artifacts"]["road_connectivity_replay_run_report_file"] == "../road_connectivity_run.json"
     assert manifest["netedit_review"]["netedit_command"] == 'netedit --sumocfg-file "workflow_netedit_review.sumocfg"'
     assert manifest["netedit_review"]["selection_file_count"] == 1
+    assert manifest["netedit_review"]["viewsettings_file_count"] == 1
     assert manifest["review_app"]["map_layers"]["edges"]
     assert manifest["review_app"]["summary_cards"]["uncertain_junctions"] == 1
     assert manifest["review_app"]["junctions"][0]["cluster_id"] == "c1"
@@ -372,9 +379,13 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert netedit_additional.is_file()
     assert netedit_sumocfg.is_file()
     assert netedit_selection.read_text(encoding="utf-8").splitlines() == ["junction:n0", "junction:tls0", "junction:n1"]
+    assert netedit_viewsettings.is_file()
     assert additional_root.tag == "additional"
     assert additional_root.findall("./poi") == []
     assert len(additional_root.findall("./poly")) == 1
     assert additional_root.find("./poly[@id='torii_c1_review_box']").attrib["shape"].startswith("44,34")
+    assert viewsettings_root.tag == "viewsettings"
+    assert viewsettings_root.find("./viewport").attrib["x"] == "60"
+    assert viewsettings_root.find("./viewport").attrib["y"] == "50"
     assert sumocfg_root.find("./input/net-file").attrib["value"] == "../candidate.net.xml"
     assert sumocfg_root.find("./input/additional-files").attrib["value"] == "workflow_netedit_review.add.xml"
