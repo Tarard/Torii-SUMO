@@ -1056,6 +1056,100 @@ def build_internal_movement_owner_road_span_repair_candidates(
     return candidates
 
 
+def write_internal_movement_owner_road_span_repair_candidate(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    repair_candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    teacher_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in ET.parse(teacher_net_file).getroot().findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    applied_candidate_count = 0
+    skipped_blocked_candidate_count = 0
+    removed_edge_count = 0
+    removed_junction_count = 0
+    removed_connection_count = 0
+    replaced_edge_count = 0
+
+    for candidate in repair_candidates:
+        if candidate.get("action") != "replace_split_approach_road_span":
+            continue
+        if candidate.get("status") != "ready":
+            skipped_blocked_candidate_count += 1
+            continue
+        remove_edge_ids = set(candidate.get("remove_edge_ids", []))
+        intermediate_junction_ids = set(candidate.get("intermediate_junction_ids", []))
+        internal_remove_edge_ids = {
+            edge.attrib.get("id", "")
+            for edge in candidate_root.findall("edge")
+            if _internal_owner_id(edge.attrib.get("id", "")) in intermediate_junction_ids
+        }
+        all_remove_edge_ids = remove_edge_ids | internal_remove_edge_ids
+        removed_connection_count += _remove_children(
+            candidate_root,
+            lambda child, edges=all_remove_edge_ids, junctions=intermediate_junction_ids: (
+                child.tag == "connection"
+                and (
+                    child.attrib.get("from", "") in edges
+                    or child.attrib.get("to", "") in edges
+                    or _internal_owner_id(child.attrib.get("from", "")) in junctions
+                    or _internal_owner_id(child.attrib.get("to", "")) in junctions
+                    or _internal_owner_id(child.attrib.get("via", "")) in junctions
+                )
+            ),
+        )
+        removed_edge_count += _remove_children(
+            candidate_root,
+            lambda child, edges=all_remove_edge_ids: child.tag == "edge" and child.attrib.get("id", "") in edges,
+        )
+        removed_junction_count += _remove_children(
+            candidate_root,
+            lambda child, junctions=intermediate_junction_ids: child.tag == "junction"
+            and child.attrib.get("id", "") in junctions,
+        )
+        _remove_children(
+            candidate_root,
+            lambda child, junctions=intermediate_junction_ids: child.tag == "tlLogic"
+            and child.attrib.get("id", "") in junctions,
+        )
+        for teacher_edge_id in candidate.get("teacher_edge_ids", []):
+            teacher_edge = teacher_edges.get(str(teacher_edge_id))
+            if teacher_edge is None:
+                continue
+            _remove_children(
+                candidate_root,
+                lambda child, edge_id=str(teacher_edge_id): child.tag == "edge"
+                and child.attrib.get("id", "") == edge_id,
+            )
+            _insert_after_last(candidate_root, "edge", copy.deepcopy(teacher_edge))
+            replaced_edge_count += 1
+        applied_candidate_count += 1
+
+    _filter_junction_lane_references(candidate_root)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="  ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "selected_candidate_count": len(repair_candidates),
+        "applied_candidate_count": applied_candidate_count,
+        "skipped_blocked_candidate_count": skipped_blocked_candidate_count,
+        "removed_edge_count": removed_edge_count,
+        "removed_junction_count": removed_junction_count,
+        "removed_connection_count": removed_connection_count,
+        "replaced_edge_count": replaced_edge_count,
+        "warnings": [],
+    }
+
+
 def build_internal_movement_owner_road_lane_repair_candidates(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -2596,6 +2690,23 @@ def _blocked_intermediate_incident_edge_ids(
             or edge.attrib.get("to", "") in intermediate_junction_set
         )
     )
+
+
+def _filter_junction_lane_references(root: ET.Element) -> None:
+    lane_ids = {
+        lane.attrib.get("id", "")
+        for edge in root.findall("edge")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    for junction in root.findall("junction"):
+        for key in ("incLanes", "intLanes"):
+            if key in junction.attrib:
+                junction.attrib[key] = " ".join(
+                    lane_id
+                    for lane_id in junction.attrib[key].split()
+                    if lane_id in lane_ids
+                )
 
 
 def _split_edge_root(edge_id: str) -> str:
