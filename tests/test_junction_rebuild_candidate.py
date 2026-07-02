@@ -1365,6 +1365,55 @@ def test_join_case_derives_split_family_edge_map_from_boundary_edges(tmp_path: P
     assert candidate["missing_teacher_edge_ids"] == []
 
 
+def test_teacher_guided_queue_prefers_existing_exact_split_edge_over_case_family_fallback(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="veh_in" from="w" to="j" type="highway.primary"><lane id="veh_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="veh_out" from="j" to="e" type="highway.primary"><lane id="veh_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="walk#0" from="p0" to="p1" type="highway.footway"><lane id="walk#0_0" index="0" allow="pedestrian" shape="-4,4 -2,2"/></edge>
+  <edge id="walk#1" from="p1" to="j" type="highway.footway"><lane id="walk#1_0" index="0" allow="pedestrian" shape="-2,2 0,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="veh_in_0 walk#1_0" intLanes=""/>
+  <connection from="veh_in" to="veh_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="veh_in" from="w" to="j" type="highway.primary"><lane id="veh_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="veh_out" from="j" to="e" type="highway.primary"><lane id="veh_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="walk#0" from="p0" to="p1" type="highway.footway"><lane id="walk#0_0" index="0" allow="pedestrian" shape="-4,4 -2,2"/></edge>
+  <edge id="walk#1" from="p1" to="j" type="highway.footway"><lane id="walk#1_0" index="0" allow="pedestrian" shape="-2,2 0,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="veh_in_0 walk#1_0" intLanes=""/>
+  <connection from="veh_in" to="veh_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "j",
+                    "matched_candidate_node_ids": ["j"],
+                    "edge_map": {"walk#1": "walk#0"},
+                    "learned_rule": "tum_like_same_id_tls_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["edge_map"]["walk#1"] == "walk#1"
+
+
 def test_missing_joined_candidate_scope_keeps_missing_teacher_edge_endpoints(
     tmp_path: Path,
 ) -> None:
@@ -8253,6 +8302,47 @@ def test_write_teacher_connection_plan_removes_raw_connections_with_invalid_patc
     assert report["removed_invalid_lane_connection_count"] == 1
 
 
+def test_write_teacher_connection_plan_removes_raw_connections_with_nonadjacent_patched_edges(
+    tmp_path: Path,
+) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="edge_a" to="reverse_a" fromLane="0" toLane="0"/>
+  <connection from="prev" to="edge_a" fromLane="0" toLane="0"/>
+</connections>
+""",
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="edge_a" from="mid" to="joined_j"><lane index="0"/></edge>
+  <edge id="reverse_a" from="old_split" to="mid"><lane index="0"/></edge>
+  <edge id="prev" from="upstream" to="mid"><lane index="0"/></edge>
+</edges>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "teacher.con.xml",
+        junction_id="joined_j",
+        teacher_model={"vehicle_connections": [], "crossings": []},
+        candidate_model={"approaches": {"incoming": [], "outgoing": []}},
+        edge_map={},
+        candidate_edge_file=candidate_edges,
+    )
+
+    root = ET.parse(report["connection_file"]).getroot()
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [("prev", "edge_a")]
+    assert report["removed_nonadjacent_connection_count"] == 1
+    assert report["removed_nonadjacent_connections"] == [
+        {"from": "edge_a", "to": "reverse_a", "fromLane": "0", "toLane": "0"}
+    ]
+
+
 def test_write_teacher_connection_plan_removes_crossings_with_missing_patched_edges(tmp_path: Path) -> None:
     raw_connections = tmp_path / "raw.con.xml"
     raw_connections.write_text(
@@ -8707,6 +8797,54 @@ def test_write_teacher_lane_patch_edges_rebases_missing_mapped_teacher_edge_to_j
             "teacher_edge_id": "missing_out",
             "from": {"teacher": "teacher_j", "candidate": "j1"},
         }
+    ]
+
+
+def test_write_teacher_lane_patch_edges_rebases_existing_mapped_teacher_edge_to_join_source(
+    tmp_path: Path,
+) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="mapped_in" from="upstream" to="teacher_j"><lane index="0"/></edge>
+  <edge id="mapped_out" from="teacher_j" to="downstream"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    teacher_edges = tmp_path / "teacher.net.xml"
+    teacher_edges.write_text(
+        """<net>
+  <edge id="teacher_in" from="upstream" to="teacher_j"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="teacher_j" to="downstream"><lane id="teacher_out_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw_edges,
+        teacher_edge_file=teacher_edges,
+        output_file=tmp_path / "patched.edg.xml",
+        edge_map={"teacher_in": "mapped_in", "teacher_out": "mapped_out"},
+        junction_id="cluster_j1_j2",
+        teacher_junction_id="teacher_j",
+        boundary_node_ids={"j2", "j1"},
+    )
+
+    root = ET.parse(report["edge_file"]).getroot()
+    assert root.find("edge[@id='mapped_in']").attrib["to"] == "j1"
+    assert root.find("edge[@id='mapped_out']").attrib["from"] == "j1"
+    assert report["rebased_existing_mapped_edge_count"] == 2
+    assert report["rebased_existing_mapped_edges"] == [
+        {
+            "candidate_edge_id": "mapped_in",
+            "teacher_edge_id": "teacher_in",
+            "to": {"teacher": "teacher_j", "candidate": "j1"},
+        },
+        {
+            "candidate_edge_id": "mapped_out",
+            "teacher_edge_id": "teacher_out",
+            "from": {"teacher": "teacher_j", "candidate": "j1"},
+        },
     ]
 
 
