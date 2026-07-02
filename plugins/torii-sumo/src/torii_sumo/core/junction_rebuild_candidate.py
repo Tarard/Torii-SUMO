@@ -2300,6 +2300,28 @@ def write_teacher_target_internal_replay_net(
             removed_invalid_lane_connections.append(dict(connection.attrib))
             candidate_root.remove(connection)
 
+    added_missing_teacher_endpoint_junctions = []
+    for edge in candidate_root.findall("edge"):
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+            if not endpoint or endpoint in candidate_junction_ids:
+                continue
+            teacher_endpoint_junction = teacher_junctions.get(endpoint)
+            if teacher_endpoint_junction is None or teacher_endpoint_junction.attrib.get("type") == "internal":
+                continue
+            candidate_root.insert(
+                _first_junction_index(candidate_root),
+                _clone_transformed_boundary_junction(
+                    teacher_endpoint_junction,
+                    dx,
+                    dy,
+                    replay_edge_map,
+                    teacher_junction_id,
+                    junction_id,
+                ),
+            )
+            candidate_junction_ids.add(endpoint)
+            added_missing_teacher_endpoint_junctions.append(endpoint)
+
     restored_geometry_anchor_junctions = _restore_geometry_anchor_junctions(candidate_root, geometry_anchor_junctions_by_id)
     target_shape_anchor_report = _expand_junction_shape_to_approach_endpoints(
         candidate_root,
@@ -2367,6 +2389,8 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_replaced_edge_connections": removed_stale_replaced_edge_connections,
         "removed_invalid_lane_connection_count": len(removed_invalid_lane_connections),
         "removed_invalid_lane_connections": removed_invalid_lane_connections,
+        "added_missing_teacher_endpoint_junction_count": len(added_missing_teacher_endpoint_junctions),
+        "added_missing_teacher_endpoint_junction_ids": added_missing_teacher_endpoint_junctions,
         "geometry_anchor_edge_count": len(geometry_anchor_edge_ids),
         "restored_geometry_anchor_junction_count": len(restored_geometry_anchor_junctions),
         "restored_geometry_anchor_junctions": restored_geometry_anchor_junctions,
@@ -3242,10 +3266,67 @@ def run_teacher_guided_repair_queue(
     sequential_blocked_reason = ""
     attempted_ready_count = 0
     accepted_internal_replays: list[dict[str, object]] = []
+    refresh_teacher_root: ET.Element | None = None
+    refresh_candidate_root: ET.Element | None = None
+    refresh_candidate_net_file: Path | None = None
     for index, candidate in enumerate(candidates):
         if not isinstance(candidate, dict):
             skipped_candidates.append({"index": index, "candidate_status": "invalid_candidate"})
             continue
+        if (
+            sequential_accept_passed_variants
+            and composite_applied_candidate_count > 0
+            and current_candidate_net_file != candidate_net_file
+            and current_candidate_net_file.exists()
+        ):
+            try:
+                if refresh_teacher_root is None:
+                    refresh_teacher_root = ET.parse(teacher_net_file).getroot()
+                if refresh_candidate_root is None or refresh_candidate_net_file != current_candidate_net_file:
+                    refresh_candidate_root = ET.parse(current_candidate_net_file).getroot()
+                    refresh_candidate_net_file = current_candidate_net_file
+                refresh_teacher_edges = {
+                    edge.attrib["id"]: edge
+                    for edge in refresh_teacher_root.findall("edge")
+                    if edge.attrib.get("id")
+                }
+                refresh_candidate_edges = {
+                    edge.attrib["id"]: edge
+                    for edge in refresh_candidate_root.findall("edge")
+                    if edge.attrib.get("id")
+                }
+                refreshed_candidate = _teacher_guided_repair_candidate(
+                    case=candidate,
+                    teacher_net_file=teacher_net_file,
+                    candidate_net_file=current_candidate_net_file,
+                    teacher_root=refresh_teacher_root,
+                    candidate_root=refresh_candidate_root,
+                    teacher_edges=refresh_teacher_edges,
+                    candidate_edges_by_id=refresh_candidate_edges,
+                    candidate_edge_ids=set(refresh_candidate_edges),
+                )
+                if refreshed_candidate.get("candidate_status") in {
+                    "ready_for_teacher_guided_variant",
+                    "needs_expanded_rebuild_scope",
+                }:
+                    candidate = {
+                        **candidate,
+                        **refreshed_candidate,
+                        "sequential_refreshed_candidate": True,
+                        "sequential_refresh_source_net_file": str(current_candidate_net_file),
+                    }
+                else:
+                    candidate = {
+                        **candidate,
+                        "sequential_refresh_status": "skipped_unusable",
+                        "sequential_refresh_candidate_status": str(refreshed_candidate.get("candidate_status", "")),
+                    }
+            except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
+                candidate = {
+                    **candidate,
+                    "sequential_refresh_status": "fail",
+                    "sequential_refresh_error": f"{type(exc).__name__}: {exc}",
+                }
         is_followup_candidate = bool(candidate.get("followup_reason"))
         junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
         teacher_junction_id = str(candidate.get("reference_id") or junction_id)
@@ -3257,6 +3338,20 @@ def run_teacher_guided_repair_queue(
         if junction_id:
             candidate_node_ids.add(junction_id)
         candidate_edge_ids = {str(item) for item in edge_map.values() if str(item)}
+        overlap_edge_ids = candidate_edge_ids & applied_candidate_edge_ids
+        overlap_node_ids = candidate_node_ids & applied_candidate_node_ids
+        blocking_overlap_edge_ids = _blocking_sequential_overlap_edge_ids(
+            overlap_edge_ids,
+            current_raw_edge_file,
+            candidate_node_ids,
+            applied_candidate_node_ids,
+        )
+        allowed_boundary_overlap_edge_ids = sorted(overlap_edge_ids - set(blocking_overlap_edge_ids))
+        if allowed_boundary_overlap_edge_ids:
+            candidate = {
+                **candidate,
+                "sequential_allowed_boundary_overlap_edge_ids": allowed_boundary_overlap_edge_ids,
+            }
         if sequential_accept_passed_variants and sequential_blocked_reason:
             skipped_candidates.append(
                 {
@@ -3267,16 +3362,15 @@ def run_teacher_guided_repair_queue(
                 }
             )
             continue
-        if sequential_accept_passed_variants and (
-            candidate_edge_ids & applied_candidate_edge_ids or candidate_node_ids & applied_candidate_node_ids
-        ):
+        if sequential_accept_passed_variants and (blocking_overlap_edge_ids or overlap_node_ids):
             skipped_candidates.append(
                 {
                     "index": index,
                     "junction_id": junction_id,
                     "candidate_status": "sequential_candidate_overlap",
-                    "overlap_edge_ids": sorted(candidate_edge_ids & applied_candidate_edge_ids),
-                    "overlap_node_ids": sorted(candidate_node_ids & applied_candidate_node_ids),
+                    "overlap_edge_ids": blocking_overlap_edge_ids,
+                    "allowed_boundary_overlap_edge_ids": allowed_boundary_overlap_edge_ids,
+                    "overlap_node_ids": sorted(overlap_node_ids),
                 }
             )
             continue
@@ -3417,16 +3511,76 @@ def run_teacher_guided_repair_queue(
                 join_patch_file,
                 joined_scope_junction_id,
             )
+            expanded_rebuild_scope = candidate.get("expanded_rebuild_scope", {})
+            blocked_teacher_edge_ids = (
+                expanded_rebuild_scope.get("blocked_teacher_edge_ids", [])
+                if isinstance(expanded_rebuild_scope, dict)
+                else []
+            )
+            protected_self_loop_edge_ids = {
+                *{str(edge_id) for edge_id in replay_edge_map.values() if str(edge_id)},
+                *{
+                    str(edge_id)
+                    for edge_id in blocked_teacher_edge_ids
+                    if str(edge_id)
+                },
+            }
             if join_self_loop_edge_ids:
                 scope_report["full_network_join_self_loop_edge_drop_candidates"] = join_self_loop_edge_ids
             if join_blocking_self_loop_edge_ids:
                 scope_report["full_network_join_blocking_self_loop_edge_drop_candidates"] = (
                     join_blocking_self_loop_edge_ids
                 )
+            full_network_join_edge_file = current_raw_edge_file
+            full_network_join_dropped_self_loop_edges: list[str] = []
+            full_network_join_absorbed_self_loop_edge_ids: list[str] = []
+            full_network_join_blocking_self_loop_edge_ids = list(join_blocking_self_loop_edge_ids)
+            if join_patch_file.is_file() and join_self_loop_edge_ids:
+                (
+                    candidate_full_network_join_edge_file,
+                    _full_network_join_edge_endpoint_rewrite_count,
+                    candidate_full_network_join_dropped_self_loop_edges,
+                    candidate_full_network_join_blocking_self_loop_edge_ids,
+                ) = _write_joined_endpoint_edge_file(
+                    current_raw_edge_file,
+                    join_patch_file,
+                    joined_scope_junction_id,
+                    output_dir / safe_junction_id / "full_network_join_replay.edg.xml",
+                )
+                surviving_edge_ids = _edge_file_ids(candidate_full_network_join_edge_file)
+                absorbable_self_loop_edge_ids = [
+                    edge_id
+                    for edge_id in candidate_full_network_join_blocking_self_loop_edge_ids
+                    if (
+                        edge_id not in protected_self_loop_edge_ids
+                        or _join_internal_self_loop_drop_has_witness(
+                            edge_id,
+                            candidate_full_network_join_dropped_self_loop_edges,
+                            surviving_edge_ids,
+                        )
+                        or _teacher_boundary_edge_has_target_junction(
+                            teacher_net_file,
+                            teacher_junction_id,
+                            edge_id,
+                        )
+                    )
+                ]
+                absorbable_self_loop_edge_id_set = set(absorbable_self_loop_edge_ids)
+                full_network_join_blocking_self_loop_edge_ids = [
+                    edge_id
+                    for edge_id in candidate_full_network_join_blocking_self_loop_edge_ids
+                    if edge_id not in absorbable_self_loop_edge_id_set
+                ]
+                if not full_network_join_blocking_self_loop_edge_ids:
+                    full_network_join_edge_file = candidate_full_network_join_edge_file
+                    full_network_join_dropped_self_loop_edges = candidate_full_network_join_dropped_self_loop_edges
+                    full_network_join_absorbed_self_loop_edge_ids = list(
+                        dict.fromkeys(candidate_full_network_join_dropped_self_loop_edges)
+                    )
             use_full_network_join_patch_replay = (
                 join_patch_file.is_file()
                 and not scope_report.get("rewritten_endpoint_count")
-                and not join_blocking_self_loop_edge_ids
+                and not full_network_join_blocking_self_loop_edge_ids
                 and not scope_report.get("blocking_missing_node_ids")
                 and not scope_report.get("blocking_missing_blocked_edge_ids")
                 and not scope_report.get("blocking_missing_joined_scope_junction_ids")
@@ -3463,6 +3617,7 @@ def run_teacher_guided_repair_queue(
                     replay_candidate_net_file = current_candidate_net_file
                     replay_blocking_self_loop_edge_drops = []
                     replay_dropped_self_loop_edges = []
+                    preabsorbed_join_internal_edge_ids = []
                     replay_edge_endpoint_rewrite_count = 0
                     scope_report["replay_scope"] = "full_network"
                 elif use_full_network_join_patch_replay:
@@ -3471,18 +3626,20 @@ def run_teacher_guided_repair_queue(
                         join_patch_file,
                         output_dir / safe_junction_id / "full_network_join_replay.nod.xml",
                     )
-                    replay_edge_file = current_raw_edge_file
+                    replay_edge_file = full_network_join_edge_file
                     replay_connection_file, dead_end_drop_count, dead_end_drop_edge_ids = _write_join_scope_connection_file(
-                        current_raw_edge_file,
+                        replay_edge_file,
                         current_raw_connection_file,
                         {str(node_id) for node_id in scope_report.get("join_node_ids", []) or [] if str(node_id)},
                         output_dir / safe_junction_id / "full_network_join_replay.con.xml",
+                        drop_edge_ids=set(full_network_join_dropped_self_loop_edges),
                     )
                     scope_report["full_network_join_dead_end_connection_drop_count"] = dead_end_drop_count
                     scope_report["full_network_join_dead_end_connection_drop_edge_ids"] = dead_end_drop_edge_ids
                     replay_edge_endpoint_rewrite_count = 0
-                    replay_dropped_self_loop_edges = []
-                    replay_blocking_self_loop_edge_drops = []
+                    replay_dropped_self_loop_edges = full_network_join_dropped_self_loop_edges
+                    replay_blocking_self_loop_edge_drops = full_network_join_blocking_self_loop_edge_ids
+                    preabsorbed_join_internal_edge_ids = full_network_join_absorbed_self_loop_edge_ids
                     replay_candidate_net_file = output_dir / safe_junction_id / "full_network_join_replay.net.xml"
                     seed_command = [
                         netconvert_binary,
@@ -3542,26 +3699,20 @@ def run_teacher_guided_repair_queue(
                     )
                     replay_connection_file = Path(str(scope_report.get("connection_file", "")))
                     replay_candidate_net_file = Path(str(scope_report.get("net_file", "")))
+                    preabsorbed_join_internal_edge_ids = []
                     scope_report["replay_scope"] = "expanded_scope"
-                expanded_rebuild_scope = candidate.get("expanded_rebuild_scope", {})
-                blocked_teacher_edge_ids = (
-                    expanded_rebuild_scope.get("blocked_teacher_edge_ids", [])
-                    if isinstance(expanded_rebuild_scope, dict)
-                    else []
+                replay_absorbed_join_internal_edge_ids = list(
+                    dict.fromkeys(
+                        [
+                            *preabsorbed_join_internal_edge_ids,
+                            *[
+                                edge_id
+                                for edge_id in replay_blocking_self_loop_edge_drops
+                                if edge_id not in protected_self_loop_edge_ids
+                            ],
+                        ]
+                    )
                 )
-                protected_self_loop_edge_ids = {
-                    *{str(edge_id) for edge_id in replay_edge_map.values() if str(edge_id)},
-                    *{
-                        str(edge_id)
-                        for edge_id in blocked_teacher_edge_ids
-                        if str(edge_id)
-                    },
-                }
-                replay_absorbed_join_internal_edge_ids = [
-                    edge_id
-                    for edge_id in replay_blocking_self_loop_edge_drops
-                    if edge_id not in protected_self_loop_edge_ids
-                ]
                 replay_blocking_self_loop_edge_drops = [
                     edge_id
                     for edge_id in replay_blocking_self_loop_edge_drops
@@ -5023,20 +5174,32 @@ def _write_join_scope_connection_file(
     connection_file: Path,
     join_node_ids: set[str],
     output_file: Path,
+    *,
+    drop_edge_ids: set[str] | None = None,
 ) -> tuple[Path, int, list[str]]:
-    if not join_node_ids:
+    drop_edge_ids = drop_edge_ids or set()
+    if not join_node_ids and not drop_edge_ids:
         return connection_file, 0, []
     incident_edge_ids = {
         edge.attrib["id"]
         for edge in ET.parse(edge_file).getroot().findall("edge")
         if edge.attrib.get("id") and (edge.attrib.get("from") in join_node_ids or edge.attrib.get("to") in join_node_ids)
     }
-    if not incident_edge_ids:
+    if not incident_edge_ids and not drop_edge_ids:
         return connection_file, 0, []
     connection_root = ET.parse(connection_file).getroot()
     filtered_root = ET.Element(connection_root.tag, connection_root.attrib)
     dropped_edge_ids = []
     for connection in connection_root:
+        if connection.tag == "crossing":
+            crossing_edge_ids = set(connection.attrib.get("edges", "").split())
+            if crossing_edge_ids & drop_edge_ids:
+                dropped_edge_ids.extend(sorted(edge_id for edge_id in crossing_edge_ids & drop_edge_ids if edge_id))
+                continue
+        connection_edge_ids = {connection.attrib.get("from", ""), connection.attrib.get("to", "")}
+        if connection.tag == "connection" and connection_edge_ids & drop_edge_ids:
+            dropped_edge_ids.extend(sorted(edge_id for edge_id in connection_edge_ids & drop_edge_ids if edge_id))
+            continue
         if (
             connection.tag == "connection"
             and connection.attrib.get("from", "") in incident_edge_ids
@@ -5124,6 +5287,35 @@ def _edge_file_ids(edge_file: Path) -> set[str]:
         }
     except (ET.ParseError, OSError):
         return set()
+
+
+def _blocking_sequential_overlap_edge_ids(
+    edge_ids: set[str],
+    edge_file: Path,
+    candidate_node_ids: set[str],
+    applied_node_ids: set[str],
+) -> list[str]:
+    if not edge_ids:
+        return []
+    try:
+        edges = {
+            edge.attrib["id"]: edge
+            for edge in ET.parse(edge_file).getroot().findall("edge")
+            if edge.attrib.get("id")
+        }
+    except (ET.ParseError, OSError):
+        return sorted(edge_ids)
+    blocking = []
+    for edge_id in sorted(edge_ids):
+        edge = edges.get(edge_id)
+        if edge is None:
+            blocking.append(edge_id)
+            continue
+        endpoints = {edge.attrib.get("from", ""), edge.attrib.get("to", "")}
+        if endpoints & candidate_node_ids and endpoints & applied_node_ids:
+            continue
+        blocking.append(edge_id)
+    return blocking
 
 
 def _plain_node_ids(node_file: Path) -> set[str]:
@@ -5461,6 +5653,11 @@ def _attach_candidate_template_context(
             "teacher_pattern_family",
             "teacher_pattern_template_count",
             "teacher_pattern_template_examples",
+            "sequential_refreshed_candidate",
+            "sequential_refresh_source_net_file",
+            "sequential_refresh_status",
+            "sequential_refresh_error",
+            "sequential_allowed_boundary_overlap_edge_ids",
         )
         if key in candidate
     }
@@ -6172,9 +6369,13 @@ def _teacher_guided_repair_candidate(
     scope_node_ids = [node_id for node_id in candidate_node_ids if node_id in matched_source_node_set]
     if len(scope_node_ids) < 2:
         scope_node_ids = candidate_node_ids
+    unique_candidate_node_ids = list(dict.fromkeys(candidate_node_ids))
+    join_all_candidate_node_ids = bool(case.get("join_all_candidate_node_ids")) or (
+        str(case.get("learned_rule_basis", "")) == "spatial_cluster" and len(unique_candidate_node_ids) > 2
+    )
     join_node_ids = (
-        list(dict.fromkeys(candidate_node_ids))
-        if case.get("join_all_candidate_node_ids")
+        unique_candidate_node_ids
+        if join_all_candidate_node_ids
         else _conservative_join_node_ids(candidate_node_ids, matched_source_node_set)
     )
     base = {
