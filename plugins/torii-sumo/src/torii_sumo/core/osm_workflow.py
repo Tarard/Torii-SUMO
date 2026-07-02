@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import gzip
 import hashlib
+import inspect
 import json
 import os
 import shutil
@@ -66,6 +67,21 @@ TLS_SEMANTIC_DELTA_KEYS = {
     "tls_shared_linkindex_group_count",
     "tls_sparse_linkindex_tl_logic_count",
 }
+
+
+def _supports_keyword(func: Callable[..., Any], name: str) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return False
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        or (
+            parameter.name == name
+            and parameter.kind in {inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+        )
+        for parameter in signature.parameters.values()
+    )
 
 
 def _osm_highway_classes(osm_file: Path) -> set[str] | None:
@@ -6637,6 +6653,8 @@ def run_osm_cleanup_workflow(
         warnings=warnings,
     )
     netedit_review_sumocfg = workflow_review_html_report.get("netedit_review_sumocfg_file", "")
+    netedit_review_selection_files = list(workflow_review_html_report.get("netedit_review_selection_files", []) or [])
+    netedit_review_viewsettings_files = list(workflow_review_html_report.get("netedit_review_viewsettings_files", []) or [])
     should_launch_netedit_review = (
         launch_netedit_after_build
         if launch_netedit_review_after_build is None
@@ -6648,7 +6666,12 @@ def run_osm_cleanup_workflow(
     elif review_launcher is None:
         should_launch_netedit_review = False
     if should_launch_netedit_review and netedit_review_sumocfg:
-        netedit_review_launch_report = review_launcher(Path(str(netedit_review_sumocfg)))
+        review_launch_kwargs: dict[str, Any] = {}
+        if netedit_review_selection_files and _supports_keyword(review_launcher, "selection_file"):
+            review_launch_kwargs["selection_file"] = Path(str(netedit_review_selection_files[0]))
+        if netedit_review_viewsettings_files and _supports_keyword(review_launcher, "gui_settings_file"):
+            review_launch_kwargs["gui_settings_file"] = Path(str(netedit_review_viewsettings_files[0]))
+        netedit_review_launch_report = review_launcher(Path(str(netedit_review_sumocfg)), **review_launch_kwargs)
     elif not netedit_review_sumocfg:
         netedit_review_launch_report = {
             "status": "blocked",
@@ -6681,7 +6704,8 @@ def run_osm_cleanup_workflow(
             "netedit_review_additional_file": workflow_review_html_report.get("netedit_review_additional_file", ""),
             "netedit_review_sumocfg_file": workflow_review_html_report.get("netedit_review_sumocfg_file", ""),
             "netedit_review_command": workflow_review_html_report.get("netedit_review_command", ""),
-            "netedit_review_selection_files": workflow_review_html_report.get("netedit_review_selection_files", []),
+            "netedit_review_selection_files": netedit_review_selection_files,
+            "netedit_review_viewsettings_files": netedit_review_viewsettings_files,
             "netedit_review_launch_status": netedit_review_launch_report.get("netedit_status", "not_started"),
             "netedit_review_launch_process_id": netedit_review_launch_report.get("netedit_process_id"),
             "netedit_review_launch_file": netedit_review_launch_report.get("netedit_input_file", ""),

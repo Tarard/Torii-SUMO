@@ -2885,7 +2885,7 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     net_file = tmp_path / "sumo" / "fragmented.net.xml"
     filtered_osm = tmp_path / "osm" / "fragmented_filtered.osm.xml.gz"
     audited: dict[str, Path] = {}
-    review_launches: list[Path] = []
+    review_launches: list[dict[str, object]] = []
 
     def fake_build(**kwargs):
         net_file.parent.mkdir(parents=True, exist_ok=True)
@@ -2963,13 +2963,15 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
             "warnings": ["junction aggregation variant requires Google Maps and Netedit review before adoption"],
         }
 
-    def fake_netedit_review(path: Path):
-        review_launches.append(path)
+    def fake_netedit_review(path: Path, **kwargs):
+        review_launches.append({"path": path, **kwargs})
         return {
             "status": "pass",
             "netedit_status": "opened",
             "netedit_process_id": 222,
             "netedit_input_file": str(path),
+            "netedit_selection_file": str(kwargs.get("selection_file", "")),
+            "netedit_gui_settings_file": str(kwargs.get("gui_settings_file", "")),
             "netedit_open_mode": "sumocfg",
             "claim_status": "diagnostic-demo",
             "warnings": [],
@@ -3046,9 +3048,18 @@ def test_osm_cleanup_workflow_runs_topology_audit_by_default(tmp_path: Path) -> 
     assert Path(report["netedit_review_additional_file"]).is_file()
     assert Path(report["netedit_review_sumocfg_file"]).is_file()
     assert Path(report["netedit_review_selection_files"][0]).is_file()
-    assert review_launches == [Path(report["netedit_review_sumocfg_file"])]
+    assert Path(report["netedit_review_viewsettings_files"][0]).is_file()
+    assert review_launches == [
+        {
+            "path": Path(report["netedit_review_sumocfg_file"]),
+            "selection_file": Path(report["netedit_review_selection_files"][0]),
+            "gui_settings_file": Path(report["netedit_review_viewsettings_files"][0]),
+        }
+    ]
     assert report["netedit_review_launch_status"] == "opened"
     assert report["netedit_review_launch"]["netedit_process_id"] == 222
+    assert report["netedit_review_launch"]["netedit_selection_file"] == report["netedit_review_selection_files"][0]
+    assert report["netedit_review_launch"]["netedit_gui_settings_file"] == report["netedit_review_viewsettings_files"][0]
     assert Path(report["network_overview_png"]).is_file()
     assert Path(report["problem_overlay_png"]).is_file()
     assert report["cluster_zoom_pngs"][0]["cluster_id"] == "C001"
