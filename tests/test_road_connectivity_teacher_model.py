@@ -1273,6 +1273,52 @@ def test_write_owner_layered_teacher_replay_candidate_runs_owner_then_road_span_
     assert root.find("junction[@id='mid']") is None
 
 
+def test_write_owner_layered_teacher_replay_candidate_can_pre_repair_ready_spans(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.layered.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="a" to="j"><lane id="road#0_0" index="0"/></edge>
+  <edge id="-road#0" from="j" to="a"><lane id="-road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#0" from="a" to="mid"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#1" from="mid" to="j"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="j" to="mid"><lane id="-road#1_0" index="0"/></edge>
+  <edge id="-road#0" from="mid" to="a"><lane id="-road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="mid" type="priority" x="10" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        pre_repair_ready_road_spans=True,
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert report["pre_road_span_repair"]["applied_candidate_count"] == 1
+    assert report["pre_replayed_endpoint_owner_ids"] == ["a"]
+    assert report["pre_endpoint_replay_reports"][0]["owner_id"] == "a"
+    assert root.find("edge[@id='road#0']").attrib["to"] == "j"
+    assert root.find("edge[@id='-road#0']").attrib["from"] == "j"
+    assert root.find("junction[@id='mid']") is None
+
+
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
     before = {
         "gate": {

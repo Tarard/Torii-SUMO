@@ -1285,18 +1285,72 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
     owner_id: str,
     copy_tls: bool = False,
     max_ready_spans: int = 1,
+    pre_repair_ready_road_spans: bool = False,
 ) -> dict[str, Any]:
+    owner_input_file = candidate_net_file
+    pre_road_span_repair = {
+        "status": "pass",
+        "selected_candidate_count": 0,
+        "applied_candidate_count": 0,
+    }
+    pre_replayed_endpoint_owner_ids: list[str] = []
+    if pre_repair_ready_road_spans:
+        pre_road_span_file = output_file.with_name(f"{output_file.stem}_pre_road_spans{output_file.suffix}")
+        pre_road_span_candidates = [
+            candidate
+            for candidate in build_internal_movement_owner_road_span_repair_candidates(
+                teacher_net_file,
+                candidate_net_file,
+                owner_id=owner_id,
+            )
+            if candidate.get("status") == "ready"
+        ][:max_ready_spans]
+        pre_road_span_repair = write_internal_movement_owner_road_span_repair_candidate(
+            teacher_net_file,
+            candidate_net_file,
+            pre_road_span_file,
+            pre_road_span_candidates,
+        )
+        pre_replayed_endpoint_owner_ids = [
+            endpoint
+            for endpoint in _teacher_endpoint_owner_ids_for_edges(
+                teacher_net_file,
+                [
+                    str(edge_id)
+                    for candidate in pre_road_span_candidates
+                    for edge_id in candidate.get("teacher_edge_ids", [])
+                ],
+            )
+            if endpoint != owner_id
+        ]
+        owner_input_file = pre_road_span_file
+
     owner_replay_file = output_file.with_name(f"{output_file.stem}_owner_replay{output_file.suffix}")
     owner_replay_report = write_internal_movement_owner_teacher_replay_candidate(
         teacher_net_file,
-        candidate_net_file,
+        owner_input_file,
         owner_replay_file,
         owner_id=owner_id,
         copy_tls=copy_tls,
     )
+    current_file = owner_replay_file
+    pre_endpoint_replay_reports = []
+    for index, endpoint_owner_id in enumerate(pre_replayed_endpoint_owner_ids, start=1):
+        next_file = output_file.with_name(f"{output_file.stem}_pre_endpoint_{index}{output_file.suffix}")
+        pre_endpoint_replay_reports.append(
+            write_internal_movement_owner_teacher_replay_candidate(
+                teacher_net_file,
+                current_file,
+                next_file,
+                owner_id=endpoint_owner_id,
+                copy_tls=copy_tls,
+            )
+        )
+        current_file = next_file
+
     road_span_endpoint_replay_report = write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
         teacher_net_file,
-        owner_replay_file,
+        current_file,
         output_file,
         owner_id=owner_id,
         copy_tls=copy_tls,
@@ -1305,18 +1359,30 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
     return {
         "status": (
             "pass"
-            if owner_replay_report.get("status") == "pass"
-            and road_span_endpoint_replay_report.get("status") == "pass"
+            if all(
+                report.get("status") == "pass"
+                for report in [
+                    pre_road_span_repair,
+                    owner_replay_report,
+                    *pre_endpoint_replay_reports,
+                    road_span_endpoint_replay_report,
+                ]
+            )
             else "fail"
         ),
         "claim_status": "diagnostic-demo",
         "repair_scope": "layered_internal_movement_owner_teacher_replay",
         "owner_id": owner_id,
         "copy_tls": copy_tls,
+        "pre_repair_ready_road_spans": pre_repair_ready_road_spans,
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "output_file": str(output_file),
+        "owner_input_file": str(owner_input_file),
         "owner_replay_file": str(owner_replay_file),
+        "pre_road_span_repair": pre_road_span_repair,
+        "pre_replayed_endpoint_owner_ids": pre_replayed_endpoint_owner_ids,
+        "pre_endpoint_replay_reports": pre_endpoint_replay_reports,
         "owner_replay_report": owner_replay_report,
         "road_span_endpoint_replay_report": road_span_endpoint_replay_report,
         "owner_road_connectivity_audit": road_span_endpoint_replay_report["owner_road_connectivity_audit"],
