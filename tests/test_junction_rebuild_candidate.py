@@ -1999,6 +1999,63 @@ def test_build_teacher_guided_repair_queue_joins_all_spatial_cluster_candidate_n
     assert scope["join_junction_ids"] == ["first", "matched", "support"]
 
 
+def test_build_teacher_guided_repair_queue_does_not_trust_stale_case_edge_map(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j" type="highway.primary"><lane id="teacher_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="j" to="b" type="highway.primary"><lane id="teacher_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="j" type="highway.primary"><lane id="cand_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="stale_out" from="split_a" to="split_b" type="highway.primary"><lane id="stale_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="split_a" type="priority" x="1" y="0" incLanes="" intLanes=""/>
+  <junction id="split_b" type="priority" x="2" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "j",
+                    "matched_candidate_node_ids": ["j"],
+                    "edge_map": {"teacher_in": "cand_in", "teacher_out": "stale_out"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "recommended_action": "rebuild_plain_xml_scope",
+                        "core_junction_id": "j",
+                        "junction_ids": ["split_a", "split_b"],
+                        "join_junction_ids": ["split_a", "split_b"],
+                        "blocked_teacher_edge_ids": [],
+                    },
+                    "learned_rule": "tum_like_same_id_tls_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["candidate_status"] == "needs_expanded_rebuild_scope"
+    assert candidate["stale_case_edge_map_ids"] == {"teacher_out": "stale_out"}
+    assert candidate["expanded_rebuild_scope"]["reason"] == "case edge map points outside candidate junction approaches"
+    assert candidate["expanded_rebuild_scope"]["join_junction_ids"] == ["j", "split_a", "split_b"]
+
+
 def test_build_teacher_guided_repair_queue_uses_first_pair_when_no_source_match(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
