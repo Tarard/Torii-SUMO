@@ -367,6 +367,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         network_profile="reference_matched",
         reference_net_file=str(tmp_path / "reference.net.xml"),
         teacher_guided_repair_max_ready_candidates=2,
+        road_connectivity_replay_max_owners=3,
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         launch_netedit_after_build=False,
         launch_sumo_gui_after_build=False,
@@ -375,6 +376,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
     assert report["status"] == "pass"
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
     assert captured["teacher_guided_repair_max_ready_candidates"] == 2
+    assert captured["road_connectivity_replay_max_owners"] == 3
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
     assert captured["launch_netedit_after_build"] is False
     assert captured["launch_sumo_gui_after_build"] is False
@@ -452,6 +454,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         bbox="11.413800,48.755391,11.433800,48.775391",
         reference_net_file=reference_net_file,
         teacher_guided_repair_max_ready_candidates=1,
+        road_connectivity_replay_max_owners=3,
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         cleanup_workflow_func=fake_cleanup,
     )
@@ -479,6 +482,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     )
     assert report["reference_matched_semantics_workflow"]["movement_rebuild_applied_candidate_count"] == 1
     assert report["reference_matched_semantics_workflow"]["configured_max_ready_candidates"] == 1
+    assert captured["road_connectivity_replay_max_owners"] == 3
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
     assert report["teacher_guided_repair_configured_max_ready_candidates"] == 1
     assert report["reference_matched_semantics_workflow"]["probe_matrix"] == {

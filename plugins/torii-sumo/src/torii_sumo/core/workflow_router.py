@@ -332,6 +332,7 @@ def run_auto_workflow(
     reference_policy_report: str | Path | dict[str, Any] | None = None,
     service_passenger_policy: str | None = None,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
+    road_connectivity_replay_max_owners: int | None = 4,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     launch_netedit_after_build: bool | None = None,
     launch_sumo_gui_after_build: bool | None = None,
@@ -372,6 +373,7 @@ def run_auto_workflow(
             reference_policy_report=reference_policy_report,
             service_passenger_policy=service_passenger_policy,
             teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+            road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
             teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
             launch_netedit_after_build=launch_netedit_after_build,
             launch_sumo_gui_after_build=launch_sumo_gui_after_build,
@@ -442,6 +444,7 @@ def _run_osm_to_sumo(
     reference_policy_report: str | Path | dict[str, Any] | None,
     service_passenger_policy: str | None,
     teacher_guided_repair_max_ready_candidates: int | None,
+    road_connectivity_replay_max_owners: int | None,
     teacher_guided_probe_matrix_junction_ids: list[str] | None,
     launch_netedit_after_build: bool | None,
     launch_sumo_gui_after_build: bool | None,
@@ -545,6 +548,8 @@ def _run_osm_to_sumo(
         cleanup_kwargs["service_passenger_policy"] = network_plan.get("service_passenger_policy")
     if _supports_keyword(cleanup_workflow_func, "teacher_guided_repair_max_ready_candidates"):
         cleanup_kwargs["teacher_guided_repair_max_ready_candidates"] = teacher_guided_repair_max_ready_candidates
+    if _supports_keyword(cleanup_workflow_func, "road_connectivity_replay_max_owners"):
+        cleanup_kwargs["road_connectivity_replay_max_owners"] = road_connectivity_replay_max_owners
     if _supports_keyword(cleanup_workflow_func, "teacher_guided_probe_matrix_junction_ids"):
         cleanup_kwargs["teacher_guided_probe_matrix_junction_ids"] = teacher_guided_probe_matrix_junction_ids
     if launch_netedit_after_build is not None and _supports_keyword(cleanup_workflow_func, "launch_netedit_after_build"):
