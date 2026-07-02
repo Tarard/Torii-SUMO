@@ -24,6 +24,9 @@ from torii_sumo.core.osm_network import (
 )
 from torii_sumo.core.osm_area import osm_map_url_bbox, resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.osm_workflow import _road_connectivity_owner_ids
+from torii_sumo.core.osm_workflow import _road_connectivity_replay_batch_report
+from torii_sumo.core.osm_workflow import _road_connectivity_seed_probe_improved
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network, sumo_osm_cleanup_workflow
 
@@ -79,6 +82,70 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
     assert captured["road_connectivity_replay_max_owners"] == 2
     assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
+
+
+def test_road_connectivity_owner_ids_include_seed_geometry_mismatch_endpoints(tmp_path: Path) -> None:
+    teacher_net_file = tmp_path / "teacher.net.xml"
+    teacher_net_file.write_text(
+        """<net>
+  <edge id="road#0" from="junction_a" to="junction_b"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#1" from="junction_b" to="junction_c"><lane id="road#1_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    queue_report = {
+        "repair_candidates": [
+            {"reference_id": "queue_owner"},
+        ]
+    }
+    seed_report = {
+        "parity": {
+            "common_edge_geometry_mismatches": [
+                {"edge_id": "road#0"},
+            ]
+        }
+    }
+
+    owner_ids = _road_connectivity_owner_ids(
+        queue_report,
+        seed_report,
+        teacher_net_file=teacher_net_file,
+        max_owner_count=3,
+    )
+
+    assert owner_ids == ["queue_owner", "junction_a", "junction_b"]
+
+
+def test_road_connectivity_seed_probe_improved_accepts_lower_delta_without_passing() -> None:
+    before = {"status": "fail", "edge_delta_count": 4, "connection_delta_count": 5}
+    after = {"status": "fail", "edge_delta_count": 2, "connection_delta_count": 1}
+
+    assert _road_connectivity_seed_probe_improved(before, after) is True
+    assert _road_connectivity_seed_probe_improved(after, before) is False
+    assert _road_connectivity_seed_probe_improved(after, dict(after)) is False
+
+
+def test_road_connectivity_batch_report_exposes_seed_improved_variant_without_passing(tmp_path: Path) -> None:
+    report = _road_connectivity_replay_batch_report(
+        [
+            {
+                "status": "pass",
+                "sumo_load_status": "pass",
+                "output_file": str(tmp_path / "improved.net.xml"),
+                "road_connectivity_seed_probe_improved": True,
+                "owner_road_connectivity_audit": {
+                    "status": "fail",
+                    "gate": {"lane_delta_count": 1},
+                },
+            }
+        ],
+        output_dir=tmp_path,
+        prefix="road_connectivity",
+    )
+
+    assert report["status"] == "fail"
+    assert report["output_file"] == str(tmp_path / "improved.net.xml")
+    assert report["owner_road_connectivity_audit"]["status"] == "fail"
 
 
 def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path) -> None:
