@@ -582,8 +582,17 @@ def _teacher_guided_queue_has_replay_candidates(report: Mapping[str, Any] | None
 
 
 def _first_teacher_owner_id(report: Mapping[str, Any] | None) -> str:
+    owner_ids = _teacher_owner_ids(report, max_owner_count=1)
+    return owner_ids[0] if owner_ids else ""
+
+
+def _teacher_owner_ids(report: Mapping[str, Any] | None, *, max_owner_count: int | None = None) -> list[str]:
     if report is None:
-        return ""
+        return []
+    if max_owner_count is not None and max_owner_count <= 0:
+        return []
+    owner_ids: list[str] = []
+    seen: set[str] = set()
     for candidate in report.get("repair_candidates", []) or []:
         if not isinstance(candidate, Mapping):
             continue
@@ -593,14 +602,34 @@ def _first_teacher_owner_id(report: Mapping[str, Any] | None) -> str:
             or candidate.get("junction_id")
             or ""
         ).strip()
-        if owner_id:
-            return owner_id
-    return ""
+        if not owner_id or owner_id in seen:
+            continue
+        seen.add(owner_id)
+        owner_ids.append(owner_id)
+        if max_owner_count is not None and len(owner_ids) >= max_owner_count:
+            break
+    return owner_ids
 
 
 def _road_connectivity_gate_counts(report: Mapping[str, Any] | None) -> dict[str, dict[str, int]]:
     if report is None:
         return {}
+    owner_reports = [item for item in report.get("owner_reports", []) or [] if isinstance(item, Mapping)]
+    if owner_reports:
+        pass_count = sum(1 for item in owner_reports if _road_connectivity_gate_status(item) == "pass")
+        failure_count = sum(
+            _int_field(item.get("owner_road_connectivity_audit", {}).get("gate", {}), "lane_delta_count")
+            for item in owner_reports
+            if isinstance(item.get("owner_road_connectivity_audit", {}), Mapping)
+            and isinstance(item.get("owner_road_connectivity_audit", {}).get("gate", {}), Mapping)
+        )
+        return {
+            "owner_road_connectivity": {
+                "pass": pass_count,
+                "fail": len(owner_reports) - pass_count,
+                "failure_count": failure_count,
+            }
+        }
     audit = report.get("owner_road_connectivity_audit", {})
     audit = audit if isinstance(audit, Mapping) else {}
     gate = audit.get("gate", {})
@@ -621,6 +650,57 @@ def _road_connectivity_gate_status(report: Mapping[str, Any] | None) -> str:
     audit = report.get("owner_road_connectivity_audit", {})
     audit = audit if isinstance(audit, Mapping) else {}
     return str(audit.get("status", report.get("status", "fail")))
+
+
+def _road_connectivity_replay_batch_report(
+    owner_reports: list[Mapping[str, Any]], *, output_dir: Path, prefix: str
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    reports = [dict(report) for report in owner_reports]
+    gate_statuses = [_road_connectivity_gate_status(report) for report in reports]
+    sumo_load_statuses = [str(report.get("sumo_load_status", "fail")) for report in reports]
+    status = (
+        "pass"
+        if reports
+        and all(str(report.get("status", "fail")) == "pass" for report in reports)
+        and all(status == "pass" for status in gate_statuses)
+        and all(status == "pass" for status in sumo_load_statuses)
+        else "fail"
+    )
+    lane_delta_count = sum(
+        _int_field(report.get("owner_road_connectivity_audit", {}).get("gate", {}), "lane_delta_count")
+        for report in reports
+        if isinstance(report.get("owner_road_connectivity_audit", {}), Mapping)
+        and isinstance(report.get("owner_road_connectivity_audit", {}).get("gate", {}), Mapping)
+    )
+    best_output = next(
+        (
+            str(report.get("output_file", ""))
+            for report in reversed(reports)
+            if report.get("output_file")
+            and str(report.get("status", "fail")) == "pass"
+            and str(report.get("sumo_load_status", "fail")) == "pass"
+            and _road_connectivity_gate_status(report) == "pass"
+        ),
+        "",
+    )
+    batch_report = {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "owner_count": len(reports),
+        "pass_owner_count": sum(1 for item in gate_statuses if item == "pass"),
+        "output_file": best_output,
+        "sumo_load_status": "pass" if reports and all(item == "pass" for item in sumo_load_statuses) else "fail",
+        "owner_road_connectivity_audit": {
+            "status": "pass" if reports and all(item == "pass" for item in gate_statuses) else "fail",
+            "gate": {"lane_delta_count": lane_delta_count},
+        },
+        "owner_reports": reports,
+    }
+    run_report_file = output_dir / f"{prefix}_batch.json"
+    batch_report["run_report_file"] = str(run_report_file)
+    run_report_file.write_text(json.dumps(batch_report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return batch_report
 
 
 def _filter_teacher_guided_queue_to_mismatch_fields(
@@ -2075,6 +2155,7 @@ def run_osm_cleanup_workflow(
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = False,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
+    road_connectivity_replay_max_owners: int | None = 4,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
@@ -3191,17 +3272,45 @@ def run_osm_cleanup_workflow(
                 output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
             )
-            road_connectivity_owner_id = _first_teacher_owner_id(teacher_guided_repair_queue_report)
-            if road_connectivity_owner_id:
-                road_connectivity_replay_report = road_connectivity_replay_func(
-                    teacher_net_file=reference_net_file,
-                    candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
-                    output_dir=output_dir / "road_connectivity_replay",
-                    prefix=f"{prefix}_road_connectivity",
-                    owner_id=road_connectivity_owner_id,
-                    sumo_binary=sumo_binary,
-                    timeout_seconds=timeout_seconds,
-                    command_runner=command_runner,
+            road_connectivity_owner_ids = _teacher_owner_ids(
+                teacher_guided_repair_queue_report,
+                max_owner_count=road_connectivity_replay_max_owners,
+            )
+            if road_connectivity_owner_ids:
+                road_connectivity_owner_reports = []
+                road_connectivity_candidate_net_file = (
+                    reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file
+                )
+                for road_connectivity_owner_id in road_connectivity_owner_ids:
+                    owner_report = dict(
+                        road_connectivity_replay_func(
+                            teacher_net_file=reference_net_file,
+                            candidate_net_file=road_connectivity_candidate_net_file,
+                            output_dir=output_dir / "road_connectivity_replay",
+                            prefix=f"{prefix}_road_connectivity",
+                            owner_id=road_connectivity_owner_id,
+                            sumo_binary=sumo_binary,
+                            timeout_seconds=timeout_seconds,
+                            command_runner=command_runner,
+                        )
+                    )
+                    owner_report.setdefault("owner_id", road_connectivity_owner_id)
+                    road_connectivity_owner_reports.append(owner_report)
+                    if (
+                        owner_report.get("output_file")
+                        and str(owner_report.get("status", "fail")) == "pass"
+                        and str(owner_report.get("sumo_load_status", "fail")) == "pass"
+                        and _road_connectivity_gate_status(owner_report) == "pass"
+                    ):
+                        road_connectivity_candidate_net_file = Path(str(owner_report["output_file"]))
+                road_connectivity_replay_report = (
+                    road_connectivity_owner_reports[0]
+                    if len(road_connectivity_owner_reports) == 1
+                    else _road_connectivity_replay_batch_report(
+                        road_connectivity_owner_reports,
+                        output_dir=output_dir / "road_connectivity_replay",
+                        prefix=f"{prefix}_road_connectivity",
+                    )
                 )
             if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
                 teacher_guided_replay_source_net_file = (
