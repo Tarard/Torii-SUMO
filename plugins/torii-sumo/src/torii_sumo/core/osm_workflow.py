@@ -616,6 +616,72 @@ def _teacher_owner_ids(report: Mapping[str, Any] | None, *, max_owner_count: int
     return owner_ids
 
 
+def _road_connectivity_owner_ids(
+    queue_report: Mapping[str, Any] | None,
+    seed_probe_report: Mapping[str, Any] | None,
+    *,
+    teacher_net_file: Path,
+    max_owner_count: int | None = None,
+) -> list[str]:
+    if max_owner_count is not None and max_owner_count <= 0:
+        return []
+    owner_ids = _teacher_owner_ids(queue_report, max_owner_count=max_owner_count)
+    seen = set(owner_ids)
+    for owner_id in _road_connectivity_seed_geometry_owner_ids(seed_probe_report, teacher_net_file):
+        if owner_id in seen:
+            continue
+        owner_ids.append(owner_id)
+        seen.add(owner_id)
+        if max_owner_count is not None and len(owner_ids) >= max_owner_count:
+            break
+    return owner_ids
+
+
+def _road_connectivity_seed_geometry_owner_ids(
+    seed_probe_report: Mapping[str, Any] | None,
+    teacher_net_file: Path,
+) -> list[str]:
+    if seed_probe_report is None:
+        return []
+    parity = seed_probe_report.get("parity", {})
+    if not isinstance(parity, Mapping):
+        return []
+    mismatches = parity.get("common_edge_geometry_mismatches", []) or []
+    if not mismatches:
+        return []
+    teacher_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in ET.parse(teacher_net_file).getroot().findall("edge")
+        if edge.attrib.get("id")
+    }
+    owner_ids: list[str] = []
+    seen: set[str] = set()
+    for mismatch in mismatches:
+        if not isinstance(mismatch, Mapping):
+            continue
+        edge = teacher_edges.get(str(mismatch.get("edge_id", "")))
+        if edge is None:
+            continue
+        for owner_id in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+            if owner_id and owner_id not in seen:
+                owner_ids.append(owner_id)
+                seen.add(owner_id)
+    return owner_ids
+
+
+def _road_connectivity_seed_probe_improved(
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+) -> bool:
+    return _road_connectivity_seed_delta_score(after) < _road_connectivity_seed_delta_score(before)
+
+
+def _road_connectivity_seed_delta_score(report: Mapping[str, Any] | None) -> int:
+    if report is None:
+        return 10**9
+    return _int_field(report, "edge_delta_count") + _int_field(report, "connection_delta_count")
+
+
 def _road_connectivity_gate_counts(report: Mapping[str, Any] | None) -> dict[str, dict[str, int]]:
     if report is None:
         return {}
@@ -700,7 +766,10 @@ def _road_connectivity_replay_batch_report(
             if report.get("output_file")
             and str(report.get("status", "fail")) == "pass"
             and str(report.get("sumo_load_status", "fail")) == "pass"
-            and _road_connectivity_gate_status(report) == "pass"
+            and (
+                _road_connectivity_gate_status(report) == "pass"
+                or bool(report.get("road_connectivity_seed_probe_improved"))
+            )
         ),
         "",
     )
@@ -3363,8 +3432,10 @@ def run_osm_cleanup_workflow(
                 output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
             )
-            road_connectivity_owner_ids = _teacher_owner_ids(
+            road_connectivity_owner_ids = _road_connectivity_owner_ids(
                 teacher_guided_repair_queue_report,
+                road_connectivity_seed_probe_report,
+                teacher_net_file=reference_net_file,
                 max_owner_count=road_connectivity_replay_max_owners,
             )
             if road_connectivity_owner_ids:
@@ -3386,14 +3457,46 @@ def run_osm_cleanup_workflow(
                         )
                     )
                     owner_report.setdefault("owner_id", road_connectivity_owner_id)
+                    owner_seed_probe_report = None
+                    owner_seed_probe_improved = False
+                    if (
+                        road_connectivity_seed_edge_ids
+                        and owner_report.get("output_file")
+                        and str(owner_report.get("status", "fail")) == "pass"
+                        and str(owner_report.get("sumo_load_status", "fail")) == "pass"
+                        and _road_connectivity_gate_status(owner_report) != "pass"
+                    ):
+                        owner_seed_probe_report = road_connectivity_seed_probe_func(
+                            teacher_net_file=reference_net_file,
+                            candidate_net_file=Path(str(owner_report["output_file"])),
+                            seed_edge_ids=road_connectivity_seed_edge_ids,
+                            output_dir=output_dir / "road_connectivity_seed_probe",
+                            prefix=f"{prefix}_road_connectivity_seed_probe_after_{_safe_path_part(road_connectivity_owner_id)}",
+                        )
+                        owner_seed_probe_improved = _road_connectivity_seed_probe_improved(
+                            road_connectivity_seed_probe_report,
+                            owner_seed_probe_report,
+                        )
+                        owner_report["road_connectivity_seed_probe"] = owner_seed_probe_report
+                        owner_report["road_connectivity_seed_probe_improved"] = owner_seed_probe_improved
+                        if owner_report.get("run_report_file"):
+                            Path(str(owner_report["run_report_file"])).write_text(
+                                json.dumps(owner_report, indent=2, ensure_ascii=False),
+                                encoding="utf-8",
+                            )
                     road_connectivity_owner_reports.append(owner_report)
                     if (
                         owner_report.get("output_file")
                         and str(owner_report.get("status", "fail")) == "pass"
                         and str(owner_report.get("sumo_load_status", "fail")) == "pass"
-                        and _road_connectivity_gate_status(owner_report) == "pass"
+                        and (
+                            _road_connectivity_gate_status(owner_report) == "pass"
+                            or owner_seed_probe_improved
+                        )
                     ):
                         road_connectivity_candidate_net_file = Path(str(owner_report["output_file"]))
+                        if owner_seed_probe_improved and owner_seed_probe_report is not None:
+                            road_connectivity_seed_probe_report = owner_seed_probe_report
                 road_connectivity_replay_report = (
                     road_connectivity_owner_reports[0]
                     if len(road_connectivity_owner_reports) == 1
