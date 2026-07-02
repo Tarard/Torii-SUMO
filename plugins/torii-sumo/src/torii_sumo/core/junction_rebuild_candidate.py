@@ -3362,7 +3362,18 @@ def run_teacher_guided_repair_queue(
                 }
             )
             continue
-        if sequential_accept_passed_variants and (blocking_overlap_edge_ids or overlap_node_ids):
+        if (
+            sequential_accept_passed_variants
+            and is_followup_candidate
+            and (blocking_overlap_edge_ids or overlap_node_ids)
+        ):
+            candidate = {
+                **candidate,
+                "sequential_followup_overlap_replay": True,
+                "sequential_followup_overlap_edge_ids": blocking_overlap_edge_ids,
+                "sequential_followup_overlap_node_ids": sorted(overlap_node_ids),
+            }
+        if sequential_accept_passed_variants and not is_followup_candidate and (blocking_overlap_edge_ids or overlap_node_ids):
             skipped_candidates.append(
                 {
                     "index": index,

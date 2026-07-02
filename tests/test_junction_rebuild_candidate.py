@@ -4538,6 +4538,124 @@ def test_run_teacher_guided_repair_queue_replays_expanded_scope_followup_in_same
     assert Path(report["composite_net_file"]).is_file()
 
 
+def test_run_teacher_guided_repair_queue_replays_overlapping_followup_after_accept(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-10" y="0"/>
+  <node id="j" x="0" y="0"/>
+  <node id="n" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="main" from="a" to="j"><lane index="0"/></edge>
+  <edge id="neighbor_out" from="j" to="n"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text("<net/>\n", encoding="utf-8")
+    candidate_net.write_text("<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>\n", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                "<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    def fake_final_internal_replay(**kwargs):
+        output_file = kwargs["output_file"]
+        output_file.write_text(
+            "<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>",
+            encoding="utf-8",
+        )
+        return {"status": "pass", "net_file": str(output_file)}
+
+    variant_calls = []
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = Path(kwargs["output_dir"]) / f"final_{len(variant_calls)}.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text(
+            "<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>",
+            encoding="utf-8",
+        )
+        replay = {
+            "status": "pass",
+            "effective_edge_map": {"teacher_main": "main", "teacher_out": "neighbor_out"},
+            "removed_stale_replaced_edge_connection_count": 0,
+        }
+        if len(variant_calls) == 1:
+            replay = {
+                **replay,
+                "removed_stale_replaced_edge_connection_count": 1,
+                "removed_stale_replaced_edge_connections": [
+                    {"from": "main", "to": "neighbor_out", "via": ":n_0_0"}
+                ],
+            }
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "parity_gate_status": "pass",
+            "final_net_file": str(final_net),
+            "target_internal_replay": replay,
+            "semantic_replay_gate": {"status": "pass", "failures": []},
+            "semantic_layer_gates": {
+                "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
+                "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                "internal": {"status": "pass", "failure_count": 0, "failures": []},
+            },
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "j",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "matched_candidate_node_ids": ["j"],
+                    "edge_map": {"teacher_main": "main", "teacher_out": "neighbor_out"},
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+        variant_builder=fake_variant,
+        final_internal_replay_writer=fake_final_internal_replay,
+        sequential_accept_passed_variants=True,
+    )
+
+    assert len(variant_calls) == 2
+    assert report["expanded_scope_followup_candidate_count"] == 1
+    assert not [
+        candidate
+        for candidate in report["skipped_candidates"]
+        if candidate.get("junction_id") == "j" and candidate.get("candidate_status") == "sequential_candidate_overlap"
+    ]
+
+
 def test_run_teacher_guided_repair_queue_replays_no_join_expanded_scope_on_full_network(
     tmp_path: Path,
 ) -> None:
