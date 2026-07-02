@@ -488,12 +488,13 @@ def write_teacher_connection_plan(
         present_candidate_edges = set(patched_lane_counts)
         incoming = [edge for edge in incoming if edge in present_candidate_edges]
         outgoing = [edge for edge in outgoing if edge in present_candidate_edges]
-    crossing_edge_endpoints = _plain_edge_endpoints(candidate_edge_file) if candidate_edge_file is not None else {}
+    patched_edge_endpoints = _plain_edge_endpoints(candidate_edge_file) if candidate_edge_file is not None else {}
 
     root = ET.Element("connections")
     kept = 0
     removed = 0
     removed_invalid_lane_connections = []
+    removed_nonadjacent_connections = []
     for child in ET.parse(raw_connection_file).getroot():
         if (
             child.tag == "connection"
@@ -511,6 +512,14 @@ def write_teacher_connection_plan(
             and not _connection_lane_indices_valid(child, candidate_lane_counts)
         ):
             removed_invalid_lane_connections.append(dict(child.attrib))
+            removed += 1
+            continue
+        if (
+            child.tag == "connection"
+            and present_candidate_edges is not None
+            and not _connection_edges_are_adjacent(child, patched_edge_endpoints)
+        ):
+            removed_nonadjacent_connections.append(dict(child.attrib))
             removed += 1
             continue
         if child.tag == "connection" and (
@@ -611,7 +620,7 @@ def write_teacher_connection_plan(
             crossing_node_id = _plain_crossing_node_id(
                 junction_id,
                 crossing_edges,
-                crossing_edge_endpoints,
+                patched_edge_endpoints,
                 crossing_node_ids,
             )
             if crossing_node_id != junction_id:
@@ -640,6 +649,8 @@ def write_teacher_connection_plan(
         "removed_target_children": removed,
         "removed_invalid_lane_connection_count": len(removed_invalid_lane_connections),
         "removed_invalid_lane_connections": removed_invalid_lane_connections,
+        "removed_nonadjacent_connection_count": len(removed_nonadjacent_connections),
+        "removed_nonadjacent_connections": removed_nonadjacent_connections,
         "emitted_connection_count": emitted_connections,
         "emitted_uncontrolled_connection_count": emitted_uncontrolled_connections,
         "emitted_delete_count": emitted_deletes,
@@ -714,6 +725,7 @@ def write_teacher_lane_patch_edges(
         else ""
     )
     rebased_missing_mapped_edges = []
+    rebased_existing_mapped_edges = []
     skipped_rebased_self_loop_edges = []
     for edge in root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
@@ -737,6 +749,23 @@ def write_teacher_lane_patch_edges(
             continue
         teacher_lanes = teacher_edge.findall("lane")
         if not teacher_lanes:
+            continue
+        rebased_endpoints = {}
+        if join_source_node_id:
+            for attr in ("from", "to"):
+                teacher_endpoint = teacher_edge.attrib.get(attr, "")
+                if teacher_endpoint == teacher_junction_id:
+                    edge.set(attr, join_source_node_id)
+                    rebased_endpoints[attr] = {"teacher": teacher_endpoint, "candidate": join_source_node_id}
+        if rebased_endpoints and edge.attrib.get("from") and edge.attrib.get("from") == edge.attrib.get("to"):
+            skipped_rebased_self_loop_edges.append(
+                {
+                    "candidate_edge_id": edge.attrib.get("id", ""),
+                    "teacher_edge_id": teacher_edge.attrib.get("id", ""),
+                    "node": edge.attrib["from"],
+                }
+            )
+            root.remove(edge)
             continue
         existing_lane_shapes = {
             lane.attrib.get("index", ""): lane.attrib["shape"]
@@ -766,6 +795,14 @@ def write_teacher_lane_patch_edges(
                     lane_attrs["shape"] = _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
             ET.SubElement(edge, "lane", lane_attrs)
         patched.append({"candidate_edge_id": edge.attrib.get("id", ""), "teacher_edge_id": teacher_edge.attrib.get("id", ""), "lane_count": len(teacher_lanes)})
+        if rebased_endpoints:
+            rebased_existing_mapped_edges.append(
+                {
+                    "candidate_edge_id": edge.attrib.get("id", ""),
+                    "teacher_edge_id": teacher_edge.attrib.get("id", ""),
+                    **rebased_endpoints,
+                }
+            )
 
     existing_edge_ids = {edge.attrib.get("id", "") for edge in root.findall("edge")}
     for teacher_id, candidate_id in sorted(edge_map.items()):
@@ -825,6 +862,8 @@ def write_teacher_lane_patch_edges(
         "patched_edges": patched,
         "added_missing_mapped_edge_count": len(added_missing_mapped_edges),
         "added_missing_mapped_edges": added_missing_mapped_edges,
+        "rebased_existing_mapped_edge_count": len(rebased_existing_mapped_edges),
+        "rebased_existing_mapped_edges": rebased_existing_mapped_edges,
         "rebased_missing_mapped_edge_count": len(rebased_missing_mapped_edges),
         "rebased_missing_mapped_edges": rebased_missing_mapped_edges,
         "skipped_rebased_self_loop_edge_count": len(skipped_rebased_self_loop_edges),
@@ -5918,6 +5957,18 @@ def _valid_edge_map(value: object) -> dict[str, str]:
     return result
 
 
+def _prefer_existing_exact_edge_ids(
+    edge_map: dict[str, str],
+    candidate_edges_by_id: dict[str, ET.Element],
+) -> dict[str, str]:
+    return {
+        teacher_edge_id: teacher_edge_id
+        if teacher_edge_id in candidate_edges_by_id
+        else candidate_edge_id
+        for teacher_edge_id, candidate_edge_id in edge_map.items()
+    }
+
+
 def _case_boundary_edge_map(
     case: dict[str, Any],
     candidate_edges_by_id: dict[str, ET.Element],
@@ -6536,6 +6587,7 @@ def _teacher_guided_repair_candidate(
         **_case_boundary_edge_map(case, candidate_edges_by_id),
         **_valid_edge_map(case.get("edge_map", {})),
     }
+    case_edge_map = _prefer_existing_exact_edge_ids(case_edge_map, candidate_edges_by_id)
     scope_node_ids = [node_id for node_id in candidate_node_ids if node_id in matched_source_node_set]
     if len(scope_node_ids) < 2:
         scope_node_ids = candidate_node_ids
