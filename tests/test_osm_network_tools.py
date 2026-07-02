@@ -69,10 +69,12 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
         bbox="11.413800,48.755391,11.433800,48.775391",
         network_profile="reference_matched",
         reference_net_file=str(reference_net_file),
+        teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
     )
 
     assert report["status"] == "pass"
     assert captured["reference_join_audit_structural_only"] is False
+    assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
 
 
 def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path) -> None:

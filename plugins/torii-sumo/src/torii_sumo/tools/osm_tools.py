@@ -524,6 +524,7 @@ def sumo_osm_cleanup_workflow(
     run_scope_pruning_after_build: bool = True,
     reference_join_audit_structural_only: bool | None = None,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
+    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
@@ -573,5 +574,6 @@ def sumo_osm_cleanup_workflow(
         run_scope_pruning_after_build=run_scope_pruning_after_build,
         reference_join_audit_structural_only=structural_only,
         teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+        teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
         key_edge_queries=key_edge_queries,
     )
