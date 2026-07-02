@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from torii_sumo.core.road_connectivity_teacher_model import (
     build_internal_movement_replay_audit,
     build_internal_movement_owner_approach_edge_map,
+    build_internal_movement_owner_approach_edge_chain_map,
     build_internal_movement_owner_internal_lane_map,
     build_internal_movement_owner_missing_approach_edge_repair_candidates,
     build_internal_movement_owner_road_connectivity_parity_audit,
@@ -844,6 +845,7 @@ def test_owner_teacher_replay_runs_road_lane_missing_edge_then_bundle(
     assert report["missing_approach_edge_repair"]["added_edge_count"] == 1
     assert report["bundle_replay"]["status"] == "pass"
     assert report["road_connectivity_audit"]["status"] == "pass"
+    assert report["approach_edge_chain_map"]["fragmented_teacher_edge_count"] == 0
     assert root.find("edge[@id='road#3']") is None
     assert len(road_lanes) == 2
     assert root.find("edge[@id='path#1']") is not None
@@ -902,6 +904,47 @@ def test_owner_road_connectivity_audit_does_not_treat_turnaround_as_route_comple
     assert report["lane_deltas"][0]["outgoing"]["flags"] == [
         "missing_non_turnaround_vehicle_connection",
         "turnaround_only_candidate",
+    ]
+
+
+def test_owner_approach_edge_chain_map_detects_split_candidate_road_span(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="a" to="j"><lane id="road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#2" from="a" to="mid"><lane id="road#2_0" index="0"/></edge>
+  <edge id="road#1" from="mid" to="j"><lane id="road#1_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="mid" type="priority" x="10" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_approach_edge_chain_map(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+
+    assert report["edge_chain_map"] == {"road#0": ["road#2", "road#1"]}
+    assert report["fragmented_teacher_edge_count"] == 1
+    assert report["fragmented_teacher_edges"] == [
+        {
+            "teacher_edge_id": "road#0",
+            "candidate_edge_ids": ["road#2", "road#1"],
+            "direction": "incoming",
+        }
     ]
 
 
