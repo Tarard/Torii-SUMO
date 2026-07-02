@@ -4011,7 +4011,11 @@ def _road_continuity_probe_summary(run_report: dict[str, Any]) -> dict[str, obje
             if value:
                 counts[field] = counts.get(field, 0) + value
         for field in ROAD_CONTINUITY_FAILURE_FIELDS:
-            value = _int_count(replay.get(field, 0))
+            value = (
+                _blocking_removed_stale_connection_count(replay)
+                if field == "removed_stale_replaced_edge_connection_count"
+                else _int_count(replay.get(field, 0))
+            )
             if value:
                 failure_counts[field] = failure_counts.get(field, 0) + value
     if not replay_count:
