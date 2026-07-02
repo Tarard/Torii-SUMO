@@ -1,0 +1,92 @@
+{
+  "case_id": "ingolstadt_center_reference_matched",
+  "claim_status": "diagnostic-demo",
+  "source_artifacts": [
+    "examples/02_one_prompt_osm_network/validation/run_2026-06-24_5_5/summary.json",
+    "examples/02_one_prompt_osm_network/validation/run_2026-06-25_review_html/ingolstadt_workflow_review.html",
+    "examples/02_one_prompt_osm_network/networks/tum_ingolstadt_center_reference.net.xml",
+    "examples/02_one_prompt_osm_network/networks/torii_5_5_connected_core_tls_aggregated.net.xml",
+    "examples/02_one_prompt_osm_network/networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml"
+  ],
+  "stages": [
+    {
+      "stage_id": "raw_netconvert",
+      "label": "Raw OSM netconvert vehicle network",
+      "counts": {
+        "edges": 2541,
+        "lanes": 3093,
+        "junctions": 1249,
+        "traffic_light_junctions": 202,
+        "tlLogic": 146
+      },
+      "routeability_status": "not_run_raw_import",
+      "teleports": null,
+      "manual_review_item_count": null,
+      "reference_delta_score": null
+    },
+    {
+      "stage_id": "torii_scoped_build",
+      "label": "Torii connected vehicle core",
+      "counts": {
+        "edges": 2493,
+        "lanes": 3045,
+        "junctions": 1220,
+        "traffic_light_junctions": 34,
+        "tlLogic": 34
+      },
+      "routeability_status": "pass",
+      "teleports": 0,
+      "manual_review_item_count": null,
+      "reference_delta_score": null
+    },
+    {
+      "stage_id": "tls_aggregated",
+      "label": "Torii reference visual-detail TLS aggregation variant",
+      "counts": {
+        "edges": 6126,
+        "lanes": 6695,
+        "junctions": 2997,
+        "traffic_light_junctions": 34,
+        "tlLogic": 34
+      },
+      "routeability_status": "not_applicable_visual_detail",
+      "teleports": null,
+      "manual_review_item_count": null,
+      "reference_delta_score": {
+        "traffic_light_junction_delta_vs_tum": 5,
+        "tlLogic_delta_vs_tum": 6,
+        "junction_delta_vs_tum": 1245
+      }
+    },
+    {
+      "stage_id": "junction_candidate_review",
+      "label": "Physical-junction candidate review cockpit",
+      "counts": {
+        "junction_aggregation_candidate_count": 102
+      },
+      "routeability_status": "not_applicable_review_stage",
+      "teleports": null,
+      "manual_review_item_count": 24,
+      "reference_delta_score": null
+    },
+    {
+      "stage_id": "teacher_guided_repair",
+      "label": "Teacher-guided replay",
+      "counts": {},
+      "routeability_status": "not_materialized_current_example",
+      "teleports": null,
+      "manual_review_item_count": null,
+      "reference_delta_score": null
+    },
+    {
+      "stage_id": "final_review_html",
+      "label": "Committed human-review cockpit",
+      "counts": {},
+      "routeability_status": "diagnostic_review_only",
+      "teleports": null,
+      "manual_review_item_count": 24,
+      "reference_delta_score": null,
+      "review_artifact": "examples/02_one_prompt_osm_network/validation/run_2026-06-25_review_html/ingolstadt_workflow_review.html"
+    }
+  ]
+}

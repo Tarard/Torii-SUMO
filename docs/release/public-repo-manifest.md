@@ -43,6 +43,7 @@ docs/
   common-sumo-signal-control-failures.md
   release/
 examples/
+benchmarks/
 tests/
 ```
 

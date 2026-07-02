@@ -1,0 +1,43 @@
+{
+  "stage_id": "tls_aggregated",
+  "label": "Torii reference visual-detail network after TLS aggregation review variant",
+  "claim_status": "diagnostic-demo",
+  "network_file": "examples/02_one_prompt_osm_network/networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml",
+  "reference_network_file": "examples/02_one_prompt_osm_network/networks/tum_ingolstadt_center_reference.net.xml",
+  "counts": {
+    "edges": 6126,
+    "lanes": 6695,
+    "junctions": 2997,
+    "traffic_light_junctions": 34,
+    "tlLogic": 34
+  },
+  "tum_reference_counts": {
+    "edges": 3577,
+    "lanes": 4955,
+    "junctions": 1752,
+    "traffic_light_junctions": 29,
+    "tlLogic": 28
+  },
+  "quality": {
+    "connectivity": null,
+    "routeability": {
+      "status": "not_applicable_visual_detail"
+    },
+    "topology_fragmentation": {
+      "junctions": 2997,
+      "tum_reference_junctions": 1752
+    },
+    "tls_semantic_delta": {
+      "traffic_light_junction_delta_vs_tum": 5,
+      "tlLogic_delta_vs_tum": 6
+    },
+    "junction_pattern_delta": {
+      "status": "needs_physical_junction_review"
+    },
+    "reference_scope_delta": {
+      "status": "scope_matched_visual_detail_available"
+    },
+    "manual_review_load": null
+  },
+  "promotion_decision": "blocked_review_required"
+}

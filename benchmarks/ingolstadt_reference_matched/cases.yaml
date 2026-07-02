@@ -1,0 +1,11 @@
+case_id: ingolstadt_center_reference_matched
+claim_status: diagnostic-demo
+workflow_claim: reference-guided OSM-to-SUMO junction and network cleaning benchmark
+osm_url: https://www.openstreetmap.org/#map=17/48.765391/11.423800
+bbox: 11.413800,48.755391,11.433800,48.775391
+network_profile: reference_matched
+reference_net: examples/02_one_prompt_osm_network/networks/tum_ingolstadt_center_reference.net.xml
+torii_vehicle_core_net: examples/02_one_prompt_osm_network/networks/torii_5_5_connected_core_tls_aggregated.net.xml
+torii_reference_visual_detail_net: examples/02_one_prompt_osm_network/networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml
+review_html: examples/02_one_prompt_osm_network/validation/run_2026-06-25_review_html/ingolstadt_workflow_review.html
+current_boundary: committed Codex 5.5 diagnostic baseline; not a Codex 5.3 TUM-level success claim

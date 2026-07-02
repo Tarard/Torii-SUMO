@@ -98,6 +98,7 @@ def test_internal_superpowers_plans_are_not_public_release_content() -> None:
 
     manifest = (ROOT / "docs" / "release" / "public-repo-manifest.md").read_text(encoding="utf-8")
     assert "ARCHITECTURE.md" in manifest
+    assert "benchmarks/" in manifest
     assert "docs/superpowers/" in manifest
     assert "docs/superpowers/plans/" not in manifest
     assert "docs/superpowers/specs/" not in manifest
