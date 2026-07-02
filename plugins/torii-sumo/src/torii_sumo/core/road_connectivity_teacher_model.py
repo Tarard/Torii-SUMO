@@ -2330,6 +2330,16 @@ def write_internal_movement_owner_bundle_replacement_candidate(
         )
         added_connection_count += 1
 
+    stale_tls_sanitizer = (
+        _downgrade_stale_owner_tls_connections(candidate_root, owner_id=owner_id)
+        if copy_tls
+        else {
+            "status": "skipped",
+            "downgraded_stale_tls_connection_count": 0,
+            "downgraded_stale_tls_connections": [],
+        }
+    )
+
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(candidate_root, space="  ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -2350,6 +2360,11 @@ def write_internal_movement_owner_bundle_replacement_candidate(
         "copied_tl_logic_count": copied_tl_logic_count,
         "added_connection_count": added_connection_count,
         "skipped_connection_count": skipped_connection_count,
+        "stale_tls_sanitizer": stale_tls_sanitizer,
+        "downgraded_stale_tls_connection_count": stale_tls_sanitizer[
+            "downgraded_stale_tls_connection_count"
+        ],
+        "downgraded_stale_tls_connections": stale_tls_sanitizer["downgraded_stale_tls_connections"],
         "warnings": [],
     }
 
@@ -2900,6 +2915,66 @@ def _copy_owner_tl_logics(
         _insert_before_first(candidate_root, "connection", copy.deepcopy(teacher_tl_logic))
         copied += 1
     return copied
+
+
+def _downgrade_stale_owner_tls_connections(root: ET.Element, *, owner_id: str) -> dict[str, Any]:
+    capacity = _owner_tllogic_min_state_length(root, owner_id)
+    downgraded: list[dict[str, str]] = []
+    if capacity is None:
+        return {
+            "status": "pass",
+            "owner_id": owner_id,
+            "owner_tllogic_state_length": 0,
+            "downgraded_stale_tls_connection_count": 0,
+            "downgraded_stale_tls_connections": [],
+        }
+    for connection in root.findall("connection"):
+        if connection.attrib.get("tl") != owner_id or not _connection_has_link_index(connection):
+            continue
+        if _connection_link_indices_fit_capacity(connection, capacity):
+            continue
+        downgraded.append(dict(connection.attrib))
+        for attr in ("tl", "linkIndex", "linkIndex2"):
+            connection.attrib.pop(attr, None)
+        connection.set("uncontrolled", "true")
+    return {
+        "status": "pass",
+        "owner_id": owner_id,
+        "owner_tllogic_state_length": capacity,
+        "downgraded_stale_tls_connection_count": len(downgraded),
+        "downgraded_stale_tls_connections": downgraded,
+    }
+
+
+def _owner_tllogic_min_state_length(root: ET.Element, owner_id: str) -> int | None:
+    tl_logic = root.find(f"tlLogic[@id='{owner_id}']")
+    if tl_logic is None:
+        return None
+    state_lengths = [
+        len(phase.attrib.get("state", ""))
+        for phase in tl_logic.findall("phase")
+        if phase.attrib.get("state")
+    ]
+    if not state_lengths:
+        return None
+    return min(state_lengths)
+
+
+def _connection_has_link_index(connection: ET.Element) -> bool:
+    return bool(connection.attrib.get("linkIndex") or connection.attrib.get("linkIndex2"))
+
+
+def _connection_link_indices_fit_capacity(connection: ET.Element, capacity: int) -> bool:
+    for attr in ("linkIndex", "linkIndex2"):
+        value = connection.attrib.get(attr, "")
+        if not value:
+            continue
+        try:
+            if int(value) >= capacity:
+                return False
+        except ValueError:
+            return False
+    return True
 
 
 def _owner_bundle_road_dependency_blockers(
