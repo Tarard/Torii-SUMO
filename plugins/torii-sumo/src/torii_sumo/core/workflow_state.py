@@ -76,6 +76,32 @@ class WorkflowState:
         }
 
 
+def build_promotion_trace(
+    *,
+    case_id: str,
+    claim_status: str,
+    stages: list[StageResult],
+    source_artifact: str = "",
+) -> dict[str, Any]:
+    trace: dict[str, Any] = {
+        "case_id": case_id,
+        "claim_status": claim_status,
+        "stages": [
+            {
+                "stage_id": stage.stage_name,
+                "before_quality": stage.before_quality.as_dict(),
+                "after_quality": stage.after_quality.as_dict(),
+                "delta_quality": dict(stage.delta_quality),
+                "promotion_decision": stage.promotion_decision or stage.status,
+            }
+            for stage in stages
+        ],
+    }
+    if source_artifact:
+        trace["source_artifact"] = source_artifact
+    return trace
+
+
 def summarize_workflow_stages(report: Mapping[str, Any]) -> list[StageResult]:
     claim_status = str(report.get("claim_status") or "diagnostic-demo")
     stages: list[StageResult] = []
