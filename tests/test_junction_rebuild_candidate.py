@@ -3732,6 +3732,16 @@ def test_final_context_parity_fails_when_teacher_cluster_members_remain(
             "candidate_member_junction_ids": ["a", "b"],
         }
     ]
+    assert report["context_split_cluster_repair_seed_count"] == 1
+    assert report["context_split_cluster_repair_seeds"] == [
+        {
+            "reference_id": "cluster_a_b",
+            "candidate_member_junction_ids": ["a", "b"],
+            "triggering_junction_id": "candidate_j",
+            "triggering_teacher_junction_id": "teacher_j",
+            "seed_reason": "final_context_split_cluster_residual",
+        }
+    ]
 
 
 def test_run_teacher_guided_repair_queue_demotes_teacher_absent_context_tls(

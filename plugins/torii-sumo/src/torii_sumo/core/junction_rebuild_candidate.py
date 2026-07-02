@@ -4388,6 +4388,8 @@ def _final_context_parity_gate(
         return {"status": "fail", "reason": f"parse_error: {exc}", "reports": []}
 
     reports: list[dict[str, object]] = []
+    split_cluster_repair_seeds: list[dict[str, object]] = []
+    seen_split_cluster_repair_seed_keys: set[tuple[str, tuple[str, ...]]] = set()
     for replay in accepted_internal_replays:
         junction_id = str(replay.get("junction_id", ""))
         teacher_junction_id = str(replay.get("teacher_junction_id", ""))
@@ -4425,6 +4427,27 @@ def _final_context_parity_gate(
             continue
         delta = _context_count_delta(teacher_context, candidate_context)
         split_cluster_residuals = _split_cluster_member_residuals(teacher_context, candidate_context)
+        report_repair_seeds = []
+        for residual in split_cluster_residuals:
+            reference_id = str(residual.get("teacher_cluster_junction_id", ""))
+            member_ids = [
+                str(member_id)
+                for member_id in residual.get("candidate_member_junction_ids", []) or []
+                if str(member_id)
+            ]
+            seed_key = (reference_id, tuple(member_ids))
+            if not reference_id or seed_key in seen_split_cluster_repair_seed_keys:
+                continue
+            seen_split_cluster_repair_seed_keys.add(seed_key)
+            seed = {
+                "reference_id": reference_id,
+                "candidate_member_junction_ids": member_ids,
+                "triggering_junction_id": junction_id,
+                "triggering_teacher_junction_id": teacher_junction_id,
+                "seed_reason": "final_context_split_cluster_residual",
+            }
+            split_cluster_repair_seeds.append(seed)
+            report_repair_seeds.append(seed)
         hard_failures = [
             {"field": field, "count": count}
             for field, count in delta.items()
@@ -4447,6 +4470,7 @@ def _final_context_parity_gate(
                 "candidate_context": candidate_context,
                 "delta_candidate_minus_teacher": delta,
                 "split_cluster_member_residuals": split_cluster_residuals,
+                "context_split_cluster_repair_seeds": report_repair_seeds,
                 "hard_failures": hard_failures,
             }
         )
@@ -4459,6 +4483,8 @@ def _final_context_parity_gate(
             "tl_logic_count",
             "split_cluster_member_junction_count",
         ],
+        "context_split_cluster_repair_seed_count": len(split_cluster_repair_seeds),
+        "context_split_cluster_repair_seeds": split_cluster_repair_seeds,
         "reports": reports,
     }
 
