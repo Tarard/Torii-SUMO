@@ -8479,13 +8479,23 @@ def test_semantic_layer_gates_route_crossing_and_walkingarea_to_pedestrian_bike(
         ],
     }
 
-    layers = _semantic_layer_gates(semantic_gate, {"status": "pass"})
+    layers = _semantic_layer_gates(
+        semantic_gate,
+        {"status": "pass"},
+        {
+            "status": "fail",
+            "teacher_only_normalized_connection_signatures": ["missing_ped_connection"],
+            "candidate_only_normalized_connection_signatures": [],
+        },
+    )
 
     assert layers["pedestrian_bike"]["status"] == "fail"
     assert [failure["field"] for failure in layers["pedestrian_bike"]["failures"]] == [
         "crossing_signature_mismatch_count",
         "walking_area_signature_mismatch_count",
+        "status",
     ]
+    assert layers["pedestrian_bike"]["failures"][-1]["report"] == "pedestrian_crossing_parity"
     assert layers["movement_tls"]["status"] == "fail"
     assert layers["internal"]["status"] == "fail"
     assert layers["topology"]["status"] == "fail"
@@ -10951,6 +10961,7 @@ def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(
     assert report["tls_movement_parity"]["candidate_connection_count"] == 1
     assert report["tls_movement_parity"]["movement_signature_equal_after_internal_id_normalization"] is True
     assert report["tls_movement_parity"]["tl_logic_phase_states_equal"] is True
+    assert report["pedestrian_crossing_parity"]["status"] == "pass"
     assert report["semantic_layer_gates"]["topology"]["status"] == "pass"
     assert report["semantic_layer_gates"]["movement_tls"]["status"] == "pass"
     assert report["semantic_layer_gates"]["pedestrian_bike"]["status"] == "pass"
