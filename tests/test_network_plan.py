@@ -420,6 +420,41 @@ def test_filter_teacher_guided_queue_keeps_topology_fragmented_tls_candidate(tmp
     assert filtered["expanded_scope_candidate_count"] == 1
 
 
+def test_filter_teacher_guided_queue_keeps_context_split_cluster_repair_seeds(tmp_path: Path) -> None:
+    queue_report = {
+        "status": "pass",
+        "queue_file": str(tmp_path / "all_queue.json"),
+        "repair_candidates": [
+            {"reference_id": "cluster_context", "candidate_status": "needs_expanded_rebuild_scope"},
+            {"reference_id": "cluster_drop", "candidate_status": "needs_expanded_rebuild_scope"},
+        ],
+    }
+    context_report = {
+        "context_split_cluster_repair_seeds": [
+            {
+                "reference_id": "cluster_context",
+                "candidate_member_junction_ids": ["a", "b"],
+                "seed_reason": "final_context_split_cluster_residual",
+            }
+        ]
+    }
+
+    filtered = _filter_teacher_guided_queue_to_mismatch_fields(
+        queue_report,
+        context_report,
+        {"movement_signature_counts", "internal_function_counts"},
+        output_dir=tmp_path / "filtered",
+        prefix="context_followup",
+    )
+
+    assert filtered["repair_candidate_count"] == 1
+    assert filtered["expanded_scope_candidate_count"] == 1
+    assert filtered["queue_filter_target_junction_ids"] == ["cluster_context"]
+    assert filtered["repair_candidates"] == [
+        {"reference_id": "cluster_context", "candidate_status": "needs_expanded_rebuild_scope"}
+    ]
+
+
 def test_full_reference_join_audit_without_movement_delta_does_not_seed_teacher_guided_queue() -> None:
     assert not _reference_join_audit_can_seed_teacher_guided_queue(
         {

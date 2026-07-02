@@ -815,8 +815,7 @@ def _filter_teacher_guided_queue_to_mismatch_fields(
     output_dir: Path,
     prefix: str,
 ) -> dict[str, Any]:
-    target_ids = sorted(
-        {
+    target_id_set = {
             str(case.get("junction_id", ""))
             for case in delta_report.get("junction_pattern_comparisons", []) or []
             if isinstance(case, Mapping)
@@ -827,11 +826,16 @@ def _filter_teacher_guided_queue_to_mismatch_fields(
             & mismatch_fields
             and str(case.get("junction_id", ""))
         }
-    )
+    for seed in delta_report.get("context_split_cluster_repair_seeds", []) or []:
+        if not isinstance(seed, Mapping):
+            continue
+        reference_id = str(seed.get("reference_id", "")).strip()
+        if reference_id:
+            target_id_set.add(reference_id)
+    target_ids = sorted(target_id_set)
     if not target_ids:
         return dict(queue_report)
 
-    target_id_set = set(target_ids)
     candidates = [
         candidate for candidate in queue_report.get("repair_candidates", []) or [] if isinstance(candidate, Mapping)
     ]
