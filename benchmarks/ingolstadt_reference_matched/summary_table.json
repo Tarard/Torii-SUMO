@@ -6,7 +6,8 @@
     "examples/02_one_prompt_osm_network/validation/run_2026-06-25_review_html/ingolstadt_workflow_review.html",
     "examples/02_one_prompt_osm_network/networks/tum_ingolstadt_center_reference.net.xml",
     "examples/02_one_prompt_osm_network/networks/torii_5_5_connected_core_tls_aggregated.net.xml",
-    "examples/02_one_prompt_osm_network/networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml"
+    "examples/02_one_prompt_osm_network/networks/torii_5_5_reference_visual_detail_tls_aggregated.net.xml",
+    "benchmarks/ingolstadt_reference_matched/semantic_gaps.json"
   ],
   "stages": [
     {

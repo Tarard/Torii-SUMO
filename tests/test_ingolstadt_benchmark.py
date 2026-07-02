@@ -89,6 +89,25 @@ def test_ingolstadt_promotion_trace_does_not_promote_blocked_review_stages() -> 
     assert decisions["teacher_guided_repair"] == "not_materialized_current_example"
 
 
+def test_ingolstadt_promotion_trace_blocks_on_semantic_gaps() -> None:
+    semantic_gaps = _read_json(BENCHMARK / "semantic_gaps.json")
+    promotion_trace = _read_json(BENCHMARK / "promotion_trace.json")
+    summary_table = _read_json(BENCHMARK / "summary_table.json")
+
+    semantic_gate = next(
+        stage for stage in promotion_trace["stages"] if stage["stage_id"] == "semantic_gap_gate"
+    )
+
+    assert "benchmarks/ingolstadt_reference_matched/semantic_gaps.json" in summary_table["source_artifacts"]
+    assert semantic_gate["promotion_decision"] == semantic_gaps["promotion_decision"]
+    assert semantic_gate["after_quality"]["tls_semantic_delta"] == {
+        gap["gap_id"]: gap["status"] for gap in semantic_gaps["gaps"]
+    }
+    assert semantic_gate["delta_quality"] == {
+        gap["gap_id"]: gap["next_gate"] for gap in semantic_gaps["gaps"]
+    }
+
+
 def test_ingolstadt_semantic_counts_match_committed_networks() -> None:
     semantic_counts = _read_json(BENCHMARK / "semantic_counts.json")
 
