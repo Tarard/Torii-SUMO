@@ -125,6 +125,59 @@ def write_road_connectivity_self_replay_net(
     }
 
 
+def write_road_connectivity_split_root_alias_repair_candidate(
+    candidate_net_file: Path,
+    output_file: Path,
+    split_root_aliases: list[dict[str, str]],
+) -> dict[str, Any]:
+    tree = ET.parse(candidate_net_file)
+    root = tree.getroot()
+    edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    renamed_edge_count = 0
+    skipped_aliases = []
+    for alias in split_root_aliases:
+        candidate_edge_id = str(alias.get("candidate_edge_id", "")).strip()
+        teacher_edge_id = str(alias.get("teacher_edge_id", "")).strip()
+        if (
+            not candidate_edge_id
+            or not teacher_edge_id
+            or candidate_edge_id == teacher_edge_id
+            or candidate_edge_id not in edges
+            or teacher_edge_id in edges
+        ):
+            skipped_aliases.append(alias)
+            continue
+        edge = edges.pop(candidate_edge_id)
+        edge.attrib["id"] = teacher_edge_id
+        for lane in edge.findall("lane"):
+            lane_id = lane.attrib.get("id", "")
+            renamed_lane_id = _renamed_lane_id(lane_id, candidate_edge_id, teacher_edge_id)
+            if renamed_lane_id != lane_id:
+                lane.attrib["id"] = renamed_lane_id
+        _rename_edge_references(root, candidate_edge_id, teacher_edge_id)
+        edges[teacher_edge_id] = edge
+        renamed_edge_count += 1
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(root, space="  ")
+    tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "selected_alias_count": len(split_root_aliases),
+        "renamed_edge_count": renamed_edge_count,
+        "skipped_alias_count": len(skipped_aliases),
+        "skipped_aliases": skipped_aliases,
+        "warnings": [],
+    }
+
+
 def compare_road_connectivity_bundles(
     teacher: dict[str, Any],
     candidate: dict[str, Any],
@@ -2954,6 +3007,31 @@ def _mapped_lane_id(lane_id: str, teacher_edge_map: dict[str, str]) -> str:
     if not sep:
         return lane_id
     return f"{teacher_edge_map.get(edge_id, edge_id)}_{index}"
+
+
+def _renamed_lane_id(lane_id: str, old_edge_id: str, new_edge_id: str) -> str:
+    edge_id, sep, index = lane_id.rpartition("_")
+    if not sep or edge_id != old_edge_id:
+        return lane_id
+    return f"{new_edge_id}_{index}"
+
+
+def _rename_edge_references(root: ET.Element, old_edge_id: str, new_edge_id: str) -> None:
+    for element in root.iter():
+        for key in ("from", "to"):
+            if element.attrib.get(key) == old_edge_id:
+                element.attrib[key] = new_edge_id
+        for key in ("incLanes", "intLanes"):
+            if key in element.attrib:
+                element.attrib[key] = " ".join(
+                    _renamed_lane_id(token, old_edge_id, new_edge_id)
+                    for token in element.attrib[key].split()
+                )
+        if "edges" in element.attrib:
+            element.attrib["edges"] = " ".join(
+                new_edge_id if token == old_edge_id else token
+                for token in element.attrib["edges"].split()
+            )
 
 
 def _connection_touches_owner_bundle(
