@@ -1,5 +1,7 @@
+from collections import Counter
 import json
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,7 @@ def test_ingolstadt_reference_matched_benchmark_files_are_present() -> None:
         "torii_reference_visual_detail.json",
         "promotion_trace.json",
         "review_load.json",
+        "semantic_counts.json",
         "summary_table.json",
     }
 
@@ -83,3 +86,60 @@ def test_ingolstadt_promotion_trace_does_not_promote_blocked_review_stages() -> 
     assert decisions["tls_aggregation"] == "blocked_review_required"
     assert decisions["junction_candidate_review"] == "blocked_review_required"
     assert decisions["teacher_guided_repair"] == "not_materialized_current_example"
+
+
+def test_ingolstadt_semantic_counts_match_committed_networks() -> None:
+    semantic_counts = _read_json(BENCHMARK / "semantic_counts.json")
+
+    for network_id, expected in semantic_counts["networks"].items():
+        net_file = ROOT / expected["network_file"]
+        assert expected == _network_semantic_counts(net_file)
+
+    assert semantic_counts["networks"]["tum_reference"]["crossing_edge_count"] > 0
+    assert semantic_counts["networks"]["tum_reference"]["walkingarea_edge_count"] > 0
+    assert semantic_counts["networks"]["torii_reference_visual_detail"]["crossing_edge_count"] == 0
+    assert semantic_counts["networks"]["torii_reference_visual_detail"]["walkingarea_edge_count"] == 0
+
+
+def _network_semantic_counts(path: Path) -> dict:
+    root = ET.parse(path).getroot()
+    edges = root.findall("edge")
+    junctions = root.findall("junction")
+    connections = root.findall("connection")
+    tl_logics = root.findall("tlLogic")
+    edge_functions = Counter(edge.attrib.get("function") or "plain" for edge in edges)
+    junction_types = Counter(junction.attrib.get("type") or "unknown" for junction in junctions)
+    dir_counts = Counter(connection.attrib.get("dir") or "blank" for connection in connections)
+    controlled_connections = [
+        connection for connection in connections if connection.attrib.get("tl") or connection.attrib.get("linkIndex")
+    ]
+    top_external_connections = [
+        connection
+        for connection in connections
+        if not connection.attrib.get("from", "").startswith(":") and not connection.attrib.get("to", "").startswith(":")
+    ]
+    internal_related_connections = [
+        connection
+        for connection in connections
+        if connection.attrib.get("from", "").startswith(":")
+        or connection.attrib.get("to", "").startswith(":")
+        or connection.attrib.get("via", "").startswith(":")
+    ]
+    return {
+        "network_file": str(path.relative_to(ROOT)).replace("\\", "/"),
+        "edge_function_counts": dict(sorted(edge_functions.items())),
+        "junction_type_counts": dict(sorted(junction_types.items())),
+        "connection_count": len(connections),
+        "top_external_connection_count": len(top_external_connections),
+        "internal_related_connection_count": len(internal_related_connections),
+        "controlled_connection_count": len(controlled_connections),
+        "connection_dir_counts": dict(sorted(dir_counts.items())),
+        "tlLogic_count": len(tl_logics),
+        "tlLogic_phase_count": sum(len(tl_logic.findall("phase")) for tl_logic in tl_logics),
+        "request_count": len(root.findall(".//request")),
+        "internal_edge_count": edge_functions.get("internal", 0),
+        "crossing_edge_count": edge_functions.get("crossing", 0),
+        "walkingarea_edge_count": edge_functions.get("walkingarea", 0),
+        "internal_junction_count": junction_types.get("internal", 0),
+        "traffic_light_junction_count": junction_types.get("traffic_light", 0),
+    }
