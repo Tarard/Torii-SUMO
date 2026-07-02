@@ -1286,6 +1286,8 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
     copy_tls: bool = False,
     max_ready_spans: int = 1,
     pre_repair_ready_road_spans: bool = False,
+    replay_blocked_road_span_endpoint_owners: bool = False,
+    max_blocked_endpoint_owner_replays: int = 1,
 ) -> dict[str, Any]:
     owner_input_file = candidate_net_file
     pre_road_span_repair = {
@@ -1348,13 +1350,76 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         )
         current_file = next_file
 
+    post_road_span_output_file = (
+        output_file.with_name(f"{output_file.stem}_post_road_spans{output_file.suffix}")
+        if replay_blocked_road_span_endpoint_owners
+        else output_file
+    )
     road_span_endpoint_replay_report = write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
         teacher_net_file,
         current_file,
-        output_file,
+        post_road_span_output_file,
         owner_id=owner_id,
         copy_tls=copy_tls,
         max_ready_spans=max_ready_spans,
+    )
+    current_file = post_road_span_output_file
+    blocked_replayed_endpoint_owner_ids: list[str] = []
+    blocked_endpoint_replay_reports = []
+    if replay_blocked_road_span_endpoint_owners:
+        blocked_candidates = [
+            candidate
+            for candidate in build_internal_movement_owner_road_span_repair_candidates(
+                teacher_net_file,
+                current_file,
+                owner_id=owner_id,
+            )
+            if candidate.get("status") == "blocked"
+        ]
+        already_replayed_owner_ids = {
+            owner_id,
+            *pre_replayed_endpoint_owner_ids,
+            *road_span_endpoint_replay_report["replayed_endpoint_owner_ids"],
+        }
+        blocked_endpoint_owner_ids = [
+            endpoint
+            for endpoint in _teacher_endpoint_owner_ids_for_edges(
+                teacher_net_file,
+                [
+                    str(edge_id)
+                    for candidate in blocked_candidates
+                    for edge_id in candidate.get("teacher_edge_ids", [])
+                ],
+            )
+            if endpoint not in already_replayed_owner_ids
+        ][:max_blocked_endpoint_owner_replays]
+        blocked_replayed_endpoint_owner_ids = blocked_endpoint_owner_ids
+        for index, endpoint_owner_id in enumerate(blocked_endpoint_owner_ids, start=1):
+            next_file = (
+                output_file
+                if index == len(blocked_endpoint_owner_ids)
+                else output_file.with_name(f"{output_file.stem}_blocked_endpoint_{index}{output_file.suffix}")
+            )
+            blocked_endpoint_replay_reports.append(
+                write_internal_movement_owner_teacher_replay_candidate(
+                    teacher_net_file,
+                    current_file,
+                    next_file,
+                    owner_id=endpoint_owner_id,
+                    copy_tls=copy_tls,
+                )
+            )
+            current_file = next_file
+        if not blocked_endpoint_owner_ids:
+            tree = ET.parse(current_file)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            ET.indent(tree.getroot(), space="  ")
+            tree.write(output_file, encoding="utf-8", xml_declaration=True)
+
+    owner_road_connectivity_audit = build_internal_movement_owner_road_connectivity_parity_audit(
+        teacher_net_file,
+        output_file,
+        owner_id=owner_id,
     )
     return {
         "status": (
@@ -1366,6 +1431,7 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
                     owner_replay_report,
                     *pre_endpoint_replay_reports,
                     road_span_endpoint_replay_report,
+                    *blocked_endpoint_replay_reports,
                 ]
             )
             else "fail"
@@ -1375,6 +1441,7 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         "owner_id": owner_id,
         "copy_tls": copy_tls,
         "pre_repair_ready_road_spans": pre_repair_ready_road_spans,
+        "replay_blocked_road_span_endpoint_owners": replay_blocked_road_span_endpoint_owners,
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "output_file": str(output_file),
@@ -1385,7 +1452,9 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         "pre_endpoint_replay_reports": pre_endpoint_replay_reports,
         "owner_replay_report": owner_replay_report,
         "road_span_endpoint_replay_report": road_span_endpoint_replay_report,
-        "owner_road_connectivity_audit": road_span_endpoint_replay_report["owner_road_connectivity_audit"],
+        "blocked_replayed_endpoint_owner_ids": blocked_replayed_endpoint_owner_ids,
+        "blocked_endpoint_replay_reports": blocked_endpoint_replay_reports,
+        "owner_road_connectivity_audit": owner_road_connectivity_audit,
         "warnings": [],
     }
 

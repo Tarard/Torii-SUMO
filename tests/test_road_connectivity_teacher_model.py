@@ -1319,6 +1319,59 @@ def test_write_owner_layered_teacher_replay_candidate_can_pre_repair_ready_spans
     assert root.find("junction[@id='mid']") is None
 
 
+def test_write_owner_layered_teacher_replay_candidate_can_replay_blocked_span_endpoint_owner(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.layered.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="cluster_a_b"><lane id="road#0_0" index="0"/></edge>
+  <edge id="-road#0" from="cluster_a_b" to="j"><lane id="-road#0_0" index="0"/></edge>
+  <edge id="out" from="cluster_a_b" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="-road#0_0"/>
+  <junction id="cluster_a_b" type="priority" x="20" y="0" incLanes="road#0_0" intLanes=":cluster_a_b_0_0"/>
+  <connection from="road#0" to="out" fromLane="0" toLane="0" via=":cluster_a_b_0_0" dir="s"/>
+  <connection from=":cluster_a_b_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="mid"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#1" from="mid" to="cluster_a_b"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="cluster_a_b" to="mid"><lane id="-road#1_0" index="0"/></edge>
+  <edge id="-road#0" from="mid" to="j"><lane id="-road#0_0" index="0"/></edge>
+  <edge id="side" from="mid" to="s"><lane id="side_0" index="0"/></edge>
+  <edge id="out" from="cluster_a_b" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+  <junction id="mid" type="priority" x="10" y="0"/>
+  <junction id="cluster_a_b" type="priority" x="20" y="0"/>
+  <junction id="s" type="priority" x="10" y="10"/>
+  <junction id="b" type="priority" x="30" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        replay_blocked_road_span_endpoint_owners=True,
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert report["blocked_replayed_endpoint_owner_ids"] == ["cluster_a_b"]
+    assert report["blocked_endpoint_replay_reports"][0]["owner_id"] == "cluster_a_b"
+    assert root.find("edge[@id=':cluster_a_b_0']") is not None
+    assert root.find("connection[@from='road#1'][@to='out']") is not None
+    assert root.find("junction[@id='mid']") is not None
+
+
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
     before = {
         "gate": {
