@@ -918,23 +918,10 @@ def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path 
         return None
     composite_net_file = str(report.get("composite_net_file", ""))
     has_accepted_composite = _int_field(report, "composite_applied_candidate_count") > 0 or (
-        report.get("status") == "pass" and report.get("parity_gate_status") == "pass"
+        report.get("status") == "pass" and report.get("parity_gate_status") == "pass" and bool(composite_net_file)
     )
-    if has_accepted_composite and composite_net_file and Path(composite_net_file).exists():
+    if has_accepted_composite and Path(composite_net_file).exists():
         return Path(composite_net_file)
-    if report.get("status") != "pass" or report.get("parity_gate_status") != "pass":
-        return None
-    for variant in report.get("variant_reports", []) or []:
-        if not isinstance(variant, Mapping):
-            continue
-        if variant.get("status") != "pass" or variant.get("parity_gate_status") != "pass":
-            continue
-        sumo_load = variant.get("sumo_load", {})
-        if isinstance(sumo_load, Mapping) and sumo_load.get("status") != "pass":
-            continue
-        final_net_file = str(variant.get("final_net_file", ""))
-        if final_net_file and Path(final_net_file).exists():
-            return Path(final_net_file)
     return None
 
 
