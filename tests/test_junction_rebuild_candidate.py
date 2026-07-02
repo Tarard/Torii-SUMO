@@ -1317,6 +1317,52 @@ def test_turnaround_only_lane_seed_scopes_missing_normal_target(tmp_path: Path) 
     assert candidate["expanded_rebuild_scope"]["missing_desired_endpoint_ids"] == ["e"]
 
 
+def test_join_case_derives_split_family_edge_map_from_boundary_edges(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in#2" from="a" to="cluster_a_b"><lane id="in#2_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="out#2" from="cluster_a_b" to="c"><lane id="out#2_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="in#2_0" intLanes=""/>
+  <connection from="in#2" to="out#2" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in#0" from="a" to="candidate_j"><lane id="in#0_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="out#0" from="candidate_j" to="c"><lane id="out#0_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="candidate_j" type="priority" x="0" y="0" incLanes="in#0_0" intLanes=""/>
+  <connection from="in#0" to="out#0" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "matched_candidate_node_ids": ["candidate_j", "other_j"],
+                    "reference_approach_edge_ids": ["in#2", "out#2"],
+                    "matched_candidate_boundary_edge_ids": ["in#0", "out#0"],
+                    "learned_rule": "tum_like_join_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    candidate = report["repair_candidates"][0]
+    assert candidate["candidate_status"] == "needs_expanded_rebuild_scope"
+    assert candidate["edge_map"] == {"in#2": "in#0", "out#2": "out#0"}
+    assert candidate["missing_teacher_edge_ids"] == []
+
+
 def test_build_teacher_guided_repair_queue_counts_duplicate_missing_teacher_movements(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
