@@ -578,6 +578,23 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["road_connectivity_replay_gate_status"] == "pass"
     assert report["reference_join_post_teacher_audit_status"] == "pass"
     assert report["routeability_audit_status"] == "pass"
+    stage_results = {stage["stage_name"]: stage for stage in report["workflow_stage_results"]}
+    assert list(stage_results) == [
+        "reference_comparison",
+        "teacher_guided_repair",
+        "road_connectivity",
+        "routeability",
+        "review_html",
+    ]
+    assert stage_results["teacher_guided_repair"]["promotion_decision"] == "pass"
+    assert stage_results["teacher_guided_repair"]["output_artifacts"]["best_variant"] == str(
+        tmp_path / "teacher_guided_best.net.xml"
+    )
+    assert (
+        stage_results["road_connectivity"]["after_quality"]["connectivity"]["road_connectivity_replay_gate_status"]
+        == "pass"
+    )
+    assert stage_results["routeability"]["after_quality"]["routeability"] == {"status": "pass"}
     assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "road_connectivity_parity" in report["network_plan"]["validation_gates"]
