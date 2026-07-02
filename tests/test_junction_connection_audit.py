@@ -2,6 +2,7 @@ from pathlib import Path
 
 from torii_sumo.core.junction_connection_audit import (
     build_connection_signature,
+    build_teacher_guided_owner_semantics_probe,
     compare_tls_movement_signatures,
     write_connection_signature,
 )
@@ -60,6 +61,130 @@ def test_connection_signature_counts_turnaround_separately_from_normal_movements
     assert signature["top_external_dir_counts"] == {"s": 1, "t": 1}
     assert signature["top_external_turnaround_connection_count"] == 1
     assert signature["top_external_non_turnaround_connection_count"] == 1
+
+
+def test_owner_semantics_probe_keeps_road_connectivity_separate_from_turnaround_junction_signature(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="in#1" from="a" to="j"><lane id="in#1_0" index="0" allow="passenger"/></edge>
+  <edge id="-in#1" from="j" to="a"><lane id="-in#1_0" index="0" allow="passenger"/></edge>
+  <edge id="out#1" from="j" to="b"><lane id="out#1_0" index="0" allow="passenger"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="priority"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <connection from="in#1" to="out#1" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in#1" to="-in#1" fromLane="0" toLane="0" dir="t"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="in#3" from="a" to="j"><lane id="in#3_0" index="0" allow="passenger"/></edge>
+  <edge id="-in#3" from="j" to="a"><lane id="-in#3_0" index="0" allow="passenger"/></edge>
+  <edge id="out#3" from="j" to="b"><lane id="out#3_0" index="0" allow="passenger"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="priority"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <connection from="in#3" to="-in#3" fromLane="0" toLane="0" dir="t"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_owner_semantics_probe(
+        teacher,
+        candidate,
+        owner_id="j",
+        teacher_edge_map={"in#1": "in#3", "-in#1": "-in#3", "out#1": "out#3"},
+    )
+
+    assert report["status"] == "fail"
+    assert report["layer_statuses"] == {
+        "edge_mapping": "pass",
+        "road_connectivity": "fail",
+        "junction_connection": "fail",
+        "tls_movement": "skipped",
+    }
+    assert report["road_connectivity_layer"]["gate"]["missing_non_turnaround_outgoing_count"] == 1
+    assert report["road_connectivity_layer"]["gate"]["turnaround_only_outgoing_count"] == 1
+    assert report["junction_connection_layer"]["teacher"]["top_external_non_turnaround_connection_count"] == 1
+    assert report["junction_connection_layer"]["candidate"]["top_external_non_turnaround_connection_count"] == 0
+    assert report["junction_connection_layer"]["candidate_turnaround_only_top_external"] is True
+
+
+def test_owner_semantics_probe_reuses_inferred_edge_map_for_tls_compare(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="in#1" from="a" to="j"><lane id="in#1_0" index="0" allow="passenger"/></edge>
+  <edge id="out#1" from="j" to="b"><lane id="out#1_0" index="0" allow="passenger"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="traffic_light"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <connection from="in#1" to="out#1" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="M"/>
+  <tlLogic id="j"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="in#3" from="a" to="j"><lane id="in#3_0" index="0" allow="passenger"/></edge>
+  <edge id="out#3" from="j" to="b"><lane id="out#3_0" index="0" allow="passenger"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="traffic_light"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <connection from="in#3" to="out#3" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="M"/>
+  <tlLogic id="j"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_owner_semantics_probe(teacher, candidate, owner_id="j")
+
+    assert report["layer_statuses"]["tls_movement"] == "pass"
+    assert report["teacher_edge_map"] == {"in#1": "in#3", "out#1": "out#3"}
+    assert report["tls_movement_layer"]["teacher_only_normalized_movement_signatures"] == []
+    assert report["tls_movement_layer"]["candidate_only_normalized_movement_signatures"] == []
+
+
+def test_owner_semantics_probe_reports_ambiguous_edge_mapping(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="b"><lane id="road#0_0" index="0" allow="passenger"/></edge>
+  <junction id="j" x="0" y="0" type="priority"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="road#1" from="j" to="b"><lane id="road#1_0" index="0" allow="passenger"/></edge>
+  <edge id="road#2" from="j" to="c"><lane id="road#2_0" index="0" allow="passenger"/></edge>
+  <junction id="j" x="0" y="0" type="priority"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <junction id="c" x="20" y="0" type="priority"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_owner_semantics_probe(teacher, candidate, owner_id="j")
+
+    assert report["status"] == "fail"
+    assert report["layer_statuses"]["edge_mapping"] == "fail"
+    assert report["edge_mapping_layer"]["ambiguous_teacher_edges"] == ["road#0"]
+    assert report["teacher_edge_map"] == {}
 
 
 def test_connection_signature_records_tls_link_indices(tmp_path: Path) -> None:
