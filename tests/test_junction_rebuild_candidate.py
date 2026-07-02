@@ -14,6 +14,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _restore_false_traffic_light_junction_types,
     _restore_non_target_internal_artifacts,
     _restore_replayed_geometry_attrs,
+    _road_continuity_probe_summary,
     _semantic_layer_gates,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
@@ -2617,6 +2618,28 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
         "same_family_continuation_edge_map_count": 2,
     }
     assert Path(report["matrix_file"]).is_file()
+
+
+def test_road_continuity_probe_summary_does_not_block_on_turnaround_boundary_cleanup() -> None:
+    report = _road_continuity_probe_summary(
+        {
+            "variant_reports": [
+                {
+                    "target_internal_replay": {
+                        "status": "pass",
+                        "removed_stale_boundary_edge_connection_count": 2,
+                        "removed_stale_boundary_edge_connections": [
+                            {"from": ":old_0", "to": "edge", "dir": "t"},
+                            {"from": "main", "to": "neighbor", "dir": "s"},
+                        ],
+                    }
+                }
+            ]
+        }
+    )
+
+    assert report["road_continuity_gate_status"] == "fail"
+    assert report["road_continuity_failure_counts"] == {"removed_stale_boundary_edge_connection_count": 1}
 
 
 def test_run_teacher_guided_repair_queue_replays_same_id_internal_mismatch_candidate(tmp_path: Path) -> None:

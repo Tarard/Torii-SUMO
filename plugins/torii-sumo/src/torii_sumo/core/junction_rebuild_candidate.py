@@ -4102,6 +4102,8 @@ def _road_continuity_probe_summary(run_report: dict[str, Any]) -> dict[str, obje
             value = (
                 _blocking_removed_stale_connection_count(replay)
                 if field == "removed_stale_replaced_edge_connection_count"
+                else _blocking_removed_stale_boundary_connection_count(replay)
+                if field == "removed_stale_boundary_edge_connection_count"
                 else _int_count(replay.get(field, 0))
             )
             if value:
@@ -8025,6 +8027,18 @@ def _blocking_removed_stale_connection_count(report: dict[str, Any]) -> int:
         and not _connection_touches_any_edge(connection, copied_boundary_edges)
     ]
     return len(blocking)
+
+
+def _blocking_removed_stale_boundary_connection_count(report: dict[str, Any]) -> int:
+    count = int(report.get("removed_stale_boundary_edge_connection_count", 0) or 0)
+    removed = report.get("removed_stale_boundary_edge_connections", [])
+    if not isinstance(removed, list):
+        return count
+    return sum(
+        1
+        for connection in removed
+        if isinstance(connection, dict) and str(connection.get("dir", "")).lower() != TURNAROUND_DIR
+    )
 
 
 def _connection_touches_walkingarea_internal(connection: dict[str, Any]) -> bool:
