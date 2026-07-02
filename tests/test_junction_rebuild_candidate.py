@@ -4164,7 +4164,14 @@ def test_run_teacher_guided_repair_queue_writes_expanded_scope_plain_inputs(tmp_
     assert scope_report["netconvert_command"][-2:] == ["--output-file", "expanded_scope.net.xml"]
     assert report["expanded_scope_pass_candidate_count"] == 1
     assert report["parity_gate_status"] == "pass"
+    assert report["local_scope_candidate_count"] == 1
+    assert report["global_candidate_eligible_count"] == 0
     assert Path(report["best_expanded_scope_net_file"]).name == "expanded_scope.net.xml"
+    assert report["variant_reports"][0]["candidate_scope_status"] == "local_scope"
+    assert report["variant_reports"][0]["global_candidate_eligible"] is False
+    promotion_gate = json.loads(Path(report["promotion_gate_file"]).read_text(encoding="utf-8"))
+    assert promotion_gate["items"][0]["candidate_scope_status"] == "local_scope"
+    assert promotion_gate["items"][0]["global_candidate_eligible"] is False
     scope_nodes = ET.parse(scope_report["node_file"]).getroot()
     scope_edges = ET.parse(scope_report["edge_file"]).getroot()
     scope_connections = ET.parse(scope_report["connection_file"]).getroot()
@@ -4453,6 +4460,45 @@ def test_teacher_guided_promotion_gate_keeps_applied_followup_report(tmp_path: P
 
     assert gate["status"] == "pass"
     assert gate["candidate_count"] == 1
+
+
+def test_teacher_guided_promotion_gate_prefers_global_candidate_over_local_scope(
+    tmp_path: Path,
+) -> None:
+    gate = _write_teacher_guided_promotion_gate(
+        output_file=tmp_path / "promotion.json",
+        status="pass",
+        claim_status="diagnostic-demo",
+        parity_gate_status="pass",
+        approach_integrity_status="pass",
+        variant_reports=[
+            {
+                "junction_id": "j",
+                "teacher_junction_id": "teacher_j",
+                "status": "pass",
+                "parity_gate_status": "pass",
+                "expanded_scope_followup_emitted": True,
+                "candidate_scope_status": "full_network",
+                "global_candidate_eligible": True,
+                "final_net_file": "global.net.xml",
+            },
+            {
+                "junction_id": "j",
+                "teacher_junction_id": "teacher_j",
+                "status": "pass",
+                "parity_gate_status": "pass",
+                "candidate_scope_status": "local_scope",
+                "global_candidate_eligible": False,
+                "final_net_file": "local.net.xml",
+            },
+        ],
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["candidate_count"] == 1
+    assert gate["items"][0]["final_net_file"] == "global.net.xml"
+    assert gate["items"][0]["candidate_scope_status"] == "full_network"
+    assert gate["items"][0]["global_candidate_eligible"] is True
 
 
 def test_run_teacher_guided_repair_queue_replays_expanded_scope_followup_in_same_call(
@@ -7834,6 +7880,8 @@ def test_run_teacher_guided_repair_queue_writes_promotion_gate_artifact(tmp_path
             "status": "pass",
             "parity_gate_status": "pass",
             "final_net_file": str(final_net),
+            "candidate_scope_status": "full_network",
+            "global_candidate_eligible": True,
             "semantic_layer_gates": {
                 "topology": {"status": "pass", "failure_count": 0, "failures": []},
                 "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
