@@ -108,6 +108,8 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "road_connectivity_replay_gate_status",
     "road_connectivity_replay_sumo_load_status",
     "road_connectivity_replay_best_variant_file",
+    "road_connectivity_promoted_variant_file",
+    "road_connectivity_promoted_variant_reason",
     "road_connectivity_replay_run_report_file",
     "road_connectivity_replay_gate_counts",
     "road_connectivity_seed_probe_status",
@@ -252,10 +254,8 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
         semantics.update(
             {
                 "best_variant_file": movement_best_variant_file
-                or str(workflow_report.get("teacher_guided_repair_best_variant_file", ""))
-                or road_connectivity_best_variant_file,
+                or str(workflow_report.get("teacher_guided_repair_best_variant_file", "")),
                 "comparison_net_file": movement_best_variant_file
-                or road_connectivity_best_variant_file
                 or str(workflow_report.get("reference_visual_detail_comparison_net_file", "")),
                 "run_report_file": str(workflow_report.get("teacher_guided_repair_run_report_file", "")),
                 "promotion_gate_status": str(workflow_report.get("teacher_guided_repair_promotion_gate_status", "")),
