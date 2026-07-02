@@ -69,11 +69,13 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
         bbox="11.413800,48.755391,11.433800,48.775391",
         network_profile="reference_matched",
         reference_net_file=str(reference_net_file),
+        road_connectivity_replay_max_owners=2,
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
     )
 
     assert report["status"] == "pass"
     assert captured["reference_join_audit_structural_only"] is False
+    assert captured["road_connectivity_replay_max_owners"] == 2
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
 
 

@@ -524,6 +524,7 @@ def sumo_osm_cleanup_workflow(
     run_scope_pruning_after_build: bool = True,
     reference_join_audit_structural_only: bool | None = None,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
+    road_connectivity_replay_max_owners: int | None = 4,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -574,6 +575,7 @@ def sumo_osm_cleanup_workflow(
         run_scope_pruning_after_build=run_scope_pruning_after_build,
         reference_join_audit_structural_only=structural_only,
         teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+        road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
         teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
         key_edge_queries=key_edge_queries,
     )
