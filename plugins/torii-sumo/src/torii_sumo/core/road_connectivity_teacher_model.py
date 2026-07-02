@@ -1651,7 +1651,7 @@ def build_internal_movement_owner_internal_lane_map(
     for connection in candidate_root.findall("connection"):
         record = _connection_replay_record(connection)
         via = record.get("via", "")
-        if _internal_owner_id(via) != owner_id:
+        if not _internal_id_belongs_to_owner(via, owner_id):
             continue
         candidate_index.setdefault(_movement_lane_key(record), []).append(via)
 
@@ -1664,7 +1664,7 @@ def build_internal_movement_owner_internal_lane_map(
             teacher_edge_map,
         )
         via = record.get("via", "")
-        if _internal_owner_id(via) != owner_id:
+        if not _internal_id_belongs_to_owner(via, owner_id):
             continue
         matches = sorted(set(candidate_index.get(_movement_lane_key(record), [])))
         if len(matches) == 1:
@@ -1919,11 +1919,11 @@ def write_internal_movement_owner_bundle_replacement_candidate(
 
     removed_internal_edge_count = _remove_children(
         candidate_root,
-        lambda child: child.tag == "edge" and _internal_owner_id(child.attrib.get("id", "")) == owner_id,
+        lambda child: child.tag == "edge" and _internal_id_belongs_to_owner(child.attrib.get("id", ""), owner_id),
     )
     removed_internal_junction_count = _remove_children(
         candidate_root,
-        lambda child: child.tag == "junction" and _internal_owner_id(child.attrib.get("id", "")) == owner_id,
+        lambda child: child.tag == "junction" and _internal_id_belongs_to_owner(child.attrib.get("id", ""), owner_id),
     )
     candidate_edges = {
         edge.attrib.get("id", ""): edge
@@ -1938,7 +1938,7 @@ def write_internal_movement_owner_bundle_replacement_candidate(
 
     added_internal_edge_count = 0
     for edge in teacher_root.findall("edge"):
-        if _internal_owner_id(edge.attrib.get("id", "")) != owner_id:
+        if not _internal_id_belongs_to_owner(edge.attrib.get("id", ""), owner_id):
             continue
         _insert_after_last(candidate_root, "edge", copy.deepcopy(edge))
         added_internal_edge_count += 1
@@ -1959,7 +1959,7 @@ def write_internal_movement_owner_bundle_replacement_candidate(
 
     added_internal_junction_count = 0
     for junction in teacher_root.findall("junction"):
-        if _internal_owner_id(junction.attrib.get("id", "")) != owner_id:
+        if not _internal_id_belongs_to_owner(junction.attrib.get("id", ""), owner_id):
             continue
         _insert_after_last(
             candidate_root,
@@ -2545,7 +2545,10 @@ def _record_touches_owner_bundle(connection: dict[str, str], owner_id: str) -> b
         _internal_owner_id(connection.get("from", "")),
         _internal_owner_id(connection.get("to", "")),
         _internal_owner_id(connection.get("via", "")),
-    }
+    } or any(
+        _internal_id_belongs_to_owner(connection.get(key, ""), owner_id)
+        for key in ("from", "to", "via")
+    )
 
 
 def _copy_owner_tl_logics(
@@ -2590,7 +2593,7 @@ def _owner_bundle_road_dependency_blockers(
     teacher_internal_edges = {
         edge.attrib.get("id", ""): edge
         for edge in teacher_root.findall("edge")
-        if _internal_owner_id(edge.attrib.get("id", "")) == owner_id
+        if _internal_id_belongs_to_owner(edge.attrib.get("id", ""), owner_id)
     }
     replay_edges = dict(candidate_edges)
     replay_edges.update(teacher_internal_edges)
@@ -2612,7 +2615,7 @@ def _owner_bundle_road_dependency_blockers(
 
     for junction in teacher_root.findall("junction"):
         junction_id = junction.attrib.get("id", "")
-        if junction_id != owner_id and _internal_owner_id(junction_id) != owner_id:
+        if junction_id != owner_id and not _internal_id_belongs_to_owner(junction_id, owner_id):
             continue
         mapped_attrs = _mapped_junction_attrs(junction.attrib, teacher_edge_map)
         for field in ("incLanes", "intLanes"):
@@ -2706,6 +2709,10 @@ def _internal_owner_id(edge_or_lane_id: str) -> str:
     if not edge_or_lane_id.startswith(":"):
         return ""
     return edge_or_lane_id[1:].split("_", 1)[0]
+
+
+def _internal_id_belongs_to_owner(edge_or_lane_id: str, owner_id: str) -> bool:
+    return bool(owner_id and edge_or_lane_id.startswith(f":{owner_id}_"))
 
 
 def _looks_internal_edge_id(edge_id: str) -> bool:
