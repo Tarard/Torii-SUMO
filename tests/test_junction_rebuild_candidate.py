@@ -8,6 +8,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _compare_teacher_models,
     _expanded_scope_followup_candidate_for_unsafe_internal_replay,
+    _endpoint_rewrite_old_endpoint_ids,
     _final_context_parity_gate,
     _netedit_review_actions,
     _remove_teacher_non_tls_tllogics,
@@ -8988,6 +8989,64 @@ def test_write_teacher_endpoint_patch_nodes_adds_translated_missing_edge_endpoin
         "type": "priority",
         "shape": "29.00,24.00 31.00,24.00",
     }
+
+
+def test_write_teacher_lane_patch_edges_applies_approach_endpoint_rewrites(tmp_path: Path) -> None:
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="old_upstream" to="j" numLanes="1"><lane index="0" shape="0,0 1,1"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="teacher_upstream" to="j" numLanes="1">
+    <lane id="teacher_in_0" index="0" speed="13.9" shape="10,10 20,20"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw_edges,
+        teacher_edge_file=teacher_net,
+        output_file=tmp_path / "patched.edg.xml",
+        edge_map={"teacher_in": "cand_in"},
+        approach_endpoint_rebuild_plan={
+            "edge_rebuilds": [
+                {
+                    "edge_id": "cand_in",
+                    "desired_from": "teacher_upstream",
+                    "desired_to": "j",
+                }
+            ]
+        },
+        lane_shape_delta=(1.0, 2.0),
+    )
+
+    edge = ET.parse(report["edge_file"]).getroot().find("edge[@id='cand_in']")
+    assert edge is not None
+    assert edge.attrib["from"] == "teacher_upstream"
+    assert edge.attrib["to"] == "j"
+    assert edge.find("lane").attrib["shape"] == "11.00,12.00 21.00,22.00"
+    assert report["endpoint_rewritten_existing_mapped_edge_count"] == 1
+
+
+def test_endpoint_rewrite_old_endpoint_ids_returns_replaced_plain_nodes() -> None:
+    assert _endpoint_rewrite_old_endpoint_ids(
+        {
+            "endpoint_rewritten_existing_mapped_edges": [
+                {"from": {"old": "old_upstream", "new": "teacher_upstream"}},
+                {"to": {"old": "j", "new": "j"}},
+                {"from": {"old": ":internal", "new": "external"}},
+            ],
+            "endpoint_rewritten_missing_mapped_edges": [
+                {"to": {"old": "old_downstream", "new": "teacher_downstream"}},
+            ],
+        }
+    ) == {"old_downstream", "old_upstream"}
 
 
 def test_write_teacher_lane_patch_edges_prunes_unmapped_target_boundary_edges(tmp_path: Path) -> None:

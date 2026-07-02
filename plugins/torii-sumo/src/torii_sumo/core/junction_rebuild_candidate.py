@@ -695,6 +695,7 @@ def write_teacher_lane_patch_edges(
     teacher_junction_id: str | None = None,
     boundary_node_ids: set[str] | None = None,
     prune_unmapped_boundary_edges: bool = False,
+    approach_endpoint_rebuild_plan: object | None = None,
     lane_shape_delta: tuple[float, float] | None = None,
     preserve_lane_shapes: bool = True,
 ) -> dict[str, object]:
@@ -726,7 +727,10 @@ def write_teacher_lane_patch_edges(
     )
     rebased_missing_mapped_edges = []
     rebased_existing_mapped_edges = []
+    endpoint_rewritten_existing_mapped_edges = []
+    endpoint_rewritten_missing_mapped_edges = []
     skipped_rebased_self_loop_edges = []
+    endpoint_rewrites = _endpoint_rewrites(approach_endpoint_rebuild_plan)
     for edge in root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
         touches_target = (
@@ -751,13 +755,21 @@ def write_teacher_lane_patch_edges(
         if not teacher_lanes:
             continue
         rebased_endpoints = {}
-        if join_source_node_id:
+        endpoint_rewritten = {}
+        endpoint_rewrite = endpoint_rewrites.get(edge_id)
+        if endpoint_rewrite is not None:
+            for attr, desired_endpoint in (("from", endpoint_rewrite[0]), ("to", endpoint_rewrite[1])):
+                current_endpoint = edge.attrib.get(attr, "")
+                if current_endpoint != desired_endpoint:
+                    edge.set(attr, desired_endpoint)
+                    endpoint_rewritten[attr] = {"old": current_endpoint, "new": desired_endpoint}
+        elif join_source_node_id:
             for attr in ("from", "to"):
                 teacher_endpoint = teacher_edge.attrib.get(attr, "")
                 if teacher_endpoint == teacher_junction_id:
                     edge.set(attr, join_source_node_id)
                     rebased_endpoints[attr] = {"teacher": teacher_endpoint, "candidate": join_source_node_id}
-        if rebased_endpoints and edge.attrib.get("from") and edge.attrib.get("from") == edge.attrib.get("to"):
+        if (rebased_endpoints or endpoint_rewritten) and edge.attrib.get("from") and edge.attrib.get("from") == edge.attrib.get("to"):
             skipped_rebased_self_loop_edges.append(
                 {
                     "candidate_edge_id": edge.attrib.get("id", ""),
@@ -767,11 +779,15 @@ def write_teacher_lane_patch_edges(
             )
             root.remove(edge)
             continue
-        existing_lane_shapes = {
-            lane.attrib.get("index", ""): lane.attrib["shape"]
-            for lane in edge.findall("lane")
-            if lane.attrib.get("index", "") and lane.attrib.get("shape")
-        }
+        existing_lane_shapes = (
+            {}
+            if endpoint_rewrite is not None
+            else {
+                lane.attrib.get("index", ""): lane.attrib["shape"]
+                for lane in edge.findall("lane")
+                if lane.attrib.get("index", "") and lane.attrib.get("shape")
+            }
+        )
         for lane in list(edge.findall("lane")):
             edge.remove(lane)
         edge.attrib.pop("allow", None)
@@ -791,10 +807,22 @@ def write_teacher_lane_patch_edges(
             if preserve_lane_shapes:
                 if lane.attrib.get("index", "") in existing_lane_shapes:
                     lane_attrs["shape"] = existing_lane_shapes[lane.attrib.get("index", "")]
-                elif lane_shape_delta is not None and lane.attrib.get("shape"):
-                    lane_attrs["shape"] = _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
+                elif lane.attrib.get("shape"):
+                    lane_attrs["shape"] = (
+                        _translate_shape(lane.attrib["shape"], lane_shape_delta[0], lane_shape_delta[1])
+                        if lane_shape_delta is not None
+                        else lane.attrib["shape"]
+                    )
             ET.SubElement(edge, "lane", lane_attrs)
         patched.append({"candidate_edge_id": edge.attrib.get("id", ""), "teacher_edge_id": teacher_edge.attrib.get("id", ""), "lane_count": len(teacher_lanes)})
+        if endpoint_rewritten:
+            endpoint_rewritten_existing_mapped_edges.append(
+                {
+                    "candidate_edge_id": edge.attrib.get("id", ""),
+                    "teacher_edge_id": teacher_edge.attrib.get("id", ""),
+                    **endpoint_rewritten,
+                }
+            )
         if rebased_endpoints:
             rebased_existing_mapped_edges.append(
                 {
@@ -816,13 +844,21 @@ def write_teacher_lane_patch_edges(
         edge_attrs["id"] = candidate_id
         edge_attrs["numLanes"] = str(len(teacher_lanes))
         rebased_endpoints = {}
-        if join_source_node_id:
+        endpoint_rewritten = {}
+        endpoint_rewrite = endpoint_rewrites.get(candidate_id)
+        if endpoint_rewrite is not None:
+            for attr, desired_endpoint in (("from", endpoint_rewrite[0]), ("to", endpoint_rewrite[1])):
+                current_endpoint = edge_attrs.get(attr, "")
+                if current_endpoint != desired_endpoint:
+                    edge_attrs[attr] = desired_endpoint
+                    endpoint_rewritten[attr] = {"old": current_endpoint, "new": desired_endpoint}
+        elif join_source_node_id:
             for attr in ("from", "to"):
                 teacher_endpoint = edge_attrs.get(attr, "")
                 if teacher_endpoint == teacher_junction_id:
                     edge_attrs[attr] = join_source_node_id
                     rebased_endpoints[attr] = {"teacher": teacher_endpoint, "candidate": join_source_node_id}
-        if rebased_endpoints and edge_attrs.get("from") and edge_attrs.get("from") == edge_attrs.get("to"):
+        if (rebased_endpoints or endpoint_rewritten) and edge_attrs.get("from") and edge_attrs.get("from") == edge_attrs.get("to"):
             skipped_rebased_self_loop_edges.append(
                 {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, "node": edge_attrs["from"]}
             )
@@ -849,6 +885,10 @@ def write_teacher_lane_patch_edges(
             rebased_missing_mapped_edges.append(
                 {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, **rebased_endpoints}
             )
+        if endpoint_rewritten:
+            endpoint_rewritten_missing_mapped_edges.append(
+                {"candidate_edge_id": candidate_id, "teacher_edge_id": teacher_id, **endpoint_rewritten}
+            )
         patched.append(added_missing_mapped_edges[-1])
         existing_edge_ids.add(candidate_id)
 
@@ -866,6 +906,10 @@ def write_teacher_lane_patch_edges(
         "rebased_existing_mapped_edges": rebased_existing_mapped_edges,
         "rebased_missing_mapped_edge_count": len(rebased_missing_mapped_edges),
         "rebased_missing_mapped_edges": rebased_missing_mapped_edges,
+        "endpoint_rewritten_existing_mapped_edge_count": len(endpoint_rewritten_existing_mapped_edges),
+        "endpoint_rewritten_existing_mapped_edges": endpoint_rewritten_existing_mapped_edges,
+        "endpoint_rewritten_missing_mapped_edge_count": len(endpoint_rewritten_missing_mapped_edges),
+        "endpoint_rewritten_missing_mapped_edges": endpoint_rewritten_missing_mapped_edges,
         "skipped_rebased_self_loop_edge_count": len(skipped_rebased_self_loop_edges),
         "skipped_rebased_self_loop_edges": skipped_rebased_self_loop_edges,
         "pruned_boundary_edge_count": len(pruned_boundary_edges),
@@ -2600,6 +2644,7 @@ def build_teacher_guided_junction_variant(
     raw_type_file: Path | None = None,
     raw_tllogic_file: Path | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
+    approach_endpoint_rebuild_plan: object | None = None,
     replay_target_internal_subgraph: bool = False,
     preserve_teacher_lane_shapes: bool = True,
     emit_teacher_crossings: bool = True,
@@ -2662,9 +2707,14 @@ def build_teacher_guided_junction_variant(
         teacher_junction_id=teacher_junction_id,
         boundary_node_ids=_joined_source_node_ids(raw_node_file, junction_id),
         prune_unmapped_boundary_edges=True,
+        approach_endpoint_rebuild_plan=approach_endpoint_rebuild_plan,
         lane_shape_delta=lane_shape_delta,
         preserve_lane_shapes=preserve_teacher_lane_shapes,
     )
+    internal_restore_exclude_junction_ids = {
+        junction_id,
+        *_endpoint_rewrite_old_endpoint_ids(lane_patch_report),
+    }
     node_patch_report = write_teacher_endpoint_patch_nodes(
         raw_node_file=raw_node_file,
         teacher_net_file=teacher_net_file,
@@ -2744,7 +2794,7 @@ def build_teacher_guided_junction_variant(
     non_target_internal_restore_report = _restore_non_target_internal_artifacts(
         source_file=candidate_net_file,
         target_file=sidewalks_net_file,
-        exclude_junction_ids={junction_id},
+        exclude_junction_ids=internal_restore_exclude_junction_ids,
     )
     if non_target_internal_restore_report.get("status") != "pass":
         return _write_teacher_guided_report(
@@ -2894,7 +2944,7 @@ def build_teacher_guided_junction_variant(
             target_internal_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
                 source_file=target_internal_replay_file,
                 target_file=target_internal_normalized_net_file,
-                exclude_junction_ids={junction_id},
+                exclude_junction_ids=internal_restore_exclude_junction_ids,
             )
         if (
             target_internal_normalize_report.get("status") == "pass"
@@ -2905,7 +2955,7 @@ def build_teacher_guided_junction_variant(
                     source_file=target_internal_replay_file,
                     target_file=target_internal_normalized_net_file,
                     fallback_node_file=raw_node_file,
-                    exclude_junction_ids={junction_id},
+                    exclude_junction_ids=internal_restore_exclude_junction_ids,
                 )
             )
             target_internal_normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
@@ -2936,7 +2986,7 @@ def build_teacher_guided_junction_variant(
                             source_file=target_internal_replay_file,
                             target_file=target_internal_normalized_unrestored_net_file,
                             fallback_node_file=raw_node_file,
-                            exclude_junction_ids={junction_id},
+                            exclude_junction_ids=internal_restore_exclude_junction_ids,
                         )
                     )
                     target_internal_normalize_report["unrestored_geometry_restore"] = _restore_replayed_geometry_attrs(
@@ -2979,7 +3029,7 @@ def build_teacher_guided_junction_variant(
             teacher_guided_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
                 source_file=final_net_file,
                 target_file=teacher_guided_normalized_net_file,
-                exclude_junction_ids={junction_id},
+                exclude_junction_ids=internal_restore_exclude_junction_ids,
             )
         if (
             teacher_guided_normalize_report.get("status") == "pass"
@@ -2990,7 +3040,7 @@ def build_teacher_guided_junction_variant(
                     source_file=final_net_file,
                     target_file=teacher_guided_normalized_net_file,
                     fallback_node_file=raw_node_file,
-                    exclude_junction_ids={junction_id},
+                    exclude_junction_ids=internal_restore_exclude_junction_ids,
                 )
             )
             teacher_guided_normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
@@ -3927,6 +3977,7 @@ def run_teacher_guided_repair_queue(
                         crossing_edge_overrides=crossing_edge_overrides_by_junction.get(joined_scope_junction_id)
                         or crossing_edge_overrides_by_junction.get(junction_id)
                         or crossing_edge_overrides_by_junction.get(teacher_junction_id),
+                        approach_endpoint_rebuild_plan=candidate.get("approach_endpoint_rebuild_plan", {}),
                         replay_target_internal_subgraph=candidate_replay_target_internal_subgraph,
                         preserve_teacher_lane_shapes=not use_full_network_join_patch_replay,
                         emit_teacher_crossings=not use_full_network_join_patch_replay,
@@ -8816,6 +8867,26 @@ def _command_report(result: Any) -> dict[str, object]:
     if "status" not in payload:
         payload["status"] = "pass" if payload.get("returncode") == 0 else "fail"
     return payload
+
+
+def _endpoint_rewrite_old_endpoint_ids(lane_patch_report: dict[str, object]) -> set[str]:
+    old_ids: set[str] = set()
+    for field in ("endpoint_rewritten_existing_mapped_edges", "endpoint_rewritten_missing_mapped_edges"):
+        entries = lane_patch_report.get(field, [])
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            for attr in ("from", "to"):
+                change = entry.get(attr)
+                if not isinstance(change, dict):
+                    continue
+                old = str(change.get("old", ""))
+                new = str(change.get("new", ""))
+                if old and old != new and not old.startswith(":"):
+                    old_ids.add(old)
+    return old_ids
 
 
 def _compare_teacher_models(
