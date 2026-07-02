@@ -895,8 +895,20 @@ def build_internal_movement_owner_approach_edge_map(
     *,
     owner_id: str,
 ) -> dict[str, Any]:
-    teacher_edges = _owner_external_approach_edges(ET.parse(teacher_net_file).getroot(), owner_id)
-    candidate_edges = _owner_external_approach_edges(ET.parse(candidate_net_file).getroot(), owner_id)
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_edges = _owner_external_approach_edges(teacher_root, owner_id)
+    candidate_edges = _owner_external_approach_edges(candidate_root, owner_id)
+    teacher_edge_nodes = {
+        edge.attrib.get("id", ""): edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_edge_nodes = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
     candidate_index: dict[tuple[str, str], list[str]] = {}
     for edge_id, direction in candidate_edges.items():
         candidate_index.setdefault((direction, _split_edge_root(edge_id)), []).append(edge_id)
@@ -909,7 +921,16 @@ def build_internal_movement_owner_approach_edge_map(
         if len(matches) == 1:
             edge_map[teacher_edge_id] = matches[0]
         elif len(matches) > 1:
-            ambiguous_teacher_edges.append(teacher_edge_id)
+            endpoint_matches = _same_terminal_endpoint_matches(
+                teacher_edge_nodes.get(teacher_edge_id),
+                [candidate_edge_nodes[edge_id] for edge_id in matches if edge_id in candidate_edge_nodes],
+                owner_id=owner_id,
+                direction=direction,
+            )
+            if len(endpoint_matches) == 1:
+                edge_map[teacher_edge_id] = endpoint_matches[0]
+            else:
+                ambiguous_teacher_edges.append(teacher_edge_id)
         else:
             unmapped_teacher_edges.append(teacher_edge_id)
 
@@ -2826,6 +2847,26 @@ def _owner_external_approach_edges(root: ET.Element, owner_id: str) -> dict[str,
         elif edge.attrib.get("from", "") == owner_id:
             edges[edge_id] = "outgoing"
     return edges
+
+
+def _same_terminal_endpoint_matches(
+    teacher_edge: ET.Element | None,
+    candidate_edges: list[ET.Element],
+    *,
+    owner_id: str,
+    direction: str,
+) -> list[str]:
+    if teacher_edge is None:
+        return []
+    endpoint_key = "from" if direction == "incoming" else "to"
+    teacher_endpoint = teacher_edge.attrib.get(endpoint_key, "")
+    if not teacher_endpoint or teacher_endpoint == owner_id:
+        return []
+    return [
+        edge.attrib["id"]
+        for edge in candidate_edges
+        if edge.attrib.get(endpoint_key, "") == teacher_endpoint
+    ]
 
 
 def _lane_allows_vehicle(lane: ET.Element) -> bool:

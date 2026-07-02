@@ -1982,6 +1982,38 @@ def test_build_internal_movement_owner_approach_edge_map_matches_split_roots(
     assert report["unmapped_teacher_edges"] == ["other#0"]
 
 
+def test_build_internal_movement_owner_approach_edge_map_prefers_matching_terminal_endpoint(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#3" from="j" to="b"><lane id="road#3_0" index="0"/></edge>
+  <edge id="-road#3" from="b" to="j"><lane id="-road#3_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#3" from="j" to="b"><lane id="road#3_0" index="0"/></edge>
+  <edge id="road#5" from="j" to="c"><lane id="road#5_0" index="0"/></edge>
+  <edge id="-road#3" from="b" to="j"><lane id="-road#3_0" index="0"/></edge>
+  <edge id="-road#5" from="c" to="j"><lane id="-road#5_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_approach_edge_map(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+
+    assert report["edge_map"] == {"-road#3": "-road#3", "road#3": "road#3"}
+    assert report["ambiguous_teacher_edges"] == []
+
+
 def test_write_internal_movement_owner_replay_candidate_applies_teacher_edge_map(
     tmp_path: Path,
 ) -> None:

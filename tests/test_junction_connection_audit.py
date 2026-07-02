@@ -170,10 +170,9 @@ def test_owner_semantics_probe_reports_ambiguous_edge_mapping(tmp_path: Path) ->
     candidate.write_text(
         """<net>
   <edge id="road#1" from="j" to="b"><lane id="road#1_0" index="0" allow="passenger"/></edge>
-  <edge id="road#2" from="j" to="c"><lane id="road#2_0" index="0" allow="passenger"/></edge>
+  <edge id="road#2" from="j" to="b"><lane id="road#2_0" index="0" allow="passenger"/></edge>
   <junction id="j" x="0" y="0" type="priority"/>
   <junction id="b" x="10" y="0" type="priority"/>
-  <junction id="c" x="20" y="0" type="priority"/>
 </net>
 """,
         encoding="utf-8",
