@@ -1694,6 +1694,53 @@ def write_teacher_target_internal_replay_net(
         candidate_edges_by_id.pop(stale_edge_id, None)
         removed_stale_split_fragment_edges.append(stale_edge_id)
     stale_split_spatial_junction_ids = set(stale_split_remote_junction_ids)
+    removed_cluster_member_residual_edges = []
+    removed_cluster_member_residual_connections = []
+    removed_cluster_member_residual_junctions = []
+    cluster_member_residual_junction_ids = set()
+    if junction_id.startswith("cluster_"):
+        cluster_member_residual_junction_ids = {
+            member_id
+            for member_id in junction_id.removeprefix("cluster_").split("_")
+            if member_id and member_id in candidate_junction_ids and member_id not in teacher_junctions
+        }
+    if cluster_member_residual_junction_ids:
+        covered_boundary_families = {
+            _signed_edge_family_id(edge_id)
+            for edge_id in replay_boundary_candidate_edge_ids
+            if edge_id and not edge_id.startswith(":")
+        }
+        protected_replay_edge_ids = {edge_id for edge_id in replay_edge_map.values() if edge_id}
+        removable_member_edges = [
+            edge_id
+            for edge_id, edge in sorted(candidate_edges_by_id.items())
+            if (
+                edge_id not in protected_replay_edge_ids
+                and edge_id not in teacher_edges
+                and not edge_id.startswith(":")
+                and edge.attrib.get("function") not in {"internal", "crossing", "walkingarea"}
+                and _signed_edge_family_id(edge_id) in covered_boundary_families
+                and (
+                    edge.attrib.get("from", "") in cluster_member_residual_junction_ids
+                    or edge.attrib.get("to", "") in cluster_member_residual_junction_ids
+                )
+            )
+        ]
+        for edge_id in removable_member_edges:
+            edge = candidate_edges_by_id.get(edge_id)
+            if edge is None:
+                continue
+            for connection in list(candidate_root.findall("connection")):
+                if edge_id in (connection.attrib.get("from", ""), connection.attrib.get("to", "")):
+                    removed_cluster_member_residual_connections.append(dict(connection.attrib))
+                    candidate_root.remove(connection)
+            _remove_edge_lanes_from_destination_junction(candidate_root, edge, all_junctions=True)
+            candidate_root.remove(edge)
+            candidate_edge_ids.discard(edge_id)
+            candidate_edges_by_id.pop(edge_id, None)
+            removed_cluster_member_residual_edges.append(edge_id)
+        if removed_cluster_member_residual_edges:
+            stale_split_spatial_junction_ids.update(cluster_member_residual_junction_ids)
     replayed_stale_split_continuation_edges = []
     replayed_stale_split_teacher_edge_ids: set[str] = set()
 
@@ -1925,6 +1972,8 @@ def write_teacher_target_internal_replay_net(
         candidate_root.remove(local_candidate_junction)
         candidate_junction_ids.discard(candidate_junction_id)
         removed_teacher_absent_same_family_continuation_junctions.append(candidate_junction_id)
+        if candidate_junction_id in cluster_member_residual_junction_ids:
+            removed_cluster_member_residual_junctions.append(candidate_junction_id)
     retuned_stale_split_junction_ids = []
     for remote_junction_id in sorted(stale_split_spatial_junction_ids):
         remote_teacher_junction = teacher_junctions.get(remote_junction_id)
@@ -2371,6 +2420,11 @@ def write_teacher_target_internal_replay_net(
         "removed_teacher_absent_same_family_continuation_junctions": (
             removed_teacher_absent_same_family_continuation_junctions
         ),
+        "removed_cluster_member_residual_edge_count": len(removed_cluster_member_residual_edges),
+        "removed_cluster_member_residual_edges": removed_cluster_member_residual_edges,
+        "removed_cluster_member_residual_connection_count": len(removed_cluster_member_residual_connections),
+        "removed_cluster_member_residual_connections": removed_cluster_member_residual_connections,
+        "removed_cluster_member_residual_junctions": removed_cluster_member_residual_junctions,
         "replayed_stale_split_context_edge_count": len(replayed_stale_split_context_edges),
         "replayed_stale_split_context_edges": replayed_stale_split_context_edges,
         "retuned_stale_split_junction_ids": retuned_stale_split_junction_ids,
