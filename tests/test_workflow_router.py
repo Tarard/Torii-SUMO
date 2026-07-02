@@ -368,6 +368,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         reference_net_file=str(tmp_path / "reference.net.xml"),
         teacher_guided_repair_max_ready_candidates=2,
         road_connectivity_replay_max_owners=3,
+        road_connectivity_probe_edge_ids=["road#0"],
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         launch_netedit_after_build=False,
         launch_sumo_gui_after_build=False,
@@ -377,6 +378,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
     assert captured["teacher_guided_repair_max_ready_candidates"] == 2
     assert captured["road_connectivity_replay_max_owners"] == 3
+    assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
     assert captured["launch_netedit_after_build"] is False
     assert captured["launch_sumo_gui_after_build"] is False
@@ -434,6 +436,11 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "road_connectivity_replay_gate_counts": {
                 "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0},
             },
+            "road_connectivity_seed_probe_status": "pass",
+            "road_connectivity_seed_probe_file": str(tmp_path / "road_seed.json"),
+            "road_connectivity_seed_probe_edge_delta_count": 0,
+            "road_connectivity_seed_probe_connection_delta_count": 0,
+            "road_connectivity_seed_probe_candidate_missing_seed_edge_ids": [],
             "workflow_review_html_status": "pass",
             "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
             "workflow_report_file": str(tmp_path / "workflow_report.json"),
@@ -455,6 +462,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         reference_net_file=reference_net_file,
         teacher_guided_repair_max_ready_candidates=1,
         road_connectivity_replay_max_owners=3,
+        road_connectivity_probe_edge_ids=["road#0"],
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         cleanup_workflow_func=fake_cleanup,
     )
@@ -483,6 +491,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["reference_matched_semantics_workflow"]["movement_rebuild_applied_candidate_count"] == 1
     assert report["reference_matched_semantics_workflow"]["configured_max_ready_candidates"] == 1
     assert captured["road_connectivity_replay_max_owners"] == 3
+    assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
     assert report["teacher_guided_repair_configured_max_ready_candidates"] == 1
     assert report["reference_matched_semantics_workflow"]["probe_matrix"] == {
@@ -508,6 +517,13 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         "gate_counts": {
             "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0},
         },
+    }
+    assert report["reference_matched_semantics_workflow"]["road_connectivity_seed_probe"] == {
+        "status": "pass",
+        "report_file": str(tmp_path / "road_seed.json"),
+        "edge_delta_count": 0,
+        "connection_delta_count": 0,
+        "candidate_missing_seed_edge_ids": [],
     }
     assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["reference_matched_semantics_workflow"]["promotion_gate_status"] == "pass"

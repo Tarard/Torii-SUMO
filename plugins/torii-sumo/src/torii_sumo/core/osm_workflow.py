@@ -32,7 +32,11 @@ from .osm_network import audit_tls, build_osm_network, build_routeability_probe,
 from .reference_bbox import derive_reference_net_bbox
 from .reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
 from .reference_join_audit import audit_reference_join_patterns
-from .road_connectivity_teacher_model import write_internal_movement_owner_layered_teacher_replay_candidate
+from .road_connectivity_teacher_model import (
+    canonical_road_connectivity_bundle,
+    compare_road_connectivity_bundles,
+    write_internal_movement_owner_layered_teacher_replay_candidate,
+)
 from .reference_scope import audit_reference_scope, build_scope_pruning_variant
 from .road_scope import (
     ROAD_LEVEL_SCOPE_OPTIONS,
@@ -939,6 +943,58 @@ def _run_owner_road_connectivity_replay(
     run_report_file = output_dir / f"{prefix}_{safe_owner}.json"
     report["run_report_file"] = str(run_report_file)
     run_report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
+def _run_road_connectivity_seed_probe(
+    *,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    seed_edge_ids: list[str],
+    output_dir: Path,
+    prefix: str,
+    hop_radius: int = 1,
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    normalized_seed_edge_ids = [str(edge_id).strip() for edge_id in seed_edge_ids if str(edge_id).strip()]
+    teacher = canonical_road_connectivity_bundle(
+        teacher_net_file,
+        seed_edge_ids=normalized_seed_edge_ids,
+        hop_radius=hop_radius,
+    )
+    candidate = canonical_road_connectivity_bundle(
+        candidate_net_file,
+        seed_edge_ids=normalized_seed_edge_ids,
+        hop_radius=hop_radius,
+    )
+    parity = compare_road_connectivity_bundles(teacher, candidate)
+    edge_ids = parity.get("edge_ids", {})
+    connections = parity.get("connections", {})
+    edge_delta_count = (
+        len(edge_ids.get("missing_in_candidate", []) or [])
+        + len(edge_ids.get("extra_in_candidate", []) or [])
+        + len(parity.get("common_edge_geometry_mismatches", []) or [])
+    )
+    connection_delta_count = len(connections.get("missing_in_candidate", []) or []) + len(
+        connections.get("extra_in_candidate", []) or []
+    )
+    report = {
+        "status": str(parity.get("status", "fail")),
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "seed_edge_ids": normalized_seed_edge_ids,
+        "hop_radius": hop_radius,
+        "edge_delta_count": edge_delta_count,
+        "connection_delta_count": connection_delta_count,
+        "candidate_missing_seed_edge_ids": parity.get("candidate_missing_seed_edge_ids", []),
+        "teacher_bundle_summary": teacher.get("summary", {}),
+        "candidate_bundle_summary": candidate.get("summary", {}),
+        "parity": parity,
+    }
+    report_file = output_dir / f"{prefix}.json"
+    report["report_file"] = str(report_file)
+    report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
 
 
@@ -2173,6 +2229,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_max_ready_candidates: int | None = 80,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     road_connectivity_replay_max_owners: int | None = 4,
+    road_connectivity_probe_edge_ids: list[str] | None = None,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_audit_func: Callable[..., dict[str, Any]] = audit_tls,
@@ -2199,6 +2256,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_probe_matrix_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_matrix,
     teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
     road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
+    road_connectivity_seed_probe_func: Callable[..., dict[str, Any]] = _run_road_connectivity_seed_probe,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
@@ -2525,6 +2583,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_run_report: dict[str, Any] | None = None
     teacher_guided_probe_matrix_report: dict[str, Any] | None = None
     road_connectivity_replay_report: dict[str, Any] | None = None
+    road_connectivity_seed_probe_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
     teacher_guided_replay_source_net_file: Path | None = None
     teacher_guided_direct_replay_report: dict[str, Any] | None = None
@@ -3219,6 +3278,19 @@ def run_osm_cleanup_workflow(
         reference_join_audit_candidate_layer = (
             "reference_visual_detail" if reference_visual_detail_comparison_net_file is not None or reference_visual_detail_net_file is not None else "vehicle_core"
         )
+        road_connectivity_seed_edge_ids = [
+            str(edge_id).strip()
+            for edge_id in (road_connectivity_probe_edge_ids or [])
+            if str(edge_id).strip()
+        ]
+        if road_connectivity_seed_edge_ids:
+            road_connectivity_seed_probe_report = road_connectivity_seed_probe_func(
+                teacher_net_file=reference_net_file,
+                candidate_net_file=reference_join_audit_candidate_net_file,
+                seed_edge_ids=road_connectivity_seed_edge_ids,
+                output_dir=output_dir / "road_connectivity_seed_probe",
+                prefix=f"{prefix}_road_connectivity_seed_probe",
+            )
         reference_join_audit_report = reference_join_audit_func(
             reference_net_file=reference_net_file,
             candidate_net_file=reference_join_audit_candidate_net_file,
@@ -4829,6 +4901,11 @@ def run_osm_cleanup_workflow(
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
         gate_status["junction_pattern_index"] = _junction_pattern_index_gate(reference_join_audit_report)
         gate_status["road_connectivity_parity"] = _road_connectivity_gate_status(road_connectivity_replay_report)
+        gate_status["road_connectivity_seed_parity"] = (
+            "skipped"
+            if road_connectivity_seed_probe_report is None
+            else str(road_connectivity_seed_probe_report.get("status", "fail"))
+        )
         semantic_parity_report = reference_join_post_teacher_audit_report or reference_join_audit_report
         gate_status["connection_semantics_parity"] = _junction_semantic_gate(
             semantic_parity_report,
@@ -4879,6 +4956,7 @@ def run_osm_cleanup_workflow(
         and gate_status.get("reference_join_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_aggregation", "skipped") in {"pass", "skipped"}
         and gate_status.get("road_connectivity_parity", "skipped") in {"pass", "skipped"}
+        and gate_status.get("road_connectivity_seed_parity", "skipped") in {"pass", "skipped"}
         and gate_status.get("teacher_guided_junction_parity", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
@@ -5646,6 +5724,21 @@ def run_osm_cleanup_workflow(
         if road_connectivity_replay_report is None
         else str(road_connectivity_replay_report.get("run_report_file", "")),
         "road_connectivity_replay_gate_counts": _road_connectivity_gate_counts(road_connectivity_replay_report),
+        "road_connectivity_seed_probe_status": "skipped"
+        if road_connectivity_seed_probe_report is None
+        else str(road_connectivity_seed_probe_report.get("status", "fail")),
+        "road_connectivity_seed_probe_file": ""
+        if road_connectivity_seed_probe_report is None
+        else str(road_connectivity_seed_probe_report.get("report_file", "")),
+        "road_connectivity_seed_probe_edge_delta_count": 0
+        if road_connectivity_seed_probe_report is None
+        else road_connectivity_seed_probe_report.get("edge_delta_count", 0),
+        "road_connectivity_seed_probe_connection_delta_count": 0
+        if road_connectivity_seed_probe_report is None
+        else road_connectivity_seed_probe_report.get("connection_delta_count", 0),
+        "road_connectivity_seed_probe_candidate_missing_seed_edge_ids": []
+        if road_connectivity_seed_probe_report is None
+        else road_connectivity_seed_probe_report.get("candidate_missing_seed_edge_ids", []),
         "teacher_guided_direct_replay_status": "skipped"
         if teacher_guided_direct_replay_report is None
         else str(teacher_guided_direct_replay_report.get("status", "fail")),
@@ -6085,6 +6178,7 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_run": teacher_guided_repair_run_report or {},
         "teacher_guided_probe_matrix": teacher_guided_probe_matrix_report or {},
         "road_connectivity_replay": road_connectivity_replay_report or {},
+        "road_connectivity_seed_probe": road_connectivity_seed_probe_report or {},
         "teacher_guided_direct_replay": teacher_guided_direct_replay_report or {},
         "teacher_guided_direct_replay_reference_delta": teacher_guided_direct_replay_reference_delta_report or {},
         "teacher_guided_direct_replay_reference_promotion": teacher_guided_direct_replay_reference_promotion_report,
