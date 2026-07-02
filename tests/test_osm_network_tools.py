@@ -76,6 +76,7 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
         bbox="11.413800,48.755391,11.433800,48.775391",
         network_profile="reference_matched",
         reference_net_file=str(reference_net_file),
+        run_teacher_guided_repair_after_build=False,
         road_connectivity_replay_max_owners=2,
         road_connectivity_probe_edge_ids=["road#0"],
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
@@ -83,6 +84,7 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
 
     assert report["status"] == "pass"
     assert captured["reference_join_audit_structural_only"] is False
+    assert captured["run_teacher_guided_repair_after_build"] is False
     assert captured["road_connectivity_replay_max_owners"] == 2
     assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
@@ -771,6 +773,273 @@ def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path
     assert report["teacher_guided_probe_matrix_missing_junction_ids"] == []
     assert report["teacher_guided_probe_matrix_file"] == str(matrix_kwargs["output_dir"] / "matrix.json")
     assert report["teacher_guided_probe_matrix"]["matrix_file"] == report["teacher_guided_probe_matrix_file"]
+
+
+def test_osm_cleanup_workflow_can_stop_after_road_connectivity_replay(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    reference_net_file.write_text("<net/>", encoding="utf-8")
+    raw_net_file = tmp_path / "candidate.net.xml"
+    source_osm_file = tmp_path / "source.osm.xml"
+    queue_file = tmp_path / "queue.json"
+    captured: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        raw_net_file.write_text("<net/>", encoding="utf-8")
+        source_osm_file.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(raw_net_file),
+            "filtered_osm_file": str(source_osm_file),
+            "source_osm_file": str(source_osm_file),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**_kwargs):
+        return {
+            "status": "pass",
+            "audit_mode": "structural_only",
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
+            "junction_pattern_comparisons": [
+                {
+                    "junction_id": "j1",
+                    "status": "fail",
+                    "mismatch_fields": ["movement_signature_counts"],
+                }
+            ],
+            "network_structural_missing_counts": {},
+            "network_structural_extra_counts": {},
+            "warnings": [],
+        }
+
+    def fake_repair_queue(**_kwargs):
+        return {
+            "status": "pass",
+            "queue_file": str(queue_file),
+            "repair_candidate_count": 1,
+            "ready_candidate_count": 1,
+            "expanded_scope_candidate_count": 0,
+            "blocked_candidate_count": 0,
+            "queued_case_count": 1,
+            "repair_candidates": [
+                {
+                    "junction_id": "j1",
+                    "reference_id": "j1",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                }
+            ],
+        }
+
+    def fake_seed_probe(**kwargs):
+        captured["seed_probe_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "report_file": str(kwargs["output_dir"] / "road_seed.json"),
+            "seed_edge_ids": kwargs["seed_edge_ids"],
+            "edge_delta_count": 0,
+            "connection_delta_count": 0,
+            "candidate_missing_seed_edge_ids": [],
+        }
+
+    def fail_plain_export(**_kwargs):
+        raise AssertionError("teacher-guided replay should be skipped")
+
+    def fail_direct_replay(**_kwargs):
+        raise AssertionError("teacher-guided direct replay should be skipped")
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.41,48.76,11.43,48.78",
+        output_dir=tmp_path,
+        prefix="road_only",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        reference_policy_report={
+            "status": "pass",
+            "reference_policy_status": "pass",
+            "reference_net_file": str(reference_net_file),
+            "selected_highway_classes": ["primary"],
+            "vehicle_core_highway_classes": ["primary"],
+            "visual_detail_highway_classes": ["primary"],
+            "movement_layers": ["passenger"],
+        },
+        run_routeability_audit_after_build=False,
+        run_topology_audit_after_build=False,
+        run_tls_aggregation_after_build=False,
+        run_junction_aggregation_after_build=False,
+        run_reference_hierarchy_audit_after_build=False,
+        run_reference_scope_audit_after_build=False,
+        run_reference_join_aggregation_after_build=False,
+        run_teacher_guided_repair_after_build=False,
+        road_connectivity_replay_max_owners=0,
+        launch_netedit_after_build=False,
+        launch_sumo_gui_after_build=False,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "warnings": [],
+        },
+        service_permission_func=lambda *_args, **_kwargs: {"status": "pass", "warnings": []},
+        reference_join_audit_func=fake_reference_join_audit,
+        teacher_guided_repair_queue_func=fake_repair_queue,
+        teacher_guided_plain_export_func=fail_plain_export,
+        teacher_guided_direct_replay_func=fail_direct_replay,
+        road_connectivity_probe_edge_ids=["road#0"],
+        road_connectivity_seed_probe_func=fake_seed_probe,
+        review_html_func=lambda **_kwargs: {"workflow_review_html_status": "pass"},
+    )
+
+    assert captured["seed_probe_candidate_net_file"] == raw_net_file
+    assert report["run_teacher_guided_repair_after_build"] is False
+    assert report["teacher_guided_repair_candidate_count"] == 1
+    assert report["teacher_guided_repair_ready_candidate_count"] == 1
+    assert report["teacher_guided_repair_run_status"] == "skipped"
+    assert report["teacher_guided_repair_parity_gate_status"] == "skipped"
+    assert report["road_connectivity_seed_probe_status"] == "pass"
+
+
+def test_osm_cleanup_workflow_replays_road_seed_without_teacher_queue(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    reference_net_file.write_text(
+        """<net>
+    <edge id="road#0" from="owner_a" to="owner_b"><lane id="road#0_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    raw_net_file = tmp_path / "candidate.net.xml"
+    source_osm_file = tmp_path / "source.osm.xml"
+    road_variant_file = tmp_path / "road_variant.net.xml"
+    captured: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        raw_net_file.write_text("<net/>", encoding="utf-8")
+        source_osm_file.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(raw_net_file),
+            "filtered_osm_file": str(source_osm_file),
+            "source_osm_file": str(source_osm_file),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**_kwargs):
+        return {
+            "status": "pass",
+            "audit_mode": "full",
+            "reference_case_count": 1,
+            "junction_pattern_mismatch_count": 0,
+            "junction_pattern_mismatch_field_counts": {},
+            "junction_pattern_comparisons": [],
+            "network_structural_missing_counts": {},
+            "network_structural_extra_counts": {},
+            "warnings": [],
+        }
+
+    def fail_repair_queue(**_kwargs):
+        raise AssertionError("junction teacher queue should not be required for road replay")
+
+    def fake_seed_probe(**kwargs):
+        return {
+            "status": "fail",
+            "report_file": str(kwargs["output_dir"] / "road_seed.json"),
+            "seed_edge_ids": kwargs["seed_edge_ids"],
+            "edge_delta_count": 1,
+            "connection_delta_count": 0,
+            "candidate_missing_seed_edge_ids": [],
+            "parity": {
+                "common_edge_geometry_mismatches": [{"edge_id": "road#0"}],
+            },
+        }
+
+    def fake_road_replay(**kwargs):
+        road_variant_file.write_text("<net/>", encoding="utf-8")
+        captured["road_replay_owner_id"] = kwargs["owner_id"]
+        captured["road_replay_candidate_net_file"] = kwargs["candidate_net_file"]
+        return {
+            "status": "pass",
+            "sumo_load_status": "pass",
+            "output_file": str(road_variant_file),
+            "owner_road_connectivity_audit": {
+                "status": "pass",
+                "gate": {"lane_delta_count": 0},
+            },
+        }
+
+    def fake_topology_replay(**_kwargs):
+        return {"status": "fail", "reason": "not_needed_for_this_test"}
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.41,48.76,11.43,48.78",
+        output_dir=tmp_path,
+        prefix="road_seed",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        reference_policy_report={
+            "status": "pass",
+            "reference_policy_status": "pass",
+            "reference_net_file": str(reference_net_file),
+            "selected_highway_classes": ["primary"],
+            "vehicle_core_highway_classes": ["primary"],
+            "visual_detail_highway_classes": ["primary"],
+            "movement_layers": ["passenger"],
+        },
+        reference_join_audit_structural_only=False,
+        run_routeability_audit_after_build=False,
+        run_topology_audit_after_build=False,
+        run_tls_aggregation_after_build=False,
+        run_junction_aggregation_after_build=False,
+        run_reference_hierarchy_audit_after_build=False,
+        run_reference_scope_audit_after_build=False,
+        run_reference_join_aggregation_after_build=False,
+        run_teacher_guided_repair_after_build=False,
+        road_connectivity_replay_max_owners=1,
+        launch_netedit_after_build=False,
+        launch_sumo_gui_after_build=False,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "warnings": [],
+        },
+        service_permission_func=lambda *_args, **_kwargs: {"status": "pass", "warnings": []},
+        reference_join_audit_func=fake_reference_join_audit,
+        teacher_guided_repair_queue_func=fail_repair_queue,
+        road_connectivity_probe_edge_ids=["road#0"],
+        road_connectivity_seed_probe_func=fake_seed_probe,
+        road_connectivity_replay_func=fake_road_replay,
+        road_connection_topology_replay_func=fake_topology_replay,
+        review_html_func=lambda **_kwargs: {"workflow_review_html_status": "pass"},
+    )
+
+    assert captured["road_replay_owner_id"] == "owner_a"
+    assert captured["road_replay_candidate_net_file"] == raw_net_file
+    assert report["teacher_guided_repair_queue_status"] == "skipped"
+    assert report["road_connectivity_replay_status"] == "pass"
+    assert report["road_connectivity_replay_gate_status"] == "pass"
+    assert report["road_connectivity_replay_best_variant_file"] == str(road_variant_file)
 
 
 def test_osm_map_url_bbox_extracts_small_area_around_center() -> None:

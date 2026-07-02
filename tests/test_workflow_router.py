@@ -112,6 +112,7 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
         output_dir=tmp_path,
         highway_classes="arterial",
         teacher_guided_repair_max_ready_candidates=1,
+        run_teacher_guided_repair_after_build=False,
         place_resolver=fake_resolver,
         cleanup_workflow_func=fake_cleanup,
     )
@@ -124,6 +125,7 @@ def test_auto_workflow_safe_autopilot_uses_resolved_bbox_without_confirmation(tm
     assert {"primary", "tertiary"} <= captured["highway_classes"]
     assert captured["run_routeability_audit_after_build"] is True
     assert captured["teacher_guided_repair_max_ready_candidates"] == 1
+    assert captured["run_teacher_guided_repair_after_build"] is False
     assert report["area_resolution_status"] == "candidate_found"
 
 
@@ -367,6 +369,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         network_profile="reference_matched",
         reference_net_file=str(tmp_path / "reference.net.xml"),
         teacher_guided_repair_max_ready_candidates=2,
+        run_teacher_guided_repair_after_build=False,
         road_connectivity_replay_max_owners=3,
         road_connectivity_probe_edge_ids=["road#0"],
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
@@ -377,6 +380,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
     assert report["status"] == "pass"
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
     assert captured["teacher_guided_repair_max_ready_candidates"] == 2
+    assert captured["run_teacher_guided_repair_after_build"] is False
     assert captured["road_connectivity_replay_max_owners"] == 3
     assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
@@ -518,7 +522,10 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         "run_status": "pass",
         "gate_status": "pass",
         "sumo_load_status": "pass",
-        "best_variant_file": str(tmp_path / "road_connectivity_best.net.xml"),
+        "best_variant_file": str(tmp_path / "road_connection_topology.net.xml"),
+        "owner_replay_variant_file": str(tmp_path / "road_connectivity_best.net.xml"),
+        "split_root_alias_repair_file": str(tmp_path / "road_connectivity_alias.net.xml"),
+        "topology_replay_file": str(tmp_path / "road_connection_topology.net.xml"),
         "run_report_file": str(tmp_path / "road_connectivity_run.json"),
         "gate_counts": {
             "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0},
