@@ -928,6 +928,72 @@ def build_internal_movement_owner_approach_edge_map(
     }
 
 
+def build_internal_movement_owner_approach_edge_chain_map(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+    max_chain_edges: int = 8,
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id") and not _is_internal_edge(edge)
+    }
+    edge_chain_map = {}
+    fragmented_teacher_edges = []
+    unmapped_teacher_edges = []
+    ambiguous_teacher_edges = []
+    for teacher_edge_id, direction in sorted(_owner_external_approach_edges(teacher_root, owner_id).items()):
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        if teacher_edge is None:
+            continue
+        terminal_junction_id = teacher_edge.attrib.get("from" if direction == "incoming" else "to", "")
+        chain, reason = _candidate_approach_edge_chain(
+            candidate_edges,
+            root_edge_id=_split_edge_root(teacher_edge_id),
+            owner_id=owner_id,
+            terminal_junction_id=terminal_junction_id,
+            direction=direction,
+            max_chain_edges=max_chain_edges,
+        )
+        if reason == "ambiguous":
+            ambiguous_teacher_edges.append(teacher_edge_id)
+            continue
+        if not chain:
+            unmapped_teacher_edges.append(teacher_edge_id)
+            continue
+        edge_chain_map[teacher_edge_id] = chain
+        if len(chain) > 1:
+            fragmented_teacher_edges.append(
+                {
+                    "teacher_edge_id": teacher_edge_id,
+                    "candidate_edge_ids": chain,
+                    "direction": direction,
+                }
+            )
+
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "owner_id": owner_id,
+        "edge_chain_map": edge_chain_map,
+        "fragmented_teacher_edge_count": len(fragmented_teacher_edges),
+        "fragmented_teacher_edges": fragmented_teacher_edges,
+        "unmapped_teacher_edges": unmapped_teacher_edges,
+        "ambiguous_teacher_edges": ambiguous_teacher_edges,
+    }
+
+
 def build_internal_movement_owner_road_lane_repair_candidates(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -1147,6 +1213,11 @@ def write_internal_movement_owner_teacher_replay_candidate(
         owner_id=owner_id,
         teacher_edge_map=edge_map,
     )
+    approach_edge_chain_map = build_internal_movement_owner_approach_edge_chain_map(
+        teacher_net_file,
+        output_file,
+        owner_id=owner_id,
+    )
     return {
         "status": bundle_replay["status"],
         "claim_status": "diagnostic-demo",
@@ -1166,6 +1237,7 @@ def write_internal_movement_owner_teacher_replay_candidate(
         "missing_approach_edge_repair": missing_approach_repair,
         "bundle_replay": bundle_replay,
         "road_connectivity_audit": road_connectivity_audit,
+        "approach_edge_chain_map": approach_edge_chain_map,
         "warnings": [],
     }
 
@@ -2356,6 +2428,65 @@ def _lane_delta_flag_count(
     flag: str,
 ) -> int:
     return sum(1 for delta in lane_deltas if flag in delta[side]["flags"])
+
+
+def _candidate_approach_edge_chain(
+    candidate_edges: dict[str, ET.Element],
+    *,
+    root_edge_id: str,
+    owner_id: str,
+    terminal_junction_id: str,
+    direction: str,
+    max_chain_edges: int,
+) -> tuple[list[str], str]:
+    if direction == "incoming":
+        current_to = owner_id
+        reversed_chain = []
+        seen = set()
+        for _ in range(max_chain_edges):
+            matches = sorted(
+                edge_id
+                for edge_id, edge in candidate_edges.items()
+                if _split_edge_root(edge_id) == root_edge_id
+                and edge.attrib.get("to", "") == current_to
+            )
+            if len(matches) > 1:
+                return [], "ambiguous"
+            if not matches:
+                return list(reversed(reversed_chain)), ""
+            edge_id = matches[0]
+            if edge_id in seen:
+                return [], "ambiguous"
+            seen.add(edge_id)
+            reversed_chain.append(edge_id)
+            current_to = candidate_edges[edge_id].attrib.get("from", "")
+            if current_to == terminal_junction_id:
+                return list(reversed(reversed_chain)), ""
+        return list(reversed(reversed_chain)), ""
+
+    current_from = owner_id
+    chain = []
+    seen = set()
+    for _ in range(max_chain_edges):
+        matches = sorted(
+            edge_id
+            for edge_id, edge in candidate_edges.items()
+            if _split_edge_root(edge_id) == root_edge_id
+            and edge.attrib.get("from", "") == current_from
+        )
+        if len(matches) > 1:
+            return [], "ambiguous"
+        if not matches:
+            return chain, ""
+        edge_id = matches[0]
+        if edge_id in seen:
+            return [], "ambiguous"
+        seen.add(edge_id)
+        chain.append(edge_id)
+        current_from = candidate_edges[edge_id].attrib.get("to", "")
+        if current_from == terminal_junction_id:
+            return chain, ""
+    return chain, ""
 
 
 def _split_edge_root(edge_id: str) -> str:
