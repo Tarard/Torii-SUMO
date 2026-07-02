@@ -1150,6 +1150,113 @@ def write_internal_movement_owner_road_span_repair_candidate(
     }
 
 
+def write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    *,
+    owner_id: str,
+    copy_tls: bool = False,
+    max_ready_spans: int = 1,
+) -> dict[str, Any]:
+    repair_candidates = build_internal_movement_owner_road_span_repair_candidates(
+        teacher_net_file,
+        candidate_net_file,
+        owner_id=owner_id,
+    )
+    ready_candidates = [
+        candidate for candidate in repair_candidates if candidate.get("status") == "ready"
+    ][:max_ready_spans]
+    blocked_candidates = [
+        candidate for candidate in repair_candidates if candidate.get("status") == "blocked"
+    ]
+    road_span_file = output_file.with_name(f"{output_file.stem}_road_spans{output_file.suffix}")
+    warnings = []
+
+    if ready_candidates:
+        road_span_repair = write_internal_movement_owner_road_span_repair_candidate(
+            teacher_net_file,
+            candidate_net_file,
+            road_span_file,
+            ready_candidates,
+        )
+    else:
+        road_span_file.parent.mkdir(parents=True, exist_ok=True)
+        tree = ET.parse(candidate_net_file)
+        ET.indent(tree.getroot(), space="  ")
+        tree.write(road_span_file, encoding="utf-8", xml_declaration=True)
+        road_span_repair = {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "candidate_net_file": str(candidate_net_file),
+            "output_file": str(road_span_file),
+            "selected_candidate_count": 0,
+            "applied_candidate_count": 0,
+            "skipped_blocked_candidate_count": 0,
+            "warnings": [],
+        }
+        warnings.append("no_ready_road_span_candidate")
+
+    endpoint_owner_ids = _teacher_endpoint_owner_ids_for_edges(
+        teacher_net_file,
+        [
+            str(edge_id)
+            for candidate in ready_candidates
+            for edge_id in candidate.get("teacher_edge_ids", [])
+        ],
+    )
+    replay_owner_ids = sorted(endpoint for endpoint in endpoint_owner_ids if endpoint != owner_id)
+    endpoint_replay_reports = []
+    current_file = road_span_file
+    for index, endpoint_owner_id in enumerate(replay_owner_ids):
+        next_file = (
+            output_file
+            if index == len(replay_owner_ids) - 1
+            else output_file.with_name(f"{output_file.stem}_endpoint_{index + 1}{output_file.suffix}")
+        )
+        endpoint_replay_reports.append(
+            write_internal_movement_owner_teacher_replay_candidate(
+                teacher_net_file,
+                current_file,
+                next_file,
+                owner_id=endpoint_owner_id,
+                copy_tls=copy_tls,
+            )
+        )
+        current_file = next_file
+
+    if not replay_owner_ids:
+        tree = ET.parse(current_file)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        ET.indent(tree.getroot(), space="  ")
+        tree.write(output_file, encoding="utf-8", xml_declaration=True)
+
+    owner_road_connectivity_audit = build_internal_movement_owner_road_connectivity_parity_audit(
+        teacher_net_file,
+        output_file,
+        owner_id=owner_id,
+    )
+    endpoint_replay_failed = any(report.get("status") != "pass" for report in endpoint_replay_reports)
+    return {
+        "status": "fail" if endpoint_replay_failed else road_span_repair["status"],
+        "claim_status": "diagnostic-demo",
+        "repair_scope": "ready_road_span_endpoint_replay",
+        "owner_id": owner_id,
+        "copy_tls": copy_tls,
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "road_span_file": str(road_span_file),
+        "selected_ready_road_span_candidate_count": len(ready_candidates),
+        "skipped_blocked_road_span_candidate_count": len(blocked_candidates),
+        "replayed_endpoint_owner_ids": replay_owner_ids,
+        "road_span_repair": road_span_repair,
+        "endpoint_replay_reports": endpoint_replay_reports,
+        "owner_road_connectivity_audit": owner_road_connectivity_audit,
+        "warnings": warnings,
+    }
+
+
 def build_internal_movement_owner_road_lane_repair_candidates(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -2707,6 +2814,23 @@ def _filter_junction_lane_references(root: ET.Element) -> None:
                     for lane_id in junction.attrib[key].split()
                     if lane_id in lane_ids
                 )
+
+
+def _teacher_endpoint_owner_ids_for_edges(
+    teacher_net_file: Path,
+    teacher_edge_ids: list[str],
+) -> list[str]:
+    requested_edge_ids = set(teacher_edge_ids)
+    endpoints = set()
+    for edge in ET.parse(teacher_net_file).getroot().findall("edge"):
+        if edge.attrib.get("id", "") not in requested_edge_ids:
+            continue
+        endpoints.update(
+            endpoint
+            for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+            if endpoint
+        )
+    return sorted(endpoints)
 
 
 def _split_edge_root(edge_id: str) -> str:

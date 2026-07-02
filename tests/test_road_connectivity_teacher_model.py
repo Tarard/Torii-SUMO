@@ -30,6 +30,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     write_internal_movement_owner_replay_candidate,
     write_internal_movement_owner_bundle_replacement_candidate,
     write_internal_movement_owner_missing_approach_edge_repair_candidate,
+    write_internal_movement_owner_ready_road_span_endpoint_replay_candidate,
     write_internal_movement_owner_teacher_replay_candidate,
     write_internal_movement_owner_road_span_repair_candidate,
     write_road_connectivity_self_replay_net,
@@ -1070,6 +1071,61 @@ def test_write_owner_road_span_repair_candidate_replaces_ready_split_chain(
     assert root.find("junction[@id='a']").attrib["incLanes"] == ""
     assert root.find("junction[@id='j']").attrib["intLanes"] == ""
     assert root.findall("connection") == []
+
+
+def test_write_owner_ready_road_span_endpoint_replay_candidate_replays_other_endpoint(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.ready_span_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="a" type="highway.residential"><lane id="road#0_0" index="0" allow="passenger" speed="13.89"/></edge>
+  <edge id="-road#0" from="a" to="j" type="highway.residential"><lane id="-road#0_0" index="0" allow="passenger" speed="13.89"/></edge>
+  <junction id="a" type="priority" x="0" y="0" incLanes="road#0_0"/>
+  <junction id="j" type="priority" x="20" y="0" incLanes="-road#0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="mid"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#1" from="mid" to="a"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="a" to="mid"><lane id="-road#1_0" index="0"/></edge>
+  <edge id="-road#0" from="mid" to="j"><lane id="-road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0" incLanes="road#1_0"/>
+  <junction id="mid" type="priority" x="10" y="0"/>
+  <junction id="j" type="priority" x="20" y="0" incLanes="-road#0_0"/>
+  <connection from="road#0" to="road#1" fromLane="0" toLane="0" dir="s"/>
+  <connection from="-road#1" to="-road#0" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+    )
+
+    root = ET.parse(output_net).getroot()
+    road = root.find("edge[@id='road#0']")
+    reverse = root.find("edge[@id='-road#0']")
+    assert report["status"] == "pass"
+    assert report["repair_scope"] == "ready_road_span_endpoint_replay"
+    assert report["selected_ready_road_span_candidate_count"] == 1
+    assert report["skipped_blocked_road_span_candidate_count"] == 0
+    assert report["replayed_endpoint_owner_ids"] == ["a"]
+    assert report["owner_road_connectivity_audit"]["status"] == "pass"
+    assert road.attrib["from"] == "j"
+    assert road.attrib["to"] == "a"
+    assert reverse.attrib["from"] == "a"
+    assert reverse.attrib["to"] == "j"
+    assert root.find("edge[@id='road#1']") is None
+    assert root.find("edge[@id='-road#1']") is None
+    assert root.find("junction[@id='mid']") is None
 
 
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
