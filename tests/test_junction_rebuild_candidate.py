@@ -6542,6 +6542,106 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
     assert full_network_seed_checked is True
 
 
+def test_run_teacher_guided_repair_queue_refreshes_stale_edge_map_after_join_patch(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-1" y="0"/>
+  <node id="b" x="1" y="0"/>
+  <node id="cluster_a_b" x="0" y="0" type="priority"/>
+  <node id="w" x="-10" y="0"/>
+  <node id="e" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="old" from="w" to="cluster_a_b"><lane index="0"/></edge>
+  <edge id="new" from="b" to="e"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="new" from="cluster_a_b" to="e">
+    <lane id="new_0" index="0" speed="8.33" length="10" shape="0,0 10,0"/>
+  </edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text('<net><junction id="cluster_a_b"/></net>', encoding="utf-8")
+    variant_edge_maps = []
+
+    def seed_net() -> str:
+        return """<net>
+  <edge id="new" from="cluster_a_b" to="e">
+    <lane id="new_0" index="0" speed="8.33" length="10" shape="0,0 10,0"/>
+  </edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>"""
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(seed_net(), encoding="utf-8")
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    def fake_variant(**kwargs):
+        variant_edge_maps.append(kwargs["edge_map"])
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.write_text(seed_net(), encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {"new": "old"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "recommended_action": "rebuild_plain_xml_scope",
+                        "core_junction_id": "cluster_a_b",
+                        "junction_ids": ["a", "b", "cluster_a_b"],
+                        "join_junction_ids": ["a", "b"],
+                        "blocked_teacher_edge_ids": [],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+        variant_builder=fake_variant,
+    )
+
+    assert report["attempted_candidate_count"] == 1
+    assert variant_edge_maps[0]["new"] == "new"
+    assert report["expanded_scope_reports"][0]["full_network_join_refreshed_edge_map"] == {"new": "new"}
+
+
 def test_run_teacher_guided_repair_queue_absorbs_unmapped_join_internal_vehicle_edge(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
