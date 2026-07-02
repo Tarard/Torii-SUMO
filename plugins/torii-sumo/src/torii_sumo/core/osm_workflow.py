@@ -1544,7 +1544,47 @@ def _sumo_load_net(
     report = _command_result_report(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
     report["source_net_file"] = str(net_file)
     report["load_net_file"] = str(load_net_file)
-    return report
+    if report.get("status") == "pass":
+        return report
+    sumo_path = Path(sumo_binary)
+    netconvert_binary = sumo_path.with_name("netconvert.exe" if sumo_path.suffix.lower() == ".exe" else "netconvert")
+    if not netconvert_binary.exists():
+        return report
+    normalized_net_file = output_dir / "sumo_load_candidate_normalized.net.xml"
+    netconvert_command = [
+        str(netconvert_binary),
+        "--sumo-net-file",
+        _command_path_for_cwd(load_net_file, output_dir),
+        "--output-file",
+        _command_path_for_cwd(normalized_net_file, output_dir),
+    ]
+    netconvert_report = _command_result_report(
+        command_runner(netconvert_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+    )
+    if netconvert_report.get("status") != "pass" or not normalized_net_file.exists():
+        report["normalization_netconvert"] = netconvert_report
+        return report
+    retry_command = [
+        sumo_binary,
+        "-n",
+        _command_path_for_cwd(normalized_net_file, output_dir),
+        "--no-step-log",
+        "true",
+        "--duration-log.disable",
+        "true",
+        "--begin",
+        "0",
+        "--end",
+        "1",
+    ]
+    retry_report = _command_result_report(
+        command_runner(retry_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+    )
+    retry_report["source_net_file"] = str(net_file)
+    retry_report["load_net_file"] = str(normalized_net_file)
+    retry_report["direct_sumo_load"] = report
+    retry_report["normalization_netconvert"] = netconvert_report
+    return retry_report
 
 
 def _has_tls_incompatibility_warning(report: Mapping[str, Any] | None) -> bool:

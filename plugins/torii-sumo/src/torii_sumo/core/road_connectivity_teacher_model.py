@@ -919,7 +919,26 @@ def build_internal_movement_owner_approach_edge_map(
     for teacher_edge_id, direction in sorted(teacher_edges.items()):
         matches = sorted(candidate_index.get((direction, _split_edge_root(teacher_edge_id)), []))
         if len(matches) == 1:
-            edge_map[teacher_edge_id] = matches[0]
+            endpoint_matches = _same_terminal_endpoint_matches(
+                teacher_edge_nodes.get(teacher_edge_id),
+                [candidate_edge_nodes[edge_id] for edge_id in matches if edge_id in candidate_edge_nodes],
+                owner_id=owner_id,
+                direction=direction,
+            )
+            if (
+                not endpoint_matches
+                and teacher_edge_id in candidate_edge_nodes
+                and teacher_edge_id != matches[0]
+                and not _edge_touches_terminal_endpoint(
+                    teacher_edge_nodes.get(teacher_edge_id),
+                    candidate_edge_nodes.get(teacher_edge_id),
+                    owner_id=owner_id,
+                    direction=direction,
+                )
+            ):
+                unmapped_teacher_edges.append(teacher_edge_id)
+            else:
+                edge_map[teacher_edge_id] = matches[0]
         elif len(matches) > 1:
             endpoint_matches = _same_terminal_endpoint_matches(
                 teacher_edge_nodes.get(teacher_edge_id),
@@ -1509,11 +1528,20 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         }
     current_file = owner_replay_file
     pre_endpoint_replay_reports = []
+    mapped_endpoint_replayed_owner_ids = [
+        endpoint
+        for endpoint in _teacher_endpoint_owner_ids_for_edges(
+            teacher_net_file,
+            list(owner_replay_report.get("edge_map", {})),
+        )
+        if endpoint != owner_id
+    ]
     pre_endpoint_owner_ids = list(
         dict.fromkeys(
             [
                 *pre_replayed_endpoint_owner_ids,
                 *blocked_overlay_replayed_endpoint_owner_ids,
+                *mapped_endpoint_replayed_owner_ids,
             ]
         )
     )
@@ -1632,6 +1660,7 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         "blocked_road_span_overlay": blocked_road_span_overlay,
         "pre_replayed_endpoint_owner_ids": pre_replayed_endpoint_owner_ids,
         "blocked_overlay_replayed_endpoint_owner_ids": blocked_overlay_replayed_endpoint_owner_ids,
+        "mapped_endpoint_replayed_owner_ids": mapped_endpoint_replayed_owner_ids,
         "pre_endpoint_owner_ids": pre_endpoint_owner_ids,
         "pre_endpoint_replay_reports": pre_endpoint_replay_reports,
         "owner_replay_report": owner_replay_report,
@@ -1710,6 +1739,11 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
         for edge in candidate_root.findall("edge")
         if edge.attrib.get("id")
     }
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
     candidate_junction_ids = {
         junction.attrib.get("id", "")
         for junction in candidate_root.findall("junction")
@@ -1723,11 +1757,21 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
     candidates = []
     for edge in teacher_root.findall("edge"):
         edge_id = edge.attrib.get("id", "")
-        if not edge_id or edge_id in teacher_edge_map or edge_id in candidate_edge_ids or _is_internal_edge(edge):
+        if not edge_id or edge_id in teacher_edge_map or _is_internal_edge(edge):
             continue
         endpoints = (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
         if owner_id not in endpoints:
             continue
+        existing_edge = candidate_edges.get(edge_id)
+        replace_existing_edge = False
+        if existing_edge is not None:
+            replace_existing_edge = (
+                endpoints != (existing_edge.attrib.get("from", ""), existing_edge.attrib.get("to", ""))
+                or _lane_signature(_canonical_edge_record(edge))
+                != _lane_signature(_canonical_edge_record(existing_edge))
+            )
+            if not replace_existing_edge:
+                continue
         missing_endpoint_junctions = [
             _minimal_endpoint_junction_attrs(teacher_junctions[endpoint])
             for endpoint in endpoints
@@ -1739,6 +1783,7 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
                 "edge_id": edge_id,
                 "edge": _edge_attrs_with_lanes(edge),
                 "edge_map_addition": {edge_id: edge_id},
+                "replace_existing_edge": replace_existing_edge,
                 "missing_endpoint_junctions": missing_endpoint_junctions,
             }
         )
@@ -1764,6 +1809,8 @@ def write_internal_movement_owner_missing_approach_edge_repair_candidate(
     }
     added_edge_count = 0
     added_junction_count = 0
+    replaced_edge_count = 0
+    removed_connection_count = 0
     edge_map_additions: dict[str, str] = {}
     for candidate in repair_candidates:
         if str(candidate.get("action", "")) != "add_missing_approach_edge":
@@ -1777,7 +1824,25 @@ def write_internal_movement_owner_missing_approach_edge_repair_candidate(
             added_junction_count += 1
         edge_record = candidate.get("edge", {})
         edge_id = str(edge_record.get("id", "")) if isinstance(edge_record, dict) else ""
-        if not edge_id or edge_id in existing_edge_ids:
+        if not edge_id:
+            continue
+        if edge_id in existing_edge_ids:
+            if not candidate.get("replace_existing_edge"):
+                continue
+            removed_connection_count += _remove_children(
+                root,
+                lambda child, target=edge_id: child.tag == "connection"
+                and (
+                    child.attrib.get("from", "") == target
+                    or child.attrib.get("to", "") == target
+                ),
+            )
+            replaced_edge_count += _remove_children(
+                root,
+                lambda child, target=edge_id: child.tag == "edge" and child.attrib.get("id", "") == target,
+            )
+            existing_edge_ids.discard(edge_id)
+        if edge_id in existing_edge_ids:
             continue
         edge_node = ET.Element("edge", _record_attrs(edge_record, "lanes"))
         for lane in edge_record.get("lanes", []):
@@ -1804,6 +1869,8 @@ def write_internal_movement_owner_missing_approach_edge_repair_candidate(
         "selected_candidate_count": len(repair_candidates),
         "added_edge_count": added_edge_count,
         "added_junction_count": added_junction_count,
+        "replaced_edge_count": replaced_edge_count,
+        "removed_connection_count": removed_connection_count,
         "edge_map_additions": edge_map_additions,
         "warnings": [],
     }
@@ -3033,6 +3100,24 @@ def _same_terminal_endpoint_matches(
         for edge in candidate_edges
         if edge.attrib.get(endpoint_key, "") == teacher_endpoint
     ]
+
+
+def _edge_touches_terminal_endpoint(
+    teacher_edge: ET.Element | None,
+    candidate_edge: ET.Element | None,
+    *,
+    owner_id: str,
+    direction: str,
+) -> bool:
+    if teacher_edge is None or candidate_edge is None:
+        return False
+    endpoint_key = "from" if direction == "incoming" else "to"
+    teacher_endpoint = teacher_edge.attrib.get(endpoint_key, "")
+    return bool(
+        teacher_endpoint
+        and teacher_endpoint != owner_id
+        and teacher_endpoint in {candidate_edge.attrib.get("from", ""), candidate_edge.attrib.get("to", "")}
+    )
 
 
 def _lane_allows_vehicle(lane: ET.Element) -> bool:
