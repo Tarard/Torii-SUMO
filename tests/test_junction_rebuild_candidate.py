@@ -1363,6 +1363,52 @@ def test_join_case_derives_split_family_edge_map_from_boundary_edges(tmp_path: P
     assert candidate["missing_teacher_edge_ids"] == []
 
 
+def test_missing_joined_candidate_scope_keeps_missing_teacher_edge_endpoints(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="outside_in" to="cluster_a_b"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="cluster_a_b" to="outside_out"><lane id="teacher_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <junction id="a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="1" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "matched_candidate_node_ids": ["a", "b"],
+                    "matched_reference_source_node_ids": ["a", "b"],
+                    "reference_approach_edge_ids": ["teacher_in", "teacher_out"],
+                    "learned_rule": "tum_like_join_candidate",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    scope = report["repair_candidates"][0]["expanded_rebuild_scope"]
+    assert scope["junction_ids"] == ["a", "b", "outside_in", "outside_out"]
+    assert scope["join_junction_ids"] == ["a", "b"]
+    assert scope["missing_desired_endpoint_ids"] == ["outside_in", "outside_out"]
+
+
 def test_build_teacher_guided_repair_queue_counts_duplicate_missing_teacher_movements(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
