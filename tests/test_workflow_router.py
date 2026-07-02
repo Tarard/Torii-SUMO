@@ -444,6 +444,9 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "road_connectivity_split_root_alias_repair_status": "pass",
             "road_connectivity_split_root_alias_repair_file": str(tmp_path / "road_connectivity_alias.net.xml"),
             "road_connectivity_split_root_alias_repair_report_file": str(tmp_path / "road_connectivity_alias.json"),
+            "road_connection_topology_replay_status": "pass",
+            "road_connection_topology_replay_file": str(tmp_path / "road_connection_topology.net.xml"),
+            "road_connection_topology_replay_report_file": str(tmp_path / "road_connection_topology.json"),
             "workflow_review_html_status": "pass",
             "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
             "workflow_report_file": str(tmp_path / "workflow_report.json"),
@@ -532,6 +535,11 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         "status": "pass",
         "output_file": str(tmp_path / "road_connectivity_alias.net.xml"),
         "report_file": str(tmp_path / "road_connectivity_alias.json"),
+    }
+    assert report["reference_matched_semantics_workflow"]["road_connection_topology_replay"] == {
+        "status": "pass",
+        "output_file": str(tmp_path / "road_connection_topology.net.xml"),
+        "report_file": str(tmp_path / "road_connection_topology.json"),
     }
     assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["reference_matched_semantics_workflow"]["promotion_gate_status"] == "pass"
