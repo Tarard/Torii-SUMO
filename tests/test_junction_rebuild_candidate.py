@@ -3363,6 +3363,123 @@ def test_run_teacher_guided_repair_queue_restores_requests_after_final_canonical
     assert not [failure for failure in failures if failure["field"] == "request_signatures_mismatch_count"]
 
 
+def test_run_teacher_guided_repair_queue_fails_when_final_context_has_extra_tls(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    for path in (raw_nodes, raw_edges, raw_connections):
+        path.write_text("<xml/>", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """
+<net>
+  <edge id="teacher_in" from="a" to="teacher_j"><lane id="teacher_in_0" index="0" speed="13.9" length="10" shape="0,0 10,0"/></edge>
+  <edge id="teacher_out" from="teacher_j" to="b"><lane id="teacher_out_0" index="0" speed="13.9" length="10" shape="10,0 20,0"/></edge>
+  <junction id="a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="teacher_out_0" intLanes=""/>
+  <junction id="teacher_j" type="traffic_light" x="10" y="0" incLanes="teacher_in_0" intLanes="" shape="9,-1 11,-1 11,1 9,1">
+    <request index="0" response="0" foes="10" cont="0"/>
+  </junction>
+  <tlLogic id="teacher_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="teacher_j" linkIndex="0" dir="s" state="O"/>
+</net>
+""".strip(),
+        encoding="utf-8",
+    )
+    candidate_net.write_text("<net/>", encoding="utf-8")
+
+    def candidate_xml() -> str:
+        return """
+<net>
+  <edge id="candidate_in" from="a" to="candidate_j"><lane id="candidate_in_0" index="0" speed="13.9" length="10" shape="0,0 10,0"/></edge>
+  <edge id="candidate_out" from="candidate_j" to="b"><lane id="candidate_out_0" index="0" speed="13.9" length="10" shape="10,0 20,0"/></edge>
+  <junction id="a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="candidate_out_0" intLanes=""/>
+  <junction id="candidate_j" type="traffic_light" x="10" y="0" incLanes="candidate_in_0" intLanes="" shape="9,-1 11,-1 11,1 9,1">
+    <request index="0" response="0" foes="10" cont="0"/>
+  </junction>
+  <junction id="near_tls" type="traffic_light" x="40" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="candidate_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <tlLogic id="near_tls" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" tl="candidate_j" linkIndex="0" dir="s" state="O"/>
+</net>
+""".strip()
+
+    def fake_variant(**kwargs):
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text(candidate_xml(), encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+            "target_internal_replay": {
+                "status": "pass",
+                "effective_edge_map": {"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+            },
+            "semantic_layer_gates": {
+                "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
+                "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                "internal": {"status": "pass", "failure_count": 0, "failures": []},
+            },
+        }
+
+    def fake_restore(**kwargs):
+        output_file = kwargs["output_file"]
+        output_file.write_text(candidate_xml(), encoding="utf-8")
+        return {"status": "pass", "claim_status": "diagnostic-demo", "net_file": str(output_file)}
+
+    def fake_runner(command, *, cwd, timeout_seconds):
+        input_file = Path(cwd) / command[command.index("--sumo-net-file") + 1]
+        output_file = Path(cwd) / command[command.index("--output-file") + 1]
+        output_file.write_text(input_file.read_text(encoding="utf-8"), encoding="utf-8")
+
+        class Result:
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "candidate_j",
+                    "reference_id": "teacher_j",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        variant_builder=fake_variant,
+        final_internal_replay_writer=fake_restore,
+        command_runner=fake_runner,
+    )
+
+    assert report["final_composite_parity"]["status"] == "pass"
+    assert report["final_context_parity"]["status"] == "fail"
+    assert report["context_gate_status"] == "fail"
+    assert report["status"] == "fail"
+    assert report["parity_gate_status"] == "pass"
+    assert report["promotion_gate_status"] == "fail"
+    context_report = report["final_context_parity"]["reports"][0]
+    assert {"field": "traffic_light_junction_count", "count": 1} in context_report["hard_failures"]
+    assert {"field": "tl_logic_count", "count": 1} in context_report["hard_failures"]
+
+
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"

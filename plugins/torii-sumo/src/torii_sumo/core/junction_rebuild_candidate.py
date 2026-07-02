@@ -4,6 +4,7 @@ import copy
 import csv
 import hashlib
 import json
+import math
 import shutil
 from collections import Counter
 from pathlib import Path
@@ -4011,6 +4012,14 @@ def run_teacher_guided_repair_queue(
         enabled=sequential_accept_passed_variants and final_internal_replay_status != "fail",
     )
     final_composite_parity_failed = final_composite_parity.get("status") == "fail"
+    final_context_parity = _final_context_parity_gate(
+        teacher_net_file=teacher_net_file,
+        composite_net_file=Path(composite_net_file) if composite_net_file else None,
+        accepted_internal_replays=accepted_internal_replays,
+        enabled=sequential_accept_passed_variants and final_internal_replay_status != "fail",
+    )
+    final_context_parity_failed = final_context_parity.get("status") == "fail"
+    context_gate_status = str(final_context_parity.get("status", "skipped"))
     sequential_composite_ready = (
         sequential_accept_passed_variants
         and composite_applied_candidate_count > 0
@@ -4018,6 +4027,7 @@ def run_teacher_guided_repair_queue(
         and Path(composite_net_file).exists()
         and final_internal_replay_status != "fail"
         and not final_composite_parity_failed
+        and not final_context_parity_failed
     )
     if attempted_count == 0:
         status = "blocked"
@@ -4027,6 +4037,10 @@ def run_teacher_guided_repair_queue(
         status = "fail"
         claim_status = "construction-invalid"
         parity_gate_status = "fail"
+    elif final_context_parity_failed:
+        status = "fail"
+        claim_status = "construction-invalid"
+        parity_gate_status = "pass" if parity_pass_count == attempted_count else "fail"
     elif sequential_composite_ready and failed_count == 0:
         status = "pass"
         claim_status = "diagnostic-demo"
@@ -4048,6 +4062,7 @@ def run_teacher_guided_repair_queue(
         status=status,
         claim_status=claim_status,
         parity_gate_status=parity_gate_status,
+        context_gate_status=context_gate_status,
         approach_integrity_status=approach_integrity_status,
         variant_reports=variant_reports,
     )
@@ -4075,6 +4090,7 @@ def run_teacher_guided_repair_queue(
         "semantic_layer_gate_counts": semantic_layer_gate_counts,
         "approach_integrity_status": approach_integrity_status,
         "approach_integrity_failure_counts": approach_integrity_failure_counts,
+        "context_gate_status": context_gate_status,
         "promotion_gate_status": promotion_gate["status"],
         "promotion_gate_file": str(promotion_gate_file),
         "expanded_scope_candidate_count": len(expanded_scope_reports),
@@ -4093,6 +4109,7 @@ def run_teacher_guided_repair_queue(
         "final_internal_replay_normalize": final_internal_replay_normalize_report,
         "final_internal_replay_normalized_net_file": final_internal_replay_normalized_net_file,
         "final_composite_parity": final_composite_parity,
+        "final_context_parity": final_context_parity,
         "final_internal_replay_restored_count": sum(
             1 for report in final_internal_replay_reports if report.get("status") == "pass"
         ),
@@ -4183,6 +4200,242 @@ def _final_composite_parity_gate(
         "checked_junction_count": len(reports),
         "reports": reports,
     }
+
+
+def _final_context_parity_gate(
+    *,
+    teacher_net_file: Path,
+    composite_net_file: Path | None,
+    accepted_internal_replays: list[dict[str, object]],
+    enabled: bool,
+    radius_m: float = 100.0,
+) -> dict[str, object]:
+    if not enabled:
+        return {"status": "skipped", "reason": "disabled"}
+    if composite_net_file is None or not composite_net_file.exists():
+        return {"status": "skipped", "reason": "missing_composite_net_file"}
+    if not accepted_internal_replays:
+        return {"status": "skipped", "reason": "no_accepted_internal_replays"}
+    try:
+        teacher_root = ET.parse(teacher_net_file).getroot()
+        composite_root = ET.parse(composite_net_file).getroot()
+    except (OSError, ET.ParseError) as exc:
+        return {"status": "fail", "reason": f"parse_error: {exc}", "reports": []}
+
+    reports: list[dict[str, object]] = []
+    for replay in accepted_internal_replays:
+        junction_id = str(replay.get("junction_id", ""))
+        teacher_junction_id = str(replay.get("teacher_junction_id", ""))
+        if not junction_id or not teacher_junction_id:
+            reports.append(
+                {
+                    "status": "fail",
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "reason": "missing_context_inputs",
+                }
+            )
+            continue
+        teacher_context = _local_junction_context_summary(
+            teacher_root,
+            teacher_junction_id,
+            radius_m=radius_m,
+        )
+        candidate_context = _local_junction_context_summary(
+            composite_root,
+            junction_id,
+            radius_m=radius_m,
+        )
+        if teacher_context.get("status") != "pass" or candidate_context.get("status") != "pass":
+            reports.append(
+                {
+                    "status": "fail",
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "reason": "context_extract_failed",
+                    "teacher_context": teacher_context,
+                    "candidate_context": candidate_context,
+                }
+            )
+            continue
+        delta = _context_count_delta(teacher_context, candidate_context)
+        hard_failures = [
+            {"field": field, "count": count}
+            for field, count in delta.items()
+            if field in {"traffic_light_junction_count", "tl_logic_count"} and count > 0
+        ]
+        reports.append(
+            {
+                "status": "fail" if hard_failures else "pass",
+                "junction_id": junction_id,
+                "teacher_junction_id": teacher_junction_id,
+                "radius_m": radius_m,
+                "teacher_context": teacher_context,
+                "candidate_context": candidate_context,
+                "delta_candidate_minus_teacher": delta,
+                "hard_failures": hard_failures,
+            }
+        )
+    return {
+        "status": "pass" if reports and all(report.get("status") == "pass" for report in reports) else "fail",
+        "checked_junction_count": len(reports),
+        "radius_m": radius_m,
+        "hard_failure_fields": ["traffic_light_junction_count", "tl_logic_count"],
+        "reports": reports,
+    }
+
+
+def _local_junction_context_summary(root: ET.Element, junction_id: str, *, radius_m: float) -> dict[str, object]:
+    target = root.find(f"junction[@id='{junction_id}']")
+    if target is None:
+        return {"status": "fail", "reason": "missing_target_junction", "junction_id": junction_id}
+    try:
+        center = (float(target.attrib.get("x", "")), float(target.attrib.get("y", "")))
+    except ValueError:
+        return {"status": "fail", "reason": "invalid_target_coordinate", "junction_id": junction_id}
+
+    junctions = {
+        str(junction.attrib.get("id", "")): junction
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    local_junction_ids = {
+        jid
+        for jid, junction in junctions.items()
+        if _junction_within_radius(junction, center=center, radius_m=radius_m)
+    }
+    local_edges: dict[str, ET.Element] = {}
+    for edge in root.findall("edge"):
+        edge_id = str(edge.attrib.get("id", ""))
+        if not edge_id:
+            continue
+        if _edge_touches_context(edge, local_junction_ids, center=center, radius_m=radius_m):
+            local_edges[edge_id] = edge
+    local_edge_ids = set(local_edges)
+    local_connections = [
+        connection
+        for connection in root.findall("connection")
+        if connection.attrib.get("from", "") in local_edge_ids or connection.attrib.get("to", "") in local_edge_ids
+    ]
+    local_tls_ids = {
+        str(jid)
+        for jid in local_junction_ids
+        if junctions.get(jid) is not None and junctions[jid].attrib.get("type") == "traffic_light"
+    }
+    local_tls_ids.update(
+        str(connection.attrib.get("tl", ""))
+        for connection in local_connections
+        if connection.attrib.get("tl")
+    )
+    edge_function_counts = Counter(
+        str(edge.attrib.get("function", "normal") or "normal") for edge in local_edges.values()
+    )
+    junction_type_counts = Counter(
+        str(junctions[jid].attrib.get("type", "")) for jid in local_junction_ids if jid in junctions
+    )
+    crossing_elements = [
+        crossing
+        for crossing in root.findall("crossing")
+        if str(crossing.attrib.get("node", "")) in local_junction_ids
+        or any(edge_id in local_edge_ids for edge_id in str(crossing.attrib.get("edges", "")).split())
+    ]
+    local_tllogics = [
+        tllogic
+        for tllogic in root.findall("tlLogic")
+        if str(tllogic.attrib.get("id", "")) in local_tls_ids
+    ]
+    return {
+        "status": "pass",
+        "junction_id": junction_id,
+        "radius_m": radius_m,
+        "junction_count": len(local_junction_ids),
+        "traffic_light_junction_count": sum(
+            1 for jid in local_junction_ids if junctions[jid].attrib.get("type") == "traffic_light"
+        ),
+        "traffic_light_junction_ids": sorted(
+            jid for jid in local_junction_ids if junctions[jid].attrib.get("type") == "traffic_light"
+        ),
+        "tl_logic_count": len(local_tllogics),
+        "tl_logic_ids": sorted(str(tllogic.attrib.get("id", "")) for tllogic in local_tllogics),
+        "edge_count": len(local_edges),
+        "edge_function_counts": dict(sorted(edge_function_counts.items())),
+        "normal_edge_count": edge_function_counts.get("normal", 0),
+        "internal_edge_count": edge_function_counts.get("internal", 0),
+        "walkingarea_edge_count": edge_function_counts.get("walkingarea", 0),
+        "crossing_edge_count": edge_function_counts.get("crossing", 0),
+        "crossing_element_count": len(crossing_elements),
+        "connection_count": len(local_connections),
+        "tls_controlled_connection_count": sum(1 for connection in local_connections if connection.attrib.get("tl")),
+        "turnaround_connection_count": sum(
+            1 for connection in local_connections if connection.attrib.get("dir") == TURNAROUND_DIR
+        ),
+        "junction_type_counts": dict(sorted(junction_type_counts.items())),
+    }
+
+
+def _context_count_delta(
+    teacher_context: dict[str, object],
+    candidate_context: dict[str, object],
+) -> dict[str, int]:
+    fields = (
+        "junction_count",
+        "traffic_light_junction_count",
+        "tl_logic_count",
+        "edge_count",
+        "normal_edge_count",
+        "internal_edge_count",
+        "walkingarea_edge_count",
+        "crossing_edge_count",
+        "crossing_element_count",
+        "connection_count",
+        "tls_controlled_connection_count",
+        "turnaround_connection_count",
+    )
+    return {
+        field: _int_count(candidate_context.get(field, 0)) - _int_count(teacher_context.get(field, 0))
+        for field in fields
+    }
+
+
+def _junction_within_radius(junction: ET.Element, *, center: tuple[float, float], radius_m: float) -> bool:
+    try:
+        x = float(junction.attrib.get("x", ""))
+        y = float(junction.attrib.get("y", ""))
+    except ValueError:
+        return False
+    return math.hypot(x - center[0], y - center[1]) <= radius_m
+
+
+def _edge_touches_context(
+    edge: ET.Element,
+    local_junction_ids: set[str],
+    *,
+    center: tuple[float, float],
+    radius_m: float,
+) -> bool:
+    if edge.attrib.get("from", "") in local_junction_ids or edge.attrib.get("to", "") in local_junction_ids:
+        return True
+    edge_id = str(edge.attrib.get("id", ""))
+    if edge_id.startswith(":") and any(edge_id.startswith(f":{junction_id}_") for junction_id in local_junction_ids):
+        return True
+    for lane in edge.findall("lane"):
+        for x, y in _shape_points(str(lane.attrib.get("shape", ""))):
+            if math.hypot(x - center[0], y - center[1]) <= radius_m:
+                return True
+    return False
+
+
+def _shape_points(shape: str) -> list[tuple[float, float]]:
+    points: list[tuple[float, float]] = []
+    for token in shape.split():
+        if "," not in token:
+            continue
+        x_value, y_value = token.split(",", 1)
+        try:
+            points.append((float(x_value), float(y_value)))
+        except ValueError:
+            continue
+    return points
 
 
 def _road_continuity_probe_summary(run_report: dict[str, Any]) -> dict[str, object]:
@@ -4310,6 +4563,7 @@ def run_teacher_guided_repair_matrix(
                 "parity_gate_status": str(run_report.get("parity_gate_status", "")),
                 "promotion_gate_status": str(run_report.get("promotion_gate_status", "")),
                 "approach_integrity_status": str(run_report.get("approach_integrity_status", "")),
+                "context_gate_status": str(run_report.get("context_gate_status", "")),
                 **road_continuity_summary,
                 "semantic_failure_counts": run_report.get("semantic_failure_counts", {})
                 if isinstance(run_report.get("semantic_failure_counts"), dict)
@@ -4327,12 +4581,17 @@ def run_teacher_guided_repair_matrix(
 
     all_parity_pass = bool(probes) and all(probe["parity_gate_status"] == "pass" for probe in probes)
     all_promotion_pass = bool(probes) and all(probe["promotion_gate_status"] == "pass" for probe in probes)
+    all_context_pass = bool(probes) and all(probe["context_gate_status"] != "fail" for probe in probes)
     all_road_continuity_pass = bool(probes) and all(
         probe["road_continuity_gate_status"] == "pass" for probe in probes
     )
     status = (
         "pass"
-        if all_parity_pass and all_promotion_pass and all_road_continuity_pass and not missing_junction_ids
+        if all_parity_pass
+        and all_promotion_pass
+        and all_context_pass
+        and all_road_continuity_pass
+        and not missing_junction_ids
         else "fail"
     )
     matrix_file = output_dir / f"{prefix}.json"
@@ -4344,6 +4603,7 @@ def run_teacher_guided_repair_matrix(
         "missing_junction_ids": missing_junction_ids,
         "all_parity_gate_pass": all_parity_pass,
         "all_promotion_gate_pass": all_promotion_pass,
+        "all_context_gate_pass": all_context_pass,
         "all_road_continuity_gate_pass": all_road_continuity_pass,
         "matrix_file": str(matrix_file),
         "probes": probes,
@@ -4932,6 +5192,7 @@ def _write_teacher_guided_promotion_gate(
     parity_gate_status: str,
     approach_integrity_status: str,
     variant_reports: list[dict[str, object]],
+    context_gate_status: str = "skipped",
 ) -> dict[str, object]:
     applied_reports = [report for report in variant_reports if report.get("composite_applied")]
     gate_reports = applied_reports or [
@@ -4954,6 +5215,7 @@ def _write_teacher_guided_promotion_gate(
         "pass"
         if status == "pass"
         and parity_gate_status == "pass"
+        and context_gate_status != "fail"
         and approach_integrity_status == "pass"
         and items
         and all(item["status"] == "pass" and item["parity_gate_status"] == "pass" for item in items)
@@ -4963,6 +5225,7 @@ def _write_teacher_guided_promotion_gate(
         "status": gate_status,
         "claim_status": claim_status,
         "parity_gate_status": parity_gate_status,
+        "context_gate_status": context_gate_status,
         "approach_integrity_status": approach_integrity_status,
         "candidate_count": len(items),
         "pass_candidate_count": sum(1 for item in items if item["status"] == "pass"),
