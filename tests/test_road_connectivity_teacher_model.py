@@ -35,6 +35,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     write_internal_movement_owner_teacher_replay_candidate,
     write_internal_movement_owner_road_span_repair_candidate,
     write_road_connectivity_self_replay_net,
+    write_road_connectivity_split_root_alias_repair_candidate,
 )
 
 
@@ -184,6 +185,42 @@ def test_compare_road_connectivity_bundles_aliases_unambiguous_split_root_connec
     }
     assert report["connections"] == {"missing_in_candidate": [], "extra_in_candidate": []}
     assert report["summary"]["split_root_alias_count"] == 1
+
+
+def test_write_road_connectivity_split_root_alias_repair_renames_edge_and_references(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.alias_repaired.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="b"><lane id="in_0" index="0"/></edge>
+  <edge id="road" from="b" to="c"><lane id="road_0" index="0"/></edge>
+  <junction id="b" type="priority" incLanes="in_0" intLanes=""/>
+  <junction id="c" type="priority" incLanes="road_0" intLanes=""/>
+  <connection from="in" to="road" fromLane="0" toLane="0" dir="s"/>
+  <crossing id=":b_c0" edges="road" priority="1"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_road_connectivity_split_root_alias_repair_candidate(
+        candidate_net,
+        output_net,
+        [
+            {
+                "root": "road",
+                "teacher_edge_id": "road#1",
+                "candidate_edge_id": "road",
+            }
+        ],
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["renamed_edge_count"] == 1
+    assert root.find("./edge[@id='road']") is None
+    assert root.find("./edge[@id='road#1']/lane").attrib["id"] == "road#1_0"
+    assert root.find("./connection[@from='in']").attrib["to"] == "road#1"
+    assert root.find("./junction[@id='c']").attrib["incLanes"] == "road#1_0"
+    assert root.find("./crossing").attrib["edges"] == "road#1"
 
 
 def test_compare_road_connectivity_bundles_reports_same_id_geometry_mismatch(tmp_path: Path) -> None:
