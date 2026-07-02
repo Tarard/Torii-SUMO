@@ -41,10 +41,16 @@ def _gate(summary: dict[str, Any], run_report: dict[str, Any], connection_audit:
 def summarize_probe_dir(probe_dir: Path) -> dict[str, Any]:
     probe_dir = probe_dir.resolve()
     summary = _load_first(sorted(probe_dir.glob("*summary.json")))
-    run_report = _load_first(sorted((probe_dir / "run").glob("*run_report.json")))
-    promotion_gate_paths = sorted((probe_dir / "run").glob("*promotion_gate.json"))
+    run_report_paths = sorted((probe_dir / "run").glob("*run_report.json")) or sorted(probe_dir.glob("*run_report.json"))
+    run_report = _load_first(run_report_paths)
+    promotion_gate_paths = sorted((probe_dir / "run").glob("*promotion_gate.json")) or sorted(
+        (probe_dir / "teacher_guided_repair_execution").glob("*promotion_gate.json")
+    )
     connection_audit = _load_first(sorted((probe_dir / "connection_audit").glob("*connection_audit_summary.json")))
-    variant_report = _load_first(sorted((probe_dir / "run").glob("candidate_*/*teacher_guided_report.json")))
+    variant_report_paths = sorted((probe_dir / "run").glob("candidate_*/*teacher_guided_report.json")) or sorted(
+        (probe_dir / "teacher_guided_repair_execution").glob("candidate_*/*teacher_guided_report.json")
+    )
+    variant_report = _load_first(variant_report_paths)
     netedit_captures = sorted((probe_dir / "netedit_review").glob("**/netedit_connection_review.png"))
     target_junction = str(variant_report.get("junction_id") or "").strip()
 
