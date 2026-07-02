@@ -413,6 +413,14 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
                 "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
                 "pedestrian_bike": {"pass": 0, "fail": 1, "failure_count": 2},
             },
+            "road_connectivity_replay_status": "pass",
+            "road_connectivity_replay_gate_status": "pass",
+            "road_connectivity_replay_sumo_load_status": "pass",
+            "road_connectivity_replay_best_variant_file": str(tmp_path / "road_connectivity_best.net.xml"),
+            "road_connectivity_replay_run_report_file": str(tmp_path / "road_connectivity_run.json"),
+            "road_connectivity_replay_gate_counts": {
+                "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0},
+            },
             "workflow_review_html_status": "pass",
             "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
             "workflow_report_file": str(tmp_path / "workflow_report.json"),
@@ -465,6 +473,16 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
         "pedestrian_bike": {"pass": 0, "fail": 1, "failure_count": 2},
     }
+    assert report["reference_matched_semantics_workflow"]["road_connectivity_layer"] == {
+        "run_status": "pass",
+        "gate_status": "pass",
+        "sumo_load_status": "pass",
+        "best_variant_file": str(tmp_path / "road_connectivity_best.net.xml"),
+        "run_report_file": str(tmp_path / "road_connectivity_run.json"),
+        "gate_counts": {
+            "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0},
+        },
+    }
     assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["reference_matched_semantics_workflow"]["promotion_gate_status"] == "pass"
     assert report["reference_matched_semantics_workflow"]["promotion_gate_file"] == str(
@@ -492,10 +510,12 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert report["post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count"] == 4
     assert report["final_movement_rebuild_sumo_load_status"] == "pass"
     assert report["final_movement_rebuild_semantic_layer_gate_counts"]["pedestrian_bike"]["failure_count"] == 2
+    assert report["road_connectivity_replay_gate_status"] == "pass"
     assert report["reference_join_post_teacher_audit_status"] == "pass"
     assert report["routeability_audit_status"] == "pass"
     assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
+    assert "road_connectivity_parity" in report["network_plan"]["validation_gates"]
     assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "internal_junction_parity" in report["network_plan"]["validation_gates"]
 

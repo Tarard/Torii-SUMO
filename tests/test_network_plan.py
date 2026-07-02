@@ -1432,6 +1432,7 @@ def test_network_plan_derives_reference_policy_from_reference_net(tmp_path: Path
     assert "scope_matched_reference_comparison" in plan["validation_gates"]
     assert "reference_join_audit" in plan["validation_gates"]
     assert "junction_pattern_index" in plan["validation_gates"]
+    assert "road_connectivity_parity" in plan["validation_gates"]
     assert "connection_semantics_parity" in plan["validation_gates"]
     assert "tls_semantics_parity" in plan["validation_gates"]
     assert "internal_junction_parity" in plan["validation_gates"]
