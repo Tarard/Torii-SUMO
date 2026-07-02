@@ -5601,6 +5601,11 @@ def _teacher_guided_repair_candidate(
         missing_teacher_edge_ids = [
             edge_id for edge_id in _teacher_approach_edge_ids(teacher_model) if edge_id not in case_edge_map
         ]
+        missing_endpoint_ids = (
+            _missing_teacher_edge_endpoint_ids(teacher_edges, missing_teacher_edge_ids, reference_id)
+            if case.get("reference_approach_edge_ids") or case.get("matched_reference_source_boundary_edge_ids")
+            else []
+        )
         if candidate_node_ids:
             return {
                 **base,
@@ -5614,10 +5619,10 @@ def _teacher_guided_repair_candidate(
                     "status": "review",
                     "recommended_action": "rebuild_plain_xml_scope",
                     "core_junction_id": base["junction_id"],
-                    "junction_ids": sorted(dict.fromkeys(scope_node_ids)),
+                    "junction_ids": sorted(dict.fromkeys([*scope_node_ids, *missing_endpoint_ids])),
                     "join_junction_ids": list(dict.fromkeys(join_node_ids)),
                     "blocked_teacher_edge_ids": missing_teacher_edge_ids,
-                    "missing_desired_endpoint_ids": [],
+                    "missing_desired_endpoint_ids": missing_endpoint_ids,
                     "reason": "candidate joined junction not found; rebuild from matched candidate source nodes",
                 },
                 "error": f"{type(candidate_error).__name__}: {candidate_error}",
@@ -5799,6 +5804,22 @@ def _expanded_rebuild_scope(
         "missing_desired_endpoint_ids": [],
         "reason": "missing teacher approach edge cannot be copied safely; rebuild from matched candidate source nodes",
     }
+
+
+def _missing_teacher_edge_endpoint_ids(
+    teacher_edges: dict[str, ET.Element],
+    missing_teacher_edge_ids: list[str],
+    reference_id: str,
+) -> list[str]:
+    return sorted(
+        {
+            endpoint
+            for edge_id in missing_teacher_edge_ids
+            if (edge := teacher_edges.get(edge_id)) is not None
+            for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+            if endpoint and endpoint != reference_id
+        }
+    )
 
 
 def _teacher_candidate_edge_map(
