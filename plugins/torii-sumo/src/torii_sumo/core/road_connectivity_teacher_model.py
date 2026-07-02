@@ -1558,6 +1558,23 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         )
         current_file = next_file
 
+    post_endpoint_owner_refresh_report: dict[str, Any] = {
+        "status": "pass",
+        "refresh_status": "skipped",
+    }
+    if pre_endpoint_replay_reports:
+        post_endpoint_owner_refresh_file = output_file.with_name(
+            f"{output_file.stem}_post_endpoint_owner_refresh{output_file.suffix}"
+        )
+        post_endpoint_owner_refresh_report = write_internal_movement_owner_teacher_replay_candidate(
+            teacher_net_file,
+            current_file,
+            post_endpoint_owner_refresh_file,
+            owner_id=owner_id,
+            copy_tls=copy_tls,
+        )
+        current_file = post_endpoint_owner_refresh_file
+
     post_road_span_output_file = (
         output_file.with_name(f"{output_file.stem}_post_road_spans{output_file.suffix}")
         if replay_blocked_road_span_endpoint_owners
@@ -1639,6 +1656,7 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
                     blocked_road_span_overlay,
                     owner_replay_report,
                     *pre_endpoint_replay_reports,
+                    post_endpoint_owner_refresh_report,
                     road_span_endpoint_replay_report,
                     *blocked_endpoint_replay_reports,
                 ]
@@ -1663,6 +1681,7 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         "mapped_endpoint_replayed_owner_ids": mapped_endpoint_replayed_owner_ids,
         "pre_endpoint_owner_ids": pre_endpoint_owner_ids,
         "pre_endpoint_replay_reports": pre_endpoint_replay_reports,
+        "post_endpoint_owner_refresh_report": post_endpoint_owner_refresh_report,
         "owner_replay_report": owner_replay_report,
         "road_span_endpoint_replay_report": road_span_endpoint_replay_report,
         "blocked_replayed_endpoint_owner_ids": blocked_replayed_endpoint_owner_ids,

@@ -1541,6 +1541,52 @@ def test_write_owner_layered_teacher_replay_candidate_replays_mapped_terminal_en
     assert report["owner_road_connectivity_audit"]["status"] == "pass"
 
 
+def test_write_owner_layered_teacher_replay_candidate_refreshes_owner_after_endpoint_replay(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.layered.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="road#3" from="j" to="b"><lane id="road#3_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="-10" y="0"/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=":j_0_0"/>
+  <junction id="b" type="priority" x="10" y="0" incLanes="road#3_0" intLanes=""/>
+  <connection from="in" to="road#3" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="road#3" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="road#5" from="j" to="mid"><lane id="road#5_0" index="0"/></edge>
+  <junction id="a" type="priority" x="-10" y="0"/>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="mid" type="priority" x="5" y="0" incLanes="road#5_0" intLanes=""/>
+  <junction id="b" type="priority" x="10" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert root.find("edge[@id='road#3']") is not None
+    assert root.find("connection[@from='in'][@to='road#3']") is not None
+    assert root.find("connection[@from='in'][@to='road#5']") is None
+    assert report["owner_road_connectivity_audit"]["status"] == "pass"
+
+
 def test_write_owner_layered_teacher_replay_candidate_returns_fail_when_owner_replay_blocks(
     tmp_path: Path,
     monkeypatch,
