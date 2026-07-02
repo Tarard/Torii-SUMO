@@ -29,6 +29,7 @@ REFERENCE_MATCHED_VALIDATION_GATES = (
     "reference_join_audit",
     "reference_join_aggregation",
     "junction_pattern_index",
+    "road_connectivity_parity",
     "connection_semantics_parity",
     "tls_semantics_parity",
     "internal_junction_parity",

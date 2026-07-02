@@ -96,6 +96,12 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "teacher_guided_repair_applied_candidate_count",
     "teacher_guided_repair_unapplied_pass_candidate_count",
     "teacher_guided_repair_semantic_layer_gate_counts",
+    "road_connectivity_replay_status",
+    "road_connectivity_replay_gate_status",
+    "road_connectivity_replay_sumo_load_status",
+    "road_connectivity_replay_best_variant_file",
+    "road_connectivity_replay_run_report_file",
+    "road_connectivity_replay_gate_counts",
     "post_teacher_tls_connection_repair_movement_rebuild_run_status",
     "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status",
     "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file",
@@ -243,6 +249,15 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
                 "semantic_layer_gate_counts": semantic_layer_gate_counts,
             }
         )
+        if "road_connectivity_replay_status" in workflow_report:
+            semantics["road_connectivity_layer"] = {
+                "run_status": str(workflow_report.get("road_connectivity_replay_status", "")),
+                "gate_status": str(workflow_report.get("road_connectivity_replay_gate_status", "")),
+                "sumo_load_status": str(workflow_report.get("road_connectivity_replay_sumo_load_status", "")),
+                "best_variant_file": str(workflow_report.get("road_connectivity_replay_best_variant_file", "")),
+                "run_report_file": str(workflow_report.get("road_connectivity_replay_run_report_file", "")),
+                "gate_counts": workflow_report.get("road_connectivity_replay_gate_counts", {}),
+            }
     report["reference_matched_semantics_workflow"] = semantics
 
 
