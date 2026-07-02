@@ -8,6 +8,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _compare_teacher_models,
     _expanded_scope_followup_candidate_for_unsafe_internal_replay,
+    _final_context_parity_gate,
     _netedit_review_actions,
     _remove_teacher_non_tls_tllogics,
     _limit_ready_repair_candidates,
@@ -3366,6 +3367,51 @@ def test_run_teacher_guided_repair_queue_restores_requests_after_final_canonical
 def test_run_teacher_guided_repair_queue_fails_when_final_context_has_extra_tls(
     tmp_path: Path,
 ) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """
+<net>
+  <junction id="teacher_j" type="traffic_light" x="10" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="teacher_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>
+""".strip(),
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """
+<net>
+  <junction id="candidate_j" type="traffic_light" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="near_tls" type="traffic_light" x="40" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="candidate_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <tlLogic id="near_tls" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = _final_context_parity_gate(
+        teacher_net_file=teacher_net,
+        composite_net_file=candidate_net,
+        accepted_internal_replays=[
+            {
+                "junction_id": "candidate_j",
+                "teacher_junction_id": "teacher_j",
+                "edge_map": {},
+            },
+        ],
+        enabled=True,
+    )
+
+    assert report["status"] == "fail"
+    context_report = report["reports"][0]
+    assert {"field": "traffic_light_junction_count", "count": 1} in context_report["hard_failures"]
+    assert {"field": "tl_logic_count", "count": 1} in context_report["hard_failures"]
+
+
+def test_run_teacher_guided_repair_queue_demotes_teacher_absent_context_tls(
+    tmp_path: Path,
+) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
     raw_connections = tmp_path / "raw.con.xml"
@@ -3396,15 +3442,20 @@ def test_run_teacher_guided_repair_queue_fails_when_final_context_has_extra_tls(
 <net>
   <edge id="candidate_in" from="a" to="candidate_j"><lane id="candidate_in_0" index="0" speed="13.9" length="10" shape="0,0 10,0"/></edge>
   <edge id="candidate_out" from="candidate_j" to="b"><lane id="candidate_out_0" index="0" speed="13.9" length="10" shape="10,0 20,0"/></edge>
+  <edge id="near_in" from="near_a" to="near_tls"><lane id="near_in_0" index="0" speed="13.9" length="10" shape="30,0 40,0"/></edge>
+  <edge id="near_out" from="near_tls" to="near_b"><lane id="near_out_0" index="0" speed="13.9" length="10" shape="40,0 50,0"/></edge>
   <junction id="a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
   <junction id="b" type="priority" x="20" y="0" incLanes="candidate_out_0" intLanes=""/>
   <junction id="candidate_j" type="traffic_light" x="10" y="0" incLanes="candidate_in_0" intLanes="" shape="9,-1 11,-1 11,1 9,1">
     <request index="0" response="0" foes="10" cont="0"/>
   </junction>
+  <junction id="near_a" type="priority" x="30" y="0" incLanes="" intLanes=""/>
+  <junction id="near_b" type="priority" x="50" y="0" incLanes="near_out_0" intLanes=""/>
   <junction id="near_tls" type="traffic_light" x="40" y="0" incLanes="" intLanes=""/>
   <tlLogic id="candidate_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
   <tlLogic id="near_tls" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
   <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" tl="candidate_j" linkIndex="0" dir="s" state="O"/>
+  <connection from="near_in" to="near_out" fromLane="0" toLane="0" tl="near_tls" linkIndex="0" dir="s" state="O"/>
 </net>
 """.strip()
 
@@ -3470,14 +3521,18 @@ def test_run_teacher_guided_repair_queue_fails_when_final_context_has_extra_tls(
     )
 
     assert report["final_composite_parity"]["status"] == "pass"
-    assert report["final_context_parity"]["status"] == "fail"
-    assert report["context_gate_status"] == "fail"
-    assert report["status"] == "fail"
+    assert report["final_context_parity"]["status"] == "pass"
+    assert report["context_gate_status"] == "pass"
+    assert report["status"] == "pass"
     assert report["parity_gate_status"] == "pass"
-    assert report["promotion_gate_status"] == "fail"
-    context_report = report["final_context_parity"]["reports"][0]
-    assert {"field": "traffic_light_junction_count", "count": 1} in context_report["hard_failures"]
-    assert {"field": "tl_logic_count", "count": 1} in context_report["hard_failures"]
+    assert report["promotion_gate_status"] == "pass"
+    root = ET.parse(report["composite_net_file"]).getroot()
+    assert root.find("junction[@id='near_tls']").attrib["type"] == "priority"
+    assert root.find("tlLogic[@id='near_tls']") is None
+    near_connection = root.find("connection[@from='near_in'][@to='near_out']")
+    assert "tl" not in near_connection.attrib
+    assert "linkIndex" not in near_connection.attrib
+    assert near_connection.attrib["uncontrolled"] == "true"
 
 
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:
