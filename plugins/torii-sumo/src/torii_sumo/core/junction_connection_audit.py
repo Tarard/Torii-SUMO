@@ -33,6 +33,83 @@ TLS_MOVEMENT_SIGNATURE_FIELDS = ["from", "to", "fromLane", "toLane", "via", "lin
 TURNAROUND_DIR = "t"
 
 
+def build_teacher_guided_owner_semantics_probe(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+    candidate_owner_id: str | None = None,
+    teacher_edge_map: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    from .road_connectivity_teacher_model import (
+        build_internal_movement_owner_approach_edge_map,
+        build_internal_movement_owner_road_connectivity_parity_audit,
+    )
+
+    candidate_owner_id = candidate_owner_id or owner_id
+    if teacher_edge_map is None:
+        edge_mapping_layer = build_internal_movement_owner_approach_edge_map(
+            teacher_net_file,
+            candidate_net_file,
+            owner_id=owner_id,
+        )
+        teacher_edge_map = edge_mapping_layer["edge_map"]
+        edge_mapping_layer = dict(edge_mapping_layer)
+        edge_mapping_layer["status"] = (
+            "fail"
+            if edge_mapping_layer.get("ambiguous_teacher_edges") or edge_mapping_layer.get("unmapped_teacher_edges")
+            else "pass"
+        )
+    else:
+        edge_mapping_layer = {
+            "status": "pass",
+            "source": "explicit_teacher_edge_map",
+            "edge_map": dict(sorted(teacher_edge_map.items())),
+        }
+    road_layer = build_internal_movement_owner_road_connectivity_parity_audit(
+        teacher_net_file,
+        candidate_net_file,
+        owner_id=owner_id,
+        teacher_edge_map=teacher_edge_map,
+    )
+    teacher_signature = build_connection_signature(teacher_net_file, owner_id)
+    candidate_signature = build_connection_signature(candidate_net_file, candidate_owner_id)
+    junction_layer = _compare_owner_connection_signatures(teacher_signature, candidate_signature)
+    if _has_tls_semantics(teacher_net_file, owner_id) or _has_tls_semantics(candidate_net_file, candidate_owner_id):
+        tls_layer = compare_tls_movement_signatures(
+            teacher_net_file,
+            candidate_net_file,
+            owner_id,
+            candidate_owner_id,
+            teacher_edge_map=teacher_edge_map,
+            teacher_internal_scope_id=owner_id,
+            candidate_internal_scope_id=candidate_owner_id,
+        )
+    else:
+        tls_layer = {"status": "skipped", "reason": "no_tls_semantics_for_owner"}
+
+    layer_statuses = {
+        "edge_mapping": str(edge_mapping_layer.get("status", "")),
+        "road_connectivity": str(road_layer.get("status", "")),
+        "junction_connection": str(junction_layer.get("status", "")),
+        "tls_movement": str(tls_layer.get("status", "")),
+    }
+    return {
+        "status": "pass" if all(status in {"pass", "skipped"} for status in layer_statuses.values()) else "fail",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "owner_id": owner_id,
+        "candidate_owner_id": candidate_owner_id,
+        "teacher_edge_map": dict(sorted(teacher_edge_map.items())),
+        "layer_statuses": layer_statuses,
+        "edge_mapping_layer": edge_mapping_layer,
+        "road_connectivity_layer": road_layer,
+        "junction_connection_layer": junction_layer,
+        "tls_movement_layer": tls_layer,
+    }
+
+
 def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, Any]:
     root = ET.parse(net_file).getroot()
     plain_edges = {
@@ -230,6 +307,43 @@ def _connection_category(
 
 def _is_turnaround_record(record: dict[str, Any]) -> bool:
     return str(record.get("dir", "")).lower() == TURNAROUND_DIR
+
+
+def _compare_owner_connection_signatures(
+    teacher_signature: dict[str, Any],
+    candidate_signature: dict[str, Any],
+) -> dict[str, Any]:
+    fields = (
+        "top_external_connection_count",
+        "top_external_non_turnaround_connection_count",
+        "top_external_turnaround_connection_count",
+        "controlled_link_count",
+        "crossing_count",
+        "walkingarea_count",
+    )
+    deltas = {
+        field: int(candidate_signature.get(field, 0)) - int(teacher_signature.get(field, 0))
+        for field in fields
+    }
+    turnaround_only = (
+        int(teacher_signature.get("top_external_non_turnaround_connection_count", 0)) > 0
+        and int(candidate_signature.get("top_external_non_turnaround_connection_count", 0)) == 0
+        and int(candidate_signature.get("top_external_turnaround_connection_count", 0)) > 0
+    )
+    return {
+        "status": "fail" if any(deltas.values()) or turnaround_only else "pass",
+        "teacher": {field: teacher_signature.get(field, 0) for field in fields},
+        "candidate": {field: candidate_signature.get(field, 0) for field in fields},
+        "count_delta": deltas,
+        "candidate_turnaround_only_top_external": turnaround_only,
+    }
+
+
+def _has_tls_semantics(net_file: Path, tls_id: str) -> bool:
+    root = ET.parse(net_file).getroot()
+    return root.find(f"tlLogic[@id='{tls_id}']") is not None or any(
+        connection.attrib.get("tl") == tls_id for connection in root.findall("connection")
+    )
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> None:
