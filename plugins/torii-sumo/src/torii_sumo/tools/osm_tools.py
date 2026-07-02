@@ -525,6 +525,7 @@ def sumo_osm_cleanup_workflow(
     reference_join_audit_structural_only: bool | None = None,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
     road_connectivity_replay_max_owners: int | None = 4,
+    road_connectivity_probe_edge_ids: list[str] | None = None,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -576,6 +577,7 @@ def sumo_osm_cleanup_workflow(
         reference_join_audit_structural_only=structural_only,
         teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
         road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
+        road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
         teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
         key_edge_queries=key_edge_queries,
     )

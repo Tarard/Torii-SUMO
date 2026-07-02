@@ -109,6 +109,11 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "road_connectivity_replay_best_variant_file",
     "road_connectivity_replay_run_report_file",
     "road_connectivity_replay_gate_counts",
+    "road_connectivity_seed_probe_status",
+    "road_connectivity_seed_probe_file",
+    "road_connectivity_seed_probe_edge_delta_count",
+    "road_connectivity_seed_probe_connection_delta_count",
+    "road_connectivity_seed_probe_candidate_missing_seed_edge_ids",
     "post_teacher_tls_connection_repair_movement_rebuild_run_status",
     "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status",
     "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file",
@@ -265,6 +270,18 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
                 "run_report_file": str(workflow_report.get("road_connectivity_replay_run_report_file", "")),
                 "gate_counts": workflow_report.get("road_connectivity_replay_gate_counts", {}),
             }
+        if "road_connectivity_seed_probe_status" in workflow_report:
+            semantics["road_connectivity_seed_probe"] = {
+                "status": str(workflow_report.get("road_connectivity_seed_probe_status", "")),
+                "report_file": str(workflow_report.get("road_connectivity_seed_probe_file", "")),
+                "edge_delta_count": workflow_report.get("road_connectivity_seed_probe_edge_delta_count", 0),
+                "connection_delta_count": workflow_report.get(
+                    "road_connectivity_seed_probe_connection_delta_count", 0
+                ),
+                "candidate_missing_seed_edge_ids": workflow_report.get(
+                    "road_connectivity_seed_probe_candidate_missing_seed_edge_ids", []
+                ),
+            }
         if "teacher_guided_probe_matrix_status" in workflow_report:
             semantics["probe_matrix"] = {
                 "status": str(workflow_report.get("teacher_guided_probe_matrix_status", "")),
@@ -333,6 +350,7 @@ def run_auto_workflow(
     service_passenger_policy: str | None = None,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
     road_connectivity_replay_max_owners: int | None = 4,
+    road_connectivity_probe_edge_ids: list[str] | None = None,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     launch_netedit_after_build: bool | None = None,
     launch_sumo_gui_after_build: bool | None = None,
@@ -374,6 +392,7 @@ def run_auto_workflow(
             service_passenger_policy=service_passenger_policy,
             teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
             road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
+            road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
             teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
             launch_netedit_after_build=launch_netedit_after_build,
             launch_sumo_gui_after_build=launch_sumo_gui_after_build,
@@ -445,6 +464,7 @@ def _run_osm_to_sumo(
     service_passenger_policy: str | None,
     teacher_guided_repair_max_ready_candidates: int | None,
     road_connectivity_replay_max_owners: int | None,
+    road_connectivity_probe_edge_ids: list[str] | None,
     teacher_guided_probe_matrix_junction_ids: list[str] | None,
     launch_netedit_after_build: bool | None,
     launch_sumo_gui_after_build: bool | None,
@@ -550,6 +570,8 @@ def _run_osm_to_sumo(
         cleanup_kwargs["teacher_guided_repair_max_ready_candidates"] = teacher_guided_repair_max_ready_candidates
     if _supports_keyword(cleanup_workflow_func, "road_connectivity_replay_max_owners"):
         cleanup_kwargs["road_connectivity_replay_max_owners"] = road_connectivity_replay_max_owners
+    if _supports_keyword(cleanup_workflow_func, "road_connectivity_probe_edge_ids"):
+        cleanup_kwargs["road_connectivity_probe_edge_ids"] = road_connectivity_probe_edge_ids
     if _supports_keyword(cleanup_workflow_func, "teacher_guided_probe_matrix_junction_ids"):
         cleanup_kwargs["teacher_guided_probe_matrix_junction_ids"] = teacher_guided_probe_matrix_junction_ids
     if launch_netedit_after_build is not None and _supports_keyword(cleanup_workflow_func, "launch_netedit_after_build"):

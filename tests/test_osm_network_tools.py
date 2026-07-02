@@ -70,12 +70,14 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
         network_profile="reference_matched",
         reference_net_file=str(reference_net_file),
         road_connectivity_replay_max_owners=2,
+        road_connectivity_probe_edge_ids=["road#0"],
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
     )
 
     assert report["status"] == "pass"
     assert captured["reference_join_audit_structural_only"] is False
     assert captured["road_connectivity_replay_max_owners"] == 2
+    assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
 
 
@@ -182,6 +184,20 @@ def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path
             "probes": [],
         }
 
+    def fake_road_seed_probe(**kwargs):
+        report_file = kwargs["output_dir"] / "road_seed.json"
+        report_file.parent.mkdir(parents=True, exist_ok=True)
+        report_file.write_text("{}", encoding="utf-8")
+        captured["road_seed_kwargs"] = kwargs
+        return {
+            "status": "pass",
+            "report_file": str(report_file),
+            "seed_edge_ids": kwargs["seed_edge_ids"],
+            "edge_delta_count": 0,
+            "connection_delta_count": 0,
+            "candidate_missing_seed_edge_ids": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="11.41,48.76,11.43,48.78",
         output_dir=tmp_path,
@@ -229,9 +245,19 @@ def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path
         teacher_guided_repair_run_func=fake_repair_run,
         teacher_guided_probe_matrix_junction_ids=["j1"],
         teacher_guided_probe_matrix_func=fake_probe_matrix,
+        road_connectivity_probe_edge_ids=["road#0"],
+        road_connectivity_seed_probe_func=fake_road_seed_probe,
         review_html_func=lambda **_kwargs: {"workflow_review_html_status": "pass"},
     )
 
+    road_seed_kwargs = captured["road_seed_kwargs"]
+    assert road_seed_kwargs["teacher_net_file"] == reference_net_file
+    assert road_seed_kwargs["candidate_net_file"] == raw_net_file
+    assert road_seed_kwargs["seed_edge_ids"] == ["road#0"]
+    assert report["road_connectivity_seed_probe_status"] == "pass"
+    assert report["road_connectivity_seed_probe_file"] == str(road_seed_kwargs["output_dir"] / "road_seed.json")
+    assert report["road_connectivity_seed_probe_edge_delta_count"] == 0
+    assert report["road_connectivity_seed_probe_connection_delta_count"] == 0
     matrix_kwargs = captured["matrix_kwargs"]
     assert matrix_kwargs["target_junction_ids"] == ["j1"]
     assert matrix_kwargs["raw_node_file"] == raw_node_file
