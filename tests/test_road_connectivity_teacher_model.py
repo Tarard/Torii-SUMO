@@ -749,6 +749,50 @@ def test_owner_road_lane_repair_candidate_replays_mapped_approach_lanes(tmp_path
     assert lanes[1].attrib["disallow"] == "pedestrian bicycle"
 
 
+def test_owner_road_lane_repair_candidate_reprojects_teacher_lane_shape_to_candidate_offset(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.owner_lanes.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <location netOffset="-100,-100"/>
+  <edge id="road#3" type="highway.primary" from="a" to="j">
+    <lane id="road#3_0" index="0" allow="passenger" speed="13.9" length="10.0" shape="100,100 110,100"/>
+    <lane id="road#3_1" index="1" allow="passenger" speed="13.9" length="10.0" shape="100,101 110,101"/>
+  </edge>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <location netOffset="-200,-200"/>
+  <edge id="road#5" type="highway.primary" from="a2" to="j">
+    <lane id="road#5_0" index="0" disallow="tram" speed="13.9" length="10.0" shape="0,0 10,0"/>
+  </edge>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    repair_candidates = build_internal_movement_owner_road_lane_repair_candidates(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+        teacher_edge_map={"road#3": "road#5"},
+    )
+    write_road_lane_template_repair_candidate(
+        candidate_net,
+        output_net,
+        repair_candidates,
+    )
+
+    lanes = ET.parse(output_net).getroot().findall("./edge[@id='road#5']/lane")
+    assert [lane.attrib["shape"] for lane in lanes] == ["0.00,0.00 10.00,0.00", "0.00,1.00 10.00,1.00"]
+
+
 def test_owner_missing_approach_edge_repair_replays_edge_and_minimal_endpoint(
     tmp_path: Path,
 ) -> None:
@@ -803,6 +847,56 @@ def test_owner_missing_approach_edge_repair_replays_edge_and_minimal_endpoint(
         "shape": "0,0 1,1",
     }
     assert endpoint.find("request") is None
+
+
+def test_owner_missing_approach_edge_repair_reprojects_teacher_edge_to_candidate_offset(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.missing_edge.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <location netOffset="-100,-100"/>
+  <edge id="path#1" type="highway.path" from="stub" to="j" shape="100,100 110,100">
+    <lane id="path#1_0" index="0" allow="passenger" speed="13.9" length="10.0" shape="100,100 110,100"/>
+  </edge>
+  <junction id="stub" type="priority" x="100" y="100" shape="99,99 101,101"/>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <location netOffset="-200,-200"/>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    repair_candidates = build_internal_movement_owner_missing_approach_edge_repair_candidates(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+    write_internal_movement_owner_missing_approach_edge_repair_candidate(
+        candidate_net,
+        output_net,
+        repair_candidates,
+    )
+
+    root = ET.parse(output_net).getroot()
+    edge = root.find("./edge[@id='path#1']")
+    lane = root.find("./edge[@id='path#1']/lane")
+    stub = root.find("./junction[@id='stub']")
+    assert edge is not None
+    assert lane is not None
+    assert stub is not None
+    assert edge.attrib["shape"] == "0.00,0.00 10.00,0.00"
+    assert lane.attrib["shape"] == "0.00,0.00 10.00,0.00"
+    assert stub.attrib["x"] == "0.00"
+    assert stub.attrib["y"] == "0.00"
+    assert stub.attrib["shape"] == "-1.00,-1.00 1.00,1.00"
 
 
 def test_owner_teacher_replay_runs_road_lane_missing_edge_then_bundle(
