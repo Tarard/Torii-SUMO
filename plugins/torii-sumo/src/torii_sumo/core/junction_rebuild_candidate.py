@@ -3928,6 +3928,13 @@ def run_teacher_guided_repair_queue(
                         exclude_junction_ids=excluded_replay_junction_ids,
                     )
                 )
+                final_internal_replay_normalize_report["teacher_absent_context_tls_cleanup"] = (
+                    _demote_teacher_absent_context_tls(
+                        teacher_net_file=teacher_net_file,
+                        target_file=normalized_composite_net_file,
+                        accepted_internal_replays=accepted_internal_replays,
+                    )
+                )
                 for replay_entry, replay_report in zip(accepted_internal_replays, final_internal_replay_reports):
                     restored_net_file = Path(str(replay_report.get("net_file", "")))
                     if replay_report.get("status") != "pass" or not restored_net_file.exists():
@@ -3981,6 +3988,13 @@ def run_teacher_guided_repair_queue(
                             if canonical_geometry_restore_report.get("status") != "pass":
                                 break
                         final_internal_replay_canonical_report["geometry_restore"] = canonical_geometry_restore_reports
+                        final_internal_replay_canonical_report["teacher_absent_context_tls_cleanup"] = (
+                            _demote_teacher_absent_context_tls(
+                                teacher_net_file=teacher_net_file,
+                                target_file=canonical_composite_net_file,
+                                accepted_internal_replays=accepted_internal_replays,
+                            )
+                        )
                         if all(report.get("status") == "pass" for report in canonical_geometry_restore_reports):
                             final_internal_replay_normalized_net_file = str(canonical_composite_net_file)
                             composite_net_file = final_internal_replay_normalized_net_file
@@ -4282,6 +4296,120 @@ def _final_context_parity_gate(
         "radius_m": radius_m,
         "hard_failure_fields": ["traffic_light_junction_count", "tl_logic_count"],
         "reports": reports,
+    }
+
+
+def _demote_teacher_absent_context_tls(
+    *,
+    teacher_net_file: Path,
+    target_file: Path,
+    accepted_internal_replays: list[dict[str, object]],
+    radius_m: float = 100.0,
+) -> dict[str, object]:
+    if not teacher_net_file.exists():
+        return _failure(f"teacher net file does not exist: {teacher_net_file}")
+    if not target_file.exists():
+        return _failure(f"target net file does not exist: {target_file}")
+    if not accepted_internal_replays:
+        return {"status": "pass", "claim_status": "diagnostic-demo", "demoted_context_tls_count": 0}
+    try:
+        teacher_root = ET.parse(teacher_net_file).getroot()
+        target_tree = ET.parse(target_file)
+    except (OSError, ET.ParseError) as exc:
+        return _failure(f"parse_error: {exc}")
+    target_root = target_tree.getroot()
+    protected_candidate_tls_ids = {
+        str(replay.get("junction_id", "")) for replay in accepted_internal_replays if str(replay.get("junction_id", ""))
+    }
+
+    candidate_tls_to_demote: set[str] = set()
+    skipped_contexts: list[dict[str, object]] = []
+    for replay in accepted_internal_replays:
+        teacher_junction_id = str(replay.get("teacher_junction_id", ""))
+        junction_id = str(replay.get("junction_id", ""))
+        if not teacher_junction_id or not junction_id:
+            continue
+        teacher_context = _local_junction_context_summary(
+            teacher_root,
+            teacher_junction_id,
+            radius_m=radius_m,
+        )
+        candidate_context = _local_junction_context_summary(
+            target_root,
+            junction_id,
+            radius_m=radius_m,
+        )
+        if teacher_context.get("status") != "pass" or candidate_context.get("status") != "pass":
+            skipped_contexts.append(
+                {
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "reason": "context_extract_failed",
+                }
+            )
+            continue
+        teacher_extra_tls_ids = (
+            set(str(item) for item in teacher_context.get("traffic_light_junction_ids", []) if str(item))
+            | set(str(item) for item in teacher_context.get("tl_logic_ids", []) if str(item))
+        ) - {teacher_junction_id}
+        if teacher_extra_tls_ids:
+            skipped_contexts.append(
+                {
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "reason": "teacher_has_extra_context_tls",
+                    "teacher_extra_tls_ids": sorted(teacher_extra_tls_ids),
+                }
+            )
+            continue
+        candidate_tls_to_demote.update(
+            (
+                set(str(item) for item in candidate_context.get("traffic_light_junction_ids", []) if str(item))
+                | set(str(item) for item in candidate_context.get("tl_logic_ids", []) if str(item))
+            )
+            - protected_candidate_tls_ids
+        )
+
+    demoted_junction_ids = []
+    for junction in target_root.findall("junction"):
+        junction_id = str(junction.attrib.get("id", ""))
+        if junction_id in candidate_tls_to_demote and junction.attrib.get("type") == "traffic_light":
+            junction.set("type", "priority")
+            demoted_junction_ids.append(junction_id)
+
+    removed_tllogic_ids = []
+    for tllogic in list(target_root.findall("tlLogic")):
+        tls_id = str(tllogic.attrib.get("id", ""))
+        if tls_id in candidate_tls_to_demote:
+            target_root.remove(tllogic)
+            removed_tllogic_ids.append(tls_id)
+
+    uncontrolled_connections = []
+    for connection in target_root.findall("connection"):
+        if str(connection.attrib.get("tl", "")) not in candidate_tls_to_demote:
+            continue
+        uncontrolled_connections.append(dict(connection.attrib))
+        for attr in ("tl", "linkIndex", "linkIndex2"):
+            connection.attrib.pop(attr, None)
+        connection.set("uncontrolled", "true")
+
+    if demoted_junction_ids or removed_tllogic_ids or uncontrolled_connections:
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "radius_m": radius_m,
+        "candidate_context_tls_ids": sorted(candidate_tls_to_demote),
+        "demoted_context_tls_count": len(candidate_tls_to_demote),
+        "demoted_context_tls_junction_count": len(demoted_junction_ids),
+        "demoted_context_tls_junction_ids": sorted(demoted_junction_ids),
+        "removed_context_tllogic_count": len(removed_tllogic_ids),
+        "removed_context_tllogic_ids": sorted(removed_tllogic_ids),
+        "uncontrolled_context_tls_connection_count": len(uncontrolled_connections),
+        "uncontrolled_context_tls_connections": uncontrolled_connections,
+        "skipped_contexts": skipped_contexts,
     }
 
 
