@@ -441,6 +441,9 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "road_connectivity_seed_probe_edge_delta_count": 0,
             "road_connectivity_seed_probe_connection_delta_count": 0,
             "road_connectivity_seed_probe_candidate_missing_seed_edge_ids": [],
+            "road_connectivity_split_root_alias_repair_status": "pass",
+            "road_connectivity_split_root_alias_repair_file": str(tmp_path / "road_connectivity_alias.net.xml"),
+            "road_connectivity_split_root_alias_repair_report_file": str(tmp_path / "road_connectivity_alias.json"),
             "workflow_review_html_status": "pass",
             "workflow_review_html_file": str(tmp_path / "workflow_review.html"),
             "workflow_report_file": str(tmp_path / "workflow_report.json"),
@@ -524,6 +527,11 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         "edge_delta_count": 0,
         "connection_delta_count": 0,
         "candidate_missing_seed_edge_ids": [],
+    }
+    assert report["reference_matched_semantics_workflow"]["road_connectivity_split_root_alias_repair"] == {
+        "status": "pass",
+        "output_file": str(tmp_path / "road_connectivity_alias.net.xml"),
+        "report_file": str(tmp_path / "road_connectivity_alias.json"),
     }
     assert report["reference_matched_semantics_workflow"]["run_report_file"] == str(tmp_path / "teacher_guided_run.json")
     assert report["reference_matched_semantics_workflow"]["promotion_gate_status"] == "pass"

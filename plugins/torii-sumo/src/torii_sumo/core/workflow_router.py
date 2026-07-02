@@ -114,6 +114,9 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "road_connectivity_seed_probe_edge_delta_count",
     "road_connectivity_seed_probe_connection_delta_count",
     "road_connectivity_seed_probe_candidate_missing_seed_edge_ids",
+    "road_connectivity_split_root_alias_repair_status",
+    "road_connectivity_split_root_alias_repair_file",
+    "road_connectivity_split_root_alias_repair_report_file",
     "post_teacher_tls_connection_repair_movement_rebuild_run_status",
     "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status",
     "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file",
@@ -280,6 +283,14 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
                 ),
                 "candidate_missing_seed_edge_ids": workflow_report.get(
                     "road_connectivity_seed_probe_candidate_missing_seed_edge_ids", []
+                ),
+            }
+        if "road_connectivity_split_root_alias_repair_status" in workflow_report:
+            semantics["road_connectivity_split_root_alias_repair"] = {
+                "status": str(workflow_report.get("road_connectivity_split_root_alias_repair_status", "")),
+                "output_file": str(workflow_report.get("road_connectivity_split_root_alias_repair_file", "")),
+                "report_file": str(
+                    workflow_report.get("road_connectivity_split_root_alias_repair_report_file", "")
                 ),
             }
         if "teacher_guided_probe_matrix_status" in workflow_report:
