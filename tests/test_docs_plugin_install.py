@@ -70,6 +70,11 @@ def test_osm_source_patterns_doc_tracks_external_projects_without_vendoring() ->
     assert "Overpass subdivision" in doc
     assert "offline PBF" in doc
     assert "multi-stage netconvert" in doc
+    assert "Observed OSM-to-SUMO Cleanup Profiles" in doc
+    assert "sumo-berlin" in doc
+    assert "MoSTScenario" in doc
+    assert "actrys" in doc
+    assert "not a substitute for TUM-style teacher replay" in doc
 
 
 def test_internal_superpowers_plans_are_not_public_release_content() -> None:
