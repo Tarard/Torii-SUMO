@@ -994,6 +994,68 @@ def build_internal_movement_owner_approach_edge_chain_map(
     }
 
 
+def build_internal_movement_owner_road_span_repair_candidates(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+    max_chain_edges: int = 8,
+) -> list[dict[str, Any]]:
+    chain_map = build_internal_movement_owner_approach_edge_chain_map(
+        teacher_net_file,
+        candidate_net_file,
+        owner_id=owner_id,
+        max_chain_edges=max_chain_edges,
+    )
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in ET.parse(candidate_net_file).getroot().findall("edge")
+        if edge.attrib.get("id") and not _is_internal_edge(edge)
+    }
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for item in chain_map["fragmented_teacher_edges"]:
+        groups.setdefault(
+            _bidirectional_span_key(str(item["teacher_edge_id"])),
+            [],
+        ).append(item)
+
+    candidates = []
+    for span_key, items in sorted(groups.items()):
+        chain_edge_ids = sorted(
+            {
+                edge_id
+                for item in items
+                for edge_id in item["candidate_edge_ids"]
+            }
+        )
+        teacher_edge_ids = sorted(str(item["teacher_edge_id"]) for item in items)
+        keep_edge_ids = sorted(edge_id for edge_id in teacher_edge_ids if edge_id in chain_edge_ids)
+        remove_edge_ids = sorted(set(chain_edge_ids) - set(keep_edge_ids))
+        intermediate_junction_ids = _candidate_chain_intermediate_junction_ids(items, candidate_edges)
+        blocked_incident_edge_ids = _blocked_intermediate_incident_edge_ids(
+            candidate_edges,
+            intermediate_junction_ids=intermediate_junction_ids,
+            chain_edge_ids=set(chain_edge_ids),
+        )
+        candidates.append(
+            {
+                "action": "replace_split_approach_road_span",
+                "status": "ready" if not blocked_incident_edge_ids else "blocked",
+                "span_key": span_key,
+                "teacher_edge_ids": teacher_edge_ids,
+                "keep_edge_ids": keep_edge_ids,
+                "remove_edge_ids": remove_edge_ids,
+                "intermediate_junction_ids": intermediate_junction_ids,
+                "blocked_incident_edge_ids": blocked_incident_edge_ids,
+                "fragmented_teacher_edges": sorted(
+                    items,
+                    key=lambda item: str(item["teacher_edge_id"]),
+                ),
+            }
+        )
+    return candidates
+
+
 def build_internal_movement_owner_road_lane_repair_candidates(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -2487,6 +2549,53 @@ def _candidate_approach_edge_chain(
         if current_from == terminal_junction_id:
             return chain, ""
     return chain, ""
+
+
+def _bidirectional_span_key(edge_id: str) -> str:
+    return _split_edge_root(edge_id).lstrip("-")
+
+
+def _candidate_chain_intermediate_junction_ids(
+    fragmented_teacher_edges: list[dict[str, Any]],
+    candidate_edges: dict[str, ET.Element],
+) -> list[str]:
+    junction_ids = set()
+    for item in fragmented_teacher_edges:
+        edge_ids = [
+            edge_id
+            for edge_id in item["candidate_edge_ids"]
+            if edge_id in candidate_edges
+        ]
+        if len(edge_ids) < 2:
+            continue
+        endpoints = {
+            candidate_edges[edge_ids[0]].attrib.get("from", ""),
+            candidate_edges[edge_ids[-1]].attrib.get("to", ""),
+        }
+        for edge_id in edge_ids:
+            edge = candidate_edges[edge_id]
+            for junction_id in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+                if junction_id and junction_id not in endpoints:
+                    junction_ids.add(junction_id)
+    return sorted(junction_ids)
+
+
+def _blocked_intermediate_incident_edge_ids(
+    candidate_edges: dict[str, ET.Element],
+    *,
+    intermediate_junction_ids: list[str],
+    chain_edge_ids: set[str],
+) -> list[str]:
+    intermediate_junction_set = set(intermediate_junction_ids)
+    return sorted(
+        edge_id
+        for edge_id, edge in candidate_edges.items()
+        if edge_id not in chain_edge_ids
+        and (
+            edge.attrib.get("from", "") in intermediate_junction_set
+            or edge.attrib.get("to", "") in intermediate_junction_set
+        )
+    )
 
 
 def _split_edge_root(edge_id: str) -> str:

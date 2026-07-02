@@ -8,6 +8,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     build_internal_movement_owner_internal_lane_map,
     build_internal_movement_owner_missing_approach_edge_repair_candidates,
     build_internal_movement_owner_road_connectivity_parity_audit,
+    build_internal_movement_owner_road_span_repair_candidates,
     build_internal_movement_owner_road_lane_repair_candidates,
     build_road_connection_topology_replay_audit,
     build_road_lane_template_edge_subset_repair_candidates,
@@ -944,6 +945,65 @@ def test_owner_approach_edge_chain_map_detects_split_candidate_road_span(
             "teacher_edge_id": "road#0",
             "candidate_edge_ids": ["road#2", "road#1"],
             "direction": "incoming",
+        }
+    ]
+
+
+def test_owner_road_span_repair_candidates_group_bidirectional_split_chain(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="a"><lane id="road#0_0" index="0"/></edge>
+  <edge id="-road#0" from="a" to="j"><lane id="-road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="mid"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#1" from="mid" to="a"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="a" to="mid"><lane id="-road#1_0" index="0"/></edge>
+  <edge id="-road#0" from="mid" to="j"><lane id="-road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="mid" type="priority" x="10" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    candidates = build_internal_movement_owner_road_span_repair_candidates(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+
+    assert candidates == [
+        {
+            "action": "replace_split_approach_road_span",
+            "status": "ready",
+            "span_key": "road",
+            "teacher_edge_ids": ["-road#0", "road#0"],
+            "keep_edge_ids": ["-road#0", "road#0"],
+            "remove_edge_ids": ["-road#1", "road#1"],
+            "intermediate_junction_ids": ["mid"],
+            "blocked_incident_edge_ids": [],
+            "fragmented_teacher_edges": [
+                {
+                    "teacher_edge_id": "-road#0",
+                    "candidate_edge_ids": ["-road#1", "-road#0"],
+                    "direction": "incoming",
+                },
+                {
+                    "teacher_edge_id": "road#0",
+                    "candidate_edge_ids": ["road#0", "road#1"],
+                    "direction": "outgoing",
+                },
+            ],
         }
     ]
 
