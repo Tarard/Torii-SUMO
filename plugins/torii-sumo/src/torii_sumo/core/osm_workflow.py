@@ -31,6 +31,7 @@ from .osm_network import audit_tls, build_osm_network, build_routeability_probe,
 from .reference_bbox import derive_reference_net_bbox
 from .reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
 from .reference_join_audit import audit_reference_join_patterns
+from .road_connectivity_teacher_model import write_internal_movement_owner_layered_teacher_replay_candidate
 from .reference_scope import audit_reference_scope, build_scope_pruning_variant
 from .road_scope import (
     ROAD_LEVEL_SCOPE_OPTIONS,
@@ -580,6 +581,48 @@ def _teacher_guided_queue_has_replay_candidates(report: Mapping[str, Any] | None
     return _int_field(report, "ready_candidate_count") > 0 or _int_field(report, "expanded_scope_candidate_count") > 0
 
 
+def _first_teacher_owner_id(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return ""
+    for candidate in report.get("repair_candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        owner_id = str(
+            candidate.get("reference_id")
+            or candidate.get("teacher_junction_id")
+            or candidate.get("junction_id")
+            or ""
+        ).strip()
+        if owner_id:
+            return owner_id
+    return ""
+
+
+def _road_connectivity_gate_counts(report: Mapping[str, Any] | None) -> dict[str, dict[str, int]]:
+    if report is None:
+        return {}
+    audit = report.get("owner_road_connectivity_audit", {})
+    audit = audit if isinstance(audit, Mapping) else {}
+    gate = audit.get("gate", {})
+    gate = gate if isinstance(gate, Mapping) else {}
+    status = _road_connectivity_gate_status(report)
+    return {
+        "owner_road_connectivity": {
+            "pass": 1 if status == "pass" else 0,
+            "fail": 0 if status == "pass" else 1,
+            "failure_count": _int_field(gate, "lane_delta_count"),
+        }
+    }
+
+
+def _road_connectivity_gate_status(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    audit = report.get("owner_road_connectivity_audit", {})
+    audit = audit if isinstance(audit, Mapping) else {}
+    return str(audit.get("status", report.get("status", "fail")))
+
+
 def _filter_teacher_guided_queue_to_mismatch_fields(
     queue_report: Mapping[str, Any],
     delta_report: Mapping[str, Any],
@@ -760,6 +803,47 @@ def _run_teacher_guided_queue_replay(
         plain_exporter=plain_export_func,
     )
     return plain_export_report, run_report, _teacher_guided_best_variant_file(run_report)
+
+
+def _run_owner_road_connectivity_replay(
+    *,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_dir: Path,
+    prefix: str,
+    owner_id: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    safe_owner = _safe_path_part(owner_id)
+    output_file = output_dir / f"{prefix}_{safe_owner}.net.xml"
+    report = write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net_file,
+        candidate_net_file,
+        output_file,
+        owner_id=owner_id,
+        copy_tls=True,
+        max_ready_spans=2,
+        pre_repair_ready_road_spans=True,
+        replay_blocked_road_span_endpoint_owners=True,
+    )
+    best_variant_file = Path(str(report.get("output_file", output_file)))
+    sumo_load = _sumo_load_net(
+        best_variant_file,
+        output_dir=output_dir / "sumo_load",
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        command_runner=command_runner,
+    )
+    report = dict(report)
+    report["sumo_load"] = sumo_load
+    report["sumo_load_status"] = str(sumo_load.get("status", "fail"))
+    run_report_file = output_dir / f"{prefix}_{safe_owner}.json"
+    report["run_report_file"] = str(run_report_file)
+    run_report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
 
 
 def _safe_path_part(value: str, max_len: int = 16) -> str:
@@ -1975,6 +2059,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
     teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
     teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
+    road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
@@ -2299,6 +2384,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
     teacher_guided_repair_run_report: dict[str, Any] | None = None
+    road_connectivity_replay_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
     teacher_guided_replay_source_net_file: Path | None = None
     teacher_guided_direct_replay_report: dict[str, Any] | None = None
@@ -3065,6 +3151,18 @@ def run_osm_cleanup_workflow(
                 output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
             )
+            road_connectivity_owner_id = _first_teacher_owner_id(teacher_guided_repair_queue_report)
+            if road_connectivity_owner_id:
+                road_connectivity_replay_report = road_connectivity_replay_func(
+                    teacher_net_file=reference_net_file,
+                    candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
+                    output_dir=output_dir / "road_connectivity_replay",
+                    prefix=f"{prefix}_road_connectivity",
+                    owner_id=road_connectivity_owner_id,
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
             if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
                 teacher_guided_replay_source_net_file = (
                     reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file
@@ -4537,6 +4635,7 @@ def run_osm_cleanup_workflow(
         gate_status["reference_scope_pruning"] = _reference_scope_pruning_gate(reference_scope_pruning_report)
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
         gate_status["junction_pattern_index"] = _junction_pattern_index_gate(reference_join_audit_report)
+        gate_status["road_connectivity_parity"] = _road_connectivity_gate_status(road_connectivity_replay_report)
         semantic_parity_report = reference_join_post_teacher_audit_report or reference_join_audit_report
         gate_status["connection_semantics_parity"] = _junction_semantic_gate(
             semantic_parity_report,
@@ -4586,6 +4685,7 @@ def run_osm_cleanup_workflow(
         and gate_status.get("reference_scope_pruning", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_aggregation", "skipped") in {"pass", "skipped"}
+        and gate_status.get("road_connectivity_parity", "skipped") in {"pass", "skipped"}
         and gate_status.get("teacher_guided_junction_parity", "skipped") in {"pass", "blocked", "skipped"}
         and gate_status["netedit"] in {"pass", "blocked"}
         and gate_status["sumo_gui"] in {"pass", "blocked"}
@@ -5316,6 +5416,22 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_best_variant_file": ""
         if teacher_guided_repair_best_variant_file is None
         else str(teacher_guided_repair_best_variant_file),
+        "road_connectivity_replay_status": "skipped"
+        if road_connectivity_replay_report is None
+        else str(road_connectivity_replay_report.get("status", "fail")),
+        "road_connectivity_replay_gate_status": "skipped"
+        if road_connectivity_replay_report is None
+        else _road_connectivity_gate_status(road_connectivity_replay_report),
+        "road_connectivity_replay_sumo_load_status": "skipped"
+        if road_connectivity_replay_report is None
+        else str(road_connectivity_replay_report.get("sumo_load_status", "")),
+        "road_connectivity_replay_best_variant_file": ""
+        if road_connectivity_replay_report is None
+        else str(road_connectivity_replay_report.get("output_file", "")),
+        "road_connectivity_replay_run_report_file": ""
+        if road_connectivity_replay_report is None
+        else str(road_connectivity_replay_report.get("run_report_file", "")),
+        "road_connectivity_replay_gate_counts": _road_connectivity_gate_counts(road_connectivity_replay_report),
         "teacher_guided_direct_replay_status": "skipped"
         if teacher_guided_direct_replay_report is None
         else str(teacher_guided_direct_replay_report.get("status", "fail")),
@@ -5753,6 +5869,7 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
         "teacher_guided_repair_plain_export": teacher_guided_plain_export_report or {},
         "teacher_guided_repair_run": teacher_guided_repair_run_report or {},
+        "road_connectivity_replay": road_connectivity_replay_report or {},
         "teacher_guided_direct_replay": teacher_guided_direct_replay_report or {},
         "teacher_guided_direct_replay_reference_delta": teacher_guided_direct_replay_reference_delta_report or {},
         "teacher_guided_direct_replay_reference_promotion": teacher_guided_direct_replay_reference_promotion_report,
