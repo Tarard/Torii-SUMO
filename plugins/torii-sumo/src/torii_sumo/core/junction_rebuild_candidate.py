@@ -3966,8 +3966,29 @@ def run_teacher_guided_repair_queue(
                         final_internal_replay_canonical_report.get("status") == "pass"
                         and canonical_composite_net_file.exists()
                     ):
-                        final_internal_replay_normalized_net_file = str(canonical_composite_net_file)
-                        composite_net_file = final_internal_replay_normalized_net_file
+                        canonical_geometry_restore_reports = []
+                        for replay_entry, replay_report in zip(accepted_internal_replays, final_internal_replay_reports):
+                            restored_net_file = Path(str(replay_report.get("net_file", "")))
+                            if replay_report.get("status") != "pass" or not restored_net_file.exists():
+                                continue
+                            canonical_geometry_restore_report = _restore_replayed_geometry_attrs(
+                                source_file=restored_net_file,
+                                target_file=canonical_composite_net_file,
+                                junction_id=str(replay_entry["junction_id"]),
+                            )
+                            canonical_geometry_restore_reports.append(canonical_geometry_restore_report)
+                            if canonical_geometry_restore_report.get("status") != "pass":
+                                break
+                        final_internal_replay_canonical_report["geometry_restore"] = canonical_geometry_restore_reports
+                        if all(report.get("status") == "pass" for report in canonical_geometry_restore_reports):
+                            final_internal_replay_normalized_net_file = str(canonical_composite_net_file)
+                            composite_net_file = final_internal_replay_normalized_net_file
+                        else:
+                            final_internal_replay_status = "fail"
+                            final_internal_replay_normalize_report["status"] = "fail"
+                            final_internal_replay_normalize_report["error"] = (
+                                "geometry restore failed after canonicalization"
+                            )
                     else:
                         final_internal_replay_status = "fail"
                         final_internal_replay_normalize_report["status"] = "fail"
@@ -3983,17 +4004,29 @@ def run_teacher_guided_repair_queue(
                     final_internal_replay_normalize_report["error"] = (
                         f"normalized output missing: {normalized_composite_net_file}"
                     )
+    final_composite_parity = _final_composite_parity_gate(
+        teacher_net_file=teacher_net_file,
+        composite_net_file=Path(composite_net_file) if composite_net_file else None,
+        accepted_internal_replays=accepted_internal_replays,
+        enabled=sequential_accept_passed_variants and final_internal_replay_status != "fail",
+    )
+    final_composite_parity_failed = final_composite_parity.get("status") == "fail"
     sequential_composite_ready = (
         sequential_accept_passed_variants
         and composite_applied_candidate_count > 0
         and bool(composite_net_file)
         and Path(composite_net_file).exists()
         and final_internal_replay_status != "fail"
+        and not final_composite_parity_failed
     )
     if attempted_count == 0:
         status = "blocked"
         claim_status = "blocked"
         parity_gate_status = "blocked"
+    elif final_composite_parity_failed:
+        status = "fail"
+        claim_status = "construction-invalid"
+        parity_gate_status = "fail"
     elif sequential_composite_ready and failed_count == 0:
         status = "pass"
         claim_status = "diagnostic-demo"
@@ -4059,6 +4092,7 @@ def run_teacher_guided_repair_queue(
         "final_internal_replay_status": final_internal_replay_status,
         "final_internal_replay_normalize": final_internal_replay_normalize_report,
         "final_internal_replay_normalized_net_file": final_internal_replay_normalized_net_file,
+        "final_composite_parity": final_composite_parity,
         "final_internal_replay_restored_count": sum(
             1 for report in final_internal_replay_reports if report.get("status") == "pass"
         ),
@@ -4079,6 +4113,76 @@ def _int_count(value: object) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _final_composite_parity_gate(
+    *,
+    teacher_net_file: Path,
+    composite_net_file: Path | None,
+    accepted_internal_replays: list[dict[str, object]],
+    enabled: bool,
+) -> dict[str, object]:
+    if not enabled:
+        return {"status": "skipped", "reason": "disabled"}
+    if composite_net_file is None or not composite_net_file.exists():
+        return {"status": "skipped", "reason": "missing_composite_net_file"}
+    if not accepted_internal_replays:
+        return {"status": "skipped", "reason": "no_accepted_internal_replays"}
+    try:
+        teacher_root = ET.parse(teacher_net_file).getroot()
+        composite_root = ET.parse(composite_net_file).getroot()
+    except (OSError, ET.ParseError) as exc:
+        return {"status": "fail", "reason": f"parse_error: {exc}", "reports": []}
+
+    reports: list[dict[str, object]] = []
+    for replay in accepted_internal_replays:
+        junction_id = str(replay.get("junction_id", ""))
+        teacher_junction_id = str(replay.get("teacher_junction_id", ""))
+        edge_map = _valid_edge_map(replay.get("edge_map", {}))
+        if not junction_id or not teacher_junction_id or not edge_map:
+            reports.append(
+                {
+                    "status": "fail",
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "reason": "missing_final_parity_inputs",
+                }
+            )
+            continue
+        try:
+            teacher_model = _extract_teacher_junction_model(teacher_root, teacher_net_file, teacher_junction_id)
+            candidate_model = _extract_teacher_junction_model(composite_root, composite_net_file, junction_id)
+            parity = _compare_teacher_models(
+                teacher_model,
+                candidate_model,
+                edge_map=edge_map,
+                teacher_junction_id=teacher_junction_id,
+                candidate_junction_id=junction_id,
+            )
+            semantic_replay_gate = _teacher_guided_semantics_gate(parity)
+            reports.append(
+                {
+                    "status": semantic_replay_gate["status"],
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "semantic_replay_gate": semantic_replay_gate,
+                    "parity": parity,
+                }
+            )
+        except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
+            reports.append(
+                {
+                    "status": "fail",
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "reason": f"extract_error: {exc}",
+                }
+            )
+    return {
+        "status": "pass" if reports and all(report.get("status") == "pass" for report in reports) else "fail",
+        "checked_junction_count": len(reports),
+        "reports": reports,
+    }
 
 
 def _road_continuity_probe_summary(run_report: dict[str, Any]) -> dict[str, object]:
