@@ -1698,16 +1698,20 @@ def build_internal_movement_owner_road_lane_repair_candidates(
     owner_id: str,
     teacher_edge_map: dict[str, str],
 ) -> list[dict[str, Any]]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
     teacher_edges = {
         edge.attrib.get("id", ""): edge
-        for edge in ET.parse(teacher_net_file).getroot().findall("edge")
+        for edge in teacher_root.findall("edge")
         if edge.attrib.get("id")
     }
     candidate_edges = {
         edge.attrib.get("id", ""): edge
-        for edge in ET.parse(candidate_net_file).getroot().findall("edge")
+        for edge in candidate_root.findall("edge")
         if edge.attrib.get("id")
     }
+    teacher_offset = _root_net_offset(teacher_root)
+    candidate_offset = _root_net_offset(candidate_root)
     candidates = []
     for teacher_edge_id, candidate_edge_id in sorted(teacher_edge_map.items()):
         teacher_edge = teacher_edges.get(teacher_edge_id)
@@ -1735,7 +1739,13 @@ def build_internal_movement_owner_road_lane_repair_candidates(
                 "from_lane_signature": candidate_signature,
                 "to_lane_signature": teacher_signature,
                 "lanes": [
-                    _mapped_edge_lane_attrs(lane.attrib, teacher_edge_id, candidate_edge_id)
+                    _mapped_edge_lane_attrs(
+                        lane.attrib,
+                        teacher_edge_id,
+                        candidate_edge_id,
+                        source_offset=teacher_offset,
+                        target_offset=candidate_offset,
+                    )
                     for lane in teacher_edge.findall("lane")
                 ],
             }
@@ -1752,6 +1762,8 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
 ) -> list[dict[str, Any]]:
     teacher_root = ET.parse(teacher_net_file).getroot()
     candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_offset = _root_net_offset(teacher_root)
+    candidate_offset = _root_net_offset(candidate_root)
     teacher_edge_map = teacher_edge_map or {}
     candidate_edge_ids = {
         edge.attrib.get("id", "")
@@ -1792,7 +1804,11 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
             if not replace_existing_edge:
                 continue
         missing_endpoint_junctions = [
-            _minimal_endpoint_junction_attrs(teacher_junctions[endpoint])
+            _minimal_endpoint_junction_attrs(
+                teacher_junctions[endpoint],
+                source_offset=teacher_offset,
+                target_offset=candidate_offset,
+            )
             for endpoint in endpoints
             if endpoint and endpoint != owner_id and endpoint not in candidate_junction_ids and endpoint in teacher_junctions
         ]
@@ -1800,7 +1816,11 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
             {
                 "action": "add_missing_approach_edge",
                 "edge_id": edge_id,
-                "edge": _edge_attrs_with_lanes(edge),
+                "edge": _reproject_edge_record(
+                    _edge_attrs_with_lanes(edge),
+                    source_offset=teacher_offset,
+                    target_offset=candidate_offset,
+                ),
                 "edge_map_addition": {edge_id: edge_id},
                 "replace_existing_edge": replace_existing_edge,
                 "missing_endpoint_junctions": missing_endpoint_junctions,
@@ -3486,14 +3506,54 @@ def _replace_edge_lanes(edge: ET.Element, lanes: Any) -> int:
     return len(new_lanes)
 
 
-def _mapped_edge_lane_attrs(attrs: dict[str, str], teacher_edge_id: str, candidate_edge_id: str) -> dict[str, str]:
+def _mapped_edge_lane_attrs(
+    attrs: dict[str, str],
+    teacher_edge_id: str,
+    candidate_edge_id: str,
+    *,
+    source_offset: tuple[float, float] = (0.0, 0.0),
+    target_offset: tuple[float, float] = (0.0, 0.0),
+) -> dict[str, str]:
     mapped = dict(attrs)
     lane_id = mapped.get("id", "")
     if lane_id:
         mapped["id"] = _mapped_lane_id(lane_id, {teacher_edge_id: candidate_edge_id})
     elif mapped.get("index", ""):
         mapped["id"] = f"{candidate_edge_id}_{mapped['index']}"
+    if mapped.get("shape"):
+        mapped["shape"] = _reproject_shape(mapped["shape"], source_offset, target_offset)
     return mapped
+
+
+def _root_net_offset(root: ET.Element) -> tuple[float, float]:
+    location = root.find("location")
+    raw = "" if location is None else str(location.attrib.get("netOffset", ""))
+    parts = raw.split(",")
+    if len(parts) < 2:
+        return (0.0, 0.0)
+    return (float(parts[0]), float(parts[1]))
+
+
+def _reproject_shape(
+    shape: str,
+    source_offset: tuple[float, float],
+    target_offset: tuple[float, float],
+) -> str:
+    if source_offset == target_offset:
+        return shape
+    points = []
+    for part in shape.split():
+        coords = part.split(",")
+        if len(coords) < 2:
+            continue
+        x = float(coords[0]) - source_offset[0] + target_offset[0]
+        y = float(coords[1]) - source_offset[1] + target_offset[1]
+        points.append(f"{x:.2f},{y:.2f}")
+    return " ".join(points) if points else shape
+
+
+def _reproject_coord(value: str, source_offset: float, target_offset: float) -> str:
+    return f"{float(value) - source_offset + target_offset:.2f}"
 
 
 def _edge_attrs_with_lanes(edge: ET.Element) -> dict[str, Any]:
@@ -3502,13 +3562,51 @@ def _edge_attrs_with_lanes(edge: ET.Element) -> dict[str, Any]:
     return record
 
 
-def _minimal_endpoint_junction_attrs(junction: ET.Element) -> dict[str, str]:
+def _reproject_edge_record(
+    edge: dict[str, Any],
+    *,
+    source_offset: tuple[float, float],
+    target_offset: tuple[float, float],
+) -> dict[str, Any]:
+    if source_offset == target_offset:
+        return edge
+    mapped = dict(edge)
+    if mapped.get("shape"):
+        mapped["shape"] = _reproject_shape(str(mapped["shape"]), source_offset, target_offset)
+    mapped["lanes"] = [
+        {
+            **lane,
+            **(
+                {"shape": _reproject_shape(str(lane["shape"]), source_offset, target_offset)}
+                if isinstance(lane, dict) and lane.get("shape")
+                else {}
+            ),
+        }
+        for lane in mapped.get("lanes", [])
+        if isinstance(lane, dict)
+    ]
+    return mapped
+
+
+def _minimal_endpoint_junction_attrs(
+    junction: ET.Element,
+    *,
+    source_offset: tuple[float, float] = (0.0, 0.0),
+    target_offset: tuple[float, float] = (0.0, 0.0),
+) -> dict[str, str]:
     attrs = {
         key: junction.attrib[key]
         for key in ("id", "x", "y", "shape")
         if key in junction.attrib
     }
     attrs["type"] = "priority"
+    if source_offset != target_offset:
+        if "x" in attrs:
+            attrs["x"] = _reproject_coord(attrs["x"], source_offset[0], target_offset[0])
+        if "y" in attrs:
+            attrs["y"] = _reproject_coord(attrs["y"], source_offset[1], target_offset[1])
+        if "shape" in attrs:
+            attrs["shape"] = _reproject_shape(attrs["shape"], source_offset, target_offset)
     return attrs
 
 
