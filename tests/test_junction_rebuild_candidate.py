@@ -1953,6 +1953,52 @@ def test_build_teacher_guided_repair_queue_uses_conservative_join_subset_for_sin
     assert scope["join_junction_ids"] == ["first", "matched"]
 
 
+def test_build_teacher_guided_repair_queue_joins_all_spatial_cluster_candidate_nodes(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="cluster_j"><lane id="teacher_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="cluster_j" to="b"><lane id="teacher_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="cluster_j" type="priority" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <junction id="first" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="matched" type="priority" x="1" y="0" incLanes="" intLanes=""/>
+  <junction id="support" type="priority" x="2" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {
+                    "reference_id": "cluster_j",
+                    "matched_candidate_node_ids": ["first", "matched", "support"],
+                    "matched_reference_source_node_ids": ["matched"],
+                    "learned_rule": "tum_like_join_candidate",
+                    "learned_rule_basis": "spatial_cluster",
+                }
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    scope = report["repair_candidates"][0]["expanded_rebuild_scope"]
+    assert scope["junction_ids"] == ["first", "matched", "support"]
+    assert scope["join_junction_ids"] == ["first", "matched", "support"]
+
+
 def test_build_teacher_guided_repair_queue_uses_first_pair_when_no_source_match(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -2774,6 +2820,173 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
     assert variant_calls[1]["raw_edge_file"] == Path(plain_export["raw_edge_file"])
     assert variant_calls[1]["raw_connection_file"] == Path(plain_export["raw_connection_file"])
     assert variant_calls[1]["raw_tllogic_file"] == Path(plain_export["raw_tllogic_file"])
+
+
+def test_run_teacher_guided_repair_queue_refreshes_stale_sequential_candidate_edge_map(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    for path in (raw_nodes, raw_edges, raw_connections):
+        path.write_text("<xml/>", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j2" type="highway.primary"><lane id="teacher_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="teacher_out" from="j2" to="b" type="highway.primary"><lane id="teacher_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j2" type="traffic_light" x="0" y="0" incLanes="teacher_in_0" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="j2" linkIndex="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text("<net/>", encoding="utf-8")
+    variant_calls = []
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text(
+            """<net>
+  <edge id="fresh_in" from="a" to="j2" type="highway.primary"><lane id="fresh_in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="fresh_out" from="j2" to="b" type="highway.primary"><lane id="fresh_out_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <junction id="j2" type="traffic_light" x="0" y="0" incLanes="fresh_in_0" intLanes=""/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    def fake_plain_exporter(**kwargs):
+        output_dir = kwargs["output_dir"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        node_file = output_dir / "plain.nod.xml"
+        edge_file = output_dir / "plain.edg.xml"
+        connection_file = output_dir / "plain.con.xml"
+        for path in (node_file, edge_file, connection_file):
+            path.write_text("<xml/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "raw_node_file": str(node_file),
+            "raw_edge_file": str(edge_file),
+            "raw_connection_file": str(connection_file),
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "j1",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"t1": "c1"},
+                },
+                {
+                    "reference_id": "j2",
+                    "junction_id": "j2",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "matched_candidate_node_ids": ["j2"],
+                    "edge_map": {"teacher_in": "stale_in", "teacher_out": "stale_out"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        plain_exporter=fake_plain_exporter,
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    assert variant_calls[1]["edge_map"] == {"teacher_in": "fresh_in", "teacher_out": "fresh_out"}
+    assert report["variant_reports"][1]["sequential_refreshed_candidate"] is True
+
+
+def test_run_teacher_guided_repair_queue_allows_adjacent_boundary_edge_overlap(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    variant_calls = []
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    def fake_plain_exporter(**kwargs):
+        output_dir = kwargs["output_dir"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        node_file = output_dir / "plain.nod.xml"
+        edge_file = output_dir / "plain.edg.xml"
+        connection_file = output_dir / "plain.con.xml"
+        node_file.write_text("<nodes/>", encoding="utf-8")
+        edge_file.write_text(
+            """<edges>
+  <edge id="shared" from="j2" to="cluster_a_b"/>
+</edges>""",
+            encoding="utf-8",
+        )
+        connection_file.write_text("<connections/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "raw_node_file": str(node_file),
+            "raw_edge_file": str(edge_file),
+            "raw_connection_file": str(connection_file),
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_shared": "shared"},
+                },
+                {
+                    "junction_id": "j2",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_shared": "shared"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        plain_exporter=fake_plain_exporter,
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    assert [call["junction_id"] for call in variant_calls] == ["cluster_a_b", "j2"]
+    assert report["variant_reports"][1]["sequential_allowed_boundary_overlap_edge_ids"] == ["shared"]
 
 
 def test_run_teacher_guided_repair_queue_restores_accepted_internal_replays_after_sequential_plain_roundtrip(
@@ -4469,6 +4682,110 @@ def test_run_teacher_guided_repair_queue_replays_joined_expanded_scope_on_full_n
     assert '<join nodes="a b"' in variant_calls[0]["raw_node_file"].read_text(encoding="utf-8")
 
 
+def test_run_teacher_guided_repair_queue_full_network_join_drops_absorbed_self_loop_edges(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="x" x="-10" y="0"/>
+  <node id="a" x="0" y="0"/>
+  <node id="b" x="1" y="0"/>
+  <node id="y" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="cand_in" from="x" to="a" shape="-10,0 0,0"><lane index="0"/></edge>
+  <edge id="cand_mid" from="a" to="b" type="highway.primary" shape="0,0 1,0"><lane index="0" allow="passenger"/></edge>
+  <edge id="-cand_mid" from="b" to="a" type="highway.primary" shape="1,0 0,0"><lane index="0" allow="passenger"/></edge>
+  <edge id="cand_out" from="b" to="y" shape="1,0 10,0"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="cand_in" to="cand_mid" fromLane="0" toLane="0"/>
+  <connection from="cand_mid" to="cand_out" fromLane="0" toLane="0"/>
+  <crossing node="a" edges="cand_mid -cand_mid" priority="0" width="4.00"/>
+</connections>
+""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (teacher_net, candidate_net):
+        path.write_text("<net/>", encoding="utf-8")
+
+    variant_calls = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "a",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {"teacher_in": "cand_in", "teacher_out": "cand_out"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "core_junction_id": "a",
+                        "junction_ids": ["a", "b"],
+                        "join_junction_ids": ["a", "b"],
+                        "blocked_teacher_edge_ids": [],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+        variant_builder=fake_variant,
+        sequential_accept_passed_variants=True,
+    )
+
+    assert report["status"] == "pass"
+    assert report["composite_applied_candidate_count"] == 1
+    scope_report = report["expanded_scope_reports"][0]
+    assert scope_report["replay_scope"] == "full_network_join_patch"
+    assert sorted(scope_report["replay_absorbed_join_internal_edge_ids"]) == ["-cand_mid", "cand_mid"]
+    assert "cand_mid" not in variant_calls[0]["raw_edge_file"].read_text(encoding="utf-8")
+    assert "cand_mid" not in variant_calls[0]["raw_connection_file"].read_text(encoding="utf-8")
+
+
 def test_run_teacher_guided_repair_queue_prefers_full_context_join_replay_for_single_probe(
     tmp_path: Path,
 ) -> None:
@@ -4669,9 +4986,9 @@ def test_run_teacher_guided_repair_queue_filters_join_scope_dead_end_connections
     assert seed_connection_files
     filtered_connections = [connection.attrib for connection in ET.parse(seed_connection_files[0]).getroot()]
     assert {"from": "cand_mid"} not in filtered_connections
-    assert {"from": "cand_mid", "to": "cand_out", "fromLane": "0", "toLane": "0"} in filtered_connections
+    assert {"from": "cand_mid", "to": "cand_out", "fromLane": "0", "toLane": "0"} not in filtered_connections
     assert variant_calls[0]["raw_connection_file"] == seed_connection_files[0]
-    assert report["expanded_scope_reports"][0]["full_network_join_dead_end_connection_drop_count"] == 1
+    assert report["expanded_scope_reports"][0]["full_network_join_dead_end_connection_drop_count"] == 3
 
 
 def test_run_teacher_guided_repair_queue_skips_joined_expanded_scope_when_seed_netconvert_fails(
@@ -6438,6 +6755,39 @@ def test_target_internal_replay_preserves_replaced_boundary_edge_order(tmp_path:
     assert report["copied_boundary_edge_count"] == 1
     children = [(child.tag, child.attrib.get("id", "")) for child in ET.parse(report["net_file"]).getroot()]
     assert children.index(("edge", "teacher_out")) < children.index(("junction", "b"))
+
+
+def test_target_internal_replay_adds_missing_teacher_endpoint_junctions(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="remote_edge" from="candidate_j" to="teacher_cluster"><lane id="remote_edge_0" index="0"/></edge>
+  <junction id="candidate_j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <junction id="teacher_j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_cluster" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replay.net.xml",
+        junction_id="candidate_j",
+        teacher_junction_id="teacher_j",
+        edge_map={},
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert report["status"] == "pass"
+    assert report["added_missing_teacher_endpoint_junction_ids"] == ["teacher_cluster"]
+    assert root.find("junction[@id='teacher_cluster']") is not None
 
 
 def test_run_teacher_guided_repair_queue_skips_review_expanded_scope(tmp_path: Path) -> None:
