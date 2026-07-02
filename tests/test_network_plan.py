@@ -884,6 +884,7 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
         run_reference_join_aggregation_after_build=False,
         run_reference_hierarchy_audit_after_build=False,
         run_reference_scope_audit_after_build=False,
+        road_connectivity_replay_max_owners=0,
         build_func=fake_build,
         tls_audit_func=fake_tls,
         tls_aggregation_func=fake_tls_aggregation,
@@ -1159,6 +1160,7 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
         run_reference_join_aggregation_after_build=False,
         run_reference_hierarchy_audit_after_build=False,
         run_reference_scope_audit_after_build=False,
+        road_connectivity_replay_max_owners=0,
         build_func=fake_build,
         tls_audit_func=lambda **_kwargs: {"status": "pass", "tls_candidate_count": 0, "warnings": []},
         connectivity_func=lambda _path: {"status": "pass", "connectivity_status": "pass", "passenger_edge_count": 1},
@@ -2448,7 +2450,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["aggregation_candidate_net_file"] == visual_detail_net_file
     assert calls["teacher_guided_candidate_net_file"] == tmp_path / "aggregated.net.xml"
     assert calls["teacher_guided_queue_max_ready_candidates"] == 80
-    assert calls["teacher_guided_plain_net_file"] == tmp_path / "aggregated.net.xml"
+    assert calls["teacher_guided_plain_net_file"] == tmp_path / "road_connectivity_best_cluster_c_d.net.xml"
     assert calls["teacher_guided_plain_netconvert_binary"] == "netconvert-test"
     assert calls["teacher_guided_run_queue_report"]["ready_candidate_count"] == 0
     assert calls["teacher_guided_run_queue_report"]["expanded_scope_candidate_count"] == 1

@@ -652,6 +652,21 @@ def _road_connectivity_gate_status(report: Mapping[str, Any] | None) -> str:
     return str(audit.get("status", report.get("status", "fail")))
 
 
+def _road_connectivity_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
+    if (
+        report is None
+        or str(report.get("status", "fail")) != "pass"
+        or str(report.get("sumo_load_status", "fail")) != "pass"
+        or _road_connectivity_gate_status(report) != "pass"
+    ):
+        return None
+    output_value = str(report.get("output_file", "")).strip()
+    if not output_value:
+        return None
+    output_file = Path(output_value)
+    return output_file if output_file.exists() else None
+
+
 def _road_connectivity_replay_batch_report(
     owner_reports: list[Mapping[str, Any]], *, output_dir: Path, prefix: str
 ) -> dict[str, Any]:
@@ -3314,7 +3329,9 @@ def run_osm_cleanup_workflow(
                 )
             if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
                 teacher_guided_replay_source_net_file = (
-                    reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file
+                    _road_connectivity_best_variant_file(road_connectivity_replay_report)
+                    or reference_visual_detail_comparison_net_file
+                    or reference_join_audit_candidate_net_file
                 )
                 teacher_guided_plain_export_report = teacher_guided_plain_export_func(
                     net_file=teacher_guided_replay_source_net_file,
