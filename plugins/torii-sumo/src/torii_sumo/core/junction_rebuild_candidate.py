@@ -5211,37 +5211,77 @@ def _turnaround_only_lane_cases(
         for edge in teacher_root.findall("edge")
         if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
     }
-    cases: dict[str, set[str]] = {}
+    teacher_lane_keys_by_family: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    for edge_id, from_lane in teacher_by_lane:
+        teacher_lane_keys_by_family.setdefault((_signed_edge_family_id(edge_id), from_lane), []).append(
+            (edge_id, from_lane)
+        )
+    cases: dict[str, dict[str, object]] = {}
     for (edge_id, from_lane), candidate_stats in candidate_by_lane.items():
         if candidate_stats["non_turnaround_count"] or not candidate_stats["turnaround_count"]:
-            continue
-        teacher_stats = teacher_by_lane.get((edge_id, from_lane))
-        if not teacher_stats or not teacher_stats["non_turnaround_count"]:
             continue
         candidate_edge = candidate_edges.get(edge_id)
         junction_id = candidate_edge.attrib.get("to", "") if candidate_edge is not None else ""
         if (
             not junction_id
             or junction_id in covered_ids
-            or junction_id not in teacher_junction_ids
             or junction_id not in candidate_junction_ids
         ):
             continue
-        teacher_edge = teacher_edges.get(edge_id)
-        if teacher_edge is None or teacher_edge.attrib.get("to") != junction_id:
+        teacher_lane_keys = [(edge_id, from_lane)] if (edge_id, from_lane) in teacher_by_lane else []
+        teacher_lane_keys.extend(
+            key
+            for key in teacher_lane_keys_by_family.get((_signed_edge_family_id(edge_id), from_lane), [])
+            if key not in teacher_lane_keys
+        )
+        matched_teacher_edge_id = ""
+        matched_teacher_stats: dict[str, object] | None = None
+        for teacher_edge_id, teacher_from_lane in teacher_lane_keys:
+            teacher_stats = teacher_by_lane.get((teacher_edge_id, teacher_from_lane))
+            if not teacher_stats or not teacher_stats["non_turnaround_count"]:
+                continue
+            teacher_edge = teacher_edges.get(teacher_edge_id)
+            if (
+                teacher_edge is None
+                or teacher_edge.attrib.get("to") != junction_id
+                or teacher_edge.attrib.get("to") not in teacher_junction_ids
+            ):
+                continue
+            matched_teacher_edge_id = teacher_edge_id
+            matched_teacher_stats = teacher_stats
+            break
+        if not matched_teacher_edge_id or matched_teacher_stats is None:
             continue
-        cases.setdefault(junction_id, set()).add(f"{edge_id}_{from_lane}")
+        case = cases.setdefault(junction_id, {"source_lanes": set(), "edge_map": {}})
+        source_lanes = case["source_lanes"]
+        if isinstance(source_lanes, set):
+            source_lanes.add(f"{edge_id}_{from_lane}")
+        edge_map = case["edge_map"]
+        if isinstance(edge_map, dict):
+            edge_map[matched_teacher_edge_id] = edge_id
+            for teacher_target in sorted(matched_teacher_stats["non_turnaround_targets"]):
+                candidate_target_id, _candidate_target = _candidate_edge_by_exact_or_unsplit_id(
+                    str(teacher_target),
+                    candidate_edges,
+                )
+                if candidate_target_id:
+                    edge_map[str(teacher_target)] = candidate_target_id
     return [
         {
             "reference_id": junction_id,
             "reference_joined_source_nodes": [],
             "matched_reference_source_node_ids": [],
             "matched_candidate_node_ids": [junction_id],
-            "turnaround_only_source_lanes": sorted(source_lanes),
+            "edge_map": dict(sorted(case_data["edge_map"].items()))
+            if isinstance(case_data.get("edge_map"), dict)
+            else {},
+            "turnaround_only_source_lanes": sorted(case_data["source_lanes"])
+            if isinstance(case_data.get("source_lanes"), set)
+            else [],
             "learned_rule_basis": "turnaround_only_lane_gap",
             "learned_rule": "tum_like_turnaround_only_lane_candidate",
         }
-        for junction_id, source_lanes in sorted(cases.items())
+        for junction_id, case_data in sorted(cases.items())
     ]
 
 
@@ -5574,6 +5614,7 @@ def _teacher_guided_repair_candidate(
         teacher_junction_id=reference_id,
         candidate_junction_id=candidate_junction_id,
     )
+    edge_map = dict(sorted({**case_edge_map, **edge_map}.items()))
     missing = [edge_id for edge_id in _teacher_approach_edge_ids(teacher_model) if edge_id not in edge_map]
     copyable_missing = _copyable_missing_teacher_edge_ids(
         teacher_root.findall("connection"),

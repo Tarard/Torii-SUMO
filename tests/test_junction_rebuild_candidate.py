@@ -1220,6 +1220,63 @@ def test_build_teacher_guided_repair_queue_seeds_turnaround_only_lane_gap_withou
     assert candidate["netedit_review_actions"] == ["rebuild_vehicle_movement_matrix"]
 
 
+def test_turnaround_only_lane_seed_matches_teacher_split_to_candidate_unsplit_edge(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in#1" from="w" to="j"><lane id="in#1_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="-in#1" from="j" to="w"><lane id="-in#1_0" index="0" shape="0,0 -10,0"/></edge>
+  <edge id="normal_out#1" from="j" to="e"><lane id="normal_out#1_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in#1_0" intLanes=""/>
+  <connection from="in#1" to="normal_out#1" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in#1" to="-in#1" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="w" to="j"><lane id="in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="-in" from="j" to="w"><lane id="-in_0" index="0" shape="0,0 -10,0"/></edge>
+  <edge id="normal_out" from="j" to="e"><lane id="normal_out_0" index="0" shape="0,0 10,0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=""/>
+  <connection from="in" to="-in" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={"matched_cases": []},
+        output_dir=tmp_path / "queue",
+        prefix="demo",
+    )
+
+    assert report["turnaround_only_lane_candidate_count"] == 1
+    candidate = report["repair_candidates"][0]
+    assert candidate["edge_map"]["in#1"] == "in"
+    assert candidate["edge_map"]["normal_out#1"] == "normal_out"
+    assert candidate["vehicle_movement_matrix_missing_count"] == 1
+    assert candidate["turnaround_only_lane_gap_count"] == 1
+    assert candidate["turnaround_only_lane_gaps"] == [
+        {
+            "teacher_from_edge_id": "in#1",
+            "from_edge_id": "in",
+            "fromLane": "0",
+            "candidate_turnaround_outgoing_count": 1,
+            "candidate_non_turnaround_outgoing_count": 0,
+            "teacher_turnaround_outgoing_count": 1,
+            "teacher_non_turnaround_outgoing_count": 1,
+            "teacher_non_turnaround_targets": ["normal_out#1"],
+            "match_status": "candidate_turnaround_only_teacher_has_normal_vehicle_movement",
+        }
+    ]
+    assert candidate["netedit_review_actions"] == ["rebuild_vehicle_movement_matrix"]
+
+
 def test_turnaround_only_lane_seed_scopes_missing_normal_target(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
