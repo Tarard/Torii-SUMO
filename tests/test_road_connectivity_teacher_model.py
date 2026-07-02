@@ -6,6 +6,7 @@ from torii_sumo.core.road_connectivity_teacher_model import (
     build_internal_movement_owner_approach_edge_map,
     build_internal_movement_owner_internal_lane_map,
     build_internal_movement_owner_missing_approach_edge_repair_candidates,
+    build_internal_movement_owner_road_connectivity_parity_audit,
     build_internal_movement_owner_road_lane_repair_candidates,
     build_road_connection_topology_replay_audit,
     build_road_lane_template_edge_subset_repair_candidates,
@@ -842,11 +843,66 @@ def test_owner_teacher_replay_runs_road_lane_missing_edge_then_bundle(
     assert report["road_lane_repair"]["changed_edge_count"] == 1
     assert report["missing_approach_edge_repair"]["added_edge_count"] == 1
     assert report["bundle_replay"]["status"] == "pass"
+    assert report["road_connectivity_audit"]["status"] == "pass"
     assert root.find("edge[@id='road#3']") is None
     assert len(road_lanes) == 2
     assert root.find("edge[@id='path#1']") is not None
     assert root.find("edge[@id=':j_0']") is not None
     assert root.find("connection[@from='path#1'][@to='out#4']") is not None
+
+
+def test_owner_road_connectivity_audit_does_not_treat_turnaround_as_route_complete(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="out#1" from="j" to="b"><lane id="out#1_0" index="0" allow="passenger"/></edge>
+  <edge id="-out#1" from="b" to="j"><lane id="-out#1_0" index="0" allow="passenger"/></edge>
+  <edge id="next" from="b" to="c"><lane id="next_0" index="0" allow="passenger"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+  <junction id="b" type="priority" x="10" y="0"/>
+  <junction id="c" type="dead_end" x="20" y="0"/>
+  <connection from="out#1" to="next" fromLane="0" toLane="0" dir="s"/>
+  <connection from="out#1" to="-out#1" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="out#3" from="j" to="b"><lane id="out#3_0" index="0" allow="passenger"/></edge>
+  <edge id="-out#3" from="b" to="j"><lane id="-out#3_0" index="0" allow="passenger"/></edge>
+  <edge id="next" from="b" to="c"><lane id="next_0" index="0" allow="passenger"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+  <junction id="b" type="priority" x="10" y="0"/>
+  <junction id="c" type="dead_end" x="20" y="0"/>
+  <connection from="out#3" to="-out#3" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_road_connectivity_parity_audit(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+        teacher_edge_map={"out#1": "out#3"},
+    )
+
+    assert report["status"] == "fail"
+    assert report["gate"] == {
+        "lane_delta_count": 1,
+        "missing_non_turnaround_outgoing_count": 1,
+        "turnaround_only_outgoing_count": 1,
+        "missing_turnaround_outgoing_count": 0,
+        "missing_non_turnaround_incoming_count": 0,
+        "turnaround_only_incoming_count": 0,
+        "missing_turnaround_incoming_count": 0,
+    }
+    assert report["lane_deltas"][0]["outgoing"]["flags"] == [
+        "missing_non_turnaround_vehicle_connection",
+        "turnaround_only_candidate",
+    ]
 
 
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:

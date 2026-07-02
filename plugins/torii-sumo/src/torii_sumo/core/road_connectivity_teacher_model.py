@@ -758,6 +758,137 @@ def build_internal_movement_replay_audit(
     }
 
 
+def build_internal_movement_owner_road_connectivity_parity_audit(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    owner_id: str,
+    teacher_edge_map: dict[str, str] | None = None,
+    max_examples: int = 20,
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    if teacher_edge_map is None:
+        teacher_edge_map = build_internal_movement_owner_approach_edge_map(
+            teacher_net_file,
+            candidate_net_file,
+            owner_id=owner_id,
+        )["edge_map"]
+    teacher_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    teacher_outgoing = _lane_connection_index(
+        teacher_root,
+        edge_ids=set(teacher_edge_map),
+        edge_key="from",
+        lane_key="fromLane",
+    )
+    candidate_outgoing = _lane_connection_index(
+        candidate_root,
+        edge_ids=set(teacher_edge_map.values()),
+        edge_key="from",
+        lane_key="fromLane",
+    )
+    teacher_incoming = _lane_connection_index(
+        teacher_root,
+        edge_ids=set(teacher_edge_map),
+        edge_key="to",
+        lane_key="toLane",
+    )
+    candidate_incoming = _lane_connection_index(
+        candidate_root,
+        edge_ids=set(teacher_edge_map.values()),
+        edge_key="to",
+        lane_key="toLane",
+    )
+
+    lane_deltas = []
+    for teacher_edge_id, candidate_edge_id in sorted(teacher_edge_map.items()):
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        candidate_edge = candidate_edges.get(candidate_edge_id)
+        if teacher_edge is None or candidate_edge is None:
+            continue
+        for lane in teacher_edge.findall("lane"):
+            if not _lane_allows_vehicle(lane):
+                continue
+            lane_index = lane.attrib.get("index", "0")
+            outgoing = _lane_connection_delta(
+                teacher_edge_id,
+                candidate_edge_id,
+                lane_index,
+                teacher_outgoing.get((teacher_edge_id, lane_index), []),
+                candidate_outgoing.get((candidate_edge_id, lane_index), []),
+            )
+            incoming = _lane_connection_delta(
+                teacher_edge_id,
+                candidate_edge_id,
+                lane_index,
+                teacher_incoming.get((teacher_edge_id, lane_index), []),
+                candidate_incoming.get((candidate_edge_id, lane_index), []),
+            )
+            if _lane_connection_delta_is_reportable(outgoing) or _lane_connection_delta_is_reportable(incoming):
+                lane_deltas.append(
+                    {
+                        "teacher_edge_id": teacher_edge_id,
+                        "candidate_edge_id": candidate_edge_id,
+                        "lane_index": lane_index,
+                        "outgoing": outgoing,
+                        "incoming": incoming,
+                    }
+                )
+
+    gate = {
+        "lane_delta_count": len(lane_deltas),
+        "missing_non_turnaround_outgoing_count": _lane_delta_flag_count(
+            lane_deltas,
+            "outgoing",
+            "missing_non_turnaround_vehicle_connection",
+        ),
+        "turnaround_only_outgoing_count": _lane_delta_flag_count(
+            lane_deltas,
+            "outgoing",
+            "turnaround_only_candidate",
+        ),
+        "missing_turnaround_outgoing_count": _lane_delta_flag_count(
+            lane_deltas,
+            "outgoing",
+            "missing_turnaround",
+        ),
+        "missing_non_turnaround_incoming_count": _lane_delta_flag_count(
+            lane_deltas,
+            "incoming",
+            "missing_non_turnaround_vehicle_connection",
+        ),
+        "turnaround_only_incoming_count": _lane_delta_flag_count(
+            lane_deltas,
+            "incoming",
+            "turnaround_only_candidate",
+        ),
+        "missing_turnaround_incoming_count": _lane_delta_flag_count(
+            lane_deltas,
+            "incoming",
+            "missing_turnaround",
+        ),
+    }
+    return {
+        "status": "pass" if not lane_deltas else "fail",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "owner_id": owner_id,
+        "mapped_edge_count": len(teacher_edge_map),
+        "gate": gate,
+        "lane_deltas": lane_deltas[:max_examples],
+    }
+
+
 def build_internal_movement_owner_approach_edge_map(
     teacher_net_file: Path,
     candidate_net_file: Path,
@@ -1010,6 +1141,12 @@ def write_internal_movement_owner_teacher_replay_candidate(
         teacher_edge_map=edge_map,
         copy_tls=copy_tls,
     )
+    road_connectivity_audit = build_internal_movement_owner_road_connectivity_parity_audit(
+        teacher_net_file,
+        output_file,
+        owner_id=owner_id,
+        teacher_edge_map=edge_map,
+    )
     return {
         "status": bundle_replay["status"],
         "claim_status": "diagnostic-demo",
@@ -1028,6 +1165,7 @@ def write_internal_movement_owner_teacher_replay_candidate(
         "road_lane_repair": road_lane_repair,
         "missing_approach_edge_repair": missing_approach_repair,
         "bundle_replay": bundle_replay,
+        "road_connectivity_audit": road_connectivity_audit,
         "warnings": [],
     }
 
@@ -2144,6 +2282,80 @@ def _owner_external_approach_edges(root: ET.Element, owner_id: str) -> dict[str,
         elif edge.attrib.get("from", "") == owner_id:
             edges[edge_id] = "outgoing"
     return edges
+
+
+def _lane_allows_vehicle(lane: ET.Element) -> bool:
+    allow = set(lane.attrib.get("allow", "").split())
+    if allow:
+        return bool(allow - {"pedestrian", "bicycle"})
+    return "passenger" not in set(lane.attrib.get("disallow", "").split())
+
+
+def _lane_connection_index(
+    root: ET.Element,
+    *,
+    edge_ids: set[str],
+    edge_key: str,
+    lane_key: str,
+) -> dict[tuple[str, str], list[dict[str, str]]]:
+    index: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for connection in root.findall("connection"):
+        edge_id = connection.attrib.get(edge_key, "")
+        if edge_id not in edge_ids:
+            continue
+        lane_index = connection.attrib.get(lane_key, "0")
+        index.setdefault((edge_id, lane_index), []).append(_connection_replay_record(connection))
+    return index
+
+
+def _lane_connection_delta(
+    teacher_edge_id: str,
+    candidate_edge_id: str,
+    lane_index: str,
+    teacher_records: list[dict[str, str]],
+    candidate_records: list[dict[str, str]],
+) -> dict[str, Any]:
+    teacher_turnaround = sum(1 for record in teacher_records if record.get("dir", "") == "t")
+    candidate_turnaround = sum(1 for record in candidate_records if record.get("dir", "") == "t")
+    teacher_non_turnaround = len(teacher_records) - teacher_turnaround
+    candidate_non_turnaround = len(candidate_records) - candidate_turnaround
+    flags = []
+    if teacher_non_turnaround > 0 and candidate_non_turnaround == 0:
+        flags.append("missing_non_turnaround_vehicle_connection")
+        if candidate_turnaround > 0:
+            flags.append("turnaround_only_candidate")
+    if teacher_turnaround > 0 and candidate_turnaround == 0:
+        flags.append("missing_turnaround")
+    return {
+        "teacher_edge_id": teacher_edge_id,
+        "candidate_edge_id": candidate_edge_id,
+        "lane_index": lane_index,
+        "teacher_non_turnaround": teacher_non_turnaround,
+        "candidate_non_turnaround": candidate_non_turnaround,
+        "teacher_turnaround": teacher_turnaround,
+        "candidate_turnaround": candidate_turnaround,
+        "teacher_dirs": sorted(record.get("dir", "") for record in teacher_records),
+        "candidate_dirs": sorted(record.get("dir", "") for record in candidate_records),
+        "flags": flags,
+    }
+
+
+def _lane_connection_delta_is_reportable(delta: dict[str, Any]) -> bool:
+    return bool(delta["flags"]) or (
+        delta["teacher_non_turnaround"],
+        delta["teacher_turnaround"],
+    ) != (
+        delta["candidate_non_turnaround"],
+        delta["candidate_turnaround"],
+    )
+
+
+def _lane_delta_flag_count(
+    lane_deltas: list[dict[str, Any]],
+    side: str,
+    flag: str,
+) -> int:
+    return sum(1 for delta in lane_deltas if flag in delta[side]["flags"])
 
 
 def _split_edge_root(edge_id: str) -> str:
