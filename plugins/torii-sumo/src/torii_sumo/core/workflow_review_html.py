@@ -447,11 +447,19 @@ def _netedit_selection_lines(junction: Mapping[str, Any]) -> list[str]:
     return [f"junction:{node_id}" for node_id in _list_value(junction.get("node_ids"))]
 
 
-def _netedit_command(sumocfg_file: str | Path | None, output_dir: Path, selection_file: str | Path | None = None) -> str:
+def _netedit_command(
+    sumocfg_file: str | Path | None,
+    output_dir: Path,
+    selection_file: str | Path | None = None,
+    viewsettings_file: str | Path | None = None,
+) -> str:
     sumocfg = _portable_path(sumocfg_file, output_dir)
     if not sumocfg:
         return ""
     command = f'netedit --sumocfg-file "{sumocfg}"'
+    viewsettings = _portable_path(viewsettings_file, output_dir)
+    if viewsettings:
+        command += f' -g "{viewsettings}"'
     selection = _portable_path(selection_file, output_dir)
     if selection:
         command += f' --selection-file "{selection}"'
@@ -525,13 +533,24 @@ def _write_netedit_review_files(
         selection_lines = _netedit_selection_lines(junction)
         if selection_lines:
             selection_file = output_dir / f"{prefix}_netedit_review_{_safe_file_stem(cluster_id)}_selection.txt"
+            viewsettings_file = output_dir / f"{prefix}_netedit_review_{_safe_file_stem(cluster_id)}.view.xml"
             selection_file.write_text("\n".join(selection_lines) + "\n", encoding="utf-8")
+            viewsettings = ET.Element("viewsettings")
+            ET.SubElement(
+                viewsettings,
+                "viewport",
+                {"zoom": "700", "x": f"{x:g}", "y": f"{y:g}", "angle": "0"},
+            )
+            ET.SubElement(viewsettings, "delay", {"value": "100"})
+            ET.indent(viewsettings)
+            ET.ElementTree(viewsettings).write(viewsettings_file, encoding="utf-8", xml_declaration=True)
             cluster_selection_files.append(
                 {
                     "cluster_id": cluster_id,
                     "selection_file": str(selection_file),
+                    "viewsettings_file": str(viewsettings_file),
                     "selected_junction_count": len(selection_lines),
-                    "netedit_command": f'netedit --sumocfg-file "{sumocfg_file}" --selection-file "{selection_file}"',
+                    "netedit_command": f'netedit --sumocfg-file "{sumocfg_file}" -g "{viewsettings_file}" --selection-file "{selection_file}"',
                 }
             )
 
@@ -556,6 +575,7 @@ def _write_netedit_review_files(
         "box_overlay_count": box_count,
         "cluster_selection_files": cluster_selection_files,
         "selection_file_count": len(cluster_selection_files),
+        "viewsettings_file_count": sum(1 for item in cluster_selection_files if item.get("viewsettings_file")),
         "edge_overlay_count": 0,
         "junction_overlay_count": 0,
     }
@@ -575,7 +595,13 @@ def _attach_netedit_cluster_review(
             {
                 **dict(item),
                 "selection_file": _portable_path(selection_file, output_dir),
-                "netedit_command": _netedit_command(netedit_review.get("sumocfg_file"), output_dir, selection_file),
+                "viewsettings_file": _portable_path(item.get("viewsettings_file"), output_dir),
+                "netedit_command": _netedit_command(
+                    netedit_review.get("sumocfg_file"),
+                    output_dir,
+                    selection_file,
+                    item.get("viewsettings_file"),
+                ),
             }
         )
     by_cluster = {str(item.get("cluster_id")): item for item in portable}
@@ -584,6 +610,7 @@ def _attach_netedit_cluster_review(
         if not item:
             continue
         junction["netedit_selection_file"] = item["selection_file"]
+        junction["netedit_viewsettings_file"] = item["viewsettings_file"]
         junction["netedit_command"] = item["netedit_command"]
     return portable
 
@@ -1679,6 +1706,11 @@ def build_workflow_review_html(
         "netedit_review_command": str(netedit_review.get("netedit_command", "")),
         "netedit_review_selection_files": [
             str(item.get("selection_file", ""))
+            for item in netedit_review.get("cluster_selection_files", []) or []
+            if isinstance(item, Mapping)
+        ],
+        "netedit_review_viewsettings_files": [
+            str(item.get("viewsettings_file", ""))
             for item in netedit_review.get("cluster_selection_files", []) or []
             if isinstance(item, Mapping)
         ],
