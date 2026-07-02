@@ -141,6 +141,51 @@ def test_compare_road_connectivity_bundles_reports_exact_edge_and_connection_del
     }
 
 
+def test_compare_road_connectivity_bundles_aliases_unambiguous_split_root_connections(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="n1" to="n2"><lane id="in_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="749560269#1" from="n2" to="n3"><lane id="749560269#1_0" index="0" allow="passenger" shape="10,0 20,0"/></edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="priority" x="10" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="n3" type="dead_end" x="20" y="0" incLanes="749560269#1_0" intLanes=""/>
+  <connection from="in" to="749560269#1" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="n1" to="n2"><lane id="in_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="749560269" from="n2" to="n3"><lane id="749560269_0" index="0" allow="passenger" shape="10,0 20,0"/></edge>
+  <junction id="n1" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="n2" type="priority" x="10" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="n3" type="dead_end" x="20" y="0" incLanes="749560269_0" intLanes=""/>
+  <connection from="in" to="749560269" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    teacher = canonical_road_connectivity_bundle(teacher_net, seed_edge_ids=["in", "749560269#1"], hop_radius=1)
+    candidate = canonical_road_connectivity_bundle(candidate_net, seed_edge_ids=["in", "749560269"], hop_radius=1)
+
+    report = compare_road_connectivity_bundles(teacher, candidate)
+
+    assert report["edge_ids"] == {
+        "missing_in_candidate": ["749560269#1"],
+        "extra_in_candidate": ["749560269"],
+        "split_root_aliases": [
+            {
+                "root": "749560269",
+                "teacher_edge_id": "749560269#1",
+                "candidate_edge_id": "749560269",
+            }
+        ],
+    }
+    assert report["connections"] == {"missing_in_candidate": [], "extra_in_candidate": []}
+    assert report["summary"]["split_root_alias_count"] == 1
+
+
 def test_compare_road_connectivity_bundles_reports_same_id_geometry_mismatch(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
