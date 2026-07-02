@@ -6372,6 +6372,176 @@ def test_run_teacher_guided_repair_queue_replays_existing_joined_expanded_scope(
     assert variant_calls[0]["raw_node_file"] == Path(scope_report["node_file"])
 
 
+def test_write_expanded_scope_plain_inputs_drops_stale_joined_node_before_join_patch(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-1" y="0"/>
+  <node id="b" x="1" y="0"/>
+  <node id="cluster_a_b" x="0" y="0" type="priority"/>
+  <node id="w" x="-10" y="0"/>
+  <node id="e" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="west" from="w" to="a"><lane index="0"/></edge>
+  <edge id="east" from="b" to="e"><lane index="0"/></edge>
+  <edge id="stale_out" from="cluster_a_b" to="e"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    netconvert_checked = False
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        nonlocal netconvert_checked
+        if command[0] == "netconvert-test":
+            node_file = Path(cwd) / command[command.index("--node-files") + 1].split(",")[0]
+            scope_nodes = ET.parse(node_file).getroot()
+            assert scope_nodes.find("node[@id='cluster_a_b']") is None
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+            netconvert_checked = True
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    report = write_expanded_scope_plain_inputs(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "scope",
+        expanded_rebuild_scope={
+            "status": "review",
+            "core_junction_id": "cluster_a_b",
+            "junction_ids": ["a", "b", "cluster_a_b"],
+            "join_junction_ids": ["a", "b"],
+            "blocked_teacher_edge_ids": [],
+            "missing_desired_endpoint_ids": [],
+        },
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["joined_scope_junction_id"] == "cluster_a_b"
+    assert report["join_explicit_join_count"] == 1
+    assert netconvert_checked is True
+
+
+def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_patch(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="a" x="-1" y="0"/>
+  <node id="b" x="1" y="0"/>
+  <node id="cluster_a_b" x="0" y="0" type="priority"/>
+  <node id="w" x="-10" y="0"/>
+  <node id="e" x="10" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="west" from="w" to="a"><lane index="0"/></edge>
+  <edge id="east" from="b" to="e"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text("<net/>", encoding="utf-8")
+    candidate_net.write_text('<net><junction id="cluster_a_b"/></net>', encoding="utf-8")
+    full_network_seed_checked = False
+    variant_calls = []
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        nonlocal full_network_seed_checked
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            node_arg = command[command.index("--node-files") + 1]
+            node_file = Path(cwd) / node_arg.split(",")[0]
+            if output_file.name == "full_network_join_replay.net.xml":
+                scope_nodes = ET.parse(node_file).getroot()
+                assert scope_nodes.find("node[@id='cluster_a_b']") is None
+                full_network_seed_checked = True
+            output_file.write_text(
+                """<net>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.write_text(
+            """<net>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+</net>""",
+            encoding="utf-8",
+        )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "cluster_a_b",
+                    "junction_id": "cluster_a_b",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "edge_map": {"teacher_west": "west", "teacher_east": "east"},
+                    "expanded_rebuild_scope": {
+                        "status": "review",
+                        "recommended_action": "rebuild_plain_xml_scope",
+                        "core_junction_id": "cluster_a_b",
+                        "junction_ids": ["a", "b", "cluster_a_b"],
+                        "join_junction_ids": ["a", "b"],
+                        "blocked_teacher_edge_ids": [],
+                    },
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+        variant_builder=fake_variant,
+    )
+
+    assert report["skipped_candidate_count"] == 0
+    assert report["attempted_candidate_count"] == 1
+    assert variant_calls[0]["junction_id"] == "cluster_a_b"
+    assert full_network_seed_checked is True
+
+
 def test_run_teacher_guided_repair_queue_absorbs_unmapped_join_internal_vehicle_edge(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
