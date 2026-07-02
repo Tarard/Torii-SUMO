@@ -108,6 +108,7 @@ def test_owner_semantics_probe_keeps_road_connectivity_separate_from_turnaround_
         "edge_mapping": "pass",
         "road_connectivity": "fail",
         "junction_connection": "fail",
+        "pedestrian_crossing": "pass",
         "tls_movement": "skipped",
     }
     assert report["road_connectivity_layer"]["gate"]["missing_non_turnaround_outgoing_count"] == 1
@@ -115,6 +116,65 @@ def test_owner_semantics_probe_keeps_road_connectivity_separate_from_turnaround_
     assert report["junction_connection_layer"]["teacher"]["top_external_non_turnaround_connection_count"] == 1
     assert report["junction_connection_layer"]["candidate"]["top_external_non_turnaround_connection_count"] == 0
     assert report["junction_connection_layer"]["candidate_turnaround_only_top_external"] is True
+
+
+def test_owner_semantics_probe_flags_missing_pedestrian_crossing_connection(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <edge id="foot" from="f" to="j"><lane id="foot_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="priority"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <junction id="f" x="0" y="10" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="foot" to=":j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
+  <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <edge id="foot" from="f" to="j"><lane id="foot_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_c0" function="crossing"><lane id=":j_c0_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" allow="pedestrian"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="priority"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <junction id="f" x="0" y="10" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="foot" to=":j_w0" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_owner_semantics_probe(
+        teacher,
+        candidate,
+        owner_id="j",
+        teacher_edge_map={"foot": "foot", "in": "in", "out": "out"},
+    )
+
+    assert report["status"] == "fail"
+    assert report["layer_statuses"]["road_connectivity"] == "pass"
+    assert report["layer_statuses"]["junction_connection"] == "pass"
+    assert report["layer_statuses"]["pedestrian_crossing"] == "fail"
+    assert report["pedestrian_crossing_layer"]["teacher_edge_signature_count"] == 2
+    assert report["pedestrian_crossing_layer"]["candidate_edge_signature_count"] == 2
+    assert report["pedestrian_crossing_layer"]["teacher_only_normalized_connection_signatures"] == [
+        "from=:TARGET_w0|to=:TARGET_c0|fromLane=0|toLane=0|via=|tl=|linkIndex=|dir=s|state=M"
+    ]
 
 
 def test_owner_semantics_probe_reuses_inferred_edge_map_for_tls_compare(tmp_path: Path) -> None:
