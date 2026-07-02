@@ -3317,6 +3317,12 @@ def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> boo
     if learned_rule == "tum_like_same_id_pattern_candidate":
         mismatch_fields = {str(item) for item in candidate.get("junction_pattern_mismatch_fields", []) or []}
         return bool(mismatch_fields & {"internal_function_counts", "request_signatures", "junction_signature"})
+    if learned_rule == "tum_like_same_id_tls_candidate":
+        teacher_pattern_key = str(candidate.get("teacher_pattern_key", ""))
+        return any(
+            _teacher_pattern_metric_is_positive(teacher_pattern_key, metric)
+            for metric in ("internal", "requests")
+        )
     return False
 
 
