@@ -3704,6 +3704,29 @@ def run_teacher_guided_repair_queue(
                             }
                         )
                         continue
+                    try:
+                        refreshed_edge_map = _teacher_candidate_edge_map(
+                            extract_teacher_junction_model(teacher_net_file, teacher_junction_id),
+                            extract_teacher_junction_model(replay_candidate_net_file, joined_scope_junction_id),
+                            teacher_junction_id=teacher_junction_id,
+                            candidate_junction_id=joined_scope_junction_id,
+                            max_bearing_delta=45.0,
+                        )
+                    except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
+                        refreshed_edge_map = {}
+                        scope_report["full_network_join_refreshed_edge_map_error"] = f"{type(exc).__name__}: {exc}"
+                    if refreshed_edge_map:
+                        replacements = {
+                            teacher_edge_id: {
+                                "old": replay_edge_map.get(teacher_edge_id, ""),
+                                "new": candidate_edge_id,
+                            }
+                            for teacher_edge_id, candidate_edge_id in refreshed_edge_map.items()
+                            if replay_edge_map.get(teacher_edge_id) != candidate_edge_id
+                        }
+                        replay_edge_map = dict(sorted({**replay_edge_map, **refreshed_edge_map}.items()))
+                        scope_report["full_network_join_refreshed_edge_map"] = refreshed_edge_map
+                        scope_report["full_network_join_refreshed_edge_map_replacements"] = replacements
                     scope_report["replay_scope"] = "full_network_join_patch"
                 else:
                     replay_node_file = _write_replay_node_file(
