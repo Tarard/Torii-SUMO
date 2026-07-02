@@ -290,6 +290,30 @@ def test_teacher_guided_best_variant_file_uses_partial_sequential_composite(tmp_
     assert best == composite_net
 
 
+def test_teacher_guided_best_variant_file_does_not_promote_unapplied_local_variant(tmp_path: Path) -> None:
+    local_variant = tmp_path / "local_teacher_guided.net.xml"
+    local_variant.write_text("<net/>", encoding="utf-8")
+
+    best = _teacher_guided_best_variant_file(
+        {
+            "status": "pass",
+            "parity_gate_status": "pass",
+            "composite_net_file": "",
+            "composite_applied_candidate_count": 0,
+            "variant_reports": [
+                {
+                    "status": "pass",
+                    "parity_gate_status": "pass",
+                    "sumo_load": {"status": "pass"},
+                    "final_net_file": str(local_variant),
+                }
+            ],
+        }
+    )
+
+    assert best is None
+
+
 def test_teacher_guided_equivalent_approach_edge_map_collects_passed_replay_maps() -> None:
     edge_map = _teacher_guided_equivalent_approach_edge_map(
         {
