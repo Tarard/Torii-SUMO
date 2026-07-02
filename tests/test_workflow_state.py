@@ -1,6 +1,7 @@
 from torii_sumo.core.workflow_state import (
     NetworkQualityVector,
     StageResult,
+    build_promotion_trace,
     summarize_workflow_stages,
 )
 
@@ -104,3 +105,53 @@ def test_summarize_workflow_stages_groups_existing_reference_matched_fields() ->
 
 def test_summarize_workflow_stages_omits_absent_stages() -> None:
     assert summarize_workflow_stages({}) == []
+
+
+def test_build_promotion_trace_serializes_stage_quality_deltas() -> None:
+    trace = build_promotion_trace(
+        case_id="small_probe",
+        claim_status="construction-invalid",
+        source_artifact="workflow_report.json",
+        stages=[
+            StageResult(
+                stage_name="routeability",
+                status="pass",
+                after_quality=NetworkQualityVector(routeability={"status": "pass"}),
+                promotion_decision="pass",
+            ),
+            StageResult(
+                stage_name="review_html",
+                status="blocked",
+                after_quality=NetworkQualityVector(manual_review_load=3),
+                promotion_decision="blocked_review_required",
+            ),
+        ],
+    )
+
+    assert trace == {
+        "case_id": "small_probe",
+        "claim_status": "construction-invalid",
+        "source_artifact": "workflow_report.json",
+        "stages": [
+            {
+                "stage_id": "routeability",
+                "before_quality": NetworkQualityVector().as_dict(),
+                "after_quality": {
+                    **NetworkQualityVector().as_dict(),
+                    "routeability": {"status": "pass"},
+                },
+                "delta_quality": {},
+                "promotion_decision": "pass",
+            },
+            {
+                "stage_id": "review_html",
+                "before_quality": NetworkQualityVector().as_dict(),
+                "after_quality": {
+                    **NetworkQualityVector().as_dict(),
+                    "manual_review_load": 3,
+                },
+                "delta_quality": {},
+                "promotion_decision": "blocked_review_required",
+            },
+        ],
+    }

@@ -10,7 +10,7 @@ from .osm_area import osm_map_url_bbox, resolve_osm_place
 from .osm_network import audit_tls_multisource
 from .osm_workflow import run_osm_cleanup_workflow
 from .workflow_review_html import build_workflow_review_html
-from .workflow_state import summarize_workflow_stages
+from .workflow_state import build_promotion_trace, summarize_workflow_stages
 
 
 AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run"}
@@ -648,6 +648,12 @@ def _run_osm_to_sumo(
     stage_results = summarize_workflow_stages(workflow_report)
     if stage_results:
         report["workflow_stage_results"] = [stage.as_dict() for stage in stage_results]
+        report["workflow_promotion_trace"] = build_promotion_trace(
+            case_id=str(network_plan.get("network_profile") or "osm_to_sumo"),
+            claim_status=str(workflow_report.get("claim_status") or "diagnostic-demo"),
+            source_artifact=str(workflow_report.get("workflow_report_file") or ""),
+            stages=stage_results,
+        )
     if network_plan.get("network_profile") == "reference_matched":
         _annotate_reference_matched_semantics(report, workflow_report)
     return report

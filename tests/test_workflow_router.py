@@ -595,6 +595,11 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         == "pass"
     )
     assert stage_results["routeability"]["after_quality"]["routeability"] == {"status": "pass"}
+    promotion_trace = report["workflow_promotion_trace"]
+    assert promotion_trace["case_id"] == "reference_matched"
+    assert promotion_trace["claim_status"] == "diagnostic-demo"
+    assert [stage["stage_id"] for stage in promotion_trace["stages"]] == list(stage_results)
+    assert promotion_trace["stages"][1]["promotion_decision"] == "pass"
     assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "road_connectivity_parity" in report["network_plan"]["validation_gates"]
