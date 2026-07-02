@@ -3323,6 +3323,12 @@ def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> boo
             _teacher_pattern_metric_is_positive(teacher_pattern_key, metric)
             for metric in ("internal", "requests")
         )
+    if learned_rule == "tum_like_turnaround_only_lane_candidate":
+        teacher_pattern_key = str(candidate.get("teacher_pattern_key", ""))
+        return any(
+            _teacher_pattern_metric_is_positive(teacher_pattern_key, metric)
+            for metric in ("internal", "requests")
+        )
     return False
 
 
