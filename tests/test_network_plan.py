@@ -12,6 +12,7 @@ from torii_sumo.core.osm_workflow import (
     _teacher_guided_seed_candidate,
     _reference_join_audit_can_seed_teacher_guided_queue,
     _restore_followup_internal_regressions,
+    _sumo_load_net,
     _filter_teacher_guided_queue_to_mismatch_fields,
     _teacher_guided_junction_parity_gate,
     _teacher_guided_application_stats,
@@ -52,6 +53,43 @@ def test_direct_replay_path_part_is_short_and_stable_for_windows() -> None:
     assert len(path_part) <= 16
     assert path_part == _safe_path_part(long_junction_id)
     assert path_part != _safe_path_part(long_junction_id + "_different")
+
+
+def test_sumo_load_retries_netconvert_normalized_net_after_direct_failure(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    sumo_binary = bin_dir / "sumo.exe"
+    netconvert_binary = bin_dir / "netconvert.exe"
+    sumo_binary.write_text("", encoding="utf-8")
+    netconvert_binary.write_text("", encoding="utf-8")
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    calls = []
+
+    def command_runner(command, *, cwd, timeout_seconds):
+        calls.append(command)
+        if Path(command[0]).name == "netconvert.exe":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text("<net/>", encoding="utf-8")
+            return {"returncode": 0, "stdout": "", "stderr": ""}
+        sumo_call_count = sum(1 for call in calls if Path(call[0]).name == "sumo.exe")
+        if sumo_call_count == 1:
+            return {"returncode": 1, "stdout": "", "stderr": "direct load failed"}
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    report = _sumo_load_net(
+        net_file,
+        output_dir=tmp_path / "sumo_load",
+        sumo_binary=str(sumo_binary),
+        timeout_seconds=10,
+        command_runner=command_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert [Path(call[0]).name for call in calls] == ["sumo.exe", "netconvert.exe", "sumo.exe"]
+    assert report["direct_sumo_load"]["status"] == "fail"
+    assert report["normalization_netconvert"]["status"] == "pass"
+    assert report["load_net_file"].endswith("sumo_load_candidate_normalized.net.xml")
 
 
 def test_teacher_guided_junction_parity_gate_uses_final_semantic_parity() -> None:

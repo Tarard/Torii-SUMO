@@ -857,6 +857,55 @@ def test_owner_teacher_replay_runs_road_lane_missing_edge_then_bundle(
     assert root.find("connection[@from='path#1'][@to='out#4']") is not None
 
 
+def test_owner_teacher_replay_replaces_stale_same_id_approach_edge(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.teacher_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="road#1" from="j" to="b"><lane id="road#1_0" index="0"/><lane id="road#1_1" index="1"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=":j_0_0"/>
+  <junction id="b" type="priority" x="10" y="0"/>
+  <connection from="in" to="road#1" fromLane="0" toLane="1" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="road#1" fromLane="0" toLane="1" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="road#0" from="j" to="wrong"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#1" from="x" to="y"><lane id="road#1_0" index="0"/></edge>
+  <edge id=":j_old" function="internal"><lane id=":j_old_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0" intLanes=":j_old_0"/>
+  <junction id="wrong" type="priority" x="5" y="0"/>
+  <junction id="x" type="priority" x="20" y="0"/>
+  <junction id="y" type="priority" x="30" y="0"/>
+  <connection from="in" to="road#0" fromLane="0" toLane="0" via=":j_old_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert report["edge_map"]["road#1"] == "road#1"
+    assert root.find("edge[@id='road#1']").attrib["from"] == "j"
+    assert len(root.findall("./edge[@id='road#1']/lane")) == 2
+    assert root.find("connection[@from='in'][@to='road#1']") is not None
+    assert root.find("connection[@from='in'][@to='road#0']") is None
+
+
 def test_owner_road_connectivity_audit_does_not_treat_turnaround_as_route_complete(
     tmp_path: Path,
 ) -> None:
@@ -1440,6 +1489,56 @@ def test_write_owner_layered_teacher_replay_candidate_overlays_blocked_span_befo
     assert root.find("connection[@from='in'][@to='road#5']") is None
     assert root.find("connection[@from='road#3'][@to='out']") is not None
     assert root.find("junction[@id='mid']") is not None
+
+
+def test_write_owner_layered_teacher_replay_candidate_replays_mapped_terminal_endpoint(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.layered.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road" from="b" to="j"><lane id="road_0" index="0"/></edge>
+  <edge id="-road" from="j" to="b"><lane id="-road_0" index="0"/></edge>
+  <edge id="next" from="b" to="c"><lane id="next_0" index="0"/></edge>
+  <edge id="-next" from="c" to="b"><lane id="-next_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <edge id=":b_0" function="internal"><lane id=":b_0_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="road_0" intLanes=":j_0_0"/>
+  <junction id="b" type="priority" x="10" y="0" incLanes="-road_0 -next_0" intLanes=":b_0_0"/>
+  <junction id="c" type="priority" x="20" y="0"/>
+  <connection from="-road" to="next" fromLane="0" toLane="0" via=":b_0_0" dir="s"/>
+  <connection from=":b_0" to="next" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road" from="b" to="j"><lane id="road_0" index="0"/></edge>
+  <edge id="-road" from="j" to="b"><lane id="-road_0" index="0"/></edge>
+  <edge id="next" from="b" to="c"><lane id="next_0" index="0"/></edge>
+  <edge id="-next" from="c" to="b"><lane id="-next_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="road_0"/>
+  <junction id="b" type="priority" x="10" y="0"/>
+  <junction id="c" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        replay_blocked_road_span_endpoint_owners=True,
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert "b" in report["pre_endpoint_owner_ids"]
+    assert root.find("connection[@from='-road'][@to='next']") is not None
+    assert report["owner_road_connectivity_audit"]["status"] == "pass"
 
 
 def test_write_owner_layered_teacher_replay_candidate_returns_fail_when_owner_replay_blocks(
