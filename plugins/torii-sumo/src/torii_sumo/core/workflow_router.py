@@ -86,6 +86,7 @@ OSM_WORKFLOW_SUMMARY_KEYS = (
     "reference_join_audit_mode",
     "teacher_guided_repair_queue_status",
     "teacher_guided_repair_max_ready_candidates",
+    "run_teacher_guided_repair_after_build",
     "teacher_guided_repair_run_status",
     "teacher_guided_repair_parity_gate_status",
     "teacher_guided_repair_promotion_gate_status",
@@ -228,6 +229,20 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
         )
         final_movement_best_variant_file = str(workflow_report.get("final_movement_rebuild_best_variant_file", ""))
         movement_best_variant_file = final_movement_best_variant_file or post_repair_movement_best_variant_file
+        road_topology_best_variant_file = (
+            str(workflow_report.get("road_connection_topology_replay_file", ""))
+            if workflow_report.get("road_connection_topology_replay_status") == "pass"
+            else ""
+        )
+        road_alias_best_variant_file = (
+            str(workflow_report.get("road_connectivity_split_root_alias_repair_file", ""))
+            if workflow_report.get("road_connectivity_split_root_alias_repair_status") == "pass"
+            else ""
+        )
+        road_replay_best_variant_file = str(workflow_report.get("road_connectivity_replay_best_variant_file", ""))
+        road_connectivity_best_variant_file = (
+            road_topology_best_variant_file or road_alias_best_variant_file or road_replay_best_variant_file
+        )
         semantic_layer_gate_counts = (
             workflow_report.get("final_movement_rebuild_semantic_layer_gate_counts")
             or workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_semantic_layer_gate_counts")
@@ -237,8 +252,10 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
         semantics.update(
             {
                 "best_variant_file": movement_best_variant_file
-                or str(workflow_report.get("teacher_guided_repair_best_variant_file", "")),
+                or str(workflow_report.get("teacher_guided_repair_best_variant_file", ""))
+                or road_connectivity_best_variant_file,
                 "comparison_net_file": movement_best_variant_file
+                or road_connectivity_best_variant_file
                 or str(workflow_report.get("reference_visual_detail_comparison_net_file", "")),
                 "run_report_file": str(workflow_report.get("teacher_guided_repair_run_report_file", "")),
                 "promotion_gate_status": str(workflow_report.get("teacher_guided_repair_promotion_gate_status", "")),
@@ -272,7 +289,10 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
                 "run_status": str(workflow_report.get("road_connectivity_replay_status", "")),
                 "gate_status": str(workflow_report.get("road_connectivity_replay_gate_status", "")),
                 "sumo_load_status": str(workflow_report.get("road_connectivity_replay_sumo_load_status", "")),
-                "best_variant_file": str(workflow_report.get("road_connectivity_replay_best_variant_file", "")),
+                "best_variant_file": road_connectivity_best_variant_file,
+                "owner_replay_variant_file": road_replay_best_variant_file,
+                "split_root_alias_repair_file": road_alias_best_variant_file,
+                "topology_replay_file": road_topology_best_variant_file,
                 "run_report_file": str(workflow_report.get("road_connectivity_replay_run_report_file", "")),
                 "gate_counts": workflow_report.get("road_connectivity_replay_gate_counts", {}),
             }
@@ -369,6 +389,7 @@ def run_auto_workflow(
     reference_policy_report: str | Path | dict[str, Any] | None = None,
     service_passenger_policy: str | None = None,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
+    run_teacher_guided_repair_after_build: bool = True,
     road_connectivity_replay_max_owners: int | None = 4,
     road_connectivity_probe_edge_ids: list[str] | None = None,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
@@ -411,6 +432,7 @@ def run_auto_workflow(
             reference_policy_report=reference_policy_report,
             service_passenger_policy=service_passenger_policy,
             teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+            run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
             road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
             road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
             teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
@@ -483,6 +505,7 @@ def _run_osm_to_sumo(
     reference_policy_report: str | Path | dict[str, Any] | None,
     service_passenger_policy: str | None,
     teacher_guided_repair_max_ready_candidates: int | None,
+    run_teacher_guided_repair_after_build: bool,
     road_connectivity_replay_max_owners: int | None,
     road_connectivity_probe_edge_ids: list[str] | None,
     teacher_guided_probe_matrix_junction_ids: list[str] | None,
@@ -588,6 +611,8 @@ def _run_osm_to_sumo(
         cleanup_kwargs["service_passenger_policy"] = network_plan.get("service_passenger_policy")
     if _supports_keyword(cleanup_workflow_func, "teacher_guided_repair_max_ready_candidates"):
         cleanup_kwargs["teacher_guided_repair_max_ready_candidates"] = teacher_guided_repair_max_ready_candidates
+    if _supports_keyword(cleanup_workflow_func, "run_teacher_guided_repair_after_build"):
+        cleanup_kwargs["run_teacher_guided_repair_after_build"] = run_teacher_guided_repair_after_build
     if _supports_keyword(cleanup_workflow_func, "road_connectivity_replay_max_owners"):
         cleanup_kwargs["road_connectivity_replay_max_owners"] = road_connectivity_replay_max_owners
     if _supports_keyword(cleanup_workflow_func, "road_connectivity_probe_edge_ids"):
