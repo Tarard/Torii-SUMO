@@ -3938,6 +3938,13 @@ def run_teacher_guided_repair_queue(
                     variant_report = _variant_exception_report(exc, joined_scope_junction_id)
                 attached_report = _attach_candidate_template_context(variant_report, candidate)
                 attached_report.setdefault("teacher_junction_id", teacher_junction_id)
+                if scope_report.get("replay_scope") == "expanded_scope":
+                    attached_report["candidate_scope_status"] = "local_scope"
+                    attached_report["global_candidate_eligible"] = False
+                    attached_report["candidate_scope_reason"] = "expanded_scope_replay_uses_local_plain_net"
+                else:
+                    attached_report["candidate_scope_status"] = "full_network"
+                    attached_report["global_candidate_eligible"] = True
                 variant_reports.append(attached_report)
                 followup_candidate = _expanded_scope_followup_candidate_for_unsafe_internal_replay(
                     candidate,
@@ -4114,6 +4121,12 @@ def run_teacher_guided_repair_queue(
     pass_count = sum(1 for report in variant_reports if report.get("status") == "pass")
     failed_count = attempted_count - pass_count
     parity_pass_count = sum(1 for report in variant_reports if report.get("parity_gate_status") == "pass")
+    local_scope_candidate_count = sum(
+        1 for report in variant_reports if report.get("candidate_scope_status") == "local_scope"
+    )
+    global_candidate_eligible_count = sum(
+        1 for report in variant_reports if report.get("global_candidate_eligible", True)
+    )
     semantic_failure_counts = _semantic_failure_counts(variant_reports)
     semantic_layer_gate_counts = _semantic_layer_gate_counts(variant_reports)
     approach_integrity_failure_counts = _approach_integrity_failure_counts(semantic_failure_counts)
@@ -4392,6 +4405,8 @@ def run_teacher_guided_repair_queue(
         "pass_candidate_count": pass_count,
         "failed_candidate_count": failed_count,
         "parity_pass_candidate_count": parity_pass_count,
+        "local_scope_candidate_count": local_scope_candidate_count,
+        "global_candidate_eligible_count": global_candidate_eligible_count,
         "semantic_failure_counts": semantic_failure_counts,
         "semantic_layer_gate_counts": semantic_layer_gate_counts,
         "approach_integrity_status": approach_integrity_status,
@@ -5742,7 +5757,12 @@ def _write_teacher_guided_promotion_gate(
     context_gate_status: str = "skipped",
 ) -> dict[str, object]:
     applied_reports = [report for report in variant_reports if report.get("composite_applied")]
+    global_candidate_reports = [
+        report for report in variant_reports if bool(report.get("global_candidate_eligible", True))
+    ]
     gate_reports = applied_reports or [
+        report for report in global_candidate_reports if not report.get("expanded_scope_followup_emitted")
+    ] or global_candidate_reports or [
         report for report in variant_reports if not report.get("expanded_scope_followup_emitted")
     ]
     items = [
@@ -5752,6 +5772,8 @@ def _write_teacher_guided_promotion_gate(
             "status": str(report.get("status", "")),
             "parity_gate_status": str(report.get("parity_gate_status", "")),
             "final_net_file": str(report.get("final_net_file", "")),
+            "candidate_scope_status": str(report.get("candidate_scope_status") or "full_network"),
+            "global_candidate_eligible": bool(report.get("global_candidate_eligible", True)),
             "semantic_layer_gates": report.get("semantic_layer_gates", {})
             if isinstance(report.get("semantic_layer_gates"), dict)
             else {},
