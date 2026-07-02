@@ -112,6 +112,10 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     tls_repair_summary.write_text('{"status": "pass"}', encoding="utf-8")
     tls_repair_delta = tmp_path / "tls_connection_repair_delta.json"
     tls_repair_delta.write_text('{"network_structural_delta_status": "fail"}', encoding="utf-8")
+    road_connectivity_best = tmp_path / "road_connectivity_best.net.xml"
+    road_connectivity_best.write_text(TINY_SUMO_NET, encoding="utf-8")
+    road_connectivity_run = tmp_path / "road_connectivity_run.json"
+    road_connectivity_run.write_text('{"status": "pass"}', encoding="utf-8")
 
     report = build_workflow_review_html(
         output_dir=tmp_path / "review",
@@ -166,6 +170,14 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
             "reference_visual_detail_tls_connection_repair_variant_file": str(tls_repair_variant),
             "reference_visual_detail_tls_connection_repair_summary_file": str(tls_repair_summary),
             "reference_visual_detail_tls_connection_repair_reference_delta_file": str(tls_repair_delta),
+            "road_connectivity_replay_status": "pass",
+            "road_connectivity_replay_gate_status": "pass",
+            "road_connectivity_replay_sumo_load_status": "pass",
+            "road_connectivity_replay_best_variant_file": str(road_connectivity_best),
+            "road_connectivity_replay_run_report_file": str(road_connectivity_run),
+            "road_connectivity_replay_gate_counts": {
+                "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0}
+            },
             "teacher_guided_repair_template_contexts": [
                 {
                     "teacher_pattern_key": "three_way|control=right_before_left",
@@ -292,6 +304,13 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert "to_edge_id=cand_out" in html
     assert "linkIndex=7" in html
     assert "via=:tlsA_7_0" in html
+    assert "road_connectivity_replay" in html
+    assert "road_connectivity_replay_status=pass" in html
+    assert "road_connectivity_replay_gate_status=pass" in html
+    assert "road_connectivity_replay_sumo_load_status=pass" in html
+    assert "owner_road_connectivity: pass=1, fail=0, failure_count=0" in html
+    assert "road_connectivity_best.net.xml" in html
+    assert "road_connectivity_run.json" in html
     assert "modal_decision_counts" in html
     assert "modal_review_action_counts" in html
     assert "junction_aggregation_blocked_by_modal_count" in html
@@ -338,6 +357,8 @@ def test_workflow_review_html_writes_visual_cockpit_and_sidecars(tmp_path: Path)
     assert manifest["artifacts"]["teacher_guided_repair_queue_csv_file"] == "../teacher_guided_queue.csv"
     assert manifest["artifacts"]["teacher_guided_repair_run_report_file"] == "../teacher_guided_run.json"
     assert manifest["artifacts"]["teacher_guided_repair_promotion_gate_file"] == "../teacher_guided_promotion_gate.json"
+    assert manifest["artifacts"]["road_connectivity_replay_best_variant_file"] == "../road_connectivity_best.net.xml"
+    assert manifest["artifacts"]["road_connectivity_replay_run_report_file"] == "../road_connectivity_run.json"
     assert manifest["netedit_review"]["netedit_command"] == 'netedit --sumocfg-file "workflow_netedit_review.sumocfg"'
     assert manifest["netedit_review"]["selection_file_count"] == 1
     assert manifest["review_app"]["map_layers"]["edges"]

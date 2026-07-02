@@ -264,6 +264,30 @@ def _evidence_rows(
         f"<td>{escape('; '.join(movement_values) if movement_values else 'no compact status supplied')}</td>"
         "</tr>"
     )
+    road_connectivity_values = []
+    for key in (
+        "road_connectivity_replay_status",
+        "road_connectivity_replay_gate_status",
+        "road_connectivity_replay_sumo_load_status",
+    ):
+        if key in workflow_summary:
+            road_connectivity_values.append(f"{key}={workflow_summary[key]}")
+    gate_counts = workflow_summary.get("road_connectivity_replay_gate_counts", {}) or {}
+    if isinstance(gate_counts, Mapping):
+        for gate_name, counts in sorted(gate_counts.items()):
+            if not isinstance(counts, Mapping):
+                continue
+            count_values = [
+                f"{key}={counts[key]}" for key in ("pass", "fail", "failure_count") if key in counts
+            ]
+            if count_values:
+                road_connectivity_values.append(f"{gate_name}: " + ", ".join(count_values))
+    html_rows.append(
+        "<tr>"
+        "<td>road_connectivity_replay</td>"
+        f"<td>{escape('; '.join(road_connectivity_values) if road_connectivity_values else 'no compact status supplied')}</td>"
+        "</tr>"
+    )
     template_contexts = workflow_summary.get("teacher_guided_repair_template_contexts", []) or []
     template_values = []
     if isinstance(template_contexts, list):
@@ -1043,6 +1067,8 @@ def build_workflow_review_html(
         "teacher_guided_repair_queue_csv_file",
         "teacher_guided_repair_run_report_file",
         "teacher_guided_repair_promotion_gate_file",
+        "road_connectivity_replay_best_variant_file",
+        "road_connectivity_replay_run_report_file",
     ):
         if workflow_summary.get(key):
             artifacts[key] = _as_path(workflow_summary.get(key))
