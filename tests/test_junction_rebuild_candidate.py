@@ -3409,6 +3409,61 @@ def test_run_teacher_guided_repair_queue_fails_when_final_context_has_extra_tls(
     assert {"field": "tl_logic_count", "count": 1} in context_report["hard_failures"]
 
 
+def test_final_context_parity_fails_when_teacher_cluster_members_remain(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """
+<net>
+  <junction id="teacher_j" type="traffic_light" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="cluster_a_b" type="priority" x="30" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="teacher_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>
+""".strip(),
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """
+<net>
+  <junction id="candidate_j" type="traffic_light" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="cluster_a_b" type="priority" x="30" y="0" incLanes="" intLanes=""/>
+  <junction id="a" type="priority" x="28" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="32" y="0" incLanes="" intLanes=""/>
+  <tlLogic id="candidate_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = _final_context_parity_gate(
+        teacher_net_file=teacher_net,
+        composite_net_file=candidate_net,
+        accepted_internal_replays=[
+            {
+                "junction_id": "candidate_j",
+                "teacher_junction_id": "teacher_j",
+                "edge_map": {},
+            },
+        ],
+        enabled=True,
+    )
+
+    context_report = report["reports"][0]
+    assert report["status"] == "fail"
+    assert {
+        "field": "split_cluster_member_junction_count",
+        "count": 1,
+    } in context_report["hard_failures"]
+    assert context_report["split_cluster_member_residuals"] == [
+        {
+            "teacher_cluster_junction_id": "cluster_a_b",
+            "candidate_member_junction_ids": ["a", "b"],
+        }
+    ]
+
+
 def test_run_teacher_guided_repair_queue_demotes_teacher_absent_context_tls(
     tmp_path: Path,
 ) -> None:

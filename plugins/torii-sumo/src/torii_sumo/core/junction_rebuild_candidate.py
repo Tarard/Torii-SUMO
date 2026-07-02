@@ -4273,11 +4273,19 @@ def _final_context_parity_gate(
             )
             continue
         delta = _context_count_delta(teacher_context, candidate_context)
+        split_cluster_residuals = _split_cluster_member_residuals(teacher_context, candidate_context)
         hard_failures = [
             {"field": field, "count": count}
             for field, count in delta.items()
             if field in {"traffic_light_junction_count", "tl_logic_count"} and count > 0
         ]
+        if split_cluster_residuals:
+            hard_failures.append(
+                {
+                    "field": "split_cluster_member_junction_count",
+                    "count": len(split_cluster_residuals),
+                }
+            )
         reports.append(
             {
                 "status": "fail" if hard_failures else "pass",
@@ -4287,6 +4295,7 @@ def _final_context_parity_gate(
                 "teacher_context": teacher_context,
                 "candidate_context": candidate_context,
                 "delta_candidate_minus_teacher": delta,
+                "split_cluster_member_residuals": split_cluster_residuals,
                 "hard_failures": hard_failures,
             }
         )
@@ -4294,9 +4303,35 @@ def _final_context_parity_gate(
         "status": "pass" if reports and all(report.get("status") == "pass" for report in reports) else "fail",
         "checked_junction_count": len(reports),
         "radius_m": radius_m,
-        "hard_failure_fields": ["traffic_light_junction_count", "tl_logic_count"],
+        "hard_failure_fields": [
+            "traffic_light_junction_count",
+            "tl_logic_count",
+            "split_cluster_member_junction_count",
+        ],
         "reports": reports,
     }
+
+
+def _split_cluster_member_residuals(
+    teacher_context: dict[str, object],
+    candidate_context: dict[str, object],
+) -> list[dict[str, object]]:
+    candidate_junction_ids = {str(item) for item in candidate_context.get("junction_ids", []) or [] if str(item)}
+    residuals: list[dict[str, object]] = []
+    for teacher_junction_id in teacher_context.get("junction_ids", []) or []:
+        teacher_junction_id = str(teacher_junction_id)
+        if not teacher_junction_id.startswith("cluster_"):
+            continue
+        member_ids = [item for item in teacher_junction_id.removeprefix("cluster_").split("_") if item]
+        residual_members = sorted(member_id for member_id in member_ids if member_id in candidate_junction_ids)
+        if residual_members:
+            residuals.append(
+                {
+                    "teacher_cluster_junction_id": teacher_junction_id,
+                    "candidate_member_junction_ids": residual_members,
+                }
+            )
+    return residuals
 
 
 def _demote_teacher_absent_context_tls(
@@ -4476,6 +4511,7 @@ def _local_junction_context_summary(root: ET.Element, junction_id: str, *, radiu
         "status": "pass",
         "junction_id": junction_id,
         "radius_m": radius_m,
+        "junction_ids": sorted(local_junction_ids),
         "junction_count": len(local_junction_ids),
         "traffic_light_junction_count": sum(
             1 for jid in local_junction_ids if junctions[jid].attrib.get("type") == "traffic_light"
