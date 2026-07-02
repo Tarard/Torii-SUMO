@@ -1,5 +1,6 @@
 import csv
 import gzip
+import shutil
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -24,10 +25,12 @@ from torii_sumo.core.osm_network import (
 )
 from torii_sumo.core.osm_area import osm_map_url_bbox, resolve_osm_place
 from torii_sumo.core.osm_workflow import run_osm_cleanup_workflow
+from torii_sumo.core.osm_workflow import _road_connectivity_best_variant_file
 from torii_sumo.core.osm_workflow import _road_connectivity_owner_ids
 from torii_sumo.core.osm_workflow import _road_connectivity_replay_batch_report
 from torii_sumo.core.osm_workflow import _road_connectivity_seed_probe_improved
 from torii_sumo.core.osm_workflow import _run_road_connectivity_split_root_alias_repair
+from torii_sumo.core.osm_workflow import _sumo_load_net
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.tools.osm_tools import resolve_highway_classes, sumo_osm_build_network, sumo_osm_cleanup_workflow
 
@@ -147,6 +150,69 @@ def test_road_connectivity_batch_report_exposes_seed_improved_variant_without_pa
     assert report["status"] == "fail"
     assert report["output_file"] == str(tmp_path / "improved.net.xml")
     assert report["owner_road_connectivity_audit"]["status"] == "fail"
+
+
+def test_road_connectivity_best_variant_uses_batch_selected_owner_output(tmp_path: Path) -> None:
+    owner_net = tmp_path / "owner.net.xml"
+    owner_net.write_text("<net/>", encoding="utf-8")
+    report = {
+        "status": "fail",
+        "sumo_load_status": "fail",
+        "output_file": str(owner_net),
+        "owner_reports": [
+            {
+                "status": "pass",
+                "sumo_load_status": "pass",
+                "output_file": str(owner_net),
+                "owner_road_connectivity_audit": {"status": "pass", "gate": {"lane_delta_count": 0}},
+            },
+            {
+                "status": "pass",
+                "sumo_load_status": "fail",
+                "output_file": str(tmp_path / "failed_owner.net.xml"),
+                "owner_road_connectivity_audit": {"status": "pass", "gate": {"lane_delta_count": 0}},
+            },
+        ],
+    }
+
+    assert _road_connectivity_best_variant_file(report) == owner_net
+
+
+def test_sumo_load_net_falls_back_to_path_netconvert_for_bare_sumo_binary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(shutil, "which", lambda name: "netconvert" if name == "netconvert" else None)
+
+    def fake_command_runner(command, **kwargs):
+        calls.append(list(command))
+        if command[0] == "netconvert":
+            output = Path(kwargs["cwd"]) / "sumo_load_candidate_normalized.net.xml"
+            output.write_text("<net/>", encoding="utf-8")
+            return CommandResult(command=command, cwd=str(kwargs["cwd"]), status="pass", returncode=0)
+        return CommandResult(
+            command=command,
+            cwd=str(kwargs["cwd"]),
+            status="pass" if "sumo_load_candidate_normalized.net.xml" in command else "fail",
+            returncode=0 if "sumo_load_candidate_normalized.net.xml" in command else 3221225477,
+        )
+
+    report = _sumo_load_net(
+        net_file,
+        output_dir=tmp_path / "sumo_load",
+        sumo_binary="sumo",
+        timeout_seconds=1,
+        command_runner=fake_command_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["direct_sumo_load"]["status"] == "fail"
+    assert report["normalization_netconvert"]["status"] == "pass"
+    assert calls[1][0] == "netconvert"
 
 
 def test_run_road_connectivity_split_root_alias_repair_promotes_seed_parity(tmp_path: Path) -> None:

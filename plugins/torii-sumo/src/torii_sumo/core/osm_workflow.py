@@ -726,18 +726,31 @@ def _road_connectivity_gate_status(report: Mapping[str, Any] | None) -> str:
 
 
 def _road_connectivity_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
-    if (
-        report is None
-        or str(report.get("status", "fail")) != "pass"
-        or str(report.get("sumo_load_status", "fail")) != "pass"
-        or _road_connectivity_gate_status(report) != "pass"
-    ):
+    if report is None:
         return None
     output_value = str(report.get("output_file", "")).strip()
     if not output_value:
         return None
     output_file = Path(output_value)
-    return output_file if output_file.exists() else None
+    if not output_file.exists():
+        return None
+    if (
+        str(report.get("status", "fail")) == "pass"
+        and str(report.get("sumo_load_status", "fail")) == "pass"
+        and _road_connectivity_gate_status(report) == "pass"
+    ):
+        return output_file
+    for owner_report in report.get("owner_reports", []) or []:
+        if not isinstance(owner_report, Mapping):
+            continue
+        if (
+            str(owner_report.get("output_file", "")) == output_value
+            and str(owner_report.get("status", "fail")) == "pass"
+            and str(owner_report.get("sumo_load_status", "fail")) == "pass"
+            and _road_connectivity_gate_status(owner_report) == "pass"
+        ):
+            return output_file
+    return None
 
 
 def _road_connectivity_replay_batch_report(
@@ -1904,7 +1917,10 @@ def _sumo_load_net(
     sumo_path = Path(sumo_binary)
     netconvert_binary = sumo_path.with_name("netconvert.exe" if sumo_path.suffix.lower() == ".exe" else "netconvert")
     if not netconvert_binary.exists():
-        return report
+        resolved_netconvert = shutil.which(str(netconvert_binary)) or shutil.which(netconvert_binary.name)
+        if not resolved_netconvert:
+            return report
+        netconvert_binary = Path(resolved_netconvert)
     normalized_net_file = output_dir / "sumo_load_candidate_normalized.net.xml"
     netconvert_command = [
         str(netconvert_binary),
