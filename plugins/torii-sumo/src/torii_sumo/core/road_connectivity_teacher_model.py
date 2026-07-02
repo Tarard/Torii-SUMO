@@ -136,14 +136,21 @@ def compare_road_connectivity_bundles(
     common_edge_ids = teacher_edge_ids & candidate_edge_ids
     missing_edges = sorted(teacher_edge_ids - candidate_edge_ids)
     extra_edges = sorted(candidate_edge_ids - teacher_edge_ids)
+    split_root_aliases = _unambiguous_split_root_aliases(missing_edges, extra_edges)
+    teacher_edge_alias_map = {
+        alias["teacher_edge_id"]: alias["candidate_edge_id"]
+        for alias in split_root_aliases
+    }
     geometry_mismatches = _common_edge_geometry_mismatches(
         teacher,
         candidate,
         common_edge_ids,
         geometry_tolerance,
     )
-    missing_connections = _missing_records(teacher.get("connections", []), candidate.get("connections", []))
-    extra_connections = _missing_records(candidate.get("connections", []), teacher.get("connections", []))
+    teacher_connections = _aliased_road_connections(teacher.get("connections", []), teacher_edge_alias_map)
+    candidate_connections = _aliased_road_connections(candidate.get("connections", []), {})
+    missing_connections = _missing_records(teacher_connections, candidate_connections)
+    extra_connections = _missing_records(candidate_connections, teacher_connections)
     candidate_missing_seed_edge_ids = sorted(
         str(edge_id)
         for edge_id in candidate.get("summary", {}).get("missing_seed_edge_ids", [])
@@ -158,26 +165,31 @@ def compare_road_connectivity_bundles(
             extra_connections,
         ]
     ) else "pass"
+    edge_id_report: dict[str, Any] = {
+        "missing_in_candidate": missing_edges,
+        "extra_in_candidate": extra_edges,
+    }
+    summary: dict[str, Any] = {
+        "teacher_edge_count": len(teacher.get("edges", [])),
+        "candidate_edge_count": len(candidate.get("edges", [])),
+        "common_edge_count": len(common_edge_ids),
+        "common_edge_geometry_mismatch_count": len(geometry_mismatches),
+        "teacher_connection_count": len(teacher.get("connections", [])),
+        "candidate_connection_count": len(candidate.get("connections", [])),
+    }
+    if split_root_aliases:
+        edge_id_report["split_root_aliases"] = split_root_aliases
+        summary["split_root_alias_count"] = len(split_root_aliases)
     return {
         "status": status,
         "candidate_missing_seed_edge_ids": candidate_missing_seed_edge_ids,
-        "edge_ids": {
-            "missing_in_candidate": missing_edges,
-            "extra_in_candidate": extra_edges,
-        },
+        "edge_ids": edge_id_report,
         "common_edge_geometry_mismatches": geometry_mismatches,
         "connections": {
             "missing_in_candidate": missing_connections,
             "extra_in_candidate": extra_connections,
         },
-        "summary": {
-            "teacher_edge_count": len(teacher.get("edges", [])),
-            "candidate_edge_count": len(candidate.get("edges", [])),
-            "common_edge_count": len(common_edge_ids),
-            "common_edge_geometry_mismatch_count": len(geometry_mismatches),
-            "teacher_connection_count": len(teacher.get("connections", [])),
-            "candidate_connection_count": len(candidate.get("connections", [])),
-        },
+        "summary": summary,
     }
 
 
@@ -2685,6 +2697,44 @@ def _record_ids(records: Any) -> set[str]:
         for record in records
         if isinstance(record, dict) and record.get("id")
     }
+
+
+def _unambiguous_split_root_aliases(
+    teacher_edge_ids: list[str],
+    candidate_edge_ids: list[str],
+) -> list[dict[str, str]]:
+    teacher_by_root = _edge_ids_by_split_root(teacher_edge_ids)
+    candidate_by_root = _edge_ids_by_split_root(candidate_edge_ids)
+    aliases = []
+    for root in sorted(set(teacher_by_root) & set(candidate_by_root)):
+        if len(teacher_by_root[root]) == 1 and len(candidate_by_root[root]) == 1:
+            aliases.append(
+                {
+                    "root": root,
+                    "teacher_edge_id": teacher_by_root[root][0],
+                    "candidate_edge_id": candidate_by_root[root][0],
+                }
+            )
+    return aliases
+
+
+def _edge_ids_by_split_root(edge_ids: list[str]) -> dict[str, list[str]]:
+    by_root: dict[str, list[str]] = {}
+    for edge_id in edge_ids:
+        by_root.setdefault(_split_edge_root(edge_id), []).append(edge_id)
+    return {root: sorted(ids) for root, ids in by_root.items()}
+
+
+def _aliased_road_connections(records: Any, edge_alias_map: dict[str, str]) -> list[dict[str, Any]]:
+    aliased = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        mapped = dict(record)
+        for key in ("from", "to"):
+            mapped[key] = edge_alias_map.get(str(mapped.get(key, "")), str(mapped.get(key, "")))
+        aliased.append(mapped)
+    return aliased
 
 
 def _missing_records(left: Any, right: Any) -> list[dict[str, Any]]:
