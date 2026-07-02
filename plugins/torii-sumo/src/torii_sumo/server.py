@@ -14,6 +14,11 @@ from .tools.evidence_tools import (
     sumo_compare_outputs,
     sumo_config_pair_preflight,
 )
+from .tools.intersection_tools import (
+    sumo_intersection_clean,
+    sumo_intersection_model,
+    sumo_intersection_validate,
+)
 from .tools.osm_tools import (
     sumo_network_connected_core,
     sumo_network_junction_aggregation_variant,
@@ -66,6 +71,15 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Run the OSM cleanup hard-gate workflow from a place name, bbox, or OSM map URL: area inference/confirmation, traffic-layer or reference-artifact planning, OSM build, TLS map audit, connectivity, routeability, review HTML, SUMO-GUI, and Netedit launch.")(
         sumo_osm_cleanup_workflow
+    )
+    server.tool(description="Build a structured IntersectionIR from a local OSM intersection patch without compiling SUMO artifacts.")(
+        sumo_intersection_model
+    )
+    server.tool(description="Compile a local OSM T3/X4 intersection patch into IntersectionIR, SUMO plain files, optional .net.xml, and validation artifacts.")(
+        sumo_intersection_clean
+    )
+    server.tool(description="Validate a compiled IntersectionIR artifact with SUMO load evidence when available.")(
+        sumo_intersection_validate
     )
     server.tool(description="Low-level helper only: download/reuse OSM for an already chosen bbox, filter road classes, and build a raw SUMO network with netconvert. Do not use this as the full user-facing workflow.")(
         sumo_osm_build_network

@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from .compile_plain import compile_intersection_to_plain
+from .infer_approaches import infer_approaches
+from .infer_control import infer_control_model
+from .infer_core import infer_intersection_core
+from .infer_movements import infer_movement_matrix
+from .infer_road_relations import build_road_pair_relation_graph
+from .osm_patch import parse_osm_xml
+from .schema import IntersectionIR, PatchSeed
+from .validate import validate_intersection
+
+
+def build_intersection_ir(
+    osm_file: Path,
+    output_dir: Path,
+    seed: PatchSeed | None = None,
+) -> IntersectionIR:
+    patch = parse_osm_xml(osm_file)
+    core = infer_intersection_core(patch, seed)
+    approaches = infer_approaches(patch, core)
+    road_pair_graph = build_road_pair_relation_graph(patch, core, approaches)
+    movement_matrix = infer_movement_matrix(core, approaches, road_pair_graph)
+    control = infer_control_model(patch, core, approaches, movement_matrix)
+    return IntersectionIR(
+        intersection_id=core.core_id,
+        osm_patch=patch,
+        core=core,
+        approaches=approaches,
+        road_pair_graph=road_pair_graph,
+        movement_matrix=movement_matrix,
+        control=control,
+        compiled=None,
+        validation=None,
+        claim_status="semantic-model-built",
+    )
+
+
+def clean_intersection(
+    osm_file: Path,
+    output_dir: Path,
+    seed: PatchSeed | None = None,
+    compile_net: bool = True,
+) -> dict:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ir = build_intersection_ir(osm_file, output_dir, seed)
+    artifacts = compile_intersection_to_plain(ir, output_dir, "intersection", compile_net=compile_net)
+    validation = validate_intersection(ir, artifacts, output_dir)
+    final_ir = ir.model_copy(
+        update={
+            "compiled": artifacts,
+            "validation": validation,
+            "claim_status": "intersection-cleaned" if validation.status == "pass" else "blocked",
+        }
+    )
+    (output_dir / "intersection_ir.json").write_text(
+        json.dumps(final_ir.model_dump(mode="json"), indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "validation.json").write_text(
+        json.dumps(validation.model_dump(mode="json"), indent=2),
+        encoding="utf-8",
+    )
+    return {
+        "status": validation.status,
+        "intersection_id": final_ir.intersection_id,
+        "topology_type": final_ir.core.topology_type,
+        "approach_count": len(final_ir.approaches),
+        "movement_count": len(final_ir.movement_matrix.movements),
+        "intersection_ir_file": str(output_dir / "intersection_ir.json"),
+        "validation_file": str(output_dir / "validation.json"),
+        "net_file": artifacts.net_file,
+    }
