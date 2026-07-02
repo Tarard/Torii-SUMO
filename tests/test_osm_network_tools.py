@@ -75,6 +75,173 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
     assert captured["reference_join_audit_structural_only"] is False
 
 
+def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "reference.net.xml"
+    reference_net_file.write_text("<net/>", encoding="utf-8")
+    raw_net_file = tmp_path / "candidate.net.xml"
+    source_osm_file = tmp_path / "source.osm.xml"
+    queue_file = tmp_path / "queue.json"
+    raw_node_file = tmp_path / "plain.nod.xml"
+    raw_edge_file = tmp_path / "plain.edg.xml"
+    raw_connection_file = tmp_path / "plain.con.xml"
+    raw_type_file = tmp_path / "plain.typ.xml"
+    raw_tllogic_file = tmp_path / "plain.tll.xml"
+    captured: dict[str, object] = {}
+
+    def fake_build(**kwargs):
+        raw_net_file.write_text("<net/>", encoding="utf-8")
+        source_osm_file.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "bbox": kwargs["bbox"],
+            "net_file": str(raw_net_file),
+            "filtered_osm_file": str(source_osm_file),
+            "source_osm_file": str(source_osm_file),
+            "road_classes": sorted(kwargs["allowed_highways"]),
+            "warnings": [],
+        }
+
+    def fake_reference_join_audit(**_kwargs):
+        return {
+            "status": "pass",
+            "audit_mode": "structural_only",
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
+            "junction_pattern_comparisons": [
+                {
+                    "junction_id": "j1",
+                    "status": "fail",
+                    "mismatch_fields": ["movement_signature_counts"],
+                }
+            ],
+            "network_structural_missing_counts": {},
+            "network_structural_extra_counts": {},
+            "warnings": [],
+        }
+
+    def fake_repair_queue(**_kwargs):
+        return {
+            "status": "pass",
+            "queue_file": str(queue_file),
+            "repair_candidate_count": 1,
+            "ready_candidate_count": 1,
+            "expanded_scope_candidate_count": 0,
+            "blocked_candidate_count": 0,
+            "queued_case_count": 1,
+            "repair_candidates": [
+                {
+                    "junction_id": "j1",
+                    "reference_id": "j1",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                }
+            ],
+        }
+
+    def fake_plain_export(**_kwargs):
+        for path in (raw_node_file, raw_edge_file, raw_connection_file, raw_type_file, raw_tllogic_file):
+            path.write_text("<xml/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "raw_node_file": str(raw_node_file),
+            "raw_edge_file": str(raw_edge_file),
+            "raw_connection_file": str(raw_connection_file),
+            "raw_type_file": str(raw_type_file),
+            "raw_tllogic_file": str(raw_tllogic_file),
+        }
+
+    def fake_repair_run(**kwargs):
+        captured["repair_queue_base_dir"] = kwargs["queue_base_dir"]
+        return {
+            "status": "pass",
+            "parity_gate_status": "pass",
+            "promotion_gate_status": "pass",
+            "semantic_failure_counts": {},
+            "semantic_layer_gate_counts": {},
+            "attempted_candidate_count": 1,
+            "pass_candidate_count": 1,
+        }
+
+    def fake_probe_matrix(**kwargs):
+        matrix_file = kwargs["output_dir"] / "matrix.json"
+        matrix_file.parent.mkdir(parents=True, exist_ok=True)
+        matrix_file.write_text("{}", encoding="utf-8")
+        captured["matrix_kwargs"] = kwargs
+        return {
+            "status": "pass",
+            "probe_count": 1,
+            "requested_junction_count": 1,
+            "matrix_file": str(matrix_file),
+            "all_parity_gate_pass": True,
+            "all_promotion_gate_pass": True,
+            "missing_junction_ids": [],
+            "probes": [],
+        }
+
+    report = run_osm_cleanup_workflow(
+        bbox="11.41,48.76,11.43,48.78",
+        output_dir=tmp_path,
+        prefix="matrix",
+        network_profile="reference_matched",
+        reference_net_file=reference_net_file,
+        reference_policy_report={
+            "status": "pass",
+            "reference_policy_status": "pass",
+            "reference_net_file": str(reference_net_file),
+            "selected_highway_classes": ["primary"],
+            "vehicle_core_highway_classes": ["primary"],
+            "visual_detail_highway_classes": ["primary"],
+            "movement_layers": ["passenger"],
+        },
+        run_routeability_audit_after_build=False,
+        run_topology_audit_after_build=False,
+        run_tls_aggregation_after_build=False,
+        run_junction_aggregation_after_build=False,
+        run_reference_hierarchy_audit_after_build=False,
+        run_reference_scope_audit_after_build=False,
+        run_reference_join_aggregation_after_build=False,
+        road_connectivity_replay_max_owners=0,
+        launch_netedit_after_build=False,
+        launch_sumo_gui_after_build=False,
+        build_func=fake_build,
+        tls_audit_func=lambda **_kwargs: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "tls_candidate_count": 0,
+            "tls_cluster_count": 0,
+            "clusters_file": str(tmp_path / "tls_clusters.csv"),
+            "warnings": [],
+        },
+        connectivity_func=lambda _path: {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "connectivity_status": "pass",
+            "warnings": [],
+        },
+        service_permission_func=lambda *_args, **_kwargs: {"status": "pass", "warnings": []},
+        reference_join_audit_func=fake_reference_join_audit,
+        teacher_guided_repair_queue_func=fake_repair_queue,
+        teacher_guided_plain_export_func=fake_plain_export,
+        teacher_guided_repair_run_func=fake_repair_run,
+        teacher_guided_probe_matrix_junction_ids=["j1"],
+        teacher_guided_probe_matrix_func=fake_probe_matrix,
+        review_html_func=lambda **_kwargs: {"workflow_review_html_status": "pass"},
+    )
+
+    matrix_kwargs = captured["matrix_kwargs"]
+    assert matrix_kwargs["target_junction_ids"] == ["j1"]
+    assert matrix_kwargs["raw_node_file"] == raw_node_file
+    assert matrix_kwargs["raw_edge_file"] == raw_edge_file
+    assert matrix_kwargs["raw_connection_file"] == raw_connection_file
+    assert matrix_kwargs["queue_base_dir"] == captured["repair_queue_base_dir"]
+    assert report["teacher_guided_probe_matrix_status"] == "pass"
+    assert report["teacher_guided_probe_matrix_probe_count"] == 1
+    assert report["teacher_guided_probe_matrix_all_parity_gate_pass"] is True
+    assert report["teacher_guided_probe_matrix_all_promotion_gate_pass"] is True
+    assert report["teacher_guided_probe_matrix_missing_junction_ids"] == []
+    assert report["teacher_guided_probe_matrix_file"] == str(matrix_kwargs["output_dir"] / "matrix.json")
+    assert report["teacher_guided_probe_matrix"]["matrix_file"] == report["teacher_guided_probe_matrix_file"]
+
+
 def test_osm_map_url_bbox_extracts_small_area_around_center() -> None:
     bbox = osm_map_url_bbox("https://www.openstreetmap.org/#map=18/48.768610/11.422681")
     parsed = parse_bbox(bbox)

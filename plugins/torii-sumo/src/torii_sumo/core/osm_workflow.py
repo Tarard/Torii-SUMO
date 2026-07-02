@@ -19,6 +19,7 @@ from .junction_rebuild_candidate import (
     build_tls_connection_repair_variant,
     _restore_false_traffic_light_junction_types,
     _restore_replayed_geometry_attrs,
+    run_teacher_guided_repair_matrix,
     run_teacher_guided_repair_queue,
     write_teacher_target_internal_replay_net,
     write_teacher_tllogic_net,
@@ -2170,6 +2171,7 @@ def run_osm_cleanup_workflow(
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = False,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
+    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     road_connectivity_replay_max_owners: int | None = 4,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
     build_func: Callable[..., dict[str, Any]] = build_osm_network,
@@ -2194,6 +2196,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
     teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
     teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
+    teacher_guided_probe_matrix_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_matrix,
     teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
     road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
@@ -2520,6 +2523,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
     teacher_guided_plain_export_report: dict[str, Any] | None = None
     teacher_guided_repair_run_report: dict[str, Any] | None = None
+    teacher_guided_probe_matrix_report: dict[str, Any] | None = None
     road_connectivity_replay_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
     teacher_guided_replay_source_net_file: Path | None = None
@@ -3362,6 +3366,29 @@ def run_osm_cleanup_workflow(
                         sequential_accept_passed_variants=True,
                         plain_exporter=teacher_guided_plain_export_func,
                     )
+                    probe_matrix_junction_ids = [
+                        str(junction_id).strip()
+                        for junction_id in (teacher_guided_probe_matrix_junction_ids or [])
+                        if str(junction_id).strip()
+                    ]
+                    if probe_matrix_junction_ids:
+                        teacher_guided_probe_matrix_report = teacher_guided_probe_matrix_func(
+                            queue_report=teacher_guided_repair_queue_report,
+                            target_junction_ids=probe_matrix_junction_ids,
+                            raw_node_file=Path(str(teacher_guided_plain_export_report["raw_node_file"])),
+                            raw_edge_file=Path(str(teacher_guided_plain_export_report["raw_edge_file"])),
+                            raw_connection_file=Path(str(teacher_guided_plain_export_report["raw_connection_file"])),
+                            raw_type_file=Path(raw_type_value) if raw_type_value else None,
+                            raw_tllogic_file=Path(raw_tllogic_value) if raw_tllogic_value else None,
+                            output_dir=output_dir / "teacher_guided_probe_matrix",
+                            prefix=f"{prefix}_teacher_guided_probe_matrix",
+                            queue_base_dir=Path(queue_file_value).resolve().parent if queue_file_value else None,
+                            replay_target_internal_subgraph=True,
+                            netconvert_binary=netconvert_binary,
+                            sumo_binary=sumo_binary,
+                            timeout_seconds=timeout_seconds,
+                            command_runner=command_runner,
+                        )
                     candidate_teacher_guided_best_variant_file = _teacher_guided_best_variant_file(
                         teacher_guided_repair_run_report
                     )
@@ -5579,6 +5606,24 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_run_report_file": ""
         if teacher_guided_repair_run_report is None
         else str(teacher_guided_repair_run_report.get("run_report_file", "")),
+        "teacher_guided_probe_matrix_status": "skipped"
+        if teacher_guided_probe_matrix_report is None
+        else str(teacher_guided_probe_matrix_report.get("status", "fail")),
+        "teacher_guided_probe_matrix_file": ""
+        if teacher_guided_probe_matrix_report is None
+        else str(teacher_guided_probe_matrix_report.get("matrix_file", "")),
+        "teacher_guided_probe_matrix_probe_count": 0
+        if teacher_guided_probe_matrix_report is None
+        else teacher_guided_probe_matrix_report.get("probe_count", 0),
+        "teacher_guided_probe_matrix_all_parity_gate_pass": False
+        if teacher_guided_probe_matrix_report is None
+        else bool(teacher_guided_probe_matrix_report.get("all_parity_gate_pass", False)),
+        "teacher_guided_probe_matrix_all_promotion_gate_pass": False
+        if teacher_guided_probe_matrix_report is None
+        else bool(teacher_guided_probe_matrix_report.get("all_promotion_gate_pass", False)),
+        "teacher_guided_probe_matrix_missing_junction_ids": []
+        if teacher_guided_probe_matrix_report is None
+        else teacher_guided_probe_matrix_report.get("missing_junction_ids", []),
         "teacher_guided_repair_best_variant_file": ""
         if teacher_guided_repair_best_variant_file is None
         else str(teacher_guided_repair_best_variant_file),
@@ -6035,6 +6080,7 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
         "teacher_guided_repair_plain_export": teacher_guided_plain_export_report or {},
         "teacher_guided_repair_run": teacher_guided_repair_run_report or {},
+        "teacher_guided_probe_matrix": teacher_guided_probe_matrix_report or {},
         "road_connectivity_replay": road_connectivity_replay_report or {},
         "teacher_guided_direct_replay": teacher_guided_direct_replay_report or {},
         "teacher_guided_direct_replay_reference_delta": teacher_guided_direct_replay_reference_delta_report or {},
