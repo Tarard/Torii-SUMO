@@ -36,6 +36,7 @@ from .road_connectivity_teacher_model import (
     canonical_road_connectivity_bundle,
     compare_road_connectivity_bundles,
     write_internal_movement_owner_layered_teacher_replay_candidate,
+    write_road_connectivity_split_root_alias_repair_candidate,
 )
 from .reference_scope import audit_reference_scope, build_scope_pruning_variant
 from .road_scope import (
@@ -1065,6 +1066,84 @@ def _run_road_connectivity_seed_probe(
     report["report_file"] = str(report_file)
     report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
+
+
+def _run_road_connectivity_split_root_alias_repair(
+    *,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    seed_probe_report: Mapping[str, Any] | None,
+    seed_edge_ids: list[str],
+    output_dir: Path,
+    prefix: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+) -> dict[str, Any]:
+    split_root_aliases = _road_connectivity_split_root_aliases(seed_probe_report)
+    if not split_root_aliases:
+        return {
+            "status": "skipped",
+            "claim_status": "diagnostic-demo",
+            "reason": "no_split_root_aliases",
+        }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / f"{prefix}_split_root_alias_repaired.net.xml"
+    repair = write_road_connectivity_split_root_alias_repair_candidate(
+        candidate_net_file,
+        output_file,
+        split_root_aliases,
+    )
+    sumo_load = _sumo_load_net(
+        output_file,
+        output_dir=output_dir / "sumo_load",
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        command_runner=command_runner,
+    )
+    seed_probe = None
+    improved = False
+    if str(sumo_load.get("status", "fail")) == "pass":
+        seed_probe = _run_road_connectivity_seed_probe(
+            teacher_net_file=teacher_net_file,
+            candidate_net_file=output_file,
+            seed_edge_ids=seed_edge_ids,
+            output_dir=output_dir / "seed_probe",
+            prefix=f"{prefix}_split_root_alias_seed_probe",
+        )
+        improved = _road_connectivity_seed_probe_improved(seed_probe_report, seed_probe)
+    report = {
+        "status": "pass" if improved else "fail",
+        "claim_status": "diagnostic-demo",
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "selected_alias_count": len(split_root_aliases),
+        "repair": repair,
+        "sumo_load": sumo_load,
+        "sumo_load_status": str(sumo_load.get("status", "fail")),
+        "seed_probe": seed_probe or {},
+        "seed_probe_improved": improved,
+    }
+    report_file = output_dir / f"{prefix}_split_root_alias_repair.json"
+    report["report_file"] = str(report_file)
+    report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
+def _road_connectivity_split_root_aliases(seed_probe_report: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    if seed_probe_report is None:
+        return []
+    parity = seed_probe_report.get("parity", {})
+    if not isinstance(parity, Mapping):
+        return []
+    edge_ids = parity.get("edge_ids", {})
+    if not isinstance(edge_ids, Mapping):
+        return []
+    return [
+        dict(alias)
+        for alias in edge_ids.get("split_root_aliases", []) or []
+        if isinstance(alias, Mapping)
+    ]
 
 
 def _safe_path_part(value: str, max_len: int = 16) -> str:
@@ -2653,6 +2732,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_probe_matrix_report: dict[str, Any] | None = None
     road_connectivity_replay_report: dict[str, Any] | None = None
     road_connectivity_seed_probe_report: dict[str, Any] | None = None
+    road_connectivity_split_root_alias_repair_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
     teacher_guided_replay_source_net_file: Path | None = None
     teacher_guided_direct_replay_report: dict[str, Any] | None = None
@@ -3506,9 +3586,42 @@ def run_osm_cleanup_workflow(
                         prefix=f"{prefix}_road_connectivity",
                     )
                 )
+                road_connectivity_replay_variant_file = _road_connectivity_best_variant_file(
+                    road_connectivity_replay_report
+                )
+                if (
+                    road_connectivity_seed_edge_ids
+                    and road_connectivity_replay_variant_file is not None
+                    and _road_connectivity_split_root_aliases(road_connectivity_seed_probe_report)
+                ):
+                    road_connectivity_split_root_alias_repair_report = (
+                        _run_road_connectivity_split_root_alias_repair(
+                            teacher_net_file=reference_net_file,
+                            candidate_net_file=road_connectivity_replay_variant_file,
+                            seed_probe_report=road_connectivity_seed_probe_report,
+                            seed_edge_ids=road_connectivity_seed_edge_ids,
+                            output_dir=output_dir / "road_connectivity_split_root_alias_repair",
+                            prefix=f"{prefix}_road_connectivity",
+                            sumo_binary=sumo_binary,
+                            timeout_seconds=timeout_seconds,
+                            command_runner=command_runner,
+                        )
+                    )
+                    if road_connectivity_split_root_alias_repair_report.get("status") == "pass":
+                        road_connectivity_seed_probe_report = dict(
+                            road_connectivity_split_root_alias_repair_report.get("seed_probe", {})
+                        )
             if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
+                road_connectivity_split_alias_variant_file = (
+                    Path(str(road_connectivity_split_root_alias_repair_report["output_file"]))
+                    if road_connectivity_split_root_alias_repair_report is not None
+                    and road_connectivity_split_root_alias_repair_report.get("status") == "pass"
+                    and road_connectivity_split_root_alias_repair_report.get("output_file")
+                    else None
+                )
                 teacher_guided_replay_source_net_file = (
-                    _road_connectivity_best_variant_file(road_connectivity_replay_report)
+                    road_connectivity_split_alias_variant_file
+                    or _road_connectivity_best_variant_file(road_connectivity_replay_report)
                     or reference_visual_detail_comparison_net_file
                     or reference_join_audit_candidate_net_file
                 )
@@ -5827,6 +5940,15 @@ def run_osm_cleanup_workflow(
         if road_connectivity_replay_report is None
         else str(road_connectivity_replay_report.get("run_report_file", "")),
         "road_connectivity_replay_gate_counts": _road_connectivity_gate_counts(road_connectivity_replay_report),
+        "road_connectivity_split_root_alias_repair_status": "skipped"
+        if road_connectivity_split_root_alias_repair_report is None
+        else str(road_connectivity_split_root_alias_repair_report.get("status", "fail")),
+        "road_connectivity_split_root_alias_repair_file": ""
+        if road_connectivity_split_root_alias_repair_report is None
+        else str(road_connectivity_split_root_alias_repair_report.get("output_file", "")),
+        "road_connectivity_split_root_alias_repair_report_file": ""
+        if road_connectivity_split_root_alias_repair_report is None
+        else str(road_connectivity_split_root_alias_repair_report.get("report_file", "")),
         "road_connectivity_seed_probe_status": "skipped"
         if road_connectivity_seed_probe_report is None
         else str(road_connectivity_seed_probe_report.get("status", "fail")),
@@ -6281,6 +6403,7 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_run": teacher_guided_repair_run_report or {},
         "teacher_guided_probe_matrix": teacher_guided_probe_matrix_report or {},
         "road_connectivity_replay": road_connectivity_replay_report or {},
+        "road_connectivity_split_root_alias_repair": road_connectivity_split_root_alias_repair_report or {},
         "road_connectivity_seed_probe": road_connectivity_seed_probe_report or {},
         "teacher_guided_direct_replay": teacher_guided_direct_replay_report or {},
         "teacher_guided_direct_replay_reference_delta": teacher_guided_direct_replay_reference_delta_report or {},
