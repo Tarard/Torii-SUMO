@@ -1442,6 +1442,108 @@ def test_write_owner_layered_teacher_replay_candidate_overlays_blocked_span_befo
     assert root.find("junction[@id='mid']") is not None
 
 
+def test_write_owner_layered_teacher_replay_candidate_returns_fail_when_owner_replay_blocks(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from torii_sumo.core import road_connectivity_teacher_model as road_model
+
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.layered.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_owner_replay(*args, **kwargs):
+        return {
+            "status": "blocked",
+            "repair_scope": "internal_movement_owner_teacher_replay",
+            "blocking_reason": "missing_road_dependencies",
+            "output_file": str(args[2]),
+        }
+
+    monkeypatch.setattr(
+        road_model,
+        "write_internal_movement_owner_teacher_replay_candidate",
+        fake_owner_replay,
+    )
+
+    report = road_model.write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        replay_blocked_road_span_endpoint_owners=True,
+    )
+
+    assert report["status"] == "fail"
+    assert report["owner_replay_report"]["status"] == "blocked"
+    assert report["road_span_endpoint_replay_report"]["status"] == "skipped"
+    assert output_net.exists()
+
+
+def test_write_internal_movement_owner_teacher_replay_candidate_returns_blocked_output(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from torii_sumo.core import road_connectivity_teacher_model as road_model
+
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    def fake_bundle_replay(*args, **kwargs):
+        return {
+            "status": "blocked",
+            "repair_scope": "internal_movement_owner_bundle",
+            "blocking_reason": "missing_road_dependencies",
+            "output_file": str(args[2]),
+        }
+
+    monkeypatch.setattr(
+        road_model,
+        "write_internal_movement_owner_bundle_replacement_candidate",
+        fake_bundle_replay,
+    )
+
+    report = road_model.write_internal_movement_owner_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+    )
+
+    assert report["status"] == "blocked"
+    assert report["bundle_replay"]["blocking_reason"] == "missing_road_dependencies"
+    assert output_net.exists()
+
+
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
     before = {
         "gate": {

@@ -1473,6 +1473,40 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         owner_id=owner_id,
         copy_tls=copy_tls,
     )
+    if owner_replay_report.get("status") != "pass":
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_bytes(Path(owner_input_file).read_bytes())
+        owner_road_connectivity_audit = build_internal_movement_owner_road_connectivity_parity_audit(
+            teacher_net_file,
+            output_file,
+            owner_id=owner_id,
+        )
+        return {
+            "status": "fail",
+            "claim_status": "diagnostic-demo",
+            "repair_scope": "layered_internal_movement_owner_teacher_replay",
+            "owner_id": owner_id,
+            "copy_tls": copy_tls,
+            "pre_repair_ready_road_spans": pre_repair_ready_road_spans,
+            "replay_blocked_road_span_endpoint_owners": replay_blocked_road_span_endpoint_owners,
+            "teacher_net_file": str(teacher_net_file),
+            "candidate_net_file": str(candidate_net_file),
+            "output_file": str(output_file),
+            "owner_input_file": str(owner_input_file),
+            "owner_replay_file": str(owner_replay_file),
+            "pre_road_span_repair": pre_road_span_repair,
+            "blocked_road_span_overlay": blocked_road_span_overlay,
+            "pre_replayed_endpoint_owner_ids": pre_replayed_endpoint_owner_ids,
+            "blocked_overlay_replayed_endpoint_owner_ids": blocked_overlay_replayed_endpoint_owner_ids,
+            "pre_endpoint_owner_ids": [],
+            "pre_endpoint_replay_reports": [],
+            "owner_replay_report": owner_replay_report,
+            "road_span_endpoint_replay_report": {"status": "skipped"},
+            "blocked_replayed_endpoint_owner_ids": [],
+            "blocked_endpoint_replay_reports": [],
+            "owner_road_connectivity_audit": owner_road_connectivity_audit,
+            "warnings": ["owner_replay_blocked"],
+        }
     current_file = owner_replay_file
     pre_endpoint_replay_reports = []
     pre_endpoint_owner_ids = list(
@@ -1822,6 +1856,9 @@ def write_internal_movement_owner_teacher_replay_candidate(
         teacher_edge_map=edge_map,
         copy_tls=copy_tls,
     )
+    if bundle_replay.get("status") != "pass" and not output_file.exists():
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_bytes(missing_approach_file.read_bytes())
     road_connectivity_audit = build_internal_movement_owner_road_connectivity_parity_audit(
         teacher_net_file,
         output_file,
