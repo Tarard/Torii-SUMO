@@ -2212,6 +2212,48 @@ def test_write_internal_movement_owner_bundle_replacement_candidate_blocks_missi
     assert not output_net.exists()
 
 
+def test_write_internal_movement_owner_bundle_replacement_candidate_allows_cluster_internal_lanes(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_bundle.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="cluster_a_b"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="cluster_a_b" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="in_0" intLanes=":cluster_a_b_0_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":cluster_a_b_0_0" dir="s"/>
+  <connection from=":cluster_a_b_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="cluster_a_b"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="cluster_a_b" to="b"><lane id="out_0" index="0"/></edge>
+  <junction id="cluster_a_b" type="priority" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_bundle_replacement_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="cluster_a_b",
+        teacher_edge_map={"in": "in", "out": "out"},
+        copy_tls=False,
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert report["added_internal_edge_count"] == 1
+    assert root.find("edge[@id=':cluster_a_b_0']") is not None
+    assert root.find("connection[@from='in'][@to='out']") is not None
+
+
 def test_write_road_connection_topology_replay_candidate_skips_internal_via_by_default(
     tmp_path: Path,
 ) -> None:
