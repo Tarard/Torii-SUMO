@@ -30,6 +30,8 @@ CONNECTION_RECORD_FIELDS = [
 ]
 
 TLS_MOVEMENT_SIGNATURE_FIELDS = ["from", "to", "fromLane", "toLane", "via", "linkIndex", "dir", "state"]
+PEDESTRIAN_EDGE_FUNCTIONS = {"crossing", "walkingarea"}
+PEDESTRIAN_CONNECTION_SIGNATURE_FIELDS = ["from", "to", "fromLane", "toLane", "via", "tl", "linkIndex", "dir", "state"]
 TURNAROUND_DIR = "t"
 
 
@@ -75,6 +77,13 @@ def build_teacher_guided_owner_semantics_probe(
     teacher_signature = build_connection_signature(teacher_net_file, owner_id)
     candidate_signature = build_connection_signature(candidate_net_file, candidate_owner_id)
     junction_layer = _compare_owner_connection_signatures(teacher_signature, candidate_signature)
+    pedestrian_layer = compare_pedestrian_crossing_signatures(
+        teacher_net_file,
+        candidate_net_file,
+        owner_id,
+        candidate_owner_id,
+        teacher_edge_map=teacher_edge_map,
+    )
     if _has_tls_semantics(teacher_net_file, owner_id) or _has_tls_semantics(candidate_net_file, candidate_owner_id):
         tls_layer = compare_tls_movement_signatures(
             teacher_net_file,
@@ -92,6 +101,7 @@ def build_teacher_guided_owner_semantics_probe(
         "edge_mapping": str(edge_mapping_layer.get("status", "")),
         "road_connectivity": str(road_layer.get("status", "")),
         "junction_connection": str(junction_layer.get("status", "")),
+        "pedestrian_crossing": str(pedestrian_layer.get("status", "")),
         "tls_movement": str(tls_layer.get("status", "")),
     }
     return {
@@ -106,6 +116,7 @@ def build_teacher_guided_owner_semantics_probe(
         "edge_mapping_layer": edge_mapping_layer,
         "road_connectivity_layer": road_layer,
         "junction_connection_layer": junction_layer,
+        "pedestrian_crossing_layer": pedestrian_layer,
         "tls_movement_layer": tls_layer,
     }
 
@@ -268,6 +279,150 @@ def compare_tls_movement_signatures(
         },
         "tl_logic_phase_states_equal": phase_equal,
     }
+
+
+def compare_pedestrian_crossing_signatures(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    teacher_owner_id: str,
+    candidate_owner_id: str,
+    *,
+    teacher_edge_map: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_edge_signatures, teacher_connection_signatures = _pedestrian_crossing_signatures(
+        teacher_root,
+        teacher_owner_id,
+        teacher_edge_map,
+    )
+    candidate_edge_signatures, candidate_connection_signatures = _pedestrian_crossing_signatures(
+        candidate_root,
+        candidate_owner_id,
+        None,
+    )
+    teacher_edges = Counter(teacher_edge_signatures)
+    candidate_edges = Counter(candidate_edge_signatures)
+    teacher_connections = Counter(teacher_connection_signatures)
+    candidate_connections = Counter(candidate_connection_signatures)
+    teacher_only_edges = teacher_edges - candidate_edges
+    candidate_only_edges = candidate_edges - teacher_edges
+    teacher_only_connections = teacher_connections - candidate_connections
+    candidate_only_connections = candidate_connections - teacher_connections
+    equal = (
+        not teacher_only_edges
+        and not candidate_only_edges
+        and not teacher_only_connections
+        and not candidate_only_connections
+    )
+    return {
+        "status": "pass" if equal else "fail",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "teacher_owner_id": teacher_owner_id,
+        "candidate_owner_id": candidate_owner_id,
+        "teacher_edge_map": dict(sorted((teacher_edge_map or {}).items())),
+        "normalized_internal_ids": True,
+        "compared_connection_fields": PEDESTRIAN_CONNECTION_SIGNATURE_FIELDS,
+        "teacher_edge_signature_count": teacher_edges.total(),
+        "candidate_edge_signature_count": candidate_edges.total(),
+        "teacher_connection_signature_count": teacher_connections.total(),
+        "candidate_connection_signature_count": candidate_connections.total(),
+        "teacher_only_normalized_edge_signatures": _counter_elements(teacher_only_edges),
+        "candidate_only_normalized_edge_signatures": _counter_elements(candidate_only_edges),
+        "teacher_only_normalized_connection_signatures": _counter_elements(teacher_only_connections),
+        "candidate_only_normalized_connection_signatures": _counter_elements(candidate_only_connections),
+    }
+
+
+def _pedestrian_crossing_signatures(
+    root: ET.Element,
+    owner_id: str,
+    edge_map: dict[str, str] | None,
+) -> tuple[list[str], list[str]]:
+    internal_prefix = f":{owner_id}_"
+    pedestrian_edge_ids = {
+        edge.attrib["id"]
+        for edge in root.findall("edge")
+        if edge.attrib.get("id", "").startswith(internal_prefix)
+        and edge.attrib.get("function") in PEDESTRIAN_EDGE_FUNCTIONS
+    }
+    pedestrian_edge_signatures = [
+        _pedestrian_edge_signature(edge, owner_id)
+        for edge in root.findall("edge")
+        if edge.attrib.get("id") in pedestrian_edge_ids
+    ]
+    pedestrian_connection_signatures = []
+    for connection in root.findall("connection"):
+        source = connection.attrib.get("from", "")
+        target = connection.attrib.get("to", "")
+        via = connection.attrib.get("via", "")
+        if not (
+            source in pedestrian_edge_ids
+            or target in pedestrian_edge_ids
+            or via.startswith(internal_prefix)
+            and _edge_id_from_lane_id(via) in pedestrian_edge_ids
+        ):
+            continue
+        fields = {
+            field: _normalize_pedestrian_crossing_value(
+                field,
+                connection.attrib.get(field, ""),
+                owner_id,
+                edge_map,
+            )
+            for field in PEDESTRIAN_CONNECTION_SIGNATURE_FIELDS
+        }
+        pedestrian_connection_signatures.append(
+            "|".join(f"{field}={fields[field]}" for field in PEDESTRIAN_CONNECTION_SIGNATURE_FIELDS)
+        )
+    return sorted(pedestrian_edge_signatures), sorted(pedestrian_connection_signatures)
+
+
+def _pedestrian_edge_signature(edge: ET.Element, owner_id: str) -> str:
+    lane_signatures = []
+    for lane in edge.findall("lane"):
+        lane_signatures.append(
+            "|".join(
+                (
+                    f"index={lane.attrib.get('index', '')}",
+                    f"allow={lane.attrib.get('allow', '')}",
+                    f"disallow={lane.attrib.get('disallow', '')}",
+                )
+            )
+        )
+    return "|".join(
+        (
+            f"id={_normalize_tls_internal_id(edge.attrib.get('id', ''), owner_id)}",
+            f"function={edge.attrib.get('function', '')}",
+            f"lanes={';'.join(sorted(lane_signatures))}",
+        )
+    )
+
+
+def _normalize_pedestrian_crossing_value(
+    field: str,
+    value: str,
+    owner_id: str,
+    edge_map: dict[str, str] | None,
+) -> str:
+    if field in {"from", "to"}:
+        if value.startswith(":"):
+            return _normalize_tls_internal_id(value, owner_id)
+        return (edge_map or {}).get(value, value)
+    if field == "via":
+        return _normalize_tls_internal_id(value, owner_id)
+    if field == "tl" and value == owner_id:
+        return "TARGET_TLS"
+    return value
+
+
+def _edge_id_from_lane_id(lane_id: str) -> str:
+    if lane_id.startswith(":"):
+        parts = lane_id.rsplit("_", 1)
+        return parts[0] if len(parts) == 2 else lane_id
+    return lane_id.rsplit("_", 1)[0] if "_" in lane_id else lane_id
 
 
 def _is_related(
