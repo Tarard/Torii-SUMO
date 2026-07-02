@@ -989,7 +989,7 @@ def test_owner_road_span_repair_candidates_group_bidirectional_split_chain(
         {
             "action": "replace_split_approach_road_span",
             "status": "ready",
-            "span_key": "road",
+            "span_key": "road#0",
             "teacher_edge_ids": ["-road#0", "road#0"],
             "keep_edge_ids": ["-road#0", "road#0"],
             "remove_edge_ids": ["-road#1", "road#1"],
@@ -1009,6 +1009,58 @@ def test_owner_road_span_repair_candidates_group_bidirectional_split_chain(
             ],
         }
     ]
+
+
+def test_owner_road_span_repair_candidates_keep_teacher_split_segments_independent(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="a" to="j"><lane id="road#0_0" index="0"/></edge>
+  <edge id="-road#0" from="j" to="a"><lane id="-road#0_0" index="0"/></edge>
+  <edge id="road#1" from="j" to="b"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="b" to="j"><lane id="-road#1_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+  <junction id="b" type="priority" x="40" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#0" from="a" to="mid0"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#2" from="mid0" to="j"><lane id="road#2_0" index="0"/></edge>
+  <edge id="-road#2" from="j" to="mid0"><lane id="-road#2_0" index="0"/></edge>
+  <edge id="-road#0" from="mid0" to="a"><lane id="-road#0_0" index="0"/></edge>
+  <edge id="road#1" from="j" to="mid1"><lane id="road#1_0" index="0"/></edge>
+  <edge id="road#3" from="mid1" to="b"><lane id="road#3_0" index="0"/></edge>
+  <edge id="-road#3" from="b" to="mid1"><lane id="-road#3_0" index="0"/></edge>
+  <edge id="-road#1" from="mid1" to="j"><lane id="-road#1_0" index="0"/></edge>
+  <edge id="side" from="mid1" to="s"><lane id="side_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="mid0" type="priority" x="10" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+  <junction id="mid1" type="priority" x="30" y="0"/>
+  <junction id="b" type="priority" x="40" y="0"/>
+  <junction id="s" type="priority" x="30" y="10"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    candidates = build_internal_movement_owner_road_span_repair_candidates(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+
+    assert [(candidate["span_key"], candidate["status"]) for candidate in candidates] == [
+        ("road#0", "ready"),
+        ("road#1", "blocked"),
+    ]
+    assert candidates[0]["blocked_incident_edge_ids"] == []
+    assert candidates[1]["blocked_incident_edge_ids"] == ["side"]
 
 
 def test_write_owner_road_span_repair_candidate_replaces_ready_split_chain(
@@ -1127,6 +1179,49 @@ def test_write_owner_ready_road_span_endpoint_replay_candidate_replays_other_end
     assert root.find("edge[@id='road#1']") is None
     assert root.find("edge[@id='-road#1']") is None
     assert root.find("junction[@id='mid']") is None
+
+
+def test_write_owner_ready_road_span_endpoint_replay_candidate_skips_owner_terminal_removal(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.ready_span_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="a" to="j"><lane id="road#0_0" index="0"/></edge>
+  <edge id="-road#0" from="j" to="a"><lane id="-road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#0" from="a" to="mid"><lane id="road#0_0" index="0"/></edge>
+  <edge id="road#1" from="mid" to="j"><lane id="road#1_0" index="0"/></edge>
+  <edge id="-road#1" from="j" to="mid"><lane id="-road#1_0" index="0"/></edge>
+  <edge id="-road#0" from="mid" to="a"><lane id="-road#0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="mid" type="priority" x="10" y="0"/>
+  <junction id="j" type="priority" x="20" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["selected_ready_road_span_candidate_count"] == 0
+    assert report["skipped_owner_terminal_road_span_candidate_count"] == 1
+    assert "skipped_owner_terminal_road_span_candidate" in report["warnings"]
+    assert root.find("edge[@id='road#1']") is not None
+    assert root.find("junction[@id='mid']") is not None
 
 
 def test_write_owner_layered_teacher_replay_candidate_runs_owner_then_road_span_endpoint(
