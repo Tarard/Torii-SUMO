@@ -28,7 +28,9 @@ def test_compile_intersection_to_plain_writes_vehicle_and_tls_files(tmp_path: Pa
         assert path is not None
         assert Path(path).exists()
 
-    assert '<junction id="core_1" type="traffic_light"' in Path(artifacts.plain_node_file).read_text()
+    node_text = Path(artifacts.plain_node_file).read_text()
+    assert '<node id="core_1" type="traffic_light"' in node_text
+    assert "<junction " not in node_text
     assert "<connection " in Path(artifacts.plain_connection_file).read_text()
     assert "<tlLogic " in Path(artifacts.plain_tllogic_file).read_text()
 

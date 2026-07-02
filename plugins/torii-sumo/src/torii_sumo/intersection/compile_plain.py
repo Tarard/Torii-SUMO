@@ -47,7 +47,7 @@ def _write_nodes(path: Path, ir: IntersectionIR) -> None:
     center_x, center_y = ir.core.center_xy
     ET.SubElement(
         root,
-        "junction",
+        "node",
         id=ir.core.core_id,
         type=ir.control.control_type,
         x=f"{center_x:.2f}",
