@@ -585,6 +585,41 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert "internal_junction_parity" in report["network_plan"]["validation_gates"]
 
 
+def test_auto_workflow_keeps_road_only_variant_in_road_layer(tmp_path: Path) -> None:
+    reference_net_file = tmp_path / "tum-reference.net.xml"
+    _write_reference_net(reference_net_file)
+    raw_net_file = tmp_path / "raw_visual.net.xml"
+    road_net_file = tmp_path / "road_connectivity.net.xml"
+
+    def fake_cleanup(**_kwargs):
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "network_profile": "reference_matched",
+            "reference_visual_detail_comparison_net_file": str(raw_net_file),
+            "road_connectivity_replay_status": "pass",
+            "road_connectivity_replay_gate_status": "pass",
+            "road_connectivity_replay_sumo_load_status": "pass",
+            "road_connectivity_replay_best_variant_file": str(road_net_file),
+            "road_connectivity_seed_probe_status": "pass",
+            "road_connectivity_seed_probe_edge_delta_count": 0,
+            "road_connectivity_seed_probe_connection_delta_count": 0,
+        }
+
+    report = run_auto_workflow(
+        user_request="Use Torii to generate a TUM-like SUMO network from OSM with TLS and connection semantics",
+        output_dir=tmp_path,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        reference_net_file=reference_net_file,
+        cleanup_workflow_func=fake_cleanup,
+    )
+
+    semantics = report["reference_matched_semantics_workflow"]
+    assert semantics["best_variant_file"] == ""
+    assert semantics["comparison_net_file"] == str(raw_net_file)
+    assert semantics["road_connectivity_layer"]["best_variant_file"] == str(road_net_file)
+
+
 def test_auto_workflow_can_call_tls_multisource_review(tmp_path: Path) -> None:
     calls = {}
 

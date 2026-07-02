@@ -4641,20 +4641,6 @@ def run_osm_cleanup_workflow(
                 road_connectivity_seed_probe_func=road_connectivity_seed_probe_func,
                 road_connection_topology_replay_func=road_connection_topology_replay_func,
             )
-        if (
-            teacher_guided_repair_best_variant_file is None
-            and teacher_guided_direct_replay_best_variant_file is None
-            and road_connectivity_seed_probe_report is not None
-            and road_connectivity_seed_probe_report.get("status") == "pass"
-        ):
-            road_connectivity_promoted_variant_file = _road_connectivity_promoted_variant_file(
-                road_connectivity_replay_report,
-                road_connectivity_split_root_alias_repair_report,
-                road_connection_topology_replay_report,
-            )
-            if road_connectivity_promoted_variant_file is not None:
-                reference_visual_detail_comparison_net_file = road_connectivity_promoted_variant_file
-                reference_visual_detail_comparison_selection_reason = "road_connectivity_seed_probe_promoted"
     if (
         run_teacher_guided_repair_after_build
         and reference_net_file is not None
@@ -5414,6 +5400,16 @@ def run_osm_cleanup_workflow(
         final_movement_direct_replay_last_queue_missing_movement_plan_count,
         final_movement_direct_replay_last_queue_top_movement_gaps,
     ) = _teacher_guided_movement_gap_stats(final_movement_direct_replay_last_queue_report)
+    road_connectivity_promoted_variant_file = None
+    road_connectivity_promoted_variant_reason = ""
+    if road_connectivity_seed_probe_report is not None and road_connectivity_seed_probe_report.get("status") == "pass":
+        road_connectivity_promoted_variant_file = _road_connectivity_promoted_variant_file(
+            road_connectivity_replay_report,
+            road_connectivity_split_root_alias_repair_report,
+            road_connection_topology_replay_report,
+        )
+        if road_connectivity_promoted_variant_file is not None:
+            road_connectivity_promoted_variant_reason = "seed_probe_pass"
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -6135,6 +6131,10 @@ def run_osm_cleanup_workflow(
         "road_connectivity_replay_best_variant_file": ""
         if road_connectivity_replay_report is None
         else str(road_connectivity_replay_report.get("output_file", "")),
+        "road_connectivity_promoted_variant_file": ""
+        if road_connectivity_promoted_variant_file is None
+        else str(road_connectivity_promoted_variant_file),
+        "road_connectivity_promoted_variant_reason": road_connectivity_promoted_variant_reason,
         "road_connectivity_replay_run_report_file": ""
         if road_connectivity_replay_report is None
         else str(road_connectivity_replay_report.get("run_report_file", "")),
