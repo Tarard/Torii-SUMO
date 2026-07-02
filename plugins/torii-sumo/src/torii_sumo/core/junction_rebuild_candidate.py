@@ -4944,6 +4944,38 @@ def _valid_edge_map(value: object) -> dict[str, str]:
     return result
 
 
+def _case_boundary_edge_map(
+    case: dict[str, Any],
+    candidate_edges_by_id: dict[str, ET.Element],
+) -> dict[str, str]:
+    teacher_edge_ids = [
+        str(edge_id)
+        for edge_id in [
+            *(case.get("reference_approach_edge_ids") or []),
+            *(case.get("matched_reference_source_boundary_edge_ids") or []),
+        ]
+        if str(edge_id)
+    ]
+    candidate_edge_ids = [
+        str(edge_id)
+        for edge_id in case.get("matched_candidate_boundary_edge_ids") or []
+        if str(edge_id) in candidate_edges_by_id
+    ]
+    candidates_by_family: dict[str, list[str]] = {}
+    for edge_id in candidate_edge_ids:
+        candidates_by_family.setdefault(_signed_edge_family_id(edge_id), []).append(edge_id)
+
+    edge_map = {}
+    for teacher_edge_id in teacher_edge_ids:
+        if teacher_edge_id in candidate_edge_ids:
+            edge_map[teacher_edge_id] = teacher_edge_id
+            continue
+        matches = sorted(set(candidates_by_family.get(_signed_edge_family_id(teacher_edge_id), [])))
+        if len(matches) == 1:
+            edge_map[teacher_edge_id] = matches[0]
+    return dict(sorted(edge_map.items()))
+
+
 def _junction_pattern_record_by_id(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
     records = {}
     for record in report.get("junction_pattern_index", []) or []:
@@ -5508,7 +5540,10 @@ def _teacher_guided_repair_candidate(
     candidate_node_ids = [str(item) for item in case.get("matched_candidate_node_ids") or case.get("candidate_node_ids") or []]
     candidate_junction_ids = _candidate_junction_id_candidates(reference_id, candidate_node_ids)
     matched_source_node_set = set(matched_reference_source_node_ids or reference_source_node_ids)
-    case_edge_map = _valid_edge_map(case.get("edge_map", {}))
+    case_edge_map = {
+        **_case_boundary_edge_map(case, candidate_edges_by_id),
+        **_valid_edge_map(case.get("edge_map", {})),
+    }
     scope_node_ids = [node_id for node_id in candidate_node_ids if node_id in matched_source_node_set]
     if len(scope_node_ids) < 2:
         scope_node_ids = candidate_node_ids
