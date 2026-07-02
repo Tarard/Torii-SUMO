@@ -36,6 +36,22 @@ APPROACH_INTEGRITY_FAILURE_FIELDS = {
     "outgoing_vehicle_edge_count",
 }
 
+ROAD_CONTINUITY_COUNT_FIELDS = (
+    "same_family_continuation_edge_map_count",
+    "copied_boundary_continuation_edge_count",
+    "copied_boundary_continuation_connection_count",
+    "replayed_stale_split_continuation_edge_count",
+    "replayed_stale_split_followup_edge_count",
+    "rewired_stale_split_fragment_connection_count",
+    "removed_teacher_absent_same_family_continuation_edge_count",
+)
+ROAD_CONTINUITY_FAILURE_FIELDS = (
+    "removed_stale_boundary_edge_connection_count",
+    "removed_stale_replaced_edge_connection_count",
+    "removed_invalid_lane_connection_count",
+    "skipped_connection_count",
+)
+
 TLS_CONNECTION_REPAIR_ATTRS = (
     "tl",
     "linkIndex",
@@ -3970,6 +3986,48 @@ def run_teacher_guided_repair_queue(
     return report
 
 
+def _int_count(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _road_continuity_probe_summary(run_report: dict[str, Any]) -> dict[str, object]:
+    counts: dict[str, int] = {}
+    failure_counts: dict[str, int] = {}
+    replay_count = 0
+    for variant in run_report.get("variant_reports", []) or []:
+        if not isinstance(variant, dict) or variant.get("expanded_scope_followup_emitted"):
+            continue
+        replay = variant.get("target_internal_replay")
+        if not isinstance(replay, dict):
+            continue
+        replay_count += 1
+        if replay.get("status") != "pass":
+            failure_counts["status_not_pass"] = failure_counts.get("status_not_pass", 0) + 1
+        for field in ROAD_CONTINUITY_COUNT_FIELDS:
+            value = _int_count(replay.get(field, 0))
+            if value:
+                counts[field] = counts.get(field, 0) + value
+        for field in ROAD_CONTINUITY_FAILURE_FIELDS:
+            value = _int_count(replay.get(field, 0))
+            if value:
+                failure_counts[field] = failure_counts.get(field, 0) + value
+    if not replay_count:
+        status = "skipped"
+    elif failure_counts:
+        status = "fail"
+    else:
+        status = "pass"
+    return {
+        "road_continuity_gate_status": status,
+        "road_continuity_replay_count": replay_count,
+        "road_continuity_counts": dict(sorted(counts.items())),
+        "road_continuity_failure_counts": dict(sorted(failure_counts.items())),
+    }
+
+
 def run_teacher_guided_repair_matrix(
     *,
     queue_report: dict[str, Any],
@@ -4044,6 +4102,7 @@ def run_teacher_guided_repair_matrix(
             timeout_seconds=timeout_seconds,
             command_runner=command_runner,
         )
+        road_continuity_summary = _road_continuity_probe_summary(run_report)
         probes.append(
             {
                 "junction_id": str(junction_id),
@@ -4051,6 +4110,7 @@ def run_teacher_guided_repair_matrix(
                 "parity_gate_status": str(run_report.get("parity_gate_status", "")),
                 "promotion_gate_status": str(run_report.get("promotion_gate_status", "")),
                 "approach_integrity_status": str(run_report.get("approach_integrity_status", "")),
+                **road_continuity_summary,
                 "semantic_failure_counts": run_report.get("semantic_failure_counts", {})
                 if isinstance(run_report.get("semantic_failure_counts"), dict)
                 else {},
@@ -4065,7 +4125,14 @@ def run_teacher_guided_repair_matrix(
 
     all_parity_pass = bool(probes) and all(probe["parity_gate_status"] == "pass" for probe in probes)
     all_promotion_pass = bool(probes) and all(probe["promotion_gate_status"] == "pass" for probe in probes)
-    status = "pass" if all_parity_pass and all_promotion_pass and not missing_junction_ids else "fail"
+    all_road_continuity_pass = bool(probes) and all(
+        probe["road_continuity_gate_status"] == "pass" for probe in probes
+    )
+    status = (
+        "pass"
+        if all_parity_pass and all_promotion_pass and all_road_continuity_pass and not missing_junction_ids
+        else "fail"
+    )
     matrix_file = output_dir / f"{prefix}.json"
     report = {
         "status": status,
@@ -4075,6 +4142,7 @@ def run_teacher_guided_repair_matrix(
         "missing_junction_ids": missing_junction_ids,
         "all_parity_gate_pass": all_parity_pass,
         "all_promotion_gate_pass": all_promotion_pass,
+        "all_road_continuity_gate_pass": all_road_continuity_pass,
         "matrix_file": str(matrix_file),
         "probes": probes,
         "review_policy": "probe matrix only; promote to workflow evidence after full OSM workflow replay uses the same gate",

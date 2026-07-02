@@ -173,6 +173,7 @@ def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path
             "matrix_file": str(matrix_file),
             "all_parity_gate_pass": True,
             "all_promotion_gate_pass": True,
+            "all_road_continuity_gate_pass": True,
             "missing_junction_ids": [],
             "probes": [],
         }
@@ -237,6 +238,7 @@ def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path
     assert report["teacher_guided_probe_matrix_probe_count"] == 1
     assert report["teacher_guided_probe_matrix_all_parity_gate_pass"] is True
     assert report["teacher_guided_probe_matrix_all_promotion_gate_pass"] is True
+    assert report["teacher_guided_probe_matrix_all_road_continuity_gate_pass"] is True
     assert report["teacher_guided_probe_matrix_missing_junction_ids"] == []
     assert report["teacher_guided_probe_matrix_file"] == str(matrix_kwargs["output_dir"] / "matrix.json")
     assert report["teacher_guided_probe_matrix"]["matrix_file"] == report["teacher_guided_probe_matrix_file"]
