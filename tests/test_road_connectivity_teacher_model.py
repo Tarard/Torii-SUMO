@@ -1365,10 +1365,80 @@ def test_write_owner_layered_teacher_replay_candidate_can_replay_blocked_span_en
 
     root = ET.parse(output_net).getroot()
     assert report["status"] == "pass"
-    assert report["blocked_replayed_endpoint_owner_ids"] == ["cluster_a_b"]
-    assert report["blocked_endpoint_replay_reports"][0]["owner_id"] == "cluster_a_b"
+    assert report["blocked_overlay_replayed_endpoint_owner_ids"] == ["cluster_a_b"]
+    assert report["blocked_replayed_endpoint_owner_ids"] == []
+    assert report["pre_endpoint_replay_reports"][0]["owner_id"] == "cluster_a_b"
     assert root.find("edge[@id=':cluster_a_b_0']") is not None
     assert root.find("connection[@from='road#1'][@to='out']") is not None
+    assert root.find("junction[@id='mid']") is not None
+
+
+def test_write_owner_layered_teacher_replay_candidate_overlays_blocked_span_before_owner_replay(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.layered.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="road#3" from="j" to="cluster_a_b"><lane id="road#3_0" index="0"/></edge>
+  <edge id="-road#3" from="cluster_a_b" to="j"><lane id="-road#3_0" index="0"/></edge>
+  <edge id="out" from="cluster_a_b" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <edge id=":cluster_a_b_0" function="internal"><lane id=":cluster_a_b_0_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0 -road#3_0" intLanes=":j_0_0"/>
+  <junction id="cluster_a_b" type="priority" x="20" y="0" incLanes="road#3_0" intLanes=":cluster_a_b_0_0"/>
+  <junction id="a" type="priority" x="-10" y="0"/>
+  <junction id="b" type="priority" x="30" y="0"/>
+  <connection from="in" to="road#3" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="road#3" fromLane="0" toLane="0" dir="s"/>
+  <connection from="road#3" to="out" fromLane="0" toLane="0" via=":cluster_a_b_0_0" dir="s"/>
+  <connection from=":cluster_a_b_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="road#5" from="j" to="mid"><lane id="road#5_0" index="0"/></edge>
+  <edge id="road#6" from="mid" to="cluster_a_b"><lane id="road#6_0" index="0"/></edge>
+  <edge id="-road#6" from="cluster_a_b" to="mid"><lane id="-road#6_0" index="0"/></edge>
+  <edge id="-road#5" from="mid" to="j"><lane id="-road#5_0" index="0"/></edge>
+  <edge id="side" from="mid" to="s"><lane id="side_0" index="0"/></edge>
+  <edge id="out" from="cluster_a_b" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_old" function="internal"><lane id=":j_old_0" index="0"/></edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="in_0 -road#5_0" intLanes=":j_old_0"/>
+  <junction id="mid" type="priority" x="10" y="0"/>
+  <junction id="cluster_a_b" type="priority" x="20" y="0"/>
+  <junction id="a" type="priority" x="-10" y="0"/>
+  <junction id="b" type="priority" x="30" y="0"/>
+  <junction id="s" type="priority" x="10" y="10"/>
+  <connection from="in" to="road#5" fromLane="0" toLane="0" via=":j_old_0" dir="s"/>
+  <connection from=":j_old" to="road#5" fromLane="0" toLane="0" dir="s"/>
+  <connection from="road#5" to="road#6" fromLane="0" toLane="0" dir="s"/>
+  <connection from="-road#6" to="-road#5" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        replay_blocked_road_span_endpoint_owners=True,
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert report["status"] == "pass"
+    assert report["blocked_road_span_overlay"]["added_edge_count"] == 2
+    assert report["blocked_overlay_replayed_endpoint_owner_ids"] == ["cluster_a_b"]
+    assert report["owner_replay_report"]["edge_map"]["road#3"] == "road#3"
+    assert root.find("edge[@id='road#3']").attrib["from"] == "j"
+    assert root.find("connection[@from='in'][@to='road#3']") is not None
+    assert root.find("connection[@from='in'][@to='road#5']") is None
+    assert root.find("connection[@from='road#3'][@to='out']") is not None
     assert root.find("junction[@id='mid']") is not None
 
 
