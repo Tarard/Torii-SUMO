@@ -3970,6 +3970,119 @@ def run_teacher_guided_repair_queue(
     return report
 
 
+def run_teacher_guided_repair_matrix(
+    *,
+    queue_report: dict[str, Any],
+    target_junction_ids: list[str],
+    raw_node_file: Path,
+    raw_edge_file: Path,
+    raw_connection_file: Path,
+    output_dir: Path,
+    prefix: str = "teacher_guided_probe_matrix",
+    queue_base_dir: Path | None = None,
+    raw_type_file: Path | None = None,
+    raw_tllogic_file: Path | None = None,
+    crossing_edge_overrides_by_junction: dict[str, dict[str, str | list[str]]] | None = None,
+    replay_target_internal_subgraph: bool = True,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+    command_runner: Any = run_command,
+    repair_queue_runner: Any = run_teacher_guided_repair_queue,
+) -> dict[str, object]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidates = queue_report.get("repair_candidates", []) or []
+    if not isinstance(candidates, list):
+        return _failure("queue report repair_candidates must be a list")
+
+    candidates_by_id: dict[str, dict[str, Any]] = {}
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        for key in (str(candidate.get("reference_id", "")), str(candidate.get("junction_id", ""))):
+            if key and key not in candidates_by_id:
+                candidates_by_id[key] = candidate
+
+    probes = []
+    missing_junction_ids = []
+    for index, junction_id in enumerate(target_junction_ids):
+        candidate = candidates_by_id.get(str(junction_id))
+        if candidate is None:
+            missing_junction_ids.append(str(junction_id))
+            continue
+        probe_dir = output_dir / _queue_candidate_dir(index, str(junction_id))
+        single_queue = dict(queue_report)
+        single_queue["repair_candidates"] = [candidate]
+        single_queue["repair_candidate_count"] = 1
+        candidate_status = candidate.get("candidate_status")
+        single_queue["ready_candidate_count"] = 1 if candidate_status == "ready_for_teacher_guided_variant" else 0
+        single_queue["expanded_scope_candidate_count"] = (
+            1 if candidate_status == "needs_expanded_rebuild_scope" else 0
+        )
+        single_queue["blocked_candidate_count"] = (
+            0 if single_queue["ready_candidate_count"] or single_queue["expanded_scope_candidate_count"] else 1
+        )
+        single_queue_file = probe_dir / "single_queue.json"
+        probe_dir.mkdir(parents=True, exist_ok=True)
+        single_queue["queue_file"] = str(single_queue_file)
+        single_queue_file.write_text(json.dumps(single_queue, indent=2, ensure_ascii=False), encoding="utf-8")
+        run_report = repair_queue_runner(
+            queue_report=single_queue,
+            raw_node_file=raw_node_file,
+            raw_edge_file=raw_edge_file,
+            raw_connection_file=raw_connection_file,
+            raw_type_file=raw_type_file,
+            raw_tllogic_file=raw_tllogic_file,
+            crossing_edge_overrides_by_junction=crossing_edge_overrides_by_junction,
+            output_dir=probe_dir,
+            prefix=f"{prefix}_{index + 1:03d}",
+            queue_base_dir=queue_base_dir,
+            replay_target_internal_subgraph=replay_target_internal_subgraph,
+            max_ready_candidates=1,
+            netconvert_binary=netconvert_binary,
+            sumo_binary=sumo_binary,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+        )
+        probes.append(
+            {
+                "junction_id": str(junction_id),
+                "status": str(run_report.get("status", "")),
+                "parity_gate_status": str(run_report.get("parity_gate_status", "")),
+                "promotion_gate_status": str(run_report.get("promotion_gate_status", "")),
+                "approach_integrity_status": str(run_report.get("approach_integrity_status", "")),
+                "semantic_failure_counts": run_report.get("semantic_failure_counts", {})
+                if isinstance(run_report.get("semantic_failure_counts"), dict)
+                else {},
+                "semantic_layer_gate_counts": run_report.get("semantic_layer_gate_counts", {})
+                if isinstance(run_report.get("semantic_layer_gate_counts"), dict)
+                else {},
+                "best_expanded_scope_net_file": str(run_report.get("best_expanded_scope_net_file", "")),
+                "run_report_file": str(run_report.get("run_report_file", "")),
+                "single_queue_file": str(single_queue_file),
+            }
+        )
+
+    all_parity_pass = bool(probes) and all(probe["parity_gate_status"] == "pass" for probe in probes)
+    all_promotion_pass = bool(probes) and all(probe["promotion_gate_status"] == "pass" for probe in probes)
+    status = "pass" if all_parity_pass and all_promotion_pass and not missing_junction_ids else "fail"
+    matrix_file = output_dir / f"{prefix}.json"
+    report = {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "requested_junction_count": len(target_junction_ids),
+        "probe_count": len(probes),
+        "missing_junction_ids": missing_junction_ids,
+        "all_parity_gate_pass": all_parity_pass,
+        "all_promotion_gate_pass": all_promotion_pass,
+        "matrix_file": str(matrix_file),
+        "probes": probes,
+        "review_policy": "probe matrix only; promote to workflow evidence after full OSM workflow replay uses the same gate",
+    }
+    matrix_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
 def write_expanded_scope_plain_inputs(
     *,
     raw_node_file: Path,

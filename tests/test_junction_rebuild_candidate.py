@@ -26,6 +26,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
     build_tls_connection_repair_variant,
+    run_teacher_guided_repair_matrix,
     run_teacher_guided_repair_queue,
     write_expanded_scope_plain_inputs,
     write_teacher_target_internal_replay_net,
@@ -2388,6 +2389,64 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     variant_report = json.loads(Path(report["variant_reports"][0]["report_file"]).read_text(encoding="utf-8"))
     assert variant_report["teacher_pattern_key"] == "three_way|control=right_before_left"
     assert variant_report["teacher_pattern_template_count"] == 127
+
+
+def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    calls = []
+
+    def fake_queue_runner(**kwargs):
+        calls.append(kwargs)
+        candidate = kwargs["queue_report"]["repair_candidates"][0]
+        junction_id = str(candidate["junction_id"])
+        run_report = kwargs["output_dir"] / "run_report.json"
+        run_report.parent.mkdir(parents=True, exist_ok=True)
+        run_report.write_text(json.dumps({"junction_id": junction_id}, indent=2), encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "parity_gate_status": "pass",
+            "promotion_gate_status": "pass",
+            "approach_integrity_status": "pass",
+            "semantic_failure_counts": {},
+            "semantic_layer_gate_counts": {"topology": {"pass": 1, "fail": 0, "failure_count": 0}},
+            "run_report_file": str(run_report),
+            "best_expanded_scope_net_file": str(kwargs["output_dir"] / "expanded_scope.net.xml"),
+        }
+
+    report = run_teacher_guided_repair_matrix(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {"reference_id": "j1", "junction_id": "j1", "candidate_status": "ready_for_teacher_guided_variant"},
+                {"reference_id": "j2", "junction_id": "j2", "candidate_status": "ready_for_teacher_guided_variant"},
+                {"reference_id": "skip", "junction_id": "skip", "candidate_status": "ready_for_teacher_guided_variant"},
+            ],
+        },
+        target_junction_ids=["j2", "j1"],
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "matrix",
+        queue_base_dir=tmp_path / "queue_base",
+        repair_queue_runner=fake_queue_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["probe_count"] == 2
+    assert report["all_promotion_gate_pass"] is True
+    assert report["all_parity_gate_pass"] is True
+    assert [call["queue_report"]["repair_candidates"][0]["junction_id"] for call in calls] == ["j2", "j1"]
+    assert [call["queue_base_dir"] for call in calls] == [tmp_path / "queue_base", tmp_path / "queue_base"]
+    assert [item["junction_id"] for item in report["probes"]] == ["j2", "j1"]
+    assert Path(report["matrix_file"]).is_file()
 
 
 def test_run_teacher_guided_repair_queue_replays_same_id_internal_mismatch_candidate(tmp_path: Path) -> None:
