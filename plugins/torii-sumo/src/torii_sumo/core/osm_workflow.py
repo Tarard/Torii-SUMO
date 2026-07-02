@@ -3823,6 +3823,7 @@ def run_osm_cleanup_workflow(
                             sumo_binary=sumo_binary,
                             timeout_seconds=timeout_seconds,
                             command_runner=command_runner,
+                            sequential_accept_passed_variants=True,
                         )
                     candidate_teacher_guided_best_variant_file = _teacher_guided_best_variant_file(
                         teacher_guided_repair_run_report

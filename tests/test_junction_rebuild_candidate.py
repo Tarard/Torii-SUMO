@@ -2556,8 +2556,10 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
         candidate = kwargs["queue_report"]["repair_candidates"][0]
         junction_id = str(candidate["junction_id"])
         run_report = kwargs["output_dir"] / "run_report.json"
+        composite_net = kwargs["output_dir"] / "composite.net.xml"
         run_report.parent.mkdir(parents=True, exist_ok=True)
         run_report.write_text(json.dumps({"junction_id": junction_id}, indent=2), encoding="utf-8")
+        composite_net.write_text("<net/>", encoding="utf-8")
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -2583,6 +2585,8 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
             ],
             "run_report_file": str(run_report),
             "best_expanded_scope_net_file": str(kwargs["output_dir"] / "expanded_scope.net.xml"),
+            "composite_applied_candidate_count": 1,
+            "composite_net_file": str(composite_net),
         }
 
     report = run_teacher_guided_repair_matrix(
@@ -2602,6 +2606,7 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
         output_dir=tmp_path / "matrix",
         queue_base_dir=tmp_path / "queue_base",
         repair_queue_runner=fake_queue_runner,
+        sequential_accept_passed_variants=True,
     )
 
     assert report["status"] == "pass"
@@ -2610,7 +2615,9 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
     assert report["all_parity_gate_pass"] is True
     assert [call["queue_report"]["repair_candidates"][0]["junction_id"] for call in calls] == ["j2", "j1"]
     assert [call["queue_base_dir"] for call in calls] == [tmp_path / "queue_base", tmp_path / "queue_base"]
+    assert [call["sequential_accept_passed_variants"] for call in calls] == [True, True]
     assert [item["junction_id"] for item in report["probes"]] == ["j2", "j1"]
+    assert [Path(item["composite_net_file"]).name for item in report["probes"]] == ["composite.net.xml", "composite.net.xml"]
     assert report["all_road_continuity_gate_pass"] is True
     assert [item["road_continuity_gate_status"] for item in report["probes"]] == ["pass", "pass"]
     assert report["probes"][0]["road_continuity_counts"] == {

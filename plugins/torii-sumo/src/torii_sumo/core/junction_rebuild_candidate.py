@@ -4141,6 +4141,7 @@ def run_teacher_guided_repair_matrix(
     timeout_seconds: float = 240.0,
     command_runner: Any = run_command,
     repair_queue_runner: Any = run_teacher_guided_repair_queue,
+    sequential_accept_passed_variants: bool = False,
 ) -> dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
     candidates = queue_report.get("repair_candidates", []) or []
@@ -4195,6 +4196,7 @@ def run_teacher_guided_repair_matrix(
             sumo_binary=sumo_binary,
             timeout_seconds=timeout_seconds,
             command_runner=command_runner,
+            sequential_accept_passed_variants=sequential_accept_passed_variants,
         )
         road_continuity_summary = _road_continuity_probe_summary(run_report)
         probes.append(
@@ -4212,6 +4214,8 @@ def run_teacher_guided_repair_matrix(
                 if isinstance(run_report.get("semantic_layer_gate_counts"), dict)
                 else {},
                 "best_expanded_scope_net_file": str(run_report.get("best_expanded_scope_net_file", "")),
+                "composite_applied_candidate_count": run_report.get("composite_applied_candidate_count", 0),
+                "composite_net_file": str(run_report.get("composite_net_file", "")),
                 "run_report_file": str(run_report.get("run_report_file", "")),
                 "single_queue_file": str(single_queue_file),
             }
