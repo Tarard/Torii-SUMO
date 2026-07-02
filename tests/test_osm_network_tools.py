@@ -425,6 +425,10 @@ def test_osm_cleanup_workflow_applies_split_root_alias_repair_before_teacher_rep
     assert report["road_connectivity_seed_probe_status"] == "pass"
     assert report["road_connectivity_seed_probe_edge_delta_count"] == 0
     assert captured["plain_export_net_file"] == Path(report["road_connectivity_split_root_alias_repair_file"])
+    assert report["reference_visual_detail_comparison_net_file"] == report[
+        "road_connectivity_split_root_alias_repair_file"
+    ]
+    assert report["reference_visual_detail_comparison_selection_reason"] == "road_connectivity_seed_probe_promoted"
 
 
 def test_osm_cleanup_workflow_uses_improved_road_topology_replay_before_teacher_replay(tmp_path: Path) -> None:

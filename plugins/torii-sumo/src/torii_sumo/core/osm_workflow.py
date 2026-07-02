@@ -1338,6 +1338,20 @@ def _run_road_connectivity_replay_sequence(
     return replay_report, current_seed_probe_report, split_root_alias_repair_report, topology_replay_report
 
 
+def _road_connectivity_promoted_variant_file(
+    replay_report: Mapping[str, Any] | None,
+    split_root_alias_report: Mapping[str, Any] | None,
+    topology_replay_report: Mapping[str, Any] | None,
+) -> Path | None:
+    for report in (topology_replay_report, split_root_alias_report):
+        if report is None or report.get("status") != "pass":
+            continue
+        output_value = str(report.get("output_file", "")).strip()
+        if output_value and Path(output_value).exists():
+            return Path(output_value)
+    return _road_connectivity_best_variant_file(replay_report)
+
+
 def _road_connectivity_split_root_aliases(seed_probe_report: Mapping[str, Any] | None) -> list[dict[str, str]]:
     if seed_probe_report is None:
         return []
@@ -4627,6 +4641,20 @@ def run_osm_cleanup_workflow(
                 road_connectivity_seed_probe_func=road_connectivity_seed_probe_func,
                 road_connection_topology_replay_func=road_connection_topology_replay_func,
             )
+        if (
+            teacher_guided_repair_best_variant_file is None
+            and teacher_guided_direct_replay_best_variant_file is None
+            and road_connectivity_seed_probe_report is not None
+            and road_connectivity_seed_probe_report.get("status") == "pass"
+        ):
+            road_connectivity_promoted_variant_file = _road_connectivity_promoted_variant_file(
+                road_connectivity_replay_report,
+                road_connectivity_split_root_alias_repair_report,
+                road_connection_topology_replay_report,
+            )
+            if road_connectivity_promoted_variant_file is not None:
+                reference_visual_detail_comparison_net_file = road_connectivity_promoted_variant_file
+                reference_visual_detail_comparison_selection_reason = "road_connectivity_seed_probe_promoted"
     if (
         run_teacher_guided_repair_after_build
         and reference_net_file is not None
