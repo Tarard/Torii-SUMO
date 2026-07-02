@@ -11,7 +11,12 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
-from .junction_connection_audit import build_connection_signature, compare_tls_movement_signatures, write_connection_signature
+from .junction_connection_audit import (
+    build_connection_signature,
+    compare_pedestrian_crossing_signatures,
+    compare_tls_movement_signatures,
+    write_connection_signature,
+)
 from .junction_join_definition import build_junction_join_definition
 from .junction_movement_model import audit_movement_graph, build_movement_graph, write_movement_review
 from .junction_teacher_model import (
@@ -2874,8 +2879,21 @@ def build_teacher_guided_junction_variant(
         teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
         candidate_internal_scope_id=junction_id if replay_target_internal_subgraph else None,
     )
-    semantic_layer_gates = _semantic_layer_gates(semantic_gate, tls_movement_parity)
-    parity_gate_status = "pass" if semantic_gate["status"] == "pass" and tls_movement_parity["status"] == "pass" else "fail"
+    pedestrian_crossing_parity = compare_pedestrian_crossing_signatures(
+        teacher_net_file,
+        final_net_file,
+        teacher_junction_id,
+        junction_id,
+        teacher_edge_map=comparison_edge_map,
+    )
+    semantic_layer_gates = _semantic_layer_gates(semantic_gate, tls_movement_parity, pedestrian_crossing_parity)
+    parity_gate_status = (
+        "pass"
+        if semantic_gate["status"] == "pass"
+        and tls_movement_parity["status"] == "pass"
+        and pedestrian_crossing_parity["status"] == "pass"
+        else "fail"
+    )
     status = "pass" if sumo_report.get("status") == "pass" else "fail"
     return _write_teacher_guided_report(
         report_file,
@@ -2933,6 +2951,7 @@ def build_teacher_guided_junction_variant(
             "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
             "semantic_replay_gate": semantic_gate,
             "tls_movement_parity": tls_movement_parity,
+            "pedestrian_crossing_parity": pedestrian_crossing_parity,
             "semantic_layer_gates": semantic_layer_gates,
             "review_policy": "diagnostic teacher-guided variant; inspect in NetEdit connection mode before adoption",
         },
@@ -7501,6 +7520,7 @@ def _connection_touches_any_edge(connection: dict[str, Any], edge_ids: set[str])
 def _semantic_layer_gates(
     semantic_gate: dict[str, Any],
     tls_movement_parity: dict[str, Any],
+    pedestrian_crossing_parity: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     layers: dict[str, dict[str, Any]] = {
         name: {"status": "pass", "failure_count": 0, "failures": []}
@@ -7513,6 +7533,14 @@ def _semantic_layer_gates(
     if isinstance(tls_movement_parity, dict) and tls_movement_parity.get("status") != "pass":
         layers["movement_tls"]["failures"].append(
             {"report": "tls_movement_parity", "field": "status", "count": 1}
+        )
+    if isinstance(pedestrian_crossing_parity, dict) and pedestrian_crossing_parity.get("status") != "pass":
+        layers["pedestrian_bike"]["failures"].append(
+            {
+                "report": "pedestrian_crossing_parity",
+                "field": "status",
+                "count": _pedestrian_crossing_delta_count(pedestrian_crossing_parity),
+            }
         )
     for layer in layers.values():
         layer["failure_count"] = len(layer["failures"])
@@ -7532,6 +7560,19 @@ def _semantic_layer_for_field(field: str) -> str:
     if field.startswith(("approach", "junction", "incoming_vehicle_edge", "outgoing_vehicle_edge")):
         return "topology"
     return "uncategorized"
+
+
+def _pedestrian_crossing_delta_count(report: dict[str, Any]) -> int:
+    count = 0
+    for field in (
+        "teacher_only_normalized_edge_signatures",
+        "candidate_only_normalized_edge_signatures",
+        "teacher_only_normalized_connection_signatures",
+        "candidate_only_normalized_connection_signatures",
+    ):
+        values = report.get(field, [])
+        count += len(values) if isinstance(values, list) else 0
+    return max(1, count)
 
 
 def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
