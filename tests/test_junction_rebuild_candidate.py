@@ -2416,6 +2416,16 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
             "approach_integrity_status": "pass",
             "semantic_failure_counts": {},
             "semantic_layer_gate_counts": {"topology": {"pass": 1, "fail": 0, "failure_count": 0}},
+            "variant_reports": [
+                {
+                    "target_internal_replay": {
+                        "status": "pass",
+                        "same_family_continuation_edge_map_count": 2,
+                        "copied_boundary_continuation_connection_count": 1,
+                        "removed_stale_replaced_edge_connection_count": 0,
+                    }
+                }
+            ],
             "run_report_file": str(run_report),
             "best_expanded_scope_net_file": str(kwargs["output_dir"] / "expanded_scope.net.xml"),
         }
@@ -2446,6 +2456,12 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
     assert [call["queue_report"]["repair_candidates"][0]["junction_id"] for call in calls] == ["j2", "j1"]
     assert [call["queue_base_dir"] for call in calls] == [tmp_path / "queue_base", tmp_path / "queue_base"]
     assert [item["junction_id"] for item in report["probes"]] == ["j2", "j1"]
+    assert report["all_road_continuity_gate_pass"] is True
+    assert [item["road_continuity_gate_status"] for item in report["probes"]] == ["pass", "pass"]
+    assert report["probes"][0]["road_continuity_counts"] == {
+        "copied_boundary_continuation_connection_count": 1,
+        "same_family_continuation_edge_map_count": 2,
+    }
     assert Path(report["matrix_file"]).is_file()
 
 

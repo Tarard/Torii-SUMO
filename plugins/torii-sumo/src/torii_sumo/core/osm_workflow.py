@@ -5621,6 +5621,9 @@ def run_osm_cleanup_workflow(
         "teacher_guided_probe_matrix_all_promotion_gate_pass": False
         if teacher_guided_probe_matrix_report is None
         else bool(teacher_guided_probe_matrix_report.get("all_promotion_gate_pass", False)),
+        "teacher_guided_probe_matrix_all_road_continuity_gate_pass": False
+        if teacher_guided_probe_matrix_report is None
+        else bool(teacher_guided_probe_matrix_report.get("all_road_continuity_gate_pass", False)),
         "teacher_guided_probe_matrix_missing_junction_ids": []
         if teacher_guided_probe_matrix_report is None
         else teacher_guided_probe_matrix_report.get("missing_junction_ids", []),
