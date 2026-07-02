@@ -158,6 +158,11 @@ def test_skill_routes_osm_source_patterns_and_region_aware_temporal_baseline() -
     assert "SUMO osmGet/osmBuild" in source_reference
     assert "osm-to-xodr" in source_reference
     assert "Do not vendor external source code" in source_reference
+    assert "Observed OSM-to-SUMO Cleanup Profiles" in source_reference
+    assert "sumo-berlin" in source_reference
+    assert "MoSTScenario" in source_reference
+    assert "actrys" in source_reference
+    assert "not a substitute for TUM-style teacher replay" in source_reference
 
 
 def test_skill_routes_detector_constrained_demand_reconstruction() -> None:
