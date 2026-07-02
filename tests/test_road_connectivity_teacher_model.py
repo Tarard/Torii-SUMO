@@ -1643,6 +1643,63 @@ def test_write_internal_movement_owner_teacher_replay_candidate_returns_blocked_
     assert output_net.exists()
 
 
+def test_owner_teacher_replay_downgrades_stale_tls_connection_beyond_teacher_capacity(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="in_0" intLanes=":j_0_0"/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="out_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="remote_in" from="x" to="mid"><lane id="remote_in_0" index="0"/></edge>
+  <edge id="remote_out" from="mid" to="z"><lane id="remote_out_0" index="0"/></edge>
+  <edge id=":mid_0" function="internal"><lane id=":mid_0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="out_0"/>
+  <junction id="x" type="priority" x="0" y="10"/>
+  <junction id="mid" type="priority" x="10" y="10" incLanes="remote_in_0" intLanes=":mid_0_0"/>
+  <junction id="z" type="priority" x="20" y="10" incLanes="remote_out_0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" tl="j" linkIndex="0" dir="s" state="O"/>
+  <connection from="remote_in" to="remote_out" fromLane="0" toLane="0" via=":mid_0_0" tl="j" linkIndex="3" dir="s" state="O"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="30" state="GGGG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_internal_movement_owner_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+        copy_tls=True,
+    )
+
+    root = ET.parse(output_net).getroot()
+    stale_continuation = root.find("connection[@from='remote_in'][@to='remote_out']")
+    assert report["status"] == "pass"
+    assert stale_continuation is not None
+    assert "tl" not in stale_continuation.attrib
+    assert "linkIndex" not in stale_continuation.attrib
+    assert stale_continuation.attrib["uncontrolled"] == "true"
+    assert report["bundle_replay"]["downgraded_stale_tls_connection_count"] == 1
+
+
 def test_evaluate_road_template_repair_promotion_blocks_worsened_common_delta() -> None:
     before = {
         "gate": {
