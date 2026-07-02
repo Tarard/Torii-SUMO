@@ -2219,6 +2219,56 @@ def test_launch_netedit_opens_sumo_config_with_additional_files(tmp_path: Path) 
     assert calls == [["C:/SUMO/bin/netedit.exe", "--sumocfg-file", str(sumocfg_file)]]
 
 
+def test_launch_netedit_accepts_review_selection_view_and_window_options(tmp_path: Path) -> None:
+    from torii_sumo.core.netedit import launch_netedit
+
+    class FakeProcess:
+        pid = 34567
+
+    calls: list[list[str]] = []
+
+    def fake_popen(command, **_kwargs):
+        calls.append(command)
+        return FakeProcess()
+
+    sumocfg_file = tmp_path / "review.sumocfg"
+    selection_file = tmp_path / "target.selection.txt"
+    view_file = tmp_path / "target.view.xml"
+    for path in (sumocfg_file, selection_file, view_file):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    report = launch_netedit(
+        sumocfg_file,
+        gui_settings_file=view_file,
+        selection_file=selection_file,
+        window_size="1000,900",
+        window_pos="1020,0",
+        which_func=lambda _name: "C:/SUMO/bin/netedit.exe",
+        popen_func=fake_popen,
+    )
+
+    assert report["netedit_status"] == "opened"
+    assert report["netedit_gui_settings_file"] == str(view_file)
+    assert report["netedit_selection_file"] == str(selection_file)
+    assert report["netedit_window_size"] == "1000,900"
+    assert report["netedit_window_pos"] == "1020,0"
+    assert calls == [
+        [
+            "C:/SUMO/bin/netedit.exe",
+            "--sumocfg-file",
+            str(sumocfg_file),
+            "-g",
+            str(view_file),
+            "--selection-file",
+            str(selection_file),
+            "--window-size",
+            "1000,900",
+            "--window-pos",
+            "1020,0",
+        ]
+    ]
+
+
 def test_launch_sumo_gui_writes_minimal_config_and_starts_non_blocking_process(tmp_path: Path) -> None:
     from torii_sumo.core.sumo_gui import launch_sumo_gui
 

@@ -9,6 +9,10 @@ import subprocess
 def launch_netedit(
     net_file: Path,
     *,
+    gui_settings_file: Path | None = None,
+    selection_file: Path | None = None,
+    window_size: str | None = None,
+    window_pos: str | None = None,
     netedit_binary: str = "netedit",
     which_func: Callable[[str], str | None] = shutil.which,
     popen_func: Callable[..., Any] = subprocess.Popen,
@@ -40,6 +44,14 @@ def launch_netedit(
 
     open_mode = "sumocfg" if net_file.suffix.lower() == ".sumocfg" else "net"
     command = [resolved_binary, "--sumocfg-file" if open_mode == "sumocfg" else "-s", str(net_file)]
+    if gui_settings_file is not None:
+        command += ["-g", str(gui_settings_file)]
+    if selection_file is not None:
+        command += ["--selection-file", str(selection_file)]
+    if window_size:
+        command += ["--window-size", window_size]
+    if window_pos:
+        command += ["--window-pos", window_pos]
     try:
         process = popen_func(
             command,
@@ -58,6 +70,10 @@ def launch_netedit(
             "netedit_network_file": str(net_file),
             "netedit_input_file": str(net_file),
             "netedit_open_mode": open_mode,
+            "netedit_gui_settings_file": str(gui_settings_file) if gui_settings_file is not None else "",
+            "netedit_selection_file": str(selection_file) if selection_file is not None else "",
+            "netedit_window_size": window_size or "",
+            "netedit_window_pos": window_pos or "",
             "warnings": [f"{type(exc).__name__}: {exc}"],
         }
 
@@ -71,5 +87,9 @@ def launch_netedit(
         "netedit_network_file": str(net_file),
         "netedit_input_file": str(net_file),
         "netedit_open_mode": open_mode,
+        "netedit_gui_settings_file": str(gui_settings_file) if gui_settings_file is not None else "",
+        "netedit_selection_file": str(selection_file) if selection_file is not None else "",
+        "netedit_window_size": window_size or "",
+        "netedit_window_pos": window_pos or "",
         "warnings": [],
     }
