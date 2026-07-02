@@ -9,6 +9,9 @@ def test_readme_links_plugin_install_doc() -> None:
 
     assert "Codex Plugin Installation" in readme
     assert "docs/codex-plugin-install.md" in readme
+    assert "ARCHITECTURE.md" in readme
+    assert "evidence-aware" in readme
+    assert "reference-comparable" in readme
     assert "skills and MCP tools" in readme
     assert "docs/superpowers/specs/2026-06-20-torii-sumo-design.md" not in readme
     assert "docs/superpowers/plans/2026-06-20-torii-sumo.md" not in readme
@@ -94,6 +97,7 @@ def test_internal_superpowers_plans_are_not_public_release_content() -> None:
         assert "superpowers/specs" not in body
 
     manifest = (ROOT / "docs" / "release" / "public-repo-manifest.md").read_text(encoding="utf-8")
+    assert "ARCHITECTURE.md" in manifest
     assert "docs/superpowers/" in manifest
     assert "docs/superpowers/plans/" not in manifest
     assert "docs/superpowers/specs/" not in manifest

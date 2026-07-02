@@ -22,9 +22,9 @@
 
 </div>
 
-## One Prompt to a SUMO Network, Across Models
+## Evidence-Aware OSM-to-SUMO Construction
 
-Torii is designed for SUMO work: one short natural-language prompt can become a bounded OSM-to-SUMO network workflow with construction evidence, routeability checks, and a clear claim boundary.
+Torii is designed for SUMO network construction work: one short natural-language prompt can become a bounded, evidence-aware, reference-comparable OSM-to-SUMO workflow with construction evidence, routeability checks, review artifacts, and a clear claim boundary.
 
 The plugin now starts from a workflow router: `torii_auto_workflow` classifies the request, chooses skills, makes plans, and runs safe MCP steps to generate or modify the SUMO network for you.
 
@@ -34,6 +34,8 @@ Torii has two layers:
 |---|---|
 | Reasoning layer | SUMO expert skills that ask the right questions, choose a workflow, and bound claims. |
 | Execution layer | Local safe stdio MCP tools that run bounded SUMO checks and return structured observations. |
+
+The architecture is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md): router, planner, executor, and reviewer.
 
 Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, TLS aggregation review variants, connectivity checks, connected-core extraction, routeability probes, completion-aware routeability audits, overlapping top-level junction audits, reference join audits, junction aggregation review variants, and Netedit launch evidence.
 
@@ -45,7 +47,7 @@ Use the prompt to test Torii:
 Use Torii to clean the Ingolstadt city-center network from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, and open the cleaned network in Netedit.
 ```
 
-This demo now uses Ingolstadt city center to test whether a Torii OSM-cleaned network converges toward a manually cleaned reference network instead of treating OSM import success as enough.
+This demo uses Ingolstadt city center to test whether a Torii OSM-derived workflow becomes more auditable and closer to a manually cleaned reference network than raw import success alone.
 
 ![TUM bbox reference compared with Torii 5.5 TLS-aggregated visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
 
