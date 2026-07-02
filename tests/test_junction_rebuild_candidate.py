@@ -3137,6 +3137,232 @@ def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_par
     }
 
 
+def test_run_teacher_guided_repair_queue_fails_when_final_composite_request_matrix_regresses(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    for path in (raw_nodes, raw_edges, raw_connections):
+        path.write_text("<xml/>", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """
+<net>
+  <edge id="teacher_in" from="teacher_a" to="teacher_j"><lane id="teacher_in_0" index="0" speed="13.9" length="10" shape="0,0 10,0"/></edge>
+  <edge id="teacher_out" from="teacher_j" to="teacher_b"><lane id="teacher_out_0" index="0" speed="13.9" length="10" shape="10,0 20,0"/></edge>
+  <junction id="teacher_a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_b" type="priority" x="20" y="0" incLanes="teacher_out_0" intLanes=""/>
+  <junction id="teacher_j" type="traffic_light" x="10" y="0" incLanes="teacher_in_0" intLanes="" shape="9,-1 11,-1 11,1 9,1">
+    <request index="0" response="0" foes="10" cont="0"/>
+  </junction>
+  <tlLogic id="teacher_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="teacher_j" linkIndex="0" dir="s" state="O"/>
+</net>
+""".strip(),
+        encoding="utf-8",
+    )
+    candidate_net.write_text("<net/>", encoding="utf-8")
+
+    def fake_variant(**kwargs):
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+            "target_internal_replay": {
+                "status": "pass",
+                "effective_edge_map": {"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+            },
+            "semantic_layer_gates": {
+                "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
+                "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                "internal": {"status": "pass", "failure_count": 0, "failures": []},
+            },
+        }
+
+    def fake_restore(**kwargs):
+        output_file = kwargs["output_file"]
+        output_file.write_text(
+            """
+<net>
+  <edge id="candidate_in" from="candidate_a" to="candidate_j"><lane id="candidate_in_0" index="0" speed="13.9" length="10" shape="0,0 10,0"/></edge>
+  <edge id="candidate_out" from="candidate_j" to="candidate_b"><lane id="candidate_out_0" index="0" speed="13.9" length="10" shape="10,0 20,0"/></edge>
+  <junction id="candidate_a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="candidate_b" type="priority" x="20" y="0" incLanes="candidate_out_0" intLanes=""/>
+  <junction id="candidate_j" type="traffic_light" x="10" y="0" incLanes="candidate_in_0" intLanes="" shape="9,-1 11,-1 11,1 9,1">
+    <request index="0" response="0" foes="01" cont="0"/>
+  </junction>
+  <tlLogic id="candidate_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" tl="candidate_j" linkIndex="0" dir="s" state="O"/>
+</net>
+""".strip(),
+            encoding="utf-8",
+        )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "net_file": str(output_file),
+            "effective_edge_map": kwargs["edge_map"],
+        }
+
+    def fake_runner(command, *, cwd, timeout_seconds):
+        input_file = Path(cwd) / command[command.index("--sumo-net-file") + 1]
+        output_file = Path(cwd) / command[command.index("--output-file") + 1]
+        output_file.write_text(input_file.read_text(encoding="utf-8"), encoding="utf-8")
+
+        class Result:
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "candidate_j",
+                    "reference_id": "teacher_j",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        variant_builder=fake_variant,
+        final_internal_replay_writer=fake_restore,
+        command_runner=fake_runner,
+    )
+
+    assert report["final_composite_parity"]["status"] == "fail"
+    failures = report["final_composite_parity"]["reports"][0]["semantic_replay_gate"]["failures"]
+    assert {"report": "parity", "field": "request_signatures_mismatch_count", "count": 1} in failures
+    assert report["status"] == "fail"
+    assert report["parity_gate_status"] == "fail"
+    assert report["promotion_gate_status"] == "fail"
+
+
+def test_run_teacher_guided_repair_queue_restores_requests_after_final_canonicalize(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    for path in (raw_nodes, raw_edges, raw_connections):
+        path.write_text("<xml/>", encoding="utf-8")
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """
+<net>
+  <edge id="teacher_in" from="teacher_a" to="teacher_j"><lane id="teacher_in_0" index="0" speed="13.9" length="10" shape="0,0 10,0"/></edge>
+  <edge id="teacher_out" from="teacher_j" to="teacher_b"><lane id="teacher_out_0" index="0" speed="13.9" length="10" shape="10,0 20,0"/></edge>
+  <junction id="teacher_a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_b" type="priority" x="20" y="0" incLanes="teacher_out_0" intLanes=""/>
+  <junction id="teacher_j" type="traffic_light" x="10" y="0" incLanes="teacher_in_0" intLanes="" shape="9,-1 11,-1 11,1 9,1">
+    <request index="0" response="0" foes="10" cont="0"/>
+  </junction>
+  <tlLogic id="teacher_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="teacher_j" linkIndex="0" dir="s" state="O"/>
+</net>
+""".strip(),
+        encoding="utf-8",
+    )
+    candidate_net.write_text("<net/>", encoding="utf-8")
+
+    def candidate_xml(foes: str) -> str:
+        return f"""
+<net>
+  <edge id="candidate_in" from="candidate_a" to="candidate_j"><lane id="candidate_in_0" index="0" speed="13.9" length="10" shape="0,0 10,0"/></edge>
+  <edge id="candidate_out" from="candidate_j" to="candidate_b"><lane id="candidate_out_0" index="0" speed="13.9" length="10" shape="10,0 20,0"/></edge>
+  <junction id="candidate_a" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="candidate_b" type="priority" x="20" y="0" incLanes="candidate_out_0" intLanes=""/>
+  <junction id="candidate_j" type="traffic_light" x="10" y="0" incLanes="candidate_in_0" intLanes="" shape="9,-1 11,-1 11,1 9,1">
+    <request index="0" response="0" foes="{foes}" cont="0"/>
+  </junction>
+  <tlLogic id="candidate_j" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" tl="candidate_j" linkIndex="0" dir="s" state="O"/>
+</net>
+""".strip()
+
+    def fake_variant(**kwargs):
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text(candidate_xml("10"), encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+            "target_internal_replay": {
+                "status": "pass",
+                "effective_edge_map": {"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+            },
+            "semantic_layer_gates": {
+                "topology": {"status": "pass", "failure_count": 0, "failures": []},
+                "movement_tls": {"status": "pass", "failure_count": 0, "failures": []},
+                "pedestrian_bike": {"status": "pass", "failure_count": 0, "failures": []},
+                "internal": {"status": "pass", "failure_count": 0, "failures": []},
+            },
+        }
+
+    def fake_restore(**kwargs):
+        output_file = kwargs["output_file"]
+        output_file.write_text(candidate_xml("10"), encoding="utf-8")
+        return {"status": "pass", "claim_status": "diagnostic-demo", "net_file": str(output_file)}
+
+    def fake_runner(command, *, cwd, timeout_seconds):
+        output_file = Path(cwd) / command[command.index("--output-file") + 1]
+        output_file.write_text(candidate_xml("01" if "canonical" in output_file.name else "10"), encoding="utf-8")
+
+        class Result:
+            def to_dict(self):
+                return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+        return Result()
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "candidate_j",
+                    "reference_id": "teacher_j",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+                },
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        sequential_accept_passed_variants=True,
+        variant_builder=fake_variant,
+        final_internal_replay_writer=fake_restore,
+        command_runner=fake_runner,
+    )
+
+    root = ET.parse(report["composite_net_file"]).getroot()
+    assert root.find("junction[@id='candidate_j']/request").attrib["foes"] == "10"
+    failures = report["final_composite_parity"]["reports"][0]["semantic_replay_gate"]["failures"]
+    assert not [failure for failure in failures if failure["field"] == "request_signatures_mismatch_count"]
+
+
 def test_run_teacher_guided_repair_queue_passes_reference_id_as_teacher_junction_id(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
