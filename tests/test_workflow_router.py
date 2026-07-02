@@ -367,6 +367,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         network_profile="reference_matched",
         reference_net_file=str(tmp_path / "reference.net.xml"),
         teacher_guided_repair_max_ready_candidates=2,
+        teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         launch_netedit_after_build=False,
         launch_sumo_gui_after_build=False,
     )
@@ -374,6 +375,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
     assert report["status"] == "pass"
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
     assert captured["teacher_guided_repair_max_ready_candidates"] == 2
+    assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
     assert captured["launch_netedit_after_build"] is False
     assert captured["launch_sumo_gui_after_build"] is False
 
@@ -381,8 +383,10 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
 def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path) -> None:
     reference_net_file = tmp_path / "tum-reference.net.xml"
     _write_reference_net(reference_net_file)
+    captured = {}
 
-    def fake_cleanup(**_kwargs):
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -397,6 +401,13 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "teacher_guided_repair_application_scope": "single_best_variant",
             "teacher_guided_repair_applied_candidate_count": 1,
             "teacher_guided_repair_unapplied_pass_candidate_count": 4,
+            "teacher_guided_probe_matrix_status": "pass",
+            "teacher_guided_probe_matrix_file": str(tmp_path / "probe_matrix.json"),
+            "teacher_guided_probe_matrix_probe_count": 2,
+            "teacher_guided_probe_matrix_all_parity_gate_pass": True,
+            "teacher_guided_probe_matrix_all_promotion_gate_pass": True,
+            "teacher_guided_probe_matrix_all_road_continuity_gate_pass": True,
+            "teacher_guided_probe_matrix_missing_junction_ids": [],
             "post_teacher_tls_connection_repair_movement_rebuild_run_status": "pass",
             "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status": "pass",
             "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file": str(
@@ -441,6 +452,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
         bbox="11.413800,48.755391,11.433800,48.775391",
         reference_net_file=reference_net_file,
         teacher_guided_repair_max_ready_candidates=1,
+        teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         cleanup_workflow_func=fake_cleanup,
     )
 
@@ -467,7 +479,17 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     )
     assert report["reference_matched_semantics_workflow"]["movement_rebuild_applied_candidate_count"] == 1
     assert report["reference_matched_semantics_workflow"]["configured_max_ready_candidates"] == 1
+    assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
     assert report["teacher_guided_repair_configured_max_ready_candidates"] == 1
+    assert report["reference_matched_semantics_workflow"]["probe_matrix"] == {
+        "status": "pass",
+        "matrix_file": str(tmp_path / "probe_matrix.json"),
+        "probe_count": 2,
+        "all_parity_gate_pass": True,
+        "all_promotion_gate_pass": True,
+        "all_road_continuity_gate_pass": True,
+        "missing_junction_ids": [],
+    }
     assert report["reference_matched_semantics_workflow"]["semantic_layer_gate_counts"] == {
         "topology": {"pass": 1, "fail": 0, "failure_count": 0},
         "movement_tls": {"pass": 1, "fail": 0, "failure_count": 0},
