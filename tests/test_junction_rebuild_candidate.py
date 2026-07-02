@@ -2422,7 +2422,12 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
                         "status": "pass",
                         "same_family_continuation_edge_map_count": 2,
                         "copied_boundary_continuation_connection_count": 1,
-                        "removed_stale_replaced_edge_connection_count": 0,
+                        "copied_boundary_edges": ["edge_a"],
+                        "removed_stale_replaced_edge_connection_count": 2,
+                        "removed_stale_replaced_edge_connections": [
+                            {"from": ":j_w0", "to": "edge_b"},
+                            {"from": "edge_a", "to": "edge_c"},
+                        ],
                     }
                 }
             ],
