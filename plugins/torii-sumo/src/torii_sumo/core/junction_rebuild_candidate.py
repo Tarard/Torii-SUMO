@@ -467,10 +467,12 @@ def write_teacher_connection_plan(
     edge_map: dict[str, str],
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     candidate_edge_file: Path | None = None,
+    crossing_node_ids: set[str] | None = None,
     emit_crossings: bool = True,
     teacher_internal_scope_id: str | None = None,
 ) -> dict[str, object]:
     crossing_edge_overrides = crossing_edge_overrides or {}
+    crossing_node_ids = crossing_node_ids or set()
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     incoming = _approach_edges(candidate_model, "incoming")
@@ -485,6 +487,7 @@ def write_teacher_connection_plan(
         present_candidate_edges = set(patched_lane_counts)
         incoming = [edge for edge in incoming if edge in present_candidate_edges]
         outgoing = [edge for edge in outgoing if edge in present_candidate_edges]
+    crossing_edge_endpoints = _plain_edge_endpoints(candidate_edge_file) if candidate_edge_file is not None else {}
 
     root = ET.Element("connections")
     kept = 0
@@ -587,6 +590,7 @@ def write_teacher_connection_plan(
 
     emitted_crossings = 0
     skipped_crossings = []
+    crossing_node_rewrites = []
     if emit_crossings:
         for crossing in teacher_model.get("crossings", []) or []:
             if not isinstance(crossing, dict):
@@ -603,7 +607,26 @@ def write_teacher_connection_plan(
             if not crossing_edges:
                 skipped_crossings.append(crossing_id)
                 continue
-            ET.SubElement(root, "crossing", {"node": junction_id, "edges": " ".join(crossing_edges), "priority": "1", "width": "4.00"})
+            crossing_node_id = _plain_crossing_node_id(
+                junction_id,
+                crossing_edges,
+                crossing_edge_endpoints,
+                crossing_node_ids,
+            )
+            if crossing_node_id != junction_id:
+                crossing_node_rewrites.append(
+                    {
+                        "crossing_id": crossing_id,
+                        "from": junction_id,
+                        "to": crossing_node_id,
+                        "edges": crossing_edges,
+                    }
+                )
+            ET.SubElement(
+                root,
+                "crossing",
+                {"node": crossing_node_id, "edges": " ".join(crossing_edges), "priority": "1", "width": "4.00"},
+            )
             emitted_crossings += 1
 
     ET.indent(root, space="    ")
@@ -622,11 +645,32 @@ def write_teacher_connection_plan(
         "emitted_crossing_count": emitted_crossings,
         "emit_crossings": emit_crossings,
         "skipped_crossings": skipped_crossings,
+        "crossing_node_rewrite_count": len(crossing_node_rewrites),
+        "crossing_node_rewrites": crossing_node_rewrites,
         "lane_clamp_count": len(lane_clamps),
         "lane_clamps": lane_clamps,
         "skipped_off_scope_internal_connection_count": len(skipped_off_scope_internal_connections),
         "skipped_off_scope_internal_connections": skipped_off_scope_internal_connections,
     }
+
+
+def _plain_crossing_node_id(
+    default_junction_id: str,
+    crossing_edges: list[str],
+    edge_endpoints: dict[str, tuple[str, str]],
+    crossing_node_ids: set[str],
+) -> str:
+    if not crossing_edges or not edge_endpoints or not crossing_node_ids:
+        return default_junction_id
+    shared_node_ids: set[str] | None = None
+    for edge_id in crossing_edges:
+        endpoints = set(edge_endpoints.get(edge_id, ())) & crossing_node_ids
+        if not endpoints:
+            return default_junction_id
+        shared_node_ids = endpoints if shared_node_ids is None else shared_node_ids & endpoints
+        if not shared_node_ids:
+            return default_junction_id
+    return sorted(shared_node_ids)[0] if shared_node_ids else default_junction_id
 
 
 def write_teacher_lane_patch_edges(
@@ -993,8 +1037,12 @@ def write_teacher_pedestrian_ring_net(
             root.remove(connection)
             removed_connections += 1
 
+    edge_ids = {edge.attrib["id"] for edge in root.findall("edge") if edge.attrib.get("id")}
+    lane_counts = _net_lane_counts(root)
     inserted_connections = 0
     skipped_connections = []
+    skipped_missing_edge_connections = []
+    skipped_invalid_lane_connections = []
     for connection in teacher_model.get("pedestrian_connections", []) or []:
         if not isinstance(connection, dict):
             continue
@@ -1002,6 +1050,17 @@ def write_teacher_pedestrian_ring_net(
         mapped_to = _map_teacher_pedestrian_endpoint(str(connection.get("to", "")), walkingarea_map, crossing_map, edge_map)
         if not mapped_from or not mapped_to:
             skipped_connections.append(connection)
+            continue
+        if mapped_from not in edge_ids or mapped_to not in edge_ids:
+            skipped_connections.append(connection)
+            skipped_missing_edge_connections.append(
+                {
+                    "from": mapped_from,
+                    "to": mapped_to,
+                    "teacher_from": str(connection.get("from", "")),
+                    "teacher_to": str(connection.get("to", "")),
+                }
+            )
             continue
         attributes = {
             "from": mapped_from,
@@ -1015,6 +1074,10 @@ def write_teacher_pedestrian_ring_net(
             attributes["tl"] = junction_id
         if connection.get("linkIndex"):
             attributes["linkIndex"] = str(connection["linkIndex"])
+        if not _connection_lane_indices_valid(ET.Element("connection", attributes), lane_counts):
+            skipped_connections.append(connection)
+            skipped_invalid_lane_connections.append(attributes)
+            continue
         root.append(ET.Element("connection", attributes))
         inserted_connections += 1
 
@@ -1046,6 +1109,10 @@ def write_teacher_pedestrian_ring_net(
         "inserted_pedestrian_connection_count": inserted_connections,
         "skipped_pedestrian_connection_count": len(skipped_connections),
         "skipped_pedestrian_connections": skipped_connections,
+        "skipped_pedestrian_connection_missing_edge_count": len(skipped_missing_edge_connections),
+        "skipped_pedestrian_connection_missing_edges": skipped_missing_edge_connections,
+        "skipped_pedestrian_connection_invalid_lane_count": len(skipped_invalid_lane_connections),
+        "skipped_pedestrian_connection_invalid_lanes": skipped_invalid_lane_connections,
     }
 
 
@@ -2515,6 +2582,7 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         crossing_edge_overrides=crossing_edge_overrides,
         candidate_edge_file=patched_edge_file,
+        crossing_node_ids=_joined_source_node_ids(raw_node_file, junction_id),
         emit_crossings=emit_teacher_crossings and not replay_target_internal_subgraph,
         teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
     )
@@ -3072,9 +3140,29 @@ def _candidate_requests_target_internal_replay(candidate: dict[str, Any]) -> boo
         "tum_like_topology_fragmented_cluster_candidate",
     }:
         return True
+    if learned_rule == "tum_like_join_candidate":
+        teacher_pattern_key = str(candidate.get("teacher_pattern_key", ""))
+        return "control=traffic_light" in teacher_pattern_key or any(
+            _teacher_pattern_metric_is_positive(teacher_pattern_key, metric)
+            for metric in ("tls", "ped", "internal", "requests")
+        )
     if learned_rule == "tum_like_same_id_pattern_candidate":
         mismatch_fields = {str(item) for item in candidate.get("junction_pattern_mismatch_fields", []) or []}
         return bool(mismatch_fields & {"internal_function_counts", "request_signatures", "junction_signature"})
+    return False
+
+
+def _teacher_pattern_metric_is_positive(pattern_key: str, metric: str) -> bool:
+    prefix = f"{metric}="
+    for part in pattern_key.split("|"):
+        if not part.startswith(prefix):
+            continue
+        for token in part[len(prefix) :].replace("/", ":").split(":"):
+            try:
+                if int(token) > 0:
+                    return True
+            except ValueError:
+                continue
     return False
 
 
@@ -7168,8 +7256,17 @@ def _restore_non_target_internal_artifacts(
     if removed_connections:
         target_root[:] = retained_children
     target_edge_ids = {edge.attrib["id"] for edge in target_root.findall("edge") if edge.attrib.get("id")}
+    target_lane_counts = _net_lane_counts(target_root)
+    lane_ids = {
+        lane.attrib["id"]
+        for edge in target_root.findall("edge")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
     source_connections = []
     skipped_missing_edge_connections = []
+    skipped_invalid_lane_connections = []
+    skipped_missing_via_lane_connections = []
     for connection in source_root.findall("connection"):
         if not connection_restored(connection):
             continue
@@ -7177,6 +7274,17 @@ def _restore_non_target_internal_artifacts(
         to_edge = connection.attrib.get("to", "")
         if from_edge not in target_edge_ids or to_edge not in target_edge_ids:
             skipped_missing_edge_connections.append(
+                {key: connection.attrib.get(key, "") for key in ("from", "to", "via")}
+            )
+            continue
+        if not _connection_lane_indices_valid(connection, target_lane_counts):
+            skipped_invalid_lane_connections.append(
+                {key: connection.attrib.get(key, "") for key in ("from", "to", "fromLane", "toLane", "via")}
+            )
+            continue
+        via_lane = connection.attrib.get("via", "")
+        if via_lane and via_lane not in lane_ids:
+            skipped_missing_via_lane_connections.append(
                 {key: connection.attrib.get(key, "") for key in ("from", "to", "via")}
             )
             continue
@@ -7190,12 +7298,6 @@ def _restore_non_target_internal_artifacts(
     }
     tl_logic_report = _copy_referenced_tllogics(source_root, target_root, restored_tls_ids)
 
-    lane_ids = {
-        lane.attrib["id"]
-        for edge in target_root.findall("edge")
-        for lane in edge.findall("lane")
-        if lane.attrib.get("id")
-    }
     restored_normal_junction_attr_count = 0
     restored_request_count = 0
     target_junctions = {
@@ -7203,11 +7305,13 @@ def _restore_non_target_internal_artifacts(
         for junction in target_root.findall("junction")
         if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
     }
+    restored_source_normal_junction_ids = set()
     for source_junction in source_root.findall("junction"):
         junction_id = source_junction.attrib.get("id", "")
         target_junction = target_junctions.get(junction_id)
         if not junction_id or junction_id in exclude_junction_ids or target_junction is None:
             continue
+        restored_source_normal_junction_ids.add(junction_id)
 
         source_inc_lanes = source_junction.attrib.get("incLanes", "").split()
         source_int_lanes = source_junction.attrib.get("intLanes", "").split()
@@ -7249,6 +7353,40 @@ def _restore_non_target_internal_artifacts(
             target_junction.append(ET.Element("request", dict(request.attrib)))
             restored_request_count += 1
 
+    for junction_id, target_junction in target_junctions.items():
+        if junction_id in exclude_junction_ids or junction_id in restored_source_normal_junction_ids:
+            continue
+        current_inc_lanes = target_junction.attrib.get("incLanes", "").split()
+        current_int_lanes = target_junction.attrib.get("intLanes", "").split()
+        current_requests = list(target_junction.findall("request"))
+        filtered_inc_lanes = [lane for lane in current_inc_lanes if lane in lane_ids]
+        filtered_int_lanes = [lane for lane in current_int_lanes if lane in lane_ids]
+        current_matrix_is_valid = all(lane in lane_ids for lane in current_int_lanes) and len(current_requests) in {
+            0,
+            len(current_int_lanes),
+        }
+        requests_to_keep = (
+            current_requests
+            if current_matrix_is_valid or len(current_requests) in {0, len(filtered_int_lanes)}
+            else []
+        )
+        new_attrs = dict(target_junction.attrib)
+        new_attrs["incLanes"] = " ".join(filtered_inc_lanes)
+        new_attrs["intLanes"] = (
+            target_junction.attrib.get("intLanes", "") if current_matrix_is_valid else " ".join(filtered_int_lanes)
+        )
+        attrs_changed = dict(target_junction.attrib) != new_attrs
+        requests_changed = len(requests_to_keep) != len(current_requests)
+        if not attrs_changed and not requests_changed:
+            continue
+        target_junction.attrib.clear()
+        target_junction.attrib.update(new_attrs)
+        for request in current_requests:
+            target_junction.remove(request)
+        for request in requests_to_keep:
+            target_junction.append(ET.Element("request", dict(request.attrib)))
+        restored_normal_junction_attr_count += 1
+
     if (
         removed_internal_edges
         or removed_internal_junctions
@@ -7276,6 +7414,10 @@ def _restore_non_target_internal_artifacts(
         "restored_non_target_internal_connection_count": len(source_connections),
         "skipped_non_target_internal_connection_missing_edge_count": len(skipped_missing_edge_connections),
         "skipped_non_target_internal_connection_missing_edges": skipped_missing_edge_connections,
+        "skipped_non_target_internal_connection_invalid_lane_count": len(skipped_invalid_lane_connections),
+        "skipped_non_target_internal_connection_invalid_lanes": skipped_invalid_lane_connections,
+        "skipped_non_target_internal_connection_missing_via_lane_count": len(skipped_missing_via_lane_connections),
+        "skipped_non_target_internal_connection_missing_via_lanes": skipped_missing_via_lane_connections,
         "restored_non_target_normal_junction_attr_count": restored_normal_junction_attr_count,
         "restored_non_target_request_count": restored_request_count,
         "restored_non_target_tllogic_count": (
