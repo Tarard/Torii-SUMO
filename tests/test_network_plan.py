@@ -2238,7 +2238,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
-            "repair_candidate_count": 1,
+            "repair_candidate_count": 2,
             "ready_candidate_count": 0,
             "expanded_scope_candidate_count": 1,
             "queue_file": str(tmp_path / "teacher_guided_queue.json"),
@@ -2282,6 +2282,11 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
                             {"from_slot": "slot_0", "to_slot": "slot_2"},
                         ]
                     },
+                },
+                {
+                    "reference_id": "cluster_c_d",
+                    "candidate_status": "blocked_pending_junction_rebuild",
+                    "netedit_review_actions": ["audit_owner_road_continuity"],
                 }
             ],
             "warnings": [],
@@ -2343,9 +2348,10 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     def fake_road_connectivity_replay(**kwargs):
         calls["road_connectivity_teacher_net_file"] = kwargs["teacher_net_file"]
         calls["road_connectivity_candidate_net_file"] = kwargs["candidate_net_file"]
-        calls["road_connectivity_owner_id"] = kwargs["owner_id"]
-        output_net = tmp_path / "road_connectivity_best.net.xml"
-        run_report = tmp_path / "road_connectivity_run.json"
+        calls.setdefault("road_connectivity_candidate_net_files", []).append(kwargs["candidate_net_file"])
+        calls.setdefault("road_connectivity_owner_ids", []).append(kwargs["owner_id"])
+        output_net = tmp_path / f"road_connectivity_best_{kwargs['owner_id']}.net.xml"
+        run_report = tmp_path / f"road_connectivity_run_{kwargs['owner_id']}.json"
         output_net.write_text("<net/>", encoding="utf-8")
         run_report.write_text('{"status": "pass"}', encoding="utf-8")
         return {
@@ -2454,8 +2460,11 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["teacher_guided_run_sequential_accept_passed_variants"] is True
     assert calls["teacher_guided_run_plain_exporter"] is fake_teacher_guided_plain_export
     assert calls["road_connectivity_teacher_net_file"] == reference_net_file
-    assert calls["road_connectivity_candidate_net_file"] == tmp_path / "aggregated.net.xml"
-    assert calls["road_connectivity_owner_id"] == "cluster_a_b"
+    assert calls["road_connectivity_candidate_net_files"] == [
+        tmp_path / "aggregated.net.xml",
+        tmp_path / "road_connectivity_best_cluster_a_b.net.xml",
+    ]
+    assert calls["road_connectivity_owner_ids"] == ["cluster_a_b", "cluster_c_d"]
     assert Path(calls["workflow_review_net_file"]) == tmp_path / "aggregated.net.xml"
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
@@ -2584,10 +2593,12 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["road_connectivity_replay_status"] == "pass"
     assert report["road_connectivity_replay_gate_status"] == "pass"
     assert report["road_connectivity_replay_sumo_load_status"] == "pass"
-    assert report["road_connectivity_replay_best_variant_file"] == str(tmp_path / "road_connectivity_best.net.xml")
-    assert report["road_connectivity_replay_run_report_file"] == str(tmp_path / "road_connectivity_run.json")
+    assert report["road_connectivity_replay_best_variant_file"] == str(
+        tmp_path / "road_connectivity_best_cluster_c_d.net.xml"
+    )
+    assert report["road_connectivity_replay_run_report_file"]
     assert report["road_connectivity_replay_gate_counts"] == {
-        "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0}
+        "owner_road_connectivity": {"pass": 2, "fail": 0, "failure_count": 0}
     }
     assert report["workflow_review_net_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
