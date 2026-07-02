@@ -2842,6 +2842,45 @@ def test_run_teacher_guided_repair_queue_replays_same_id_internal_mismatch_candi
     assert variant_calls[0]["replay_target_internal_subgraph"] is True
 
 
+def test_run_teacher_guided_repair_queue_replays_same_id_tls_internal_template_candidate(tmp_path: Path) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    variant_calls = []
+
+    def fake_variant(**kwargs):
+        variant_calls.append(kwargs)
+        return {"status": "pass", "claim_status": "diagnostic-demo", "parity_gate_status": "pass"}
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "junction_id": "same_id_tls",
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "learned_rule": "tum_like_same_id_tls_candidate",
+                    "teacher_pattern_key": "four_way|control=traffic_light|tls=13/6|ped=3/3|internal=12/14|requests=13",
+                    "edge_map": {"teacher_in": "cand_in"},
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fake_variant,
+    )
+
+    assert report["status"] == "pass"
+    assert variant_calls[0]["replay_target_internal_subgraph"] is True
+
+
 def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plain_export(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
