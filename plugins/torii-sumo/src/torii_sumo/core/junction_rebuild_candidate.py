@@ -3596,7 +3596,16 @@ def run_teacher_guided_repair_queue(
                 and not scope_report.get("blocking_missing_blocked_edge_ids")
                 and not scope_report.get("blocking_missing_joined_scope_junction_ids")
             )
-            if use_full_network_join_patch_replay and joined_scope_junction_id in _plain_node_ids(current_raw_node_file):
+            join_patch_joined_node_ids = _join_patch_joined_node_ids(join_patch_file)
+            can_replace_stale_joined_node = (
+                joined_scope_junction_id == junction_id
+                and joined_scope_junction_id in join_patch_joined_node_ids
+            )
+            if (
+                use_full_network_join_patch_replay
+                and joined_scope_junction_id in _plain_node_ids(current_raw_node_file)
+                and not can_replace_stale_joined_node
+            ):
                 skipped_candidates.append(
                     {
                         "index": index,
@@ -3607,6 +3616,11 @@ def run_teacher_guided_repair_queue(
                     }
                 )
                 continue
+            replaced_stale_joined_node_ids = sorted(
+                join_patch_joined_node_ids & _plain_node_ids(current_raw_node_file)
+            )
+            if can_replace_stale_joined_node and replaced_stale_joined_node_ids:
+                scope_report["full_network_join_replaced_stale_joined_node_ids"] = replaced_stale_joined_node_ids
             if (
                 scope_report.get("status") == "pass"
                 and (scope_report.get("netconvert") or {}).get("status") == "pass"
@@ -5041,10 +5055,20 @@ def write_expanded_scope_plain_inputs(
                 rewritten_endpoint_count += 1
         edge_root.append(copied_edge)
 
-    node_root = ET.Element("nodes")
-    for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
-        node_root.append(copy.deepcopy(raw_nodes[node_id]))
     join_node_ids = sorted(node_id for node_id in join_seed_node_ids if node_id in raw_nodes)
+    if len(join_node_ids) >= 2:
+        joined_scope_junction_id = _sumo_joined_cluster_id(join_node_ids)
+    elif core_junction_id in raw_nodes:
+        joined_scope_junction_id = core_junction_id
+    else:
+        joined_scope_junction_id = ""
+
+    node_root = ET.Element("nodes")
+    stale_joined_node_ids = {joined_scope_junction_id} if len(join_node_ids) >= 2 and joined_scope_junction_id else set()
+    for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
+        if node_id in stale_joined_node_ids:
+            continue
+        node_root.append(copy.deepcopy(raw_nodes[node_id]))
     if len(join_node_ids) >= 2:
         join_definition = build_junction_join_definition(
             [
@@ -5060,13 +5084,10 @@ def write_expanded_scope_plain_inputs(
             output_dir=output_dir,
             prefix="expanded_scope",
         )
-        joined_scope_junction_id = _sumo_joined_cluster_id(join_node_ids)
     elif core_junction_id in raw_nodes:
         join_definition = {}
-        joined_scope_junction_id = core_junction_id
     else:
         join_definition = {}
-        joined_scope_junction_id = ""
 
     connection_root = ET.Element("connections")
     selected_edge_endpoints = {
@@ -5198,12 +5219,29 @@ def _write_replay_node_file(node_file: Path, join_patch_file: Path, output_file:
     joins = [copy.deepcopy(join) for join in join_root.findall("join")]
     if not joins:
         return node_file
+    stale_joined_node_ids = _join_patch_joined_node_ids(join_patch_file)
+    for node in list(node_root.findall("node")):
+        if node.attrib.get("id") in stale_joined_node_ids:
+            node_root.remove(node)
     for join in joins:
         node_root.append(join)
     ET.indent(node_root, space="    ")
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(node_root).write(output_file, encoding="utf-8", xml_declaration=True)
     return output_file
+
+
+def _join_patch_joined_node_ids(join_patch_file: Path) -> set[str]:
+    try:
+        join_root = ET.parse(join_patch_file).getroot()
+    except (ET.ParseError, OSError):
+        return set()
+    joined_node_ids = set()
+    for join in join_root.findall("join"):
+        node_ids = [node_id for node_id in join.attrib.get("nodes", "").split() if node_id]
+        if len(node_ids) >= 2:
+            joined_node_ids.add(_sumo_joined_cluster_id(node_ids))
+    return joined_node_ids
 
 
 def _write_join_scope_connection_file(
