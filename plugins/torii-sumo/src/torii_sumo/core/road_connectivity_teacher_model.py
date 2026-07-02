@@ -1164,14 +1164,33 @@ def write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
         candidate_net_file,
         owner_id=owner_id,
     )
-    ready_candidates = [
+    owner_mapped_edge_ids = set(
+        build_internal_movement_owner_approach_edge_map(
+            teacher_net_file,
+            candidate_net_file,
+            owner_id=owner_id,
+        )["edge_map"].values()
+    )
+    all_ready_candidates = [
         candidate for candidate in repair_candidates if candidate.get("status") == "ready"
+    ]
+    skipped_owner_terminal_candidates = [
+        candidate
+        for candidate in all_ready_candidates
+        if set(candidate.get("remove_edge_ids", [])) & owner_mapped_edge_ids
+    ]
+    ready_candidates = [
+        candidate
+        for candidate in all_ready_candidates
+        if not set(candidate.get("remove_edge_ids", [])) & owner_mapped_edge_ids
     ][:max_ready_spans]
     blocked_candidates = [
         candidate for candidate in repair_candidates if candidate.get("status") == "blocked"
     ]
     road_span_file = output_file.with_name(f"{output_file.stem}_road_spans{output_file.suffix}")
     warnings = []
+    if skipped_owner_terminal_candidates:
+        warnings.append("skipped_owner_terminal_road_span_candidate")
 
     if ready_candidates:
         road_span_repair = write_internal_movement_owner_road_span_repair_candidate(
@@ -1249,6 +1268,7 @@ def write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
         "road_span_file": str(road_span_file),
         "selected_ready_road_span_candidate_count": len(ready_candidates),
         "skipped_blocked_road_span_candidate_count": len(blocked_candidates),
+        "skipped_owner_terminal_road_span_candidate_count": len(skipped_owner_terminal_candidates),
         "replayed_endpoint_owner_ids": replay_owner_ids,
         "road_span_repair": road_span_repair,
         "endpoint_replay_reports": endpoint_replay_reports,
@@ -2800,7 +2820,7 @@ def _candidate_approach_edge_chain(
 
 
 def _bidirectional_span_key(edge_id: str) -> str:
-    return _split_edge_root(edge_id).lstrip("-")
+    return edge_id.lstrip("-")
 
 
 def _candidate_chain_intermediate_junction_ids(
