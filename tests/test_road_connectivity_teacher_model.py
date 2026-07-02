@@ -2357,6 +2357,48 @@ def test_write_road_connection_topology_replay_candidate_adds_safe_missing_conne
     }
 
 
+def test_road_connection_topology_replay_does_not_treat_turnaround_as_normal_movement(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate_replayed.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <edge id="-out" from="b" to="j"><lane id="-out_0" index="0" allow="passenger"/></edge>
+  <edge id="next" from="b" to="c"><lane id="next_0" index="0" allow="passenger"/></edge>
+  <connection from="out" to="-out" fromLane="0" toLane="0" dir="t"/>
+  <connection from="out" to="next" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <edge id="-out" from="b" to="j"><lane id="-out_0" index="0" allow="passenger"/></edge>
+  <edge id="next" from="b" to="c"><lane id="next_0" index="0" allow="passenger"/></edge>
+  <connection from="out" to="-out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    audit = build_road_connection_topology_replay_audit(teacher_net, candidate_net)
+    report = write_road_connection_topology_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+    )
+
+    root = ET.parse(output_net).getroot()
+    assert audit["already_present_connection_count"] == 1
+    assert audit["replayable_connection_count"] == 1
+    assert audit["replayable_connections"][0]["dir"] == "s"
+    assert report["added_connection_count"] == 1
+    assert root.find("connection[@from='out'][@to='-out'][@dir='t']") is not None
+    assert root.find("connection[@from='out'][@to='next'][@dir='s']") is not None
+
+
 def test_write_internal_movement_owner_replay_candidate_adds_only_target_owner(
     tmp_path: Path,
 ) -> None:

@@ -36,6 +36,7 @@ from .road_connectivity_teacher_model import (
     canonical_road_connectivity_bundle,
     compare_road_connectivity_bundles,
     write_internal_movement_owner_layered_teacher_replay_candidate,
+    write_road_connection_topology_replay_candidate,
     write_road_connectivity_split_root_alias_repair_candidate,
 )
 from .reference_scope import audit_reference_scope, build_scope_pruning_variant
@@ -1125,6 +1126,60 @@ def _run_road_connectivity_split_root_alias_repair(
         "seed_probe_improved": improved,
     }
     report_file = output_dir / f"{prefix}_split_root_alias_repair.json"
+    report["report_file"] = str(report_file)
+    report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
+def _run_road_connection_topology_replay(
+    *,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    seed_probe_report: Mapping[str, Any] | None,
+    seed_edge_ids: list[str],
+    output_dir: Path,
+    prefix: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / f"{prefix}_road_connection_topology_replayed.net.xml"
+    replay = write_road_connection_topology_replay_candidate(
+        teacher_net_file,
+        candidate_net_file,
+        output_file,
+    )
+    sumo_load = _sumo_load_net(
+        output_file,
+        output_dir=output_dir / "sumo_load",
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+        command_runner=command_runner,
+    )
+    seed_probe = None
+    improved = False
+    if str(sumo_load.get("status", "fail")) == "pass":
+        seed_probe = _run_road_connectivity_seed_probe(
+            teacher_net_file=teacher_net_file,
+            candidate_net_file=output_file,
+            seed_edge_ids=seed_edge_ids,
+            output_dir=output_dir / "seed_probe",
+            prefix=f"{prefix}_road_connection_topology_seed_probe",
+        )
+        improved = _road_connectivity_seed_probe_improved(seed_probe_report, seed_probe)
+    report = {
+        "status": "pass" if improved else "fail",
+        "claim_status": "diagnostic-demo",
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "replay": replay,
+        "sumo_load": sumo_load,
+        "sumo_load_status": str(sumo_load.get("status", "fail")),
+        "seed_probe": seed_probe or {},
+        "seed_probe_improved": improved,
+    }
+    report_file = output_dir / f"{prefix}_road_connection_topology_replay.json"
     report["report_file"] = str(report_file)
     report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
@@ -2405,6 +2460,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_direct_replay_func: Callable[..., dict[str, Any]] = _run_direct_local_teacher_replay,
     road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
     road_connectivity_seed_probe_func: Callable[..., dict[str, Any]] = _run_road_connectivity_seed_probe,
+    road_connection_topology_replay_func: Callable[..., dict[str, Any]] = _run_road_connection_topology_replay,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
@@ -2733,6 +2789,7 @@ def run_osm_cleanup_workflow(
     road_connectivity_replay_report: dict[str, Any] | None = None
     road_connectivity_seed_probe_report: dict[str, Any] | None = None
     road_connectivity_split_root_alias_repair_report: dict[str, Any] | None = None
+    road_connection_topology_replay_report: dict[str, Any] | None = None
     teacher_guided_repair_best_variant_file: Path | None = None
     teacher_guided_replay_source_net_file: Path | None = None
     teacher_guided_direct_replay_report: dict[str, Any] | None = None
@@ -3611,6 +3668,34 @@ def run_osm_cleanup_workflow(
                         road_connectivity_seed_probe_report = dict(
                             road_connectivity_split_root_alias_repair_report.get("seed_probe", {})
                         )
+                road_connection_topology_source_net_file = (
+                    Path(str(road_connectivity_split_root_alias_repair_report["output_file"]))
+                    if road_connectivity_split_root_alias_repair_report is not None
+                    and road_connectivity_split_root_alias_repair_report.get("status") == "pass"
+                    and road_connectivity_split_root_alias_repair_report.get("output_file")
+                    else road_connectivity_replay_variant_file
+                )
+                if (
+                    road_connectivity_seed_edge_ids
+                    and road_connection_topology_source_net_file is not None
+                    and road_connectivity_seed_probe_report is not None
+                    and str(road_connectivity_seed_probe_report.get("status", "fail")) != "pass"
+                ):
+                    road_connection_topology_replay_report = road_connection_topology_replay_func(
+                        teacher_net_file=reference_net_file,
+                        candidate_net_file=road_connection_topology_source_net_file,
+                        seed_probe_report=road_connectivity_seed_probe_report,
+                        seed_edge_ids=road_connectivity_seed_edge_ids,
+                        output_dir=output_dir / "road_connection_topology_replay",
+                        prefix=f"{prefix}_road_connection_topology",
+                        sumo_binary=sumo_binary,
+                        timeout_seconds=timeout_seconds,
+                        command_runner=command_runner,
+                    )
+                    if road_connection_topology_replay_report.get("status") == "pass":
+                        road_connectivity_seed_probe_report = dict(
+                            road_connection_topology_replay_report.get("seed_probe", {})
+                        )
             if _teacher_guided_queue_has_replay_candidates(teacher_guided_repair_queue_report):
                 road_connectivity_split_alias_variant_file = (
                     Path(str(road_connectivity_split_root_alias_repair_report["output_file"]))
@@ -3619,8 +3704,16 @@ def run_osm_cleanup_workflow(
                     and road_connectivity_split_root_alias_repair_report.get("output_file")
                     else None
                 )
+                road_connection_topology_variant_file = (
+                    Path(str(road_connection_topology_replay_report["output_file"]))
+                    if road_connection_topology_replay_report is not None
+                    and road_connection_topology_replay_report.get("status") == "pass"
+                    and road_connection_topology_replay_report.get("output_file")
+                    else None
+                )
                 teacher_guided_replay_source_net_file = (
-                    road_connectivity_split_alias_variant_file
+                    road_connection_topology_variant_file
+                    or road_connectivity_split_alias_variant_file
                     or _road_connectivity_best_variant_file(road_connectivity_replay_report)
                     or reference_visual_detail_comparison_net_file
                     or reference_join_audit_candidate_net_file
@@ -5949,6 +6042,15 @@ def run_osm_cleanup_workflow(
         "road_connectivity_split_root_alias_repair_report_file": ""
         if road_connectivity_split_root_alias_repair_report is None
         else str(road_connectivity_split_root_alias_repair_report.get("report_file", "")),
+        "road_connection_topology_replay_status": "skipped"
+        if road_connection_topology_replay_report is None
+        else str(road_connection_topology_replay_report.get("status", "fail")),
+        "road_connection_topology_replay_file": ""
+        if road_connection_topology_replay_report is None
+        else str(road_connection_topology_replay_report.get("output_file", "")),
+        "road_connection_topology_replay_report_file": ""
+        if road_connection_topology_replay_report is None
+        else str(road_connection_topology_replay_report.get("report_file", "")),
         "road_connectivity_seed_probe_status": "skipped"
         if road_connectivity_seed_probe_report is None
         else str(road_connectivity_seed_probe_report.get("status", "fail")),
@@ -6404,6 +6506,7 @@ def run_osm_cleanup_workflow(
         "teacher_guided_probe_matrix": teacher_guided_probe_matrix_report or {},
         "road_connectivity_replay": road_connectivity_replay_report or {},
         "road_connectivity_split_root_alias_repair": road_connectivity_split_root_alias_repair_report or {},
+        "road_connection_topology_replay": road_connection_topology_replay_report or {},
         "road_connectivity_seed_probe": road_connectivity_seed_probe_report or {},
         "teacher_guided_direct_replay": teacher_guided_direct_replay_report or {},
         "teacher_guided_direct_replay_reference_delta": teacher_guided_direct_replay_reference_delta_report or {},
