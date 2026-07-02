@@ -6335,6 +6335,24 @@ def _approaches(model: dict[str, object], direction: str) -> list[dict[str, Any]
     return [edge for edge in approaches.get(direction, []) or [] if isinstance(edge, dict)]
 
 
+def _stale_case_edge_map_entries(
+    case_edge_map: dict[str, str],
+    teacher_model: dict[str, object],
+    candidate_model: dict[str, object],
+    approach_edge_map: dict[str, str],
+) -> dict[str, str]:
+    stale: dict[str, str] = {}
+    for direction in ("incoming", "outgoing"):
+        teacher_edge_ids = {str(edge.get("edge_id", "")) for edge in _approaches(teacher_model, direction)}
+        candidate_edge_ids = {str(edge.get("edge_id", "")) for edge in _approaches(candidate_model, direction)}
+        for teacher_edge_id, candidate_edge_id in case_edge_map.items():
+            if teacher_edge_id in approach_edge_map:
+                continue
+            if teacher_edge_id in teacher_edge_ids and candidate_edge_id not in candidate_edge_ids:
+                stale[teacher_edge_id] = candidate_edge_id
+    return dict(sorted(stale.items()))
+
+
 def _conservative_join_node_ids(candidate_node_ids: list[str], matched_source_node_ids: set[str]) -> list[str]:
     matched = [node_id for node_id in candidate_node_ids if node_id in matched_source_node_ids]
     if len(matched) >= 2:
@@ -6474,6 +6492,12 @@ def _teacher_guided_repair_candidate(
             if junction.attrib.get("id")
         },
     )
+    stale_case_edge_map = _stale_case_edge_map_entries(
+        case_edge_map,
+        teacher_model,
+        candidate_model,
+        provisional_edge_map,
+    )
     edge_map = _teacher_candidate_edge_map(
         teacher_model,
         candidate_model,
@@ -6498,6 +6522,44 @@ def _teacher_guided_repair_candidate(
         blocked_teacher_edge_ids=uncopyable_missing,
         fallback_junction_ids=scope_node_ids,
     )
+    if stale_case_edge_map:
+        stale_endpoint_ids = sorted(
+            {
+                endpoint
+                for edge_id in stale_case_edge_map.values()
+                if (edge := candidate_edges_by_id.get(edge_id)) is not None
+                for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+                if endpoint and endpoint != candidate_junction_id
+            }
+        )
+        existing_scope = case.get("expanded_rebuild_scope", {})
+        if isinstance(existing_scope, dict) and existing_scope:
+            existing_junction_ids = [
+                str(item) for item in existing_scope.get("junction_ids", []) or [] if str(item)
+            ]
+            existing_join_junction_ids = [
+                str(item) for item in existing_scope.get("join_junction_ids", []) or [] if str(item)
+            ]
+            expanded_rebuild_scope = {
+                **existing_scope,
+                "status": "review",
+                "junction_ids": sorted(dict.fromkeys([candidate_junction_id, *existing_junction_ids])),
+                "join_junction_ids": sorted(dict.fromkeys([candidate_junction_id, *existing_join_junction_ids])),
+                "reason": "case edge map points outside candidate junction approaches",
+                "stale_case_edge_map_ids": stale_case_edge_map,
+            }
+        else:
+            expanded_rebuild_scope = {
+                "status": "review",
+                "recommended_action": "rebuild_plain_xml_scope",
+                "core_junction_id": candidate_junction_id,
+                "junction_ids": sorted(dict.fromkeys([candidate_junction_id, *scope_node_ids, *stale_endpoint_ids])),
+                "join_junction_ids": list(dict.fromkeys(join_node_ids or [candidate_junction_id])),
+                "blocked_teacher_edge_ids": sorted(stale_case_edge_map),
+                "missing_desired_endpoint_ids": [],
+                "reason": "case edge map points outside candidate junction approaches",
+                "stale_case_edge_map_ids": stale_case_edge_map,
+            }
     if str(case.get("learned_rule", "")) == "tum_like_turnaround_only_lane_candidate" and missing:
         missing_endpoint_ids = sorted(
             {
@@ -6554,6 +6616,7 @@ def _teacher_guided_repair_candidate(
         "movement_exemplar": movement_exemplar,
         "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
         "expanded_rebuild_scope": expanded_rebuild_scope,
+        "stale_case_edge_map_ids": stale_case_edge_map,
         "missing_teacher_edge_ids": missing,
         "copyable_missing_teacher_edge_ids": copyable_missing,
         "uncopyable_missing_teacher_edge_ids": uncopyable_missing,
