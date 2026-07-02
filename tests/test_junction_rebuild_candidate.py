@@ -6749,6 +6749,48 @@ def test_teacher_target_replay_preserves_existing_candidate_edge_geometry(tmp_pa
     assert edge.find("lane").attrib["shape"] == "0,0 8,30"
 
 
+def test_teacher_target_replay_keeps_teacher_boundary_geometry_without_anchor(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="tj"><lane id="teacher_in_0" index="0" shape="90,50 100,50"/></edge>
+  <edge id="teacher_out" from="tj" to="n" shape="100,50 110,50"><lane id="teacher_out_0" index="0" shape="100,50 110,50"/></edge>
+  <edge id=":tj_0" function="internal"><lane id=":tj_0_0" index="0" shape="100,50 101,50"/></edge>
+  <junction id="tj" type="traffic_light" x="100" y="50" incLanes="teacher_in_0" intLanes=":tj_0_0"/>
+  <junction id="n" type="priority" x="110" y="50" incLanes="" intLanes=""/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":tj_0_0" tl="tj" linkIndex="0" dir="s" state="O"/>
+  <tlLogic id="tj" type="static" programID="0" offset="0"><phase duration="1" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="cand_in" from="a" to="cj"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="cand_out" from="cj" to="n" shape="0,0 8,3"><lane id="cand_out_0" index="0" shape="0,0 8,3"/></edge>
+  <junction id="cj" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
+  <junction id="n" type="priority" x="8" y="3" incLanes="" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="cj",
+        teacher_junction_id="tj",
+        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+    )
+
+    edge = ET.parse(report["net_file"]).getroot().find("edge[@id='cand_out']")
+    assert edge is not None
+    assert edge.attrib["shape"] == "0.00,0.00 10.00,0.00"
+    assert edge.find("lane").attrib["shape"] == "0.00,0.00 10.00,0.00"
+
+
 def test_teacher_target_replay_joins_stale_split_fragment_geometry(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -9456,6 +9498,56 @@ def test_write_teacher_target_internal_replay_net_preserves_colliding_teacher_bo
     assert report["removed_stale_boundary_edges"] == ["out"]
     assert report["removed_stale_boundary_edge_connection_count"] == 1
     assert report["removed_stale_replaced_edge_connection_count"] == 1
+
+
+def test_write_teacher_target_internal_replay_net_maps_same_family_continuation_edge(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="mid" type="highway.primary">
+    <lane id="road#0_0" index="0" shape="0,0 10,0"/>
+    <lane id="road#0_1" index="1" shape="0,1 10,1"/>
+  </edge>
+  <edge id="road#1" from="mid" to="b" type="highway.primary">
+    <lane id="road#1_0" index="0" shape="10,0 20,0"/>
+    <lane id="road#1_1" index="1" shape="10,1 20,1"/>
+  </edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="mid" type="priority" x="10" y="0" incLanes="road#0_0 road#0_1" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="road#1_0 road#1_1" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#0" from="j" to="mid" type="highway.primary">
+    <lane id="road#0_0" index="0" shape="0,0 10,0"/>
+    <lane id="road#0_1" index="1" shape="0,1 10,1"/>
+  </edge>
+  <edge id="road#3" from="mid" to="b" type="highway.primary">
+    <lane id="road#3_0" index="0" shape="10,0 20,0"/>
+    <lane id="road#3_1" index="1" shape="10,1 20,1"/>
+  </edge>
+  <junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="mid" type="priority" x="10" y="0" incLanes="road#0_0 road#0_1" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="road#3_0 road#3_1" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "replayed.net.xml",
+        junction_id="j",
+        edge_map={"road#0": "road#0"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["effective_edge_map"]["road#1"] == "road#3"
 
 
 def test_write_teacher_target_internal_replay_net_removes_replaced_boundary_connection_with_stale_lane_index(

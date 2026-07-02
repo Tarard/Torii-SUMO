@@ -1402,6 +1402,14 @@ def write_teacher_target_internal_replay_net(
         if mapped_edge_id in needed_boundary_edge_id_set or mapped_boundary_counts[mapped_edge_id] > 1:
             replay_edge_map[edge_id] = edge_id
             preserved_colliding_boundary_edges.append(edge_id)
+    same_family_continuation_edge_map = _same_family_continuation_edge_map(
+        teacher_edges,
+        candidate_edges_by_id,
+        replay_edge_map,
+        teacher_junction_id=teacher_junction_id,
+        candidate_junction_id=junction_id,
+    )
+    replay_edge_map.update(same_family_continuation_edge_map)
     for edge_id in needed_boundary_edge_ids:
         teacher_edge = teacher_edges[edge_id]
         mapped_from = junction_id if teacher_edge.attrib.get("from") == teacher_junction_id else teacher_edge.attrib.get("from", "")
@@ -1447,12 +1455,13 @@ def write_teacher_target_internal_replay_net(
         insert_at = insert_index + boundary_insert_offset
         if replaced_edge is not None:
             replaced_boundary_source_edges[copied_edge_id] = copy.deepcopy(replaced_edge)
-            _restore_existing_edge_geometry(
-                copied_edge,
-                replaced_edge,
-                candidate_root,
-                max_endpoint_delta=None if copied_edge_id in geometry_anchor_edge_ids else 5.0,
-            )
+            if copied_edge_id in geometry_anchor_edge_ids:
+                _restore_existing_edge_geometry(
+                    copied_edge,
+                    replaced_edge,
+                    candidate_root,
+                    max_endpoint_delta=None,
+                )
             insert_at = list(candidate_root).index(replaced_edge)
             _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
             candidate_root.remove(replaced_edge)
@@ -1618,12 +1627,13 @@ def write_teacher_target_internal_replay_net(
             teacher_junction_id,
             junction_id,
         )
-        _restore_existing_edge_geometry(
-            copied_edge,
-            existing_edge,
-            candidate_root,
-            max_endpoint_delta=None if candidate_edge_id in geometry_anchor_edge_ids else 5.0,
-        )
+        if candidate_edge_id in geometry_anchor_edge_ids:
+            _restore_existing_edge_geometry(
+                copied_edge,
+                existing_edge,
+                candidate_root,
+                max_endpoint_delta=None,
+            )
         insert_at = list(candidate_root).index(existing_edge)
         _remove_edge_lanes_from_destination_junction(candidate_root, existing_edge, all_junctions=True)
         candidate_root.remove(existing_edge)
@@ -2263,6 +2273,8 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_split_tllogic_ids": removed_stale_split_tllogic_ids,
         "preserved_colliding_boundary_edge_count": len(preserved_colliding_boundary_edges),
         "preserved_colliding_boundary_edges": preserved_colliding_boundary_edges,
+        "same_family_continuation_edge_map_count": len(same_family_continuation_edge_map),
+        "same_family_continuation_edge_map": dict(sorted(same_family_continuation_edge_map.items())),
         "removed_stale_boundary_edge_count": len(removed_stale_boundary_edges),
         "removed_stale_boundary_edges": removed_stale_boundary_edges,
         "removed_stale_boundary_edge_connection_count": len(removed_stale_boundary_edge_connections),
@@ -5929,6 +5941,91 @@ def _edge_is_vehicle_continuation_candidate(edge: ET.Element) -> bool:
         & {"passenger", "private", "bus", "coach", "truck", "motorcycle", "moped", "taxi", "delivery", "emergency"}
         for lane in edge.findall("lane")
     )
+
+
+def _same_family_continuation_edge_map(
+    teacher_edges: dict[str, ET.Element],
+    candidate_edges_by_id: dict[str, ET.Element],
+    edge_map: dict[str, str],
+    *,
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+) -> dict[str, str]:
+    frontier_endpoints_by_family: dict[str, set[str]] = {}
+    used_candidate_edge_ids = {candidate_id for candidate_id in edge_map.values() if candidate_id}
+    for teacher_edge_id, candidate_edge_id in edge_map.items():
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        candidate_edge = candidate_edges_by_id.get(candidate_edge_id)
+        if (
+            teacher_edge is None
+            or candidate_edge is None
+            or teacher_edge_id.startswith(":")
+            or _signed_edge_family_id(teacher_edge_id) != _signed_edge_family_id(candidate_edge_id)
+            or not _edge_is_vehicle_continuation_candidate(teacher_edge)
+            or not _edge_is_vehicle_continuation_candidate(candidate_edge)
+        ):
+            continue
+        family_id = _signed_edge_family_id(teacher_edge_id)
+        frontier_endpoints_by_family.setdefault(family_id, set()).update(
+            {
+                _mapped_junction_ref(teacher_edge.attrib.get("from", ""), teacher_junction_id, candidate_junction_id),
+                _mapped_junction_ref(teacher_edge.attrib.get("to", ""), teacher_junction_id, candidate_junction_id),
+            }
+        )
+    if not frontier_endpoints_by_family:
+        return {}
+
+    candidate_edges_by_signature: dict[tuple[str, str, str], list[str]] = {}
+    for candidate_edge_id, candidate_edge in candidate_edges_by_id.items():
+        if candidate_edge_id.startswith(":") or not _edge_is_vehicle_continuation_candidate(candidate_edge):
+            continue
+        candidate_edges_by_signature.setdefault(
+            (
+                _signed_edge_family_id(candidate_edge_id),
+                candidate_edge.attrib.get("from", ""),
+                candidate_edge.attrib.get("to", ""),
+            ),
+            [],
+        ).append(candidate_edge_id)
+
+    additions: dict[str, str] = {}
+    for teacher_edge_id, teacher_edge in sorted(teacher_edges.items()):
+        if (
+            teacher_edge_id in edge_map
+            or teacher_edge_id.startswith(":")
+            or not _edge_is_vehicle_continuation_candidate(teacher_edge)
+        ):
+            continue
+        family_id = _signed_edge_family_id(teacher_edge_id)
+        frontier_endpoints = frontier_endpoints_by_family.get(family_id, set())
+        if not frontier_endpoints:
+            continue
+        desired_from = _mapped_junction_ref(teacher_edge.attrib.get("from", ""), teacher_junction_id, candidate_junction_id)
+        desired_to = _mapped_junction_ref(teacher_edge.attrib.get("to", ""), teacher_junction_id, candidate_junction_id)
+        if not desired_from or not desired_to or not ({desired_from, desired_to} & frontier_endpoints):
+            continue
+        candidate_ids = [
+            candidate_edge_id
+            for candidate_edge_id in candidate_edges_by_signature.get((family_id, desired_from, desired_to), [])
+            if candidate_edge_id not in used_candidate_edge_ids
+            and _edge_type_signature(candidate_edges_by_id[candidate_edge_id]) == _edge_type_signature(teacher_edge)
+            and _edge_lane_count(candidate_edges_by_id[candidate_edge_id]) == _edge_lane_count(teacher_edge)
+        ]
+        unique_candidate_ids = sorted(set(candidate_ids))
+        if len(unique_candidate_ids) != 1:
+            continue
+        candidate_edge_id = unique_candidate_ids[0]
+        additions[teacher_edge_id] = candidate_edge_id
+        used_candidate_edge_ids.add(candidate_edge_id)
+    return additions
+
+
+def _edge_lane_count(edge: ET.Element) -> int:
+    return max(1, len(edge.findall("lane")))
+
+
+def _edge_type_signature(edge: ET.Element) -> str:
+    return edge.attrib.get("type", "")
 
 
 def _command_path(path: Path, cwd: Path) -> str:
