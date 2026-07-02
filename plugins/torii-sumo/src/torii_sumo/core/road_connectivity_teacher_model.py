@@ -1257,6 +1257,53 @@ def write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
     }
 
 
+def write_internal_movement_owner_layered_teacher_replay_candidate(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    *,
+    owner_id: str,
+    copy_tls: bool = False,
+    max_ready_spans: int = 1,
+) -> dict[str, Any]:
+    owner_replay_file = output_file.with_name(f"{output_file.stem}_owner_replay{output_file.suffix}")
+    owner_replay_report = write_internal_movement_owner_teacher_replay_candidate(
+        teacher_net_file,
+        candidate_net_file,
+        owner_replay_file,
+        owner_id=owner_id,
+        copy_tls=copy_tls,
+    )
+    road_span_endpoint_replay_report = write_internal_movement_owner_ready_road_span_endpoint_replay_candidate(
+        teacher_net_file,
+        owner_replay_file,
+        output_file,
+        owner_id=owner_id,
+        copy_tls=copy_tls,
+        max_ready_spans=max_ready_spans,
+    )
+    return {
+        "status": (
+            "pass"
+            if owner_replay_report.get("status") == "pass"
+            and road_span_endpoint_replay_report.get("status") == "pass"
+            else "fail"
+        ),
+        "claim_status": "diagnostic-demo",
+        "repair_scope": "layered_internal_movement_owner_teacher_replay",
+        "owner_id": owner_id,
+        "copy_tls": copy_tls,
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_file": str(output_file),
+        "owner_replay_file": str(owner_replay_file),
+        "owner_replay_report": owner_replay_report,
+        "road_span_endpoint_replay_report": road_span_endpoint_replay_report,
+        "owner_road_connectivity_audit": road_span_endpoint_replay_report["owner_road_connectivity_audit"],
+        "warnings": [],
+    }
+
+
 def build_internal_movement_owner_road_lane_repair_candidates(
     teacher_net_file: Path,
     candidate_net_file: Path,
