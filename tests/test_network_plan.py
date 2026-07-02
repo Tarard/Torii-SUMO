@@ -2302,6 +2302,29 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
             "warnings": [],
         }
 
+    def fake_road_connectivity_replay(**kwargs):
+        calls["road_connectivity_teacher_net_file"] = kwargs["teacher_net_file"]
+        calls["road_connectivity_candidate_net_file"] = kwargs["candidate_net_file"]
+        calls["road_connectivity_owner_id"] = kwargs["owner_id"]
+        output_net = tmp_path / "road_connectivity_best.net.xml"
+        run_report = tmp_path / "road_connectivity_run.json"
+        output_net.write_text("<net/>", encoding="utf-8")
+        run_report.write_text('{"status": "pass"}', encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "output_file": str(output_net),
+            "run_report_file": str(run_report),
+            "sumo_load_status": "pass",
+            "owner_road_connectivity_audit": {
+                "status": "pass",
+                "gate": {
+                    "lane_delta_count": 0,
+                    "missing_non_turnaround_outgoing_count": 0,
+                },
+            },
+        }
+
     def fake_review_html(**kwargs):
         calls["workflow_review_net_file"] = kwargs["net_file"]
         return {
@@ -2371,6 +2394,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         teacher_guided_repair_queue_func=fake_teacher_guided_repair_queue,
         teacher_guided_plain_export_func=fake_teacher_guided_plain_export,
         teacher_guided_repair_run_func=fake_teacher_guided_repair_run,
+        road_connectivity_replay_func=fake_road_connectivity_replay,
         review_html_func=fake_review_html,
     )
 
@@ -2391,6 +2415,9 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["teacher_guided_run_max_ready_candidates"] == 80
     assert calls["teacher_guided_run_sequential_accept_passed_variants"] is True
     assert calls["teacher_guided_run_plain_exporter"] is fake_teacher_guided_plain_export
+    assert calls["road_connectivity_teacher_net_file"] == reference_net_file
+    assert calls["road_connectivity_candidate_net_file"] == tmp_path / "aggregated.net.xml"
+    assert calls["road_connectivity_owner_id"] == "cluster_a_b"
     assert Path(calls["workflow_review_net_file"]) == tmp_path / "aggregated.net.xml"
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
@@ -2516,8 +2543,17 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         }
     ]
     assert report["teacher_guided_repair_run_report_file"] == str(tmp_path / "teacher_guided_run.json")
+    assert report["road_connectivity_replay_status"] == "pass"
+    assert report["road_connectivity_replay_gate_status"] == "pass"
+    assert report["road_connectivity_replay_sumo_load_status"] == "pass"
+    assert report["road_connectivity_replay_best_variant_file"] == str(tmp_path / "road_connectivity_best.net.xml")
+    assert report["road_connectivity_replay_run_report_file"] == str(tmp_path / "road_connectivity_run.json")
+    assert report["road_connectivity_replay_gate_counts"] == {
+        "owner_road_connectivity": {"pass": 1, "fail": 0, "failure_count": 0}
+    }
     assert report["workflow_review_net_file"] == str(tmp_path / "aggregated.net.xml")
     assert report["gate_status"]["junction_pattern_index"] == "pass"
+    assert report["gate_status"]["road_connectivity_parity"] == "pass"
     assert report["gate_status"]["connection_semantics_parity"] == "pass"
     assert report["gate_status"]["tls_semantics_parity"] == "pass"
     assert report["gate_status"]["internal_junction_parity"] == "blocked"
