@@ -47,6 +47,27 @@ def test_compile_intersection_to_plain_defines_approach_highway_types(tmp_path: 
     assert 'id="highway.footway"' in type_text
 
 
+def test_compile_intersection_to_plain_disables_auto_turnarounds(monkeypatch, tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    captured = {}
+    monkeypatch.setattr("torii_sumo.intersection.compile_plain.shutil.which", lambda _name: "netconvert")
+
+    def fake_run(command, **_kwargs):
+        captured["command"] = command
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.compile_plain.subprocess.run", fake_run)
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=True)
+
+    assert artifacts.net_file
+    assert "--no-turnarounds" in captured["command"]
+
+
 def _build_ir(osm_file: Path) -> IntersectionIR:
     patch = parse_osm_xml(osm_file)
     core = infer_intersection_core(patch)
