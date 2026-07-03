@@ -178,6 +178,101 @@ def test_infer_control_model_includes_known_bicycle_support_movements() -> None:
     assert support.movement_id in control.link_index_map
 
 
+def test_infer_control_model_keeps_one_same_way_bicycle_support_turnaround() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph)
+    support_a = approaches[0].model_copy(
+        update={"approach_id": "support_a", "source_way_ids": ["cycleway_1"], "allowed_modes": {"bicycle"}}
+    )
+    support_b = approaches[1].model_copy(
+        update={"approach_id": "support_b", "source_way_ids": ["cycleway_1"], "allowed_modes": {"bicycle"}}
+    )
+    support_ab = Movement(
+        movement_id="support_a_to_support_b",
+        from_approach_id="support_a",
+        to_approach_id="support_b",
+        road_pair_relation_id="support_pair",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:same_way_support_path"],
+        confidence=1.0,
+    )
+    support_ba = support_ab.model_copy(
+        update={
+            "movement_id": "support_b_to_support_a",
+            "from_approach_id": "support_b",
+            "to_approach_id": "support_a",
+        }
+    )
+    matrix = matrix.model_copy(
+        update={
+            "movements": [*matrix.movements, support_ab, support_ba],
+            "legal_movement_count": matrix.legal_movement_count + 2,
+            "inferred_movement_count": matrix.inferred_movement_count + 2,
+        }
+    )
+
+    control = infer_control_model(patch, core, [*approaches, support_a, support_b], matrix)
+
+    controlled_support = {support_ab.movement_id, support_ba.movement_id} & set(control.link_index_map)
+    assert controlled_support == {support_ab.movement_id}
+
+
+def test_infer_control_model_keeps_one_mixed_support_feeder_to_same_bike_corridor() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph)
+    feeder = approaches[0].model_copy(
+        update={"approach_id": "feeder", "source_way_ids": ["feeder_path"], "allowed_modes": {"bicycle", "pedestrian"}}
+    )
+    bike_a = approaches[1].model_copy(
+        update={"approach_id": "bike_a", "source_way_ids": ["cycleway_1"], "allowed_modes": {"bicycle"}}
+    )
+    bike_b = approaches[2].model_copy(
+        update={"approach_id": "bike_b", "source_way_ids": ["cycleway_1"], "allowed_modes": {"bicycle"}}
+    )
+    feeder_to_a = Movement(
+        movement_id="feeder_to_bike_a",
+        from_approach_id="feeder",
+        to_approach_id="bike_a",
+        road_pair_relation_id="support_pair_a",
+        turn="right",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:mixed_support_feeder"],
+        confidence=1.0,
+    )
+    feeder_to_b = feeder_to_a.model_copy(
+        update={
+            "movement_id": "feeder_to_bike_b",
+            "to_approach_id": "bike_b",
+            "road_pair_relation_id": "support_pair_b",
+        }
+    )
+    matrix = matrix.model_copy(
+        update={
+            "movements": [*matrix.movements, feeder_to_a, feeder_to_b],
+            "legal_movement_count": matrix.legal_movement_count + 2,
+            "inferred_movement_count": matrix.inferred_movement_count + 2,
+        }
+    )
+
+    control = infer_control_model(patch, core, [*approaches, feeder, bike_a, bike_b], matrix)
+
+    controlled_support = {feeder_to_a.movement_id, feeder_to_b.movement_id} & set(control.link_index_map)
+    assert controlled_support == {feeder_to_a.movement_id}
+
+
 def test_infer_movement_matrix_does_not_allow_cross_mode_movements() -> None:
     patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
     patch.nodes["bike"] = OSMNode(id="bike", lat=48.00075, lon=11.00035, x=100.0, y=100.0)
