@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -959,11 +960,13 @@ def build_internal_movement_owner_approach_edge_map(
     candidate_net_file: Path,
     *,
     owner_id: str,
+    candidate_owner_id: str | None = None,
 ) -> dict[str, Any]:
+    candidate_owner_id = candidate_owner_id or owner_id
     teacher_root = ET.parse(teacher_net_file).getroot()
     candidate_root = ET.parse(candidate_net_file).getroot()
     teacher_edges = _owner_external_approach_edges(teacher_root, owner_id)
-    candidate_edges = _owner_external_approach_edges(candidate_root, owner_id)
+    candidate_edges = _owner_external_approach_edges(candidate_root, candidate_owner_id)
     teacher_edge_nodes = {
         edge.attrib.get("id", ""): edge
         for edge in teacher_root.findall("edge")
@@ -975,14 +978,18 @@ def build_internal_movement_owner_approach_edge_map(
         if edge.attrib.get("id")
     }
     candidate_index: dict[tuple[str, str], list[str]] = {}
+    candidate_osm_way_index: dict[tuple[str, str], list[str]] = {}
     for edge_id, direction in candidate_edges.items():
         candidate_index.setdefault((direction, _split_edge_root(edge_id)), []).append(edge_id)
+        candidate_osm_way_index.setdefault((direction, _osm_way_edge_root(edge_id)), []).append(edge_id)
 
     edge_map = {}
     ambiguous_teacher_edges = []
     unmapped_teacher_edges = []
     for teacher_edge_id, direction in sorted(teacher_edges.items()):
         matches = sorted(candidate_index.get((direction, _split_edge_root(teacher_edge_id)), []))
+        if not matches:
+            matches = sorted(candidate_osm_way_index.get((direction, _osm_way_edge_root(teacher_edge_id)), []))
         if len(matches) == 1:
             endpoint_matches = _same_terminal_endpoint_matches(
                 teacher_edge_nodes.get(teacher_edge_id),
@@ -1024,6 +1031,7 @@ def build_internal_movement_owner_approach_edge_map(
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "owner_id": owner_id,
+        "candidate_owner_id": candidate_owner_id,
         "mapped_edge_count": len(edge_map),
         "teacher_edge_count": len(teacher_edges),
         "candidate_edge_count": len(candidate_edges),
@@ -3579,6 +3587,12 @@ def _teacher_endpoint_owner_ids_for_edges(
 def _split_edge_root(edge_id: str) -> str:
     head, sep, tail = edge_id.rpartition("#")
     return head if sep and tail.isdigit() else edge_id
+
+
+def _osm_way_edge_root(edge_id: str) -> str:
+    root = _split_edge_root(edge_id).lstrip("-")
+    match = re.match(r"(\d+)(?:_|$)", root)
+    return match.group(1) if match else root
 
 
 def _is_internal_edge(edge: ET.Element | None) -> bool:

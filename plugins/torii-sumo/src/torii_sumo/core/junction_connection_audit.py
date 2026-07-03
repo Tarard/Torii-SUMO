@@ -54,6 +54,7 @@ def build_teacher_guided_owner_semantics_probe(
             teacher_net_file,
             candidate_net_file,
             owner_id=owner_id,
+            candidate_owner_id=candidate_owner_id,
         )
         teacher_edge_map = edge_mapping_layer["edge_map"]
         edge_mapping_layer = dict(edge_mapping_layer)

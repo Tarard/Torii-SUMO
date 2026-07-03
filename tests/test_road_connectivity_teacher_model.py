@@ -2606,6 +2606,44 @@ def test_build_internal_movement_owner_approach_edge_map_prefers_matching_termin
     assert report["ambiguous_teacher_edges"] == []
 
 
+def test_build_internal_movement_owner_approach_edge_map_matches_torii_osm_way_prefixes(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="-24693977#0" from="a" to="j"><lane id="-24693977#0_0" index="0"/></edge>
+  <edge id="24693977#0" from="j" to="a"><lane id="24693977#0_0" index="0"/></edge>
+  <junction id="a" type="priority"/>
+  <junction id="j" type="traffic_light"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="24693977_10176312934_to_core_1833941950" from="a" to="core"><lane id="24693977_10176312934_to_core_1833941950_0" index="0"/></edge>
+  <edge id="24693977_core_1833941950_to_10176312934" from="core" to="a"><lane id="24693977_core_1833941950_to_10176312934_0" index="0"/></edge>
+  <junction id="a" type="priority"/>
+  <junction id="core" type="traffic_light"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_approach_edge_map(
+        teacher,
+        candidate,
+        owner_id="j",
+        candidate_owner_id="core",
+    )
+
+    assert report["edge_map"] == {
+        "-24693977#0": "24693977_10176312934_to_core_1833941950",
+        "24693977#0": "24693977_core_1833941950_to_10176312934",
+    }
+    assert report["unmapped_teacher_edges"] == []
+
+
 def test_write_internal_movement_owner_replay_candidate_applies_teacher_edge_map(
     tmp_path: Path,
 ) -> None:
