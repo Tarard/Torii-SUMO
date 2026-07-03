@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from torii_sumo.intersection.clean import clean_intersection
@@ -20,3 +21,31 @@ def test_clean_intersection_writes_ir_validation_and_plain_files(tmp_path: Path)
     assert result["tls_linkindex_status"] in {"pass", "fail", "skipped"}
     for name in ["intersection_ir.json", "validation.json", "intersection.nod.xml", "intersection.edg.xml", "intersection.con.xml"]:
         assert (tmp_path / name).exists()
+
+
+def test_clean_intersection_applies_xml_turn_restriction_to_ir(tmp_path: Path) -> None:
+    source_xml = (FIXTURES / "t3_priority.osm.xml").read_text(encoding="utf-8")
+    restricted_xml = source_xml.replace(
+        "</osm>",
+        """  <relation id="r_clean_no_right">
+    <member type="way" ref="10" role="from"/>
+    <member type="node" ref="1" role="via"/>
+    <member type="way" ref="11" role="to"/>
+    <tag k="type" v="restriction"/>
+    <tag k="restriction" v="no_right_turn"/>
+  </relation>
+</osm>""",
+    )
+    osm_file = tmp_path / "t3_restricted.osm.xml"
+    osm_file.write_text(restricted_xml, encoding="utf-8")
+
+    result = clean_intersection(osm_file, tmp_path, compile_net=False)
+    ir = json.loads(Path(result["intersection_ir_file"]).read_text(encoding="utf-8"))
+    evidence = [
+        item
+        for movement in ir["movement_matrix"]["movements"]
+        for item in movement["evidence"]
+    ]
+
+    assert ir["movement_matrix"]["restriction_blocked_count"] == 1
+    assert "osm_restriction:r_clean_no_right:no_right_turn" in evidence
