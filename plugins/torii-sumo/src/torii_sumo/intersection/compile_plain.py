@@ -103,21 +103,47 @@ def _write_edges(path: Path, ir: IntersectionIR) -> None:
         core_id = support_core_id if support_core_id and _is_support_only_approach(approach) else ir.core.core_id
         edge_type = f"highway.{approach.highway_class}"
         allow = " ".join(sorted(approach.allowed_modes))
-        incoming_lane_modes = _lane_modes(approach.incoming_lane_count, approach.allowed_modes, approach.incoming_extra_lane_modes)
-        outgoing_extra_lane_modes = [] if support_core_id and "passenger" in approach.allowed_modes else approach.outgoing_extra_lane_modes
-        outgoing_lane_modes = _lane_modes(approach.outgoing_lane_count, approach.allowed_modes, outgoing_extra_lane_modes)
+        incoming_lane_modes = _incoming_lane_modes(approach)
+        outgoing_lane_modes = _outgoing_lane_modes(approach, support_core_id)
         incoming_attrs = {"from": approach.approach_id, "to": core_id, "type": edge_type, "numLanes": str(len(incoming_lane_modes)), "allow": allow}
         outgoing_attrs = {"from": core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(len(outgoing_lane_modes)), "allow": allow}
         if approach.source_shape_xy:
             incoming_attrs["shape"] = _format_shape(approach.source_shape_xy)
             outgoing_attrs["shape"] = _format_shape(list(reversed(approach.source_shape_xy)))
-        _write_edge(root, approach.incoming_edge_ids[0], incoming_attrs, incoming_lane_modes if approach.incoming_extra_lane_modes else [])
-        _write_edge(root, approach.outgoing_edge_ids[0], outgoing_attrs, outgoing_lane_modes if approach.outgoing_extra_lane_modes else [])
+        if _emits_incoming_edge(approach):
+            _write_edge(root, approach.incoming_edge_ids[0], incoming_attrs, incoming_lane_modes if approach.incoming_extra_lane_modes else [])
+        if _emits_outgoing_edge(approach, support_core_id):
+            _write_edge(root, approach.outgoing_edge_ids[0], outgoing_attrs, outgoing_lane_modes if approach.outgoing_extra_lane_modes else [])
     _write_xml(path, root)
 
 
 def _lane_modes(base_count: int, base_modes: set[str], extra_modes: list[set[str]]) -> list[set[str]]:
     return [base_modes for _ in range(base_count)] + extra_modes
+
+
+def _incoming_lane_modes(approach) -> list[set[str]]:
+    return _lane_modes(approach.incoming_lane_count, approach.allowed_modes, approach.incoming_extra_lane_modes)
+
+
+def _outgoing_lane_modes(approach, support_core_id: str | None) -> list[set[str]]:
+    outgoing_extra_lane_modes = [] if support_core_id and "passenger" in approach.allowed_modes else approach.outgoing_extra_lane_modes
+    return _lane_modes(approach.outgoing_lane_count, approach.allowed_modes, outgoing_extra_lane_modes)
+
+
+def _emits_incoming_edge(approach) -> bool:
+    return _has_incoming_flow(approach) and bool(_incoming_lane_modes(approach))
+
+
+def _emits_outgoing_edge(approach, support_core_id: str | None) -> bool:
+    return _has_outgoing_flow(approach) and bool(_outgoing_lane_modes(approach, support_core_id))
+
+
+def _has_incoming_flow(approach) -> bool:
+    return "passenger" not in approach.allowed_modes or approach.has_incoming_vehicle_flow
+
+
+def _has_outgoing_flow(approach) -> bool:
+    return "passenger" not in approach.allowed_modes or approach.has_outgoing_vehicle_flow
 
 
 def _support_core_id(ir: IntersectionIR) -> str | None:
@@ -185,6 +211,7 @@ def _write_connections(path: Path, ir: IntersectionIR, connection_rows) -> None:
 def _connection_rows(ir: IntersectionIR):
     approaches = {approach.approach_id: approach for approach in ir.approaches}
     controlled_ids = set(ir.control.link_index_map)
+    support_core_id = _support_core_id(ir)
     movements = core_connection_movements(ir.movement_matrix.movements)
     seen = {movement.movement_id for movement in movements}
     movements = [
@@ -203,6 +230,8 @@ def _connection_rows(ir: IntersectionIR):
     for movement in movements:
         source = approaches[movement.from_approach_id]
         target = approaches[movement.to_approach_id]
+        if not (_emits_incoming_edge(source) and _emits_outgoing_edge(target, support_core_id)):
+            continue
         for from_lane, to_lane in _lane_pairs(movement.from_lane_indices, movement.to_lane_indices):
             rows.append((movement, source, target, from_lane, to_lane))
     return rows

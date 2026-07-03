@@ -88,6 +88,9 @@ class Approach(BaseModel):
     incoming_edge_ids: list[str]
     outgoing_edge_ids: list[str]
     oneway: bool
+    has_incoming_vehicle_flow: bool = True
+    has_outgoing_vehicle_flow: bool = True
+    direction_evidence: list[str] = Field(default_factory=list)
     allowed_modes: set[str]
     mode_layer: Literal["vehicle", "support", "fused_support_lane"] = "vehicle"
     is_vehicle_approach: bool = True

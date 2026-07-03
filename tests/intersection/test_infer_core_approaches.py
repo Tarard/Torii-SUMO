@@ -129,6 +129,155 @@ def test_infer_approaches_uses_directional_lane_counts_and_turn_lanes() -> None:
     assert south.turn_lanes_raw == "right"
 
 
+def test_infer_approaches_marks_oneway_toward_core_as_incoming_only() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags["oneway"] = "yes"
+
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    north = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+
+    assert north.has_incoming_vehicle_flow is True
+    assert north.has_outgoing_vehicle_flow is False
+    assert "oneway:forward_toward_core" in north.direction_evidence
+
+
+def test_infer_approaches_marks_reverse_oneway_away_from_core_as_outgoing_only() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags["oneway"] = "-1"
+
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    north = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+
+    assert north.oneway is True
+    assert north.has_incoming_vehicle_flow is False
+    assert north.has_outgoing_vehicle_flow is True
+    assert north.direction_evidence == ["oneway:forward_away_from_core"]
+
+
+def test_infer_approaches_assumes_unknown_oneway_toward_core() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags["oneway"] = "reversible"
+
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    north = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+
+    assert north.oneway is True
+    assert north.has_incoming_vehicle_flow is True
+    assert north.has_outgoing_vehicle_flow is False
+    assert north.direction_evidence == ["oneway:unknown_reversible_assumed_toward_core"]
+
+
+def test_infer_approaches_uses_core_adjacent_oneway_for_extended_corridor_flow() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    patch.nodes["99"] = OSMNode(id="99", lat=48.0015, lon=11.0005, x=0.0, y=110.0)
+    patch.ways["10"].tags.update({"name": "Main Road", "oneway": "yes"})
+    patch.ways["99"] = OSMWay(
+        id="99",
+        node_refs=["99", "2"],
+        tags={"highway": "primary", "name": "Main Road"},
+    )
+
+    approaches = infer_approaches(patch, core)
+    north = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] == 110.0)
+
+    assert north.source_way_ids == ["10", "99"]
+    assert north.has_incoming_vehicle_flow is True
+    assert north.has_outgoing_vehicle_flow is False
+    assert north.direction_evidence == ["oneway:forward_toward_core"]
+
+
+def test_infer_approaches_uses_reverse_core_adjacent_oneway_for_extended_corridor_flow() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    patch.nodes["99"] = OSMNode(id="99", lat=48.0015, lon=11.0005, x=0.0, y=110.0)
+    patch.ways["10"].tags.update({"name": "Main Road", "oneway": "-1"})
+    patch.ways["99"] = OSMWay(
+        id="99",
+        node_refs=["99", "2"],
+        tags={"highway": "primary", "name": "Main Road"},
+    )
+
+    approaches = infer_approaches(patch, core)
+    north = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] == 110.0)
+
+    assert north.source_way_ids == ["10", "99"]
+    assert north.oneway is True
+    assert north.has_incoming_vehicle_flow is False
+    assert north.has_outgoing_vehicle_flow is True
+    assert north.direction_evidence == ["oneway:forward_away_from_core"]
+
+
+def test_infer_approaches_ignores_outer_oneway_when_core_adjacent_extended_corridor_is_bidirectional() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    patch.nodes["99"] = OSMNode(id="99", lat=48.0015, lon=11.0005, x=0.0, y=110.0)
+    patch.ways["10"].tags.update({"name": "Main Road"})
+    patch.ways["99"] = OSMWay(
+        id="99",
+        node_refs=["99", "2"],
+        tags={"highway": "primary", "name": "Main Road", "oneway": "yes"},
+    )
+
+    approaches = infer_approaches(patch, core)
+    north = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] == 110.0)
+
+    assert north.source_way_ids == ["10", "99"]
+    assert north.has_incoming_vehicle_flow is True
+    assert north.has_outgoing_vehicle_flow is True
+    assert north.direction_evidence == []
+
+
+def test_infer_approaches_filters_access_tags_through_road_semantics() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["vehicle_blocked"] = OSMNode(id="vehicle_blocked", lat=48.00075, lon=11.00035, x=100.0, y=100.0)
+    patch.ways["vehicle_blocked"] = OSMWay(
+        id="vehicle_blocked",
+        node_refs=["vehicle_blocked", "vehicle_core"],
+        tags={"highway": "service", "vehicle": "no"},
+    )
+    patch.nodes["cycle_blocked"] = OSMNode(id="cycle_blocked", lat=48.00025, lon=11.00035, x=-100.0, y=-100.0)
+    patch.ways["cycle_blocked"] = OSMWay(
+        id="cycle_blocked",
+        node_refs=["cycle_blocked", "vehicle_core"],
+        tags={"highway": "cycleway", "bicycle": "no", "foot": "yes"},
+    )
+    patch.nodes["foot_blocked"] = OSMNode(id="foot_blocked", lat=48.00085, lon=11.00035, x=100.0, y=-100.0)
+    patch.ways["foot_blocked"] = OSMWay(
+        id="foot_blocked",
+        node_refs=["foot_blocked", "vehicle_core"],
+        tags={"highway": "footway", "foot": "no", "bicycle": "yes"},
+    )
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    modes_by_way = {approach.source_way_ids[0]: approach.allowed_modes for approach in approaches}
+
+    assert modes_by_way["vehicle_blocked"] == set()
+    assert modes_by_way["cycle_blocked"] == {"pedestrian"}
+    assert modes_by_way["foot_blocked"] == {"bicycle"}
+
+
+def test_infer_approaches_preserves_motor_vehicle_positive_override_in_access_tags() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["override"] = OSMNode(id="override", lat=48.00075, lon=11.00035, x=100.0, y=100.0)
+    patch.ways["override"] = OSMWay(
+        id="override",
+        node_refs=["override", "vehicle_core"],
+        tags={"highway": "service", "access": "no", "motor_vehicle": "yes"},
+    )
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    override = next(approach for approach in approaches if approach.source_way_ids == ["override"])
+
+    assert override.allowed_modes == {"passenger"}
+    assert override.access_tags == {"access": "no", "motor_vehicle": "yes"}
+
+
 def test_infer_approaches_turns_vehicle_way_sidewalk_and_cycleway_tags_into_support_lanes() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     patch.ways["10"].tags.update({"sidewalk": "separate", "cycleway:both": "track"})
