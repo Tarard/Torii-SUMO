@@ -511,6 +511,7 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "gate_status": {
                 "reference_join_audit": "pass",
                 "reference_join_aggregation": "blocked",
+                "netedit_connection_mode_review": "blocked",
                 "netedit": "blocked",
             },
         }
@@ -650,7 +651,8 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert promotion_trace["claim_status"] == "diagnostic-demo"
     assert [stage["stage_id"] for stage in promotion_trace["stages"]] == list(stage_results)
     assert promotion_trace["stages"][1]["promotion_decision"] == "pass"
-    assert "netedit_connection_mode" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    assert "netedit_connection_mode_review" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    assert "netedit_connection_mode" not in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "road_connectivity_parity" in report["network_plan"]["validation_gates"]
     assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]

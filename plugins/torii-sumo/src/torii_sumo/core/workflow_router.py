@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import re
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from .network_plan import derive_network_plan
 from .osm_area import osm_map_url_bbox, resolve_osm_place
@@ -81,7 +81,15 @@ REFERENCE_MATCHED_SEMANTICS_WORKFLOW = {
     "batch_repair_tool": "sumo_network_teacher_guided_repair_queue",
     "per_junction_repair_tool": "sumo_network_teacher_guided_junction_variant",
     "warning_parity_tool": "sumo_network_tls_warning_parity",
-    "required_manual_reviews": ["netedit_connection_mode", "map_or_field_imagery"],
+    "required_manual_reviews": ["netedit_connection_mode_review", "map_or_field_imagery"],
+}
+
+MANUAL_REVIEW_GATES = {
+    "junction_aggregation",
+    "netedit_connection_mode_review",
+    "reference_join_aggregation",
+    "tls_aggregation",
+    "topology_audit",
 }
 
 OSM_WORKFLOW_SUMMARY_KEYS = (
@@ -245,6 +253,7 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
     if configured_max_ready_candidates != "":
         semantics["configured_max_ready_candidates"] = configured_max_ready_candidates
     if workflow_report is not None:
+        semantics["required_manual_reviews"] = _required_manual_reviews_from_gates(workflow_report.get("gate_status"))
         post_repair_movement_best_variant_file = str(
             workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_best_variant_file", "")
         )
@@ -358,6 +367,17 @@ def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_repor
                 "missing_junction_ids": workflow_report.get("teacher_guided_probe_matrix_missing_junction_ids", []),
             }
     report["reference_matched_semantics_workflow"] = semantics
+
+
+def _required_manual_reviews_from_gates(gate_status: Any) -> list[str]:
+    if not isinstance(gate_status, Mapping):
+        return list(REFERENCE_MATCHED_SEMANTICS_WORKFLOW["required_manual_reviews"])
+    blocked = [
+        str(gate)
+        for gate, status in sorted(gate_status.items())
+        if gate in MANUAL_REVIEW_GATES and str(status) == "blocked"
+    ]
+    return blocked or list(REFERENCE_MATCHED_SEMANTICS_WORKFLOW["required_manual_reviews"])
 
 
 def _invalid_mode(user_request: str, autonomy_mode: str) -> dict[str, Any]:
