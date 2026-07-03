@@ -23,12 +23,13 @@ def compile_intersection_to_plain(
     tllogic_file = output_dir / f"{prefix}.tll.xml" if ir.control.control_type == "traffic_light" else None
     net_file = output_dir / f"{prefix}.net.xml"
 
+    connection_rows = _connection_rows(ir)
     _write_nodes(node_file, ir)
     _write_edges(edge_file, ir)
-    _write_connections(connection_file, ir)
+    _write_connections(connection_file, ir, connection_rows)
     _write_types(type_file, {approach.highway_class for approach in ir.approaches})
     if tllogic_file is not None:
-        _write_tllogic(tllogic_file, ir)
+        _write_tllogic(tllogic_file, ir, connection_rows)
 
     netconvert_warnings: list[str] = []
     compiled_net = False
@@ -97,26 +98,43 @@ def _write_edges(path: Path, ir: IntersectionIR) -> None:
     _write_xml(path, root)
 
 
-def _write_connections(path: Path, ir: IntersectionIR) -> None:
+def _write_connections(path: Path, ir: IntersectionIR, connection_rows) -> None:
     root = ET.Element("connections")
+    for index, (movement, source, target, from_lane, to_lane) in enumerate(connection_rows):
+        attrs = {
+            "from": source.incoming_edge_ids[0],
+            "to": target.outgoing_edge_ids[0],
+            "fromLane": str(from_lane),
+            "toLane": str(to_lane),
+            "dir": movement.turn[0],
+        }
+        if movement.movement_id in ir.control.link_index_map:
+            attrs["tl"] = ir.control.tls_id or ir.core.core_id
+            attrs["linkIndex"] = str(index)
+        ET.SubElement(root, "connection", **attrs)
+    _write_xml(path, root)
+
+
+def _connection_rows(ir: IntersectionIR):
     approaches = {approach.approach_id: approach for approach in ir.approaches}
+    rows = []
     for movement in ir.movement_matrix.movements:
         if not movement.allowed:
             continue
         source = approaches[movement.from_approach_id]
         target = approaches[movement.to_approach_id]
-        attrs = {
-            "from": source.incoming_edge_ids[0],
-            "to": target.outgoing_edge_ids[0],
-            "fromLane": str(movement.from_lane_indices[0]),
-            "toLane": str(movement.to_lane_indices[0]),
-            "dir": movement.turn[0],
-        }
-        if movement.movement_id in ir.control.link_index_map:
-            attrs["tl"] = ir.control.tls_id or ir.core.core_id
-            attrs["linkIndex"] = str(ir.control.link_index_map[movement.movement_id])
-        ET.SubElement(root, "connection", **attrs)
-    _write_xml(path, root)
+        for from_lane, to_lane in _lane_pairs(movement.from_lane_indices, movement.to_lane_indices):
+            rows.append((movement, source, target, from_lane, to_lane))
+    return rows
+
+
+def _lane_pairs(from_lanes: list[int], to_lanes: list[int]) -> list[tuple[int, int]]:
+    if not from_lanes or not to_lanes:
+        return []
+    return [
+        (from_lanes[min(index, len(from_lanes) - 1)], to_lanes[min(index, len(to_lanes) - 1)])
+        for index in range(max(len(from_lanes), len(to_lanes)))
+    ]
 
 
 def _write_types(path: Path, highway_classes: set[str]) -> None:
@@ -126,12 +144,16 @@ def _write_types(path: Path, highway_classes: set[str]) -> None:
     _write_xml(path, root)
 
 
-def _write_tllogic(path: Path, ir: IntersectionIR) -> None:
+def _write_tllogic(path: Path, ir: IntersectionIR, connection_rows) -> None:
     root = ET.Element("tlLogics")
     logic = ET.SubElement(root, "tlLogic", id=ir.control.tls_id or ir.core.core_id, type="static", programID="0", offset="0")
     for phase in ir.control.phases:
-        ET.SubElement(logic, "phase", duration=f"{phase.duration:g}", state=phase.state)
+        ET.SubElement(logic, "phase", duration=f"{phase.duration:g}", state=_expanded_phase_state(ir, phase.state, connection_rows))
     _write_xml(path, root)
+
+
+def _expanded_phase_state(ir: IntersectionIR, state: str, connection_rows) -> str:
+    return "".join(state[ir.control.link_index_map[movement.movement_id]] for movement, *_ in connection_rows)
 
 
 def _format_shape(points: list[tuple[float, float]]) -> str:
