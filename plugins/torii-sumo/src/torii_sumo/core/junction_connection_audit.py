@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import json
 from collections import Counter
 from pathlib import Path
@@ -42,6 +43,7 @@ def build_teacher_guided_owner_semantics_probe(
     owner_id: str,
     candidate_owner_id: str | None = None,
     teacher_edge_map: dict[str, str] | None = None,
+    source_osm_file: Path | None = None,
 ) -> dict[str, Any]:
     from .road_connectivity_teacher_model import (
         build_internal_movement_owner_approach_edge_map,
@@ -105,7 +107,7 @@ def build_teacher_guided_owner_semantics_probe(
         "pedestrian_crossing": str(pedestrian_layer.get("status", "")),
         "tls_movement": str(tls_layer.get("status", "")),
     }
-    return {
+    report = {
         "status": "pass" if all(status in {"pass", "skipped"} for status in layer_statuses.values()) else "fail",
         "claim_status": "diagnostic-demo",
         "teacher_net_file": str(teacher_net_file),
@@ -120,6 +122,73 @@ def build_teacher_guided_owner_semantics_probe(
         "pedestrian_crossing_layer": pedestrian_layer,
         "tls_movement_layer": tls_layer,
     }
+    if source_osm_file is not None:
+        report["source_coverage_layer"] = build_teacher_source_osm_coverage(
+            teacher_net_file,
+            source_osm_file,
+            owner_id=owner_id,
+        )
+    return report
+
+
+def build_teacher_source_osm_coverage(
+    teacher_net_file: Path,
+    source_osm_file: Path,
+    *,
+    owner_id: str,
+) -> dict[str, Any]:
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    source_way_ids = _source_osm_way_ids(source_osm_file)
+    rows = []
+    for edge_id, direction in sorted(_owner_external_approach_edges(teacher_root, owner_id).items()):
+        way_id = _teacher_edge_source_way_id(edge_id)
+        status = (
+            "synthetic_or_non_osm_edge"
+            if not way_id
+            else ("source_way_present" if way_id in source_way_ids else "source_way_missing")
+        )
+        rows.append(
+            {
+                "edge_id": edge_id,
+                "direction": direction,
+                "source_way_id": way_id,
+                "status": status,
+            }
+        )
+    return {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "source_osm_file": str(source_osm_file),
+        "owner_id": owner_id,
+        "status_counts": dict(sorted(Counter(row["status"] for row in rows).items())),
+        "teacher_edges": rows,
+    }
+
+
+def _source_osm_way_ids(source_osm_file: Path) -> set[str]:
+    opener = gzip.open if source_osm_file.suffix.lower() == ".gz" else open
+    with opener(source_osm_file, "rt", encoding="utf-8") as handle:
+        root = ET.parse(handle).getroot()
+    return {way.attrib["id"] for way in root.findall("way") if way.attrib.get("id")}
+
+
+def _teacher_edge_source_way_id(edge_id: str) -> str:
+    root = edge_id.lstrip("-").split("#", 1)[0]
+    return root if root.isdigit() else ""
+
+
+def _owner_external_approach_edges(root: ET.Element, owner_id: str) -> dict[str, str]:
+    edges = {}
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id or edge_id.startswith(":") or edge.attrib.get("function") == "internal":
+            continue
+        if edge.attrib.get("to", "") == owner_id:
+            edges[edge_id] = "incoming"
+        elif edge.attrib.get("from", "") == owner_id:
+            edges[edge_id] = "outgoing"
+    return edges
 
 
 def build_connection_signature(net_file: Path, junction_id: str) -> dict[str, Any]:
