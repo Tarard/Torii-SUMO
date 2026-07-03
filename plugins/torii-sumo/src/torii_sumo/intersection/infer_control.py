@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from .schema import Approach, ControlModel, IntersectionCore, MovementMatrix, OSMPatch, TLSPhase
 
 
@@ -9,11 +11,8 @@ def infer_control_model(
     approaches: list[Approach],
     movements: MovementMatrix,
 ) -> ControlModel:
-    has_signal = any(
-        patch.nodes[node_id].tags.get("highway") == "traffic_signals"
-        for node_id in core.core_osm_node_ids
-        if node_id in patch.nodes
-    )
+    signal_source = _traffic_signal_source(patch, core)
+    has_signal = bool(signal_source)
     if not has_signal:
         return ControlModel(
             control_type="priority",
@@ -33,7 +32,7 @@ def infer_control_model(
     phase_b = "".join("r" if char == "G" else "G" for char in phase_a)
     return ControlModel(
         control_type="traffic_light",
-        source=["osm:highway=traffic_signals"],
+        source=[signal_source],
         priority_approach_ids=[],
         tls_id=core.core_id,
         phases=[
@@ -43,3 +42,20 @@ def infer_control_model(
         link_index_map=link_index_map,
         confidence=0.9,
     )
+
+
+def _traffic_signal_source(patch: OSMPatch, core: IntersectionCore) -> str:
+    if any(
+        patch.nodes[node_id].tags.get("highway") == "traffic_signals"
+        for node_id in core.core_osm_node_ids
+        if node_id in patch.nodes
+    ):
+        return "osm:highway=traffic_signals"
+
+    center_x, center_y = core.center_xy
+    for node in patch.nodes.values():
+        if node.tags.get("highway") != "traffic_signals" or node.x is None or node.y is None:
+            continue
+        if math.hypot(node.x - center_x, node.y - center_y) <= core.core_radius_m:
+            return "osm:nearby_highway=traffic_signals"
+    return ""
