@@ -75,6 +75,7 @@ class Approach(BaseModel):
     approach_id: str
     role: str
     source_way_ids: list[str]
+    corridor_extension_way_ids: list[str] = Field(default_factory=list)
     road_name: str | None = None
     highway_class: str
     bearing_to_core: float
