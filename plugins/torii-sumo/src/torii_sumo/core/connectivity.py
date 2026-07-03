@@ -137,12 +137,12 @@ def extract_largest_passenger_component_core(
     command = [
         "netconvert",
         "--sumo-net-file",
-        str(net_file),
+        str(net_file.resolve()),
         "--keep-edges.input-file",
-        str(keep_edges_file),
+        keep_edges_file.name,
         "--keep-edges.postload",
         "--output-file",
-        str(core_file),
+        core_file.name,
     ]
     command_record.write_text(" ".join(command) + "\n", encoding="utf-8")
     try:

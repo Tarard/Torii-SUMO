@@ -14,9 +14,15 @@ from .tools.evidence_tools import (
     sumo_compare_outputs,
     sumo_config_pair_preflight,
 )
+from .tools.intersection_tools import (
+    sumo_intersection_clean,
+    sumo_intersection_model,
+    sumo_intersection_validate,
+)
 from .tools.osm_tools import (
     sumo_network_connected_core,
     sumo_network_junction_aggregation_variant,
+    sumo_network_overlapping_junction_audit,
     sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
@@ -24,7 +30,10 @@ from .tools.osm_tools import (
     sumo_network_routeability_audit,
     sumo_network_routeability_probe,
     sumo_network_scope_pruning_variant,
+    sumo_network_teacher_guided_junction_variant,
+    sumo_network_teacher_guided_repair_queue,
     sumo_network_tls_aggregation_variant,
+    sumo_network_tls_warning_parity,
     sumo_network_topology_audit,
     sumo_osm_build_network,
     sumo_osm_cleanup_workflow,
@@ -54,16 +63,25 @@ def create_server() -> FastMCP:
     server.tool(description="Write a JSON and Markdown evidence bundle.")(
         sumo_collect_evidence
     )
-    server.tool(description="Route one natural-language SUMO request into a Torii workflow, ask only blocking questions, and run safe MCP steps when possible.")(
+    server.tool(description="Route one natural-language SUMO request, including OSM map URLs, into a full Torii workflow with cleanup, audits, review HTML, SUMO-GUI, and Netedit evidence.")(
         torii_auto_workflow
     )
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(
         sumo_osm_resolve_place
     )
-    server.tool(description="Run the OSM cleanup hard-gate workflow: area inference/confirmation, traffic-layer or reference-artifact network planning, OSM build, service-road passenger-permission cleanup when requested, region-aware TLS map audit, connectivity and routeability checks, SUMO-GUI launch, and Netedit launch.")(
+    server.tool(description="Run the OSM cleanup hard-gate workflow from a place name, bbox, or OSM map URL: area inference/confirmation, traffic-layer or reference-artifact planning, OSM build, TLS map audit, connectivity, routeability, review HTML, SUMO-GUI, and Netedit launch.")(
         sumo_osm_cleanup_workflow
     )
-    server.tool(description="Download or reuse OSM, filter road classes, and build a SUMO network with netconvert.")(
+    server.tool(description="Build a structured IntersectionIR from a local OSM intersection patch without compiling SUMO artifacts.")(
+        sumo_intersection_model
+    )
+    server.tool(description="Compile a local OSM T3/X4 intersection patch into IntersectionIR, SUMO plain files, optional .net.xml, and validation artifacts.")(
+        sumo_intersection_clean
+    )
+    server.tool(description="Validate a compiled IntersectionIR artifact with SUMO load evidence when available.")(
+        sumo_intersection_validate
+    )
+    server.tool(description="Low-level helper only: download/reuse OSM for an already chosen bbox, filter road classes, and build a raw SUMO network with netconvert. Do not use this as the full user-facing workflow.")(
         sumo_osm_build_network
     )
     server.tool(description="Extract SUMO TLS audit candidates and cluster nearby physical intersections.")(
@@ -84,6 +102,9 @@ def create_server() -> FastMCP:
     server.tool(description="Audit dense SUMO junction clusters, including physical cross/T approach-axis shape scoring for over-fragmented OSM topology.")(
         sumo_network_topology_audit
     )
+    server.tool(description="Audit close overlapping top-level SUMO junctions while ignoring valid internal crossing and walkingarea layers.")(
+        sumo_network_overlapping_junction_audit
+    )
     server.tool(description="Mine joined-junction cases from a reference SUMO network and match them against fragmented candidate topology clusters.")(
         sumo_network_reference_join_audit
     )
@@ -99,8 +120,17 @@ def create_server() -> FastMCP:
     server.tool(description="Create a separate reference-scope pruning review variant from a reference scope audit without overwriting the source network.")(
         sumo_network_scope_pruning_variant
     )
+    server.tool(description="Build a diagnostic teacher-guided junction variant by replaying reference lane permissions, movements, pedestrian ring, and tlLogic onto candidate plain network files; requires NetEdit connection-mode review before adoption.")(
+        sumo_network_teacher_guided_junction_variant
+    )
+    server.tool(description="Execute ready teacher-guided junction repair queue items against explicit plain node/edge/connection files; requires per-result NetEdit connection-mode review before adoption.")(
+        sumo_network_teacher_guided_repair_queue
+    )
     server.tool(description="Create a separate TLS cleanup review variant with one real SUMO junction set as TLS per physical TLS audit cluster.")(
         sumo_network_tls_aggregation_variant
+    )
+    server.tool(description="Compare mapped TUM/reference and candidate SUMO TLS warnings, separating inherited warnings from candidate-only regressions.")(
+        sumo_network_tls_warning_parity
     )
     server.tool(description="Create an HTML human-review cockpit for a generated or partial SUMO network and available audit artifacts.")(
         sumo_network_review_html

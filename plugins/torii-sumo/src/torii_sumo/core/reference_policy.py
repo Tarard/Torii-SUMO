@@ -55,6 +55,16 @@ def _sorted_counter(counter: Counter[str]) -> dict[str, int]:
     return {key: counter[key] for key in sorted(counter)}
 
 
+def _source_way_id(edge_id: str) -> str:
+    normalized = edge_id.strip()
+    if not normalized or normalized.startswith(":"):
+        return ""
+    if normalized.startswith("-"):
+        normalized = normalized[1:]
+    normalized = normalized.split("#", 1)[0]
+    return normalized if normalized.isdigit() else ""
+
+
 def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str, Any]:
     net_file = Path(reference_net_file)
     if not net_file.exists():
@@ -75,13 +85,17 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
     service_passenger_edge_count = 0
     selected_highways: set[str] = set()
     visual_detail_highways: set[str] = set()
+    source_way_ids: set[str] = set()
     visual_detail_edge_type_counts: Counter[str] = Counter()
     auxiliary_highways: dict[str, set[str]] = defaultdict(set)
 
     root = ET.parse(net_file).getroot()
     for edge in root.findall("edge"):
-        if edge.attrib.get("function") == "internal":
+        if edge.attrib.get("function") == "internal" or edge.attrib.get("id", "").startswith(":"):
             continue
+        source_way_id = _source_way_id(edge.attrib.get("id", ""))
+        if source_way_id:
+            source_way_ids.add(source_way_id)
         edge_type = edge.attrib.get("type", "").strip().lower()
         base_class = _base_highway_class(edge_type)
         if not edge_type or not base_class:
@@ -102,7 +116,7 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
                 service_passenger_edge_count += 1
         if allows_passenger:
             passenger_edge_type_counts[edge_type] += 1
-            if base_class in VEHICLE_HIGHWAY_CLASSES:
+            if base_class in VEHICLE_HIGHWAY_CLASSES and base_class != "service":
                 selected_highways.add(base_class)
         if allows_bicycle:
             bicycle_edge_type_counts[edge_type] += 1
@@ -136,6 +150,8 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
         "vehicle_core_highway_classes": sorted(selected_highways),
         "visual_detail_highway_classes": sorted(visual_detail_highways),
         "visual_detail_only_highway_classes": sorted(visual_detail_highways - selected_highways),
+        "reference_source_way_ids": sorted(source_way_ids, key=int),
+        "reference_source_way_id_count": len(source_way_ids),
         "auxiliary_modal_layers": auxiliary_layers,
         "auxiliary_modal_highway_classes": {
             layer: sorted(values) for layer, values in sorted(auxiliary_highways.items())
@@ -176,6 +192,7 @@ def load_reference_policy_report(report: str | Path | Mapping[str, Any]) -> dict
     visual_detail_set = {str(item) for item in visual_detail}
     vehicle_core_set = {str(item) for item in vehicle_core}
     movement_layers = payload.get("movement_layers") or ["passenger", *payload.get("auxiliary_modal_layers", [])]
+    source_way_ids = sorted({str(item) for item in payload.get("reference_source_way_ids", payload.get("source_way_ids", []))})
     return {
         "status": str(payload.get("status", "pass")),
         "claim_status": str(payload.get("claim_status", "diagnostic-demo")),
@@ -186,6 +203,8 @@ def load_reference_policy_report(report: str | Path | Mapping[str, Any]) -> dict
         "vehicle_core_highway_classes": sorted(vehicle_core_set),
         "visual_detail_highway_classes": sorted(visual_detail_set),
         "visual_detail_only_highway_classes": sorted(visual_detail_set - vehicle_core_set),
+        "reference_source_way_ids": source_way_ids,
+        "reference_source_way_id_count": int(payload.get("reference_source_way_id_count", len(source_way_ids)) or 0),
         "auxiliary_modal_layers": sorted(str(item) for item in payload.get("auxiliary_modal_layers", [])),
         "auxiliary_modal_highway_classes": dict(payload.get("auxiliary_modal_highway_classes", {})),
         "movement_layers": sorted(str(item) for item in movement_layers),

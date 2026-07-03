@@ -1,0 +1,38 @@
+{
+  "stage_id": "torii_scoped_build",
+  "label": "Torii vehicle core after connected-core extraction and TLS aggregation",
+  "claim_status": "diagnostic-demo",
+  "network_file": "examples/02_one_prompt_osm_network/networks/torii_5_5_connected_core_tls_aggregated.net.xml",
+  "counts": {
+    "edges": 2493,
+    "lanes": 3045,
+    "junctions": 1220,
+    "traffic_light_junctions": 34,
+    "tlLogic": 34
+  },
+  "quality": {
+    "connectivity": {
+      "connected_core_status": "pass",
+      "connected_core_connectivity_status": "pass",
+      "discarded_passenger_edge_count": 48
+    },
+    "routeability": {
+      "status": "pass",
+      "vehicle_count": 100,
+      "final_end": 600,
+      "arrived": 100,
+      "running": 0,
+      "teleports": 0,
+      "collisions": 0
+    },
+    "topology_fragmentation": {
+      "traffic_light_junctions": 34,
+      "tlLogic": 34
+    },
+    "tls_semantic_delta": null,
+    "junction_pattern_delta": null,
+    "reference_scope_delta": null,
+    "manual_review_load": null
+  },
+  "promotion_decision": "promote_for_routeability_smoke_only"
+}

@@ -22,9 +22,9 @@
 
 </div>
 
-## One Prompt to a SUMO Network, Across Models
+## Evidence-Aware OSM-to-SUMO Construction
 
-Torii 面向 SUMO 工作：一句简短的自然语言 prompt 可以变成一个有边界的 OSM-to-SUMO 路网工作流，包含构建证据、路线可达性检查和清晰的结论边界。
+Torii 面向 SUMO 路网构建工作：一句简短的自然语言 prompt 可以变成一个有边界、证据驱动、可与参考路网对比的 OSM-to-SUMO 工作流，包含构建证据、路线可达性检查、审查 artifacts 和清晰的结论边界。
 
 插件现在从 workflow router 开始：`torii_auto_workflow` 会分类用户请求、选择 skill、制定计划，并运行安全的 MCP 步骤来为你生成或修改 SUMO 路网。
 
@@ -35,7 +35,9 @@ Torii 有两层：
 | 推理层 | SUMO expert skills 负责提出正确问题、选择工作流并限定结论边界。 |
 | 执行层 | 本地安全 stdio MCP tools 负责运行有边界的 SUMO 检查，并返回结构化观察。 |
 
-当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、TLS aggregation review variant、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、reference join audit、junction aggregation review variant 和 Netedit 打开证据。
+架构说明见 [`ARCHITECTURE.md`](ARCHITECTURE.md)：router、planner、executor 和 reviewer。
+
+当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、TLS aggregation review variant、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、overlapping top-level junction audit、reference join audit、junction aggregation review variant 和 Netedit 打开证据。
 
 ## Example
 
@@ -45,7 +47,7 @@ Torii 有两层：
 Use Torii to clean the Ingolstadt city-center network from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, and open the cleaned network in Netedit.
 ```
 
-这个 demo 现在使用 Ingolstadt 市中心，用来测试 Torii 从 OSM 清洗出的路网是否能向人工清洗参考路网收敛，而不是把 OSM 导入成功当作充分结果。
+这个 demo 使用 Ingolstadt 市中心，用来测试 Torii 的 OSM-derived workflow 是否比单纯导入更可审计，并且是否更接近人工清洗参考路网。
 
 ![TUM bbox reference 与 Torii 5.5 TLS 聚合 visual-detail 对比](examples/02_one_prompt_osm_network/assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
 
@@ -91,7 +93,7 @@ Torii 可以构建和审计 SUMO artifacts，但不会认证模型一定正确�
 
 ## License and Notices
 
-源代码使用 MIT 许可证。Skill 文件、文档、检查清单、示例和协议文本使用 CC BY 4.0。两个授权范围都写在 [`LICENSE`](LICENSE)。
+源代码使用 PolyForm Noncommercial 1.0.0。Skill 文件、文档、检查清单、示例和协议文本使用 CC BY-NC 4.0。商业使用需要另行取得书面许可。两个授权范围都写在 [`LICENSE`](LICENSE)。
 
 Eclipse SUMO 是 Eclipse Foundation 的商标。OSM demo 中的地图数据 © OpenStreetMap contributors，并基于 Open Database License (ODbL) 提供。
 

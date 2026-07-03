@@ -9,8 +9,18 @@ from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
-from .osm_network import _net_xy_to_latlon
+from .junction_teacher_model import (
+    compare_junction_pattern_records,
+    extract_junction_pattern_index,
+    summarize_junction_pattern_policy,
+    summarize_junction_pattern_templates,
+)
+from .detector_demand import lane_allows_passenger
+from .osm_network import _net_xy_to_latlon, _parse_utm_zone, _utm_to_latlon
 from .topology_audit import audit_topology_fragmentation
+
+
+STRUCTURAL_ONLY_PATTERN_SAMPLE_LIMIT = 40
 
 
 def audit_reference_join_patterns(
@@ -23,6 +33,8 @@ def audit_reference_join_patterns(
     candidate_cluster_radius_m: float = 30.0,
     candidate_min_cluster_nodes: int = 3,
     match_radius_m: float = 45.0,
+    structural_only: bool = False,
+    equivalent_approach_edge_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     if match_radius_m <= 0:
         return _failure("match_radius_m must be positive")
@@ -30,12 +42,80 @@ def audit_reference_join_patterns(
         return _failure(f"reference net file does not exist: {reference_net_file}")
     if not candidate_net_file.exists():
         return _failure(f"candidate net file does not exist: {candidate_net_file}")
+    if structural_only:
+        try:
+            return _structural_only_report(
+                reference_net_file=reference_net_file,
+                candidate_net_file=candidate_net_file,
+                output_dir=output_dir,
+                prefix=prefix,
+                reference_cluster_prefix=reference_cluster_prefix,
+                candidate_cluster_radius_m=candidate_cluster_radius_m,
+                candidate_min_cluster_nodes=candidate_min_cluster_nodes,
+                match_radius_m=match_radius_m,
+                equivalent_approach_edge_map=equivalent_approach_edge_map,
+            )
+        except (OSError, ET.ParseError, KeyError, ValueError) as exc:
+            return _failure(f"{type(exc).__name__}: {exc}")
 
     try:
         reference_cases = _reference_join_cases(reference_net_file, reference_cluster_prefix)
         candidate_graph = _candidate_graph(candidate_net_file)
     except (OSError, ET.ParseError, KeyError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
+
+    pattern_junction_ids = [
+        str(case.get("reference_id", ""))
+        for case in reference_cases
+        if str(case.get("reference_id", ""))
+    ]
+    pattern_warnings = []
+    try:
+        junction_pattern_index = extract_junction_pattern_index(
+            reference_net_file,
+            junction_ids=pattern_junction_ids,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        junction_pattern_index = []
+        pattern_warnings.append(f"junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    try:
+        candidate_junction_pattern_index = extract_junction_pattern_index(
+            candidate_net_file,
+            junction_ids=pattern_junction_ids,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        candidate_junction_pattern_index = []
+        pattern_warnings.append(f"candidate junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    junction_pattern_comparisons = _compare_same_id_patterns(
+        junction_pattern_index,
+        candidate_junction_pattern_index,
+        equivalent_approach_edge_map=equivalent_approach_edge_map,
+    )
+    junction_pattern_mismatch_count = sum(
+        1 for comparison in junction_pattern_comparisons if comparison["status"] != "pass"
+    )
+    junction_pattern_mismatch_field_counts = dict(
+        Counter(
+            field
+            for comparison in junction_pattern_comparisons
+            for field in comparison.get("mismatch_fields", [])
+        )
+    )
+    junction_pattern_templates = summarize_junction_pattern_templates(junction_pattern_index)
+    candidate_junction_pattern_templates = summarize_junction_pattern_templates(candidate_junction_pattern_index)
+    reference_structural_signature_summary = _structural_signature_summary(junction_pattern_index)
+    candidate_structural_signature_summary = _structural_signature_summary(candidate_junction_pattern_index)
+    junction_structural_signature_delta = _structural_signature_delta(
+        reference_structural_signature_summary,
+        candidate_structural_signature_summary,
+    )
+    reference_network_structural_summary = _net_structural_summary(reference_net_file)
+    candidate_network_structural_summary = _net_structural_summary(candidate_net_file)
+    network_structural_delta = _network_structural_delta(
+        reference_network_structural_summary,
+        candidate_network_structural_summary,
+    )
+    tls_control_review = _tls_control_review(reference_network_structural_summary, candidate_network_structural_summary)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidate_audit = audit_topology_fragmentation(
@@ -59,12 +139,67 @@ def audit_reference_join_patterns(
     matched = [case for case in matched_cases if case["match_status"] == "matched"]
 
     cases_file = output_dir / f"{prefix}_reference_join_cases.csv"
+    junction_pattern_comparisons_file = output_dir / f"{prefix}_junction_pattern_comparisons.csv"
+    junction_pattern_templates_file = output_dir / f"{prefix}_junction_pattern_templates.json"
+    junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
     summary_file = output_dir / f"{prefix}_reference_join_audit.json"
     _write_cases_csv(cases_file, matched_cases)
+    _write_junction_pattern_comparisons_csv(junction_pattern_comparisons_file, junction_pattern_comparisons)
+    junction_pattern_templates_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "reference_net_file": str(reference_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "reference_policy_summary": summarize_junction_pattern_policy(junction_pattern_index),
+                "candidate_policy_summary": summarize_junction_pattern_policy(candidate_junction_pattern_index),
+                "reference_templates": junction_pattern_templates,
+                "candidate_templates": candidate_junction_pattern_templates,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    junction_teacher_delta = {
+        "schema_version": 1,
+        "reference_net_file": str(reference_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "reference_cluster_prefix": reference_cluster_prefix,
+        "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
+        "junction_pattern_comparison_status": "fail"
+        if junction_pattern_mismatch_count
+        else ("pass" if junction_pattern_comparisons else "skipped"),
+        "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+        "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+        "junction_structural_signature_status": junction_structural_signature_delta["status"],
+        "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
+        "reference_structural_signature_summary": reference_structural_signature_summary,
+        "candidate_structural_signature_summary": candidate_structural_signature_summary,
+        "network_structural_delta_status": network_structural_delta["status"],
+        "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_extra_counts": network_structural_delta["extra_counts"],
+        "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
+        "tls_control_review_status": tls_control_review["status"],
+        "tls_control_review_queue_count": tls_control_review["queue_count"],
+        "tls_control_review_queue": tls_control_review["queue"],
+        "reference_network_structural_summary": reference_network_structural_summary,
+        "candidate_network_structural_summary": candidate_network_structural_summary,
+        "junction_pattern_comparisons": junction_pattern_comparisons,
+        "junction_pattern_templates": junction_pattern_templates,
+        "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
+        "matched_cases": matched,
+    }
+    junction_teacher_delta_file.write_text(
+        json.dumps(junction_teacher_delta, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     report = {
         "status": "pass" if reference_cases else "blocked",
         "claim_status": "diagnostic-demo" if reference_cases else "blocked",
+        "audit_mode": "full",
         "reference_net_file": str(reference_net_file),
         "candidate_net_file": str(candidate_net_file),
         "output_dir": str(output_dir),
@@ -72,6 +207,7 @@ def audit_reference_join_patterns(
         "candidate_cluster_radius_m": candidate_cluster_radius_m,
         "candidate_min_cluster_nodes": candidate_min_cluster_nodes,
         "match_radius_m": match_radius_m,
+        "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
         "reference_case_count": len(reference_cases),
         "matched_case_count": len(matched),
         "unmatched_case_count": len(matched_cases) - len(matched),
@@ -79,15 +215,260 @@ def audit_reference_join_patterns(
         "reference_type_counts": dict(Counter(case["reference_type"] for case in reference_cases)),
         "learned_rule_counts": dict(Counter(case["learned_rule"] for case in matched_cases)),
         "pattern_stats": _pattern_stats(reference_cases, matched),
+        "junction_pattern_index": junction_pattern_index,
+        "candidate_junction_pattern_index": candidate_junction_pattern_index,
+        "junction_pattern_comparison_status": "fail"
+        if junction_pattern_mismatch_count
+        else ("pass" if junction_pattern_comparisons else "skipped"),
+        "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+        "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+        "junction_structural_signature_status": junction_structural_signature_delta["status"],
+        "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
+        "reference_structural_signature_summary": reference_structural_signature_summary,
+        "candidate_structural_signature_summary": candidate_structural_signature_summary,
+        "network_structural_delta_status": network_structural_delta["status"],
+        "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_extra_counts": network_structural_delta["extra_counts"],
+        "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
+        "tls_control_review_status": tls_control_review["status"],
+        "tls_control_review_queue_count": tls_control_review["queue_count"],
+        "tls_control_review_queue": tls_control_review["queue"],
+        "reference_network_structural_summary": reference_network_structural_summary,
+        "candidate_network_structural_summary": candidate_network_structural_summary,
+        "junction_pattern_comparisons": junction_pattern_comparisons,
+        "junction_pattern_templates": junction_pattern_templates,
+        "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
+        "junction_pattern_comparisons_file": str(junction_pattern_comparisons_file),
+        "junction_pattern_templates_file": str(junction_pattern_templates_file),
+        "junction_teacher_delta_file": str(junction_teacher_delta_file),
         "cases_file": str(cases_file),
         "summary_file": str(summary_file),
         "candidate_topology_audit_file": str(candidate_audit.get("report_file", "")),
         "matched_cases": matched,
         "all_cases": matched_cases,
-        "warnings": _warnings(reference_cases, matched_cases),
+        "warnings": _warnings(reference_cases, matched_cases) + pattern_warnings,
     }
     summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
+
+
+def _structural_only_report(
+    *,
+    reference_net_file: Path,
+    candidate_net_file: Path,
+    output_dir: Path,
+    prefix: str,
+    reference_cluster_prefix: str,
+    candidate_cluster_radius_m: float,
+    candidate_min_cluster_nodes: int,
+    match_radius_m: float,
+    equivalent_approach_edge_map: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    reference_network_structural_summary = _net_structural_summary(reference_net_file)
+    candidate_network_structural_summary = _net_structural_summary(candidate_net_file)
+    network_structural_delta = _network_structural_delta(
+        reference_network_structural_summary,
+        candidate_network_structural_summary,
+    )
+    tls_control_review = _tls_control_review(reference_network_structural_summary, candidate_network_structural_summary)
+    pattern_junction_ids, pattern_sample_warning = _structural_only_pattern_junction_ids(
+        reference_net_file,
+        candidate_net_file,
+        limit=STRUCTURAL_ONLY_PATTERN_SAMPLE_LIMIT,
+    )
+    pattern_warnings = []
+    try:
+        junction_pattern_index = extract_junction_pattern_index(reference_net_file, junction_ids=pattern_junction_ids)
+    except (KeyError, TypeError, ValueError) as exc:
+        junction_pattern_index = []
+        pattern_warnings.append(f"junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    try:
+        candidate_junction_pattern_index = extract_junction_pattern_index(
+            candidate_net_file,
+            junction_ids=pattern_junction_ids,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        candidate_junction_pattern_index = []
+        pattern_warnings.append(f"candidate junction pattern extraction failed: {type(exc).__name__}: {exc}")
+    junction_pattern_comparisons = _compare_same_id_patterns(
+        junction_pattern_index,
+        candidate_junction_pattern_index,
+        equivalent_approach_edge_map=equivalent_approach_edge_map,
+    )
+    junction_pattern_mismatch_count = sum(
+        1 for comparison in junction_pattern_comparisons if comparison["status"] != "pass"
+    )
+    junction_pattern_mismatch_field_counts = dict(
+        Counter(
+            field
+            for comparison in junction_pattern_comparisons
+            for field in comparison.get("mismatch_fields", [])
+        )
+    )
+    junction_pattern_templates = summarize_junction_pattern_templates(junction_pattern_index)
+    candidate_junction_pattern_templates = summarize_junction_pattern_templates(candidate_junction_pattern_index)
+    reference_structural_signature_summary = _structural_signature_summary(junction_pattern_index)
+    candidate_structural_signature_summary = _structural_signature_summary(candidate_junction_pattern_index)
+    junction_structural_signature_delta = _structural_signature_delta(
+        reference_structural_signature_summary,
+        candidate_structural_signature_summary,
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
+    junction_pattern_comparisons_file = output_dir / f"{prefix}_junction_pattern_comparisons.csv"
+    junction_pattern_templates_file = output_dir / f"{prefix}_junction_pattern_templates.json"
+    summary_file = output_dir / f"{prefix}_reference_join_audit.json"
+    _write_junction_pattern_comparisons_csv(junction_pattern_comparisons_file, junction_pattern_comparisons)
+    junction_pattern_templates_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "reference_net_file": str(reference_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "reference_policy_summary": summarize_junction_pattern_policy(junction_pattern_index),
+                "candidate_policy_summary": summarize_junction_pattern_policy(candidate_junction_pattern_index),
+                "reference_templates": junction_pattern_templates,
+                "candidate_templates": candidate_junction_pattern_templates,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    report = {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "audit_mode": "structural_only",
+        "reference_net_file": str(reference_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "output_dir": str(output_dir),
+        "reference_cluster_prefix": reference_cluster_prefix,
+        "candidate_cluster_radius_m": candidate_cluster_radius_m,
+        "candidate_min_cluster_nodes": candidate_min_cluster_nodes,
+        "match_radius_m": match_radius_m,
+        "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
+        "reference_case_count": 0,
+        "matched_case_count": 0,
+        "unmatched_case_count": 0,
+        "candidate_topology_cluster_count": 0,
+        "reference_type_counts": {},
+        "learned_rule_counts": {},
+        "pattern_stats": {},
+        "junction_pattern_index": junction_pattern_index,
+        "candidate_junction_pattern_index": candidate_junction_pattern_index,
+        "junction_pattern_comparison_status": "fail"
+        if junction_pattern_mismatch_count
+        else ("pass" if junction_pattern_comparisons else "skipped"),
+        "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+        "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+        "junction_structural_signature_status": junction_structural_signature_delta["status"],
+        "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
+        "reference_structural_signature_summary": reference_structural_signature_summary,
+        "candidate_structural_signature_summary": candidate_structural_signature_summary,
+        "network_structural_delta_status": network_structural_delta["status"],
+        "network_structural_missing_counts": network_structural_delta["missing_counts"],
+        "network_structural_extra_counts": network_structural_delta["extra_counts"],
+        "network_structural_junction_type_missing_counts": network_structural_delta["junction_type_missing_counts"],
+        "network_structural_junction_type_extra_counts": network_structural_delta["junction_type_extra_counts"],
+        "tls_control_review_status": tls_control_review["status"],
+        "tls_control_review_queue_count": tls_control_review["queue_count"],
+        "tls_control_review_queue": tls_control_review["queue"],
+        "reference_network_structural_summary": reference_network_structural_summary,
+        "candidate_network_structural_summary": candidate_network_structural_summary,
+        "junction_pattern_comparisons": junction_pattern_comparisons,
+        "junction_pattern_templates": junction_pattern_templates,
+        "candidate_junction_pattern_templates": candidate_junction_pattern_templates,
+        "junction_pattern_comparisons_file": str(junction_pattern_comparisons_file),
+        "junction_pattern_templates_file": str(junction_pattern_templates_file),
+        "junction_teacher_delta_file": str(junction_teacher_delta_file),
+        "cases_file": "",
+        "summary_file": str(summary_file),
+        "candidate_topology_audit_file": "",
+        "matched_cases": [],
+        "all_cases": [],
+        "warnings": ["reference join audit ran in structural-only mode; full case matching was skipped"]
+        + ([pattern_sample_warning] if pattern_sample_warning else [])
+        + pattern_warnings,
+    }
+    junction_teacher_delta_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "audit_mode": "structural_only",
+                "reference_net_file": str(reference_net_file),
+                "candidate_net_file": str(candidate_net_file),
+                "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
+                "junction_pattern_comparison_status": report["junction_pattern_comparison_status"],
+                "junction_pattern_mismatch_count": junction_pattern_mismatch_count,
+                "junction_pattern_mismatch_field_counts": junction_pattern_mismatch_field_counts,
+                "junction_structural_signature_status": junction_structural_signature_delta["status"],
+                "junction_structural_signature_missing_counts": junction_structural_signature_delta["missing_counts"],
+                "network_structural_delta_status": network_structural_delta["status"],
+                "network_structural_missing_counts": network_structural_delta["missing_counts"],
+                "network_structural_extra_counts": network_structural_delta["extra_counts"],
+                "network_structural_junction_type_missing_counts": network_structural_delta[
+                    "junction_type_missing_counts"
+                ],
+                "network_structural_junction_type_extra_counts": network_structural_delta[
+                    "junction_type_extra_counts"
+                ],
+                "tls_control_review_status": tls_control_review["status"],
+                "tls_control_review_queue_count": tls_control_review["queue_count"],
+                "tls_control_review_queue": tls_control_review["queue"],
+                "reference_network_structural_summary": reference_network_structural_summary,
+                "candidate_network_structural_summary": candidate_network_structural_summary,
+                "junction_pattern_comparisons": junction_pattern_comparisons,
+                "matched_cases": [],
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    summary_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
+def _structural_only_pattern_junction_ids(
+    reference_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    limit: int,
+) -> tuple[list[str], str]:
+    reference = _junction_pattern_candidates(reference_net_file)
+    candidate = _junction_pattern_candidates(candidate_net_file)
+    common_ids = sorted(set(reference) & set(candidate))
+    ranked = sorted(
+        common_ids,
+        key=lambda junction_id: (
+            not (reference[junction_id]["is_tls"] or candidate[junction_id]["is_tls"]),
+            -max(reference[junction_id]["inc_lane_count"], candidate[junction_id]["inc_lane_count"]),
+            junction_id,
+        ),
+    )
+    warning = ""
+    if len(ranked) > limit:
+        warning = (
+            f"structural-only junction pattern comparison sampled {limit} of {len(ranked)} common junction ids; "
+            "full topology matching was skipped"
+        )
+    return ranked[:limit], warning
+
+
+def _junction_pattern_candidates(net_file: Path) -> dict[str, dict[str, Any]]:
+    root = ET.parse(net_file).getroot()
+    candidates: dict[str, dict[str, Any]] = {}
+    for junction in root.findall("junction"):
+        junction_id = junction.attrib.get("id", "")
+        if not junction_id or junction_id.startswith(":") or junction.attrib.get("type") == "internal":
+            continue
+        candidates[junction_id] = {
+            "is_tls": junction.attrib.get("type") == "traffic_light",
+            "inc_lane_count": len(junction.attrib.get("incLanes", "").split()),
+        }
+    return candidates
 
 
 def _failure(error: str) -> dict[str, Any]:
@@ -100,7 +481,7 @@ def _failure(error: str) -> dict[str, Any]:
 
 def _reference_join_cases(net_file: Path, cluster_prefix: str) -> list[dict[str, Any]]:
     root = ET.parse(net_file).getroot()
-    xy_to_latlon = _coordinate_converter(net_file)
+    xy_to_latlon = _coordinate_converter(root, net_file)
     cases = []
     for junction in root.findall("junction"):
         junction_id = junction.attrib.get("id", "")
@@ -267,9 +648,11 @@ def _match_reference_sources(reference_case: dict[str, Any], candidate_graph: di
 
 
 def _has_source_join_evidence(source_match: dict[str, Any]) -> bool:
+    if int(source_match.get("matched_reference_source_node_count", 0)) < 2:
+        return False
     return (
-        int(source_match.get("matched_reference_source_node_count", 0)) >= 2
-        and int(source_match.get("matched_reference_source_internal_edge_count", 0)) > 0
+        int(source_match.get("matched_reference_source_internal_edge_count", 0)) > 0
+        or int(source_match.get("matched_reference_source_boundary_edge_count", 0)) >= 2
     )
 
 
@@ -299,6 +682,399 @@ def _pattern_stats(reference_cases: list[dict[str, Any]], matched_cases: list[di
         "matched_reference_type_counts": _count_field(matched_cases, "reference_type"),
         "learned_rule_basis_counts": _count_field(matched_cases, "learned_rule_basis"),
     }
+
+
+def _structural_signature_summary(patterns: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        "pattern_count": len(patterns),
+        "internal_bundle_pattern_count": sum(1 for pattern in patterns if int(pattern.get("internal_edge_count", 0)) > 0),
+        "movement_signature_pattern_count": sum(1 for pattern in patterns if pattern.get("movement_signature_counts")),
+        "pedestrian_separation_pattern_count": sum(
+            1
+            for pattern in patterns
+            if int((pattern.get("internal_function_counts", {}) or {}).get("crossing", 0)) > 0
+            or int((pattern.get("internal_function_counts", {}) or {}).get("walkingarea", 0)) > 0
+        ),
+        "request_bit_vector_pattern_count": sum(
+            1
+            for pattern in patterns
+            if int(pattern.get("request_count", 0)) > 0 and bool(pattern.get("request_bit_lengths_ok", False))
+        ),
+        "tls_pattern_count": sum(1 for pattern in patterns if bool(pattern.get("has_tls", False))),
+    }
+
+
+def _structural_signature_delta(reference: dict[str, int], candidate: dict[str, int]) -> dict[str, Any]:
+    missing = {
+        key: reference[key] - candidate.get(key, 0)
+        for key in reference
+        if key != "pattern_count" and reference[key] > candidate.get(key, 0)
+    }
+    return {"status": "fail" if missing else "pass", "missing_counts": missing}
+
+
+def _net_structural_summary(net_file: Path) -> dict[str, Any]:
+    root = ET.parse(net_file).getroot()
+    edge_function_counts = Counter(_edge_function(edge) for edge in root.findall("edge"))
+    plain_edge_type_counts: Counter[str] = Counter()
+    plain_edge_type_pedestrian_lane_counts: Counter[str] = Counter()
+    for edge in root.findall("edge"):
+        if _edge_function(edge) != "plain":
+            continue
+        edge_type = edge.attrib.get("type", "") or "none"
+        plain_edge_type_counts[edge_type] += 1
+        if any("pedestrian" in lane.attrib.get("allow", "").split() for lane in edge.findall("lane")):
+            plain_edge_type_pedestrian_lane_counts[edge_type] += 1
+    junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib.get("id", "").startswith(":")
+    }
+    junction_type_counts = Counter(
+        junction.attrib.get("type", "") or "blank"
+        for junction in root.findall("junction")
+        if not junction.attrib.get("id", "").startswith(":") and junction.attrib.get("type") != "internal"
+    )
+    connections = root.findall("connection")
+    tls_summary = _tls_semantic_summary(root, connections, junction_ids)
+    return {
+        "plain_edge_count": edge_function_counts.get("plain", 0),
+        "internal_edge_count": edge_function_counts.get("internal", 0),
+        "crossing_edge_count": edge_function_counts.get("crossing", 0),
+        "walkingarea_edge_count": edge_function_counts.get("walkingarea", 0),
+        "connection_count": len(connections),
+        "request_count": sum(len(junction.findall("request")) for junction in root.findall("junction")),
+        "tl_logic_count": len(root.findall("tlLogic")),
+        "traffic_light_junction_count": junction_type_counts.get("traffic_light", 0),
+        "tls_controlled_connection_count": sum(
+            1 for connection in connections if connection.attrib.get("tl") and connection.attrib.get("linkIndex")
+        ),
+        "tl_connection_missing_linkindex_count": sum(
+            1 for connection in connections if connection.attrib.get("tl") and not connection.attrib.get("linkIndex")
+        ),
+        **tls_summary,
+        "junction_type_counts": dict(sorted(junction_type_counts.items())),
+        "edge_function_counts": dict(sorted(edge_function_counts.items())),
+        "plain_edge_type_counts": dict(sorted(plain_edge_type_counts.items())),
+        "plain_edge_type_pedestrian_lane_counts": dict(sorted(plain_edge_type_pedestrian_lane_counts.items())),
+    }
+
+
+def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junction_ids: set[str]) -> dict[str, Any]:
+    tl_logic_ids = [tl.attrib["id"] for tl in root.findall("tlLogic") if tl.attrib.get("id")]
+    passenger_edges = {
+        edge.attrib.get("id", "")
+        for edge in root.findall("edge")
+        if edge.attrib.get("id") and any(lane_allows_passenger(lane) for lane in edge.findall("lane"))
+    }
+    known_edges = {edge.attrib.get("id", "") for edge in root.findall("edge") if edge.attrib.get("id")}
+    traffic_light_ids = {
+        junction.attrib["id"]
+        for junction in root.findall("junction")
+        if junction.attrib.get("id") and junction.attrib.get("type") == "traffic_light"
+    }
+    phase_state_lengths = {
+        tl_id: max((len(phase.attrib.get("state", "")) for phase in tl.findall("phase")), default=0)
+        for tl in root.findall("tlLogic")
+        if (tl_id := tl.attrib.get("id"))
+    }
+    controlled_connection_counts: Counter[str] = Counter()
+    controlled_junctions_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    controlled_junctions: set[str] = set()
+    linkindex_group_counts: Counter[tuple[str, str]] = Counter()
+    linkindexes_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    known_from_edges_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    passenger_from_edges_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    for connection in connections:
+        tl_id = connection.attrib.get("tl", "")
+        link_index = connection.attrib.get("linkIndex", "")
+        if not tl_id or not link_index:
+            continue
+        controlled_connection_counts[tl_id] += 1
+        from_edge = connection.attrib.get("from", "")
+        if from_edge in known_edges:
+            known_from_edges_by_tl.setdefault(tl_id, set()).add(from_edge)
+        if from_edge in passenger_edges:
+            passenger_from_edges_by_tl.setdefault(tl_id, set()).add(from_edge)
+        linkindex_group_counts[(tl_id, link_index)] += 1
+        try:
+            linkindexes_by_tl.setdefault(tl_id, set()).add(int(link_index))
+        except ValueError:
+            pass
+        junction_id = _connection_junction_id(connection, junction_ids)
+        if junction_id:
+            controlled_junctions_by_tl.setdefault(tl_id, set()).add(junction_id)
+            controlled_junctions.add(junction_id)
+    shared_linkindex_groups_by_tl: Counter[str] = Counter()
+    for (tl_id, _link_index), count in linkindex_group_counts.items():
+        if count > 1:
+            shared_linkindex_groups_by_tl[tl_id] += 1
+    tl_logic_control_records = []
+    for tl_id in tl_logic_ids:
+        linkindexes = sorted(linkindexes_by_tl.get(tl_id, set()))
+        phase_state_length = int(phase_state_lengths.get(tl_id, 0))
+        tl_logic_control_records.append(
+            {
+                "tl_id": tl_id,
+                "controlled_connection_count": int(controlled_connection_counts.get(tl_id, 0)),
+                "controlled_junction_count": len(controlled_junctions_by_tl.get(tl_id, set())),
+                "junction_ids": sorted(controlled_junctions_by_tl.get(tl_id, set())),
+                "controlled_known_from_edge_count": len(known_from_edges_by_tl.get(tl_id, set())),
+                "controlled_passenger_from_edge_count": len(passenger_from_edges_by_tl.get(tl_id, set())),
+                "passenger_from_edge_ids": sorted(passenger_from_edges_by_tl.get(tl_id, set())),
+                "linkindexes": linkindexes,
+                "controlled_linkindex_count": len(linkindexes),
+                "phase_state_length": phase_state_length,
+                "shared_linkindex_group_count": int(shared_linkindex_groups_by_tl.get(tl_id, 0)),
+                "sparse_linkindex": bool(linkindexes and phase_state_length > len(linkindexes)),
+            }
+        )
+    return {
+        "tl_logic_controlled_connection_count_distribution": _count_distribution(
+            controlled_connection_counts.get(tl_id, 0) for tl_id in tl_logic_ids
+        ),
+        "tl_logic_controlled_junction_count_distribution": _count_distribution(
+            len(controlled_junctions_by_tl.get(tl_id, set())) for tl_id in tl_logic_ids
+        ),
+        "tl_logic_controlled_passenger_from_edge_count_distribution": _count_distribution(
+            len(passenger_from_edges_by_tl.get(tl_id, set())) for tl_id in tl_logic_ids
+        ),
+        "low_passenger_approach_tl_logic_count": sum(
+            1
+            for tl_id in tl_logic_ids
+            if known_from_edges_by_tl.get(tl_id) and len(passenger_from_edges_by_tl.get(tl_id, set())) <= 2
+        ),
+        "multi_junction_tl_logic_count": sum(
+            1 for tl_id in tl_logic_ids if len(controlled_junctions_by_tl.get(tl_id, set())) > 1
+        ),
+        "traffic_light_junction_without_tls_connection_count": len(traffic_light_ids - controlled_junctions),
+        "traffic_light_junction_without_tls_connection_ids": sorted(traffic_light_ids - controlled_junctions),
+        "tls_shared_linkindex_group_count": sum(1 for count in linkindex_group_counts.values() if count > 1),
+        "tls_sparse_linkindex_tl_logic_count": sum(
+            1
+            for tl_id in tl_logic_ids
+            if linkindexes_by_tl.get(tl_id)
+            and int(phase_state_lengths.get(tl_id, 0)) > len(linkindexes_by_tl.get(tl_id, set()))
+        ),
+        "tl_logic_control_records": tl_logic_control_records,
+    }
+
+
+def _count_distribution(values: Any) -> dict[str, int]:
+    return dict(sorted(Counter(str(value) for value in values).items(), key=lambda item: int(item[0])))
+
+
+def _tls_control_review(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    reference_max_junction_count = _max_distribution_key(
+        reference.get("tl_logic_controlled_junction_count_distribution", {})
+    )
+    reference_sparse_budget = int(reference.get("tls_sparse_linkindex_tl_logic_count", 0))
+    reference_low_passenger_approach_budget = int(reference.get("low_passenger_approach_tl_logic_count", 0))
+    sparse_seen = 0
+    low_passenger_approach_seen = 0
+    queue = []
+    for record in candidate.get("tl_logic_control_records", []):
+        controlled_junction_count = int(record.get("controlled_junction_count", 0))
+        controlled_known_from_edge_count = int(record.get("controlled_known_from_edge_count", 0))
+        controlled_passenger_from_edge_count = int(record.get("controlled_passenger_from_edge_count", 0))
+        if controlled_known_from_edge_count and controlled_passenger_from_edge_count <= 2:
+            low_passenger_approach_seen += 1
+            if low_passenger_approach_seen > reference_low_passenger_approach_budget:
+                queue.append(
+                    {
+                        "repair_category": "tls_reality_review",
+                        "review_type": "downgrade_low_vehicle_approach_tls",
+                        "tl_id": record.get("tl_id", ""),
+                        "controlled_connection_count": int(record.get("controlled_connection_count", 0)),
+                        "controlled_known_from_edge_count": controlled_known_from_edge_count,
+                        "controlled_passenger_from_edge_count": controlled_passenger_from_edge_count,
+                        "reference_low_passenger_approach_tl_logic_count": reference_low_passenger_approach_budget,
+                        "passenger_from_edge_ids": list(record.get("passenger_from_edge_ids", [])),
+                        "reason": "candidate tlLogic has few passenger from-edges beyond the reference low-approach budget",
+                    }
+                )
+        if controlled_junction_count > reference_max_junction_count:
+            queue.append(
+                {
+                    "repair_category": "tls_controller_cardinality_repair",
+                    "review_type": "split_multi_junction_tls",
+                    "tl_id": record.get("tl_id", ""),
+                    "controlled_connection_count": int(record.get("controlled_connection_count", 0)),
+                    "controlled_junction_count": controlled_junction_count,
+                    "reference_max_controlled_junction_count": reference_max_junction_count,
+                    "junction_ids": list(record.get("junction_ids", [])),
+                    "reason": "candidate tlLogic controls more junctions than the reference maximum",
+                }
+            )
+        if bool(record.get("sparse_linkindex", False)):
+            sparse_seen += 1
+            if sparse_seen > reference_sparse_budget:
+                queue.append(
+                    {
+                        "repair_category": "tls_linkindex_phase_repair",
+                        "review_type": "inspect_sparse_linkindex",
+                        "tl_id": record.get("tl_id", ""),
+                        "controlled_connection_count": int(record.get("controlled_connection_count", 0)),
+                        "controlled_linkindex_count": int(record.get("controlled_linkindex_count", 0)),
+                        "phase_state_length": int(record.get("phase_state_length", 0)),
+                        "linkindexes": list(record.get("linkindexes", [])),
+                        "reason": "candidate tlLogic phase state has more positions than controlled linkIndexes",
+                    }
+                )
+    for junction_id in candidate.get("traffic_light_junction_without_tls_connection_ids", []):
+        queue.append(
+            {
+                "repair_category": "tls_controller_cardinality_repair",
+                "review_type": "bind_or_downgrade_uncontrolled_traffic_light_junction",
+                "junction_id": junction_id,
+                "reason": "traffic_light junction has no controlled connection",
+            }
+        )
+    for key, review_type, repair_category, reason in (
+        (
+            "tls_controlled_connection_count",
+            "restore_tls_controlled_connections",
+            "tls_controller_cardinality_repair",
+            "candidate has fewer TLS-controlled connections than the reference",
+        ),
+        (
+            "multi_junction_tl_logic_count",
+            "restore_reference_multi_junction_tls_scope",
+            "tls_controller_cardinality_repair",
+            "candidate has fewer reference-style multi-junction tlLogic scopes",
+        ),
+        (
+            "tls_shared_linkindex_group_count",
+            "restore_shared_linkindex_groups",
+            "tls_linkindex_phase_repair",
+            "candidate has fewer shared linkIndex groups than the reference",
+        ),
+        (
+            "tls_sparse_linkindex_tl_logic_count",
+            "inspect_reference_sparse_linkindex_programs",
+            "tls_linkindex_phase_repair",
+            "candidate has fewer reference-style sparse linkIndex programs",
+        ),
+    ):
+        reference_count = int(reference.get(key, 0))
+        candidate_count = int(candidate.get(key, 0))
+        if reference_count > candidate_count:
+            queue.append(
+                {
+                    "repair_category": repair_category,
+                    "review_type": review_type,
+                    "reference_count": reference_count,
+                    "candidate_count": candidate_count,
+                    "missing_count": reference_count - candidate_count,
+                    "reason": reason,
+                }
+            )
+    return {"status": "needs_review" if queue else "pass", "queue_count": len(queue), "queue": queue}
+
+
+def _max_distribution_key(distribution: Any) -> int:
+    if not isinstance(distribution, dict) or not distribution:
+        return 1
+    return max((int(key) for key in distribution), default=1)
+
+
+def _connection_junction_id(connection: ET.Element, junction_ids: set[str]) -> str:
+    via = connection.attrib.get("via", "")
+    if via.startswith(":"):
+        lane_id = via[1:]
+        matches = [junction_id for junction_id in junction_ids if lane_id == junction_id or lane_id.startswith(f"{junction_id}_")]
+        if matches:
+            return max(matches, key=len)
+    tl_id = connection.attrib.get("tl", "")
+    return tl_id if tl_id in junction_ids else ""
+
+
+def _edge_function(edge: ET.Element) -> str:
+    function = edge.attrib.get("function", "")
+    if function in {"crossing", "walkingarea"}:
+        return function
+    if edge.attrib.get("id", "").startswith(":") or function == "internal":
+        return "internal"
+    return "plain"
+
+
+def _network_structural_delta(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    scalar_keys = [
+        "crossing_edge_count",
+        "walkingarea_edge_count",
+        "internal_edge_count",
+        "connection_count",
+        "request_count",
+        "tl_logic_count",
+        "traffic_light_junction_count",
+        "tls_controlled_connection_count",
+        "multi_junction_tl_logic_count",
+        "traffic_light_junction_without_tls_connection_count",
+        "tls_shared_linkindex_group_count",
+        "tls_sparse_linkindex_tl_logic_count",
+    ]
+    missing_counts = {
+        key: int(reference.get(key, 0)) - int(candidate.get(key, 0))
+        for key in scalar_keys
+        if int(reference.get(key, 0)) > int(candidate.get(key, 0))
+    }
+    extra_counts = {
+        key: int(candidate.get(key, 0)) - int(reference.get(key, 0))
+        for key in scalar_keys
+        if int(candidate.get(key, 0)) > int(reference.get(key, 0))
+    }
+    reference_types = reference.get("junction_type_counts", {}) if isinstance(reference.get("junction_type_counts"), dict) else {}
+    candidate_types = candidate.get("junction_type_counts", {}) if isinstance(candidate.get("junction_type_counts"), dict) else {}
+    junction_type_missing_counts = {
+        key: int(value) - int(candidate_types.get(key, 0))
+        for key, value in reference_types.items()
+        if int(value) > int(candidate_types.get(key, 0))
+    }
+    junction_type_extra_counts = {
+        key: int(value) - int(reference_types.get(key, 0))
+        for key, value in candidate_types.items()
+        if int(value) > int(reference_types.get(key, 0))
+    }
+    return {
+        "status": "fail"
+        if missing_counts or extra_counts or junction_type_missing_counts or junction_type_extra_counts
+        else "pass",
+        "missing_counts": dict(sorted(missing_counts.items())),
+        "extra_counts": dict(sorted(extra_counts.items())),
+        "junction_type_missing_counts": dict(sorted(junction_type_missing_counts.items())),
+        "junction_type_extra_counts": dict(sorted(junction_type_extra_counts.items())),
+    }
+
+
+def _compare_same_id_patterns(
+    reference_patterns: list[dict[str, Any]],
+    candidate_patterns: list[dict[str, Any]],
+    *,
+    equivalent_approach_edge_map: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    candidates_by_id = {str(pattern.get("junction_id", "")): pattern for pattern in candidate_patterns}
+    comparisons = []
+    for reference in reference_patterns:
+        junction_id = str(reference.get("junction_id", ""))
+        candidate = candidates_by_id.get(junction_id)
+        if not junction_id or candidate is None:
+            continue
+        comparison = compare_junction_pattern_records(
+            reference,
+            candidate,
+            equivalent_approach_edge_map=equivalent_approach_edge_map,
+        )
+        comparisons.append(
+            {
+                "junction_id": junction_id,
+                "status": comparison["status"],
+                "mismatch_fields": comparison["mismatch_fields"],
+                "teacher": comparison["teacher"],
+                "candidate": comparison["candidate"],
+                "approach_edge_equivalence_applied": comparison["approach_edge_equivalence_applied"],
+            }
+        )
+    return comparisons
 
 
 def _count_field(cases: list[dict[str, Any]], field: str) -> dict[str, int]:
@@ -351,7 +1127,15 @@ def _parse_shape(shape_text: str) -> list[tuple[float, float]]:
     return points
 
 
-def _coordinate_converter(net_file: Path) -> Callable[[float, float], tuple[float, float]] | None:
+def _coordinate_converter(root: ET.Element, net_file: Path) -> Callable[[float, float], tuple[float, float]] | None:
+    location = root.find("location")
+    if location is not None:
+        try:
+            offset_x, offset_y = (float(value) for value in location.attrib["netOffset"].split(",", 1))
+            zone = _parse_utm_zone(location.attrib["projParameter"])
+            return lambda x, y: _utm_to_latlon(x - offset_x, y - offset_y, zone=zone, northern=True)
+        except (KeyError, TypeError, ValueError):
+            pass
     try:
         import sumolib  # type: ignore
 
@@ -435,6 +1219,51 @@ def _write_cases_csv(path: Path, cases: list[dict[str, Any]]) -> None:
                 if isinstance(value, list):
                     row[field] = ";".join(str(item) for item in value)
             writer.writerow(row)
+
+
+def _write_junction_pattern_comparisons_csv(path: Path, comparisons: list[dict[str, Any]]) -> None:
+    fields = [
+        "junction_id",
+        "status",
+        "mismatch_fields",
+        "teacher_approach_edge_ids",
+        "candidate_approach_edge_ids",
+        "teacher_control_type",
+        "candidate_control_type",
+        "teacher_has_tls",
+        "candidate_has_tls",
+        "teacher_internal_function_counts",
+        "candidate_internal_function_counts",
+        "teacher_request_bit_lengths_ok",
+        "candidate_request_bit_lengths_ok",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for comparison in comparisons:
+            teacher = comparison.get("teacher", {})
+            candidate = comparison.get("candidate", {})
+            writer.writerow(
+                {
+                    "junction_id": comparison.get("junction_id", ""),
+                    "status": comparison.get("status", ""),
+                    "mismatch_fields": ";".join(str(field) for field in comparison.get("mismatch_fields", [])),
+                    "teacher_approach_edge_ids": ";".join(teacher.get("approach_edge_ids", []) or []),
+                    "candidate_approach_edge_ids": ";".join(candidate.get("approach_edge_ids", []) or []),
+                    "teacher_control_type": teacher.get("control_type", ""),
+                    "candidate_control_type": candidate.get("control_type", ""),
+                    "teacher_has_tls": teacher.get("has_tls", ""),
+                    "candidate_has_tls": candidate.get("has_tls", ""),
+                    "teacher_internal_function_counts": json.dumps(
+                        teacher.get("internal_function_counts", {}), ensure_ascii=False, sort_keys=True
+                    ),
+                    "candidate_internal_function_counts": json.dumps(
+                        candidate.get("internal_function_counts", {}), ensure_ascii=False, sort_keys=True
+                    ),
+                    "teacher_request_bit_lengths_ok": teacher.get("request_bit_lengths_ok", ""),
+                    "candidate_request_bit_lengths_ok": candidate.get("request_bit_lengths_ok", ""),
+                }
+            )
 
 
 def _warnings(reference_cases: list[dict[str, Any]], matched_cases: list[dict[str, Any]]) -> list[str]:

@@ -22,9 +22,9 @@
 
 </div>
 
-## One Prompt to a SUMO Network, Across Models
+## Evidence-Aware OSM-to-SUMO Construction
 
-Torii ist fuer SUMO-Arbeit gedacht: Eine kurze natuerliche Anfrage kann zu einem begrenzten OSM-zu-SUMO-Netzworkflow werden, mit Konstruktionsnachweisen, Erreichbarkeitschecks und klarer Aussagegrenze.
+Torii ist fuer SUMO-Netzkonstruktion gedacht: Eine kurze natuerliche Anfrage kann zu einem begrenzten, evidence-aware und reference-comparable OSM-zu-SUMO-Workflow werden, mit Konstruktionsnachweisen, Erreichbarkeitschecks, Review-Artefakten und klarer Aussagegrenze.
 
 Das Plugin startet jetzt mit einem Workflow Router: `torii_auto_workflow` klassifiziert die Anfrage, waehlt Skills, erstellt Plaene und fuehrt sichere MCP-Schritte aus, um das SUMO-Netz zu erzeugen oder zu aendern.
 
@@ -35,7 +35,9 @@ Torii hat zwei Schichten:
 | Reasoning layer | SUMO Expert Skills stellen die richtigen Fragen, waehlen einen Workflow und begrenzen Aussagen. |
 | Execution layer | Lokale sichere stdio MCP Tools fuehren begrenzte SUMO-Checks aus und liefern strukturierte Beobachtungen. |
 
-Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
+Die Architektur ist in [`ARCHITECTURE.md`](ARCHITECTURE.md) dokumentiert: Router, Planner, Executor und Reviewer.
+
+Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
 
 ## Example
 
@@ -45,7 +47,7 @@ Mit diesem Prompt kann Torii getestet werden:
 Use Torii to clean the Ingolstadt city-center network from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, and open the cleaned network in Netedit.
 ```
 
-Dieses Demo nutzt jetzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein von Torii aus OSM bereinigtes Netz in Richtung eines manuell bereinigten Referenznetzes konvergiert, statt OSM-Import-Erfolg als ausreichend zu behandeln.
+Dieses Demo nutzt die Ingolstaedter Innenstadt, um zu pruefen, ob ein Torii OSM-derived Workflow besser auditierbar ist und naeher an ein manuell bereinigtes Referenznetz kommt als reiner OSM-Import-Erfolg.
 
 ![TUM-bbox-Referenz im Vergleich mit Torii 5.5 TLS-aggregated visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
 
@@ -91,7 +93,7 @@ Torii baut und auditiert SUMO-Artefakte, zertifiziert ein Modell aber nicht als 
 
 ## License and Notices
 
-Quelltext ist unter MIT lizenziert. Skill-Dateien, Dokumentation, Checklisten, Beispiele und Protokolltexte sind unter CC BY 4.0 lizenziert. Beide Bereiche stehen in [`LICENSE`](LICENSE).
+Quelltext ist unter PolyForm Noncommercial 1.0.0 lizenziert. Skill-Dateien, Dokumentation, Checklisten, Beispiele und Protokolltexte sind unter CC BY-NC 4.0 lizenziert. Kommerzielle Nutzung erfordert eine separate schriftliche Erlaubnis. Beide Bereiche stehen in [`LICENSE`](LICENSE).
 
 Eclipse SUMO ist eine Marke der Eclipse Foundation. Kartendaten im OSM-Demo sind © OpenStreetMap contributors und unter der Open Database License (ODbL) verfuegbar.
 

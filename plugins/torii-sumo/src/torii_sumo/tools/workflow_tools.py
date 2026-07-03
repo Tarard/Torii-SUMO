@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from torii_sumo.core.workflow_router import run_auto_workflow
+from torii_sumo.tools.osm_tools import sumo_osm_cleanup_workflow
 
 
 def torii_auto_workflow(
@@ -17,9 +18,17 @@ def torii_auto_workflow(
     highway_classes: str | None = None,
     traffic_layers: str | None = None,
     network_profile: str | None = None,
+    seed_osm_node_id: str | None = None,
     reference_net_file: str | None = None,
     reference_policy_report: str | None = None,
     service_passenger_policy: str | None = None,
+    teacher_guided_repair_max_ready_candidates: int | None = 80,
+    run_teacher_guided_repair_after_build: bool = True,
+    road_connectivity_replay_max_owners: int | None = 4,
+    road_connectivity_probe_edge_ids: list[str] | None = None,
+    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
+    launch_netedit_after_build: bool | None = None,
+    launch_sumo_gui_after_build: bool | None = None,
     net_file: str | None = None,
     osm_file: str | None = None,
     official_inventory_csv: str | None = None,
@@ -37,12 +46,21 @@ def torii_auto_workflow(
         highway_classes=highway_classes,
         traffic_layers=traffic_layers,
         network_profile=network_profile,
+        seed_osm_node_id=seed_osm_node_id,
         reference_net_file=Path(reference_net_file) if reference_net_file else None,
         reference_policy_report=reference_policy_report,
         service_passenger_policy=service_passenger_policy,
+        teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+        run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
+        road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
+        road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
+        teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
+        launch_netedit_after_build=launch_netedit_after_build,
+        launch_sumo_gui_after_build=launch_sumo_gui_after_build,
         net_file=Path(net_file) if net_file else None,
         osm_file=Path(osm_file) if osm_file else None,
         official_inventory_csv=Path(official_inventory_csv) if official_inventory_csv else None,
         signal_plan_csv=Path(signal_plan_csv) if signal_plan_csv else None,
         field_evidence_csv=Path(field_evidence_csv) if field_evidence_csv else None,
+        cleanup_workflow_func=sumo_osm_cleanup_workflow,
     )

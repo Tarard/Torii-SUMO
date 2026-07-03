@@ -1,6 +1,7 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
-from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
+from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
 
 
 def _write_net(path: Path, edge_specs: list[tuple[str, str, str, str, float, str]]) -> None:
@@ -123,6 +124,168 @@ def test_reference_hierarchy_audit_passes_when_high_roads_are_aligned(tmp_path: 
     assert report["decision_counts"] == {"aligned": 1}
 
 
+def test_reference_hierarchy_audit_treats_compound_reference_types_as_high_roads(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [
+            (
+                "ref_tertiary_cycle_track",
+                "ra",
+                "rb",
+                "cycleway.track|highway.tertiary",
+                120.0,
+                "0,0 120,0",
+                "Jahnstrasse",
+            )
+        ],
+    )
+    _write_named_net(
+        candidate_net,
+        [
+            (
+                "cand_tertiary",
+                "ca",
+                "cb",
+                "highway.tertiary",
+                118.0,
+                "0,2 118,2",
+                "Jahnstrasse",
+            )
+        ],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="compound_type",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    assert report["status"] == "pass"
+    assert report["reference_high_hierarchy_edge_count"] == 1
+    assert report["decision_counts"] == {"aligned": 1}
+    assert report["type_comparisons"] == [
+        {
+            "edge_type": "highway.tertiary",
+            "reference_count": 1,
+            "candidate_count": 1,
+            "extra_edge_count": 0,
+            "candidate_to_reference_ratio": 1.0,
+            "hierarchy_scope_decision": "reference_aligned",
+        }
+    ]
+
+
+def test_reference_hierarchy_audit_keeps_link_when_reference_has_same_link_type(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [
+            (
+                "ref_link",
+                "ra",
+                "rb",
+                "cycleway.track|highway.primary_link",
+                80.0,
+                "0,0 80,0",
+                "Hindenburgstrasse",
+            )
+        ],
+    )
+    _write_named_net(
+        candidate_net,
+        [
+            (
+                "cand_link",
+                "ca",
+                "cb",
+                "cycleway.track|highway.primary_link",
+                78.0,
+                "0,3 78,3",
+                "Hindenburgstrasse",
+            )
+        ],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="same_link",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    assert report["status"] == "pass"
+    assert report["decision_counts"] == {"aligned": 1}
+    assert report["candidate_cases"][0]["nearest_same_type_reference_edge_id"] == "ref_link"
+
+
+def test_reference_hierarchy_audit_keeps_high_edge_when_reference_type_is_missing(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    reference_net.write_text(
+        """<net>
+  <junction id="ra" x="0.0" y="0.0" type="priority"/>
+  <junction id="rb" x="100.0" y="0.0" type="priority"/>
+  <edge id="ref_missing" from="ra" to="rb">
+    <lane id="ref_missing_0" index="0" length="100.0" shape="0,0 100,0"/>
+  </edge>
+</net>
+""",
+        encoding="utf-8",
+    )
+    _write_named_net(
+        candidate_net,
+        [("cand_primary", "ca", "cb", "highway.primary", 98.0, "0,1 98,1", "B 13")],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="missing_reference_type",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    assert report["status"] == "pass"
+    assert report["candidate_cases"][0]["corridor_match_basis"] == "reference_type_missing"
+
+
+def test_reference_hierarchy_audit_uses_same_name_same_type_corridor_beyond_distance_gate(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [
+            ("ref_context", "ra", "rb", "highway.unclassified", 100.0, "0,1 100,1", "Context"),
+            ("ref_secondary", "rc", "rd", "highway.secondary", 100.0, "0,40 100,40", "Ringstrasse"),
+        ],
+    )
+    _write_named_net(
+        candidate_net,
+        [("cand_secondary", "ca", "cb", "highway.secondary", 98.0, "0,0 98,0", "Ringstrasse")],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="same_name_same_type",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    assert report["status"] == "pass"
+    assert report["candidate_cases"][0]["corridor_match_basis"] == "same_name"
+
+
 def test_reference_hierarchy_audit_uses_same_road_name_as_corridor_evidence(tmp_path: Path) -> None:
     reference_net = tmp_path / "reference.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
@@ -203,3 +366,79 @@ def test_reference_hierarchy_audit_matches_networks_with_different_net_offsets(t
     assert report["status"] == "pass"
     assert report["candidate_cases"][0]["hierarchy_decision"] == "aligned"
     assert report["candidate_cases"][0]["nearest_same_type_reference_distance_m"] < 1.0
+
+
+def test_reference_hierarchy_type_repair_variant_copies_same_name_reference_type(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [("ref_ring", "ra", "rb", "highway.secondary", 120.0, "0,0 120,0", "Ringstrasse")],
+    )
+    _write_named_net(
+        candidate_net,
+        [("cand_ring", "ca", "cb", "highway.primary", 118.0, "0,2 118,2", "Ringstrasse")],
+    )
+    audit = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="before",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    repair = build_reference_hierarchy_type_repair_variant(
+        candidate_net_file=candidate_net,
+        reference_hierarchy_report=audit,
+        output_dir=tmp_path / "repair",
+        prefix="repair",
+    )
+
+    assert repair["status"] == "pass"
+    assert repair["reference_hierarchy_type_repair_status"] == "variant_created_for_review"
+    assert repair["reference_hierarchy_type_repair_count"] == 1
+    variant_root = ET.parse(repair["reference_hierarchy_type_repair_variant_file"]).getroot()
+    assert variant_root.find("edge[@id='cand_ring']").attrib["type"] == "highway.secondary"
+    repaired_audit = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=Path(repair["reference_hierarchy_type_repair_variant_file"]),
+        output_dir=tmp_path / "hierarchy_repaired",
+        prefix="after",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+    assert repaired_audit["status"] == "pass"
+
+
+def test_reference_hierarchy_type_repair_variant_skips_ambiguous_mismatch(tmp_path: Path) -> None:
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        candidate_net,
+        [("cand_b13", "ca", "cb", "highway.primary", 50.0, "0,0 50,0", "B 13")],
+    )
+    report = {
+        "match_distance_m": 35.0,
+        "candidate_cases": [
+            {
+                "candidate_edge_id": "cand_b13",
+                "candidate_edge_name": "B 13",
+                "candidate_edge_type": "highway.primary",
+                "hierarchy_decision": "type_hierarchy_mismatch",
+                "same_name_match_status": "no_same_name_reference",
+                "same_name_reference_edge_type": "",
+                "same_name_reference_distance_m": "",
+            }
+        ],
+    }
+
+    repair = build_reference_hierarchy_type_repair_variant(
+        candidate_net_file=candidate_net,
+        reference_hierarchy_report=report,
+        output_dir=tmp_path / "repair",
+        prefix="repair",
+    )
+
+    assert repair["status"] == "pass"
+    assert repair["reference_hierarchy_type_repair_status"] == "not_needed"
+    assert repair["reference_hierarchy_type_repair_count"] == 0

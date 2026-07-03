@@ -103,3 +103,49 @@ def test_routeability_audit_extends_horizon_until_all_vehicles_finish(tmp_path: 
     assert report["final_attempt"]["inspection"]["summary"]["running"] == 0
     assert Path(report["report_file"]).is_file()
     assert any(command[0] == "sumo" for command in calls)
+
+
+def test_routeability_audit_passes_absolute_net_file_to_random_trips(tmp_path: Path) -> None:
+    net_file = tmp_path / "network.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_runner(command: list[str], *, cwd: Path | None = None, timeout_seconds: float = 60.0):
+        assert cwd is not None
+        if "randomTrips.py" in command:
+            net_arg = Path(command[command.index("-n") + 1])
+            assert net_arg.is_absolute()
+            route_path = cwd / command[command.index("-r") + 1]
+            route_path.write_text("<routes/>", encoding="utf-8")
+            return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
+
+        cfg_path = cwd / command[command.index("-c") + 1]
+        cfg_root = ET.parse(cfg_path).getroot()
+        assert Path(cfg_root.find("input/net-file").attrib["value"]).is_absolute()
+        summary_path = cwd / cfg_root.find("output/summary-output").attrib["value"]
+        tripinfo_path = cwd / cfg_root.find("output/tripinfo-output").attrib["value"]
+        summary_path.write_text(
+            """<summary>
+  <step time="300.00" loaded="1" inserted="1" arrived="1" ended="1" running="0" waiting="0" teleports="0" collisions="0"/>
+</summary>""",
+            encoding="utf-8",
+        )
+        tripinfo_path.write_text(
+            """<tripinfos>
+  <tripinfo id="veh0" duration="10" waitingTime="0" timeLoss="1"/>
+</tripinfos>""",
+            encoding="utf-8",
+        )
+        return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
+
+    report = run_routeability_audit(
+        net_file=net_file,
+        output_dir=tmp_path / "audit",
+        prefix="demo",
+        vehicle_count=1,
+        initial_end=300,
+        max_end=300,
+        binaries={"sumo": "sumo", "randomTrips": "randomTrips.py"},
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"

@@ -268,6 +268,25 @@ def _way_node_refs(way: ET.Element) -> list[str]:
     return [node.attrib["ref"] for node in way.findall("nd")]
 
 
+def _node_in_bbox(node: ET.Element, bbox: Bbox) -> bool:
+    try:
+        lon = float(node.attrib.get("lon", ""))
+        lat = float(node.attrib.get("lat", ""))
+    except ValueError:
+        return False
+    return bbox.west <= lon <= bbox.east and bbox.south <= lat <= bbox.north
+
+
+def _copy_way_with_node_refs(way: ET.Element, refs: list[str]) -> ET.Element:
+    clone = ET.Element("way", dict(way.attrib))
+    for ref in refs:
+        ET.SubElement(clone, "nd", {"ref": ref})
+    for child in way:
+        if child.tag != "nd":
+            clone.append(ET.Element(child.tag, dict(child.attrib)))
+    return clone
+
+
 def _relation_way_refs(relation: ET.Element) -> set[str]:
     refs = set()
     for member in relation.findall("member"):
@@ -280,20 +299,44 @@ def filter_osm_by_highways(
     source: Path,
     target: Path,
     allowed_highways: set[str],
+    *,
+    bbox: Bbox | None = None,
+    allowed_way_ids: set[str] | None = None,
 ) -> dict[str, int]:
     with _open_xml(source, "rt") as handle:
         root = ET.parse(handle).getroot()
+
+    bbox_node_refs = None
+    if bbox is not None:
+        bbox_node_refs = {node.attrib["id"] for node in root.findall("node") if _node_in_bbox(node, bbox)}
 
     kept_ways = []
     kept_way_ids = set()
     kept_node_refs = set()
     dropped_ways = 0
+    dropped_ways_outside_bbox = 0
+    dropped_ways_outside_reference_scope = 0
+    dropped_node_refs_outside_bbox = set()
+    trimmed_ways = 0
     for way in root.findall("way"):
         highway = _highway_value(way)
         if highway in allowed_highways:
-            kept_ways.append(way)
+            if allowed_way_ids is not None and way.attrib.get("id", "") not in allowed_way_ids:
+                dropped_ways_outside_reference_scope += 1
+                continue
+            refs = _way_node_refs(way)
+            kept_refs = refs if bbox_node_refs is None else [ref for ref in refs if ref in bbox_node_refs]
+            if len(kept_refs) < 2:
+                dropped_ways_outside_bbox += 1
+                continue
+            if kept_refs != refs:
+                dropped_node_refs_outside_bbox.update(set(refs) - set(kept_refs))
+                trimmed_ways += 1
+                kept_ways.append(_copy_way_with_node_refs(way, kept_refs))
+            else:
+                kept_ways.append(way)
             kept_way_ids.add(way.attrib["id"])
-            kept_node_refs.update(_way_node_refs(way))
+            kept_node_refs.update(kept_refs)
         elif highway is not None:
             dropped_ways += 1
 
@@ -326,12 +369,23 @@ def filter_osm_by_highways(
     else:
         target.write_bytes(payload)
 
-    return {
+    stats = {
         "kept_nodes": len(kept_nodes),
         "kept_ways": len(kept_ways),
         "dropped_ways": dropped_ways,
         "kept_relations": len(kept_relations),
     }
+    if bbox is not None:
+        stats.update(
+            {
+                "trimmed_ways": trimmed_ways,
+                "dropped_ways_outside_bbox": dropped_ways_outside_bbox,
+                "dropped_nodes_outside_bbox": len(dropped_node_refs_outside_bbox),
+            }
+        )
+    if allowed_way_ids is not None:
+        stats["dropped_ways_outside_reference_scope"] = dropped_ways_outside_reference_scope
+    return stats
 
 
 def _result_to_dict(result: Any) -> dict[str, Any]:
@@ -352,6 +406,13 @@ def _relative_to_root(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
 
+def _command_path(path: Path, root: Path) -> str:
+    try:
+        return _relative_to_root(path, root)
+    except ValueError:
+        return str(path)
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -366,6 +427,64 @@ def _failure(error_message: str, *, artifacts: dict[str, Any] | None = None) -> 
     if artifacts:
         payload.update(artifacts)
     return payload
+
+
+REFERENCE_VISUAL_PROFILES = {"reference_visual_detail", "reference_matched_visual_detail"}
+REFERENCE_VISUAL_SUMO_TYPEMAPS = (
+    "osmNetconvert.typ.xml",
+    "osmNetconvertBicycle.typ.xml",
+    "osmNetconvertPedestrians.typ.xml",
+)
+REFERENCE_VISUAL_SERVICE_TYPE_XML = """<types xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/types_file.xsd">
+    <type id="highway.service" numLanes="1" speed="5.56" priority="1" oneway="false" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship cable_car subway"/>
+    <type id="highway.service|psv" numLanes="1" speed="13.89" priority="1" oneway="false" allow="bus coach"/>
+    <type id="highway.service|bus" numLanes="1" speed="13.89" priority="1" oneway="false" allow="bus coach"/>
+</types>
+"""
+
+
+def _reference_visual_type_options(root: Path, logs_dir: Path, prefix: str) -> tuple[list[str], list[str]]:
+    sumo_home = os.environ.get("SUMO_HOME", "").strip()
+    if not sumo_home:
+        return [], ["SUMO_HOME is not set; reference visual service typemap overlay skipped"]
+    typemap_dir = Path(sumo_home) / "data" / "typemap"
+    base_type_files = [typemap_dir / name for name in REFERENCE_VISUAL_SUMO_TYPEMAPS]
+    missing = [str(path) for path in base_type_files if not path.exists()]
+    if missing:
+        return [], ["SUMO typemap files missing; reference visual service typemap overlay skipped: " + ", ".join(missing)]
+    service_type_file = logs_dir / f"{prefix}_service_no_pedestrian.typ.xml"
+    _write_text(service_type_file, REFERENCE_VISUAL_SERVICE_TYPE_XML)
+    type_files = [*base_type_files, service_type_file]
+    return ["--type-files", ",".join(_command_path(path, root) for path in type_files)], []
+
+
+def _netconvert_profile_options(profile: str | None) -> list[str]:
+    normalized = (profile or "vehicle_core").strip().lower().replace("-", "_")
+    if normalized in {"", "default", "vehicle", "vehicle_core"}:
+        return []
+    if normalized in REFERENCE_VISUAL_PROFILES:
+        return [
+            "--osm.bike-access",
+            "--osm.sidewalks",
+            "--osm.crossings",
+            "--osm.turn-lanes",
+            "--sidewalks.guess.from-permissions",
+            "--crossings.guess",
+            "--walkingareas",
+            "--tls.guess",
+            "--tls.guess-signals",
+            "--tls.rebuild",
+            "--tls.default-type",
+            "actuated",
+        ]
+    raise ValueError(f"unsupported netconvert_profile: {profile}")
+
+
+def _normalized_netconvert_profile(profile: str | None) -> str:
+    normalized = (profile or "vehicle_core").strip().lower().replace("-", "_")
+    if normalized in {"", "default", "vehicle"}:
+        return "vehicle_core"
+    return normalized
 
 
 def build_osm_network(
@@ -384,6 +503,8 @@ def build_osm_network(
     retry_pause_seconds: float = 5.0,
     command_runner: Callable[..., Any] = run_command,
     download_func: Callable[..., bytes] = download_osm,
+    netconvert_profile: str | None = "vehicle_core",
+    allowed_way_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     try:
         parsed_bbox = parse_bbox(bbox)
@@ -392,6 +513,8 @@ def build_osm_network(
             timeout=int(timeout_seconds),
             historical_date=historical_date,
         )
+        profile_options = _netconvert_profile_options(netconvert_profile)
+        normalized_profile = _normalized_netconvert_profile(netconvert_profile)
     except ValueError as exc:
         return _failure(str(exc))
 
@@ -434,7 +557,23 @@ def build_osm_network(
                     artifacts={"query_file": str(query_file)},
                 )
 
-        filter_stats = filter_osm_by_highways(source_osm, filtered_osm, allowed)
+        filter_stats = filter_osm_by_highways(
+            source_osm,
+            filtered_osm,
+            allowed,
+            bbox=parsed_bbox,
+            allowed_way_ids=allowed_way_ids,
+        )
+        turnaround_options = (
+            []
+            if normalized_profile in REFERENCE_VISUAL_PROFILES
+            else ["--no-turnarounds"]
+        )
+        type_options, type_warnings = (
+            _reference_visual_type_options(root, logs_dir, prefix)
+            if normalized_profile in REFERENCE_VISUAL_PROFILES
+            else ([], [])
+        )
         command = [
             "netconvert",
             "--osm-files",
@@ -442,11 +581,13 @@ def build_osm_network(
             "--output-file",
             _relative_to_root(net_file, root),
             "--proj.utm",
-            "--no-turnarounds",
+            *turnaround_options,
             "--osm.all-attributes",
             "--tls.join",
             "--tls.join-dist",
             "35",
+            *type_options,
+            *profile_options,
             "--verbose",
         ]
         _write_text(
@@ -458,9 +599,14 @@ def build_osm_network(
                     f"filtered_osm={filtered_osm}",
                     f"net_file={net_file}",
                     "allowed_highways=" + ",".join(sorted(allowed)),
+                    "allowed_way_ids_count="
+                    + ("not_applied" if allowed_way_ids is None else str(len(allowed_way_ids))),
                     f"overpass_strategy={overpass_report['strategy'] if overpass_report else 'source-osm'}",
                     f"overpass_tile_count={overpass_report['tile_count'] if overpass_report else 0}",
                     f"overpass_retry_count={overpass_report['retry_count'] if overpass_report else 0}",
+                    f"netconvert_profile={normalized_profile}",
+                    "netconvert_profile_options=" + " ".join(profile_options),
+                    "netconvert_type_options=" + " ".join(type_options),
                     "netconvert_command=" + " ".join(command),
                     "",
                 ]
@@ -486,7 +632,7 @@ def build_osm_network(
         )
 
     status = "pass" if result.get("status") == "pass" and net_file.exists() else "fail"
-    warnings = []
+    warnings = list(type_warnings)
     if not net_file.exists():
         warnings.append(f"net file was not created: {net_file}")
     return {
@@ -494,6 +640,7 @@ def build_osm_network(
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "bbox": bbox,
         "road_classes": sorted(allowed),
+        "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
         "source_osm_file": str(source_osm),
         "filtered_osm_file": str(filtered_osm),
         "net_file": str(net_file),
@@ -502,6 +649,8 @@ def build_osm_network(
         "netconvert_log": str(netconvert_log),
         "filter_stats": filter_stats,
         "overpass": overpass_report,
+        "netconvert_profile": normalized_profile,
+        "netconvert_profile_options": profile_options,
         "netconvert": result,
         "warnings": warnings,
     }

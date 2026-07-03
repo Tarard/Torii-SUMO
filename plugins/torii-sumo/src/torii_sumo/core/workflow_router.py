@@ -3,13 +3,16 @@ from __future__ import annotations
 import inspect
 import re
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from .network_plan import derive_network_plan
-from .osm_area import resolve_osm_place
-from .osm_network import audit_tls_multisource
+from .osm_area import osm_map_url_bbox, resolve_osm_place
+from .osm_network import audit_tls_multisource, build_osm_network
 from .osm_workflow import run_osm_cleanup_workflow
+from ..intersection.clean import clean_intersection
+from ..intersection.schema import PatchSeed
 from .workflow_review_html import build_workflow_review_html
+from .workflow_state import NetworkQualityVector, StageResult, build_promotion_trace, summarize_workflow_stages
 
 
 AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run"}
@@ -36,6 +39,10 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
         "description": "Create an HTML human-review cockpit for a generated or partial SUMO network and available audit artifacts.",
         "tool_chain": ["sumo_network_review_html", "sumo_collect_evidence"],
     },
+    "intersection_clean": {
+        "description": "Compile a local or bbox-sourced OSM T3/X4 intersection patch into IntersectionIR, SUMO plain files, .net.xml when available, and validation artifacts.",
+        "tool_chain": ["sumo_osm_build_network", "sumo_intersection_clean", "sumo_intersection_validate"],
+    },
     "routeability": {
         "description": "Snap named route endpoints to passenger-accessible SUMO edges, generate routes, run a bounded smoke check, and report completion before claims.",
         "tool_chain": ["sumo_network_routeability_probe", "sumo_network_routeability_audit", "sumo_compare_outputs"],
@@ -55,28 +62,162 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
 }
 
 
+REFERENCE_MATCHED_TOOL_CHAIN = [
+    "sumo_network_reference_hierarchy_audit",
+    "sumo_network_reference_scope_audit",
+    "sumo_network_tls_aggregation_variant",
+    "sumo_network_reference_join_audit",
+    "sumo_network_junction_aggregation_variant",
+    "sumo_network_teacher_guided_repair_queue",
+    "sumo_network_teacher_guided_junction_variant",
+    "sumo_network_tls_warning_parity",
+    "sumo_network_review_html",
+]
+
+REFERENCE_MATCHED_SEMANTICS_WORKFLOW = {
+    "claim_status": "diagnostic-demo",
+    "reference_policy": "learn road layers and service/passenger permissions from a manual reference net",
+    "junction_policy": "learn reusable junction patterns from the reference net before proposing aggregation",
+    "connection_policy": "audit connection, TLS, crossing, walkingarea, and internal-junction parity before adoption",
+    "batch_repair_tool": "sumo_network_teacher_guided_repair_queue",
+    "per_junction_repair_tool": "sumo_network_teacher_guided_junction_variant",
+    "warning_parity_tool": "sumo_network_tls_warning_parity",
+    "required_manual_reviews": ["netedit_connection_mode_review", "map_or_field_imagery"],
+}
+
+MANUAL_REVIEW_GATES = {
+    "junction_aggregation",
+    "netedit_connection_mode_review",
+    "reference_join_aggregation",
+    "tls_aggregation",
+    "topology_audit",
+}
+
+OSM_WORKFLOW_SUMMARY_KEYS = (
+    "workflow_review_html_status",
+    "workflow_review_html_file",
+    "workflow_report_file",
+    "review_manifest_file",
+    "reference_join_audit_mode",
+    "teacher_guided_repair_queue_status",
+    "teacher_guided_repair_max_ready_candidates",
+    "run_teacher_guided_repair_after_build",
+    "teacher_guided_repair_run_status",
+    "teacher_guided_repair_parity_gate_status",
+    "teacher_guided_repair_promotion_gate_status",
+    "teacher_guided_repair_promotion_gate_file",
+    "teacher_guided_repair_application_scope",
+    "teacher_guided_repair_best_variant_file",
+    "teacher_guided_repair_run_report_file",
+    "teacher_guided_repair_applied_candidate_count",
+    "teacher_guided_repair_unapplied_pass_candidate_count",
+    "teacher_guided_repair_semantic_layer_gate_counts",
+    "teacher_guided_probe_matrix_status",
+    "teacher_guided_probe_matrix_file",
+    "teacher_guided_probe_matrix_probe_count",
+    "teacher_guided_probe_matrix_all_parity_gate_pass",
+    "teacher_guided_probe_matrix_all_promotion_gate_pass",
+    "teacher_guided_probe_matrix_all_road_continuity_gate_pass",
+    "teacher_guided_probe_matrix_missing_junction_ids",
+    "road_connectivity_replay_status",
+    "road_connectivity_replay_gate_status",
+    "road_connectivity_replay_sumo_load_status",
+    "road_connectivity_replay_best_variant_file",
+    "road_connectivity_promoted_variant_file",
+    "road_connectivity_promoted_variant_reason",
+    "road_connectivity_replay_run_report_file",
+    "road_connectivity_replay_gate_counts",
+    "road_connectivity_seed_probe_status",
+    "road_connectivity_seed_probe_file",
+    "road_connectivity_seed_probe_edge_delta_count",
+    "road_connectivity_seed_probe_connection_delta_count",
+    "road_connectivity_seed_probe_candidate_missing_seed_edge_ids",
+    "road_connectivity_split_root_alias_repair_status",
+    "road_connectivity_split_root_alias_repair_file",
+    "road_connectivity_split_root_alias_repair_report_file",
+    "road_connection_topology_replay_status",
+    "road_connection_topology_replay_file",
+    "road_connection_topology_replay_report_file",
+    "post_teacher_tls_connection_repair_movement_rebuild_run_status",
+    "post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status",
+    "post_teacher_tls_connection_repair_movement_rebuild_best_variant_file",
+    "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count",
+    "post_teacher_tls_connection_repair_movement_rebuild_semantic_layer_gate_counts",
+    "final_movement_rebuild_run_status",
+    "final_movement_rebuild_parity_gate_status",
+    "final_movement_rebuild_sumo_load_status",
+    "final_movement_rebuild_best_variant_file",
+    "final_movement_rebuild_applied_candidate_count",
+    "final_movement_rebuild_semantic_layer_gate_counts",
+    "reference_join_post_teacher_audit_status",
+    "routeability_audit_status",
+)
+
+
 def _normalized(value: str) -> str:
     return " ".join(value.lower().split())
+
+
+def _looks_like_osm_generation(text: str) -> bool:
+    generation_terms = (
+        "build",
+        "download",
+        "generate",
+        "netconvert",
+        "open it in sumo",
+        "from osm",
+    )
+    network_terms = ("osm", "map", "network", "sumo network", "net.xml")
+    return any(token in text for token in generation_terms) and any(token in text for token in network_terms)
+
+
+def _looks_like_intersection_clean(text: str) -> bool:
+    intersection_terms = ("intersection", "junction", "crossroad", "t3", "x4")
+    patch_terms = ("patch", "local osm", "osm file", "osm extract", "osm bbox", "bbox", "openstreetmap")
+    build_terms = ("clean", "compile", "generate", "build")
+    return (
+        any(token in text for token in intersection_terms)
+        and any(token in text for token in patch_terms)
+        and any(token in text for token in build_terms)
+    )
 
 
 def detect_workflow(user_request: str) -> str:
     text = _normalized(user_request)
     if any(token in text for token in ("waiting time", "got worse", "teleport", "tripinfo", "summary disagree", "debug")):
         return "debug_bad_run"
+    if _looks_like_intersection_clean(text):
+        return "intersection_clean"
+    if _looks_like_osm_generation(text):
+        return "osm_to_sumo"
     if any(token in text for token in ("compare", "baseline", "fixed-time", "fixed time", "max-pressure", "controller")):
         return "experiment_audit"
-    if any(token in text for token in ("traffic light", "traffic lights", "tls", "signal")):
-        return "tls_review"
     if (
         any(token in text for token in ("html", "review cockpit", "human review", "review"))
         and any(token in text for token in ("sumo network", "partial sumo network", "network", ".net.xml", "net.xml"))
     ):
         return "network_review"
+    if any(token in text for token in ("traffic light", "traffic lights", "tls", "signal")):
+        return "tls_review"
     if any(token in text for token in ("osm", "map", "network", "netconvert", "open it in sumo", "build a sumo")):
         return "osm_to_sumo"
     if any(token in text for token in ("route", "from ", " to ", "connected", "routeability", "reachable")):
         return "routeability"
     return "general"
+
+
+def infer_seed_osm_node_id(user_request: str) -> str:
+    text = " ".join(user_request.strip().split())
+    patterns = [
+        r"\bosm_node_id\s*[:=]\s*(?P<id>-?\d+)\b",
+        r"\bOSM\s+node\s+(?P<id>-?\d+)\b",
+        r"\bnode\s+(?P<id>-?\d+)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group("id")
+    return ""
 
 
 def infer_place_name(user_request: str) -> str:
@@ -113,6 +254,145 @@ def _base_report(
         "user_request": user_request,
         "tool_chain": list(recipe["tool_chain"]),
     }
+
+
+def _annotate_reference_matched_semantics(report: dict[str, Any], workflow_report: Mapping[str, Any] | None = None) -> None:
+    for tool_name in REFERENCE_MATCHED_TOOL_CHAIN:
+        if tool_name not in report["tool_chain"]:
+            report["tool_chain"].append(tool_name)
+    semantics = {
+        **REFERENCE_MATCHED_SEMANTICS_WORKFLOW,
+        "tool_chain": list(REFERENCE_MATCHED_TOOL_CHAIN),
+    }
+    configured_max_ready_candidates = report.get("teacher_guided_repair_configured_max_ready_candidates", "")
+    if configured_max_ready_candidates != "":
+        semantics["configured_max_ready_candidates"] = configured_max_ready_candidates
+    if workflow_report is not None:
+        semantics["required_manual_reviews"] = _required_manual_reviews_from_gates(workflow_report.get("gate_status"))
+        post_repair_movement_best_variant_file = str(
+            workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_best_variant_file", "")
+        )
+        final_movement_best_variant_file = str(workflow_report.get("final_movement_rebuild_best_variant_file", ""))
+        movement_best_variant_file = final_movement_best_variant_file or post_repair_movement_best_variant_file
+        road_topology_best_variant_file = (
+            str(workflow_report.get("road_connection_topology_replay_file", ""))
+            if workflow_report.get("road_connection_topology_replay_status") == "pass"
+            else ""
+        )
+        road_alias_best_variant_file = (
+            str(workflow_report.get("road_connectivity_split_root_alias_repair_file", ""))
+            if workflow_report.get("road_connectivity_split_root_alias_repair_status") == "pass"
+            else ""
+        )
+        road_replay_best_variant_file = str(workflow_report.get("road_connectivity_replay_best_variant_file", ""))
+        road_connectivity_best_variant_file = (
+            road_topology_best_variant_file or road_alias_best_variant_file or road_replay_best_variant_file
+        )
+        semantic_layer_gate_counts = (
+            workflow_report.get("final_movement_rebuild_semantic_layer_gate_counts")
+            or workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_semantic_layer_gate_counts")
+            or workflow_report.get("teacher_guided_repair_semantic_layer_gate_counts")
+            or {}
+        )
+        semantics.update(
+            {
+                "best_variant_file": movement_best_variant_file
+                or str(workflow_report.get("teacher_guided_repair_best_variant_file", "")),
+                "comparison_net_file": movement_best_variant_file
+                or str(workflow_report.get("reference_visual_detail_comparison_net_file", "")),
+                "run_report_file": str(workflow_report.get("teacher_guided_repair_run_report_file", "")),
+                "promotion_gate_status": str(workflow_report.get("teacher_guided_repair_promotion_gate_status", "")),
+                "promotion_gate_file": str(workflow_report.get("teacher_guided_repair_promotion_gate_file", "")),
+                "application_scope": str(workflow_report.get("teacher_guided_repair_application_scope", "")),
+                "applied_candidate_count": workflow_report.get("teacher_guided_repair_applied_candidate_count", 0),
+                "unapplied_pass_candidate_count": workflow_report.get(
+                    "teacher_guided_repair_unapplied_pass_candidate_count", 0
+                ),
+                "movement_rebuild_best_variant_file": movement_best_variant_file,
+                "movement_rebuild_run_status": str(
+                    workflow_report.get("final_movement_rebuild_run_status")
+                    or workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_run_status", "")
+                ),
+                "movement_rebuild_parity_gate_status": str(
+                    workflow_report.get("final_movement_rebuild_parity_gate_status")
+                    or workflow_report.get("post_teacher_tls_connection_repair_movement_rebuild_parity_gate_status", "")
+                ),
+                "movement_rebuild_applied_candidate_count": workflow_report.get(
+                    "final_movement_rebuild_applied_candidate_count"
+                )
+                or workflow_report.get(
+                    "post_teacher_tls_connection_repair_movement_rebuild_applied_candidate_count",
+                    0,
+                ),
+                "semantic_layer_gate_counts": semantic_layer_gate_counts,
+            }
+        )
+        if "road_connectivity_replay_status" in workflow_report:
+            semantics["road_connectivity_layer"] = {
+                "run_status": str(workflow_report.get("road_connectivity_replay_status", "")),
+                "gate_status": str(workflow_report.get("road_connectivity_replay_gate_status", "")),
+                "sumo_load_status": str(workflow_report.get("road_connectivity_replay_sumo_load_status", "")),
+                "best_variant_file": road_connectivity_best_variant_file,
+                "owner_replay_variant_file": road_replay_best_variant_file,
+                "split_root_alias_repair_file": road_alias_best_variant_file,
+                "topology_replay_file": road_topology_best_variant_file,
+                "run_report_file": str(workflow_report.get("road_connectivity_replay_run_report_file", "")),
+                "gate_counts": workflow_report.get("road_connectivity_replay_gate_counts", {}),
+            }
+        if "road_connectivity_seed_probe_status" in workflow_report:
+            semantics["road_connectivity_seed_probe"] = {
+                "status": str(workflow_report.get("road_connectivity_seed_probe_status", "")),
+                "report_file": str(workflow_report.get("road_connectivity_seed_probe_file", "")),
+                "edge_delta_count": workflow_report.get("road_connectivity_seed_probe_edge_delta_count", 0),
+                "connection_delta_count": workflow_report.get(
+                    "road_connectivity_seed_probe_connection_delta_count", 0
+                ),
+                "candidate_missing_seed_edge_ids": workflow_report.get(
+                    "road_connectivity_seed_probe_candidate_missing_seed_edge_ids", []
+                ),
+            }
+        if "road_connectivity_split_root_alias_repair_status" in workflow_report:
+            semantics["road_connectivity_split_root_alias_repair"] = {
+                "status": str(workflow_report.get("road_connectivity_split_root_alias_repair_status", "")),
+                "output_file": str(workflow_report.get("road_connectivity_split_root_alias_repair_file", "")),
+                "report_file": str(
+                    workflow_report.get("road_connectivity_split_root_alias_repair_report_file", "")
+                ),
+            }
+        if "road_connection_topology_replay_status" in workflow_report:
+            semantics["road_connection_topology_replay"] = {
+                "status": str(workflow_report.get("road_connection_topology_replay_status", "")),
+                "output_file": str(workflow_report.get("road_connection_topology_replay_file", "")),
+                "report_file": str(workflow_report.get("road_connection_topology_replay_report_file", "")),
+            }
+        if "teacher_guided_probe_matrix_status" in workflow_report:
+            semantics["probe_matrix"] = {
+                "status": str(workflow_report.get("teacher_guided_probe_matrix_status", "")),
+                "matrix_file": str(workflow_report.get("teacher_guided_probe_matrix_file", "")),
+                "probe_count": workflow_report.get("teacher_guided_probe_matrix_probe_count", 0),
+                "all_parity_gate_pass": bool(
+                    workflow_report.get("teacher_guided_probe_matrix_all_parity_gate_pass", False)
+                ),
+                "all_promotion_gate_pass": bool(
+                    workflow_report.get("teacher_guided_probe_matrix_all_promotion_gate_pass", False)
+                ),
+                "all_road_continuity_gate_pass": bool(
+                    workflow_report.get("teacher_guided_probe_matrix_all_road_continuity_gate_pass", False)
+                ),
+                "missing_junction_ids": workflow_report.get("teacher_guided_probe_matrix_missing_junction_ids", []),
+            }
+    report["reference_matched_semantics_workflow"] = semantics
+
+
+def _required_manual_reviews_from_gates(gate_status: Any) -> list[str]:
+    if not isinstance(gate_status, Mapping):
+        return list(REFERENCE_MATCHED_SEMANTICS_WORKFLOW["required_manual_reviews"])
+    blocked = [
+        str(gate)
+        for gate, status in sorted(gate_status.items())
+        if gate in MANUAL_REVIEW_GATES and str(status) == "blocked"
+    ]
+    return blocked or list(REFERENCE_MATCHED_SEMANTICS_WORKFLOW["required_manual_reviews"])
 
 
 def _invalid_mode(user_request: str, autonomy_mode: str) -> dict[str, Any]:
@@ -159,9 +439,17 @@ def run_auto_workflow(
     highway_classes: str | None = None,
     traffic_layers: str | None = None,
     network_profile: str | None = None,
+    seed_osm_node_id: str | None = None,
     reference_net_file: Path | None = None,
     reference_policy_report: str | Path | dict[str, Any] | None = None,
     service_passenger_policy: str | None = None,
+    teacher_guided_repair_max_ready_candidates: int | None = 80,
+    run_teacher_guided_repair_after_build: bool = True,
+    road_connectivity_replay_max_owners: int | None = 4,
+    road_connectivity_probe_edge_ids: list[str] | None = None,
+    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
+    launch_netedit_after_build: bool | None = None,
+    launch_sumo_gui_after_build: bool | None = None,
     net_file: Path | None = None,
     osm_file: Path | None = None,
     official_inventory_csv: Path | None = None,
@@ -169,6 +457,8 @@ def run_auto_workflow(
     field_evidence_csv: Path | None = None,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     cleanup_workflow_func: Callable[..., dict[str, Any]] = run_osm_cleanup_workflow,
+    intersection_clean_func: Callable[..., dict[str, Any]] = clean_intersection,
+    intersection_osm_build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_review_func: Callable[..., dict[str, Any]] = audit_tls_multisource,
     review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
@@ -198,9 +488,29 @@ def run_auto_workflow(
             reference_net_file=reference_net_file,
             reference_policy_report=reference_policy_report,
             service_passenger_policy=service_passenger_policy,
+            teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+            run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
+            road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
+            road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
+            teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
+            launch_netedit_after_build=launch_netedit_after_build,
+            launch_sumo_gui_after_build=launch_sumo_gui_after_build,
+            source_osm_path=osm_file,
             autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
             cleanup_workflow_func=cleanup_workflow_func,
+        )
+    if workflow == "intersection_clean":
+        return _run_intersection_clean(
+            report=report,
+            user_request=user_request,
+            output_dir=output_dir,
+            bbox=bbox,
+            place_name=place_name,
+            osm_file=osm_file,
+            seed_osm_node_id=seed_osm_node_id,
+            intersection_clean_func=intersection_clean_func,
+            intersection_osm_build_func=intersection_osm_build_func,
         )
     if workflow == "tls_review":
         return _run_tls_review(
@@ -249,6 +559,121 @@ def run_auto_workflow(
     )
 
 
+def _run_intersection_clean(
+    *,
+    report: dict[str, Any],
+    user_request: str,
+    output_dir: Path,
+    bbox: str | None,
+    place_name: str | None,
+    osm_file: Path | None,
+    seed_osm_node_id: str | None,
+    intersection_clean_func: Callable[..., dict[str, Any]],
+    intersection_osm_build_func: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    if osm_file is None:
+        source_bbox = (bbox or "").strip()
+        url_bbox = osm_map_url_bbox(source_bbox) or osm_map_url_bbox(place_name or "") or osm_map_url_bbox(user_request)
+        if url_bbox:
+            source_bbox = url_bbox
+            report["area_resolution_status"] = "osm_map_url_bbox"
+            report["candidate_bbox"] = url_bbox
+        if not source_bbox:
+            return _blocked(
+                report,
+                execution_status="needs_osm_intersection_patch",
+                missing=["osm_file_or_bbox"],
+                next_question="Which local OSM intersection patch or bbox should Torii compile?",
+            )
+        source_build = intersection_osm_build_func(
+            bbox=source_bbox,
+            output_dir=output_dir / "intersection_source",
+            prefix="intersection_source",
+        )
+        report["osm_source_build_status"] = source_build.get("status", "fail")
+        report["osm_source_build_result"] = source_build
+        source_osm = source_build.get("source_osm_file") or source_build.get("filtered_osm_file")
+        if source_build.get("status") != "pass" or not source_osm:
+            report.update(
+                {
+                    "status": source_build.get("status", "fail"),
+                    "claim_status": source_build.get("claim_status", "construction-invalid"),
+                    "execution_status": "osm_source_build_failed",
+                    "tool_called": "sumo_osm_build_network",
+                }
+            )
+            return report
+        osm_file = Path(str(source_osm))
+        report["intersection_source_osm_file"] = str(osm_file)
+    effective_seed_osm_node_id = (seed_osm_node_id or infer_seed_osm_node_id(user_request)).strip()
+    seed = PatchSeed(osm_node_id=effective_seed_osm_node_id) if effective_seed_osm_node_id else None
+    if effective_seed_osm_node_id:
+        report["seed_osm_node_id"] = effective_seed_osm_node_id
+    result = intersection_clean_func(osm_file=osm_file, output_dir=output_dir, compile_net=True, seed=seed)
+    report.update(
+        {
+            "status": result.get("status", "fail"),
+            "claim_status": result.get("claim_status", "diagnostic-demo"),
+            "execution_status": "executed",
+            "tool_called": "sumo_intersection_clean",
+            "workflow_result": result,
+        }
+    )
+    for key in (
+        "intersection_id",
+        "topology_type",
+        "approach_count",
+        "movement_count",
+        "sumo_load_status",
+        "route_probe_status",
+        "tls_linkindex_status",
+        "missing_movement_count",
+        "disconnected_edge_count",
+        "internal_fragment_count",
+        "approach_mode_counts",
+        "vehicle_approach_count",
+        "vehicle_topology_type",
+        "legal_movement_mode_counts",
+        "forbidden_cross_mode_movement_count",
+        "net_file",
+        "intersection_ir_file",
+        "validation_file",
+    ):
+        if key in result:
+            report[key] = result[key]
+    stage = StageResult(
+        stage_name="intersection_compile_validate",
+        status=str(result.get("status", "fail")),
+        input_artifacts={"osm": str(osm_file)},
+        output_artifacts={
+            key: str(result[key])
+            for key in ("net_file", "intersection_ir_file", "validation_file")
+            if result.get(key)
+        },
+        after_quality=NetworkQualityVector(
+            connectivity={
+                "missing_movement_count": result.get("missing_movement_count", 0),
+                "disconnected_edge_count": result.get("disconnected_edge_count", 0),
+            },
+            routeability={"route_probe_status": result.get("route_probe_status", "skipped")},
+            topology_fragmentation={"internal_fragment_count": result.get("internal_fragment_count", 0)},
+            tls_semantic_delta={"tls_linkindex_status": result.get("tls_linkindex_status", "skipped")},
+        ),
+        promotion_decision=str(result.get("status", "fail")),
+        claim_status=str(result.get("claim_status", "diagnostic-demo")),
+        evidence_files=[str(result[key]) for key in ("intersection_ir_file", "validation_file") if result.get(key)],
+        warnings=list(result.get("warnings", [])) if isinstance(result.get("warnings"), list) else [],
+    )
+    report["workflow_stage_results"] = [stage.as_dict()]
+    report["workflow_promotion_trace"] = build_promotion_trace(
+        case_id="intersection_clean",
+        claim_status=str(result.get("claim_status", "diagnostic-demo")),
+        source_artifact=str(result.get("validation_file", "")),
+        stages=[stage],
+    )
+    return report
+
+
 def _run_osm_to_sumo(
     *,
     report: dict[str, Any],
@@ -263,14 +688,46 @@ def _run_osm_to_sumo(
     reference_net_file: Path | None,
     reference_policy_report: str | Path | dict[str, Any] | None,
     service_passenger_policy: str | None,
+    teacher_guided_repair_max_ready_candidates: int | None,
+    run_teacher_guided_repair_after_build: bool,
+    road_connectivity_replay_max_owners: int | None,
+    road_connectivity_probe_edge_ids: list[str] | None,
+    teacher_guided_probe_matrix_junction_ids: list[str] | None,
+    launch_netedit_after_build: bool | None,
+    launch_sumo_gui_after_build: bool | None,
+    source_osm_path: Path | None,
     autonomy_mode: str,
     place_resolver: Callable[[str], dict[str, Any]],
     cleanup_workflow_func: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
+    explicit_bbox = (bbox or "").strip()
+    url_bbox = osm_map_url_bbox(explicit_bbox)
+    if not explicit_bbox:
+        url_bbox = osm_map_url_bbox(place_name or "") or osm_map_url_bbox(user_request)
+    if url_bbox:
+        bbox = url_bbox
+        report["area_resolution_status"] = "osm_map_url_bbox"
+        report["candidate_bbox"] = url_bbox
+
     inferred = (place_name or "").strip() or infer_place_name(user_request)
     if inferred:
         report["inferred_place_name"] = inferred
-    if not bbox and not inferred:
+
+    network_plan = derive_network_plan(
+        user_request=user_request,
+        highway_classes=highway_classes,
+        traffic_layers=traffic_layers,
+        network_profile=network_profile,
+        reference_net_file=reference_net_file,
+        reference_policy_report=reference_policy_report,
+        service_passenger_policy=service_passenger_policy,
+    )
+    if network_plan.get("network_profile") == "reference_matched":
+        report["teacher_guided_repair_configured_max_ready_candidates"] = (
+            teacher_guided_repair_max_ready_candidates if teacher_guided_repair_max_ready_candidates is not None else ""
+        )
+    reference_matched_with_net = network_plan.get("network_profile") == "reference_matched" and reference_net_file is not None
+    if not bbox and not inferred and source_osm_path is None and not reference_matched_with_net:
         return _blocked(
             report,
             execution_status="needs_area",
@@ -278,7 +735,7 @@ def _run_osm_to_sumo(
             next_question="Which OSM place name or bbox should Torii use?",
         )
     candidate: dict[str, Any] | None = None
-    if not confirmed_area and not bbox:
+    if not confirmed_area and not bbox and source_osm_path is None and not reference_matched_with_net:
         candidate = place_resolver(inferred)
         report.update(candidate)
         if autonomy_mode != "ask-first":
@@ -298,26 +755,22 @@ def _run_osm_to_sumo(
             report["claim_status"] = "blocked"
             report["next_question"] = "Confirm this OSM area and bbox before network construction?"
             return report
-
-    network_plan = derive_network_plan(
-        user_request=user_request,
-        highway_classes=highway_classes,
-        traffic_layers=traffic_layers,
-        network_profile=network_profile,
-        reference_net_file=reference_net_file,
-        reference_policy_report=reference_policy_report,
-        service_passenger_policy=service_passenger_policy,
-    )
     if network_plan.get("status") == "blocked":
         report.update(network_plan)
+        if network_plan.get("network_profile") == "reference_matched":
+            _annotate_reference_matched_semantics(report)
         report["execution_status"] = "needs_network_plan"
         return report
     if network_plan.get("status") != "pass":
         report.update(network_plan)
+        if network_plan.get("network_profile") == "reference_matched":
+            _annotate_reference_matched_semantics(report)
         report["status"] = "fail"
         report["claim_status"] = "construction-invalid"
         report["execution_status"] = "network_plan_failed"
         return report
+    if network_plan.get("network_profile") == "reference_matched":
+        _annotate_reference_matched_semantics(report)
     selected_highway_classes = set(network_plan.get("highway_classes", []))
 
     cleanup_kwargs = {
@@ -326,6 +779,8 @@ def _run_osm_to_sumo(
         "place_name": inferred or None,
         "confirmed_area": confirmed_area,
     }
+    if _supports_keyword(cleanup_workflow_func, "source_osm_path"):
+        cleanup_kwargs["source_osm_path"] = source_osm_path
     if _supports_keyword(cleanup_workflow_func, "highway_classes"):
         cleanup_kwargs["highway_classes"] = selected_highway_classes
     if _supports_keyword(cleanup_workflow_func, "traffic_layers"):
@@ -338,6 +793,25 @@ def _run_osm_to_sumo(
         cleanup_kwargs["reference_policy_report"] = reference_policy_report
     if _supports_keyword(cleanup_workflow_func, "service_passenger_policy"):
         cleanup_kwargs["service_passenger_policy"] = network_plan.get("service_passenger_policy")
+    if _supports_keyword(cleanup_workflow_func, "teacher_guided_repair_max_ready_candidates"):
+        cleanup_kwargs["teacher_guided_repair_max_ready_candidates"] = teacher_guided_repair_max_ready_candidates
+    if _supports_keyword(cleanup_workflow_func, "run_teacher_guided_repair_after_build"):
+        cleanup_kwargs["run_teacher_guided_repair_after_build"] = run_teacher_guided_repair_after_build
+    if _supports_keyword(cleanup_workflow_func, "road_connectivity_replay_max_owners"):
+        cleanup_kwargs["road_connectivity_replay_max_owners"] = road_connectivity_replay_max_owners
+    if _supports_keyword(cleanup_workflow_func, "road_connectivity_probe_edge_ids"):
+        cleanup_kwargs["road_connectivity_probe_edge_ids"] = road_connectivity_probe_edge_ids
+    if _supports_keyword(cleanup_workflow_func, "teacher_guided_probe_matrix_junction_ids"):
+        cleanup_kwargs["teacher_guided_probe_matrix_junction_ids"] = teacher_guided_probe_matrix_junction_ids
+    if launch_netedit_after_build is not None and _supports_keyword(cleanup_workflow_func, "launch_netedit_after_build"):
+        cleanup_kwargs["launch_netedit_after_build"] = launch_netedit_after_build
+    if launch_sumo_gui_after_build is not None and _supports_keyword(cleanup_workflow_func, "launch_sumo_gui_after_build"):
+        cleanup_kwargs["launch_sumo_gui_after_build"] = launch_sumo_gui_after_build
+    if (
+        network_plan.get("network_profile") == "reference_matched"
+        and _supports_keyword(cleanup_workflow_func, "reference_join_audit_structural_only")
+    ):
+        cleanup_kwargs["reference_join_audit_structural_only"] = False
     if _supports_keyword(cleanup_workflow_func, "run_routeability_audit_after_build"):
         cleanup_kwargs["run_routeability_audit_after_build"] = True
     workflow_report = cleanup_workflow_func(**cleanup_kwargs)
@@ -351,6 +825,20 @@ def _run_osm_to_sumo(
             "workflow_result": workflow_report,
         }
     )
+    for key in OSM_WORKFLOW_SUMMARY_KEYS:
+        if key in workflow_report:
+            report[key] = workflow_report[key]
+    stage_results = summarize_workflow_stages(workflow_report)
+    if stage_results:
+        report["workflow_stage_results"] = [stage.as_dict() for stage in stage_results]
+        report["workflow_promotion_trace"] = build_promotion_trace(
+            case_id=str(network_plan.get("network_profile") or "osm_to_sumo"),
+            claim_status=str(workflow_report.get("claim_status") or "diagnostic-demo"),
+            source_artifact=str(workflow_report.get("workflow_report_file") or ""),
+            stages=stage_results,
+        )
+    if network_plan.get("network_profile") == "reference_matched":
+        _annotate_reference_matched_semantics(report, workflow_report)
     return report
 
 

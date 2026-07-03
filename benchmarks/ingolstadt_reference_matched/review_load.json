@@ -1,0 +1,15 @@
+{
+  "case_id": "ingolstadt_center_reference_matched",
+  "claim_status": "diagnostic-demo",
+  "review_html_file": "examples/02_one_prompt_osm_network/validation/run_2026-06-25_review_html/ingolstadt_workflow_review.html",
+  "review_manifest_file": "examples/02_one_prompt_osm_network/validation/run_2026-06-25_review_html/ingolstadt_workflow_review_review_manifest.json",
+  "dense_junction_cluster_review_item_count": 24,
+  "blocked_gates": [
+    "tls_reality_audit",
+    "tls_aggregation",
+    "topology_audit",
+    "reference_join_aggregation",
+    "sumo_gui"
+  ],
+  "suggested_next_action": "review physical-junction clusters and TLS representatives before automatic repair promotion"
+}
