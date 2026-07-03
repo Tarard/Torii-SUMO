@@ -143,6 +143,10 @@ def test_validate_intersection_reports_mode_layer_counts(monkeypatch, tmp_path: 
 
     assert result.approach_mode_counts["passenger"] == 4
     assert result.approach_mode_counts["bicycle"] == 1
+    assert result.vehicle_approach_count == 4
+    assert result.vehicle_topology_type == "X4"
     assert result.legal_movement_mode_counts["passenger"] > 0
     assert result.legal_movement_mode_counts.get("bicycle", 0) == 0
     assert result.forbidden_cross_mode_movement_count > 0
+    assert result.status == "pass"
+    assert not [warning for warning in result.warnings if "unsupported intersection topology" in warning]

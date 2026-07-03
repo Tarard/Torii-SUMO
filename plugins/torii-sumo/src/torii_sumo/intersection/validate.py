@@ -51,7 +51,11 @@ def validate_intersection(
         if ir.control.control_type != "traffic_light"
         else ("pass" if len(ir.control.link_index_map) == ir.movement_matrix.legal_movement_count else "fail")
     )
-    topology_supported = ir.core.topology_type in {"T3", "X4"} and len(ir.approaches) >= 3
+    vehicle_approach_count = sum(1 for approach in ir.approaches if "passenger" in approach.allowed_modes)
+    vehicle_topology_type = _topology_type(vehicle_approach_count)
+    topology_supported = (
+        ir.core.topology_type in {"T3", "X4"} and len(ir.approaches) >= 3
+    ) or vehicle_topology_type in {"T3", "X4"}
     if not topology_supported:
         warnings.append(f"unsupported intersection topology: {ir.core.topology_type} with {len(ir.approaches)} approaches")
     status = "pass" if sumo_load_status == "pass" and tls_status != "fail" and topology_supported else "blocked"
@@ -68,6 +72,8 @@ def validate_intersection(
         disconnected_edge_count=ir.road_pair_graph.missing_connection_count,
         tls_linkindex_status=tls_status,
         approach_mode_counts=_approach_mode_counts(ir),
+        vehicle_approach_count=vehicle_approach_count,
+        vehicle_topology_type=vehicle_topology_type,
         legal_movement_mode_counts=_legal_movement_mode_counts(ir.movement_matrix.movements),
         forbidden_cross_mode_movement_count=sum(
             1 for movement in ir.movement_matrix.movements if not movement.allowed and not movement.allowed_modes
@@ -86,3 +92,13 @@ def _legal_movement_mode_counts(movements: list[Movement]) -> dict[str, int]:
 
 def _mode_key(modes: set[str]) -> str:
     return "+".join(sorted(modes)) if modes else "none"
+
+
+def _topology_type(approach_count: int) -> str:
+    if approach_count == 3:
+        return "T3"
+    if approach_count == 4:
+        return "X4"
+    if approach_count > 4:
+        return "complex"
+    return "unknown"

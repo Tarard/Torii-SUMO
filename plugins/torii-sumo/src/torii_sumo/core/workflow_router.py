@@ -631,6 +631,8 @@ def _run_intersection_clean(
         "disconnected_edge_count",
         "internal_fragment_count",
         "approach_mode_counts",
+        "vehicle_approach_count",
+        "vehicle_topology_type",
         "legal_movement_mode_counts",
         "forbidden_cross_mode_movement_count",
         "net_file",
