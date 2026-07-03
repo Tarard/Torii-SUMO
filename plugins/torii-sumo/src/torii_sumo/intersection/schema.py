@@ -71,7 +71,7 @@ class IntersectionCore(BaseModel):
 
 class Approach(BaseModel):
     approach_id: str
-    role: Literal["north", "east", "south", "west", "leg_1", "leg_2", "leg_3", "leg_4"]
+    role: str
     source_way_ids: list[str]
     road_name: str | None = None
     highway_class: str
