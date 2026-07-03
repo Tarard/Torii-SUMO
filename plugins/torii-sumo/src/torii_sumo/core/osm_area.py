@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 import json
+import math
+import re
 from typing import Any
 from urllib import error, parse, request
 
@@ -12,6 +14,38 @@ DEFAULT_USER_AGENT = "Torii-SUMO/1.0 (+https://github.com/Tarard/Torii-SUMO)"
 
 def osm_preview_url(place_name: str) -> str:
     return "https://www.openstreetmap.org/search?" + parse.urlencode({"query": place_name})
+
+
+def osm_map_url_bbox(value: str, *, min_radius_m: float = 250.0) -> str:
+    cleaned = value.strip()
+    parsed = parse.urlparse(cleaned)
+    if not parsed.netloc.lower().endswith("openstreetmap.org"):
+        url_match = re.search(r"https?://(?:www\.)?openstreetmap\.org/\S+", cleaned)
+        if not url_match:
+            return ""
+        parsed = parse.urlparse(url_match.group(0).rstrip(").,;"))
+    match = re.search(
+        r"(?:^|&)map=(?P<zoom>\d+(?:\.\d+)?)/(?P<lat>-?\d+(?:\.\d+)?)/(?P<lon>-?\d+(?:\.\d+)?)",
+        parse.unquote(parsed.fragment),
+    )
+    if not match:
+        return ""
+
+    zoom = float(match.group("zoom"))
+    lat = float(match.group("lat"))
+    lon = float(match.group("lon"))
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return ""
+
+    meters_per_pixel = 156543.03392 * max(math.cos(math.radians(lat)), 0.01) / (2**zoom)
+    radius_m = max(min_radius_m, meters_per_pixel * 450.0)
+    lat_delta = radius_m / 111_320.0
+    lon_delta = radius_m / (111_320.0 * max(math.cos(math.radians(lat)), 0.01))
+    west = max(-180.0, lon - lon_delta)
+    south = max(-90.0, lat - lat_delta)
+    east = min(180.0, lon + lon_delta)
+    north = min(90.0, lat + lat_delta)
+    return f"{west:.7f},{south:.7f},{east:.7f},{north:.7f}"
 
 
 def _candidate_osm_url(osm_type: str, osm_id: str) -> str:

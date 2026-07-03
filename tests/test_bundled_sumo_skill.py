@@ -18,6 +18,7 @@ EXISTING_PUBLIC_REFERENCES = {
     "interactive-experiment-intake.md",
     "learn-sumo-knowledge.md",
     "model-osm-detectors.md",
+    "osm-to-sumo-workflow.md",
     "osm-source-patterns.md",
     "plan-experiment.md",
     "preflight-sumo-environment.md",
@@ -122,20 +123,30 @@ def test_skill_routes_sumolights_controller_patterns_without_source_copy() -> No
     assert "create a code-development plan instead of pretending the controller was applied" in reference
 
 
+def test_skill_routes_osm_to_sumo_workflow_separately() -> None:
+    body = read_skill()
+    workflow_reference = (SKILL / "references" / "osm-to-sumo-workflow.md").read_text(encoding="utf-8")
+    model_reference = (SKILL / "references" / "model-osm-detectors.md").read_text(encoding="utf-8")
+
+    assert "references/osm-to-sumo-workflow.md" in body
+    assert "sumo_osm_cleanup_workflow" in workflow_reference
+    assert "network_plan_status" in workflow_reference
+    assert "Google Maps TLS review" in workflow_reference
+    assert "SUMO-GUI" in workflow_reference
+    assert "Netedit" in workflow_reference
+    assert "workflow_review_html" in workflow_reference
+    assert "OSM Cleanup Hard Gates" not in model_reference
+    assert "One-Sentence Autopilot Contract" not in model_reference
+
+
 def test_skill_routes_osm_source_patterns_and_region_aware_temporal_baseline() -> None:
     body = read_skill()
     model_reference = (SKILL / "references" / "model-osm-detectors.md").read_text(encoding="utf-8")
     source_reference = (SKILL / "references" / "osm-source-patterns.md").read_text(encoding="utf-8")
 
     assert "references/osm-source-patterns.md" in body
-    assert "sumo_osm_cleanup_workflow" in model_reference
-    assert "proceed when the candidate is clear" in model_reference
-    assert "block only when the area is ambiguous, missing, or unsafe" in model_reference
-    assert "Netedit" in model_reference
-    assert "SUMO-GUI" in model_reference
     assert "user's stated historical target controls the baseline" in model_reference
     assert "Region-Aware Reality Baseline" in model_reference
-    assert "One-Sentence Autopilot Contract" in model_reference
     assert "regional map/TLS reality evidence" in model_reference
     assert "Amap/Gaode" in model_reference
     assert "WGS84/GCJ-02/BD-09" in model_reference
@@ -147,6 +158,11 @@ def test_skill_routes_osm_source_patterns_and_region_aware_temporal_baseline() -
     assert "SUMO osmGet/osmBuild" in source_reference
     assert "osm-to-xodr" in source_reference
     assert "Do not vendor external source code" in source_reference
+    assert "Observed OSM-to-SUMO Cleanup Profiles" in source_reference
+    assert "sumo-berlin" in source_reference
+    assert "MoSTScenario" in source_reference
+    assert "actrys" in source_reference
+    assert "not a substitute for TUM-style teacher replay" in source_reference
 
 
 def test_skill_routes_detector_constrained_demand_reconstruction() -> None:

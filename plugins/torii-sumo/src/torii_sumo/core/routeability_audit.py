@@ -264,7 +264,7 @@ def _build_random_trips_command(
         sys.executable,
         random_trips,
         "-n",
-        _relpath(net_file, cwd),
+        str(net_file.resolve()),
         "-o",
         trip_file.name,
         "-r",
@@ -289,7 +289,7 @@ def _write_sumocfg(
 ) -> None:
     root = ET.Element("configuration")
     input_node = ET.SubElement(root, "input")
-    ET.SubElement(input_node, "net-file", value=_relpath(net_file, path.parent))
+    ET.SubElement(input_node, "net-file", value=str(net_file.resolve()))
     ET.SubElement(input_node, "route-files", value=_relpath(route_file, path.parent))
     output_node = ET.SubElement(root, "output")
     ET.SubElement(output_node, "summary-output", value=summary_file.name)

@@ -4,11 +4,12 @@ import csv
 import json
 import math
 from collections import Counter, deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
+from .modal_aggregation_policy import classify_cluster_modal_policy, classify_edge_modal_role
 from .osm_network import _net_xy_to_latlon
 from .road_corridor import (
     enrich_clusters_with_corridor_audit,
@@ -46,6 +47,7 @@ def audit_topology_fragmentation(
         xy_to_latlon=xy_to_latlon,
         edges=edges,
     )
+    connection_cell_candidates = _connection_cell_candidates(junctions, edges)
     warnings = []
     corridor_audit_status = "not_run"
     corridor_error = ""
@@ -65,14 +67,22 @@ def audit_topology_fragmentation(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     clusters_file = output_dir / f"{prefix}_dense_junction_clusters.csv"
+    connection_cells_file = output_dir / f"{prefix}_topology_connection_candidates.csv"
     report_file = output_dir / f"{prefix}_topology_audit.json"
     _write_clusters_csv(clusters_file, clusters)
+    _write_connection_cells_csv(connection_cells_file, connection_cell_candidates)
 
     status = "blocked" if clusters else "pass"
     if clusters:
         warnings.append(f"topology audit found {len(clusters)} suspicious dense junction cluster(s)")
 
     physical_shape_counts = dict(Counter(cluster["physical_intersection_shape"] for cluster in clusters))
+    modal_decision_counts = dict(
+        Counter(cluster.get("modal_aggregation_decision", "review_required") for cluster in clusters)
+    )
+    modal_review_action_counts = dict(
+        Counter(cluster.get("modal_review_action", "review_vehicle_core_boundary") for cluster in clusters)
+    )
     corridor_decision_counts = dict(
         Counter(
             str(cluster.get("corridor_decision", "not_available"))
@@ -96,10 +106,16 @@ def audit_topology_fragmentation(
         "min_cluster_nodes": min_cluster_nodes,
         "junction_count": len(junctions),
         "suspicious_cluster_count": len(clusters),
+        "topology_connection_cell_candidate_count": len(connection_cell_candidates),
+        "topology_connection_cell_candidates_file": str(connection_cells_file),
+        "topology_connection_cell_candidates": connection_cell_candidates,
         "max_cluster_node_count": max((cluster["node_count"] for cluster in clusters), default=0),
         "aggregation_decision_counts": dict(Counter(cluster["aggregation_decision"] for cluster in clusters)),
         "physical_intersection_shape_counts": physical_shape_counts,
         "physical_intersection_candidate_count": physical_intersection_candidate_count,
+        "modal_policy_status": "pass",
+        "modal_decision_counts": modal_decision_counts,
+        "modal_review_action_counts": modal_review_action_counts,
         "corridor_audit_status": corridor_audit_status,
         "corridor_audit_error": corridor_error,
         "corridor_decision_counts": corridor_decision_counts,
@@ -113,12 +129,19 @@ def audit_topology_fragmentation(
             for cluster in clusters
             if cluster["aggregation_decision"] in {"join", "needs_map_review"}
             and cluster.get("corridor_decision") != "reject"
+            and cluster.get("modal_aggregation_decision") not in {"never_join", "protected_terminal", "shape_support"}
         ),
         "junction_aggregation_blocked_by_corridor_count": sum(
             1
             for cluster in clusters
             if cluster["aggregation_decision"] in {"join", "needs_map_review"}
             and cluster.get("corridor_decision") == "reject"
+        ),
+        "junction_aggregation_blocked_by_modal_count": sum(
+            1
+            for cluster in clusters
+            if cluster["aggregation_decision"] in {"join", "needs_map_review"}
+            and cluster.get("modal_aggregation_decision") in {"never_join", "protected_terminal", "shape_support"}
         ),
         "clusters_file": str(clusters_file),
         "report_file": str(report_file),
@@ -171,6 +194,9 @@ def _read_network_graph(net_file: Path) -> tuple[list[dict[str, Any]], list[dict
                 "from": from_node,
                 "to": to_node,
                 "type": edge.attrib.get("type", ""),
+                "function": edge.attrib.get("function", ""),
+                "allow": edge.attrib.get("allow", ""),
+                "disallow": edge.attrib.get("disallow", ""),
                 "name": edge.attrib.get("name", ""),
                 "lane_count": len(lanes),
                 "length": _edge_length(shape, lanes),
@@ -216,6 +242,85 @@ def _dense_clusters(
     for index, cluster in enumerate(clusters, start=1):
         cluster["cluster_id"] = f"C{index:03d}"
     return clusters
+
+
+def _connection_cell_candidates(
+    junctions: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    *,
+    short_edge_max_length_m: float = 12.0,
+    min_external_vehicle_approaches: int = 3,
+) -> list[dict[str, Any]]:
+    junction_by_id = {str(junction["id"]): junction for junction in junctions}
+    short_vehicle_edges = [
+        edge
+        for edge in edges
+        if float(edge.get("length") or 0.0) <= short_edge_max_length_m
+        and classify_edge_modal_role(edge)["modal_primary_role"] == "vehicle_core"
+    ]
+    graph: dict[str, set[str]] = {}
+    for edge in short_vehicle_edges:
+        left = str(edge["from"])
+        right = str(edge["to"])
+        graph.setdefault(left, set()).add(right)
+        graph.setdefault(right, set()).add(left)
+
+    candidates = []
+    for component in _connected_node_components(graph):
+        if len(component) < 2:
+            continue
+        boundary_edges = [
+            edge
+            for edge in edges
+            if (str(edge["from"]) in component) ^ (str(edge["to"]) in component)
+            and classify_edge_modal_role(edge)["modal_primary_role"] == "vehicle_core"
+        ]
+        if len(boundary_edges) < min_external_vehicle_approaches:
+            continue
+        internal_edges = [
+            edge
+            for edge in edges
+            if str(edge["from"]) in component and str(edge["to"]) in component
+        ]
+        centroid_x = _mean(float(junction_by_id[node]["x"]) for node in component if node in junction_by_id)
+        centroid_y = _mean(float(junction_by_id[node]["y"]) for node in component if node in junction_by_id)
+        candidates.append(
+            {
+                "cell_id": f"TC{len(candidates) + 1:03d}",
+                "node_ids": sorted(component),
+                "centroid_x": round(centroid_x, 3),
+                "centroid_y": round(centroid_y, 3),
+                "internal_edge_ids": sorted(str(edge["id"]) for edge in internal_edges),
+                "boundary_edge_ids": sorted(str(edge["id"]) for edge in boundary_edges),
+                "external_vehicle_approach_count": len(boundary_edges),
+                "connection_cell_decision": "needs_review",
+                "reason": "short connected vehicle-core topology cell has multiple external approaches",
+            }
+        )
+    return candidates
+
+
+def _connected_node_components(graph: dict[str, set[str]]) -> list[set[str]]:
+    remaining = set(graph)
+    components = []
+    while remaining:
+        start = remaining.pop()
+        component = {start}
+        stack = [start]
+        while stack:
+            node = stack.pop()
+            for neighbor in graph.get(node, set()):
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    component.add(neighbor)
+                    stack.append(neighbor)
+        components.append(component)
+    return components
+
+
+def _mean(values: Iterable[float]) -> float:
+    items = list(values)
+    return sum(items) / len(items) if items else 0.0
 
 
 def _cluster_summary(
@@ -318,6 +423,10 @@ def _cluster_graph_summary(
         overlap_pair_count=overlap_pair_count,
         physical_shape=physical_shape,
     )
+    modal_policy = classify_cluster_modal_policy(
+        internal_edges=internal_edges,
+        boundary_edges=boundary_edges,
+    )
     return {
         "internal_edge_ids": sorted(str(edge["id"]) for edge in internal_edges),
         "boundary_edge_ids": sorted(str(edge["id"]) for edge in boundary_edges),
@@ -337,7 +446,8 @@ def _cluster_graph_summary(
             approach_count=len(external_junction_ids),
         ),
         **aggregation_score,
-        "risk_flags": risk_flags,
+        **modal_policy,
+        "risk_flags": sorted(set(risk_flags) | set(modal_policy["modal_risk_flags"])),
     }
 
 
@@ -711,6 +821,13 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "aggregation_decision",
                 "aggregation_confidence",
                 "aggregation_reason",
+                "modal_aggregation_decision",
+                "modal_primary_role",
+                "modal_review_action",
+                "modal_reason",
+                "modal_risk_flags",
+                "modal_decision_counts",
+                "modal_role_counts",
                 "short_internal_edge_score",
                 "same_road_name_score",
                 "physical_intersection_shape",
@@ -762,5 +879,31 @@ def _write_clusters_csv(path: Path, clusters: list[dict[str, Any]]) -> None:
                 "corridor_unnamed_corridors",
                 "corridor_top_partitions",
             ):
+                row[field] = ";".join(str(item) for item in row.get(field, []) or [])
+            for field in ("modal_decision_counts", "modal_role_counts"):
+                row[field] = json.dumps(row.get(field, {}) or {}, sort_keys=True)
+            writer.writerow(row)
+
+
+def _write_connection_cells_csv(path: Path, cells: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "cell_id",
+                "node_ids",
+                "centroid_x",
+                "centroid_y",
+                "internal_edge_ids",
+                "boundary_edge_ids",
+                "external_vehicle_approach_count",
+                "connection_cell_decision",
+                "reason",
+            ],
+        )
+        writer.writeheader()
+        for cell in cells:
+            row = dict(cell)
+            for field in ("node_ids", "internal_edge_ids", "boundary_edge_ids"):
                 row[field] = ";".join(str(item) for item in row.get(field, []) or [])
             writer.writerow(row)

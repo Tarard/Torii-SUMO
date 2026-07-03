@@ -9,6 +9,9 @@ def test_readme_links_plugin_install_doc() -> None:
 
     assert "Codex Plugin Installation" in readme
     assert "docs/codex-plugin-install.md" in readme
+    assert "ARCHITECTURE.md" in readme
+    assert "evidence-aware" in readme
+    assert "reference-comparable" in readme
     assert "skills and MCP tools" in readme
     assert "docs/superpowers/specs/2026-06-20-torii-sumo-design.md" not in readme
     assert "docs/superpowers/plans/2026-06-20-torii-sumo.md" not in readme
@@ -38,6 +41,8 @@ def test_plugin_install_doc_explains_marketplace_and_new_thread() -> None:
     assert "sumo_network_connected_core" in doc
     assert "sumo_network_routeability_probe" in doc
     assert "sumo_network_routeability_audit" in doc
+    assert "sumo_network_overlapping_junction_audit" in doc
+    assert "sumo_network_teacher_guided_junction_variant" in doc
     assert "tiled Overpass" in doc
     assert "retry" in doc
     assert "deduplicate" in doc
@@ -68,6 +73,11 @@ def test_osm_source_patterns_doc_tracks_external_projects_without_vendoring() ->
     assert "Overpass subdivision" in doc
     assert "offline PBF" in doc
     assert "multi-stage netconvert" in doc
+    assert "Observed OSM-to-SUMO Cleanup Profiles" in doc
+    assert "sumo-berlin" in doc
+    assert "MoSTScenario" in doc
+    assert "actrys" in doc
+    assert "not a substitute for TUM-style teacher replay" in doc
 
 
 def test_internal_superpowers_plans_are_not_public_release_content() -> None:
@@ -87,6 +97,8 @@ def test_internal_superpowers_plans_are_not_public_release_content() -> None:
         assert "superpowers/specs" not in body
 
     manifest = (ROOT / "docs" / "release" / "public-repo-manifest.md").read_text(encoding="utf-8")
+    assert "ARCHITECTURE.md" in manifest
+    assert "benchmarks/" in manifest
     assert "docs/superpowers/" in manifest
     assert "docs/superpowers/plans/" not in manifest
     assert "docs/superpowers/specs/" not in manifest

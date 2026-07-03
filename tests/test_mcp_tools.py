@@ -5,12 +5,16 @@ from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_
 from torii_sumo.tools.osm_tools import (
     sumo_network_review_html,
     sumo_network_junction_aggregation_variant,
+    sumo_network_overlapping_junction_audit,
     sumo_network_reference_hierarchy_audit,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
     sumo_network_routeability_audit,
     sumo_network_scope_pruning_variant,
+    sumo_network_teacher_guided_junction_variant,
+    sumo_network_teacher_guided_repair_queue,
     sumo_network_tls_aggregation_variant,
+    sumo_network_tls_warning_parity,
     sumo_network_topology_audit,
 )
 from torii_sumo.tools.run_tools import sumo_run_minimal_smoke
@@ -226,6 +230,45 @@ def test_sumo_network_reference_join_audit_tool_returns_json_compatible_report(m
     json.dumps(report)
 
 
+def test_sumo_network_overlapping_junction_audit_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    reference_join_file = tmp_path / "reference_join.json"
+    reference_join_file.write_text('{"matched_cases": []}', encoding="utf-8")
+
+    def fake_audit(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["overlap_radius_m"] == 9.0
+        assert kwargs["short_edge_length_m"] == 13.0
+        assert kwargs["min_group_nodes"] == 3
+        assert kwargs["reference_join_audit_report"] == {"matched_cases": []}
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "overlapping_junction_group_count": 1,
+            "summary_file": str(tmp_path / "summary.json"),
+        }
+
+    monkeypatch.setattr(osm_tools, "audit_overlapping_junctions", fake_audit)
+
+    report = sumo_network_overlapping_junction_audit(
+        net_file=str(net_file),
+        output_dir=str(tmp_path / "overlap"),
+        overlap_radius_m=9.0,
+        short_edge_length_m=13.0,
+        min_group_nodes=3,
+        reference_join_audit_report_file=str(reference_join_file),
+    )
+
+    assert report["status"] == "pass"
+    assert report["overlapping_junction_group_count"] == 1
+    json.dumps(report)
+
+
 def test_sumo_network_reference_hierarchy_audit_tool_returns_json_compatible_report(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -274,6 +317,7 @@ def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_
 
     net_file = tmp_path / "candidate.net.xml"
     topology_report_file = tmp_path / "topology.json"
+    overlap_report_file = tmp_path / "overlap.json"
     net_file.write_text("<net/>", encoding="utf-8")
     topology_report_file.write_text(
         json.dumps(
@@ -290,11 +334,16 @@ def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_
         ),
         encoding="utf-8",
     )
+    overlap_report_file.write_text(
+        json.dumps({"overlapping_junction_groups": [{"group_id": "OJ001", "node_ids": ["j1", "j2"]}]}),
+        encoding="utf-8",
+    )
 
     def fake_aggregation(**kwargs):
         assert kwargs["net_file"] == net_file
         assert kwargs["join_dist_m"] == 25.0
         assert kwargs["topology_audit_report"]["suspicious_clusters"][0]["cluster_id"] == "C001"
+        assert kwargs["overlapping_junction_audit_report"]["overlapping_junction_groups"][0]["group_id"] == "OJ001"
         return {
             "status": "pass",
             "claim_status": "blocked",
@@ -309,6 +358,7 @@ def test_sumo_network_junction_aggregation_variant_tool_returns_json_compatible_
         net_file=str(net_file),
         output_dir=str(tmp_path / "aggregation"),
         topology_audit_report_file=str(topology_report_file),
+        overlapping_junction_audit_report_file=str(overlap_report_file),
         join_dist_m=25.0,
     )
 
@@ -427,3 +477,221 @@ def test_sumo_network_tls_aggregation_variant_tool_returns_json_compatible_repor
     assert report["status"] == "pass"
     assert report["tls_physical_cluster_count"] == 2
     json.dumps(report)
+
+
+def test_sumo_network_tls_warning_parity_tool_writes_reference_aware_report(tmp_path: Path) -> None:
+    teacher_report = tmp_path / "teacher_load.json"
+    candidate_report = tmp_path / "candidate_load.json"
+    teacher_report.write_text(
+        json.dumps(
+            {
+                "stderr_tail": "Warning: Unused states in tlLogic '7616444534', program '0' in phase 0 after tl-index 17\n"
+                "Warning: Missing green phase in tlLogic '7616444534', program '0' for tl-index 9.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    candidate_report.write_text(
+        json.dumps(
+            {
+                "stderr_tail": "Warning: Unused states in tlLogic 'cluster_tls', program '0' in phase 0 after tl-index 17\n"
+                "Warning: Missing yellow phase in tlLogic 'cluster_tls', program '0' for tl-index 3 when switching to phase 2.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = sumo_network_tls_warning_parity(
+        teacher_sumo_load_report_file=str(teacher_report),
+        candidate_sumo_load_report_file=str(candidate_report),
+        tls_id_map={"7616444534": "cluster_tls"},
+        output_dir=str(tmp_path / "warning-parity"),
+        prefix="probe",
+    )
+
+    assert report["status"] == "pass"
+    assert report["inherited_warning_count"] == 1
+    assert report["candidate_only_warning_count"] == 1
+    assert report["teacher_only_warning_count"] == 1
+    assert Path(report["warning_parity_file"]).is_file()
+    json.dumps(report)
+
+
+def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    raw_node_file = tmp_path / "raw.nod.xml"
+    raw_edge_file = tmp_path / "raw.edg.xml"
+    raw_connection_file = tmp_path / "raw.con.xml"
+    teacher_net_file = tmp_path / "teacher.net.xml"
+    candidate_net_file = tmp_path / "candidate.net.xml"
+    raw_type_file = tmp_path / "raw.typ.xml"
+    raw_tllogic_file = tmp_path / "raw.tll.xml"
+    for path in (
+        raw_node_file,
+        raw_edge_file,
+        raw_connection_file,
+        teacher_net_file,
+        candidate_net_file,
+        raw_type_file,
+        raw_tllogic_file,
+    ):
+        path.write_text("<xml/>", encoding="utf-8")
+
+    def fake_builder(**kwargs):
+        assert kwargs["raw_node_file"] == raw_node_file
+        assert kwargs["raw_edge_file"] == raw_edge_file
+        assert kwargs["raw_connection_file"] == raw_connection_file
+        assert kwargs["raw_type_file"] == raw_type_file
+        assert kwargs["raw_tllogic_file"] == raw_tllogic_file
+        assert kwargs["teacher_net_file"] == teacher_net_file
+        assert kwargs["candidate_net_file"] == candidate_net_file
+        assert kwargs["teacher_junction_id"] == "teacher_j"
+        assert kwargs["edge_map"] == {"teacher_in": "cand_in"}
+        assert kwargs["crossing_edge_overrides"] == {":j_c5": "cand_crossing"}
+        assert kwargs["replay_target_internal_subgraph"] is True
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "final_net_file": str(tmp_path / "teacher_guided.net.xml"),
+            "parity": {"delta": {"vehicle_connection_count": 0}},
+        }
+
+    monkeypatch.setattr(osm_tools, "build_teacher_guided_junction_variant", fake_builder)
+
+    report = sumo_network_teacher_guided_junction_variant(
+        raw_node_file=str(raw_node_file),
+        raw_edge_file=str(raw_edge_file),
+        raw_connection_file=str(raw_connection_file),
+        raw_type_file=str(raw_type_file),
+        raw_tllogic_file=str(raw_tllogic_file),
+        teacher_net_file=str(teacher_net_file),
+        candidate_net_file=str(candidate_net_file),
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        output_dir=str(tmp_path / "teacher-guided"),
+        edge_map={"teacher_in": "cand_in"},
+        crossing_edge_overrides={":j_c5": "cand_crossing"},
+        replay_target_internal_subgraph=True,
+    )
+
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["parity"]["delta"]["vehicle_connection_count"] == 0
+    json.dumps(report)
+
+
+def test_sumo_network_teacher_guided_junction_variant_tool_replays_internal_subgraph_by_default(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    for name in ("raw.nod.xml", "raw.edg.xml", "raw.con.xml", "teacher.net.xml", "candidate.net.xml"):
+        (tmp_path / name).write_text("<xml/>", encoding="utf-8")
+
+    def fake_builder(**kwargs):
+        assert kwargs["replay_target_internal_subgraph"] is True
+        return {"status": "pass", "claim_status": "diagnostic-demo"}
+
+    monkeypatch.setattr(osm_tools, "build_teacher_guided_junction_variant", fake_builder)
+
+    report = sumo_network_teacher_guided_junction_variant(
+        raw_node_file=str(tmp_path / "raw.nod.xml"),
+        raw_edge_file=str(tmp_path / "raw.edg.xml"),
+        raw_connection_file=str(tmp_path / "raw.con.xml"),
+        teacher_net_file=str(tmp_path / "teacher.net.xml"),
+        candidate_net_file=str(tmp_path / "candidate.net.xml"),
+        junction_id="j",
+        output_dir=str(tmp_path / "out"),
+        edge_map={},
+    )
+
+    assert report["status"] == "pass"
+
+
+def test_sumo_network_teacher_guided_repair_queue_tool_returns_json_compatible_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    raw_node_file = tmp_path / "raw.nod.xml"
+    raw_edge_file = tmp_path / "raw.edg.xml"
+    raw_connection_file = tmp_path / "raw.con.xml"
+    raw_type_file = tmp_path / "raw.typ.xml"
+    raw_tllogic_file = tmp_path / "raw.tll.xml"
+    for path in (raw_node_file, raw_edge_file, raw_connection_file, raw_type_file, raw_tllogic_file):
+        path.write_text("<xml/>", encoding="utf-8")
+    queue_file = tmp_path / "queue.json"
+    queue_file.write_text(
+        json.dumps(
+            {
+                "teacher_net_file": str(tmp_path / "teacher.net.xml"),
+                "candidate_net_file": str(tmp_path / "candidate.net.xml"),
+                "repair_candidates": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_runner(**kwargs):
+        assert kwargs["queue_report"]["repair_candidates"] == []
+        assert kwargs["raw_node_file"] == raw_node_file
+        assert kwargs["raw_edge_file"] == raw_edge_file
+        assert kwargs["raw_connection_file"] == raw_connection_file
+        assert kwargs["raw_type_file"] == raw_type_file
+        assert kwargs["raw_tllogic_file"] == raw_tllogic_file
+        assert kwargs["output_dir"] == tmp_path / "queue-run"
+        assert kwargs["queue_base_dir"] == queue_file.resolve().parent
+        assert kwargs["replay_target_internal_subgraph"] is True
+        return {
+            "status": "blocked",
+            "claim_status": "blocked",
+            "attempted_candidate_count": 0,
+            "skipped_candidate_count": 0,
+        }
+
+    monkeypatch.setattr(osm_tools, "run_teacher_guided_repair_queue", fake_runner)
+
+    report = sumo_network_teacher_guided_repair_queue(
+        queue_report_file=str(queue_file),
+        raw_node_file=str(raw_node_file),
+        raw_edge_file=str(raw_edge_file),
+        raw_connection_file=str(raw_connection_file),
+        raw_type_file=str(raw_type_file),
+        raw_tllogic_file=str(raw_tllogic_file),
+        output_dir=str(tmp_path / "queue-run"),
+        replay_target_internal_subgraph=True,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["claim_status"] == "blocked"
+    json.dumps(report)
+
+
+def test_sumo_network_teacher_guided_repair_queue_tool_replays_internal_subgraph_by_default(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    for name in ("raw.nod.xml", "raw.edg.xml", "raw.con.xml"):
+        (tmp_path / name).write_text("<xml/>", encoding="utf-8")
+    queue_file = tmp_path / "queue.json"
+    queue_file.write_text(json.dumps({"repair_candidates": []}), encoding="utf-8")
+
+    def fake_runner(**kwargs):
+        assert kwargs["replay_target_internal_subgraph"] is True
+        return {"status": "blocked", "claim_status": "blocked"}
+
+    monkeypatch.setattr(osm_tools, "run_teacher_guided_repair_queue", fake_runner)
+
+    report = sumo_network_teacher_guided_repair_queue(
+        queue_report_file=str(queue_file),
+        raw_node_file=str(tmp_path / "raw.nod.xml"),
+        raw_edge_file=str(tmp_path / "raw.edg.xml"),
+        raw_connection_file=str(tmp_path / "raw.con.xml"),
+        output_dir=str(tmp_path / "out"),
+    )
+
+    assert report["status"] == "blocked"

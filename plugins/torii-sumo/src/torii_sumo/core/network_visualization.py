@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+import math
 import xml.etree.ElementTree as ET
 
 from PIL import Image, ImageDraw, ImageFont
@@ -65,6 +66,26 @@ def _expanded_bounds(points: Iterable[tuple[float, float]]) -> tuple[float, floa
     pad_x = (max_x - min_x) * 0.05
     pad_y = (max_y - min_y) * 0.05
     return (min_x - pad_x, min_y - pad_y, max_x + pad_x, max_y + pad_y)
+
+
+def _finite_point(point: tuple[float, float]) -> bool:
+    return math.isfinite(point[0]) and math.isfinite(point[1])
+
+
+def _point_near_bounds(
+    point: tuple[float, float],
+    bounds: tuple[float, float, float, float],
+) -> bool:
+    if not _finite_point(point):
+        return False
+    min_x, min_y, max_x, max_y = bounds
+    width = max_x - min_x
+    height = max_y - min_y
+    margin = max(50.0, max(width, height) * 0.1)
+    return (
+        min_x - margin <= point[0] <= max_x + margin
+        and min_y - margin <= point[1] <= max_y + margin
+    )
 
 
 def _read_net(net_file: Path) -> NetDrawing:
@@ -158,10 +179,31 @@ def _cluster_points(records: Iterable[Mapping[str, Any]]) -> list[tuple[float, f
     points: list[tuple[float, float]] = []
     for record in records:
         try:
-            points.append((float(record["x"]), float(record["y"])))
+            point = (float(record["x"]), float(record["y"]))
         except (KeyError, TypeError, ValueError):
             continue
+        if _finite_point(point):
+            points.append(point)
     return points
+
+
+def _map_layers(net: NetDrawing) -> dict[str, Any]:
+    min_x, min_y, max_x, max_y = net.bounds
+    return {
+        "bounds": {"min_x": min_x, "min_y": min_y, "max_x": max_x, "max_y": max_y},
+        "edges": [
+            {
+                "category": segment.category,
+                "points": [[x, y] for x, y in segment.points],
+            }
+            for segment in net.segments
+        ],
+        "junctions": [
+            {"id": junction_id, "x": point[0], "y": point[1]}
+            for junction_id, point in sorted(net.junctions.items())
+        ],
+        "traffic_lights": [{"x": point[0], "y": point[1]} for point in net.traffic_lights],
+    }
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -219,6 +261,8 @@ def _draw_net(
         draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill=(208, 0, 0))
 
     for point in cluster_points:
+        if not _point_near_bounds(point, active_bounds):
+            continue
         x, y = _project(point, bounds=active_bounds, origin=origin, size=size)
         radius = 12
         draw.ellipse([x - radius, y - radius, x + radius, y + radius], outline=(240, 142, 0), width=3)
@@ -378,7 +422,13 @@ def build_network_review_visuals(
 
     network = _read_net(net_path)
     cluster_records = _cluster_records(topology_audit_report, network)
-    clusters = _cluster_points(cluster_records)
+    drawable_cluster_records = [
+        cluster
+        for cluster in cluster_records
+        if _point_near_bounds((float(cluster["x"]), float(cluster["y"])), network.bounds)
+    ]
+    skipped_cluster_count = len(cluster_records) - len(drawable_cluster_records)
+    clusters = _cluster_points(drawable_cluster_records)
     overview_file = output_dir / f"{prefix}_network_overview.png"
     problem_file = output_dir / f"{prefix}_problem_overlay.png"
     comparison_file = output_dir / f"{prefix}_reference_comparison.png"
@@ -387,7 +437,7 @@ def build_network_review_visuals(
     _write_single_panel(net=network, output_file=problem_file, title="Problem Map", cluster_points=clusters)
 
     cluster_zoom_pngs: list[dict[str, Any]] = []
-    for index, cluster in enumerate(cluster_records[:24], start=1):
+    for index, cluster in enumerate(drawable_cluster_records[:24], start=1):
         zoom_file = output_dir / f"{prefix}_cluster_{index:03d}_{cluster['cluster_id']}.png"
         _write_cluster_zoom(net=network, cluster=cluster, output_file=zoom_file)
         cluster_zoom_pngs.append(
@@ -411,5 +461,6 @@ def build_network_review_visuals(
         "problem_overlay_png": str(problem_file),
         "reference_comparison_png": comparison_value,
         "cluster_zoom_pngs": cluster_zoom_pngs,
-        "warnings": [],
+        "map_layers": _map_layers(network),
+        "warnings": [f"skipped {skipped_cluster_count} out-of-bounds review cluster(s)"] if skipped_cluster_count else [],
     }

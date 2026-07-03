@@ -19,6 +19,7 @@ Agent plugin for SUMO
 README.md
 README.zh-CN.md
 README.de.md
+ARCHITECTURE.md
 LICENSE
 NOTICE.md
 CITATION.cff
@@ -31,6 +32,7 @@ plugins/
 skills/
   simulation-helper-skill-for-eclipse-sumo/
   debugging-helper-skill-for-eclipse-sumo/
+  sumo-experiment-problem-solving/
 docs/
   index.html
   assets/
@@ -41,6 +43,7 @@ docs/
   common-sumo-signal-control-failures.md
   release/
 examples/
+benchmarks/
 tests/
 ```
 

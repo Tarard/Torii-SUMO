@@ -6,6 +6,10 @@ from typing import Any
 
 from torii_sumo.core.connectivity import extract_largest_passenger_component_core
 from torii_sumo.core.junction_aggregation import build_junction_aggregation_variant
+from torii_sumo.core.junction_rebuild_candidate import (
+    build_teacher_guided_junction_variant,
+    run_teacher_guided_repair_queue,
+)
 from torii_sumo.core.tls_aggregation import build_tls_aggregation_variant
 from torii_sumo.core.osm_network import (
     audit_tls,
@@ -23,6 +27,8 @@ from torii_sumo.core.routeability_audit import run_routeability_audit
 from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 from torii_sumo.core.reference_scope import audit_reference_scope, build_scope_pruning_variant
+from torii_sumo.core.overlapping_junction_audit import audit_overlapping_junctions
+from torii_sumo.core.sumo_warning_audit import compare_mapped_tls_warnings
 from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.core.workflow_review_html import build_workflow_review_html
 
@@ -178,6 +184,26 @@ def sumo_network_topology_audit(
     )
 
 
+def sumo_network_overlapping_junction_audit(
+    net_file: str,
+    output_dir: str,
+    prefix: str = "overlapping_junction_audit",
+    overlap_radius_m: float = 12.0,
+    short_edge_length_m: float = 20.0,
+    min_group_nodes: int = 2,
+    reference_join_audit_report_file: str | None = None,
+) -> dict[str, Any]:
+    return audit_overlapping_junctions(
+        net_file=Path(net_file),
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        overlap_radius_m=overlap_radius_m,
+        short_edge_length_m=short_edge_length_m,
+        min_group_nodes=min_group_nodes,
+        reference_join_audit_report=_read_json_report(reference_join_audit_report_file),
+    )
+
+
 def sumo_network_reference_join_audit(
     reference_net_file: str,
     candidate_net_file: str,
@@ -226,6 +252,7 @@ def sumo_network_junction_aggregation_variant(
     prefix: str = "junction_aggregation",
     topology_audit_report_file: str | None = None,
     reference_join_audit_report_file: str | None = None,
+    overlapping_junction_audit_report_file: str | None = None,
     join_dist_m: float = 30.0,
     timeout_seconds: float = 240.0,
 ) -> dict[str, Any]:
@@ -235,6 +262,7 @@ def sumo_network_junction_aggregation_variant(
         prefix=prefix,
         topology_audit_report=_read_json_report(topology_audit_report_file),
         reference_join_audit_report=_read_json_report(reference_join_audit_report_file),
+        overlapping_junction_audit_report=_read_json_report(overlapping_junction_audit_report_file),
         join_dist_m=join_dist_m,
         timeout_seconds=timeout_seconds,
     )
@@ -288,6 +316,108 @@ def sumo_network_tls_aggregation_variant(
         tls_audit_report=_read_json_report(tls_audit_report_file) or {},
         output_dir=Path(output_dir),
         prefix=prefix,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def sumo_network_tls_warning_parity(
+    teacher_sumo_load_report_file: str,
+    candidate_sumo_load_report_file: str,
+    tls_id_map: dict[str, str],
+    output_dir: str,
+    prefix: str = "tls_warning_parity",
+) -> dict[str, Any]:
+    teacher_report = _read_json_report(teacher_sumo_load_report_file) or {}
+    candidate_report = _read_json_report(candidate_sumo_load_report_file) or {}
+    report = compare_mapped_tls_warnings(
+        str(teacher_report.get("stderr_tail", "")),
+        str(candidate_report.get("stderr_tail", "")),
+        tls_id_map,
+    )
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    warning_parity_file = output_path / f"{prefix}_sumo_tls_warning_parity.json"
+    report.update(
+        {
+            "teacher_sumo_load_report_file": str(Path(teacher_sumo_load_report_file)),
+            "candidate_sumo_load_report_file": str(Path(candidate_sumo_load_report_file)),
+            "warning_parity_file": str(warning_parity_file),
+        }
+    )
+    warning_parity_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
+def sumo_network_teacher_guided_junction_variant(
+    raw_node_file: str,
+    raw_edge_file: str,
+    raw_connection_file: str,
+    teacher_net_file: str,
+    candidate_net_file: str,
+    junction_id: str,
+    output_dir: str,
+    edge_map: dict[str, str],
+    prefix: str = "teacher_guided_junction",
+    teacher_junction_id: str | None = None,
+    raw_type_file: str | None = None,
+    raw_tllogic_file: str | None = None,
+    crossing_edge_overrides: dict[str, str | list[str]] | None = None,
+    replay_target_internal_subgraph: bool = True,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    return build_teacher_guided_junction_variant(
+        raw_node_file=Path(raw_node_file),
+        raw_edge_file=Path(raw_edge_file),
+        raw_connection_file=Path(raw_connection_file),
+        raw_type_file=Path(raw_type_file) if raw_type_file else None,
+        raw_tllogic_file=Path(raw_tllogic_file) if raw_tllogic_file else None,
+        teacher_net_file=Path(teacher_net_file),
+        candidate_net_file=Path(candidate_net_file),
+        junction_id=junction_id,
+        output_dir=Path(output_dir),
+        edge_map=edge_map,
+        prefix=prefix,
+        teacher_junction_id=teacher_junction_id,
+        crossing_edge_overrides=crossing_edge_overrides,
+        replay_target_internal_subgraph=replay_target_internal_subgraph,
+        netconvert_binary=netconvert_binary,
+        sumo_binary=sumo_binary,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def sumo_network_teacher_guided_repair_queue(
+    queue_report_file: str,
+    raw_node_file: str,
+    raw_edge_file: str,
+    raw_connection_file: str,
+    output_dir: str,
+    prefix: str = "teacher_guided_repair",
+    raw_type_file: str | None = None,
+    raw_tllogic_file: str | None = None,
+    replay_target_internal_subgraph: bool = True,
+    max_ready_candidates: int | None = None,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 240.0,
+) -> dict[str, Any]:
+    queue_report_path = Path(queue_report_file)
+    return run_teacher_guided_repair_queue(
+        queue_report=_read_json_report(str(queue_report_path)) or {},
+        raw_node_file=Path(raw_node_file),
+        raw_edge_file=Path(raw_edge_file),
+        raw_connection_file=Path(raw_connection_file),
+        raw_type_file=Path(raw_type_file) if raw_type_file else None,
+        raw_tllogic_file=Path(raw_tllogic_file) if raw_tllogic_file else None,
+        output_dir=Path(output_dir),
+        prefix=prefix,
+        queue_base_dir=queue_report_path.resolve().parent,
+        replay_target_internal_subgraph=replay_target_internal_subgraph,
+        max_ready_candidates=max_ready_candidates,
+        netconvert_binary=netconvert_binary,
+        sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
     )
 
@@ -370,6 +500,8 @@ def sumo_osm_cleanup_workflow(
     historical_date: str | None = None,
     overpass_url: str = "https://overpass-api.de/api/interpreter",
     timeout_seconds: float = 240.0,
+    netconvert_binary: str = "netconvert",
+    sumo_binary: str = "sumo",
     max_tile_area_km2: float = 2500.0,
     max_retries: int = 2,
     retry_pause_seconds: float = 5.0,
@@ -390,9 +522,21 @@ def sumo_osm_cleanup_workflow(
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = True,
+    reference_join_audit_structural_only: bool | None = None,
+    teacher_guided_repair_max_ready_candidates: int | None = 80,
+    run_teacher_guided_repair_after_build: bool = True,
+    road_connectivity_replay_max_owners: int | None = 4,
+    road_connectivity_probe_edge_ids: list[str] | None = None,
+    teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
     key_edge_queries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected_highway_classes = resolve_highway_classes_from_scope(highway_classes, default_to_recommended=False)
+    normalized_profile = (network_profile or "").strip().lower()
+    structural_only = (
+        not (normalized_profile == "reference_matched" and reference_net_file)
+        if reference_join_audit_structural_only is None
+        else reference_join_audit_structural_only
+    )
     return run_osm_cleanup_workflow(
         output_dir=Path(output_dir),
         bbox=bbox,
@@ -409,6 +553,8 @@ def sumo_osm_cleanup_workflow(
         historical_date=historical_date,
         overpass_url=overpass_url,
         timeout_seconds=timeout_seconds,
+        netconvert_binary=netconvert_binary,
+        sumo_binary=sumo_binary,
         max_tile_area_km2=max_tile_area_km2,
         max_retries=max_retries,
         retry_pause_seconds=retry_pause_seconds,
@@ -429,5 +575,11 @@ def sumo_osm_cleanup_workflow(
         run_reference_hierarchy_audit_after_build=run_reference_hierarchy_audit_after_build,
         run_reference_scope_audit_after_build=run_reference_scope_audit_after_build,
         run_scope_pruning_after_build=run_scope_pruning_after_build,
+        reference_join_audit_structural_only=structural_only,
+        teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+        run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
+        road_connectivity_replay_max_owners=road_connectivity_replay_max_owners,
+        road_connectivity_probe_edge_ids=road_connectivity_probe_edge_ids,
+        teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
         key_edge_queries=key_edge_queries,
     )
