@@ -69,7 +69,7 @@ def test_infer_movement_matrix_labels_turns_from_incoming_heading() -> None:
     assert by_target[west.approach_id].turn == "right"
 
 
-def test_infer_movement_matrix_ignores_ambiguous_shared_way_no_u_turn_restriction() -> None:
+def test_infer_movement_matrix_warns_when_shared_way_no_u_turn_has_no_matching_turn() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)
     approaches = infer_approaches(patch, core)
@@ -89,7 +89,9 @@ def test_infer_movement_matrix_ignores_ambiguous_shared_way_no_u_turn_restrictio
     assert matrix.legal_movement_count == unrestricted.legal_movement_count
     assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count
     assert matrix.restriction_blocked_count == 0
-    assert matrix.restriction_warnings == []
+    assert matrix.restriction_warnings == [
+        "osm_restriction:r_no_u_shared:ambiguous:shared_way_direction"
+    ]
     for pair in [("leg_1", "leg_3"), ("leg_3", "leg_1")]:
         movement = movements[pair]
         assert movement.turn == "straight"
@@ -102,7 +104,7 @@ def test_infer_movement_matrix_ignores_ambiguous_shared_way_no_u_turn_restrictio
     )
 
 
-def test_infer_movement_matrix_ignores_ambiguous_shared_way_only_restriction() -> None:
+def test_infer_movement_matrix_applies_shared_same_way_only_restriction_by_turn() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)
     approaches = infer_approaches(patch, core)
@@ -117,19 +119,25 @@ def test_infer_movement_matrix_ignores_ambiguous_shared_way_only_restriction() -
     )
 
     matrix = infer_movement_matrix(core, approaches, graph, patch=patch)
+    movements = {(movement.from_approach_id, movement.to_approach_id): movement for movement in matrix.movements}
 
-    assert matrix.legal_movement_count == unrestricted.legal_movement_count
-    assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count
-    assert matrix.restriction_blocked_count == 0
+    assert matrix.legal_movement_count == unrestricted.legal_movement_count - 4
+    assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count + 4
+    assert matrix.restriction_blocked_count == 4
     assert matrix.restriction_warnings == []
-    assert all(
-        "r_only_shared" not in item
-        for movement in matrix.movements
-        for item in movement.evidence
-    )
+    for pair in [("leg_1", "leg_3"), ("leg_3", "leg_1")]:
+        movement = movements[pair]
+        assert movement.turn == "straight"
+        assert movement.allowed is True
+        assert "osm_restriction:r_only_shared:only_straight_on" not in movement.evidence
+    for pair in [("leg_1", "leg_2"), ("leg_1", "leg_4"), ("leg_3", "leg_2"), ("leg_3", "leg_4")]:
+        movement = movements[pair]
+        assert movement.turn != "straight"
+        assert movement.allowed is False
+        assert "osm_restriction:r_only_shared:only_straight_on" in movement.evidence
 
 
-def test_infer_movement_matrix_ignores_ambiguous_shared_from_to_way_no_restriction() -> None:
+def test_infer_movement_matrix_applies_shared_from_to_way_no_restriction_by_turn() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)
     approaches = infer_approaches(patch, core)
@@ -144,19 +152,25 @@ def test_infer_movement_matrix_ignores_ambiguous_shared_from_to_way_no_restricti
     )
 
     matrix = infer_movement_matrix(core, approaches, graph, patch=patch)
+    movements = {(movement.from_approach_id, movement.to_approach_id): movement for movement in matrix.movements}
 
-    assert matrix.legal_movement_count == unrestricted.legal_movement_count
-    assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count
-    assert matrix.restriction_blocked_count == 0
+    assert matrix.legal_movement_count == unrestricted.legal_movement_count - 2
+    assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count + 2
+    assert matrix.restriction_blocked_count == 2
     assert matrix.restriction_warnings == []
-    assert all(
-        "r_no_right_shared" not in item
-        for movement in matrix.movements
-        for item in movement.evidence
-    )
+    for pair in [("leg_1", "leg_4"), ("leg_3", "leg_2")]:
+        movement = movements[pair]
+        assert movement.turn == "right"
+        assert movement.allowed is False
+        assert "osm_restriction:r_no_right_shared:no_right_turn" in movement.evidence
+    for pair in [("leg_1", "leg_2"), ("leg_3", "leg_4")]:
+        movement = movements[pair]
+        assert movement.turn == "left"
+        assert movement.allowed is True
+        assert "osm_restriction:r_no_right_shared:no_right_turn" not in movement.evidence
 
 
-def test_infer_movement_matrix_ignores_ambiguous_shared_from_to_way_only_restriction() -> None:
+def test_infer_movement_matrix_applies_shared_from_to_way_only_restriction_by_turn() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)
     approaches = infer_approaches(patch, core)
@@ -171,16 +185,22 @@ def test_infer_movement_matrix_ignores_ambiguous_shared_from_to_way_only_restric
     )
 
     matrix = infer_movement_matrix(core, approaches, graph, patch=patch)
+    movements = {(movement.from_approach_id, movement.to_approach_id): movement for movement in matrix.movements}
 
-    assert matrix.legal_movement_count == unrestricted.legal_movement_count
-    assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count
-    assert matrix.restriction_blocked_count == 0
+    assert matrix.legal_movement_count == unrestricted.legal_movement_count - 4
+    assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count + 4
+    assert matrix.restriction_blocked_count == 4
     assert matrix.restriction_warnings == []
-    assert all(
-        "r_only_right_shared" not in item
-        for movement in matrix.movements
-        for item in movement.evidence
-    )
+    for pair in [("leg_1", "leg_4"), ("leg_3", "leg_2")]:
+        movement = movements[pair]
+        assert movement.turn == "right"
+        assert movement.allowed is True
+        assert "osm_restriction:r_only_right_shared:only_right_turn" not in movement.evidence
+    for pair in [("leg_1", "leg_2"), ("leg_1", "leg_3"), ("leg_3", "leg_1"), ("leg_3", "leg_4")]:
+        movement = movements[pair]
+        assert movement.turn != "right"
+        assert movement.allowed is False
+        assert "osm_restriction:r_only_right_shared:only_right_turn" in movement.evidence
 
 
 def test_infer_movement_matrix_uses_turn_lanes_for_source_lane_indices() -> None:
