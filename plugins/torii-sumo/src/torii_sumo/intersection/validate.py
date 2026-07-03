@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 
-from .schema import CompiledSUMOArtifacts, IntersectionIR, IntersectionValidation
+from .schema import CompiledSUMOArtifacts, IntersectionIR, IntersectionValidation, Movement
 
 
 def validate_intersection(
@@ -66,5 +67,22 @@ def validate_intersection(
         duplicate_junction_count=0,
         disconnected_edge_count=ir.road_pair_graph.missing_connection_count,
         tls_linkindex_status=tls_status,
+        approach_mode_counts=_approach_mode_counts(ir),
+        legal_movement_mode_counts=_legal_movement_mode_counts(ir.movement_matrix.movements),
+        forbidden_cross_mode_movement_count=sum(
+            1 for movement in ir.movement_matrix.movements if not movement.allowed and not movement.allowed_modes
+        ),
         warnings=warnings,
     )
+
+
+def _approach_mode_counts(ir: IntersectionIR) -> dict[str, int]:
+    return dict(Counter(_mode_key(approach.allowed_modes) for approach in ir.approaches))
+
+
+def _legal_movement_mode_counts(movements: list[Movement]) -> dict[str, int]:
+    return dict(Counter(_mode_key(movement.allowed_modes) for movement in movements if movement.allowed))
+
+
+def _mode_key(modes: set[str]) -> str:
+    return "+".join(sorted(modes)) if modes else "none"

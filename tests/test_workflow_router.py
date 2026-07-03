@@ -274,6 +274,9 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
             "missing_movement_count": 0,
             "disconnected_edge_count": 0,
             "internal_fragment_count": 1,
+            "approach_mode_counts": {"passenger": 4, "bicycle": 1},
+            "legal_movement_mode_counts": {"passenger": 12},
+            "forbidden_cross_mode_movement_count": 8,
         }
 
     report = run_auto_workflow(
@@ -292,6 +295,9 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
     assert report["sumo_load_status"] == "pass"
     assert report["tls_linkindex_status"] == "pass"
     assert report["missing_movement_count"] == 0
+    assert report["approach_mode_counts"] == {"passenger": 4, "bicycle": 1}
+    assert report["legal_movement_mode_counts"] == {"passenger": 12}
+    assert report["forbidden_cross_mode_movement_count"] == 8
     assert report["workflow_stage_results"][0]["stage_name"] == "intersection_compile_validate"
     assert report["workflow_stage_results"][0]["after_quality"]["connectivity"]["disconnected_edge_count"] == 0
     assert report["workflow_promotion_trace"]["case_id"] == "intersection_clean"
