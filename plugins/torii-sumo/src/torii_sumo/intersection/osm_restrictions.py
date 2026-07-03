@@ -132,7 +132,7 @@ def restriction_for_movement(
     ]
     for restriction in only_restrictions:
         if _has_ambiguous_directional_member(restriction, approaches):
-            if restriction.to_way_id not in target_way_ids or turn != restriction.allowed_turn:
+            if turn != restriction.allowed_turn:
                 return restriction
             continue
         if restriction.to_way_id not in target_way_ids:
