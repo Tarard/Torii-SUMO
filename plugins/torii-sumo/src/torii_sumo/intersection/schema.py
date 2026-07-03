@@ -235,7 +235,7 @@ class MovementMatrix(BaseModel):
     legal_movement_count: int
     forbidden_movement_count: int
     inferred_movement_count: int
-    restriction_blocked_count: int
+    restriction_blocked_count: int = 0
     restriction_warnings: list[str] = Field(default_factory=list)
 
 
@@ -292,7 +292,7 @@ class IntersectionValidation(BaseModel):
     internal_fragment_count: int
     duplicate_junction_count: int
     disconnected_edge_count: int
-    tls_linkindex_status: Literal["pass", "fail", "skipped"]
+    tls_linkindex_status: Literal["pass", "fail", "skipped"] = "skipped"
     approach_mode_counts: dict[str, int] = Field(default_factory=dict)
     vehicle_approach_count: int = 0
     vehicle_topology_type: str = "unknown"
