@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status note (2026-07-03):** Tasks 1-5 from this plan were implemented on branch `html` in commit `a1686ee`. The remaining refinement work moved to `docs/superpowers/plans/2026-07-03-intersection-cleaning-next-phase.md`.
+
 **Goal:** Tighten the existing Torii-SUMO intersection-cleaning semantic model without rewriting the pipeline.
 
 **Architecture:** Extend the current Pydantic IR models and reuse existing inference modules. Keep geometry, support handling, TLS compilation, validation, and MCP summaries in their current files with small focused edits.

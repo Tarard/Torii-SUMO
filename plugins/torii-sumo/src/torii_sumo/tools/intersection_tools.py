@@ -41,6 +41,14 @@ def sumo_intersection_model(
         "forbidden_cross_mode_movement_count": sum(
             1 for movement in ir.movement_matrix.movements if not movement.allowed and not movement.allowed_modes
         ),
+        "restriction_warning_count": len(ir.movement_matrix.restriction_warnings),
+        "direction_blocked_approach_count": sum(
+            1
+            for approach in ir.approaches
+            if "passenger" in approach.allowed_modes
+            and not (approach.has_incoming_vehicle_flow and approach.has_outgoing_vehicle_flow)
+        ),
+        "custom_tllogic_applied": None,
         "intersection_ir_file": str(ir_file),
         "claim_status": ir.claim_status,
     }
@@ -71,7 +79,8 @@ def sumo_intersection_validate(
             "claim_status": "blocked",
             "error": "intersection_ir.compiled is required",
         }
-    validation = validate_intersection(ir, CompiledSUMOArtifacts.model_validate(ir.compiled), Path(output_dir))
+    artifacts = CompiledSUMOArtifacts.model_validate(ir.compiled)
+    validation = validate_intersection(ir, artifacts, Path(output_dir))
     validation_file = Path(output_dir) / "validation.json"
     validation_file.parent.mkdir(parents=True, exist_ok=True)
     validation_file.write_text(json.dumps(validation.model_dump(mode="json"), indent=2), encoding="utf-8")
@@ -79,6 +88,14 @@ def sumo_intersection_validate(
         "status": validation.status,
         "sumo_load_status": validation.sumo_load_status,
         "route_probe_status": validation.route_probe_status,
+        "restriction_warning_count": len(ir.movement_matrix.restriction_warnings),
+        "direction_blocked_approach_count": sum(
+            1
+            for approach in ir.approaches
+            if "passenger" in approach.allowed_modes
+            and not (approach.has_incoming_vehicle_flow and approach.has_outgoing_vehicle_flow)
+        ),
+        "custom_tllogic_applied": artifacts.custom_tllogic_applied,
         "warning_count_by_severity": validation.warning_count_by_severity,
         "blocking_error_count": validation.blocking_error_count,
         "validation_file": str(validation_file),

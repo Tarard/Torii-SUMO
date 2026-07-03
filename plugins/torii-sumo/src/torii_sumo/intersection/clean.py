@@ -82,6 +82,14 @@ def clean_intersection(
         "vehicle_topology_type": validation.vehicle_topology_type,
         "legal_movement_mode_counts": validation.legal_movement_mode_counts,
         "forbidden_cross_mode_movement_count": validation.forbidden_cross_mode_movement_count,
+        "restriction_warning_count": len(final_ir.movement_matrix.restriction_warnings),
+        "direction_blocked_approach_count": sum(
+            1
+            for approach in final_ir.approaches
+            if "passenger" in approach.allowed_modes
+            and not (approach.has_incoming_vehicle_flow and approach.has_outgoing_vehicle_flow)
+        ),
+        "custom_tllogic_applied": artifacts.custom_tllogic_applied,
         "warning_count_by_severity": validation.warning_count_by_severity,
         "blocking_error_count": validation.blocking_error_count,
         "warnings": validation.warnings,

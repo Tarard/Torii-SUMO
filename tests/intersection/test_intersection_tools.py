@@ -22,6 +22,14 @@ def test_sumo_intersection_model_returns_json_compatible_ir_summary(tmp_path: Pa
     json.dumps(report)
 
 
+def test_sumo_intersection_model_reports_next_phase_fields(tmp_path: Path) -> None:
+    result = sumo_intersection_model(str(FIXTURES / "x4_signalized.osm.xml"), str(tmp_path))
+
+    assert "restriction_warning_count" in result
+    assert "custom_tllogic_applied" in result
+    assert "direction_blocked_approach_count" in result
+
+
 def test_sumo_intersection_clean_wraps_clean_intersection(monkeypatch, tmp_path: Path) -> None:
     def fake_clean(**kwargs):
         assert kwargs["osm_file"] == FIXTURES / "t3_priority.osm.xml"

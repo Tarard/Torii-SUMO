@@ -23,6 +23,13 @@ def test_clean_intersection_writes_ir_validation_and_plain_files(tmp_path: Path)
         assert (tmp_path / name).exists()
 
 
+def test_clean_intersection_summary_reports_next_phase_counts(tmp_path: Path) -> None:
+    result = clean_intersection(FIXTURES / "x4_signalized.osm.xml", tmp_path, compile_net=False)
+
+    assert "restriction_warning_count" in result
+    assert "direction_blocked_approach_count" in result
+
+
 def test_clean_intersection_applies_xml_turn_restriction_to_ir(tmp_path: Path) -> None:
     source_xml = (FIXTURES / "t3_priority.osm.xml").read_text(encoding="utf-8")
     restricted_xml = source_xml.replace(
