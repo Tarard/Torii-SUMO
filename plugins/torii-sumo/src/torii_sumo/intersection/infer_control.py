@@ -31,20 +31,107 @@ def infer_control_model(
     link_index_map = {
         movement.movement_id: index for index, movement in enumerate(allowed_movements)
     }
-    phase_a = "".join("G" if index % 2 == 0 else "r" for index in range(len(allowed_movements)))
-    phase_b = "".join("r" if char == "G" else "G" for char in phase_a)
+    approaches_by_id = {approach.approach_id: approach for approach in approaches}
+    phases = _conflict_grouped_phases(allowed_movements, link_index_map, approaches_by_id)
+    if phases is None:
+        phases = _alternating_phases(allowed_movements, link_index_map)
+        synthetic_source = "synthetic:alternating_placeholder"
+    else:
+        synthetic_source = "synthetic:conflict_grouped"
+
     return ControlModel(
         control_type="traffic_light",
-        source=[signal_source, "synthetic:alternating_placeholder"],
+        source=[signal_source, synthetic_source],
         priority_approach_ids=[],
         tls_id=core.core_id,
-        phases=[
-            TLSPhase(phase_id="p0", duration=30.0, state=phase_a, movement_ids=list(link_index_map)),
-            TLSPhase(phase_id="p1", duration=30.0, state=phase_b, movement_ids=list(link_index_map)),
-        ],
+        phases=phases,
         link_index_map=link_index_map,
         confidence=0.9,
     )
+
+
+def _alternating_phases(allowed_movements: list[Movement], link_index_map: dict[str, int]) -> list[TLSPhase]:
+    phase_a = "".join("G" if index % 2 == 0 else "r" for index in range(len(allowed_movements)))
+    phase_b = "".join("r" if char == "G" else "G" for char in phase_a)
+    movement_ids = list(link_index_map)
+    return [
+        TLSPhase(phase_id="p0", duration=30.0, state=phase_a, movement_ids=movement_ids),
+        TLSPhase(phase_id="p1", duration=30.0, state=phase_b, movement_ids=movement_ids),
+    ]
+
+
+def _can_group_conflicts(approaches_by_id: dict[str, Approach], movements: list[Movement]) -> bool:
+    return all(
+        approaches_by_id.get(movement.from_approach_id) is not None
+        and approaches_by_id.get(movement.to_approach_id) is not None
+        and approaches_by_id[movement.from_approach_id].endpoint_xy is not None
+        and approaches_by_id[movement.to_approach_id].endpoint_xy is not None
+        for movement in movements
+    )
+
+
+def _compatible(left: Movement, right: Movement, approaches_by_id: dict[str, Approach]) -> bool:
+    left_support = _movement_is_support_only(left, approaches_by_id)
+    right_support = _movement_is_support_only(right, approaches_by_id)
+    if left_support or right_support:
+        return (
+            left_support
+            and right_support
+            and left.from_approach_id != right.from_approach_id
+            and left.to_approach_id != right.to_approach_id
+        )
+    if left.turn in {"left", "uturn"} or right.turn in {"left", "uturn"}:
+        return False
+    if left.from_approach_id == right.from_approach_id or left.to_approach_id == right.to_approach_id:
+        return False
+    return _approaches_are_opposite(
+        approaches_by_id[left.from_approach_id],
+        approaches_by_id[right.from_approach_id],
+    )
+
+
+def _movement_is_support_only(movement: Movement, approaches_by_id: dict[str, Approach]) -> bool:
+    source = approaches_by_id.get(movement.from_approach_id)
+    target = approaches_by_id.get(movement.to_approach_id)
+    return source is not None and target is not None and _is_support_only(source) and _is_support_only(target)
+
+
+def _approaches_are_opposite(first: Approach, second: Approach) -> bool:
+    delta = abs(((first.bearing_from_core - second.bearing_from_core + 180) % 360) - 180)
+    return delta >= 135
+
+
+def _conflict_grouped_phases(
+    allowed_movements: list[Movement],
+    link_index_map: dict[str, int],
+    approaches_by_id: dict[str, Approach],
+) -> list[TLSPhase] | None:
+    if not allowed_movements or not _can_group_conflicts(approaches_by_id, allowed_movements):
+        return None
+    groups: list[list[Movement]] = []
+    for movement in allowed_movements:
+        placed = False
+        for group in groups:
+            if all(_compatible(movement, other, approaches_by_id) for other in group):
+                group.append(movement)
+                placed = True
+                break
+        if not placed:
+            groups.append([movement])
+    phases: list[TLSPhase] = []
+    for index, group in enumerate(groups):
+        state = ["r"] * len(allowed_movements)
+        for movement in group:
+            state[link_index_map[movement.movement_id]] = "G"
+        phases.append(
+            TLSPhase(
+                phase_id=f"p{index}",
+                duration=30.0,
+                state="".join(state),
+                movement_ids=[movement.movement_id for movement in group],
+            )
+        )
+    return phases
 
 
 def _controlled_movements(movements: list[Movement], approaches: list[Approach]) -> list[Movement]:
