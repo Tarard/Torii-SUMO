@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 from .schema import Approach, ControlModel, IntersectionCore, MovementMatrix, OSMPatch, TLSPhase
+from .infer_movements import core_connection_movements
 
 
 def infer_control_model(
@@ -24,7 +25,7 @@ def infer_control_model(
             confidence=0.6,
         )
 
-    allowed_movements = [movement for movement in movements.movements if movement.allowed]
+    allowed_movements = core_connection_movements(movements.movements)
     link_index_map = {
         movement.movement_id: index for index, movement in enumerate(allowed_movements)
     }

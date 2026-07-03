@@ -6,7 +6,7 @@ from torii_sumo.intersection.infer_core import infer_intersection_core
 from torii_sumo.intersection.infer_movements import infer_movement_matrix
 from torii_sumo.intersection.infer_road_relations import build_road_pair_relation_graph
 from torii_sumo.intersection.osm_patch import parse_osm_xml
-from torii_sumo.intersection.schema import OSMNode, OSMWay, PatchSeed
+from torii_sumo.intersection.schema import Movement, OSMNode, OSMWay, PatchSeed
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -65,6 +65,41 @@ def test_infer_control_model_uses_nearby_osm_traffic_signal_node() -> None:
 
     assert control.control_type == "traffic_light"
     assert "osm:nearby_highway=traffic_signals" in control.source
+
+
+def test_infer_control_model_excludes_support_path_movements_from_tls() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["seed"].tags = {"highway": "traffic_signals"}
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph)
+    support = Movement(
+        movement_id="support_path_to_support_path",
+        from_approach_id="path_a",
+        to_approach_id="path_b",
+        road_pair_relation_id="support_pair",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:support_path"],
+        confidence=1.0,
+    )
+    matrix = matrix.model_copy(
+        update={
+            "movements": [*matrix.movements, support],
+            "legal_movement_count": matrix.legal_movement_count + 1,
+            "inferred_movement_count": matrix.inferred_movement_count + 1,
+        }
+    )
+
+    control = infer_control_model(patch, core, approaches, matrix)
+
+    indexed = {movement.movement_id: movement for movement in matrix.movements if movement.movement_id in control.link_index_map}
+    assert indexed
+    assert all("passenger" in movement.allowed_modes for movement in indexed.values())
 
 
 def test_infer_movement_matrix_does_not_allow_cross_mode_movements() -> None:

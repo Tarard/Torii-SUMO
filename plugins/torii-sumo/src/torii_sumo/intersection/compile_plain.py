@@ -6,6 +6,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from .infer_movements import core_connection_movements
 from .schema import CompiledSUMOArtifacts, IntersectionIR
 
 
@@ -119,9 +120,7 @@ def _write_connections(path: Path, ir: IntersectionIR, connection_rows) -> None:
 def _connection_rows(ir: IntersectionIR):
     approaches = {approach.approach_id: approach for approach in ir.approaches}
     rows = []
-    for movement in ir.movement_matrix.movements:
-        if not movement.allowed:
-            continue
+    for movement in core_connection_movements(ir.movement_matrix.movements):
         source = approaches[movement.from_approach_id]
         target = approaches[movement.to_approach_id]
         for from_lane, to_lane in _lane_pairs(movement.from_lane_indices, movement.to_lane_indices):
@@ -188,7 +187,7 @@ def _run_netconvert(
     if guess_crossings:
         command.extend(["--crossings.guess", "--walkingareas"])
     command.extend(["--output-file", str(net_file)])
-    if tllogic_file:
+    if tllogic_file and not guess_crossings:
         command.extend(["--tllogic-files", str(tllogic_file)])
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     return result.returncode == 0, _warning_lines(result.stdout, result.stderr)
