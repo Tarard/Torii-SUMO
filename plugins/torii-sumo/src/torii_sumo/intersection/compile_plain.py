@@ -30,7 +30,17 @@ def compile_intersection_to_plain(
     if tllogic_file is not None:
         _write_tllogic(tllogic_file, ir)
 
-    compiled_net = compile_net and _run_netconvert(node_file, edge_file, connection_file, type_file, tllogic_file, net_file)
+    netconvert_warnings: list[str] = []
+    compiled_net = False
+    if compile_net:
+        compiled_net, netconvert_warnings = _run_netconvert(
+            node_file,
+            edge_file,
+            connection_file,
+            type_file,
+            tllogic_file,
+            net_file,
+        )
     return CompiledSUMOArtifacts(
         plain_node_file=str(node_file),
         plain_edge_file=str(edge_file),
@@ -39,6 +49,7 @@ def compile_intersection_to_plain(
         plain_tllogic_file=str(tllogic_file) if tllogic_file else None,
         net_file=str(net_file) if compiled_net else "",
         sumocfg_file=None,
+        netconvert_warnings=netconvert_warnings,
     )
 
 
@@ -134,10 +145,10 @@ def _run_netconvert(
     type_file: Path,
     tllogic_file: Path | None,
     net_file: Path,
-) -> bool:
+) -> tuple[bool, list[str]]:
     netconvert = shutil.which("netconvert")
     if not netconvert:
-        return False
+        return False, []
     command = [
         netconvert,
         "--node-files",
@@ -154,7 +165,12 @@ def _run_netconvert(
     ]
     if tllogic_file:
         command.extend(["--tllogic-files", str(tllogic_file)])
-    return subprocess.run(command, capture_output=True, text=True, timeout=30).returncode == 0
+    result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+    return result.returncode == 0, _warning_lines(result.stdout, result.stderr)
+
+
+def _warning_lines(*texts: str) -> list[str]:
+    return [line.strip() for text in texts for line in text.splitlines() if line.strip().startswith("Warning:")]
 
 
 def _write_xml(path: Path, root: ET.Element) -> None:

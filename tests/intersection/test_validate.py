@@ -98,6 +98,38 @@ def test_validate_intersection_blocks_unknown_fragment(monkeypatch, tmp_path: Pa
     assert "unsupported intersection topology: unknown with 1 approaches" in result.warnings
 
 
+def test_validate_intersection_reports_netconvert_warnings(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "t3_priority.osm.xml", tmp_path)
+    net_file = tmp_path / "netconvert_warning.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 0
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.subprocess.run", fake_run)
+
+    result = validate_intersection(
+        ir,
+        CompiledSUMOArtifacts(
+            plain_node_file="",
+            plain_edge_file="",
+            plain_connection_file="",
+            net_file=str(net_file),
+            netconvert_warnings=["Warning: lane is not connected."],
+        ),
+        tmp_path,
+    )
+
+    assert "netconvert: Warning: lane is not connected." in result.warnings
+    assert result.status == "blocked"
+
+
 def test_validate_intersection_reports_mode_layer_counts(monkeypatch, tmp_path: Path) -> None:
     osm_file = tmp_path / "mode_cluster.osm.xml"
     osm_file.write_text(
