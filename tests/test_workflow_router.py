@@ -294,6 +294,57 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
     assert captured["compile_net"] is True
 
 
+def test_auto_workflow_downloads_bbox_for_intersection_clean_when_osm_file_missing(tmp_path: Path) -> None:
+    captured_build = {}
+    captured_clean = {}
+    filtered_osm = tmp_path / "osm" / "bbox_filtered.osm.xml"
+
+    def fake_osm_build(**kwargs):
+        captured_build.update(kwargs)
+        filtered_osm.parent.mkdir(parents=True)
+        filtered_osm.write_text("<osm/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "source_osm_file": str(tmp_path / "osm" / "bbox.osm.xml"),
+            "filtered_osm_file": str(filtered_osm),
+        }
+
+    def fake_intersection_clean(**kwargs):
+        captured_clean.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "intersection-cleaned",
+            "intersection_id": "core_1",
+            "topology_type": "X4",
+            "approach_count": 4,
+            "movement_count": 12,
+            "sumo_load_status": "pass",
+            "route_probe_status": "skipped",
+            "tls_linkindex_status": "pass",
+            "missing_movement_count": 0,
+            "disconnected_edge_count": 0,
+            "internal_fragment_count": 0,
+        }
+
+    report = run_auto_workflow(
+        user_request="Clean this OSM bbox intersection into a SUMO intersection net",
+        output_dir=tmp_path,
+        bbox="11.0,48.0,11.001,48.001",
+        intersection_osm_build_func=fake_osm_build,
+        intersection_clean_func=fake_intersection_clean,
+    )
+
+    assert report["status"] == "pass"
+    assert report["detected_workflow"] == "intersection_clean"
+    assert report["osm_source_build_status"] == "pass"
+    assert report["intersection_source_osm_file"] == str(filtered_osm)
+    assert captured_build["bbox"] == "11.0,48.0,11.001,48.001"
+    assert captured_build["output_dir"] == tmp_path / "intersection_source"
+    assert captured_clean["osm_file"] == filtered_osm
+    assert report["workflow_stage_results"][0]["input_artifacts"]["osm"] == str(filtered_osm)
+
+
 def test_auto_workflow_blocks_intersection_clean_without_local_osm_patch(tmp_path: Path) -> None:
     report = run_auto_workflow(
         user_request="Clean this local OSM intersection patch into a SUMO intersection net",
@@ -303,7 +354,7 @@ def test_auto_workflow_blocks_intersection_clean_without_local_osm_patch(tmp_pat
     assert report["status"] == "blocked"
     assert report["detected_workflow"] == "intersection_clean"
     assert report["execution_status"] == "needs_osm_intersection_patch"
-    assert report["missing_blockers"] == ["osm_file"]
+    assert report["missing_blockers"] == ["osm_file_or_bbox"]
 
 
 def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp_path: Path) -> None:

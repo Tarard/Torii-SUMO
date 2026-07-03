@@ -7,7 +7,7 @@ from typing import Any, Callable, Mapping
 
 from .network_plan import derive_network_plan
 from .osm_area import osm_map_url_bbox, resolve_osm_place
-from .osm_network import audit_tls_multisource
+from .osm_network import audit_tls_multisource, build_osm_network
 from .osm_workflow import run_osm_cleanup_workflow
 from ..intersection.clean import clean_intersection
 from .workflow_review_html import build_workflow_review_html
@@ -39,8 +39,8 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
         "tool_chain": ["sumo_network_review_html", "sumo_collect_evidence"],
     },
     "intersection_clean": {
-        "description": "Compile a local OSM T3/X4 intersection patch into IntersectionIR, SUMO plain files, .net.xml when available, and validation artifacts.",
-        "tool_chain": ["sumo_intersection_clean", "sumo_intersection_validate"],
+        "description": "Compile a local or bbox-sourced OSM T3/X4 intersection patch into IntersectionIR, SUMO plain files, .net.xml when available, and validation artifacts.",
+        "tool_chain": ["sumo_osm_build_network", "sumo_intersection_clean", "sumo_intersection_validate"],
     },
     "routeability": {
         "description": "Snap named route endpoints to passenger-accessible SUMO edges, generate routes, run a bounded smoke check, and report completion before claims.",
@@ -172,7 +172,7 @@ def _looks_like_osm_generation(text: str) -> bool:
 
 def _looks_like_intersection_clean(text: str) -> bool:
     intersection_terms = ("intersection", "junction", "crossroad", "t3", "x4")
-    patch_terms = ("patch", "local osm", "osm file", "osm extract")
+    patch_terms = ("patch", "local osm", "osm file", "osm extract", "osm bbox", "bbox", "openstreetmap")
     build_terms = ("clean", "compile", "generate", "build")
     return (
         any(token in text for token in intersection_terms)
@@ -442,6 +442,7 @@ def run_auto_workflow(
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     cleanup_workflow_func: Callable[..., dict[str, Any]] = run_osm_cleanup_workflow,
     intersection_clean_func: Callable[..., dict[str, Any]] = clean_intersection,
+    intersection_osm_build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_review_func: Callable[..., dict[str, Any]] = audit_tls_multisource,
     review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
@@ -486,9 +487,13 @@ def run_auto_workflow(
     if workflow == "intersection_clean":
         return _run_intersection_clean(
             report=report,
+            user_request=user_request,
             output_dir=output_dir,
+            bbox=bbox,
+            place_name=place_name,
             osm_file=osm_file,
             intersection_clean_func=intersection_clean_func,
+            intersection_osm_build_func=intersection_osm_build_func,
         )
     if workflow == "tls_review":
         return _run_tls_review(
@@ -540,17 +545,48 @@ def run_auto_workflow(
 def _run_intersection_clean(
     *,
     report: dict[str, Any],
+    user_request: str,
     output_dir: Path,
+    bbox: str | None,
+    place_name: str | None,
     osm_file: Path | None,
     intersection_clean_func: Callable[..., dict[str, Any]],
+    intersection_osm_build_func: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
     if osm_file is None:
-        return _blocked(
-            report,
-            execution_status="needs_osm_intersection_patch",
-            missing=["osm_file"],
-            next_question="Which local OSM intersection patch should Torii compile?",
+        source_bbox = (bbox or "").strip()
+        url_bbox = osm_map_url_bbox(source_bbox) or osm_map_url_bbox(place_name or "") or osm_map_url_bbox(user_request)
+        if url_bbox:
+            source_bbox = url_bbox
+            report["area_resolution_status"] = "osm_map_url_bbox"
+            report["candidate_bbox"] = url_bbox
+        if not source_bbox:
+            return _blocked(
+                report,
+                execution_status="needs_osm_intersection_patch",
+                missing=["osm_file_or_bbox"],
+                next_question="Which local OSM intersection patch or bbox should Torii compile?",
+            )
+        source_build = intersection_osm_build_func(
+            bbox=source_bbox,
+            output_dir=output_dir / "intersection_source",
+            prefix="intersection_source",
         )
+        report["osm_source_build_status"] = source_build.get("status", "fail")
+        report["osm_source_build_result"] = source_build
+        source_osm = source_build.get("filtered_osm_file") or source_build.get("source_osm_file")
+        if source_build.get("status") != "pass" or not source_osm:
+            report.update(
+                {
+                    "status": source_build.get("status", "fail"),
+                    "claim_status": source_build.get("claim_status", "construction-invalid"),
+                    "execution_status": "osm_source_build_failed",
+                    "tool_called": "sumo_osm_build_network",
+                }
+            )
+            return report
+        osm_file = Path(str(source_osm))
+        report["intersection_source_osm_file"] = str(osm_file)
     result = intersection_clean_func(osm_file=osm_file, output_dir=output_dir, compile_net=True)
     report.update(
         {
