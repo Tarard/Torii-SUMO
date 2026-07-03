@@ -244,6 +244,7 @@ class CompiledSUMOArtifacts(BaseModel):
     plain_tllogic_file: str | None = None
     net_file: str
     sumocfg_file: str | None = None
+    netconvert_warnings: list[str] = Field(default_factory=list)
 
 
 class IntersectionValidation(BaseModel):

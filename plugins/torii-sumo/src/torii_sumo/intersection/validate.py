@@ -13,7 +13,7 @@ def validate_intersection(
     artifacts: CompiledSUMOArtifacts,
     output_dir: Path,
 ) -> IntersectionValidation:
-    warnings: list[str] = []
+    warnings: list[str] = [f"netconvert: {warning}" for warning in artifacts.netconvert_warnings]
     sumo_load_status = "fail"
     net_path = Path(artifacts.net_file)
     if not net_path.is_absolute():
@@ -58,7 +58,14 @@ def validate_intersection(
     ) or vehicle_topology_type in {"T3", "X4"}
     if not topology_supported:
         warnings.append(f"unsupported intersection topology: {ir.core.topology_type} with {len(ir.approaches)} approaches")
-    status = "pass" if sumo_load_status == "pass" and tls_status != "fail" and topology_supported else "blocked"
+    status = (
+        "pass"
+        if sumo_load_status == "pass"
+        and tls_status != "fail"
+        and topology_supported
+        and not _has_blocking_netconvert_warning(warnings)
+        else "blocked"
+    )
     return IntersectionValidation(
         status=status,
         sumo_load_status=sumo_load_status,
@@ -102,3 +109,7 @@ def _topology_type(approach_count: int) -> str:
     if approach_count > 4:
         return "complex"
     return "unknown"
+
+
+def _has_blocking_netconvert_warning(warnings: list[str]) -> bool:
+    return any("not connected" in warning.lower() or "invalid pedestrian topology" in warning.lower() for warning in warnings)

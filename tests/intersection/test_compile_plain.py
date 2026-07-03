@@ -96,6 +96,8 @@ def test_compile_intersection_to_plain_disables_auto_turnarounds(monkeypatch, tm
 
         class Result:
             returncode = 0
+            stderr = "Warning: lane is not connected.\nSuccess."
+            stdout = ""
 
         return Result()
 
@@ -105,6 +107,7 @@ def test_compile_intersection_to_plain_disables_auto_turnarounds(monkeypatch, tm
 
     assert artifacts.net_file
     assert "--no-turnarounds" in captured["command"]
+    assert artifacts.netconvert_warnings == ["Warning: lane is not connected."]
 
 
 def _build_ir(osm_file: Path) -> IntersectionIR:
