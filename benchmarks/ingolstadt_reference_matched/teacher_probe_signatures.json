@@ -1,0 +1,133 @@
+{
+  "claim_status": "diagnostic-demo",
+  "probe_cases": [
+    {
+      "control_type": "priority",
+      "dir_counts": {
+        "l": 2,
+        "r": 2,
+        "s": 2,
+        "t": 3
+      },
+      "has_tls": false,
+      "internal_function_counts": {
+        "crossing": 1,
+        "internal": 12,
+        "walkingarea": 2
+      },
+      "junction_id": "1433119620",
+      "movement_signature_count": 9,
+      "movement_signature_counts": {
+        "dir=l|state=m|fromLane=0|toLane=1|controlled=false|via=true": 1,
+        "dir=l|state=m|fromLane=1|toLane=0|controlled=false|via=true": 1,
+        "dir=r|state=M|fromLane=1|toLane=0|controlled=false|via=true": 1,
+        "dir=r|state=m|fromLane=0|toLane=1|controlled=false|via=true": 1,
+        "dir=s|state=M|fromLane=1|toLane=1|controlled=false|via=true": 2,
+        "dir=t|state=m|fromLane=0|toLane=0|controlled=false|via=true": 1,
+        "dir=t|state=m|fromLane=1|toLane=1|controlled=false|via=true": 2
+      },
+      "pattern_family": "three_way",
+      "probe_role": "priority_three_way_pedestrian",
+      "selection_rule": "first three_way priority/non_tls case with crossing and walkingarea layers",
+      "semantic_roles": [
+        "pedestrian_layer",
+        "priority_control"
+      ]
+    },
+    {
+      "control_type": "traffic_light",
+      "dir_counts": {
+        "l": 2,
+        "r": 3,
+        "s": 3
+      },
+      "has_tls": true,
+      "internal_function_counts": {
+        "crossing": 4,
+        "internal": 13,
+        "walkingarea": 4
+      },
+      "junction_id": "267380207",
+      "movement_signature_count": 8,
+      "movement_signature_counts": {
+        "dir=l|state=o|fromLane=1|toLane=1|controlled=true|via=true": 1,
+        "dir=l|state=o|fromLane=2|toLane=1|controlled=true|via=true": 1,
+        "dir=r|state=o|fromLane=1|toLane=1|controlled=true|via=true": 3,
+        "dir=s|state=o|fromLane=1|toLane=1|controlled=true|via=true": 3
+      },
+      "pattern_family": "three_way",
+      "probe_role": "tls_three_way_pedestrian",
+      "selection_rule": "first three_way traffic_light case with controlled links and pedestrian layers",
+      "semantic_roles": [
+        "pedestrian_layer",
+        "tls_linkindex_phase"
+      ]
+    },
+    {
+      "control_type": "traffic_light",
+      "dir_counts": {
+        "l": 2,
+        "r": 2,
+        "s": 6
+      },
+      "has_tls": true,
+      "internal_function_counts": {
+        "crossing": 3,
+        "internal": 12,
+        "walkingarea": 3
+      },
+      "junction_id": "267517510",
+      "movement_signature_count": 10,
+      "movement_signature_counts": {
+        "dir=l|state=o|fromLane=1|toLane=1|controlled=true|via=true": 2,
+        "dir=r|state=o|fromLane=1|toLane=1|controlled=true|via=true": 2,
+        "dir=s|state=o|fromLane=0|toLane=0|controlled=true|via=true": 1,
+        "dir=s|state=o|fromLane=0|toLane=1|controlled=true|via=true": 1,
+        "dir=s|state=o|fromLane=1|toLane=0|controlled=true|via=true": 1,
+        "dir=s|state=o|fromLane=1|toLane=1|controlled=true|via=true": 2,
+        "dir=s|state=o|fromLane=2|toLane=2|controlled=true|via=true": 1
+      },
+      "pattern_family": "four_way",
+      "probe_role": "tls_four_way_pedestrian",
+      "selection_rule": "first four_way traffic_light case with controlled links and pedestrian layers",
+      "semantic_roles": [
+        "pedestrian_layer",
+        "tls_linkindex_phase"
+      ]
+    },
+    {
+      "control_type": "right_before_left",
+      "dir_counts": {
+        "l": 2,
+        "r": 2,
+        "s": 2,
+        "t": 3
+      },
+      "has_tls": false,
+      "internal_function_counts": {
+        "crossing": 0,
+        "internal": 9,
+        "walkingarea": 0
+      },
+      "junction_id": "1031988198",
+      "movement_signature_count": 9,
+      "movement_signature_counts": {
+        "dir=l|state==|fromLane=0|toLane=0|controlled=false|via=true": 2,
+        "dir=r|state=M|fromLane=0|toLane=0|controlled=false|via=true": 2,
+        "dir=s|state==|fromLane=0|toLane=0|controlled=false|via=true": 1,
+        "dir=s|state=M|fromLane=0|toLane=0|controlled=false|via=true": 1,
+        "dir=t|state==|fromLane=0|toLane=0|controlled=false|via=true": 3
+      },
+      "pattern_family": "three_way",
+      "probe_role": "priority_turnaround_vehicle_only",
+      "selection_rule": "first non_tls vehicle-only case where dir=t is optional beside non-turnaround movements",
+      "semantic_roles": [
+        "turnaround_optional",
+        "vehicle_only"
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "selection_policy": "deterministic records from extract_junction_pattern_index; benchmark fixture only, not a generation claim",
+  "teacher_net_file": "examples/02_one_prompt_osm_network/networks/tum_ingolstadt_center_reference.net.xml"
+}

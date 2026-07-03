@@ -9,6 +9,7 @@ from .network_plan import derive_network_plan
 from .osm_area import osm_map_url_bbox, resolve_osm_place
 from .osm_network import audit_tls_multisource
 from .osm_workflow import run_osm_cleanup_workflow
+from ..intersection.clean import clean_intersection
 from .workflow_review_html import build_workflow_review_html
 from .workflow_state import build_promotion_trace, summarize_workflow_stages
 
@@ -36,6 +37,10 @@ WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
     "network_review": {
         "description": "Create an HTML human-review cockpit for a generated or partial SUMO network and available audit artifacts.",
         "tool_chain": ["sumo_network_review_html", "sumo_collect_evidence"],
+    },
+    "intersection_clean": {
+        "description": "Compile a local OSM T3/X4 intersection patch into IntersectionIR, SUMO plain files, .net.xml when available, and validation artifacts.",
+        "tool_chain": ["sumo_intersection_clean", "sumo_intersection_validate"],
     },
     "routeability": {
         "description": "Snap named route endpoints to passenger-accessible SUMO edges, generate routes, run a bounded smoke check, and report completion before claims.",
@@ -157,10 +162,23 @@ def _looks_like_osm_generation(text: str) -> bool:
     return any(token in text for token in generation_terms) and any(token in text for token in network_terms)
 
 
+def _looks_like_intersection_clean(text: str) -> bool:
+    intersection_terms = ("intersection", "junction", "crossroad", "t3", "x4")
+    patch_terms = ("patch", "local osm", "osm file", "osm extract")
+    build_terms = ("clean", "compile", "generate", "build")
+    return (
+        any(token in text for token in intersection_terms)
+        and any(token in text for token in patch_terms)
+        and any(token in text for token in build_terms)
+    )
+
+
 def detect_workflow(user_request: str) -> str:
     text = _normalized(user_request)
     if any(token in text for token in ("waiting time", "got worse", "teleport", "tripinfo", "summary disagree", "debug")):
         return "debug_bad_run"
+    if _looks_like_intersection_clean(text):
+        return "intersection_clean"
     if _looks_like_osm_generation(text):
         return "osm_to_sumo"
     if any(token in text for token in ("compare", "baseline", "fixed-time", "fixed time", "max-pressure", "controller")):
@@ -403,6 +421,7 @@ def run_auto_workflow(
     field_evidence_csv: Path | None = None,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     cleanup_workflow_func: Callable[..., dict[str, Any]] = run_osm_cleanup_workflow,
+    intersection_clean_func: Callable[..., dict[str, Any]] = clean_intersection,
     tls_review_func: Callable[..., dict[str, Any]] = audit_tls_multisource,
     review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
 ) -> dict[str, Any]:
@@ -443,6 +462,13 @@ def run_auto_workflow(
             autonomy_mode=autonomy_mode,
             place_resolver=place_resolver,
             cleanup_workflow_func=cleanup_workflow_func,
+        )
+    if workflow == "intersection_clean":
+        return _run_intersection_clean(
+            report=report,
+            output_dir=output_dir,
+            osm_file=osm_file,
+            intersection_clean_func=intersection_clean_func,
         )
     if workflow == "tls_review":
         return _run_tls_review(
@@ -489,6 +515,44 @@ def run_auto_workflow(
         missing=["sumo_config_or_network_or_outputs"],
         next_question="Which SUMO config, network, route, output, or log should Torii inspect?",
     )
+
+
+def _run_intersection_clean(
+    *,
+    report: dict[str, Any],
+    output_dir: Path,
+    osm_file: Path | None,
+    intersection_clean_func: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    if osm_file is None:
+        return _blocked(
+            report,
+            execution_status="needs_osm_intersection_patch",
+            missing=["osm_file"],
+            next_question="Which local OSM intersection patch should Torii compile?",
+        )
+    result = intersection_clean_func(osm_file=osm_file, output_dir=output_dir, compile_net=True)
+    report.update(
+        {
+            "status": result.get("status", "fail"),
+            "claim_status": result.get("claim_status", "diagnostic-demo"),
+            "execution_status": "executed",
+            "tool_called": "sumo_intersection_clean",
+            "workflow_result": result,
+        }
+    )
+    for key in (
+        "intersection_id",
+        "topology_type",
+        "approach_count",
+        "movement_count",
+        "net_file",
+        "intersection_ir_file",
+        "validation_file",
+    ):
+        if key in result:
+            report[key] = result[key]
+    return report
 
 
 def _run_osm_to_sumo(
