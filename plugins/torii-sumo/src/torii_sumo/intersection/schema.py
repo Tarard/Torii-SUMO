@@ -78,6 +78,7 @@ class Approach(BaseModel):
     bearing_to_core: float
     bearing_from_core: float
     endpoint_xy: tuple[float, float] | None = None
+    source_shape_xy: list[tuple[float, float]] = Field(default_factory=list)
     incoming_lane_count: int
     outgoing_lane_count: int
     incoming_edge_ids: list[str]

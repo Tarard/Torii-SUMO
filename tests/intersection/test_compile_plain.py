@@ -58,6 +58,21 @@ def test_compile_intersection_to_plain_writes_edge_permissions(tmp_path: Path) -
     assert 'type="highway.path" numLanes="1" allow="bicycle pedestrian"' in edge_text
 
 
+def test_compile_intersection_to_plain_preserves_approach_shapes(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    ir.approaches[0].source_shape_xy = [(-1.0, 2.0), (3.0, 4.0), ir.core.center_xy]
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+
+    root = ET.parse(artifacts.plain_edge_file).getroot()
+    incoming = root.find(f"edge[@id='{ir.approaches[0].incoming_edge_ids[0]}']")
+    outgoing = root.find(f"edge[@id='{ir.approaches[0].outgoing_edge_ids[0]}']")
+    assert incoming is not None
+    assert outgoing is not None
+    assert incoming.attrib["shape"] == "-1.00,2.00 3.00,4.00 0.00,0.00"
+    assert outgoing.attrib["shape"] == "0.00,0.00 3.00,4.00 -1.00,2.00"
+
+
 def test_compile_intersection_to_plain_places_approach_nodes_at_inferred_endpoint(tmp_path: Path) -> None:
     ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
     ir.approaches[0].endpoint_xy = (123.4, 567.8)

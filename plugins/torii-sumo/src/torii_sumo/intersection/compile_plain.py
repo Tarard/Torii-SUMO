@@ -76,18 +76,13 @@ def _write_edges(path: Path, ir: IntersectionIR) -> None:
     for approach in ir.approaches:
         edge_type = f"highway.{approach.highway_class}"
         allow = " ".join(sorted(approach.allowed_modes))
-        ET.SubElement(
-            root,
-            "edge",
-            id=approach.incoming_edge_ids[0],
-            **{"from": approach.approach_id, "to": ir.core.core_id, "type": edge_type, "numLanes": str(approach.incoming_lane_count), "allow": allow},
-        )
-        ET.SubElement(
-            root,
-            "edge",
-            id=approach.outgoing_edge_ids[0],
-            **{"from": ir.core.core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(approach.outgoing_lane_count), "allow": allow},
-        )
+        incoming_attrs = {"from": approach.approach_id, "to": ir.core.core_id, "type": edge_type, "numLanes": str(approach.incoming_lane_count), "allow": allow}
+        outgoing_attrs = {"from": ir.core.core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(approach.outgoing_lane_count), "allow": allow}
+        if approach.source_shape_xy:
+            incoming_attrs["shape"] = _format_shape(approach.source_shape_xy)
+            outgoing_attrs["shape"] = _format_shape(list(reversed(approach.source_shape_xy)))
+        ET.SubElement(root, "edge", id=approach.incoming_edge_ids[0], **incoming_attrs)
+        ET.SubElement(root, "edge", id=approach.outgoing_edge_ids[0], **outgoing_attrs)
     _write_xml(path, root)
 
 
@@ -126,6 +121,10 @@ def _write_tllogic(path: Path, ir: IntersectionIR) -> None:
     for phase in ir.control.phases:
         ET.SubElement(logic, "phase", duration=f"{phase.duration:g}", state=phase.state)
     _write_xml(path, root)
+
+
+def _format_shape(points: list[tuple[float, float]]) -> str:
+    return " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
 
 
 def _run_netconvert(
