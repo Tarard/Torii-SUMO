@@ -90,14 +90,26 @@ def _write_edges(path: Path, ir: IntersectionIR) -> None:
     for approach in ir.approaches:
         edge_type = f"highway.{approach.highway_class}"
         allow = " ".join(sorted(approach.allowed_modes))
-        incoming_attrs = {"from": approach.approach_id, "to": ir.core.core_id, "type": edge_type, "numLanes": str(approach.incoming_lane_count), "allow": allow}
-        outgoing_attrs = {"from": ir.core.core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(approach.outgoing_lane_count), "allow": allow}
+        incoming_lane_modes = _lane_modes(approach.incoming_lane_count, approach.allowed_modes, approach.incoming_extra_lane_modes)
+        outgoing_lane_modes = _lane_modes(approach.outgoing_lane_count, approach.allowed_modes, approach.outgoing_extra_lane_modes)
+        incoming_attrs = {"from": approach.approach_id, "to": ir.core.core_id, "type": edge_type, "numLanes": str(len(incoming_lane_modes)), "allow": allow}
+        outgoing_attrs = {"from": ir.core.core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(len(outgoing_lane_modes)), "allow": allow}
         if approach.source_shape_xy:
             incoming_attrs["shape"] = _format_shape(approach.source_shape_xy)
             outgoing_attrs["shape"] = _format_shape(list(reversed(approach.source_shape_xy)))
-        ET.SubElement(root, "edge", id=approach.incoming_edge_ids[0], **incoming_attrs)
-        ET.SubElement(root, "edge", id=approach.outgoing_edge_ids[0], **outgoing_attrs)
+        _write_edge(root, approach.incoming_edge_ids[0], incoming_attrs, incoming_lane_modes if approach.incoming_extra_lane_modes else [])
+        _write_edge(root, approach.outgoing_edge_ids[0], outgoing_attrs, outgoing_lane_modes if approach.outgoing_extra_lane_modes else [])
     _write_xml(path, root)
+
+
+def _lane_modes(base_count: int, base_modes: set[str], extra_modes: list[set[str]]) -> list[set[str]]:
+    return [base_modes for _ in range(base_count)] + extra_modes
+
+
+def _write_edge(root: ET.Element, edge_id: str, attrs: dict[str, str], lane_modes: list[set[str]]) -> None:
+    edge = ET.SubElement(root, "edge", id=edge_id, **attrs)
+    for index, modes in enumerate(lane_modes):
+        ET.SubElement(edge, "lane", index=str(index), allow=" ".join(sorted(modes)))
 
 
 def _write_connections(path: Path, ir: IntersectionIR, connection_rows) -> None:
@@ -202,6 +214,12 @@ def _write_xml(path: Path, root: ET.Element) -> None:
 
 
 def needs_sumo_crossing(ir: IntersectionIR) -> bool:
+    if any(
+        "pedestrian" in modes
+        for approach in ir.approaches
+        for modes in [*approach.incoming_extra_lane_modes, *approach.outgoing_extra_lane_modes]
+    ):
+        return True
     crossing_points = {
         (node.x or 0.0, node.y or 0.0)
         for node in ir.osm_patch.nodes.values()

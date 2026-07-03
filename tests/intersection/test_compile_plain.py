@@ -73,6 +73,33 @@ def test_compile_intersection_to_plain_preserves_approach_shapes(tmp_path: Path)
     assert outgoing.attrib["shape"] == "0.00,0.00 3.00,4.00 -1.00,2.00"
 
 
+def test_compile_intersection_to_plain_writes_fused_multimodal_lane_permissions(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    approach = ir.approaches[0]
+    ir = ir.model_copy(
+        update={
+            "approaches": [
+                approach.model_copy(
+                    update={
+                        "incoming_extra_lane_modes": [{"bicycle", "pedestrian"}],
+                        "outgoing_extra_lane_modes": [{"bicycle", "pedestrian"}],
+                    }
+                ),
+                *ir.approaches[1:],
+            ]
+        }
+    )
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+
+    edge_root = ET.parse(artifacts.plain_edge_file).getroot()
+    incoming = edge_root.find(f"edge[@id='{approach.incoming_edge_ids[0]}']")
+    assert incoming is not None
+    assert incoming.attrib["numLanes"] == str(approach.incoming_lane_count + 1)
+    assert incoming.find("lane[@index='0'][@allow='passenger']") is not None
+    assert incoming.find(f"lane[@index='{approach.incoming_lane_count}'][@allow='bicycle pedestrian']") is not None
+
+
 def test_compile_intersection_to_plain_expands_multilane_connections_and_tls(tmp_path: Path) -> None:
     ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
     movement = next(movement for movement in ir.movement_matrix.movements if movement.allowed)
@@ -175,6 +202,44 @@ def test_compile_intersection_to_plain_guesses_crossings_for_osm_support_path(mo
     monkeypatch.setattr("torii_sumo.intersection.compile_plain.subprocess.run", fake_run)
 
     compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=True)
+
+    assert "--crossings.guess" in captured["command"]
+    assert "--walkingareas" in captured["command"]
+    assert "--tllogic-files" not in captured["command"]
+
+
+def test_compile_intersection_to_plain_guesses_crossings_for_fused_multimodal_lanes(monkeypatch, tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    approach = ir.approaches[0]
+    ir = ir.model_copy(
+        update={
+            "approaches": [
+                approach.model_copy(
+                    update={
+                        "incoming_extra_lane_modes": [{"bicycle", "pedestrian"}],
+                        "outgoing_extra_lane_modes": [{"bicycle", "pedestrian"}],
+                    }
+                ),
+                *ir.approaches[1:],
+            ]
+        }
+    )
+    captured = {}
+    monkeypatch.setattr("torii_sumo.intersection.compile_plain.shutil.which", lambda _name: "netconvert")
+
+    def fake_run(command, **_kwargs):
+        captured["command"] = command
+
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = "Success."
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.compile_plain.subprocess.run", fake_run)
+
+    compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=True)
 
     assert "--crossings.guess" in captured["command"]
     assert "--walkingareas" in captured["command"]

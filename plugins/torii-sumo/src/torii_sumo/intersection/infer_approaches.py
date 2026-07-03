@@ -26,13 +26,16 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
         bearing = bearing_between_xy(core.center_xy, endpoint_xy)
         source_shape_xy = _approach_shape_xy(patch, core, terminal_id, source_way_ids)
         used_way_ids.update(source_way_ids)
-        rows.append((bearing, neighbor_id, way, terminal_id, source_way_ids, edge_way_id, endpoint_xy, source_shape_xy))
-    rows.extend(_crossing_support_path_rows(patch, highway_ways, core, set(adjacent), used_way_ids))
+        rows.append((bearing, neighbor_id, way, terminal_id, source_way_ids, edge_way_id, endpoint_xy, source_shape_xy, []))
+    rows = _fuse_support_path_rows(
+        rows,
+        _crossing_support_path_rows(patch, highway_ways, core, set(adjacent), used_way_ids),
+    )
     rows.sort()
 
     roles = _roles_for_bearings([row[0] for row in rows])
     approaches = []
-    for index, ((bearing, neighbor_id, way, terminal_id, source_way_ids, edge_way_id, endpoint_xy, source_shape_xy), role) in enumerate(
+    for index, ((bearing, neighbor_id, way, terminal_id, source_way_ids, edge_way_id, endpoint_xy, source_shape_xy, extra_lane_modes), role) in enumerate(
         zip(rows, roles, strict=True),
         start=1,
     ):
@@ -50,6 +53,8 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 source_shape_xy=source_shape_xy,
                 incoming_lane_count=lane_count,
                 outgoing_lane_count=lane_count,
+                incoming_extra_lane_modes=extra_lane_modes,
+                outgoing_extra_lane_modes=extra_lane_modes,
                 incoming_edge_ids=[f"{edge_way_id}_{terminal_id}_to_{core.core_id}"],
                 outgoing_edge_ids=[f"{edge_way_id}_{core.core_id}_to_{terminal_id}"],
                 oneway=way.tags.get("oneway") in {"yes", "true", "1"},
@@ -83,7 +88,7 @@ def _crossing_support_path_rows(
     core: IntersectionCore,
     adjacent_node_ids: set[str],
     used_way_ids: set[str],
-) -> list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]]]]:
+) -> list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]]:
     rows = []
     for way in highway_ways:
         if way.id in used_way_ids or "passenger" in _allowed_modes(way.tags):
@@ -111,9 +116,47 @@ def _crossing_support_path_rows(
                     way.id,
                     endpoint_xy,
                     _support_shape_xy(patch, core, terminal_id, anchor_id, way.id),
+                    [],
                 )
             )
     return rows
+
+
+def _fuse_support_path_rows(
+    rows: list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]],
+    support_rows: list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]],
+) -> list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]]:
+    fused = list(rows)
+    for support in support_rows:
+        support_modes = _allowed_modes(support[2].tags)
+        match_index = _support_lane_match_index(fused, support)
+        if match_index is None:
+            fused.append(support)
+            continue
+        row = fused[match_index]
+        fused[match_index] = (*row[:8], [_merged_support_modes(row[8], support_modes)])
+    return fused
+
+
+def _merged_support_modes(extra_modes: list[set[str]], support_modes: set[str]) -> set[str]:
+    merged = set(support_modes)
+    for modes in extra_modes:
+        merged.update(modes)
+    return merged
+
+
+def _support_lane_match_index(
+    rows: list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]],
+    support: tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]],
+) -> int | None:
+    return next(
+        (
+            index
+            for index, row in enumerate(rows)
+            if row[1] == support[1] and "passenger" in _allowed_modes(row[2].tags)
+        ),
+        None,
+    )
 
 
 def _support_terminal_ids(

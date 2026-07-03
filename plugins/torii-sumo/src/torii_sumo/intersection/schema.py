@@ -81,6 +81,8 @@ class Approach(BaseModel):
     source_shape_xy: list[tuple[float, float]] = Field(default_factory=list)
     incoming_lane_count: int
     outgoing_lane_count: int
+    incoming_extra_lane_modes: list[set[str]] = Field(default_factory=list)
+    outgoing_extra_lane_modes: list[set[str]] = Field(default_factory=list)
     incoming_edge_ids: list[str]
     outgoing_edge_ids: list[str]
     oneway: bool
