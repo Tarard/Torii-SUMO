@@ -54,14 +54,18 @@ def _write_nodes(path: Path, ir: IntersectionIR) -> None:
         y=f"{center_y:.2f}",
     )
     for approach in ir.approaches:
-        dx = math.sin(math.radians(approach.bearing_from_core)) * 50
-        dy = math.cos(math.radians(approach.bearing_from_core)) * 50
+        if approach.endpoint_xy is None:
+            dx = math.sin(math.radians(approach.bearing_from_core)) * 50
+            dy = math.cos(math.radians(approach.bearing_from_core)) * 50
+            x, y = center_x + dx, center_y + dy
+        else:
+            x, y = approach.endpoint_xy
         ET.SubElement(
             root,
             "node",
             id=approach.approach_id,
-            x=f"{center_x + dx:.2f}",
-            y=f"{center_y + dy:.2f}",
+            x=f"{x:.2f}",
+            y=f"{y:.2f}",
             type="priority",
         )
     _write_xml(path, root)

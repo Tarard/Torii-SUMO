@@ -1,4 +1,5 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from torii_sumo.intersection.compile_plain import compile_intersection_to_plain
 from torii_sumo.intersection.infer_approaches import infer_approaches
@@ -55,6 +56,19 @@ def test_compile_intersection_to_plain_writes_edge_permissions(tmp_path: Path) -
     edge_text = Path(artifacts.plain_edge_file).read_text()
     assert 'type="highway.secondary" numLanes="4" allow="passenger"' in edge_text
     assert 'type="highway.path" numLanes="1" allow="bicycle pedestrian"' in edge_text
+
+
+def test_compile_intersection_to_plain_places_approach_nodes_at_inferred_endpoint(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    ir.approaches[0].endpoint_xy = (123.4, 567.8)
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+
+    root = ET.parse(artifacts.plain_node_file).getroot()
+    node = root.find(f"node[@id='{ir.approaches[0].approach_id}']")
+    assert node is not None
+    assert node.attrib["x"] == "123.40"
+    assert node.attrib["y"] == "567.80"
 
 
 def test_compile_intersection_to_plain_disables_auto_turnarounds(monkeypatch, tmp_path: Path) -> None:
