@@ -144,6 +144,7 @@ def _run_netconvert(
         str(connection_file),
         "--type-files",
         str(type_file),
+        "--no-turnarounds",
         "--output-file",
         str(net_file),
     ]
