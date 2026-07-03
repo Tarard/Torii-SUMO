@@ -39,7 +39,7 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
         zip(rows, roles, strict=True),
         start=1,
     ):
-        lane_count = _lane_count(way.tags)
+        incoming_lane_count, outgoing_lane_count = _directional_lane_counts(patch, core, terminal_id, source_way_ids)
         approaches.append(
             Approach(
                 approach_id=f"leg_{index}",
@@ -51,15 +51,15 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 bearing_from_core=bearing,
                 endpoint_xy=endpoint_xy,
                 source_shape_xy=source_shape_xy,
-                incoming_lane_count=lane_count,
-                outgoing_lane_count=lane_count,
+                incoming_lane_count=incoming_lane_count,
+                outgoing_lane_count=outgoing_lane_count,
                 incoming_extra_lane_modes=extra_lane_modes,
                 outgoing_extra_lane_modes=extra_lane_modes,
                 incoming_edge_ids=[f"{edge_way_id}_{terminal_id}_to_{core.core_id}"],
                 outgoing_edge_ids=[f"{edge_way_id}_{core.core_id}_to_{terminal_id}"],
                 oneway=way.tags.get("oneway") in {"yes", "true", "1"},
                 allowed_modes=_allowed_modes(way.tags),
-                turn_lanes_raw=way.tags.get("turn:lanes"),
+                turn_lanes_raw=_incoming_turn_lanes_raw(patch, core, terminal_id, source_way_ids),
                 access_tags={key: value for key, value in way.tags.items() if key in {"access", "vehicle", "bicycle", "foot"}},
             )
         )
@@ -80,6 +80,96 @@ def _approach_shape_xy(
     points = [_node_xy(patch, node_id) for node_id in path[:-1]]
     points.append(core.center_xy)
     return _dedupe_adjacent_points(points)
+
+
+def _directional_lane_counts(
+    patch: OSMPatch,
+    core: IntersectionCore,
+    terminal_id: str,
+    source_way_ids: list[str],
+) -> tuple[int, int]:
+    tagged = _directional_way_and_direction(patch, core, terminal_id, source_way_ids)
+    if tagged is None:
+        way = patch.ways[source_way_ids[0]]
+        count = _lane_count(way.tags)
+        return count, count
+    way, incoming_direction = tagged
+    total = _lane_count(way.tags)
+    incoming = _direction_lane_count(way.tags, incoming_direction)
+    outgoing = _direction_lane_count(way.tags, _opposite_direction(incoming_direction))
+    if incoming is None:
+        incoming = _turn_lane_count(way.tags, incoming_direction)
+    if outgoing is None:
+        outgoing = _turn_lane_count(way.tags, _opposite_direction(incoming_direction))
+    if incoming is None and outgoing is not None:
+        incoming = max(1, total - outgoing)
+    if outgoing is None and incoming is not None:
+        outgoing = max(1, total - incoming)
+    return incoming or total, outgoing or total
+
+
+def _incoming_turn_lanes_raw(
+    patch: OSMPatch,
+    core: IntersectionCore,
+    terminal_id: str,
+    source_way_ids: list[str],
+) -> str | None:
+    tagged = _directional_way_and_direction(patch, core, terminal_id, source_way_ids)
+    if tagged is None:
+        return patch.ways[source_way_ids[0]].tags.get("turn:lanes")
+    way, incoming_direction = tagged
+    return way.tags.get(f"turn:lanes:{incoming_direction}") or way.tags.get("turn:lanes")
+
+
+def _directional_way_and_direction(
+    patch: OSMPatch,
+    core: IntersectionCore,
+    terminal_id: str,
+    source_way_ids: list[str],
+) -> tuple[OSMWay, str] | None:
+    graph = _way_graph(patch, source_way_ids)
+    path = _shortest_path_to_core(graph, terminal_id, set(core.core_osm_node_ids))
+    if len(path) < 2:
+        return None
+    for first, second in zip(path, path[1:], strict=False):
+        for way_id in source_way_ids:
+            way = patch.ways[way_id]
+            if not _has_directional_lane_data(way.tags):
+                continue
+            refs = way.node_refs
+            if first not in refs or second not in refs:
+                continue
+            first_index = refs.index(first)
+            second_index = refs.index(second)
+            if abs(first_index - second_index) == 1:
+                return way, "forward" if second_index > first_index else "backward"
+    return None
+
+
+def _has_directional_lane_data(tags: dict[str, str]) -> bool:
+    return any(key.startswith("lanes:") or key.startswith("turn:lanes:") or key == "turn:lanes" for key in tags)
+
+
+def _direction_lane_count(tags: dict[str, str], direction: str) -> int | None:
+    return _int_or_none(tags.get(f"lanes:{direction}"))
+
+
+def _turn_lane_count(tags: dict[str, str], direction: str) -> int | None:
+    raw = tags.get(f"turn:lanes:{direction}") or tags.get("turn:lanes")
+    return len(raw.split("|")) if raw else None
+
+
+def _opposite_direction(direction: str) -> str:
+    return "backward" if direction == "forward" else "forward"
+
+
+def _int_or_none(value: str | None) -> int | None:
+    if not value:
+        return None
+    try:
+        return max(1, int(value))
+    except ValueError:
+        return None
 
 
 def _crossing_support_path_rows(
