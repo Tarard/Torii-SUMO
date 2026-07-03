@@ -26,7 +26,7 @@ def compile_intersection_to_plain(
     _write_nodes(node_file, ir)
     _write_edges(edge_file, ir)
     _write_connections(connection_file, ir)
-    _write_types(type_file)
+    _write_types(type_file, {approach.highway_class for approach in ir.approaches})
     if tllogic_file is not None:
         _write_tllogic(tllogic_file, ir)
 
@@ -108,9 +108,9 @@ def _write_connections(path: Path, ir: IntersectionIR) -> None:
     _write_xml(path, root)
 
 
-def _write_types(path: Path) -> None:
+def _write_types(path: Path, highway_classes: set[str]) -> None:
     root = ET.Element("types")
-    for highway_class in ["primary", "secondary", "residential", "road"]:
+    for highway_class in sorted({"primary", "secondary", "residential", "road", *highway_classes}):
         ET.SubElement(root, "type", id=f"highway.{highway_class}", numLanes="1", speed="13.89")
     _write_xml(path, root)
 

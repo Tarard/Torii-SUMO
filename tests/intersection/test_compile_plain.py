@@ -35,6 +35,18 @@ def test_compile_intersection_to_plain_writes_vehicle_and_tls_files(tmp_path: Pa
     assert "<tlLogic " in Path(artifacts.plain_tllogic_file).read_text()
 
 
+def test_compile_intersection_to_plain_defines_approach_highway_types(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    ir.approaches[0].highway_class = "cycleway"
+    ir.approaches[1].highway_class = "footway"
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+
+    type_text = Path(artifacts.plain_type_file).read_text()
+    assert 'id="highway.cycleway"' in type_text
+    assert 'id="highway.footway"' in type_text
+
+
 def _build_ir(osm_file: Path) -> IntersectionIR:
     patch = parse_osm_xml(osm_file)
     core = infer_intersection_core(patch)
