@@ -256,6 +256,9 @@ class IntersectionValidation(BaseModel):
     duplicate_junction_count: int
     disconnected_edge_count: int
     tls_linkindex_status: Literal["pass", "fail", "skipped"]
+    approach_mode_counts: dict[str, int] = Field(default_factory=dict)
+    legal_movement_mode_counts: dict[str, int] = Field(default_factory=dict)
+    forbidden_cross_mode_movement_count: int = 0
     warnings: list[str]
 
 
