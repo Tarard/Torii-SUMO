@@ -105,7 +105,7 @@ def test_infer_approaches_extends_vehicle_corridor_across_short_split_node() -> 
     assert west.source_shape_xy == [(-90.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy]
 
 
-def test_infer_approaches_keeps_support_path_at_crossing_terminal() -> None:
+def test_infer_approaches_fuses_support_path_at_crossing_terminal() -> None:
     patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
     patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
     patch.nodes["side_path"] = OSMNode(id="side_path", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
@@ -117,13 +117,18 @@ def test_infer_approaches_keeps_support_path_at_crossing_terminal() -> None:
 
     core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
     approaches = infer_approaches(patch, core)
-    support = next(approach for approach in approaches if approach.source_way_ids == ["path_side"])
+    west = next(
+        approach
+        for approach in approaches
+        if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0
+    )
 
-    assert support.allowed_modes == {"bicycle", "pedestrian"}
-    assert support.source_shape_xy == [(-90.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy]
+    assert not [approach for approach in approaches if approach.source_way_ids == ["path_side"]]
+    assert west.incoming_extra_lane_modes == [{"bicycle", "pedestrian"}]
+    assert west.outgoing_extra_lane_modes == [{"bicycle", "pedestrian"}]
 
 
-def test_infer_approaches_keeps_both_sides_of_support_path_crossing() -> None:
+def test_infer_approaches_fuses_both_sides_of_support_path_crossing() -> None:
     patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
     patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
     patch.nodes["side_a"] = OSMNode(id="side_a", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
@@ -136,13 +141,35 @@ def test_infer_approaches_keeps_both_sides_of_support_path_crossing() -> None:
 
     core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
     approaches = infer_approaches(patch, core)
-    supports = [approach for approach in approaches if approach.source_way_ids == ["path_crossing"]]
+    west = next(
+        approach
+        for approach in approaches
+        if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0
+    )
 
-    assert {approach.endpoint_xy for approach in supports} == {(-90.0, 0.0), (-40.0, 0.0)}
-    assert {
-        tuple(approach.source_shape_xy)
-        for approach in supports
-    } == {
-        ((-90.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy),
-        ((-40.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy),
-    }
+    assert not [approach for approach in approaches if approach.source_way_ids == ["path_crossing"]]
+    assert west.incoming_extra_lane_modes == [{"bicycle", "pedestrian"}]
+    assert west.outgoing_extra_lane_modes == [{"bicycle", "pedestrian"}]
+
+
+def test_infer_approaches_fuses_crossing_support_path_into_vehicle_lanes() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
+    patch.nodes["side_path"] = OSMNode(id="side_path", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    patch.ways["path_side"] = OSMWay(
+        id="path_side",
+        node_refs=["side_path", "west"],
+        tags={"highway": "path", "foot": "designated", "bicycle": "designated"},
+    )
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(
+        approach
+        for approach in approaches
+        if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0
+    )
+
+    assert not [approach for approach in approaches if approach.source_way_ids == ["path_side"]]
+    assert {"bicycle", "pedestrian"} in west.incoming_extra_lane_modes
+    assert {"bicycle", "pedestrian"} in west.outgoing_extra_lane_modes
