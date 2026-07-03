@@ -14,5 +14,9 @@ def test_clean_intersection_writes_ir_validation_and_plain_files(tmp_path: Path)
     assert result["topology_type"] == "T3"
     assert result["approach_count"] == 3
     assert result["movement_count"] > 0
+    assert result["claim_status"] in {"intersection-cleaned", "blocked"}
+    assert result["sumo_load_status"] in {"pass", "fail"}
+    assert result["route_probe_status"] == "skipped"
+    assert result["tls_linkindex_status"] in {"pass", "fail", "skipped"}
     for name in ["intersection_ir.json", "validation.json", "intersection.nod.xml", "intersection.edg.xml", "intersection.con.xml"]:
         assert (tmp_path / name).exists()

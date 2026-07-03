@@ -259,6 +259,14 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
             "approach_count": 4,
             "movement_count": 12,
             "net_file": str(tmp_path / "intersection.net.xml"),
+            "intersection_ir_file": str(tmp_path / "intersection_ir.json"),
+            "validation_file": str(tmp_path / "validation.json"),
+            "sumo_load_status": "pass",
+            "route_probe_status": "skipped",
+            "tls_linkindex_status": "pass",
+            "missing_movement_count": 0,
+            "disconnected_edge_count": 0,
+            "internal_fragment_count": 1,
         }
 
     report = run_auto_workflow(
@@ -274,6 +282,13 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
     assert report["tool_called"] == "sumo_intersection_clean"
     assert report["execution_status"] == "executed"
     assert report["workflow_result"]["topology_type"] == "X4"
+    assert report["sumo_load_status"] == "pass"
+    assert report["tls_linkindex_status"] == "pass"
+    assert report["missing_movement_count"] == 0
+    assert report["workflow_stage_results"][0]["stage_name"] == "intersection_compile_validate"
+    assert report["workflow_stage_results"][0]["after_quality"]["connectivity"]["disconnected_edge_count"] == 0
+    assert report["workflow_promotion_trace"]["case_id"] == "intersection_clean"
+    assert report["workflow_promotion_trace"]["stages"][0]["promotion_decision"] == "pass"
     assert captured["osm_file"] == osm_file
     assert captured["output_dir"] == tmp_path
     assert captured["compile_net"] is True

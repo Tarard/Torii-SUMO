@@ -11,7 +11,7 @@ from .osm_network import audit_tls_multisource
 from .osm_workflow import run_osm_cleanup_workflow
 from ..intersection.clean import clean_intersection
 from .workflow_review_html import build_workflow_review_html
-from .workflow_state import build_promotion_trace, summarize_workflow_stages
+from .workflow_state import NetworkQualityVector, StageResult, build_promotion_trace, summarize_workflow_stages
 
 
 AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run"}
@@ -566,12 +566,48 @@ def _run_intersection_clean(
         "topology_type",
         "approach_count",
         "movement_count",
+        "sumo_load_status",
+        "route_probe_status",
+        "tls_linkindex_status",
+        "missing_movement_count",
+        "disconnected_edge_count",
+        "internal_fragment_count",
         "net_file",
         "intersection_ir_file",
         "validation_file",
     ):
         if key in result:
             report[key] = result[key]
+    stage = StageResult(
+        stage_name="intersection_compile_validate",
+        status=str(result.get("status", "fail")),
+        input_artifacts={"osm": str(osm_file)},
+        output_artifacts={
+            key: str(result[key])
+            for key in ("net_file", "intersection_ir_file", "validation_file")
+            if result.get(key)
+        },
+        after_quality=NetworkQualityVector(
+            connectivity={
+                "missing_movement_count": result.get("missing_movement_count", 0),
+                "disconnected_edge_count": result.get("disconnected_edge_count", 0),
+            },
+            routeability={"route_probe_status": result.get("route_probe_status", "skipped")},
+            topology_fragmentation={"internal_fragment_count": result.get("internal_fragment_count", 0)},
+            tls_semantic_delta={"tls_linkindex_status": result.get("tls_linkindex_status", "skipped")},
+        ),
+        promotion_decision=str(result.get("status", "fail")),
+        claim_status=str(result.get("claim_status", "diagnostic-demo")),
+        evidence_files=[str(result[key]) for key in ("intersection_ir_file", "validation_file") if result.get(key)],
+        warnings=list(result.get("warnings", [])) if isinstance(result.get("warnings"), list) else [],
+    )
+    report["workflow_stage_results"] = [stage.as_dict()]
+    report["workflow_promotion_trace"] = build_promotion_trace(
+        case_id="intersection_clean",
+        claim_status=str(result.get("claim_status", "diagnostic-demo")),
+        source_artifact=str(result.get("validation_file", "")),
+        stages=[stage],
+    )
     return report
 
 
