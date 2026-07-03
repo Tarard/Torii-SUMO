@@ -96,24 +96,36 @@ def _crossing_support_path_rows(
         if not anchors:
             continue
         anchor_id = min(anchors, key=lambda node_id: _distance_to_center(patch, node_id, core.center_xy))
-        terminal_id = _far_endpoint_id(patch, way, anchor_id, core.center_xy)
-        if terminal_id == anchor_id:
-            continue
-        endpoint_xy = _node_xy(patch, terminal_id)
-        bearing = bearing_between_xy(core.center_xy, endpoint_xy)
-        rows.append(
-            (
-                bearing,
-                anchor_id,
-                way,
-                terminal_id,
-                [way.id],
-                way.id,
-                endpoint_xy,
-                _support_shape_xy(patch, core, terminal_id, anchor_id, way.id),
+        for terminal_id in _support_terminal_ids(patch, way, anchor_id, core.center_xy):
+            if terminal_id == anchor_id:
+                continue
+            endpoint_xy = _node_xy(patch, terminal_id)
+            bearing = bearing_between_xy(core.center_xy, endpoint_xy)
+            rows.append(
+                (
+                    bearing,
+                    anchor_id,
+                    way,
+                    terminal_id,
+                    [way.id],
+                    way.id,
+                    endpoint_xy,
+                    _support_shape_xy(patch, core, terminal_id, anchor_id, way.id),
+                )
             )
-        )
     return rows
+
+
+def _support_terminal_ids(
+    patch: OSMPatch,
+    way: OSMWay,
+    anchor_id: str,
+    center_xy: tuple[float, float],
+) -> list[str]:
+    endpoints = [way.node_refs[0], way.node_refs[-1]]
+    if anchor_id in endpoints:
+        return [_far_endpoint_id(patch, way, anchor_id, center_xy)]
+    return list(dict.fromkeys(endpoints))
 
 
 def _support_shape_xy(
