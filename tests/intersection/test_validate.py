@@ -1,5 +1,7 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
+from torii_sumo.intersection.compile_plain import compile_intersection_to_plain
 from torii_sumo.intersection.infer_control import infer_control_model
 from torii_sumo.intersection.clean import build_intersection_ir
 from torii_sumo.intersection.schema import CompiledSUMOArtifacts, Movement, OSMNode, OSMWay, PatchSeed
@@ -129,6 +131,103 @@ def test_validate_intersection_reports_netconvert_warnings(monkeypatch, tmp_path
 
     assert "netconvert: Warning: lane is not connected." in result.warnings
     assert result.status == "blocked"
+
+
+def test_validate_intersection_blocks_malformed_tllogic_state_length(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    net_file = tmp_path / "x4.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    tll_root = ET.parse(artifacts.plain_tllogic_file).getroot()
+    for phase in tll_root.findall("tlLogic/phase"):
+        phase.attrib["state"] = "G"
+    ET.ElementTree(tll_root).write(artifacts.plain_tllogic_file, encoding="utf-8", xml_declaration=True)
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 0
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.subprocess.run", fake_run)
+
+    result = validate_intersection(
+        ir,
+        artifacts.model_copy(update={"net_file": str(net_file)}),
+        tmp_path,
+    )
+
+    assert result.tls_linkindex_status == "fail"
+    assert result.status == "blocked"
+    assert any("tlLogic state length" in warning for warning in result.warnings)
+
+
+def test_validate_intersection_blocks_missing_controlled_plain_connection(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    net_file = tmp_path / "x4.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    connection_root = ET.parse(artifacts.plain_connection_file).getroot()
+    first_controlled = next(connection for connection in connection_root.findall("connection") if "tl" in connection.attrib)
+    connection_root.remove(first_controlled)
+    ET.ElementTree(connection_root).write(artifacts.plain_connection_file, encoding="utf-8", xml_declaration=True)
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 0
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.subprocess.run", fake_run)
+
+    result = validate_intersection(
+        ir,
+        artifacts.model_copy(update={"net_file": str(net_file)}),
+        tmp_path,
+    )
+
+    assert result.tls_linkindex_status == "fail"
+    assert result.status == "blocked"
+    assert any("missing controlled connection" in warning for warning in result.warnings)
+
+
+def test_validate_intersection_keeps_diagnostic_warning_non_blocking(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "t3_priority.osm.xml", tmp_path)
+    net_file = tmp_path / "diagnostic_warning.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 0
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.subprocess.run", fake_run)
+
+    result = validate_intersection(
+        ir,
+        CompiledSUMOArtifacts(
+            plain_node_file="",
+            plain_edge_file="",
+            plain_connection_file="",
+            net_file=str(net_file),
+            netconvert_warnings=["Warning: duplicate parallel edge ignored."],
+        ),
+        tmp_path,
+    )
+
+    assert result.status == "pass"
+    assert result.warning_count_by_severity["diagnostic"] == 1
+    assert result.blocking_error_count == 0
 
 
 def test_validate_intersection_tls_linkindex_uses_core_connection_movements(monkeypatch, tmp_path: Path) -> None:

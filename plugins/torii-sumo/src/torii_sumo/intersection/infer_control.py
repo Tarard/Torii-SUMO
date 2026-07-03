@@ -33,7 +33,7 @@ def infer_control_model(
     phase_b = "".join("r" if char == "G" else "G" for char in phase_a)
     return ControlModel(
         control_type="traffic_light",
-        source=[signal_source],
+        source=[signal_source, "synthetic:alternating_placeholder"],
         priority_approach_ids=[],
         tls_id=core.core_id,
         phases=[
@@ -67,7 +67,7 @@ def _controlled_movements(movements: list[Movement], approaches: list[Approach])
 
 
 def _is_support_only(approach: Approach | None) -> bool:
-    return approach is not None and "passenger" not in approach.allowed_modes
+    return approach is not None and (approach.is_support_only or "passenger" not in approach.allowed_modes)
 
 
 def _keep_support_direction_once(

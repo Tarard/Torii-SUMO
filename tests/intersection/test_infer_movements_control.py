@@ -6,7 +6,7 @@ from torii_sumo.intersection.infer_core import infer_intersection_core
 from torii_sumo.intersection.infer_movements import infer_movement_matrix
 from torii_sumo.intersection.infer_road_relations import build_road_pair_relation_graph
 from torii_sumo.intersection.osm_patch import parse_osm_xml
-from torii_sumo.intersection.schema import Movement, OSMNode, OSMWay, PatchSeed
+from torii_sumo.intersection.schema import Approach, BBox, IntersectionCore, Movement, OSMNode, OSMPatch, OSMWay, PatchSeed
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -80,6 +80,7 @@ def test_infer_control_model_uses_osm_traffic_signal_tag() -> None:
 
     assert control.control_type == "traffic_light"
     assert control.tls_id == core.core_id
+    assert "synthetic:alternating_placeholder" in control.source
     assert len(control.link_index_map) == matrix.legal_movement_count
     assert len(control.phases) == 2
     assert {len(phase.state) for phase in control.phases} == {matrix.legal_movement_count}
@@ -293,3 +294,58 @@ def test_infer_movement_matrix_does_not_allow_cross_mode_movements() -> None:
 
     assert movements_by_pair[(road_id, bike_id)].allowed_modes == set()
     assert movements_by_pair[(road_id, bike_id)].allowed is False
+
+
+def test_infer_movement_matrix_blocks_disjoint_same_mode_movements() -> None:
+    patch = OSMPatch(
+        nodes={
+            "a": OSMNode(id="a", lat=0, lon=0, x=0, y=0, tags={}),
+            "b": OSMNode(id="b", lat=0, lon=0, x=100, y=0, tags={}),
+        },
+        ways={
+            "wa": OSMWay(id="wa", node_refs=["a"], tags={"highway": "residential"}),
+            "wb": OSMWay(id="wb", node_refs=["b"], tags={"highway": "residential"}),
+        },
+        relations={},
+        bbox=BBox(min_lon=0, min_lat=0, max_lon=0, max_lat=0),
+    )
+    core = IntersectionCore(
+        core_id="core",
+        center_xy=(0, 0),
+        core_osm_node_ids=[],
+        core_way_ids=["wa", "wb"],
+        core_radius_m=20,
+        topology_type="unknown",
+        internal_fragment_count=0,
+        short_internal_edge_count=0,
+        confidence=0.5,
+    )
+    approaches = [
+        _approach("a", "wa", 0),
+        _approach("b", "wb", 90),
+    ]
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+
+    matrix = infer_movement_matrix(core, approaches, graph)
+
+    assert {relation.expected_relation for relation in graph.relations} == {"unknown"}
+    assert [movement.allowed for movement in matrix.movements] == [False, False]
+
+
+def _approach(approach_id: str, way_id: str, bearing: float) -> Approach:
+    return Approach(
+        approach_id=approach_id,
+        role=approach_id,
+        source_way_ids=[way_id],
+        road_name=None,
+        highway_class="residential",
+        bearing_to_core=(bearing + 180) % 360,
+        bearing_from_core=bearing,
+        incoming_lane_count=1,
+        outgoing_lane_count=1,
+        incoming_edge_ids=[f"{approach_id}_in"],
+        outgoing_edge_ids=[f"{approach_id}_out"],
+        oneway=False,
+        allowed_modes={"passenger"},
+        access_tags={},
+    )

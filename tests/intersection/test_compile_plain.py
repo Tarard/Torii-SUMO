@@ -126,6 +126,32 @@ def test_compile_intersection_to_plain_expands_multilane_connections_and_tls(tmp
     assert len(phase.attrib["state"]) == ir.movement_matrix.legal_movement_count + 2
 
 
+def test_compile_intersection_to_plain_keeps_tls_link_indexes_inside_phase_state(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    movement = next(movement for movement in ir.movement_matrix.movements if movement.allowed)
+    source = next(approach for approach in ir.approaches if approach.approach_id == movement.from_approach_id)
+    target = next(approach for approach in ir.approaches if approach.approach_id == movement.to_approach_id)
+    source.incoming_lane_count = 2
+    target.outgoing_lane_count = 2
+    movement.from_lane_indices = [0, 1]
+    movement.to_lane_indices = [0, 1]
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+
+    controlled = [
+        connection
+        for connection in ET.parse(artifacts.plain_connection_file).getroot().findall("connection")
+        if "tl" in connection.attrib
+    ]
+    phase_states = [
+        phase.attrib["state"]
+        for phase in ET.parse(artifacts.plain_tllogic_file).getroot().findall("tlLogic/phase")
+    ]
+    assert controlled
+    assert {len(state) for state in phase_states} == {len(controlled)}
+    assert all(int(connection.attrib["linkIndex"]) < len(phase_states[0]) for connection in controlled)
+
+
 def test_compile_intersection_to_plain_places_approach_nodes_at_inferred_endpoint(tmp_path: Path) -> None:
     ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
     ir.approaches[0].endpoint_xy = (123.4, 567.8)

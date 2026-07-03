@@ -52,6 +52,8 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
         start=1,
     ):
         incoming_lane_count, outgoing_lane_count = _directional_lane_counts(patch, core, terminal_id, source_way_ids)
+        allowed_modes = _allowed_modes(way.tags)
+        mode_layer = _mode_layer(allowed_modes, extra_lane_modes)
         approaches.append(
             Approach(
                 approach_id=f"leg_{index}",
@@ -70,12 +72,24 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 incoming_edge_ids=[f"{edge_way_id}_{terminal_id}_to_{core.core_id}"],
                 outgoing_edge_ids=[f"{edge_way_id}_{core.core_id}_to_{terminal_id}"],
                 oneway=way.tags.get("oneway") in {"yes", "true", "1"},
-                allowed_modes=_allowed_modes(way.tags),
+                allowed_modes=allowed_modes,
+                mode_layer=mode_layer,
+                is_vehicle_approach=mode_layer in {"vehicle", "fused_support_lane"},
+                is_support_only=mode_layer == "support",
+                fused_support_modes=extra_lane_modes,
                 turn_lanes_raw=_incoming_turn_lanes_raw(patch, core, terminal_id, source_way_ids),
                 access_tags={key: value for key, value in way.tags.items() if key in {"access", "vehicle", "bicycle", "foot"}},
             )
         )
     return approaches
+
+
+def _mode_layer(allowed_modes: set[str], extra_lane_modes: list[set[str]]) -> str:
+    if "passenger" not in allowed_modes:
+        return "support"
+    if extra_lane_modes:
+        return "fused_support_lane"
+    return "vehicle"
 
 
 def _approach_shape_xy(
