@@ -10,6 +10,7 @@ from .osm_area import osm_map_url_bbox, resolve_osm_place
 from .osm_network import audit_tls_multisource, build_osm_network
 from .osm_workflow import run_osm_cleanup_workflow
 from ..intersection.clean import clean_intersection
+from ..intersection.schema import PatchSeed
 from .workflow_review_html import build_workflow_review_html
 from .workflow_state import NetworkQualityVector, StageResult, build_promotion_trace, summarize_workflow_stages
 
@@ -203,6 +204,20 @@ def detect_workflow(user_request: str) -> str:
     if any(token in text for token in ("route", "from ", " to ", "connected", "routeability", "reachable")):
         return "routeability"
     return "general"
+
+
+def infer_seed_osm_node_id(user_request: str) -> str:
+    text = " ".join(user_request.strip().split())
+    patterns = [
+        r"\bosm_node_id\s*[:=]\s*(?P<id>-?\d+)\b",
+        r"\bOSM\s+node\s+(?P<id>-?\d+)\b",
+        r"\bnode\s+(?P<id>-?\d+)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group("id")
+    return ""
 
 
 def infer_place_name(user_request: str) -> str:
@@ -424,6 +439,7 @@ def run_auto_workflow(
     highway_classes: str | None = None,
     traffic_layers: str | None = None,
     network_profile: str | None = None,
+    seed_osm_node_id: str | None = None,
     reference_net_file: Path | None = None,
     reference_policy_report: str | Path | dict[str, Any] | None = None,
     service_passenger_policy: str | None = None,
@@ -492,6 +508,7 @@ def run_auto_workflow(
             bbox=bbox,
             place_name=place_name,
             osm_file=osm_file,
+            seed_osm_node_id=seed_osm_node_id,
             intersection_clean_func=intersection_clean_func,
             intersection_osm_build_func=intersection_osm_build_func,
         )
@@ -550,6 +567,7 @@ def _run_intersection_clean(
     bbox: str | None,
     place_name: str | None,
     osm_file: Path | None,
+    seed_osm_node_id: str | None,
     intersection_clean_func: Callable[..., dict[str, Any]],
     intersection_osm_build_func: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
@@ -587,7 +605,11 @@ def _run_intersection_clean(
             return report
         osm_file = Path(str(source_osm))
         report["intersection_source_osm_file"] = str(osm_file)
-    result = intersection_clean_func(osm_file=osm_file, output_dir=output_dir, compile_net=True)
+    effective_seed_osm_node_id = (seed_osm_node_id or infer_seed_osm_node_id(user_request)).strip()
+    seed = PatchSeed(osm_node_id=effective_seed_osm_node_id) if effective_seed_osm_node_id else None
+    if effective_seed_osm_node_id:
+        report["seed_osm_node_id"] = effective_seed_osm_node_id
+    result = intersection_clean_func(osm_file=osm_file, output_dir=output_dir, compile_net=True, seed=seed)
     report.update(
         {
             "status": result.get("status", "fail"),
