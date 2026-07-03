@@ -105,6 +105,145 @@ def test_infer_approaches_extends_vehicle_corridor_across_short_split_node() -> 
     assert west.source_shape_xy == [(-90.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy]
 
 
+def test_infer_approaches_extends_vehicle_corridor_across_two_short_split_nodes() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["outer_a"] = OSMNode(id="outer_a", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    patch.nodes["outer_b"] = OSMNode(id="outer_b", lat=48.00055, lon=10.99920, x=-130.0, y=0.0)
+    patch.ways["road_west_mid"] = OSMWay(id="road_west_mid", node_refs=["outer_a", "west"], tags={"highway": "secondary", "name": "Ring Road", "ref": "B 13"})
+    patch.ways["road_west_outer"] = OSMWay(id="road_west_outer", node_refs=["outer_b", "outer_a"], tags={"highway": "secondary", "name": "Ring Road", "ref": "B 13"})
+    patch.ways["road_ew"].tags.update({"name": "Ring Road", "ref": "B 13"})
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_west_outer" in approach.source_way_ids)
+
+    assert west.endpoint_xy == (-130.0, 0.0)
+    assert west.corridor_extension_way_ids == ["road_west_mid", "road_west_outer"]
+
+
+def test_corridor_extension_stops_at_ambiguous_fork() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["fork_a"] = OSMNode(id="fork_a", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    patch.nodes["fork_b"] = OSMNode(id="fork_b", lat=48.00065, lon=10.99950, x=-90.0, y=30.0)
+    patch.nodes["fork_c"] = OSMNode(id="fork_c", lat=48.00045, lon=10.99950, x=-90.0, y=-30.0)
+    patch.ways["fork_one"] = OSMWay(id="fork_one", node_refs=["fork_a", "west"], tags={"highway": "secondary", "name": "Ring Road"})
+    patch.ways["fork_two"] = OSMWay(id="fork_two", node_refs=["fork_b", "west"], tags={"highway": "secondary", "name": "Ring Road"})
+    patch.ways["fork_three"] = OSMWay(id="fork_three", node_refs=["fork_c", "west"], tags={"highway": "secondary", "name": "Ring Road"})
+    patch.ways["road_ew"].tags["name"] = "Ring Road"
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0)
+
+    assert west.source_way_ids == ["road_ew"]
+
+
+def test_corridor_extension_stops_at_sharp_angle_single_candidate() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["sharp"] = OSMNode(id="sharp", lat=48.00085, lon=10.99980, x=-40.0, y=120.0)
+    patch.ways["sharp_same_name"] = OSMWay(id="sharp_same_name", node_refs=["sharp", "west"], tags={"highway": "secondary", "name": "Ring Road"})
+    patch.ways["road_ew"].tags["name"] = "Ring Road"
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0)
+
+    assert not any("sharp_same_name" in approach.source_way_ids for approach in approaches)
+    assert west.source_way_ids == ["road_ew"]
+    assert west.corridor_extension_way_ids == []
+
+
+def test_corridor_extension_stops_at_long_distance_single_candidate() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["far"] = OSMNode(id="far", lat=48.00055, lon=10.99800, x=-300.0, y=0.0)
+    patch.ways["far_same_name"] = OSMWay(id="far_same_name", node_refs=["far", "west"], tags={"highway": "secondary", "name": "Ring Road"})
+    patch.ways["road_ew"].tags["name"] = "Ring Road"
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0)
+
+    assert not any("far_same_name" in approach.source_way_ids for approach in approaches)
+    assert west.source_way_ids == ["road_ew"]
+    assert west.corridor_extension_way_ids == []
+
+
+def test_corridor_extension_uses_polyline_distance_guard_for_single_candidate() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    west_x = patch.nodes["west"].x or 0.0
+    west_y = patch.nodes["west"].y or 0.0
+    patch.nodes["poly_a"] = OSMNode(id="poly_a", lat=48.00055, lon=10.99980, x=west_x - 30.0, y=west_y)
+    patch.nodes["poly_b"] = OSMNode(id="poly_b", lat=48.00105, lon=10.99980, x=west_x - 30.0, y=west_y + 60.0)
+    patch.nodes["poly_c"] = OSMNode(id="poly_c", lat=48.00105, lon=10.99930, x=west_x - 70.0, y=west_y + 60.0)
+    patch.nodes["poly_end"] = OSMNode(id="poly_end", lat=48.00055, lon=10.99930, x=west_x - 70.0, y=west_y)
+    patch.ways["polyline_long"] = OSMWay(
+        id="polyline_long",
+        node_refs=["west", "poly_a", "poly_b", "poly_c", "poly_end"],
+        tags={"highway": "secondary", "name": "Ring Road"},
+    )
+    patch.ways["road_ew"].tags["name"] = "Ring Road"
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0)
+
+    assert not any("polyline_long" in approach.source_way_ids for approach in approaches)
+    assert west.source_way_ids == ["road_ew"]
+    assert west.corridor_extension_way_ids == []
+
+
+def test_corridor_extension_uses_first_segment_heading_guard_for_single_candidate() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    west_x = patch.nodes["west"].x or 0.0
+    west_y = patch.nodes["west"].y or 0.0
+    patch.nodes["turn_a"] = OSMNode(id="turn_a", lat=48.00085, lon=10.99900, x=west_x, y=west_y + 35.0)
+    patch.nodes["turn_end"] = OSMNode(id="turn_end", lat=48.00055, lon=10.99930, x=west_x - 70.0, y=west_y)
+    patch.ways["first_segment_turn"] = OSMWay(
+        id="first_segment_turn",
+        node_refs=["west", "turn_a", "turn_end"],
+        tags={"highway": "secondary", "name": "Ring Road"},
+    )
+    patch.ways["road_ew"].tags["name"] = "Ring Road"
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_ew" in approach.source_way_ids and approach.endpoint_xy and approach.endpoint_xy[0] < 0)
+
+    assert not any("first_segment_turn" in approach.source_way_ids for approach in approaches)
+    assert west.source_way_ids == ["road_ew"]
+    assert west.corridor_extension_way_ids == []
+
+
+def test_corridor_extension_stops_before_distinct_way_cycle_revisits_path_node() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    west_x = patch.nodes["west"].x or 0.0
+    west_y = patch.nodes["west"].y or 0.0
+    patch.nodes["cycle_mid"] = OSMNode(id="cycle_mid", lat=48.00055, lon=10.99980, x=west_x - 20.0, y=west_y)
+    patch.nodes["cycle_a"] = OSMNode(id="cycle_a", lat=48.00055, lon=10.99960, x=west_x - 40.0, y=west_y)
+    patch.nodes["cycle_b_mid"] = OSMNode(id="cycle_b_mid", lat=48.00055, lon=10.99940, x=west_x - 60.0, y=west_y)
+    patch.nodes["cycle_end"] = OSMNode(id="cycle_end", lat=48.00055, lon=10.99930, x=west_x - 70.0, y=west_y)
+    patch.ways["road_cycle_a"] = OSMWay(
+        id="road_cycle_a",
+        node_refs=["west", "cycle_mid", "cycle_a"],
+        tags={"highway": "secondary", "name": "Ring Road"},
+    )
+    patch.ways["road_cycle_b"] = OSMWay(
+        id="road_cycle_b",
+        node_refs=["cycle_a", "cycle_b_mid", "cycle_mid", "cycle_end"],
+        tags={"highway": "secondary", "name": "Ring Road"},
+    )
+    patch.ways["road_ew"].tags["name"] = "Ring Road"
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_cycle_a" in approach.source_way_ids)
+
+    assert not any("road_cycle_b" in approach.source_way_ids for approach in approaches)
+    assert west.source_way_ids == ["road_ew", "road_cycle_a"]
+    assert west.corridor_extension_way_ids == ["road_cycle_a"]
+    assert west.endpoint_xy == (west_x - 40.0, west_y)
+
+
 def test_infer_approaches_uses_directional_lane_counts_and_turn_lanes() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     patch.ways["10"].tags.update(

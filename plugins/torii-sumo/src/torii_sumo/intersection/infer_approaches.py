@@ -4,9 +4,26 @@ from collections import defaultdict, deque
 
 from torii_sumo.road_semantics import classify_approach_mode_layer, filtered_osm_modes
 
-from .geometry import bearing_between_xy
+from .geometry import abs_angle_between as angle_difference, bearing_between_xy, euclidean_distance
 from .infer_core import _adjacent_highway_nodes
 from .schema import Approach, IntersectionCore, OSMWay, OSMPatch
+
+
+MAX_CORRIDOR_EXTENSION_M = 120.0
+MAX_CORRIDOR_HEADING_DELTA_DEG = 35.0
+
+ApproachRow = tuple[
+    float,
+    str,
+    OSMWay,
+    str,
+    list[str],
+    str,
+    tuple[float, float],
+    list[tuple[float, float]],
+    list[set[str]],
+    list[str],
+]
 
 
 def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
@@ -16,7 +33,7 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
     used_way_ids = set()
     for neighbor_id, way_ids in adjacent.items():
         way = patch.ways[sorted(way_ids)[0]]
-        terminal_id, source_way_ids, edge_way_id = _extended_vehicle_corridor_endpoint(
+        terminal_id, source_way_ids, edge_way_id, corridor_extension_way_ids = _extended_vehicle_corridor_endpoint(
             patch,
             highway_ways,
             core,
@@ -39,6 +56,7 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 endpoint_xy,
                 source_shape_xy,
                 _vehicle_support_lane_modes(way.tags),
+                corridor_extension_way_ids,
             )
         )
     rows = _fuse_support_path_rows(
@@ -49,7 +67,21 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
 
     roles = _roles_for_bearings([row[0] for row in rows])
     approaches = []
-    for index, ((bearing, neighbor_id, way, terminal_id, source_way_ids, edge_way_id, endpoint_xy, source_shape_xy, extra_lane_modes), role) in enumerate(
+    for index, (
+        (
+            bearing,
+            neighbor_id,
+            way,
+            terminal_id,
+            source_way_ids,
+            edge_way_id,
+            endpoint_xy,
+            source_shape_xy,
+            extra_lane_modes,
+            corridor_extension_way_ids,
+        ),
+        role,
+    ) in enumerate(
         zip(rows, roles, strict=True),
         start=1,
     ):
@@ -68,6 +100,7 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 approach_id=f"leg_{index}",
                 role=role,
                 source_way_ids=source_way_ids,
+                corridor_extension_way_ids=corridor_extension_way_ids,
                 road_name=way.tags.get("name"),
                 highway_class=way.tags.get("highway", "road"),
                 bearing_to_core=(bearing + 180) % 360,
@@ -299,7 +332,7 @@ def _crossing_support_path_rows(
     core: IntersectionCore,
     adjacent_node_ids: set[str],
     used_way_ids: set[str],
-) -> list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]]:
+) -> list[ApproachRow]:
     rows = []
     for way in highway_ways:
         if way.id in used_way_ids or "passenger" in _allowed_modes(way.tags):
@@ -328,15 +361,16 @@ def _crossing_support_path_rows(
                     endpoint_xy,
                     _support_shape_xy(patch, core, terminal_id, anchor_id, way.id),
                     [],
+                    [],
                 )
             )
     return rows
 
 
 def _fuse_support_path_rows(
-    rows: list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]],
-    support_rows: list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]],
-) -> list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]]:
+    rows: list[ApproachRow],
+    support_rows: list[ApproachRow],
+) -> list[ApproachRow]:
     fused = list(rows)
     for support in support_rows:
         support_modes = _allowed_modes(support[2].tags)
@@ -345,7 +379,7 @@ def _fuse_support_path_rows(
             fused.append(support)
             continue
         row = fused[match_index]
-        fused[match_index] = (*row[:8], [_merged_support_modes(row[8], support_modes)])
+        fused[match_index] = (*row[:8], [_merged_support_modes(row[8], support_modes)], row[9])
     return fused
 
 
@@ -372,8 +406,8 @@ def _has_positive_tag(tags: dict[str, str], prefix: str) -> bool:
 
 
 def _support_lane_match_index(
-    rows: list[tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]]],
-    support: tuple[float, str, OSMWay, str, list[str], str, tuple[float, float], list[tuple[float, float]], list[set[str]]],
+    rows: list[ApproachRow],
+    support: ApproachRow,
 ) -> int | None:
     return next(
         (
@@ -463,21 +497,128 @@ def _extended_vehicle_corridor_endpoint(
     core: IntersectionCore,
     neighbor_id: str,
     way: OSMWay,
-) -> tuple[str, list[str], str]:
+) -> tuple[str, list[str], str, list[str]]:
+    source_way_ids = [way.id]
+    corridor_extension_way_ids: list[str] = []
     if "passenger" not in _allowed_modes(way.tags):
-        return neighbor_id, [way.id], way.id
-    continuations = [
-        candidate
-        for candidate in highway_ways
-        if candidate.id != way.id
-        and neighbor_id in candidate.node_refs
-        and "passenger" in _allowed_modes(candidate.tags)
-        and _same_vehicle_corridor(way, candidate)
+        return neighbor_id, source_way_ids, way.id, corridor_extension_way_ids
+
+    terminal_id = neighbor_id
+    edge_way_id = way.id
+    current_way = way
+    current_heading = _outward_heading_at_terminal(patch, way, terminal_id, core.center_xy)
+    cumulative_distance_m = 0.0
+    seen_way_ids = {way.id}
+    visited_node_ids = set(_initial_corridor_path_node_ids(way, terminal_id, set(core.core_osm_node_ids)))
+
+    while True:
+        continuations = [
+            candidate
+            for candidate in highway_ways
+            if candidate.id not in seen_way_ids
+            and terminal_id in candidate.node_refs
+            and candidate.tags.get("highway") not in {"service", "parking_aisle"}
+            and "passenger" in _allowed_modes(candidate.tags)
+            and _same_vehicle_corridor(current_way, candidate)
+        ]
+        if len(continuations) != 1:
+            break
+
+        continuation = continuations[0]
+        next_terminal_id = _far_endpoint_id(patch, continuation, terminal_id, core.center_xy)
+        if next_terminal_id == terminal_id:
+            break
+
+        candidate_subpath = _way_subpath_between(continuation, terminal_id, next_terminal_id)
+        if len(candidate_subpath) < 2:
+            break
+
+        if any(node_id in visited_node_ids for node_id in candidate_subpath[1:]):
+            break
+
+        segment_length_m = _path_length_m(patch, candidate_subpath)
+        if cumulative_distance_m + segment_length_m > MAX_CORRIDOR_EXTENSION_M:
+            break
+
+        first_segment_heading = bearing_between_xy(_node_xy(patch, candidate_subpath[0]), _node_xy(patch, candidate_subpath[1]))
+        if angle_difference(current_heading, first_segment_heading) > MAX_CORRIDOR_HEADING_DELTA_DEG:
+            break
+
+        source_way_ids.append(continuation.id)
+        corridor_extension_way_ids.append(continuation.id)
+        seen_way_ids.add(continuation.id)
+        visited_node_ids.update(candidate_subpath)
+        terminal_id = next_terminal_id
+        edge_way_id = continuation.id
+        current_way = continuation
+        current_heading = bearing_between_xy(_node_xy(patch, candidate_subpath[-2]), _node_xy(patch, candidate_subpath[-1]))
+        cumulative_distance_m += segment_length_m
+
+    return terminal_id, source_way_ids, edge_way_id, corridor_extension_way_ids
+
+
+def _initial_corridor_path_node_ids(
+    way: OSMWay,
+    terminal_id: str,
+    core_node_ids: set[str],
+) -> list[str]:
+    refs = way.node_refs
+    try:
+        terminal_index = refs.index(terminal_id)
+    except ValueError:
+        return [terminal_id]
+
+    core_indices = [index for index, node_id in enumerate(refs) if node_id in core_node_ids]
+    if not core_indices:
+        return [terminal_id]
+
+    core_index = min(core_indices, key=lambda index: abs(index - terminal_index))
+    start_index, end_index = sorted((core_index, terminal_index))
+    return refs[start_index : end_index + 1]
+
+
+def _way_subpath_between(way: OSMWay, start_node_id: str, end_node_id: str) -> list[str]:
+    refs = way.node_refs
+    try:
+        start_index = refs.index(start_node_id)
+        end_index = refs.index(end_node_id)
+    except ValueError:
+        return []
+
+    if start_index <= end_index:
+        return refs[start_index : end_index + 1]
+    return list(reversed(refs[end_index : start_index + 1]))
+
+
+def _path_length_m(patch: OSMPatch, node_ids: list[str]) -> float:
+    return sum(
+        euclidean_distance(_node_xy(patch, first), _node_xy(patch, second))
+        for first, second in zip(node_ids, node_ids[1:], strict=False)
+    )
+
+
+def _outward_heading_at_terminal(
+    patch: OSMPatch,
+    way: OSMWay,
+    terminal_id: str,
+    center_xy: tuple[float, float],
+) -> float:
+    refs = way.node_refs
+    try:
+        terminal_index = refs.index(terminal_id)
+    except ValueError:
+        return bearing_between_xy(center_xy, _node_xy(patch, terminal_id))
+
+    adjacent_node_ids = [
+        refs[index]
+        for index in (terminal_index - 1, terminal_index + 1)
+        if 0 <= index < len(refs) and refs[index] in patch.nodes
     ]
-    if len(continuations) != 1:
-        return neighbor_id, [way.id], way.id
-    continuation = continuations[0]
-    return _far_endpoint_id(patch, continuation, neighbor_id, core.center_xy), [way.id, continuation.id], continuation.id
+    if not adjacent_node_ids:
+        return bearing_between_xy(center_xy, _node_xy(patch, terminal_id))
+
+    from_node_id = min(adjacent_node_ids, key=lambda node_id: _distance_to_center(patch, node_id, center_xy))
+    return bearing_between_xy(_node_xy(patch, from_node_id), _node_xy(patch, terminal_id))
 
 
 def _same_vehicle_corridor(first: OSMWay, second: OSMWay) -> bool:
