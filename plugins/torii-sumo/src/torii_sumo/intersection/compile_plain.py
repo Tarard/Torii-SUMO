@@ -25,6 +25,8 @@ def compile_intersection_to_plain(
     type_file = output_dir / f"{prefix}.typ.xml"
     tllogic_file = output_dir / f"{prefix}.tll.xml" if ir.control.control_type == "traffic_light" else None
     net_file = output_dir / f"{prefix}.net.xml"
+    guess_crossings = needs_sumo_crossing(ir)
+    custom_tllogic_applied = bool(tllogic_file and not guess_crossings)
 
     connection_rows = _connection_rows(ir)
     _write_nodes(node_file, ir)
@@ -44,7 +46,7 @@ def compile_intersection_to_plain(
             type_file,
             tllogic_file,
             net_file,
-            guess_crossings=needs_sumo_crossing(ir),
+            guess_crossings=guess_crossings,
         )
     return CompiledSUMOArtifacts(
         plain_node_file=str(node_file),
@@ -55,6 +57,7 @@ def compile_intersection_to_plain(
         net_file=str(net_file) if compiled_net else "",
         sumocfg_file=None,
         netconvert_warnings=netconvert_warnings,
+        custom_tllogic_applied=custom_tllogic_applied,
     )
 
 

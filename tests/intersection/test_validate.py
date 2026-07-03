@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -9,6 +10,66 @@ from torii_sumo.intersection.validate import validate_intersection
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _write_compiled_net_from_plain(
+    artifacts: CompiledSUMOArtifacts,
+    net_file: Path,
+    *,
+    link_index: str | None = None,
+    omit_link_index: bool = False,
+    omit_tllogic_phases: bool = False,
+    omit_controlled_pair_once: tuple[str, str] | None = None,
+    include_lane_attrs: bool = False,
+    duplicate_lane_attrs_pair_once: tuple[str, str] | None = None,
+    omit_edge: str | None = None,
+) -> None:
+    edge_ids = [edge.attrib["id"] for edge in ET.parse(artifacts.plain_edge_file).getroot().findall("edge")]
+    controlled = [
+        connection
+        for connection in ET.parse(artifacts.plain_connection_file).getroot().findall("connection")
+        if "tl" in connection.attrib
+    ]
+    filtered_controlled = []
+    omitted_pair = False
+    for connection in controlled:
+        pair = (connection.attrib["from"], connection.attrib["to"])
+        if omit_controlled_pair_once == pair and not omitted_pair:
+            omitted_pair = True
+            continue
+        filtered_controlled.append(connection)
+    controlled = filtered_controlled
+    state = "G" * len(controlled)
+    root = ET.Element("net")
+    for edge_id in edge_ids:
+        if edge_id == omit_edge:
+            continue
+        ET.SubElement(root, "edge", id=edge_id)
+    duplicated_lane_attrs: tuple[str, str] | None = None
+    for index, connection in enumerate(controlled):
+        attrs = {
+            "from": connection.attrib["from"],
+            "to": connection.attrib["to"],
+            "tl": connection.attrib["tl"],
+        }
+        if include_lane_attrs:
+            lane_attrs = (connection.attrib["fromLane"], connection.attrib["toLane"])
+            pair = (connection.attrib["from"], connection.attrib["to"])
+            if duplicate_lane_attrs_pair_once == pair:
+                if duplicated_lane_attrs is None:
+                    duplicated_lane_attrs = lane_attrs
+                else:
+                    lane_attrs = duplicated_lane_attrs
+            attrs["fromLane"] = lane_attrs[0]
+            attrs["toLane"] = lane_attrs[1]
+        if not omit_link_index:
+            attrs["linkIndex"] = link_index if link_index is not None else str(index)
+        ET.SubElement(root, "connection", **attrs)
+    if not omit_tllogic_phases:
+        logic_id = controlled[0].attrib["tl"] if controlled else "tls"
+        logic = ET.SubElement(root, "tlLogic", id=logic_id)
+        ET.SubElement(logic, "phase", state=state)
+    ET.ElementTree(root).write(net_file, encoding="utf-8")
 
 
 def test_validate_intersection_passes_absolute_net_path_to_sumo(monkeypatch, tmp_path: Path) -> None:
@@ -131,6 +192,216 @@ def test_validate_intersection_reports_netconvert_warnings(monkeypatch, tmp_path
 
     assert "netconvert: Warning: lane is not connected." in result.warnings
     assert result.status == "blocked"
+
+
+def test_validate_blocks_compiled_net_missing_expected_connection(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    net_file = tmp_path / "x4.net.xml"
+    net_file.write_text("<net><edge id='placeholder'/></net>", encoding="utf-8")
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert result.status == "blocked"
+    assert any("compiled net missing expected connection" in warning for warning in result.warnings)
+
+
+def test_validate_blocks_compiled_net_missing_duplicate_controlled_connection(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    movement = next(movement for movement in ir.movement_matrix.movements if movement.allowed)
+    source = next(approach for approach in ir.approaches if approach.approach_id == movement.from_approach_id)
+    target = next(approach for approach in ir.approaches if approach.approach_id == movement.to_approach_id)
+    source.incoming_lane_count = 2
+    target.outgoing_lane_count = 2
+    movement.from_lane_indices = [0, 1]
+    movement.to_lane_indices = [0, 1]
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    controlled_pairs = Counter(
+        (connection.attrib["from"], connection.attrib["to"])
+        for connection in ET.parse(artifacts.plain_connection_file).getroot().findall("connection")
+        if "tl" in connection.attrib
+    )
+    duplicated_pair = next(pair for pair, count in controlled_pairs.items() if count > 1)
+    net_file = tmp_path / "x4_missing_duplicate_connection.net.xml"
+    _write_compiled_net_from_plain(artifacts, net_file, omit_controlled_pair_once=duplicated_pair)
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert result.tls_linkindex_status == "fail"
+    assert result.status == "blocked"
+    assert any("compiled net missing expected connection" in warning for warning in result.warnings)
+
+
+def test_validate_blocks_compiled_net_wrong_duplicate_lane_tuple(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    movement = next(movement for movement in ir.movement_matrix.movements if movement.allowed)
+    source = next(approach for approach in ir.approaches if approach.approach_id == movement.from_approach_id)
+    target = next(approach for approach in ir.approaches if approach.approach_id == movement.to_approach_id)
+    source.incoming_lane_count = 2
+    target.outgoing_lane_count = 2
+    movement.from_lane_indices = [0, 1]
+    movement.to_lane_indices = [0, 1]
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    duplicated_pair = (source.incoming_edge_ids[0], target.outgoing_edge_ids[0])
+    net_file = tmp_path / "x4_duplicate_lane_tuple.net.xml"
+    _write_compiled_net_from_plain(
+        artifacts,
+        net_file,
+        include_lane_attrs=True,
+        duplicate_lane_attrs_pair_once=duplicated_pair,
+    )
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert result.tls_linkindex_status == "fail"
+    assert result.status == "blocked"
+    assert any("compiled net missing expected connection" in warning for warning in result.warnings)
+
+
+def test_validate_records_compiled_net_missing_expected_edge_as_blocking(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    missing_edge = ET.parse(artifacts.plain_edge_file).getroot().find("edge").attrib["id"]
+    net_file = tmp_path / "x4_missing_edge.net.xml"
+    _write_compiled_net_from_plain(artifacts, net_file, omit_edge=missing_edge)
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert any("compiled net missing expected edge" in warning for warning in result.warnings)
+    assert result.status == "blocked"
+    assert any(
+        "compiled net missing expected edge" in record.message
+        and record.severity == "blocking"
+        and record.source == "torii"
+        for record in result.warning_records
+    )
+
+
+def test_validate_blocks_compiled_net_tllogic_state_mismatch(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    first_row = next(iter(ET.parse(artifacts.plain_connection_file).getroot().findall("connection")))
+    net_file = tmp_path / "x4.net.xml"
+    net_file.write_text(
+        f"<net><connection from='{first_row.attrib['from']}' to='{first_row.attrib['to']}' tl='{ir.control.tls_id}' linkIndex='3'/><tlLogic id='{ir.control.tls_id}'><phase state='G'/></tlLogic></net>",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert result.tls_linkindex_status == "fail"
+    assert any("compiled net tlLogic state length" in warning for warning in result.warnings)
+
+
+def test_validate_blocks_compiled_net_missing_tllogic_phases(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    net_file = tmp_path / "x4_missing_tllogic_phases.net.xml"
+    _write_compiled_net_from_plain(artifacts, net_file, omit_tllogic_phases=True)
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert result.tls_linkindex_status == "fail"
+    assert result.status == "blocked"
+    assert "compiled net missing tlLogic phases for controlled connections" in result.warnings
+
+
+def test_validate_blocks_compiled_net_missing_controlled_linkindex(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    net_file = tmp_path / "x4_missing_linkindex.net.xml"
+    _write_compiled_net_from_plain(artifacts, net_file, omit_link_index=True)
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert result.tls_linkindex_status == "fail"
+    assert any("compiled net controlled connection has invalid linkIndex" in warning for warning in result.warnings)
+
+
+def test_validate_blocks_compiled_net_negative_controlled_linkindex(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    net_file = tmp_path / "x4_negative_linkindex.net.xml"
+    _write_compiled_net_from_plain(artifacts, net_file, link_index="-1")
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(ir, artifacts.model_copy(update={"net_file": str(net_file)}), tmp_path)
+
+    assert result.tls_linkindex_status == "fail"
+    assert any("compiled net controlled connection has invalid linkIndex" in warning for warning in result.warnings)
+
+
+def test_validate_reports_custom_tllogic_omission(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+    net_file = tmp_path / "x4_valid.net.xml"
+    _write_compiled_net_from_plain(artifacts, net_file)
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(
+        ir,
+        artifacts.model_copy(update={"net_file": str(net_file), "custom_tllogic_applied": False}),
+        tmp_path,
+    )
+
+    assert result.tls_linkindex_status == "fail"
+    assert "custom plain tlLogic was omitted because netconvert crossing guessing was enabled" in result.warnings
+
+
+def test_crossing_guess_custom_tllogic_omission_is_reported(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "clustered_signalized_crossing.osm.xml", tmp_path)
+    monkeypatch.setattr("torii_sumo.intersection.compile_plain.shutil.which", lambda _name: "netconvert")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.compile_plain.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": "", "stdout": ""})(),
+    )
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=True)
+
+    assert artifacts.custom_tllogic_applied is False
 
 
 def test_validate_intersection_blocks_malformed_tllogic_state_length(monkeypatch, tmp_path: Path) -> None:

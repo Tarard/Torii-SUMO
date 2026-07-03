@@ -271,6 +271,7 @@ class CompiledSUMOArtifacts(BaseModel):
     net_file: str
     sumocfg_file: str | None = None
     netconvert_warnings: list[str] = Field(default_factory=list)
+    custom_tllogic_applied: bool | None = None
 
 
 class ValidationWarningRecord(BaseModel):

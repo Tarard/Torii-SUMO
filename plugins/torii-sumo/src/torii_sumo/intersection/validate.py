@@ -50,6 +50,9 @@ def validate_intersection(
             _add_warning(warnings, warning_records, "sumo binary not found", "sumo", "blocking")
     else:
         _add_warning(warnings, warning_records, "compiled net file not available", "torii", "blocking")
+    if artifacts.net_file and net_path.is_file():
+        for warning in _compiled_net_edge_warnings(ir, net_path):
+            _add_warning(warnings, warning_records, warning, "torii", "blocking")
 
     tls_status, tls_warnings = _tls_linkindex_status(ir, artifacts, output_dir)
     for warning in tls_warnings:
@@ -134,6 +137,13 @@ def _tls_linkindex_status(ir: IntersectionIR, artifacts: CompiledSUMOArtifacts, 
     warnings = []
     if not set(ir.control.link_index_map).issubset(allowed_movement_ids):
         warnings.append("controlled movement is not an allowed movement")
+    net_path = _artifact_path(artifacts.net_file, output_dir)
+    if net_path and net_path.is_file() and _net_has_compiled_artifact_content(net_path):
+        status, compiled_warnings = _compiled_net_tls_status(ir, net_path)
+        warnings.extend(compiled_warnings)
+        if artifacts.custom_tllogic_applied is False:
+            warnings.append("custom plain tlLogic was omitted because netconvert crossing guessing was enabled")
+        return ("fail" if warnings else status), warnings
     connection_path = _artifact_path(artifacts.plain_connection_file, output_dir)
     tllogic_path = _artifact_path(artifacts.plain_tllogic_file, output_dir)
     if connection_path and connection_path.is_file():
@@ -158,13 +168,115 @@ def _tls_linkindex_status(ir: IntersectionIR, artifacts: CompiledSUMOArtifacts, 
     return ("fail" if warnings else "pass"), warnings
 
 
+def _compiled_net_tls_status(ir: IntersectionIR, net_path: Path) -> tuple[str, list[str]]:
+    if ir.control.control_type != "traffic_light" or not net_path.is_file():
+        return "skipped", []
+    root = ET.parse(net_path).getroot()
+    connections = root.findall("connection")
+    controlled = [connection for connection in connections if "tl" in connection.attrib]
+    use_lane_tuples = bool(controlled) and all(
+        "fromLane" in connection.attrib and "toLane" in connection.attrib for connection in controlled
+    )
+    if use_lane_tuples:
+        expected_counts = Counter(
+            (
+                source.incoming_edge_ids[0],
+                target.outgoing_edge_ids[0],
+                str(from_lane),
+                str(to_lane),
+            )
+            for movement, source, target, from_lane, to_lane in _connection_rows(ir)
+            if movement.movement_id in ir.control.link_index_map
+        )
+        actual_counts = Counter(
+            (
+                connection.attrib.get("from", ""),
+                connection.attrib.get("to", ""),
+                connection.attrib.get("fromLane", ""),
+                connection.attrib.get("toLane", ""),
+            )
+            for connection in controlled
+        )
+    else:
+        expected_counts = Counter(
+            (source.incoming_edge_ids[0], target.outgoing_edge_ids[0])
+            for movement, source, target, _from_lane, _to_lane in _connection_rows(ir)
+            if movement.movement_id in ir.control.link_index_map
+        )
+        actual_counts = Counter((connection.attrib.get("from", ""), connection.attrib.get("to", "")) for connection in controlled)
+    missing = [key for key, expected_count in expected_counts.items() if actual_counts[key] < expected_count]
+    warnings: list[str] = []
+    if missing:
+        first_missing = sorted(missing)[0]
+        warnings.append(f"compiled net missing expected connection: {first_missing[0]}->{first_missing[1]}")
+    states = [phase.attrib.get("state", "") for phase in root.findall("tlLogic/phase")]
+    if controlled and not states:
+        warnings.append("compiled net missing tlLogic phases for controlled connections")
+    if states and any(len(state) != len(controlled) for state in states):
+        warnings.append("compiled net tlLogic state length does not match controlled connection count")
+    state_length = len(states[0]) if states else None
+    invalid_linkindex = False
+    linkindex_exceeds_state = False
+    for connection in controlled:
+        raw_link_index = connection.attrib.get("linkIndex")
+        if raw_link_index is None:
+            invalid_linkindex = True
+            continue
+        try:
+            link_index = int(raw_link_index)
+        except ValueError:
+            invalid_linkindex = True
+            continue
+        if link_index < 0:
+            invalid_linkindex = True
+        elif state_length is not None and link_index >= state_length:
+            linkindex_exceeds_state = True
+    if invalid_linkindex:
+        warnings.append("compiled net controlled connection has invalid linkIndex")
+    if state_length is not None:
+        if linkindex_exceeds_state:
+            if "compiled net tlLogic state length does not match controlled connection count" not in warnings:
+                warnings.append("compiled net tlLogic state length does not match controlled connection count")
+            warnings.append("compiled net controlled connection linkIndex exceeds tlLogic state length")
+    return ("fail" if warnings else "pass"), warnings
+
+
+def _compiled_net_edge_warnings(ir: IntersectionIR, net_path: Path) -> list[str]:
+    if not net_path.is_file():
+        return []
+    root = ET.parse(net_path).getroot()
+    if not _root_has_compiled_artifact_content(root):
+        return []
+    actual = {edge.attrib.get("id", "") for edge in root.findall("edge") if not edge.attrib.get("id", "").startswith(":")}
+    expected = set()
+    for approach in ir.approaches:
+        if approach.incoming_edge_ids and ("passenger" not in approach.allowed_modes or approach.has_incoming_vehicle_flow):
+            expected.add(approach.incoming_edge_ids[0])
+        if approach.outgoing_edge_ids and ("passenger" not in approach.allowed_modes or approach.has_outgoing_vehicle_flow):
+            expected.add(approach.outgoing_edge_ids[0])
+    return [f"compiled net missing expected edge: {edge_id}" for edge_id in sorted(expected - actual)]
+
+
+def _net_has_compiled_artifact_content(net_path: Path) -> bool:
+    if not net_path.is_file():
+        return False
+    return _root_has_compiled_artifact_content(ET.parse(net_path).getroot())
+
+
+def _root_has_compiled_artifact_content(root: ET.Element) -> bool:
+    return bool(root.findall("edge") or root.findall("connection") or root.findall("tlLogic"))
+
+
 def _artifact_path(value: str | None, output_dir: Path) -> Path | None:
     if not value:
         return None
     path = Path(value)
     if path.is_absolute():
         return path
-    return output_dir / path
+    output_relative_path = output_dir / path
+    if path.is_file() or not output_relative_path.exists():
+        return path
+    return output_relative_path
 
 
 def _legal_movement_mode_counts(movements: list[Movement]) -> dict[str, int]:
