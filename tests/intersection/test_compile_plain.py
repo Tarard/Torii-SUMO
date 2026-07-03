@@ -488,7 +488,6 @@ def test_compile_intersection_to_plain_preserves_controlled_support_movements(tm
         evidence=["fixture:signalized_support_path"],
         confidence=1.0,
     )
-    first_phase, second_phase = ir.control.phases
     ir = ir.model_copy(
         update={
             "approaches": [*ir.approaches, support_a, support_b],
@@ -501,10 +500,13 @@ def test_compile_intersection_to_plain_preserves_controlled_support_movements(tm
             ),
             "control": ir.control.model_copy(
                 update={
-                    "link_index_map": {**ir.control.link_index_map, support_movement.movement_id: len(ir.control.link_index_map)},
+                    "link_index_map": {
+                        **ir.control.link_index_map,
+                        support_movement.movement_id: len(ir.control.link_index_map),
+                    },
                     "phases": [
-                        first_phase.model_copy(update={"state": f"{first_phase.state}G"}),
-                        second_phase.model_copy(update={"state": f"{second_phase.state}r"}),
+                        phase.model_copy(update={"state": f"{phase.state}{'G' if index == 0 else 'r'}"})
+                        for index, phase in enumerate(ir.control.phases)
                     ],
                 }
             ),

@@ -11,6 +11,7 @@ from torii_sumo.intersection.schema import (
     BBox,
     IntersectionCore,
     Movement,
+    MovementMatrix,
     OSMNode,
     OSMPatch,
     OSMRelation,
@@ -676,10 +677,238 @@ def test_infer_control_model_uses_osm_traffic_signal_tag() -> None:
 
     assert control.control_type == "traffic_light"
     assert control.tls_id == core.core_id
-    assert "synthetic:alternating_placeholder" in control.source
+    assert "synthetic:conflict_grouped" in control.source
+    assert "synthetic:alternating_placeholder" not in control.source
     assert len(control.link_index_map) == matrix.legal_movement_count
-    assert len(control.phases) == 2
     assert {len(phase.state) for phase in control.phases} == {matrix.legal_movement_count}
+
+
+def test_conflicting_left_turns_do_not_share_green_phase() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph, patch)
+
+    control = infer_control_model(patch, core, approaches, matrix)
+    left_ids = {
+        movement.movement_id
+        for movement in matrix.movements
+        if movement.allowed and movement.turn == "left"
+    }
+
+    for phase in control.phases:
+        greens = {
+            movement_id
+            for movement_id, index in control.link_index_map.items()
+            if phase.state[index] == "G"
+        }
+        assert len(greens & left_ids) <= 1
+
+
+def test_tls_grouping_keeps_singleton_conflict_groups_when_geometry_is_sufficient() -> None:
+    core = _core_with_refs(["w_a", "w_b", "w_c"], ["n_core"])
+    patch = _patch_with_relations(["w_a", "w_b", "w_c"], {})
+    patch.nodes["n_core"].tags = {"highway": "traffic_signals"}
+    approaches = [
+        _approach("a", "w_a", 0).model_copy(update={"endpoint_xy": (0.0, 100.0)}),
+        _approach("b", "w_b", 90).model_copy(update={"endpoint_xy": (100.0, 0.0)}),
+        _approach("c", "w_c", 270).model_copy(update={"endpoint_xy": (-100.0, 0.0)}),
+    ]
+    movements = [
+        Movement(
+            movement_id="a_to_b",
+            from_approach_id="a",
+            to_approach_id="b",
+            road_pair_relation_id="a_b",
+            turn="left",
+            allowed=True,
+            from_lane_indices=[0],
+            to_lane_indices=[0],
+            allowed_modes={"passenger"},
+            evidence=["fixture:all_conflict"],
+            confidence=1.0,
+        ),
+        Movement(
+            movement_id="b_to_c",
+            from_approach_id="b",
+            to_approach_id="c",
+            road_pair_relation_id="b_c",
+            turn="left",
+            allowed=True,
+            from_lane_indices=[0],
+            to_lane_indices=[0],
+            allowed_modes={"passenger"},
+            evidence=["fixture:all_conflict"],
+            confidence=1.0,
+        ),
+        Movement(
+            movement_id="c_to_a",
+            from_approach_id="c",
+            to_approach_id="a",
+            road_pair_relation_id="c_a",
+            turn="left",
+            allowed=True,
+            from_lane_indices=[0],
+            to_lane_indices=[0],
+            allowed_modes={"passenger"},
+            evidence=["fixture:all_conflict"],
+            confidence=1.0,
+        ),
+    ]
+    matrix = MovementMatrix(
+        movements=movements,
+        legal_movement_count=len(movements),
+        forbidden_movement_count=0,
+        inferred_movement_count=len(movements),
+        restriction_blocked_count=0,
+    )
+
+    control = infer_control_model(patch, core, approaches, matrix)
+
+    assert "synthetic:conflict_grouped" in control.source
+    assert "synthetic:alternating_placeholder" not in control.source
+    assert {len(phase.state) for phase in control.phases} == {len(control.link_index_map)}
+    assert all(len(phase.movement_ids) == 1 for phase in control.phases)
+    assert all(phase.state.count("G") <= 1 for phase in control.phases)
+
+
+def test_tls_grouping_keeps_vehicle_uturns_singleton() -> None:
+    core = _core_with_refs(["w_north", "w_return", "w_south", "w_exit"], ["n_core"])
+    patch = _patch_with_relations(["w_north", "w_return", "w_south", "w_exit"], {})
+    patch.nodes["n_core"].tags = {"highway": "traffic_signals"}
+    approaches = [
+        _approach("north", "w_north", 0).model_copy(update={"endpoint_xy": (0.0, 100.0)}),
+        _approach("return", "w_return", 0).model_copy(update={"endpoint_xy": (0.0, 120.0)}),
+        _approach("south", "w_south", 180).model_copy(update={"endpoint_xy": (0.0, -100.0)}),
+        _approach("exit", "w_exit", 180).model_copy(update={"endpoint_xy": (0.0, -120.0)}),
+    ]
+    uturn = Movement(
+        movement_id="north_to_return",
+        from_approach_id="north",
+        to_approach_id="return",
+        road_pair_relation_id="north_return",
+        turn="uturn",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"passenger"},
+        evidence=["fixture:uturn"],
+        confidence=1.0,
+    )
+    opposite = Movement(
+        movement_id="south_to_exit",
+        from_approach_id="south",
+        to_approach_id="exit",
+        road_pair_relation_id="south_exit",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"passenger"},
+        evidence=["fixture:opposite_vehicle"],
+        confidence=1.0,
+    )
+    matrix = MovementMatrix(
+        movements=[uturn, opposite],
+        legal_movement_count=2,
+        forbidden_movement_count=0,
+        inferred_movement_count=2,
+        restriction_blocked_count=0,
+    )
+
+    control = infer_control_model(patch, core, approaches, matrix)
+
+    uturn_index = control.link_index_map[uturn.movement_id]
+    assert "synthetic:conflict_grouped" in control.source
+    for phase in control.phases:
+        if phase.state[uturn_index] == "G":
+            assert phase.state.count("G") == 1
+
+
+def test_compatible_opposite_straights_share_green_phase() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph, patch)
+    control = infer_control_model(patch, core, approaches, matrix)
+
+    straight_ids = {
+        movement.movement_id
+        for movement in matrix.movements
+        if movement.allowed and movement.turn == "straight"
+    }
+
+    assert any(
+        len(
+            {
+                movement_id
+                for movement_id, index in control.link_index_map.items()
+                if phase.state[index] == "G"
+            }
+            & straight_ids
+        )
+        >= 2
+        for phase in control.phases
+    )
+
+
+def test_support_movement_not_grouped_with_conflicting_vehicle_movement() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph, patch)
+    support_a = approaches[0].model_copy(update={"approach_id": "support_a", "allowed_modes": {"bicycle"}})
+    support_b = approaches[1].model_copy(update={"approach_id": "support_b", "allowed_modes": {"bicycle"}})
+    support = Movement(
+        movement_id="support_a_to_support_b",
+        from_approach_id="support_a",
+        to_approach_id="support_b",
+        road_pair_relation_id="support_pair",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:conflicting_support"],
+        confidence=1.0,
+    )
+    matrix = matrix.model_copy(
+        update={
+            "movements": [*matrix.movements, support],
+            "legal_movement_count": matrix.legal_movement_count + 1,
+            "inferred_movement_count": matrix.inferred_movement_count + 1,
+        }
+    )
+
+    control = infer_control_model(patch, core, [*approaches, support_a, support_b], matrix)
+
+    support_index = control.link_index_map[support.movement_id]
+    for phase in control.phases:
+        if phase.state[support_index] == "G":
+            vehicle_green = [
+                movement_id
+                for movement_id, index in control.link_index_map.items()
+                if phase.state[index] == "G" and movement_id != support.movement_id
+            ]
+            assert not vehicle_green
+
+
+def test_tls_grouping_falls_back_when_geometry_is_insufficient() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = [
+        approach.model_copy(update={"endpoint_xy": None, "source_shape_xy": []})
+        for approach in infer_approaches(patch, core)
+    ]
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph, patch)
+
+    control = infer_control_model(patch, core, approaches, matrix)
+
+    assert "synthetic:alternating_placeholder" in control.source
 
 
 def test_infer_control_model_uses_nearby_osm_traffic_signal_node() -> None:
