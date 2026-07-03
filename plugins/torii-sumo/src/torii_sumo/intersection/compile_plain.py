@@ -72,7 +72,7 @@ def _write_nodes(path: Path, ir: IntersectionIR) -> None:
             root,
             "node",
             id=support_core_id,
-            type="priority",
+            type=_support_core_type(ir),
             x=f"{center_x:.2f}",
             y=f"{center_y:.2f}",
         )
@@ -128,6 +128,27 @@ def _support_core_id(ir: IntersectionIR) -> str | None:
     return f"support_{ir.core.core_id}"
 
 
+def _support_core_type(ir: IntersectionIR) -> str:
+    return "traffic_light" if _has_controlled_support_movement(ir) else "priority"
+
+
+def _has_controlled_support_movement(ir: IntersectionIR) -> bool:
+    approaches = {approach.approach_id: approach for approach in ir.approaches}
+    for movement in ir.movement_matrix.movements:
+        source = approaches.get(movement.from_approach_id)
+        target = approaches.get(movement.to_approach_id)
+        if (
+            movement.allowed
+            and movement.movement_id in ir.control.link_index_map
+            and source is not None
+            and target is not None
+            and _is_support_only_approach(source)
+            and _is_support_only_approach(target)
+        ):
+            return True
+    return False
+
+
 def _is_support_only_approach(approach) -> bool:
     return "passenger" not in approach.allowed_modes
 
@@ -157,8 +178,23 @@ def _write_connections(path: Path, ir: IntersectionIR, connection_rows) -> None:
 
 def _connection_rows(ir: IntersectionIR):
     approaches = {approach.approach_id: approach for approach in ir.approaches}
+    controlled_ids = set(ir.control.link_index_map)
+    movements = core_connection_movements(ir.movement_matrix.movements)
+    seen = {movement.movement_id for movement in movements}
+    movements = [
+        *movements,
+        *[
+            movement
+            for movement in ir.movement_matrix.movements
+            if movement.allowed
+            and movement.movement_id in controlled_ids
+            and movement.movement_id not in seen
+            and movement.from_approach_id in approaches
+            and movement.to_approach_id in approaches
+        ],
+    ]
     rows = []
-    for movement in core_connection_movements(ir.movement_matrix.movements):
+    for movement in movements:
         source = approaches[movement.from_approach_id]
         target = approaches[movement.to_approach_id]
         for from_lane, to_lane in _lane_pairs(movement.from_lane_indices, movement.to_lane_indices):

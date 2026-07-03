@@ -7,7 +7,6 @@ from collections import Counter
 from pathlib import Path
 
 from .compile_plain import needs_sumo_crossing
-from .infer_movements import core_connection_movements
 from .schema import CompiledSUMOArtifacts, IntersectionIR, IntersectionValidation, Movement
 
 
@@ -49,11 +48,7 @@ def validate_intersection(
     else:
         warnings.append("compiled net file not available")
 
-    tls_status = (
-        "skipped"
-        if ir.control.control_type != "traffic_light"
-        else ("pass" if len(ir.control.link_index_map) == len(core_connection_movements(ir.movement_matrix.movements)) else "fail")
-    )
+    tls_status = _tls_linkindex_status(ir)
     vehicle_approach_count = sum(1 for approach in ir.approaches if "passenger" in approach.allowed_modes)
     vehicle_topology_type = _topology_type(vehicle_approach_count)
     topology_supported = (
@@ -96,6 +91,13 @@ def validate_intersection(
 
 def _approach_mode_counts(ir: IntersectionIR) -> dict[str, int]:
     return dict(Counter(_mode_key(approach.allowed_modes) for approach in ir.approaches))
+
+
+def _tls_linkindex_status(ir: IntersectionIR) -> str:
+    if ir.control.control_type != "traffic_light":
+        return "skipped"
+    allowed_movement_ids = {movement.movement_id for movement in ir.movement_matrix.movements if movement.allowed}
+    return "pass" if set(ir.control.link_index_map).issubset(allowed_movement_ids) else "fail"
 
 
 def _legal_movement_mode_counts(movements: list[Movement]) -> dict[str, int]:

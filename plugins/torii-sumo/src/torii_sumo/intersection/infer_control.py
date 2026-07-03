@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from .schema import Approach, ControlModel, IntersectionCore, MovementMatrix, OSMPatch, TLSPhase
+from .schema import Approach, ControlModel, IntersectionCore, Movement, MovementMatrix, OSMPatch, TLSPhase
 from .infer_movements import core_connection_movements
 
 
@@ -25,7 +25,7 @@ def infer_control_model(
             confidence=0.6,
         )
 
-    allowed_movements = core_connection_movements(movements.movements)
+    allowed_movements = _controlled_movements(movements.movements, approaches)
     link_index_map = {
         movement.movement_id: index for index, movement in enumerate(allowed_movements)
     }
@@ -43,6 +43,27 @@ def infer_control_model(
         link_index_map=link_index_map,
         confidence=0.9,
     )
+
+
+def _controlled_movements(movements: list[Movement], approaches: list[Approach]) -> list[Movement]:
+    vehicle_movements = core_connection_movements(movements)
+    vehicle_ids = {movement.movement_id for movement in vehicle_movements}
+    approaches_by_id = {approach.approach_id: approach for approach in approaches}
+    support_movements = [
+        movement
+        for movement in movements
+        if movement.allowed
+        and movement.movement_id not in vehicle_ids
+        and "bicycle" in movement.allowed_modes
+        and "passenger" not in movement.allowed_modes
+        and _is_support_only(approaches_by_id.get(movement.from_approach_id))
+        and _is_support_only(approaches_by_id.get(movement.to_approach_id))
+    ]
+    return [*vehicle_movements, *support_movements]
+
+
+def _is_support_only(approach: Approach | None) -> bool:
+    return approach is not None and "passenger" not in approach.allowed_modes
 
 
 def _traffic_signal_source(patch: OSMPatch, core: IntersectionCore) -> str:

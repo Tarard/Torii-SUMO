@@ -359,6 +359,74 @@ def test_compile_intersection_to_plain_drops_outgoing_support_lanes_when_support
     assert outgoing.attrib["numLanes"] == str(vehicle.outgoing_lane_count)
 
 
+def test_compile_intersection_to_plain_preserves_controlled_support_movements(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    support_a = ir.approaches[0].model_copy(
+        update={
+            "approach_id": "support_a",
+            "incoming_edge_ids": ["support_a_in"],
+            "outgoing_edge_ids": ["support_a_out"],
+            "allowed_modes": {"bicycle"},
+        }
+    )
+    support_b = ir.approaches[0].model_copy(
+        update={
+            "approach_id": "support_b",
+            "incoming_edge_ids": ["support_b_in"],
+            "outgoing_edge_ids": ["support_b_out"],
+            "allowed_modes": {"bicycle"},
+        }
+    )
+    support_movement = Movement(
+        movement_id="support_a_to_support_b",
+        from_approach_id="support_a",
+        to_approach_id="support_b",
+        road_pair_relation_id="support_pair",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:signalized_support_path"],
+        confidence=1.0,
+    )
+    first_phase, second_phase = ir.control.phases
+    ir = ir.model_copy(
+        update={
+            "approaches": [*ir.approaches, support_a, support_b],
+            "movement_matrix": ir.movement_matrix.model_copy(
+                update={
+                    "movements": [*ir.movement_matrix.movements, support_movement],
+                    "legal_movement_count": ir.movement_matrix.legal_movement_count + 1,
+                    "inferred_movement_count": ir.movement_matrix.inferred_movement_count + 1,
+                }
+            ),
+            "control": ir.control.model_copy(
+                update={
+                    "link_index_map": {**ir.control.link_index_map, support_movement.movement_id: len(ir.control.link_index_map)},
+                    "phases": [
+                        first_phase.model_copy(update={"state": f"{first_phase.state}G"}),
+                        second_phase.model_copy(update={"state": f"{second_phase.state}r"}),
+                    ],
+                }
+            ),
+        }
+    )
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=False)
+
+    support_core = f"support_{ir.core.core_id}"
+    node_root = ET.parse(artifacts.plain_node_file).getroot()
+    assert node_root.find(f"node[@id='{support_core}'][@type='traffic_light']") is not None
+
+    connection_root = ET.parse(artifacts.plain_connection_file).getroot()
+    controlled_support = connection_root.find(
+        f"connection[@from='support_a_in'][@to='support_b_out'][@tl='{ir.control.tls_id}']"
+    )
+    assert controlled_support is not None
+    assert controlled_support.attrib["linkIndex"]
+
+
 def _build_ir(osm_file: Path) -> IntersectionIR:
     patch = parse_osm_xml(osm_file)
     core = infer_intersection_core(patch)

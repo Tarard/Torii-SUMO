@@ -144,6 +144,40 @@ def test_infer_control_model_excludes_support_path_movements_from_tls() -> None:
     assert all("passenger" in movement.allowed_modes for movement in indexed.values())
 
 
+def test_infer_control_model_includes_known_bicycle_support_movements() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    matrix = infer_movement_matrix(core, approaches, graph)
+    support_a = approaches[0].model_copy(update={"approach_id": "support_a", "allowed_modes": {"bicycle"}})
+    support_b = approaches[1].model_copy(update={"approach_id": "support_b", "allowed_modes": {"bicycle"}})
+    support = Movement(
+        movement_id="support_a_to_support_b",
+        from_approach_id="support_a",
+        to_approach_id="support_b",
+        road_pair_relation_id="support_pair",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:signalized_support_path"],
+        confidence=1.0,
+    )
+    matrix = matrix.model_copy(
+        update={
+            "movements": [*matrix.movements, support],
+            "legal_movement_count": matrix.legal_movement_count + 1,
+            "inferred_movement_count": matrix.inferred_movement_count + 1,
+        }
+    )
+
+    control = infer_control_model(patch, core, [*approaches, support_a, support_b], matrix)
+
+    assert support.movement_id in control.link_index_map
+
+
 def test_infer_movement_matrix_does_not_allow_cross_mode_movements() -> None:
     patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
     patch.nodes["bike"] = OSMNode(id="bike", lat=48.00075, lon=11.00035, x=100.0, y=100.0)
