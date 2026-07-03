@@ -2,26 +2,17 @@ from __future__ import annotations
 
 import csv
 import json
-import math
 from pathlib import Path
 from typing import Any, Iterable
 import xml.etree.ElementTree as ET
+
+from torii_sumo.road_semantics import classify_turn_direction as _shared_classify_turn_direction
 
 from .modal_aggregation_policy import classify_edge_modal_role
 
 
 def classify_turn_direction(in_axis: tuple[float, float], out_axis: tuple[float, float]) -> str:
-    incoming = _unit(in_axis)
-    outgoing = _unit(out_axis)
-    if incoming == (0.0, 0.0) or outgoing == (0.0, 0.0):
-        return "unknown"
-    angle = math.degrees(math.acos(_clamp(incoming[0] * outgoing[0] + incoming[1] * outgoing[1])))
-    if angle <= 45:
-        return "straight"
-    if angle >= 135:
-        return "u_turn"
-    cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
-    return "left" if cross > 0 else "right"
+    return _shared_classify_turn_direction(in_axis, out_axis)
 
 
 def build_approach_model(net_file: Path, junction_id: str) -> dict[str, Any]:
@@ -248,17 +239,6 @@ def _axis(shape: list[tuple[float, float]], direction: str) -> tuple[float, floa
     if direction == "incoming":
         return (end[0] - start[0], end[1] - start[1])
     return (end[0] - start[0], end[1] - start[1])
-
-
-def _unit(axis: tuple[float, float]) -> tuple[float, float]:
-    length = math.hypot(axis[0], axis[1])
-    if length == 0:
-        return (0.0, 0.0)
-    return (axis[0] / length, axis[1] / length)
-
-
-def _clamp(value: float) -> float:
-    return max(-1.0, min(1.0, value))
 
 
 def _tokens(values: Iterable[str]) -> list[str]:

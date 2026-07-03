@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from torii_sumo.road_semantics import classify_approach_mode_layer
 
 
 class BBox(BaseModel):
@@ -93,6 +95,19 @@ class Approach(BaseModel):
     fused_support_modes: list[set[str]] = Field(default_factory=list)
     turn_lanes_raw: str | None = None
     access_tags: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def normalize_mode_layer_fields(self) -> Approach:
+        classification = classify_approach_mode_layer(
+            self.allowed_modes,
+            self.incoming_extra_lane_modes,
+            self.outgoing_extra_lane_modes,
+        )
+        self.mode_layer = classification.mode_layer
+        self.is_vehicle_approach = classification.is_vehicle_approach
+        self.is_support_only = classification.is_support_only
+        self.fused_support_modes = [set(modes) for modes in classification.fused_support_modes]
+        return self
 
 
 class RoadPairAngle(BaseModel):

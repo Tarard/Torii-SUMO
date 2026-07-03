@@ -19,6 +19,32 @@ from torii_sumo.intersection.schema import (
     RoadPairRelationGraph,
     TLSPhase,
 )
+from torii_sumo.road_semantics import classify_approach_mode_layer
+
+
+def test_classify_approach_mode_layer_marks_bicycle_as_support_only() -> None:
+    classification = classify_approach_mode_layer({"bicycle"}, [], [])
+
+    assert classification.mode_layer == "support"
+    assert classification.is_support_only is True
+    assert classification.is_vehicle_approach is False
+    assert [set(modes) for modes in classification.fused_support_modes] == []
+
+
+def test_classify_approach_mode_layer_marks_passenger_with_support_lanes_as_fused() -> None:
+    classification = classify_approach_mode_layer(
+        {"passenger"},
+        [{"bicycle", "pedestrian"}],
+        [{"bicycle"}],
+    )
+
+    assert classification.mode_layer == "fused_support_lane"
+    assert classification.is_vehicle_approach is True
+    assert classification.is_support_only is False
+    assert [set(modes) for modes in classification.fused_support_modes] == [
+        {"bicycle", "pedestrian"},
+        {"bicycle"},
+    ]
 
 
 def test_intersection_ir_models_dump_json_ready_schema() -> None:

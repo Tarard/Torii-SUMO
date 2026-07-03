@@ -6,7 +6,20 @@ from torii_sumo.intersection.infer_core import infer_intersection_core
 from torii_sumo.intersection.infer_movements import infer_movement_matrix
 from torii_sumo.intersection.infer_road_relations import build_road_pair_relation_graph
 from torii_sumo.intersection.osm_patch import parse_osm_xml
-from torii_sumo.intersection.schema import Approach, BBox, IntersectionCore, Movement, OSMNode, OSMPatch, OSMWay, PatchSeed
+from torii_sumo.intersection.schema import (
+    Approach,
+    BBox,
+    IntersectionCore,
+    Movement,
+    OSMNode,
+    OSMPatch,
+    OSMWay,
+    PatchSeed,
+    RoadPairAngle,
+    RoadPairDistance,
+    RoadPairRelation,
+    RoadPairRelationGraph,
+)
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -153,6 +166,8 @@ def test_infer_control_model_includes_known_bicycle_support_movements() -> None:
     matrix = infer_movement_matrix(core, approaches, graph)
     support_a = approaches[0].model_copy(update={"approach_id": "support_a", "allowed_modes": {"bicycle"}})
     support_b = approaches[1].model_copy(update={"approach_id": "support_b", "allowed_modes": {"bicycle"}})
+    assert support_a.is_support_only is False
+    assert support_b.is_support_only is False
     support = Movement(
         movement_id="support_a_to_support_b",
         from_approach_id="support_a",
@@ -332,6 +347,32 @@ def test_infer_movement_matrix_blocks_disjoint_same_mode_movements() -> None:
     assert [movement.allowed for movement in matrix.movements] == [False, False]
 
 
+def test_infer_movement_matrix_derives_support_only_from_allowed_modes_after_model_copy() -> None:
+    core = IntersectionCore(
+        core_id="core",
+        center_xy=(0, 0),
+        core_osm_node_ids=[],
+        core_way_ids=["wa", "wb"],
+        core_radius_m=20,
+        topology_type="unknown",
+        internal_fragment_count=0,
+        short_internal_edge_count=0,
+        confidence=0.5,
+    )
+    source = _approach("a", "wa", 0).model_copy(update={"allowed_modes": {"bicycle"}})
+    target = _approach("b", "wb", 180).model_copy(update={"allowed_modes": {"bicycle"}})
+    graph = _connected_pair_graph("a", "b")
+
+    assert source.is_support_only is False
+    assert target.is_support_only is False
+
+    matrix = infer_movement_matrix(core, [source, target], graph)
+
+    assert matrix.legal_movement_count == 2
+    assert [movement.allowed_modes for movement in matrix.movements] == [{"bicycle"}, {"bicycle"}]
+    assert all(movement.allowed for movement in matrix.movements)
+
+
 def _approach(approach_id: str, way_id: str, bearing: float) -> Approach:
     return Approach(
         approach_id=approach_id,
@@ -348,4 +389,50 @@ def _approach(approach_id: str, way_id: str, bearing: float) -> Approach:
         oneway=False,
         allowed_modes={"passenger"},
         access_tags={},
+    )
+
+
+def _connected_pair_graph(first_id: str, second_id: str) -> RoadPairRelationGraph:
+    relation = RoadPairRelation(
+        relation_id=f"{first_id}_{second_id}",
+        road_a_id=first_id,
+        road_b_id=second_id,
+        road_a_source_way_ids=[first_id],
+        road_b_source_way_ids=[second_id],
+        geometry_relation="shared_node",
+        topology_relation="connected",
+        expected_relation="should_connect",
+        angle=RoadPairAngle(
+            road_a_bearing_deg=0.0,
+            road_b_bearing_deg=180.0,
+            signed_delta_deg=180.0,
+            abs_delta_deg=180.0,
+            relation_class="opposite_direction",
+            turn_angle_from_a_to_b_deg=180.0,
+        ),
+        distance=RoadPairDistance(
+            endpoint_gap_m=0.0,
+            min_geometry_distance_m=0.0,
+            projected_intersection_xy=(0.0, 0.0),
+            overlap_length_m=0.0,
+            overlap_ratio_a=0.0,
+            overlap_ratio_b=0.0,
+            crossing_point_inside_segments=True,
+            nearest_point_a_xy=(0.0, 0.0),
+            nearest_point_b_xy=(0.0, 0.0),
+        ),
+        inferred_turn="straight",
+        error_type="none",
+        suggested_fix="none",
+        confidence=1.0,
+        evidence=["fixture:connected_support_pair"],
+    )
+    return RoadPairRelationGraph(
+        relations=[relation],
+        missing_connection_count=0,
+        wrong_connection_count=0,
+        overlap_conflict_count=0,
+        near_miss_count=0,
+        duplicate_parallel_count=0,
+        blocking_error_count=0,
     )

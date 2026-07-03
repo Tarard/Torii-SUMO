@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 
+from torii_sumo.road_semantics import classify_approach_mode_layer
+
 from .schema import Approach, ControlModel, IntersectionCore, Movement, MovementMatrix, OSMPatch, TLSPhase
 from .infer_movements import core_connection_movements
 
@@ -67,7 +69,15 @@ def _controlled_movements(movements: list[Movement], approaches: list[Approach])
 
 
 def _is_support_only(approach: Approach | None) -> bool:
-    return approach is not None and (approach.is_support_only or "passenger" not in approach.allowed_modes)
+    return approach is not None and _mode_layer_for(approach).is_support_only
+
+
+def _mode_layer_for(approach: Approach):
+    return classify_approach_mode_layer(
+        approach.allowed_modes,
+        approach.incoming_extra_lane_modes,
+        approach.outgoing_extra_lane_modes,
+    )
 
 
 def _keep_support_direction_once(

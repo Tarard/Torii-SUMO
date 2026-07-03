@@ -6,6 +6,8 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from torii_sumo.road_semantics import classify_approach_mode_layer
+
 from .infer_movements import core_connection_movements
 from .schema import CompiledSUMOArtifacts, IntersectionIR
 
@@ -150,7 +152,11 @@ def _has_controlled_support_movement(ir: IntersectionIR) -> bool:
 
 
 def _is_support_only_approach(approach) -> bool:
-    return approach.is_support_only or "passenger" not in approach.allowed_modes
+    return classify_approach_mode_layer(
+        approach.allowed_modes,
+        approach.incoming_extra_lane_modes,
+        approach.outgoing_extra_lane_modes,
+    ).is_support_only
 
 
 def _write_edge(root: ET.Element, edge_id: str, attrs: dict[str, str], lane_modes: list[set[str]]) -> None:

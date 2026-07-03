@@ -3,66 +3,13 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-VEHICLE_CORE_TYPES = {
-    "highway.primary",
-    "highway.secondary",
-    "highway.tertiary",
-    "highway.unclassified",
-    "highway.residential",
-    "highway.living_street",
-}
+from torii_sumo.road_semantics import classify_modal_role_from_edge
+
 HARD_BLOCKER_ROLE_PRIORITY = ("rail", "ramp", "grade_separated", "roundabout")
 
 
 def classify_edge_modal_role(edge: dict[str, Any]) -> dict[str, Any]:
-    type_id = str(edge.get("type", "") or "")
-    function = str(edge.get("function", "") or "")
-    text = " ".join(
-        str(edge.get(key, "") or "").lower()
-        for key in ("id", "type", "function", "allow", "disallow", "name")
-    )
-    if type_id.startswith("railway."):
-        return _role("rail", "never_join", "railway edge must not be joined into vehicle core", ["railway_present"])
-    if type_id in {"highway.motorway", "highway.trunk"} or type_id.endswith("_link"):
-        return _role(
-            "ramp",
-            "never_join",
-            "motorway/trunk/link geometry uses ramp or interchange semantics",
-            ["ramp_or_interchange"],
-        )
-    if any(token in text for token in ("bridge", "tunnel", "layer=")):
-        return _role(
-            "grade_separated",
-            "never_join",
-            "bridge/tunnel/layer evidence blocks same-level joining",
-            ["grade_separation"],
-        )
-    if "roundabout" in text:
-        return _role("roundabout", "never_join", "roundabout topology should be preserved", ["roundabout"])
-    if function in {"crossing", "walkingarea"} or "footway" in type_id or "crossing" in type_id:
-        return _role(
-            "pedestrian",
-            "shape_support",
-            "pedestrian crossing/walkingarea supports review but not vehicle-core joining",
-            ["pedestrian_support"],
-        )
-    if "cycleway" in type_id or "bicycle" in text:
-        return _role(
-            "bicycle",
-            "shape_support",
-            "bicycle infrastructure is support evidence unless map/reference includes it in the core",
-            ["bicycle_support"],
-        )
-    if "service" in type_id or any(token in text for token in ("driveway", "parking_aisle", "parking", "private", "alley")):
-        return _role(
-            "service",
-            "protected_terminal",
-            "service or parking access is a protected terminal by default",
-            ["service_terminal_present"],
-        )
-    if type_id in VEHICLE_CORE_TYPES or "passenger" in text:
-        return _role("vehicle_core", "join_core", "ordinary passenger-drivable urban road", [])
-    return _role("unknown", "review_required", "modal role is unknown from SUMO edge attributes", ["unknown_modal_role"])
+    return classify_modal_role_from_edge(edge).as_dict()
 
 
 def classify_cluster_modal_policy(
@@ -102,16 +49,6 @@ def classify_cluster_modal_policy(
         "modal_risk_flags": risk_flags,
         "modal_decision_counts": dict(decisions),
         "modal_role_counts": dict(primary_roles),
-    }
-
-
-def _role(primary: str, decision: str, reason: str, flags: list[str]) -> dict[str, Any]:
-    return {
-        "modal_primary_role": primary,
-        "modal_aggregation_decision": decision,
-        "modal_review_action": _review_action(decision, Counter({decision: 1})),
-        "modal_reason": reason,
-        "modal_risk_flags": flags,
     }
 
 
