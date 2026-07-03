@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from torii_sumo.intersection.clean import build_intersection_ir
-from torii_sumo.intersection.schema import CompiledSUMOArtifacts, PatchSeed
+from torii_sumo.intersection.schema import CompiledSUMOArtifacts, OSMNode, OSMWay, PatchSeed
 from torii_sumo.intersection.validate import validate_intersection
 
 
@@ -127,6 +127,48 @@ def test_validate_intersection_reports_netconvert_warnings(monkeypatch, tmp_path
     )
 
     assert "netconvert: Warning: lane is not connected." in result.warnings
+    assert result.status == "blocked"
+
+
+def test_validate_intersection_blocks_missing_sumo_crossing_for_osm_support_path(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "clustered_signalized_crossing.osm.xml", tmp_path, PatchSeed(osm_node_id="seed"))
+    ir.osm_patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
+    ir.osm_patch.nodes["side_a"] = OSMNode(id="side_a", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    ir.osm_patch.nodes["side_b"] = OSMNode(id="side_b", lat=48.00055, lon=10.99980, x=-40.0, y=0.0)
+    ir.osm_patch.ways["path_crossing"] = OSMWay(
+        id="path_crossing",
+        node_refs=["side_a", "west", "side_b"],
+        tags={"highway": "path", "foot": "designated", "bicycle": "designated"},
+    )
+    support = ir.approaches[0].model_copy(
+        update={
+            "source_way_ids": ["path_crossing"],
+            "allowed_modes": {"pedestrian", "bicycle"},
+            "source_shape_xy": [(-90.0, 0.0), (ir.osm_patch.nodes["west"].x, ir.osm_patch.nodes["west"].y), (-40.0, 0.0)],
+        }
+    )
+    ir = ir.model_copy(update={"approaches": [support, *ir.approaches[1:]]})
+    net_file = tmp_path / "missing_crossing.net.xml"
+    net_file.write_text("<net><edge id='vehicle'/></net>", encoding="utf-8")
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 0
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.subprocess.run", fake_run)
+
+    result = validate_intersection(
+        ir,
+        CompiledSUMOArtifacts(plain_node_file="", plain_edge_file="", plain_connection_file="", net_file=str(net_file)),
+        tmp_path,
+    )
+
+    assert "missing SUMO crossing edge for OSM pedestrian crossing support" in result.warnings
     assert result.status == "blocked"
 
 

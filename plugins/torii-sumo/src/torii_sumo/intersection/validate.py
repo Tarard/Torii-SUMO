@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
@@ -58,12 +59,14 @@ def validate_intersection(
     ) or vehicle_topology_type in {"T3", "X4"}
     if not topology_supported:
         warnings.append(f"unsupported intersection topology: {ir.core.topology_type} with {len(ir.approaches)} approaches")
+    if _needs_sumo_crossing(ir) and not _net_has_crossing(net_path):
+        warnings.append("missing SUMO crossing edge for OSM pedestrian crossing support")
     status = (
         "pass"
         if sumo_load_status == "pass"
         and tls_status != "fail"
         and topology_supported
-        and not _has_blocking_netconvert_warning(warnings)
+        and not _has_blocking_validation_warning(warnings)
         else "blocked"
     )
     return IntersectionValidation(
@@ -111,5 +114,31 @@ def _topology_type(approach_count: int) -> str:
     return "unknown"
 
 
-def _has_blocking_netconvert_warning(warnings: list[str]) -> bool:
-    return any("not connected" in warning.lower() or "invalid pedestrian topology" in warning.lower() for warning in warnings)
+def _has_blocking_validation_warning(warnings: list[str]) -> bool:
+    return any(
+        "not connected" in warning.lower()
+        or "invalid pedestrian topology" in warning.lower()
+        or "missing sumo crossing edge" in warning.lower()
+        for warning in warnings
+    )
+
+
+def _needs_sumo_crossing(ir: IntersectionIR) -> bool:
+    crossing_points = {
+        (node.x or 0.0, node.y or 0.0)
+        for node in ir.osm_patch.nodes.values()
+        if node.tags.get("highway") == "crossing" or "crossing" in node.tags
+    }
+    return any(
+        "pedestrian" in approach.allowed_modes
+        and "passenger" not in approach.allowed_modes
+        and any(point in crossing_points for point in approach.source_shape_xy)
+        for approach in ir.approaches
+    )
+
+
+def _net_has_crossing(net_path: Path) -> bool:
+    if not net_path.exists():
+        return False
+    root = ET.parse(net_path).getroot()
+    return any(edge.attrib.get("function") == "crossing" for edge in root.findall("edge"))
