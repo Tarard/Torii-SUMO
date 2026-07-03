@@ -27,6 +27,48 @@ def test_infer_movement_matrix_references_road_pair_relations() -> None:
     assert all(movement.confidence > 0 for movement in matrix.movements)
 
 
+def test_infer_movement_matrix_labels_turns_from_incoming_heading() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    source = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+    south = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] < 0)
+    east = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[0] > 1)
+    west = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[0] < -1)
+
+    matrix = infer_movement_matrix(core, approaches, graph)
+    by_target = {
+        movement.to_approach_id: movement
+        for movement in matrix.movements
+        if movement.from_approach_id == source.approach_id and movement.allowed
+    }
+
+    assert by_target[south.approach_id].turn == "straight"
+    assert by_target[east.approach_id].turn == "left"
+    assert by_target[west.approach_id].turn == "right"
+
+
+def test_infer_movement_matrix_uses_turn_lanes_for_source_lane_indices() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags.update({"lanes": "3", "turn:lanes": "left|through|right"})
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    source = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+
+    matrix = infer_movement_matrix(core, approaches, graph)
+    by_turn = {
+        movement.turn: movement
+        for movement in matrix.movements
+        if movement.from_approach_id == source.approach_id and movement.allowed
+    }
+
+    assert by_turn["left"].from_lane_indices == [0]
+    assert by_turn["straight"].from_lane_indices == [1]
+    assert by_turn["right"].from_lane_indices == [2]
+
+
 def test_infer_control_model_uses_osm_traffic_signal_tag() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)

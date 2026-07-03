@@ -27,17 +27,20 @@ def infer_movement_matrix(
             relation = by_pair[frozenset((source.approach_id, target.approach_id))]
             allowed_modes = source.allowed_modes & target.allowed_modes
             allowed = relation.expected_relation != "should_not_connect" and bool(allowed_modes)
-            signed_delta = normalize_signed_angle(target.bearing_from_core - source.bearing_from_core)
+            signed_delta = normalize_signed_angle(target.bearing_from_core - ((source.bearing_from_core + 180) % 360))
+            turn = _turn_from_signed_delta(signed_delta)
+            from_lane_indices = _source_lane_indices(source, turn)
+            to_lane_indices = _target_lane_indices(target, len(from_lane_indices))
             movements.append(
                 Movement(
                     movement_id=f"{source.approach_id}_to_{target.approach_id}",
                     from_approach_id=source.approach_id,
                     to_approach_id=target.approach_id,
                     road_pair_relation_id=relation.relation_id,
-                    turn=_turn_from_signed_delta(signed_delta),
+                    turn=turn,
                     allowed=allowed,
-                    from_lane_indices=list(range(source.incoming_lane_count)),
-                    to_lane_indices=list(range(target.outgoing_lane_count)),
+                    from_lane_indices=from_lane_indices,
+                    to_lane_indices=to_lane_indices,
                     allowed_modes=allowed_modes,
                     evidence=[f"road_pair_relation:{relation.relation_id}", "inferred_default"],
                     confidence=min(source.incoming_lane_count, target.outgoing_lane_count, 1) * relation.confidence,
@@ -60,3 +63,27 @@ def _turn_from_signed_delta(delta: float) -> str:
     if abs(delta) < 25:
         return "straight"
     return "right" if delta > 0 else "left"
+
+
+def _source_lane_indices(source: Approach, turn: str) -> list[int]:
+    if not source.turn_lanes_raw:
+        return list(range(source.incoming_lane_count))
+    matching = [
+        index
+        for index, raw_lane in enumerate(source.turn_lanes_raw.split("|"))
+        if _lane_allows_turn(raw_lane, turn)
+    ]
+    return matching or list(range(source.incoming_lane_count))
+
+
+def _target_lane_indices(target: Approach, source_lane_count: int) -> list[int]:
+    return list(range(min(target.outgoing_lane_count, max(1, source_lane_count))))
+
+
+def _lane_allows_turn(raw_lane: str, turn: str) -> bool:
+    tokens = {token.strip() for token in raw_lane.split(";") if token.strip()}
+    if turn == "straight":
+        return bool(tokens & {"through", "straight"})
+    if turn == "uturn":
+        return bool(tokens & {"reverse", "uturn"})
+    return turn in tokens

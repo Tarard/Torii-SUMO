@@ -105,6 +105,30 @@ def test_infer_approaches_extends_vehicle_corridor_across_short_split_node() -> 
     assert west.source_shape_xy == [(-90.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy]
 
 
+def test_infer_approaches_uses_directional_lane_counts_and_turn_lanes() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags.update(
+        {
+            "lanes": "3",
+            "lanes:forward": "2",
+            "turn:lanes:forward": "left|through",
+            "turn:lanes:backward": "right",
+        }
+    )
+
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    north = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+    south = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] < 0)
+
+    assert north.incoming_lane_count == 2
+    assert north.outgoing_lane_count == 1
+    assert north.turn_lanes_raw == "left|through"
+    assert south.incoming_lane_count == 1
+    assert south.outgoing_lane_count == 2
+    assert south.turn_lanes_raw == "right"
+
+
 def test_infer_approaches_fuses_support_path_at_crossing_terminal() -> None:
     patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
     patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
