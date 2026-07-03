@@ -350,7 +350,7 @@ def test_infer_approaches_uses_reverse_core_adjacent_oneway_for_extended_corrido
     assert north.direction_evidence == ["oneway:forward_away_from_core"]
 
 
-def test_infer_approaches_ignores_outer_oneway_when_core_adjacent_extended_corridor_is_bidirectional() -> None:
+def test_infer_approaches_uses_outer_oneway_for_extended_corridor_flow() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)
     patch.nodes["99"] = OSMNode(id="99", lat=48.0015, lon=11.0005, x=0.0, y=110.0)
@@ -366,8 +366,8 @@ def test_infer_approaches_ignores_outer_oneway_when_core_adjacent_extended_corri
 
     assert north.source_way_ids == ["10", "99"]
     assert north.has_incoming_vehicle_flow is True
-    assert north.has_outgoing_vehicle_flow is True
-    assert north.direction_evidence == []
+    assert north.has_outgoing_vehicle_flow is False
+    assert north.direction_evidence == ["oneway:forward_toward_core"]
 
 
 def test_infer_approaches_filters_access_tags_through_road_semantics() -> None:
