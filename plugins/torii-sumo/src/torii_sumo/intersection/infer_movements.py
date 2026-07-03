@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from torii_sumo.road_semantics import classify_approach_mode_layer, classify_turn_from_signed_delta
+
 from .geometry import normalize_signed_angle
 from .schema import Approach, IntersectionCore, Movement, MovementMatrix, RoadPairRelationGraph
 
@@ -27,7 +29,7 @@ def infer_movement_matrix(
             relation = by_pair[frozenset((source.approach_id, target.approach_id))]
             allowed_modes = source.allowed_modes & target.allowed_modes
             signed_delta = normalize_signed_angle(target.bearing_from_core - ((source.bearing_from_core + 180) % 360))
-            turn = _turn_from_signed_delta(signed_delta)
+            turn = classify_turn_from_signed_delta(signed_delta)
             allowed = _movement_allowed(source, target, allowed_modes, relation.expected_relation, turn)
             from_lane_indices = _source_lane_indices(source, turn)
             to_lane_indices = _target_lane_indices(target, len(from_lane_indices))
@@ -57,22 +59,24 @@ def infer_movement_matrix(
     )
 
 
-def _turn_from_signed_delta(delta: float) -> str:
-    if abs(delta) > 155:
-        return "uturn"
-    if abs(delta) < 25:
-        return "straight"
-    return "right" if delta > 0 else "left"
-
-
 def _movement_allowed(source: Approach, target: Approach, modes: set[str], expected_relation: str, turn: str) -> bool:
     if not modes or expected_relation != "should_connect":
         return False
     if turn == "uturn" and not _turn_lanes_allow_uturn(source):
         return False
+    source_layer = _mode_layer_for(source)
+    target_layer = _mode_layer_for(target)
     if "passenger" in modes:
-        return source.is_vehicle_approach and target.is_vehicle_approach
-    return source.is_support_only and target.is_support_only
+        return source_layer.is_vehicle_approach and target_layer.is_vehicle_approach
+    return source_layer.is_support_only and target_layer.is_support_only
+
+
+def _mode_layer_for(approach: Approach):
+    return classify_approach_mode_layer(
+        approach.allowed_modes,
+        approach.incoming_extra_lane_modes,
+        approach.outgoing_extra_lane_modes,
+    )
 
 
 def _turn_lanes_allow_uturn(source: Approach) -> bool:

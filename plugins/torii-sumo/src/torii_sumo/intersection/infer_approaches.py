@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 
+from torii_sumo.road_semantics import classify_approach_mode_layer, filtered_osm_modes
+
 from .geometry import bearing_between_xy
 from .infer_core import _adjacent_highway_nodes
 from .schema import Approach, IntersectionCore, OSMWay, OSMPatch
@@ -53,7 +55,7 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
     ):
         incoming_lane_count, outgoing_lane_count = _directional_lane_counts(patch, core, terminal_id, source_way_ids)
         allowed_modes = _allowed_modes(way.tags)
-        mode_layer = _mode_layer(allowed_modes, extra_lane_modes)
+        mode_layer = classify_approach_mode_layer(allowed_modes, extra_lane_modes, extra_lane_modes)
         approaches.append(
             Approach(
                 approach_id=f"leg_{index}",
@@ -73,23 +75,19 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 outgoing_edge_ids=[f"{edge_way_id}_{core.core_id}_to_{terminal_id}"],
                 oneway=way.tags.get("oneway") in {"yes", "true", "1"},
                 allowed_modes=allowed_modes,
-                mode_layer=mode_layer,
-                is_vehicle_approach=mode_layer in {"vehicle", "fused_support_lane"},
-                is_support_only=mode_layer == "support",
-                fused_support_modes=extra_lane_modes,
+                mode_layer=mode_layer.mode_layer,
+                is_vehicle_approach=mode_layer.is_vehicle_approach,
+                is_support_only=mode_layer.is_support_only,
+                fused_support_modes=[set(modes) for modes in mode_layer.fused_support_modes],
                 turn_lanes_raw=_incoming_turn_lanes_raw(patch, core, terminal_id, source_way_ids),
-                access_tags={key: value for key, value in way.tags.items() if key in {"access", "vehicle", "bicycle", "foot"}},
+                access_tags={
+                    key: value
+                    for key, value in way.tags.items()
+                    if key in {"access", "vehicle", "motor_vehicle", "bicycle", "foot"}
+                },
             )
         )
     return approaches
-
-
-def _mode_layer(allowed_modes: set[str], extra_lane_modes: list[set[str]]) -> str:
-    if "passenger" not in allowed_modes:
-        return "support"
-    if extra_lane_modes:
-        return "fused_support_lane"
-    return "vehicle"
 
 
 def _approach_shape_xy(
@@ -429,17 +427,17 @@ def _allowed_modes(tags: dict[str, str]) -> set[str]:
         modes = {"bicycle"}
         if tags.get("foot") in {"yes", "designated", "permissive"}:
             modes.add("pedestrian")
-        return modes
+        return filtered_osm_modes(tags, modes)
     if highway in {"footway", "pedestrian", "steps", "crossing"}:
         modes = {"pedestrian"}
         if tags.get("bicycle") in {"yes", "designated", "permissive"}:
             modes.add("bicycle")
-        return modes
+        return filtered_osm_modes(tags, modes)
     if highway == "path":
         modes = set()
         if tags.get("foot") != "no":
             modes.add("pedestrian")
         if tags.get("bicycle") != "no":
             modes.add("bicycle")
-        return modes or {"pedestrian"}
-    return {"passenger"}
+        return filtered_osm_modes(tags, modes or {"pedestrian"})
+    return filtered_osm_modes(tags, {"passenger"})

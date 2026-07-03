@@ -7,6 +7,7 @@ from torii_sumo.core.junction_movement_model import (
     classify_turn_direction,
     write_movement_review,
 )
+from torii_sumo.road_semantics import classify_turn_direction as shared_classify_turn_direction
 
 
 def _write_fixture(path: Path) -> None:
@@ -53,6 +54,17 @@ def test_classify_turn_direction() -> None:
     assert classify_turn_direction((1, 0), (0, 1)) == "left"
     assert classify_turn_direction((1, 0), (-1, 0)) == "u_turn"
     assert classify_turn_direction((1, 0), (10, 2)) == "straight"
+
+
+def test_classify_turn_direction_agrees_with_shared_semantics_for_cardinal_turns() -> None:
+    cases = [
+        ((1, 0), (0, -1)),
+        ((1, 0), (0, 1)),
+        ((1, 0), (-1, 0)),
+    ]
+
+    for in_axis, out_axis in cases:
+        assert classify_turn_direction(in_axis, out_axis) == shared_classify_turn_direction(in_axis, out_axis)
 
 
 def test_build_approach_model_keeps_support_layers_separate(tmp_path: Path) -> None:

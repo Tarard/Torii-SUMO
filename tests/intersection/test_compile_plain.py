@@ -329,9 +329,10 @@ def test_compile_intersection_to_plain_routes_support_only_edges_to_priority_sup
             "approach_id": "support_a",
             "incoming_edge_ids": ["support_a_in"],
             "outgoing_edge_ids": ["support_a_out"],
-            "allowed_modes": {"bicycle", "pedestrian"},
+            "allowed_modes": {"bicycle"},
         }
     )
+    assert support.is_support_only is False
     ir = ir.model_copy(
         update={
             "approaches": [*ir.approaches, support],

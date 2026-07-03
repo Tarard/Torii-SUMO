@@ -2,6 +2,7 @@ from torii_sumo.core.modal_aggregation_policy import (
     classify_cluster_modal_policy,
     classify_edge_modal_role,
 )
+from torii_sumo.road_semantics import classify_modal_role_from_edge
 
 
 def test_ordinary_urban_vehicle_edges_are_join_core() -> None:
@@ -76,3 +77,23 @@ def test_shape_support_cluster_gets_modal_support_action() -> None:
     assert policy["modal_aggregation_decision"] == "shape_support"
     assert policy["modal_primary_role"] == "pedestrian"
     assert policy["modal_review_action"] == "review_modal_support"
+
+
+def test_classify_edge_modal_role_agrees_with_shared_semantics_for_common_edges() -> None:
+    edges = [
+        {"id": "main", "type": "highway.tertiary", "allow": "passenger"},
+        {"id": "bike", "type": "highway.cycleway", "allow": "bicycle"},
+        {"id": "walk", "type": "highway.footway", "allow": "pedestrian"},
+        {"id": "svc", "type": "highway.service", "name": "service=driveway"},
+        {"id": "bridge", "type": "highway.primary", "name": "bridge layer=1"},
+    ]
+
+    for edge in edges:
+        policy_role = classify_edge_modal_role(edge)
+        shared_role = classify_modal_role_from_edge(edge)
+
+        assert policy_role["modal_primary_role"] == shared_role.modal_primary_role
+        assert policy_role["modal_aggregation_decision"] == shared_role.modal_aggregation_decision
+        assert policy_role["modal_review_action"] == shared_role.modal_review_action
+        assert policy_role["modal_reason"] == shared_role.modal_reason
+        assert tuple(policy_role["modal_risk_flags"]) == shared_role.modal_risk_flags
