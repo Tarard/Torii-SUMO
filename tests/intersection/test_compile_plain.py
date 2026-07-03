@@ -8,7 +8,7 @@ from torii_sumo.intersection.infer_core import infer_intersection_core
 from torii_sumo.intersection.infer_movements import infer_movement_matrix
 from torii_sumo.intersection.infer_road_relations import build_road_pair_relation_graph
 from torii_sumo.intersection.osm_patch import parse_osm_xml
-from torii_sumo.intersection.schema import IntersectionIR, OSMNode, OSMWay
+from torii_sumo.intersection.schema import IntersectionIR, Movement, OSMNode, OSMWay
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -153,7 +153,12 @@ def test_compile_intersection_to_plain_guesses_crossings_for_osm_support_path(mo
             "source_shape_xy": [(-90.0, 0.0), (ir.osm_patch.nodes["west"].x, ir.osm_patch.nodes["west"].y), (-40.0, 0.0)],
         }
     )
-    ir = ir.model_copy(update={"approaches": [support, *ir.approaches[1:]]})
+    ir = ir.model_copy(
+        update={
+            "approaches": [support, *ir.approaches[1:]],
+            "control": ir.control.model_copy(update={"control_type": "traffic_light", "tls_id": ir.core.core_id}),
+        }
+    )
     captured = {}
     monkeypatch.setattr("torii_sumo.intersection.compile_plain.shutil.which", lambda _name: "netconvert")
 
@@ -173,6 +178,57 @@ def test_compile_intersection_to_plain_guesses_crossings_for_osm_support_path(mo
 
     assert "--crossings.guess" in captured["command"]
     assert "--walkingareas" in captured["command"]
+    assert "--tllogic-files" not in captured["command"]
+
+
+def test_compile_intersection_to_plain_keeps_support_paths_out_of_core_connections(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    support_a = ir.approaches[0].model_copy(
+        update={
+            "approach_id": "support_a",
+            "incoming_edge_ids": ["support_a_in"],
+            "outgoing_edge_ids": ["support_a_out"],
+            "allowed_modes": {"bicycle"},
+        }
+    )
+    support_b = ir.approaches[0].model_copy(
+        update={
+            "approach_id": "support_b",
+            "incoming_edge_ids": ["support_b_in"],
+            "outgoing_edge_ids": ["support_b_out"],
+            "allowed_modes": {"bicycle"},
+        }
+    )
+    support_movement = Movement(
+        movement_id="support_a_to_support_b",
+        from_approach_id="support_a",
+        to_approach_id="support_b",
+        road_pair_relation_id="support_pair",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:support_path"],
+        confidence=1.0,
+    )
+    ir = ir.model_copy(
+        update={
+            "approaches": [*ir.approaches, support_a, support_b],
+            "movement_matrix": ir.movement_matrix.model_copy(
+                update={
+                    "movements": [*ir.movement_matrix.movements, support_movement],
+                    "legal_movement_count": ir.movement_matrix.legal_movement_count + 1,
+                    "inferred_movement_count": ir.movement_matrix.inferred_movement_count + 1,
+                }
+            ),
+        }
+    )
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=False)
+
+    connection_root = ET.parse(artifacts.plain_connection_file).getroot()
+    assert connection_root.find("connection[@from='support_a_in'][@to='support_b_out']") is None
 
 
 def _build_ir(osm_file: Path) -> IntersectionIR:

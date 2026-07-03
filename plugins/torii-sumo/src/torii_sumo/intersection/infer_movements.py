@@ -4,6 +4,12 @@ from .geometry import normalize_signed_angle
 from .schema import Approach, IntersectionCore, Movement, MovementMatrix, RoadPairRelationGraph
 
 
+def core_connection_movements(movements: list[Movement]) -> list[Movement]:
+    allowed = [movement for movement in movements if movement.allowed]
+    vehicle = [movement for movement in allowed if "passenger" in movement.allowed_modes]
+    return vehicle or allowed
+
+
 def infer_movement_matrix(
     core: IntersectionCore,
     approaches: list[Approach],

@@ -7,6 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 from .compile_plain import needs_sumo_crossing
+from .infer_movements import core_connection_movements
 from .schema import CompiledSUMOArtifacts, IntersectionIR, IntersectionValidation, Movement
 
 
@@ -51,7 +52,7 @@ def validate_intersection(
     tls_status = (
         "skipped"
         if ir.control.control_type != "traffic_light"
-        else ("pass" if len(ir.control.link_index_map) == ir.movement_matrix.legal_movement_count else "fail")
+        else ("pass" if len(ir.control.link_index_map) == len(core_connection_movements(ir.movement_matrix.movements)) else "fail")
     )
     vehicle_approach_count = sum(1 for approach in ir.approaches if "passenger" in approach.allowed_modes)
     vehicle_topology_type = _topology_type(vehicle_approach_count)
@@ -125,7 +126,7 @@ def _has_blocking_validation_warning(warnings: list[str]) -> bool:
 
 
 def _net_has_crossing(net_path: Path) -> bool:
-    if not net_path.exists():
+    if not net_path.is_file():
         return False
     root = ET.parse(net_path).getroot()
     return any(edge.attrib.get("function") == "crossing" for edge in root.findall("edge"))

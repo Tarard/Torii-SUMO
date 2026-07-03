@@ -1,7 +1,8 @@
 from pathlib import Path
 
+from torii_sumo.intersection.infer_control import infer_control_model
 from torii_sumo.intersection.clean import build_intersection_ir
-from torii_sumo.intersection.schema import CompiledSUMOArtifacts, OSMNode, OSMWay, PatchSeed
+from torii_sumo.intersection.schema import CompiledSUMOArtifacts, Movement, OSMNode, OSMWay, PatchSeed
 from torii_sumo.intersection.validate import validate_intersection
 
 
@@ -130,6 +131,58 @@ def test_validate_intersection_reports_netconvert_warnings(monkeypatch, tmp_path
     assert result.status == "blocked"
 
 
+def test_validate_intersection_tls_linkindex_uses_core_connection_movements(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
+    support = Movement(
+        movement_id="support_path_to_support_path",
+        from_approach_id="path_a",
+        to_approach_id="path_b",
+        road_pair_relation_id="support_pair",
+        turn="straight",
+        allowed=True,
+        from_lane_indices=[0],
+        to_lane_indices=[0],
+        allowed_modes={"bicycle"},
+        evidence=["fixture:support_path"],
+        confidence=1.0,
+    )
+    movement_matrix = ir.movement_matrix.model_copy(
+        update={
+            "movements": [*ir.movement_matrix.movements, support],
+            "legal_movement_count": ir.movement_matrix.legal_movement_count + 1,
+            "inferred_movement_count": ir.movement_matrix.inferred_movement_count + 1,
+        }
+    )
+    ir = ir.model_copy(
+        update={
+            "movement_matrix": movement_matrix,
+            "control": infer_control_model(ir.osm_patch, ir.core, ir.approaches, movement_matrix),
+        }
+    )
+    net_file = tmp_path / "x4.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+
+    def fake_run(_command, **_kwargs):
+        class Result:
+            returncode = 0
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.subprocess.run", fake_run)
+
+    result = validate_intersection(
+        ir,
+        CompiledSUMOArtifacts(plain_node_file="", plain_edge_file="", plain_connection_file="", net_file=str(net_file)),
+        tmp_path,
+    )
+
+    assert result.tls_linkindex_status == "pass"
+    assert result.status == "pass"
+
+
 def test_validate_intersection_blocks_missing_sumo_crossing_for_osm_support_path(monkeypatch, tmp_path: Path) -> None:
     ir = build_intersection_ir(FIXTURES / "clustered_signalized_crossing.osm.xml", tmp_path, PatchSeed(osm_node_id="seed"))
     ir.osm_patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
@@ -169,6 +222,37 @@ def test_validate_intersection_blocks_missing_sumo_crossing_for_osm_support_path
     )
 
     assert "missing SUMO crossing edge for OSM pedestrian crossing support" in result.warnings
+    assert result.status == "blocked"
+
+
+def test_validate_intersection_handles_missing_net_file_for_crossing_probe(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "clustered_signalized_crossing.osm.xml", tmp_path, PatchSeed(osm_node_id="seed"))
+    ir.osm_patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
+    ir.osm_patch.nodes["side_a"] = OSMNode(id="side_a", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    ir.osm_patch.nodes["side_b"] = OSMNode(id="side_b", lat=48.00055, lon=10.99980, x=-40.0, y=0.0)
+    ir.osm_patch.ways["path_crossing"] = OSMWay(
+        id="path_crossing",
+        node_refs=["side_a", "west", "side_b"],
+        tags={"highway": "path", "foot": "designated", "bicycle": "designated"},
+    )
+    support = ir.approaches[0].model_copy(
+        update={
+            "source_way_ids": ["path_crossing"],
+            "allowed_modes": {"pedestrian", "bicycle"},
+            "source_shape_xy": [(-90.0, 0.0), (ir.osm_patch.nodes["west"].x, ir.osm_patch.nodes["west"].y), (-40.0, 0.0)],
+        }
+    )
+    ir = ir.model_copy(update={"approaches": [support, *ir.approaches[1:]]})
+
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+
+    result = validate_intersection(
+        ir,
+        CompiledSUMOArtifacts(plain_node_file="", plain_edge_file="", plain_connection_file="", net_file=""),
+        tmp_path,
+    )
+
+    assert "compiled net file not available" in result.warnings
     assert result.status == "blocked"
 
 
