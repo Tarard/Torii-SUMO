@@ -82,6 +82,8 @@ def extract_turn_restrictions(
         if len(from_way_ids) > 1 or len(to_way_ids) > 1:
             warnings.append(f"osm_restriction:{relation.id}:ambiguous:multiple_from_or_to")
             continue
+        if mode == "no" and restriction_turn == "uturn" and from_way_ids[0] == to_way_ids[0]:
+            warnings.append(f"osm_restriction:{relation.id}:ambiguous:shared_way_direction")
 
         restrictions.append(
             MovementRestriction(
@@ -113,32 +115,28 @@ def restriction_for_movement(
     for restriction in restrictions:
         if restriction.mode != "no":
             continue
-        if (
-            restriction.from_way_id in source_way_ids
-            and restriction.to_way_id in target_way_ids
-            and not _has_ambiguous_directional_member(
-                restriction,
-                approaches,
-            )
-        ):
-            return restriction
+        if restriction.from_way_id not in source_way_ids or restriction.to_way_id not in target_way_ids:
+            continue
+        if _has_ambiguous_directional_member(restriction, approaches):
+            if turn == restriction.blocked_turn:
+                return restriction
+            continue
+        return restriction
     only_restrictions = [
         restriction
         for restriction in restrictions
         if (
             restriction.mode == "only"
             and restriction.from_way_id in source_way_ids
-            and not _has_ambiguous_directional_member(
-                restriction,
-                approaches,
-            )
         )
     ]
-    if only_restrictions and not any(
-        restriction.to_way_id in target_way_ids
-        for restriction in only_restrictions
-    ):
-        return only_restrictions[0]
+    for restriction in only_restrictions:
+        if _has_ambiguous_directional_member(restriction, approaches):
+            if restriction.to_way_id not in target_way_ids or turn != restriction.allowed_turn:
+                return restriction
+            continue
+        if restriction.to_way_id not in target_way_ids:
+            return restriction
     return None
 
 
