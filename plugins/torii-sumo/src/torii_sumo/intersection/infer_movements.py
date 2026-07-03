@@ -3,7 +3,8 @@ from __future__ import annotations
 from torii_sumo.road_semantics import classify_approach_mode_layer, classify_turn_from_signed_delta
 
 from .geometry import normalize_signed_angle
-from .schema import Approach, IntersectionCore, Movement, MovementMatrix, RoadPairRelationGraph
+from .osm_restrictions import extract_turn_restrictions, restriction_for_movement
+from .schema import Approach, IntersectionCore, Movement, MovementMatrix, OSMPatch, RoadPairRelationGraph
 
 
 def core_connection_movements(movements: list[Movement]) -> list[Movement]:
@@ -16,11 +17,17 @@ def infer_movement_matrix(
     core: IntersectionCore,
     approaches: list[Approach],
     road_pair_graph: RoadPairRelationGraph,
+    patch: OSMPatch | None = None,
 ) -> MovementMatrix:
     by_pair = {
         frozenset((relation.road_a_id, relation.road_b_id)): relation
         for relation in road_pair_graph.relations
     }
+    restrictions = []
+    restriction_warnings = []
+    if patch is not None:
+        restrictions, restriction_warnings = extract_turn_restrictions(patch, core)
+    restriction_blocked_count = 0
     movements: list[Movement] = []
     for source in approaches:
         for target in approaches:
@@ -34,6 +41,14 @@ def infer_movement_matrix(
             direction_evidence = _movement_direction_evidence(source, target, allowed_modes)
             from_lane_indices = _source_lane_indices(source, turn)
             to_lane_indices = _target_lane_indices(target, len(from_lane_indices))
+            evidence = [f"road_pair_relation:{relation.relation_id}", "inferred_default", *direction_evidence]
+            restriction = restriction_for_movement(restrictions, source, target, turn, approaches)
+            if restriction is not None:
+                was_allowed = allowed
+                allowed = False
+                evidence.append(restriction.evidence)
+                if was_allowed:
+                    restriction_blocked_count += 1
             movements.append(
                 Movement(
                     movement_id=f"{source.approach_id}_to_{target.approach_id}",
@@ -45,7 +60,7 @@ def infer_movement_matrix(
                     from_lane_indices=from_lane_indices,
                     to_lane_indices=to_lane_indices,
                     allowed_modes=allowed_modes,
-                    evidence=[f"road_pair_relation:{relation.relation_id}", "inferred_default", *direction_evidence],
+                    evidence=evidence,
                     confidence=min(source.incoming_lane_count, target.outgoing_lane_count, 1) * relation.confidence,
                     notes=[],
                 )
@@ -56,7 +71,8 @@ def infer_movement_matrix(
         legal_movement_count=legal_count,
         forbidden_movement_count=len(movements) - legal_count,
         inferred_movement_count=len(movements),
-        restriction_blocked_count=0,
+        restriction_blocked_count=restriction_blocked_count,
+        restriction_warnings=restriction_warnings,
     )
 
 

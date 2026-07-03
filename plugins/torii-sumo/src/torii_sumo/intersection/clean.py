@@ -23,7 +23,7 @@ def build_intersection_ir(
     core = infer_intersection_core(patch, seed)
     approaches = infer_approaches(patch, core)
     road_pair_graph = build_road_pair_relation_graph(patch, core, approaches)
-    movement_matrix = infer_movement_matrix(core, approaches, road_pair_graph)
+    movement_matrix = infer_movement_matrix(core, approaches, road_pair_graph, patch=patch)
     control = infer_control_model(patch, core, approaches, movement_matrix)
     return IntersectionIR(
         intersection_id=core.core_id,

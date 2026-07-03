@@ -235,6 +235,7 @@ class MovementMatrix(BaseModel):
     forbidden_movement_count: int
     inferred_movement_count: int
     restriction_blocked_count: int
+    restriction_warnings: list[str] = Field(default_factory=list)
 
 
 class TLSPhase(BaseModel):
