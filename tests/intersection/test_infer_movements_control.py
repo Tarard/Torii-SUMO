@@ -6,7 +6,7 @@ from torii_sumo.intersection.infer_core import infer_intersection_core
 from torii_sumo.intersection.infer_movements import infer_movement_matrix
 from torii_sumo.intersection.infer_road_relations import build_road_pair_relation_graph
 from torii_sumo.intersection.osm_patch import parse_osm_xml
-from torii_sumo.intersection.schema import OSMNode
+from torii_sumo.intersection.schema import OSMNode, OSMWay, PatchSeed
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -65,3 +65,25 @@ def test_infer_control_model_uses_nearby_osm_traffic_signal_node() -> None:
 
     assert control.control_type == "traffic_light"
     assert "osm:nearby_highway=traffic_signals" in control.source
+
+
+def test_infer_movement_matrix_does_not_allow_cross_mode_movements() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["bike"] = OSMNode(id="bike", lat=48.00075, lon=11.00035, x=100.0, y=100.0)
+    patch.ways["cycleway_extra"] = OSMWay(
+        id="cycleway_extra",
+        node_refs=["bike", "vehicle_core"],
+        tags={"highway": "cycleway", "foot": "no"},
+    )
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+
+    matrix = infer_movement_matrix(core, approaches, graph)
+    movements_by_pair = {(movement.from_approach_id, movement.to_approach_id): movement for movement in matrix.movements}
+    by_way = {approach.source_way_ids[0]: approach.approach_id for approach in approaches}
+    road_id = by_way["road_ew"]
+    bike_id = by_way["cycleway_extra"]
+
+    assert movements_by_pair[(road_id, bike_id)].allowed_modes == set()
+    assert movements_by_pair[(road_id, bike_id)].allowed is False
