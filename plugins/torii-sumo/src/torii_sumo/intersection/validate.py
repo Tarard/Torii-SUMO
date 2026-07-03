@@ -19,6 +19,8 @@ def validate_intersection(
     warning_records: list[ValidationWarningRecord] = []
     for warning in artifacts.netconvert_warnings:
         _add_warning(warnings, warning_records, f"netconvert: {warning}", "netconvert", _warning_severity(warning))
+    for warning in ir.movement_matrix.restriction_warnings:
+        _add_warning(warnings, warning_records, warning, "torii", "diagnostic")
     sumo_load_status = "fail"
     net_path = Path(artifacts.net_file)
     if not net_path.is_absolute():
