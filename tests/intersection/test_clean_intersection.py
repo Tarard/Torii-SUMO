@@ -26,8 +26,9 @@ def test_clean_intersection_writes_ir_validation_and_plain_files(tmp_path: Path)
 def test_clean_intersection_summary_reports_next_phase_counts(tmp_path: Path) -> None:
     result = clean_intersection(FIXTURES / "x4_signalized.osm.xml", tmp_path, compile_net=False)
 
-    assert "restriction_warning_count" in result
-    assert "direction_blocked_approach_count" in result
+    assert result["restriction_warning_count"] == 0
+    assert result["direction_blocked_approach_count"] == 0
+    assert result["custom_tllogic_applied"] is True
 
 
 def test_clean_intersection_applies_xml_turn_restriction_to_ir(tmp_path: Path) -> None:

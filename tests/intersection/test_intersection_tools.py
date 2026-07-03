@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 
 from torii_sumo.tools import intersection_tools
-from torii_sumo.tools.intersection_tools import sumo_intersection_clean, sumo_intersection_model
+from torii_sumo.tools.intersection_tools import (
+    sumo_intersection_clean,
+    sumo_intersection_model,
+    sumo_intersection_validate,
+)
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -25,9 +29,23 @@ def test_sumo_intersection_model_returns_json_compatible_ir_summary(tmp_path: Pa
 def test_sumo_intersection_model_reports_next_phase_fields(tmp_path: Path) -> None:
     result = sumo_intersection_model(str(FIXTURES / "x4_signalized.osm.xml"), str(tmp_path))
 
-    assert "restriction_warning_count" in result
-    assert "custom_tllogic_applied" in result
-    assert "direction_blocked_approach_count" in result
+    assert result["restriction_warning_count"] == 0
+    assert result["custom_tllogic_applied"] is None
+    assert result["direction_blocked_approach_count"] == 0
+
+
+def test_sumo_intersection_validate_reports_next_phase_fields(tmp_path: Path) -> None:
+    clean_result = sumo_intersection_clean(
+        str(FIXTURES / "x4_signalized.osm.xml"),
+        str(tmp_path / "clean"),
+        compile_net=False,
+    )
+
+    result = sumo_intersection_validate(clean_result["intersection_ir_file"], str(tmp_path / "validate"))
+
+    assert result["restriction_warning_count"] == 0
+    assert result["custom_tllogic_applied"] is True
+    assert result["direction_blocked_approach_count"] == 0
 
 
 def test_sumo_intersection_clean_wraps_clean_intersection(monkeypatch, tmp_path: Path) -> None:
