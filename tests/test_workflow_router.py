@@ -241,6 +241,56 @@ def test_auto_workflow_passes_local_osm_file_to_cleanup(tmp_path: Path) -> None:
     assert captured["bbox"] is None
 
 
+def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_cleaner(tmp_path: Path) -> None:
+    captured = {}
+    osm_file = tmp_path / "intersection.osm.xml"
+    osm_file.write_text("<osm/>", encoding="utf-8")
+
+    def fake_cleanup(**_kwargs):
+        raise AssertionError("full OSM cleanup must not run for a local intersection patch")
+
+    def fake_intersection_clean(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "intersection-cleaned",
+            "intersection_id": "core_1",
+            "topology_type": "X4",
+            "approach_count": 4,
+            "movement_count": 12,
+            "net_file": str(tmp_path / "intersection.net.xml"),
+        }
+
+    report = run_auto_workflow(
+        user_request="Clean this local OSM intersection patch into a SUMO intersection net",
+        output_dir=tmp_path,
+        osm_file=osm_file,
+        cleanup_workflow_func=fake_cleanup,
+        intersection_clean_func=fake_intersection_clean,
+    )
+
+    assert report["status"] == "pass"
+    assert report["detected_workflow"] == "intersection_clean"
+    assert report["tool_called"] == "sumo_intersection_clean"
+    assert report["execution_status"] == "executed"
+    assert report["workflow_result"]["topology_type"] == "X4"
+    assert captured["osm_file"] == osm_file
+    assert captured["output_dir"] == tmp_path
+    assert captured["compile_net"] is True
+
+
+def test_auto_workflow_blocks_intersection_clean_without_local_osm_patch(tmp_path: Path) -> None:
+    report = run_auto_workflow(
+        user_request="Clean this local OSM intersection patch into a SUMO intersection net",
+        output_dir=tmp_path,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["detected_workflow"] == "intersection_clean"
+    assert report["execution_status"] == "needs_osm_intersection_patch"
+    assert report["missing_blockers"] == ["osm_file"]
+
+
 def test_auto_workflow_blocks_osm_generation_until_road_level_scope_selected(tmp_path: Path) -> None:
     def fake_resolver(_place_name: str):
         return {
