@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -8,7 +9,8 @@ from .schema import BBox, OSMNode, OSMPatch, OSMRelation, OSMWay
 
 
 def parse_osm_xml(path: Path) -> OSMPatch:
-    root = ET.parse(path).getroot()
+    with _open_osm(path) as handle:
+        root = ET.parse(handle).getroot()
     bbox = _parse_bbox(root)
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
@@ -49,6 +51,12 @@ def parse_osm_xml(path: Path) -> OSMPatch:
         for element in root.findall("relation")
     }
     return OSMPatch(nodes=nodes, ways=ways, relations=relations, bbox=bbox)
+
+
+def _open_osm(path: Path):
+    if path.suffix.lower() == ".gz":
+        return gzip.open(path, "rb")
+    return path.open("rb")
 
 
 def _tags(element: ET.Element) -> dict[str, str]:
