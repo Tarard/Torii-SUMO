@@ -252,6 +252,43 @@ def test_owner_semantics_probe_maps_edges_when_candidate_owner_id_differs(tmp_pa
     assert report["layer_statuses"]["edge_mapping"] == "pass"
 
 
+def test_owner_semantics_probe_reports_teacher_source_osm_coverage(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    source = tmp_path / "source.osm.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="123#0" from="a" to="j"><lane id="123#0_0" index="0"/></edge>
+  <edge id="-456#1" from="b" to="j"><lane id="-456#1_0" index="0"/></edge>
+  <edge id="gneE1" from="c" to="j"><lane id="gneE1_0" index="0"/></edge>
+  <junction id="j" type="traffic_light"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text("""<net><junction id="j" type="traffic_light"/></net>""", encoding="utf-8")
+    source.write_text(
+        """<osm version="0.6">
+  <way id="123"><nd ref="a"/><nd ref="j"/><tag k="highway" v="secondary"/></way>
+</osm>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_owner_semantics_probe(teacher, candidate, owner_id="j", source_osm_file=source)
+
+    assert report["source_coverage_layer"]["status_counts"] == {
+        "source_way_missing": 1,
+        "source_way_present": 1,
+        "synthetic_or_non_osm_edge": 1,
+    }
+    assert report["source_coverage_layer"]["teacher_edges"] == [
+        {"edge_id": "-456#1", "direction": "incoming", "source_way_id": "456", "status": "source_way_missing"},
+        {"edge_id": "123#0", "direction": "incoming", "source_way_id": "123", "status": "source_way_present"},
+        {"edge_id": "gneE1", "direction": "incoming", "source_way_id": "", "status": "synthetic_or_non_osm_edge"},
+    ]
+
+
 def test_owner_semantics_probe_reports_ambiguous_edge_mapping(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
