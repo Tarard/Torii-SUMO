@@ -50,7 +50,10 @@ def validate_intersection(
         if ir.control.control_type != "traffic_light"
         else ("pass" if len(ir.control.link_index_map) == ir.movement_matrix.legal_movement_count else "fail")
     )
-    status = "pass" if sumo_load_status == "pass" and tls_status != "fail" else "blocked"
+    topology_supported = ir.core.topology_type in {"T3", "X4"} and len(ir.approaches) >= 3
+    if not topology_supported:
+        warnings.append(f"unsupported intersection topology: {ir.core.topology_type} with {len(ir.approaches)} approaches")
+    status = "pass" if sumo_load_status == "pass" and tls_status != "fail" and topology_supported else "blocked"
     return IntersectionValidation(
         status=status,
         sumo_load_status=sumo_load_status,

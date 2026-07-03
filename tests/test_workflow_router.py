@@ -329,16 +329,18 @@ def test_auto_workflow_passes_prompt_seed_to_intersection_cleaner(tmp_path: Path
 def test_auto_workflow_downloads_bbox_for_intersection_clean_when_osm_file_missing(tmp_path: Path) -> None:
     captured_build = {}
     captured_clean = {}
+    source_osm = tmp_path / "osm" / "bbox.osm.xml"
     filtered_osm = tmp_path / "osm" / "bbox_filtered.osm.xml"
 
     def fake_osm_build(**kwargs):
         captured_build.update(kwargs)
         filtered_osm.parent.mkdir(parents=True)
+        source_osm.write_text("<osm/>", encoding="utf-8")
         filtered_osm.write_text("<osm/>", encoding="utf-8")
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
-            "source_osm_file": str(tmp_path / "osm" / "bbox.osm.xml"),
+            "source_osm_file": str(source_osm),
             "filtered_osm_file": str(filtered_osm),
         }
 
@@ -370,11 +372,11 @@ def test_auto_workflow_downloads_bbox_for_intersection_clean_when_osm_file_missi
     assert report["status"] == "pass"
     assert report["detected_workflow"] == "intersection_clean"
     assert report["osm_source_build_status"] == "pass"
-    assert report["intersection_source_osm_file"] == str(filtered_osm)
+    assert report["intersection_source_osm_file"] == str(source_osm)
     assert captured_build["bbox"] == "11.0,48.0,11.001,48.001"
     assert captured_build["output_dir"] == tmp_path / "intersection_source"
-    assert captured_clean["osm_file"] == filtered_osm
-    assert report["workflow_stage_results"][0]["input_artifacts"]["osm"] == str(filtered_osm)
+    assert captured_clean["osm_file"] == source_osm
+    assert report["workflow_stage_results"][0]["input_artifacts"]["osm"] == str(source_osm)
 
 
 def test_auto_workflow_blocks_intersection_clean_without_local_osm_patch(tmp_path: Path) -> None:

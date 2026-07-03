@@ -592,7 +592,7 @@ def _run_intersection_clean(
         )
         report["osm_source_build_status"] = source_build.get("status", "fail")
         report["osm_source_build_result"] = source_build
-        source_osm = source_build.get("filtered_osm_file") or source_build.get("source_osm_file")
+        source_osm = source_build.get("source_osm_file") or source_build.get("filtered_osm_file")
         if source_build.get("status") != "pass" or not source_osm:
             report.update(
                 {
