@@ -6,14 +6,12 @@ from .schema import Approach, IntersectionCore, OSMPatch
 
 
 def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
-    center_id = core.core_osm_node_ids[0]
-    center = patch.nodes[center_id]
     highway_ways = [way for way in patch.ways.values() if "highway" in way.tags]
-    adjacent = _adjacent_highway_nodes(highway_ways, center_id)
+    adjacent = _adjacent_highway_nodes(highway_ways, core.core_osm_node_ids)
     rows = []
     for neighbor_id, way_ids in adjacent.items():
         neighbor = patch.nodes[neighbor_id]
-        bearing = bearing_between_xy((center.x or 0.0, center.y or 0.0), (neighbor.x or 0.0, neighbor.y or 0.0))
+        bearing = bearing_between_xy(core.center_xy, (neighbor.x or 0.0, neighbor.y or 0.0))
         way = patch.ways[sorted(way_ids)[0]]
         rows.append((bearing, neighbor_id, way))
     rows.sort()
@@ -33,8 +31,8 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 bearing_from_core=bearing,
                 incoming_lane_count=lane_count,
                 outgoing_lane_count=lane_count,
-                incoming_edge_ids=[f"{way.id}_{neighbor_id}_to_{center_id}"],
-                outgoing_edge_ids=[f"{way.id}_{center_id}_to_{neighbor_id}"],
+                incoming_edge_ids=[f"{way.id}_{neighbor_id}_to_{core.core_id}"],
+                outgoing_edge_ids=[f"{way.id}_{core.core_id}_to_{neighbor_id}"],
                 oneway=way.tags.get("oneway") in {"yes", "true", "1"},
                 allowed_modes={"passenger"},
                 turn_lanes_raw=way.tags.get("turn:lanes"),
