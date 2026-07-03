@@ -173,8 +173,14 @@ def test_infer_movement_matrix_applies_shared_from_to_way_no_restriction_by_turn
 def test_infer_movement_matrix_applies_shared_from_to_way_only_restriction_by_turn() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)
-    approaches = infer_approaches(patch, core)
-    graph = build_road_pair_relation_graph(patch, core, approaches)
+    fixture_approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, fixture_approaches)
+    approaches = [
+        approach.model_copy(update={"source_way_ids": ["outside_relation_to_way"]})
+        if approach.approach_id == "leg_4"
+        else approach
+        for approach in fixture_approaches
+    ]
     unrestricted = infer_movement_matrix(core, approaches, graph)
     patch.relations["r_only_right_shared"] = _restriction_relation(
         "r_only_right_shared",
@@ -191,9 +197,16 @@ def test_infer_movement_matrix_applies_shared_from_to_way_only_restriction_by_tu
     assert matrix.forbidden_movement_count == unrestricted.forbidden_movement_count + 4
     assert matrix.restriction_blocked_count == 4
     assert matrix.restriction_warnings == []
-    for pair in [("leg_1", "leg_4"), ("leg_3", "leg_2")]:
-        movement = movements[pair]
-        assert movement.turn == "right"
+    right_movements_from_shared_source = [
+        movement
+        for movement in matrix.movements
+        if movement.from_approach_id in {"leg_1", "leg_3"} and movement.turn == "right"
+    ]
+    assert {
+        (movement.from_approach_id, movement.to_approach_id)
+        for movement in right_movements_from_shared_source
+    } == {("leg_1", "leg_4"), ("leg_3", "leg_2")}
+    for movement in right_movements_from_shared_source:
         assert movement.allowed is True
         assert "osm_restriction:r_only_right_shared:only_right_turn" not in movement.evidence
     for pair in [("leg_1", "leg_2"), ("leg_1", "leg_3"), ("leg_3", "leg_1"), ("leg_3", "leg_4")]:
