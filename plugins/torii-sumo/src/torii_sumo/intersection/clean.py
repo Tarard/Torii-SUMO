@@ -78,6 +78,8 @@ def clean_intersection(
         "disconnected_edge_count": validation.disconnected_edge_count,
         "internal_fragment_count": validation.internal_fragment_count,
         "approach_mode_counts": validation.approach_mode_counts,
+        "vehicle_approach_count": validation.vehicle_approach_count,
+        "vehicle_topology_type": validation.vehicle_topology_type,
         "legal_movement_mode_counts": validation.legal_movement_mode_counts,
         "forbidden_cross_mode_movement_count": validation.forbidden_cross_mode_movement_count,
         "warnings": validation.warnings,

@@ -275,6 +275,8 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
             "disconnected_edge_count": 0,
             "internal_fragment_count": 1,
             "approach_mode_counts": {"passenger": 4, "bicycle": 1},
+            "vehicle_approach_count": 4,
+            "vehicle_topology_type": "X4",
             "legal_movement_mode_counts": {"passenger": 12},
             "forbidden_cross_mode_movement_count": 8,
         }
@@ -296,6 +298,8 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
     assert report["tls_linkindex_status"] == "pass"
     assert report["missing_movement_count"] == 0
     assert report["approach_mode_counts"] == {"passenger": 4, "bicycle": 1}
+    assert report["vehicle_approach_count"] == 4
+    assert report["vehicle_topology_type"] == "X4"
     assert report["legal_movement_mode_counts"] == {"passenger": 12}
     assert report["forbidden_cross_mode_movement_count"] == 8
     assert report["workflow_stage_results"][0]["stage_name"] == "intersection_compile_validate"
