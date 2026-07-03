@@ -194,6 +194,38 @@ def test_validate_intersection_reports_netconvert_warnings(monkeypatch, tmp_path
     assert result.status == "blocked"
 
 
+def test_validate_reports_restriction_warnings_as_diagnostic(monkeypatch, tmp_path: Path) -> None:
+    ir = build_intersection_ir(FIXTURES / "t3_priority.osm.xml", tmp_path)
+    ir = ir.model_copy(
+        update={
+            "movement_matrix": ir.movement_matrix.model_copy(
+                update={"restriction_warnings": ["unknown restriction r1:no_hover_turn"]}
+            )
+        }
+    )
+    net_file = tmp_path / "restriction_warning.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    monkeypatch.setattr("torii_sumo.intersection.validate.shutil.which", lambda _name: "sumo")
+    monkeypatch.setattr(
+        "torii_sumo.intersection.validate.subprocess.run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0, "stderr": ""})(),
+    )
+
+    result = validate_intersection(
+        ir,
+        CompiledSUMOArtifacts(
+            plain_node_file="",
+            plain_edge_file="",
+            plain_connection_file="",
+            net_file=str(net_file),
+        ),
+        tmp_path,
+    )
+
+    assert "unknown restriction r1:no_hover_turn" in result.warnings
+    assert result.warning_count_by_severity["diagnostic"] >= 1
+
+
 def test_validate_blocks_compiled_net_missing_expected_connection(monkeypatch, tmp_path: Path) -> None:
     ir = build_intersection_ir(FIXTURES / "x4_signalized.osm.xml", tmp_path)
     artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)

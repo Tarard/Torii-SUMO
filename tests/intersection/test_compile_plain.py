@@ -126,6 +126,28 @@ def test_compile_intersection_to_plain_expands_multilane_connections_and_tls(tmp
     assert len(phase.attrib["state"]) == ir.movement_matrix.legal_movement_count + 2
 
 
+def test_compile_does_not_write_connection_for_restriction_blocked_movement(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    movement = next(movement for movement in ir.movement_matrix.movements if movement.allowed)
+    blocked = movement.model_copy(
+        update={"allowed": False, "evidence": [*movement.evidence, "osm_restriction:test:no_left_turn"]}
+    )
+    movements = [blocked if item.movement_id == movement.movement_id else item for item in ir.movement_matrix.movements]
+    ir = ir.model_copy(update={"movement_matrix": ir.movement_matrix.model_copy(update={"movements": movements})})
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+
+    source = next(approach for approach in ir.approaches if approach.approach_id == movement.from_approach_id)
+    target = next(approach for approach in ir.approaches if approach.approach_id == movement.to_approach_id)
+    connections = ET.parse(artifacts.plain_connection_file).getroot().findall("connection")
+    assert not [
+        connection
+        for connection in connections
+        if connection.attrib["from"] == source.incoming_edge_ids[0]
+        and connection.attrib["to"] == target.outgoing_edge_ids[0]
+    ]
+
+
 def test_compile_intersection_to_plain_skips_blocked_direction_vehicle_edges_and_connections(tmp_path: Path) -> None:
     ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
     movement = next(movement for movement in ir.movement_matrix.movements if movement.allowed)
