@@ -262,19 +262,33 @@ def _vehicle_flow_direction(
     fallback_way: OSMWay,
 ) -> tuple[bool, bool, list[str]]:
     path_directions = _path_way_directions(patch, core, terminal_id, source_way_ids)
-    tagged = path_directions[-1] if path_directions else None
-    way = tagged[0] if tagged else fallback_way
+    if path_directions:
+        has_incoming = True
+        has_outgoing = True
+        evidence = []
+        for way, terminal_to_core_direction in path_directions:
+            allowed_direction = _oneway_direction(way.tags)
+            if allowed_direction == "bidirectional":
+                continue
+            if allowed_direction == "unknown":
+                has_outgoing = False
+                evidence.append(_unknown_oneway_evidence(way.tags))
+                continue
+            if terminal_to_core_direction == allowed_direction:
+                has_outgoing = False
+                evidence.append(f"oneway:{terminal_to_core_direction}_toward_core")
+            else:
+                has_incoming = False
+                evidence.append(f"oneway:{terminal_to_core_direction}_away_from_core")
+        return has_incoming, has_outgoing, evidence
+
+    way = fallback_way
     allowed_direction = _oneway_direction(way.tags)
     if allowed_direction == "bidirectional":
         return True, True, []
     if allowed_direction == "unknown":
         return True, False, [_unknown_oneway_evidence(way.tags)]
-    if tagged is None:
-        return True, False, ["oneway:assumed_toward_core"]
-    _, terminal_to_core_direction = tagged
-    if terminal_to_core_direction == allowed_direction:
-        return True, False, [f"oneway:{terminal_to_core_direction}_toward_core"]
-    return False, True, [f"oneway:{terminal_to_core_direction}_away_from_core"]
+    return True, False, ["oneway:assumed_toward_core"]
 
 
 def _is_oneway(tags: dict[str, str]) -> bool:
