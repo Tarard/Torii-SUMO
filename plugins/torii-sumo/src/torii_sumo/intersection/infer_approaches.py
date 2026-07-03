@@ -26,7 +26,19 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
         bearing = bearing_between_xy(core.center_xy, endpoint_xy)
         source_shape_xy = _approach_shape_xy(patch, core, terminal_id, source_way_ids)
         used_way_ids.update(source_way_ids)
-        rows.append((bearing, neighbor_id, way, terminal_id, source_way_ids, edge_way_id, endpoint_xy, source_shape_xy, []))
+        rows.append(
+            (
+                bearing,
+                neighbor_id,
+                way,
+                terminal_id,
+                source_way_ids,
+                edge_way_id,
+                endpoint_xy,
+                source_shape_xy,
+                _vehicle_support_lane_modes(way.tags),
+            )
+        )
     rows = _fuse_support_path_rows(
         rows,
         _crossing_support_path_rows(patch, highway_ways, core, set(adjacent), used_way_ids),
@@ -233,6 +245,21 @@ def _merged_support_modes(extra_modes: list[set[str]], support_modes: set[str]) 
     for modes in extra_modes:
         merged.update(modes)
     return merged
+
+
+def _vehicle_support_lane_modes(tags: dict[str, str]) -> list[set[str]]:
+    if "passenger" not in _allowed_modes(tags):
+        return []
+    modes = set()
+    if _has_positive_tag(tags, "sidewalk"):
+        modes.add("pedestrian")
+    if any(key.startswith("cycleway") and value not in {"", "no", "none"} for key, value in tags.items()):
+        modes.add("bicycle")
+    return [modes] if modes else []
+
+
+def _has_positive_tag(tags: dict[str, str], prefix: str) -> bool:
+    return any(key == prefix or key.startswith(f"{prefix}:") for key, value in tags.items() if value not in {"", "no", "none"})
 
 
 def _support_lane_match_index(
