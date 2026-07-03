@@ -121,3 +121,28 @@ def test_infer_approaches_keeps_support_path_at_crossing_terminal() -> None:
 
     assert support.allowed_modes == {"bicycle", "pedestrian"}
     assert support.source_shape_xy == [(-90.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy]
+
+
+def test_infer_approaches_keeps_both_sides_of_support_path_crossing() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
+    patch.nodes["side_a"] = OSMNode(id="side_a", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    patch.nodes["side_b"] = OSMNode(id="side_b", lat=48.00055, lon=10.99980, x=-40.0, y=0.0)
+    patch.ways["path_crossing"] = OSMWay(
+        id="path_crossing",
+        node_refs=["side_a", "west", "side_b"],
+        tags={"highway": "path", "foot": "designated", "bicycle": "designated"},
+    )
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    supports = [approach for approach in approaches if approach.source_way_ids == ["path_crossing"]]
+
+    assert {approach.endpoint_xy for approach in supports} == {(-90.0, 0.0), (-40.0, 0.0)}
+    assert {
+        tuple(approach.source_shape_xy)
+        for approach in supports
+    } == {
+        ((-90.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy),
+        ((-40.0, 0.0), (patch.nodes["west"].x, patch.nodes["west"].y), core.center_xy),
+    }
