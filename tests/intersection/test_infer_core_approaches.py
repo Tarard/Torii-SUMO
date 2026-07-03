@@ -129,6 +129,19 @@ def test_infer_approaches_uses_directional_lane_counts_and_turn_lanes() -> None:
     assert south.turn_lanes_raw == "right"
 
 
+def test_infer_approaches_turns_vehicle_way_sidewalk_and_cycleway_tags_into_support_lanes() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags.update({"sidewalk": "separate", "cycleway:both": "track"})
+
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    way_10_approaches = [approach for approach in approaches if approach.source_way_ids == ["10"]]
+
+    assert way_10_approaches
+    assert all({"bicycle", "pedestrian"} in approach.incoming_extra_lane_modes for approach in way_10_approaches)
+    assert all({"bicycle", "pedestrian"} in approach.outgoing_extra_lane_modes for approach in way_10_approaches)
+
+
 def test_infer_approaches_fuses_support_path_at_crossing_terminal() -> None:
     patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
     patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}

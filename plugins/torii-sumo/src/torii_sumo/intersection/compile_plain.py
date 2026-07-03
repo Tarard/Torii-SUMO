@@ -67,6 +67,15 @@ def _write_nodes(path: Path, ir: IntersectionIR) -> None:
         x=f"{center_x:.2f}",
         y=f"{center_y:.2f}",
     )
+    if support_core_id := _support_core_id(ir):
+        ET.SubElement(
+            root,
+            "node",
+            id=support_core_id,
+            type="priority",
+            x=f"{center_x:.2f}",
+            y=f"{center_y:.2f}",
+        )
     for approach in ir.approaches:
         if approach.endpoint_xy is None:
             dx = math.sin(math.radians(approach.bearing_from_core)) * 50
@@ -87,13 +96,16 @@ def _write_nodes(path: Path, ir: IntersectionIR) -> None:
 
 def _write_edges(path: Path, ir: IntersectionIR) -> None:
     root = ET.Element("edges")
+    support_core_id = _support_core_id(ir)
     for approach in ir.approaches:
+        core_id = support_core_id if support_core_id and _is_support_only_approach(approach) else ir.core.core_id
         edge_type = f"highway.{approach.highway_class}"
         allow = " ".join(sorted(approach.allowed_modes))
         incoming_lane_modes = _lane_modes(approach.incoming_lane_count, approach.allowed_modes, approach.incoming_extra_lane_modes)
-        outgoing_lane_modes = _lane_modes(approach.outgoing_lane_count, approach.allowed_modes, approach.outgoing_extra_lane_modes)
-        incoming_attrs = {"from": approach.approach_id, "to": ir.core.core_id, "type": edge_type, "numLanes": str(len(incoming_lane_modes)), "allow": allow}
-        outgoing_attrs = {"from": ir.core.core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(len(outgoing_lane_modes)), "allow": allow}
+        outgoing_extra_lane_modes = [] if support_core_id and "passenger" in approach.allowed_modes else approach.outgoing_extra_lane_modes
+        outgoing_lane_modes = _lane_modes(approach.outgoing_lane_count, approach.allowed_modes, outgoing_extra_lane_modes)
+        incoming_attrs = {"from": approach.approach_id, "to": core_id, "type": edge_type, "numLanes": str(len(incoming_lane_modes)), "allow": allow}
+        outgoing_attrs = {"from": core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(len(outgoing_lane_modes)), "allow": allow}
         if approach.source_shape_xy:
             incoming_attrs["shape"] = _format_shape(approach.source_shape_xy)
             outgoing_attrs["shape"] = _format_shape(list(reversed(approach.source_shape_xy)))
@@ -104,6 +116,20 @@ def _write_edges(path: Path, ir: IntersectionIR) -> None:
 
 def _lane_modes(base_count: int, base_modes: set[str], extra_modes: list[set[str]]) -> list[set[str]]:
     return [base_modes for _ in range(base_count)] + extra_modes
+
+
+def _support_core_id(ir: IntersectionIR) -> str | None:
+    if ir.control.control_type != "traffic_light":
+        return None
+    if not any("passenger" in approach.allowed_modes for approach in ir.approaches):
+        return None
+    if not any(_is_support_only_approach(approach) for approach in ir.approaches):
+        return None
+    return f"support_{ir.core.core_id}"
+
+
+def _is_support_only_approach(approach) -> bool:
+    return "passenger" not in approach.allowed_modes
 
 
 def _write_edge(root: ET.Element, edge_id: str, attrs: dict[str, str], lane_modes: list[set[str]]) -> None:

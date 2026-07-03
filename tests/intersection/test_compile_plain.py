@@ -296,6 +296,69 @@ def test_compile_intersection_to_plain_keeps_support_paths_out_of_core_connectio
     assert connection_root.find("connection[@from='support_a_in'][@to='support_b_out']") is None
 
 
+def test_compile_intersection_to_plain_routes_support_only_edges_to_priority_support_core(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    support = ir.approaches[0].model_copy(
+        update={
+            "approach_id": "support_a",
+            "incoming_edge_ids": ["support_a_in"],
+            "outgoing_edge_ids": ["support_a_out"],
+            "allowed_modes": {"bicycle", "pedestrian"},
+        }
+    )
+    ir = ir.model_copy(
+        update={
+            "approaches": [*ir.approaches, support],
+            "control": ir.control.model_copy(update={"control_type": "traffic_light", "tls_id": ir.core.core_id}),
+        }
+    )
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=False)
+
+    node_root = ET.parse(artifacts.plain_node_file).getroot()
+    support_core = f"support_{ir.core.core_id}"
+    assert node_root.find(f"node[@id='{support_core}'][@type='priority']") is not None
+
+    edge_root = ET.parse(artifacts.plain_edge_file).getroot()
+    assert edge_root.find(f"edge[@id='support_a_in'][@to='{support_core}']") is not None
+    assert edge_root.find(f"edge[@id='support_a_out'][@from='{support_core}']") is not None
+    assert edge_root.find(f"edge[@id='{ir.approaches[0].incoming_edge_ids[0]}'][@to='{ir.core.core_id}']") is not None
+
+
+def test_compile_intersection_to_plain_drops_outgoing_support_lanes_when_support_core_is_split(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    vehicle = ir.approaches[0].model_copy(
+        update={
+            "incoming_extra_lane_modes": [{"bicycle", "pedestrian"}],
+            "outgoing_extra_lane_modes": [{"bicycle", "pedestrian"}],
+        }
+    )
+    support = ir.approaches[0].model_copy(
+        update={
+            "approach_id": "support_a",
+            "incoming_edge_ids": ["support_a_in"],
+            "outgoing_edge_ids": ["support_a_out"],
+            "allowed_modes": {"bicycle", "pedestrian"},
+        }
+    )
+    ir = ir.model_copy(
+        update={
+            "approaches": [vehicle, *ir.approaches[1:], support],
+            "control": ir.control.model_copy(update={"control_type": "traffic_light", "tls_id": ir.core.core_id}),
+        }
+    )
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=False)
+
+    edge_root = ET.parse(artifacts.plain_edge_file).getroot()
+    incoming = edge_root.find(f"edge[@id='{vehicle.incoming_edge_ids[0]}']")
+    outgoing = edge_root.find(f"edge[@id='{vehicle.outgoing_edge_ids[0]}']")
+    assert incoming is not None
+    assert outgoing is not None
+    assert incoming.attrib["numLanes"] == str(vehicle.incoming_lane_count + 1)
+    assert outgoing.attrib["numLanes"] == str(vehicle.outgoing_lane_count)
+
+
 def _build_ir(osm_file: Path) -> IntersectionIR:
     patch = parse_osm_xml(osm_file)
     core = infer_intersection_core(patch)
