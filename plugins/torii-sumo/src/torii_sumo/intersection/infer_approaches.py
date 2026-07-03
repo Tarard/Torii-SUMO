@@ -34,7 +34,7 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 incoming_edge_ids=[f"{way.id}_{neighbor_id}_to_{core.core_id}"],
                 outgoing_edge_ids=[f"{way.id}_{core.core_id}_to_{neighbor_id}"],
                 oneway=way.tags.get("oneway") in {"yes", "true", "1"},
-                allowed_modes={"passenger"},
+                allowed_modes=_allowed_modes(way.tags),
                 turn_lanes_raw=way.tags.get("turn:lanes"),
                 access_tags={key: value for key, value in way.tags.items() if key in {"access", "vehicle", "bicycle", "foot"}},
             )
@@ -58,3 +58,25 @@ def _lane_count(tags: dict[str, str]) -> int:
         return max(1, int(tags.get("lanes", "1")))
     except ValueError:
         return 1
+
+
+def _allowed_modes(tags: dict[str, str]) -> set[str]:
+    highway = tags.get("highway", "road")
+    if highway == "cycleway":
+        modes = {"bicycle"}
+        if tags.get("foot") in {"yes", "designated", "permissive"}:
+            modes.add("pedestrian")
+        return modes
+    if highway in {"footway", "pedestrian", "steps", "crossing"}:
+        modes = {"pedestrian"}
+        if tags.get("bicycle") in {"yes", "designated", "permissive"}:
+            modes.add("bicycle")
+        return modes
+    if highway == "path":
+        modes = set()
+        if tags.get("foot") != "no":
+            modes.add("pedestrian")
+        if tags.get("bicycle") != "no":
+            modes.add("bicycle")
+        return modes or {"pedestrian"}
+    return {"passenger"}

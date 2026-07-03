@@ -47,6 +47,16 @@ def test_compile_intersection_to_plain_defines_approach_highway_types(tmp_path: 
     assert 'id="highway.footway"' in type_text
 
 
+def test_compile_intersection_to_plain_writes_edge_permissions(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "clustered_signalized_crossing.osm.xml")
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=False)
+
+    edge_text = Path(artifacts.plain_edge_file).read_text()
+    assert 'type="highway.secondary" numLanes="4" allow="passenger"' in edge_text
+    assert 'type="highway.path" numLanes="1" allow="bicycle pedestrian"' in edge_text
+
+
 def test_compile_intersection_to_plain_disables_auto_turnarounds(monkeypatch, tmp_path: Path) -> None:
     ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
     captured = {}

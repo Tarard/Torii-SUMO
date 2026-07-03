@@ -19,7 +19,8 @@ def infer_movement_matrix(
             if source.approach_id == target.approach_id:
                 continue
             relation = by_pair[frozenset((source.approach_id, target.approach_id))]
-            allowed = relation.expected_relation != "should_not_connect"
+            allowed_modes = source.allowed_modes & target.allowed_modes
+            allowed = relation.expected_relation != "should_not_connect" and bool(allowed_modes)
             signed_delta = normalize_signed_angle(target.bearing_from_core - source.bearing_from_core)
             movements.append(
                 Movement(
@@ -31,7 +32,7 @@ def infer_movement_matrix(
                     allowed=allowed,
                     from_lane_indices=list(range(source.incoming_lane_count)),
                     to_lane_indices=list(range(target.outgoing_lane_count)),
-                    allowed_modes=source.allowed_modes & target.allowed_modes,
+                    allowed_modes=allowed_modes,
                     evidence=[f"road_pair_relation:{relation.relation_id}", "inferred_default"],
                     confidence=min(source.incoming_lane_count, target.outgoing_lane_count, 1) * relation.confidence,
                     notes=[],

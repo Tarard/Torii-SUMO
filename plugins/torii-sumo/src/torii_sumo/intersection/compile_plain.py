@@ -71,17 +71,18 @@ def _write_edges(path: Path, ir: IntersectionIR) -> None:
     root = ET.Element("edges")
     for approach in ir.approaches:
         edge_type = f"highway.{approach.highway_class}"
+        allow = " ".join(sorted(approach.allowed_modes))
         ET.SubElement(
             root,
             "edge",
             id=approach.incoming_edge_ids[0],
-            **{"from": approach.approach_id, "to": ir.core.core_id, "type": edge_type, "numLanes": str(approach.incoming_lane_count)},
+            **{"from": approach.approach_id, "to": ir.core.core_id, "type": edge_type, "numLanes": str(approach.incoming_lane_count), "allow": allow},
         )
         ET.SubElement(
             root,
             "edge",
             id=approach.outgoing_edge_ids[0],
-            **{"from": ir.core.core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(approach.outgoing_lane_count)},
+            **{"from": ir.core.core_id, "to": approach.approach_id, "type": edge_type, "numLanes": str(approach.outgoing_lane_count), "allow": allow},
         )
     _write_xml(path, root)
 
