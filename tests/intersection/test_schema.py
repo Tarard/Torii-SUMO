@@ -198,6 +198,9 @@ def test_intersection_ir_models_dump_json_ready_schema() -> None:
     assert dumped["approaches"][0]["is_vehicle_approach"] is True
     assert dumped["approaches"][0]["is_support_only"] is False
     assert dumped["approaches"][0]["fused_support_modes"] == []
+    assert dumped["approaches"][0]["has_incoming_vehicle_flow"] is True
+    assert dumped["approaches"][0]["has_outgoing_vehicle_flow"] is True
+    assert dumped["approaches"][0]["direction_evidence"] == []
     assert dumped["road_pair_graph"]["relations"][0]["severity"] == "none"
     assert dumped["road_pair_graph"]["relations"][0]["evidence"] == ["shared_node:n0"]
     assert dumped["movement_matrix"]["movements"][0]["road_pair_relation_id"] == "leg_1_leg_2"

@@ -54,6 +54,13 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
         start=1,
     ):
         incoming_lane_count, outgoing_lane_count = _directional_lane_counts(patch, core, terminal_id, source_way_ids)
+        has_incoming_vehicle_flow, has_outgoing_vehicle_flow, direction_evidence = _vehicle_flow_direction(
+            patch,
+            core,
+            terminal_id,
+            source_way_ids,
+            way,
+        )
         allowed_modes = _allowed_modes(way.tags)
         mode_layer = classify_approach_mode_layer(allowed_modes, extra_lane_modes, extra_lane_modes)
         approaches.append(
@@ -73,7 +80,10 @@ def infer_approaches(patch: OSMPatch, core: IntersectionCore) -> list[Approach]:
                 outgoing_extra_lane_modes=extra_lane_modes,
                 incoming_edge_ids=[f"{edge_way_id}_{terminal_id}_to_{core.core_id}"],
                 outgoing_edge_ids=[f"{edge_way_id}_{core.core_id}_to_{terminal_id}"],
-                oneway=way.tags.get("oneway") in {"yes", "true", "1"},
+                oneway=_is_oneway(way.tags),
+                has_incoming_vehicle_flow=has_incoming_vehicle_flow,
+                has_outgoing_vehicle_flow=has_outgoing_vehicle_flow,
+                direction_evidence=direction_evidence,
                 allowed_modes=allowed_modes,
                 mode_layer=mode_layer.mode_layer,
                 is_vehicle_approach=mode_layer.is_vehicle_approach,
@@ -151,14 +161,54 @@ def _directional_way_and_direction(
     terminal_id: str,
     source_way_ids: list[str],
 ) -> tuple[OSMWay, str] | None:
+    return _path_way_and_direction(
+        patch,
+        core,
+        terminal_id,
+        source_way_ids,
+        require_directional_lane_data=True,
+    )
+
+
+def _path_way_and_direction(
+    patch: OSMPatch,
+    core: IntersectionCore,
+    terminal_id: str,
+    source_way_ids: list[str],
+    *,
+    require_directional_lane_data: bool = False,
+) -> tuple[OSMWay, str] | None:
+    return next(
+        iter(
+            _path_way_directions(
+                patch,
+                core,
+                terminal_id,
+                source_way_ids,
+                require_directional_lane_data=require_directional_lane_data,
+            )
+        ),
+        None,
+    )
+
+
+def _path_way_directions(
+    patch: OSMPatch,
+    core: IntersectionCore,
+    terminal_id: str,
+    source_way_ids: list[str],
+    *,
+    require_directional_lane_data: bool = False,
+) -> list[tuple[OSMWay, str]]:
     graph = _way_graph(patch, source_way_ids)
     path = _shortest_path_to_core(graph, terminal_id, set(core.core_osm_node_ids))
     if len(path) < 2:
-        return None
+        return []
+    tagged = []
     for first, second in zip(path, path[1:], strict=False):
         for way_id in source_way_ids:
             way = patch.ways[way_id]
-            if not _has_directional_lane_data(way.tags):
+            if require_directional_lane_data and not _has_directional_lane_data(way.tags):
                 continue
             refs = way.node_refs
             if first not in refs or second not in refs:
@@ -166,8 +216,55 @@ def _directional_way_and_direction(
             first_index = refs.index(first)
             second_index = refs.index(second)
             if abs(first_index - second_index) == 1:
-                return way, "forward" if second_index > first_index else "backward"
-    return None
+                tagged.append((way, "forward" if second_index > first_index else "backward"))
+                break
+    return tagged
+
+
+def _vehicle_flow_direction(
+    patch: OSMPatch,
+    core: IntersectionCore,
+    terminal_id: str,
+    source_way_ids: list[str],
+    fallback_way: OSMWay,
+) -> tuple[bool, bool, list[str]]:
+    path_directions = _path_way_directions(patch, core, terminal_id, source_way_ids)
+    tagged = path_directions[-1] if path_directions else None
+    way = tagged[0] if tagged else fallback_way
+    allowed_direction = _oneway_direction(way.tags)
+    if allowed_direction == "bidirectional":
+        return True, True, []
+    if allowed_direction == "unknown":
+        return True, False, [_unknown_oneway_evidence(way.tags)]
+    if tagged is None:
+        return True, False, ["oneway:assumed_toward_core"]
+    _, terminal_to_core_direction = tagged
+    if terminal_to_core_direction == allowed_direction:
+        return True, False, [f"oneway:{terminal_to_core_direction}_toward_core"]
+    return False, True, [f"oneway:{terminal_to_core_direction}_away_from_core"]
+
+
+def _is_oneway(tags: dict[str, str]) -> bool:
+    return _oneway_direction(tags) != "bidirectional"
+
+
+def _oneway_direction(tags: dict[str, str]) -> str:
+    raw = tags.get("oneway", "").strip().lower()
+    if raw in {"yes", "true", "1"}:
+        return "forward"
+    if raw == "-1":
+        return "backward"
+    if raw in {"", "no", "false", "0"}:
+        return "bidirectional"
+    return "unknown"
+
+
+def _unknown_oneway_evidence(tags: dict[str, str]) -> str:
+    raw = tags.get("oneway", "").strip().lower()
+    marker = "".join(character if character.isalnum() else "_" for character in raw).strip("_")
+    if not marker:
+        return "oneway:assumed_toward_core"
+    return f"oneway:unknown_{marker}_assumed_toward_core"
 
 
 def _has_directional_lane_data(tags: dict[str, str]) -> bool:

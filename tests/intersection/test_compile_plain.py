@@ -8,7 +8,7 @@ from torii_sumo.intersection.infer_core import infer_intersection_core
 from torii_sumo.intersection.infer_movements import infer_movement_matrix
 from torii_sumo.intersection.infer_road_relations import build_road_pair_relation_graph
 from torii_sumo.intersection.osm_patch import parse_osm_xml
-from torii_sumo.intersection.schema import IntersectionIR, Movement, OSMNode, OSMWay
+from torii_sumo.intersection.schema import IntersectionIR, Movement, OSMNode, OSMPatch, OSMWay
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -124,6 +124,77 @@ def test_compile_intersection_to_plain_expands_multilane_connections_and_tls(tmp
     phase = ET.parse(artifacts.plain_tllogic_file).getroot().find("tlLogic/phase")
     assert phase is not None
     assert len(phase.attrib["state"]) == ir.movement_matrix.legal_movement_count + 2
+
+
+def test_compile_intersection_to_plain_skips_blocked_direction_vehicle_edges_and_connections(tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "x4_signalized.osm.xml")
+    movement = next(movement for movement in ir.movement_matrix.movements if movement.allowed)
+    source = next(approach for approach in ir.approaches if approach.approach_id == movement.from_approach_id)
+    blocked_source = source.model_copy(
+        update={
+            "has_incoming_vehicle_flow": False,
+            "incoming_lane_count": 0,
+            "direction_evidence": ["oneway:backward_away_from_core"],
+        }
+    )
+    ir = ir.model_copy(
+        update={
+            "approaches": [
+                blocked_source if approach.approach_id == source.approach_id else approach
+                for approach in ir.approaches
+            ]
+        }
+    )
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4", compile_net=False)
+
+    edge_root = ET.parse(artifacts.plain_edge_file).getroot()
+    assert edge_root.find(f"edge[@id='{source.incoming_edge_ids[0]}']") is None
+    assert edge_root.find(f"edge[@id='{source.outgoing_edge_ids[0]}']") is not None
+    assert edge_root.find("edge[@numLanes='0']") is None
+
+    connection_root = ET.parse(artifacts.plain_connection_file).getroot()
+    assert connection_root.find(f"connection[@from='{source.incoming_edge_ids[0]}']") is None
+
+
+def test_compile_intersection_to_plain_omits_reverse_oneway_blocked_incoming_edges_and_connections(tmp_path: Path) -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags["oneway"] = "-1"
+    ir = _build_ir_from_patch(patch)
+    blocked_source = next(approach for approach in ir.approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4_reverse_oneway", compile_net=False)
+
+    assert blocked_source.has_incoming_vehicle_flow is False
+    assert blocked_source.has_outgoing_vehicle_flow is True
+    edge_root = ET.parse(artifacts.plain_edge_file).getroot()
+    assert edge_root.find(f"edge[@id='{blocked_source.incoming_edge_ids[0]}']") is None
+    assert edge_root.find(f"edge[@id='{blocked_source.outgoing_edge_ids[0]}']") is not None
+
+    connection_root = ET.parse(artifacts.plain_connection_file).getroot()
+    assert connection_root.find(f"connection[@from='{blocked_source.incoming_edge_ids[0]}']") is None
+
+
+def test_compile_intersection_to_plain_omits_unknown_oneway_blocked_outgoing_edges_and_connections(
+    tmp_path: Path,
+) -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags["oneway"] = "reversible"
+    ir = _build_ir_from_patch(patch)
+    blocked_source = next(approach for approach in ir.approaches if approach.endpoint_xy and approach.endpoint_xy[1] > 0)
+
+    artifacts = compile_intersection_to_plain(ir, tmp_path, "x4_unknown_oneway", compile_net=False)
+
+    assert blocked_source.oneway is True
+    assert blocked_source.has_incoming_vehicle_flow is True
+    assert blocked_source.has_outgoing_vehicle_flow is False
+    assert blocked_source.direction_evidence == ["oneway:unknown_reversible_assumed_toward_core"]
+    edge_root = ET.parse(artifacts.plain_edge_file).getroot()
+    assert edge_root.find(f"edge[@id='{blocked_source.incoming_edge_ids[0]}']") is not None
+    assert edge_root.find(f"edge[@id='{blocked_source.outgoing_edge_ids[0]}']") is None
+
+    connection_root = ET.parse(artifacts.plain_connection_file).getroot()
+    assert connection_root.find(f"connection[@to='{blocked_source.outgoing_edge_ids[0]}']") is None
 
 
 def test_compile_intersection_to_plain_keeps_tls_link_indexes_inside_phase_state(tmp_path: Path) -> None:
@@ -456,6 +527,10 @@ def test_compile_intersection_to_plain_preserves_controlled_support_movements(tm
 
 def _build_ir(osm_file: Path) -> IntersectionIR:
     patch = parse_osm_xml(osm_file)
+    return _build_ir_from_patch(patch)
+
+
+def _build_ir_from_patch(patch: OSMPatch) -> IntersectionIR:
     core = infer_intersection_core(patch)
     approaches = infer_approaches(patch, core)
     graph = build_road_pair_relation_graph(patch, core, approaches)

@@ -31,6 +31,7 @@ def infer_movement_matrix(
             signed_delta = normalize_signed_angle(target.bearing_from_core - ((source.bearing_from_core + 180) % 360))
             turn = classify_turn_from_signed_delta(signed_delta)
             allowed = _movement_allowed(source, target, allowed_modes, relation.expected_relation, turn)
+            direction_evidence = _movement_direction_evidence(source, target, allowed_modes)
             from_lane_indices = _source_lane_indices(source, turn)
             to_lane_indices = _target_lane_indices(target, len(from_lane_indices))
             movements.append(
@@ -44,7 +45,7 @@ def infer_movement_matrix(
                     from_lane_indices=from_lane_indices,
                     to_lane_indices=to_lane_indices,
                     allowed_modes=allowed_modes,
-                    evidence=[f"road_pair_relation:{relation.relation_id}", "inferred_default"],
+                    evidence=[f"road_pair_relation:{relation.relation_id}", "inferred_default", *direction_evidence],
                     confidence=min(source.incoming_lane_count, target.outgoing_lane_count, 1) * relation.confidence,
                     notes=[],
                 )
@@ -67,8 +68,28 @@ def _movement_allowed(source: Approach, target: Approach, modes: set[str], expec
     source_layer = _mode_layer_for(source)
     target_layer = _mode_layer_for(target)
     if "passenger" in modes:
-        return source_layer.is_vehicle_approach and target_layer.is_vehicle_approach
+        return (
+            source_layer.is_vehicle_approach
+            and target_layer.is_vehicle_approach
+            and source.has_incoming_vehicle_flow
+            and target.has_outgoing_vehicle_flow
+        )
     return source_layer.is_support_only and target_layer.is_support_only
+
+
+def _movement_direction_evidence(source: Approach, target: Approach, modes: set[str]) -> list[str]:
+    if "passenger" not in modes:
+        return []
+    evidence = []
+    if source.direction_evidence:
+        evidence.extend(f"source_direction:{item}" for item in source.direction_evidence)
+    elif not source.has_incoming_vehicle_flow:
+        evidence.append("source_direction:blocked_incoming_vehicle_flow")
+    if target.direction_evidence:
+        evidence.extend(f"target_direction:{item}" for item in target.direction_evidence)
+    elif not target.has_outgoing_vehicle_flow:
+        evidence.append("target_direction:blocked_outgoing_vehicle_flow")
+    return evidence
 
 
 def _mode_layer_for(approach: Approach):

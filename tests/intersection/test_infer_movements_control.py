@@ -82,6 +82,26 @@ def test_infer_movement_matrix_uses_turn_lanes_for_source_lane_indices() -> None
     assert by_turn["right"].from_lane_indices == [2]
 
 
+def test_infer_movement_matrix_blocks_passenger_movements_from_oneway_away_from_core() -> None:
+    patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
+    patch.ways["10"].tags["oneway"] = "yes"
+    core = infer_intersection_core(patch)
+    approaches = infer_approaches(patch, core)
+    graph = build_road_pair_relation_graph(patch, core, approaches)
+    away_from_core = next(approach for approach in approaches if approach.endpoint_xy and approach.endpoint_xy[1] < 0)
+
+    matrix = infer_movement_matrix(core, approaches, graph)
+    movements_from_blocked_source = [
+        movement for movement in matrix.movements if movement.from_approach_id == away_from_core.approach_id
+    ]
+
+    assert away_from_core.has_incoming_vehicle_flow is False
+    assert away_from_core.has_outgoing_vehicle_flow is True
+    assert movements_from_blocked_source
+    assert all(movement.allowed is False for movement in movements_from_blocked_source)
+    assert all("source_direction:oneway:backward_away_from_core" in movement.evidence for movement in movements_from_blocked_source)
+
+
 def test_infer_control_model_uses_osm_traffic_signal_tag() -> None:
     patch = parse_osm_xml(FIXTURES / "x4_signalized.osm.xml")
     core = infer_intersection_core(patch)
