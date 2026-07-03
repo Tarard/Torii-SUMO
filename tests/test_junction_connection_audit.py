@@ -215,6 +215,43 @@ def test_owner_semantics_probe_reuses_inferred_edge_map_for_tls_compare(tmp_path
     assert report["tls_movement_layer"]["candidate_only_normalized_movement_signatures"] == []
 
 
+def test_owner_semantics_probe_maps_edges_when_candidate_owner_id_differs(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="j" x="0" y="0" type="traffic_light"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s" state="M"/>
+  <tlLogic id="j"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="in" from="a" to="c"><lane id="in_0" index="0" allow="passenger"/></edge>
+  <edge id="out" from="c" to="b"><lane id="out_0" index="0" allow="passenger"/></edge>
+  <junction id="a" x="-10" y="0" type="priority"/>
+  <junction id="c" x="0" y="0" type="traffic_light"/>
+  <junction id="b" x="10" y="0" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":c_0_0" tl="c" linkIndex="0" dir="s" state="M"/>
+  <tlLogic id="c"><phase duration="10" state="G"/></tlLogic>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = build_teacher_guided_owner_semantics_probe(teacher, candidate, owner_id="j", candidate_owner_id="c")
+
+    assert report["status"] == "pass"
+    assert report["teacher_edge_map"] == {"in": "in", "out": "out"}
+    assert report["layer_statuses"]["edge_mapping"] == "pass"
+
+
 def test_owner_semantics_probe_reports_ambiguous_edge_mapping(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
