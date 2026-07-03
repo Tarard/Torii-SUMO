@@ -41,6 +41,7 @@ def compile_intersection_to_plain(
             type_file,
             tllogic_file,
             net_file,
+            guess_crossings=needs_sumo_crossing(ir),
         )
     return CompiledSUMOArtifacts(
         plain_node_file=str(node_file),
@@ -167,6 +168,7 @@ def _run_netconvert(
     type_file: Path,
     tllogic_file: Path | None,
     net_file: Path,
+    guess_crossings: bool = False,
 ) -> tuple[bool, list[str]]:
     netconvert = shutil.which("netconvert")
     if not netconvert:
@@ -182,9 +184,10 @@ def _run_netconvert(
         "--type-files",
         str(type_file),
         "--no-turnarounds",
-        "--output-file",
-        str(net_file),
     ]
+    if guess_crossings:
+        command.extend(["--crossings.guess", "--walkingareas"])
+    command.extend(["--output-file", str(net_file)])
     if tllogic_file:
         command.extend(["--tllogic-files", str(tllogic_file)])
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
@@ -197,3 +200,17 @@ def _warning_lines(*texts: str) -> list[str]:
 
 def _write_xml(path: Path, root: ET.Element) -> None:
     ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
+
+
+def needs_sumo_crossing(ir: IntersectionIR) -> bool:
+    crossing_points = {
+        (node.x or 0.0, node.y or 0.0)
+        for node in ir.osm_patch.nodes.values()
+        if node.tags.get("highway") == "crossing" or "crossing" in node.tags
+    }
+    return any(
+        "pedestrian" in approach.allowed_modes
+        and "passenger" not in approach.allowed_modes
+        and any(point in crossing_points for point in approach.source_shape_xy)
+        for approach in ir.approaches
+    )

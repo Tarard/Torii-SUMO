@@ -8,7 +8,7 @@ from torii_sumo.intersection.infer_core import infer_intersection_core
 from torii_sumo.intersection.infer_movements import infer_movement_matrix
 from torii_sumo.intersection.infer_road_relations import build_road_pair_relation_graph
 from torii_sumo.intersection.osm_patch import parse_osm_xml
-from torii_sumo.intersection.schema import IntersectionIR
+from torii_sumo.intersection.schema import IntersectionIR, OSMNode, OSMWay
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -134,6 +134,45 @@ def test_compile_intersection_to_plain_disables_auto_turnarounds(monkeypatch, tm
     assert artifacts.net_file
     assert "--no-turnarounds" in captured["command"]
     assert artifacts.netconvert_warnings == ["Warning: lane is not connected."]
+
+
+def test_compile_intersection_to_plain_guesses_crossings_for_osm_support_path(monkeypatch, tmp_path: Path) -> None:
+    ir = _build_ir(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    ir.osm_patch.nodes["west"].tags = {"highway": "crossing", "crossing": "traffic_signals"}
+    ir.osm_patch.nodes["side_a"] = OSMNode(id="side_a", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    ir.osm_patch.nodes["side_b"] = OSMNode(id="side_b", lat=48.00055, lon=10.99980, x=-40.0, y=0.0)
+    ir.osm_patch.ways["path_crossing"] = OSMWay(
+        id="path_crossing",
+        node_refs=["side_a", "west", "side_b"],
+        tags={"highway": "path", "foot": "designated", "bicycle": "designated"},
+    )
+    support = ir.approaches[0].model_copy(
+        update={
+            "source_way_ids": ["path_crossing"],
+            "allowed_modes": {"pedestrian", "bicycle"},
+            "source_shape_xy": [(-90.0, 0.0), (ir.osm_patch.nodes["west"].x, ir.osm_patch.nodes["west"].y), (-40.0, 0.0)],
+        }
+    )
+    ir = ir.model_copy(update={"approaches": [support, *ir.approaches[1:]]})
+    captured = {}
+    monkeypatch.setattr("torii_sumo.intersection.compile_plain.shutil.which", lambda _name: "netconvert")
+
+    def fake_run(command, **_kwargs):
+        captured["command"] = command
+
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = "Success."
+
+        return Result()
+
+    monkeypatch.setattr("torii_sumo.intersection.compile_plain.subprocess.run", fake_run)
+
+    compile_intersection_to_plain(ir, tmp_path, "cluster", compile_net=True)
+
+    assert "--crossings.guess" in captured["command"]
+    assert "--walkingareas" in captured["command"]
 
 
 def _build_ir(osm_file: Path) -> IntersectionIR:

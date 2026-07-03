@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
+from .compile_plain import needs_sumo_crossing
 from .schema import CompiledSUMOArtifacts, IntersectionIR, IntersectionValidation, Movement
 
 
@@ -59,7 +60,7 @@ def validate_intersection(
     ) or vehicle_topology_type in {"T3", "X4"}
     if not topology_supported:
         warnings.append(f"unsupported intersection topology: {ir.core.topology_type} with {len(ir.approaches)} approaches")
-    if _needs_sumo_crossing(ir) and not _net_has_crossing(net_path):
+    if needs_sumo_crossing(ir) and not _net_has_crossing(net_path):
         warnings.append("missing SUMO crossing edge for OSM pedestrian crossing support")
     status = (
         "pass"
@@ -120,20 +121,6 @@ def _has_blocking_validation_warning(warnings: list[str]) -> bool:
         or "invalid pedestrian topology" in warning.lower()
         or "missing sumo crossing edge" in warning.lower()
         for warning in warnings
-    )
-
-
-def _needs_sumo_crossing(ir: IntersectionIR) -> bool:
-    crossing_points = {
-        (node.x or 0.0, node.y or 0.0)
-        for node in ir.osm_patch.nodes.values()
-        if node.tags.get("highway") == "crossing" or "crossing" in node.tags
-    }
-    return any(
-        "pedestrian" in approach.allowed_modes
-        and "passenger" not in approach.allowed_modes
-        and any(point in crossing_points for point in approach.source_shape_xy)
-        for approach in ir.approaches
     )
 
 
