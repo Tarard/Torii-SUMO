@@ -3,6 +3,7 @@ from pathlib import Path
 from torii_sumo.core.workflow_router import (
     detect_workflow,
     infer_place_name,
+    infer_seed_osm_node_id,
     run_auto_workflow,
 )
 from torii_sumo.tools.workflow_tools import torii_auto_workflow
@@ -47,6 +48,12 @@ def test_detect_workflow_routes_common_one_sentence_requests() -> None:
     assert detect_workflow("check whether this route from station to museum is connected") == "routeability"
     assert detect_workflow("my waiting time got worse after cleanup") == "debug_bad_run"
     assert detect_workflow("compare fixed-time and max-pressure controllers") == "experiment_audit"
+
+
+def test_infer_seed_osm_node_id_requires_node_context() -> None:
+    assert infer_seed_osm_node_id("Clean OSM node 98101394 from this bbox") == "98101394"
+    assert infer_seed_osm_node_id("clean osm_node_id=1833941950 as the target intersection") == "1833941950"
+    assert infer_seed_osm_node_id("Clean this bbox in 2026 for a conference paper") == ""
 
 
 def test_auto_workflow_blocks_osm_place_until_area_confirmation(tmp_path: Path) -> None:
@@ -294,6 +301,31 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
     assert captured["compile_net"] is True
 
 
+def test_auto_workflow_passes_prompt_seed_to_intersection_cleaner(tmp_path: Path) -> None:
+    captured = {}
+    osm_file = tmp_path / "intersection.osm.xml"
+    osm_file.write_text("<osm/>", encoding="utf-8")
+
+    def fake_intersection_clean(**kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "pass",
+            "claim_status": "intersection-cleaned",
+            "intersection_id": "core_1",
+        }
+
+    report = run_auto_workflow(
+        user_request="Clean OSM node 98101394 from this local OSM intersection patch into SUMO",
+        output_dir=tmp_path,
+        osm_file=osm_file,
+        intersection_clean_func=fake_intersection_clean,
+    )
+
+    assert report["status"] == "pass"
+    assert report["seed_osm_node_id"] == "98101394"
+    assert captured["seed"].osm_node_id == "98101394"
+
+
 def test_auto_workflow_downloads_bbox_for_intersection_clean_when_osm_file_missing(tmp_path: Path) -> None:
     captured_build = {}
     captured_clean = {}
@@ -483,6 +515,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         output_dir=str(tmp_path),
         bbox="11.413800,48.755391,11.433800,48.775391",
         network_profile="reference_matched",
+        seed_osm_node_id="98101394",
         reference_net_file=str(tmp_path / "reference.net.xml"),
         teacher_guided_repair_max_ready_candidates=2,
         run_teacher_guided_repair_after_build=False,
@@ -497,6 +530,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
     assert captured["cleanup_workflow_func"].__name__ == "sumo_osm_cleanup_workflow"
     assert captured["teacher_guided_repair_max_ready_candidates"] == 2
     assert captured["run_teacher_guided_repair_after_build"] is False
+    assert captured["seed_osm_node_id"] == "98101394"
     assert captured["road_connectivity_replay_max_owners"] == 3
     assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
