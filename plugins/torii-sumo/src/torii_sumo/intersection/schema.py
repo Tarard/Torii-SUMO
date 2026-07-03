@@ -77,6 +77,7 @@ class Approach(BaseModel):
     highway_class: str
     bearing_to_core: float
     bearing_from_core: float
+    endpoint_xy: tuple[float, float] | None = None
     incoming_lane_count: int
     outgoing_lane_count: int
     incoming_edge_ids: list[str]

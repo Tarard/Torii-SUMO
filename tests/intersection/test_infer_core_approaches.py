@@ -82,3 +82,23 @@ def test_infer_approaches_preserves_pedestrian_and_bicycle_modes() -> None:
     assert modes_by_way["cycleway_extra"] == {"bicycle"}
     assert modes_by_way["footway_extra"] == {"bicycle", "pedestrian"}
     assert modes_by_way["road_ew"] == {"passenger"}
+
+
+def test_infer_approaches_extends_vehicle_corridor_across_short_split_node() -> None:
+    patch = parse_osm_xml(FIXTURES / "clustered_signalized_crossing.osm.xml")
+    patch.nodes["outer"] = OSMNode(id="outer", lat=48.00055, lon=10.99950, x=-90.0, y=0.0)
+    patch.ways["road_west_outer"] = OSMWay(
+        id="road_west_outer",
+        node_refs=["outer", "west"],
+        tags={"highway": "secondary", "name": "Ring Road", "ref": "B 13", "lanes": "4"},
+    )
+    patch.ways["road_ew"].tags.update({"name": "Ring Road", "ref": "B 13"})
+
+    core = infer_intersection_core(patch, PatchSeed(osm_node_id="seed"))
+    approaches = infer_approaches(patch, core)
+    west = next(approach for approach in approaches if "road_west_outer" in approach.source_way_ids)
+
+    assert west.source_way_ids == ["road_ew", "road_west_outer"]
+    assert west.incoming_edge_ids == ["road_west_outer_outer_to_core_seed"]
+    assert west.outgoing_edge_ids == ["road_west_outer_core_seed_to_outer"]
+    assert west.endpoint_xy == (-90.0, 0.0)
