@@ -13,6 +13,11 @@ def test_sumo_intersection_model_returns_json_compatible_ir_summary(tmp_path: Pa
 
     assert report["status"] == "pass"
     assert report["intersection_id"] == "core_1"
+    assert report["approach_mode_counts"] == {"passenger": 3}
+    assert report["vehicle_approach_count"] == 3
+    assert report["vehicle_topology_type"] == "T3"
+    assert report["legal_movement_mode_counts"] == {"passenger": 6}
+    assert report["forbidden_cross_mode_movement_count"] == 0
     assert Path(report["intersection_ir_file"]).exists()
     json.dumps(report)
 

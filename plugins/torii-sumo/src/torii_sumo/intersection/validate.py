@@ -6,8 +6,8 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
-from .compile_plain import needs_sumo_crossing
-from .schema import CompiledSUMOArtifacts, IntersectionIR, IntersectionValidation, Movement
+from .compile_plain import _connection_rows, needs_sumo_crossing
+from .schema import CompiledSUMOArtifacts, IntersectionIR, IntersectionValidation, Movement, ValidationWarningRecord
 
 
 def validate_intersection(
@@ -15,7 +15,10 @@ def validate_intersection(
     artifacts: CompiledSUMOArtifacts,
     output_dir: Path,
 ) -> IntersectionValidation:
-    warnings: list[str] = [f"netconvert: {warning}" for warning in artifacts.netconvert_warnings]
+    warnings: list[str] = []
+    warning_records: list[ValidationWarningRecord] = []
+    for warning in artifacts.netconvert_warnings:
+        _add_warning(warnings, warning_records, f"netconvert: {warning}", "netconvert", _warning_severity(warning))
     sumo_load_status = "fail"
     net_path = Path(artifacts.net_file)
     if not net_path.is_absolute():
@@ -42,28 +45,38 @@ def validate_intersection(
             result = subprocess.run(command, cwd=output_dir, capture_output=True, text=True, timeout=30)
             sumo_load_status = "pass" if result.returncode == 0 else "fail"
             if result.returncode != 0:
-                warnings.append(result.stderr.strip() or "sumo load failed")
+                _add_warning(warnings, warning_records, result.stderr.strip() or "sumo load failed", "sumo", "blocking")
         else:
-            warnings.append("sumo binary not found")
+            _add_warning(warnings, warning_records, "sumo binary not found", "sumo", "blocking")
     else:
-        warnings.append("compiled net file not available")
+        _add_warning(warnings, warning_records, "compiled net file not available", "torii", "blocking")
 
-    tls_status = _tls_linkindex_status(ir)
+    tls_status, tls_warnings = _tls_linkindex_status(ir, artifacts, output_dir)
+    for warning in tls_warnings:
+        _add_warning(warnings, warning_records, warning, "torii", "blocking")
     vehicle_approach_count = sum(1 for approach in ir.approaches if "passenger" in approach.allowed_modes)
     vehicle_topology_type = _topology_type(vehicle_approach_count)
     topology_supported = (
         ir.core.topology_type in {"T3", "X4"} and len(ir.approaches) >= 3
     ) or vehicle_topology_type in {"T3", "X4"}
     if not topology_supported:
-        warnings.append(f"unsupported intersection topology: {ir.core.topology_type} with {len(ir.approaches)} approaches")
+        _add_warning(
+            warnings,
+            warning_records,
+            f"unsupported intersection topology: {ir.core.topology_type} with {len(ir.approaches)} approaches",
+            "torii",
+            "blocking",
+        )
     if needs_sumo_crossing(ir) and not _net_has_crossing(net_path):
-        warnings.append("missing SUMO crossing edge for OSM pedestrian crossing support")
+        _add_warning(warnings, warning_records, "missing SUMO crossing edge for OSM pedestrian crossing support", "torii", "blocking")
+    warning_count_by_severity = dict(Counter(record.severity for record in warning_records))
+    blocking_error_count = ir.road_pair_graph.blocking_error_count + warning_count_by_severity.get("blocking", 0)
     status = (
         "pass"
         if sumo_load_status == "pass"
         and tls_status != "fail"
         and topology_supported
-        and not _has_blocking_validation_warning(warnings)
+        and blocking_error_count == 0
         else "blocked"
     )
     return IntersectionValidation(
@@ -85,19 +98,73 @@ def validate_intersection(
         forbidden_cross_mode_movement_count=sum(
             1 for movement in ir.movement_matrix.movements if not movement.allowed and not movement.allowed_modes
         ),
+        warning_records=warning_records,
+        warning_count_by_severity=warning_count_by_severity,
+        blocking_error_count=blocking_error_count,
         warnings=warnings,
     )
+
+
+def _add_warning(
+    warnings: list[str],
+    records: list[ValidationWarningRecord],
+    message: str,
+    source: str,
+    severity: str,
+) -> None:
+    warnings.append(message)
+    records.append(ValidationWarningRecord(message=message, source=source, severity=severity))
+
+
+def _warning_severity(message: str) -> str:
+    lower = message.lower()
+    if "not connected" in lower or "invalid pedestrian topology" in lower or "missing sumo crossing edge" in lower:
+        return "blocking"
+    return "diagnostic"
 
 
 def _approach_mode_counts(ir: IntersectionIR) -> dict[str, int]:
     return dict(Counter(_mode_key(approach.allowed_modes) for approach in ir.approaches))
 
 
-def _tls_linkindex_status(ir: IntersectionIR) -> str:
+def _tls_linkindex_status(ir: IntersectionIR, artifacts: CompiledSUMOArtifacts, output_dir: Path) -> tuple[str, list[str]]:
     if ir.control.control_type != "traffic_light":
-        return "skipped"
+        return "skipped", []
     allowed_movement_ids = {movement.movement_id for movement in ir.movement_matrix.movements if movement.allowed}
-    return "pass" if set(ir.control.link_index_map).issubset(allowed_movement_ids) else "fail"
+    warnings = []
+    if not set(ir.control.link_index_map).issubset(allowed_movement_ids):
+        warnings.append("controlled movement is not an allowed movement")
+    connection_path = _artifact_path(artifacts.plain_connection_file, output_dir)
+    tllogic_path = _artifact_path(artifacts.plain_tllogic_file, output_dir)
+    if connection_path and connection_path.is_file():
+        controlled_connections = [
+            connection
+            for connection in ET.parse(connection_path).getroot().findall("connection")
+            if "tl" in connection.attrib
+        ]
+        expected_controlled_count = sum(
+            1
+            for movement, *_ in _connection_rows(ir)
+            if movement.movement_id in ir.control.link_index_map
+        )
+        if len(controlled_connections) < expected_controlled_count:
+            warnings.append("missing controlled connection in compiled plain connections")
+        if tllogic_path and tllogic_path.is_file():
+            states = [phase.attrib.get("state", "") for phase in ET.parse(tllogic_path).getroot().findall("tlLogic/phase")]
+            if any(len(state) != len(controlled_connections) for state in states):
+                warnings.append("tlLogic state length does not match controlled connection count")
+            if any(int(connection.attrib.get("linkIndex", "-1")) >= len(states[0]) for connection in controlled_connections) if states else False:
+                warnings.append("controlled connection linkIndex exceeds tlLogic state length")
+    return ("fail" if warnings else "pass"), warnings
+
+
+def _artifact_path(value: str | None, output_dir: Path) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return output_dir / path
 
 
 def _legal_movement_mode_counts(movements: list[Movement]) -> dict[str, int]:
@@ -116,15 +183,6 @@ def _topology_type(approach_count: int) -> str:
     if approach_count > 4:
         return "complex"
     return "unknown"
-
-
-def _has_blocking_validation_warning(warnings: list[str]) -> bool:
-    return any(
-        "not connected" in warning.lower()
-        or "invalid pedestrian topology" in warning.lower()
-        or "missing sumo crossing edge" in warning.lower()
-        for warning in warnings
-    )
 
 
 def _net_has_crossing(net_path: Path) -> bool:

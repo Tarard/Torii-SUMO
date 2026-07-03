@@ -150,7 +150,7 @@ def _has_controlled_support_movement(ir: IntersectionIR) -> bool:
 
 
 def _is_support_only_approach(approach) -> bool:
-    return "passenger" not in approach.allowed_modes
+    return approach.is_support_only or "passenger" not in approach.allowed_modes
 
 
 def _write_edge(root: ET.Element, edge_id: str, attrs: dict[str, str], lane_modes: list[set[str]]) -> None:

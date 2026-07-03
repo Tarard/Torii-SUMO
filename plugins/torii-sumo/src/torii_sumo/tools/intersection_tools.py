@@ -6,7 +6,12 @@ from typing import Any
 
 from torii_sumo.intersection.clean import build_intersection_ir, clean_intersection
 from torii_sumo.intersection.schema import CompiledSUMOArtifacts, IntersectionIR, PatchSeed
-from torii_sumo.intersection.validate import validate_intersection
+from torii_sumo.intersection.validate import (
+    _approach_mode_counts,
+    _legal_movement_mode_counts,
+    _topology_type,
+    validate_intersection,
+)
 
 
 def sumo_intersection_model(
@@ -29,6 +34,13 @@ def sumo_intersection_model(
         "topology_type": ir.core.topology_type,
         "approach_count": len(ir.approaches),
         "movement_count": len(ir.movement_matrix.movements),
+        "approach_mode_counts": _approach_mode_counts(ir),
+        "vehicle_approach_count": sum(1 for approach in ir.approaches if "passenger" in approach.allowed_modes),
+        "vehicle_topology_type": _topology_type(sum(1 for approach in ir.approaches if "passenger" in approach.allowed_modes)),
+        "legal_movement_mode_counts": _legal_movement_mode_counts(ir.movement_matrix.movements),
+        "forbidden_cross_mode_movement_count": sum(
+            1 for movement in ir.movement_matrix.movements if not movement.allowed and not movement.allowed_modes
+        ),
         "intersection_ir_file": str(ir_file),
         "claim_status": ir.claim_status,
     }
@@ -67,6 +79,8 @@ def sumo_intersection_validate(
         "status": validation.status,
         "sumo_load_status": validation.sumo_load_status,
         "route_probe_status": validation.route_probe_status,
+        "warning_count_by_severity": validation.warning_count_by_severity,
+        "blocking_error_count": validation.blocking_error_count,
         "validation_file": str(validation_file),
         "claim_status": "intersection-cleaned" if validation.status == "pass" else "blocked",
     }

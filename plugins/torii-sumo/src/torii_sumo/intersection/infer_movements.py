@@ -26,9 +26,9 @@ def infer_movement_matrix(
                 continue
             relation = by_pair[frozenset((source.approach_id, target.approach_id))]
             allowed_modes = source.allowed_modes & target.allowed_modes
-            allowed = relation.expected_relation != "should_not_connect" and bool(allowed_modes)
             signed_delta = normalize_signed_angle(target.bearing_from_core - ((source.bearing_from_core + 180) % 360))
             turn = _turn_from_signed_delta(signed_delta)
+            allowed = _movement_allowed(source, target, allowed_modes, relation.expected_relation, turn)
             from_lane_indices = _source_lane_indices(source, turn)
             to_lane_indices = _target_lane_indices(target, len(from_lane_indices))
             movements.append(
@@ -63,6 +63,20 @@ def _turn_from_signed_delta(delta: float) -> str:
     if abs(delta) < 25:
         return "straight"
     return "right" if delta > 0 else "left"
+
+
+def _movement_allowed(source: Approach, target: Approach, modes: set[str], expected_relation: str, turn: str) -> bool:
+    if not modes or expected_relation != "should_connect":
+        return False
+    if turn == "uturn" and not _turn_lanes_allow_uturn(source):
+        return False
+    if "passenger" in modes:
+        return source.is_vehicle_approach and target.is_vehicle_approach
+    return source.is_support_only and target.is_support_only
+
+
+def _turn_lanes_allow_uturn(source: Approach) -> bool:
+    return bool(source.turn_lanes_raw and any(_lane_allows_turn(lane, "uturn") for lane in source.turn_lanes_raw.split("|")))
 
 
 def _source_lane_indices(source: Approach, turn: str) -> list[int]:

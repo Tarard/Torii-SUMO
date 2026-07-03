@@ -168,5 +168,10 @@ def test_intersection_ir_models_dump_json_ready_schema() -> None:
     dumped = ir.model_dump(mode="json")
 
     assert dumped["schema_version"] == "intersection-ir/v1"
+    assert dumped["approaches"][0]["mode_layer"] == "vehicle"
+    assert dumped["approaches"][0]["is_vehicle_approach"] is True
+    assert dumped["approaches"][0]["is_support_only"] is False
+    assert dumped["approaches"][0]["fused_support_modes"] == []
+    assert dumped["road_pair_graph"]["relations"][0]["severity"] == "none"
     assert dumped["road_pair_graph"]["relations"][0]["evidence"] == ["shared_node:n0"]
     assert dumped["movement_matrix"]["movements"][0]["road_pair_relation_id"] == "leg_1_leg_2"

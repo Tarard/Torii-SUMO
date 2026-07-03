@@ -87,6 +87,10 @@ class Approach(BaseModel):
     outgoing_edge_ids: list[str]
     oneway: bool
     allowed_modes: set[str]
+    mode_layer: Literal["vehicle", "support", "fused_support_lane"] = "vehicle"
+    is_vehicle_approach: bool = True
+    is_support_only: bool = False
+    fused_support_modes: list[set[str]] = Field(default_factory=list)
     turn_lanes_raw: str | None = None
     access_tags: dict[str, str] = Field(default_factory=dict)
 
@@ -177,6 +181,7 @@ class RoadPairRelation(BaseModel):
         "preserve_separate_levels",
         "manual_review",
     ]
+    severity: Literal["none", "diagnostic", "blocking", "manual_review"] = "none"
     confidence: float
     evidence: list[str]
 
@@ -249,6 +254,12 @@ class CompiledSUMOArtifacts(BaseModel):
     netconvert_warnings: list[str] = Field(default_factory=list)
 
 
+class ValidationWarningRecord(BaseModel):
+    message: str
+    severity: Literal["diagnostic", "blocking", "manual_review"]
+    source: Literal["netconvert", "sumo", "torii"]
+
+
 class IntersectionValidation(BaseModel):
     status: Literal["pass", "blocked", "fail"]
     sumo_load_status: Literal["pass", "fail"]
@@ -266,6 +277,9 @@ class IntersectionValidation(BaseModel):
     vehicle_topology_type: str = "unknown"
     legal_movement_mode_counts: dict[str, int] = Field(default_factory=dict)
     forbidden_cross_mode_movement_count: int = 0
+    warning_records: list[ValidationWarningRecord] = Field(default_factory=list)
+    warning_count_by_severity: dict[str, int] = Field(default_factory=dict)
+    blocking_error_count: int = 0
     warnings: list[str]
 
 

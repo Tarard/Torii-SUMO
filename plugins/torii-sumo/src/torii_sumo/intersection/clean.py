@@ -82,6 +82,8 @@ def clean_intersection(
         "vehicle_topology_type": validation.vehicle_topology_type,
         "legal_movement_mode_counts": validation.legal_movement_mode_counts,
         "forbidden_cross_mode_movement_count": validation.forbidden_cross_mode_movement_count,
+        "warning_count_by_severity": validation.warning_count_by_severity,
+        "blocking_error_count": validation.blocking_error_count,
         "warnings": validation.warnings,
         "intersection_ir_file": str(output_dir / "intersection_ir.json"),
         "validation_file": str(output_dir / "validation.json"),
