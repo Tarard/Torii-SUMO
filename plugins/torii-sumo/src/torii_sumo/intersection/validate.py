@@ -14,13 +14,19 @@ def validate_intersection(
 ) -> IntersectionValidation:
     warnings: list[str] = []
     sumo_load_status = "fail"
-    if artifacts.net_file and Path(artifacts.net_file).exists():
+    net_path = Path(artifacts.net_file)
+    if not net_path.is_absolute():
+        net_path = net_path.resolve()
+        output_relative_net_path = (output_dir / artifacts.net_file).resolve()
+        if not net_path.exists() and output_relative_net_path.exists():
+            net_path = output_relative_net_path
+    if artifacts.net_file and net_path.exists():
         sumo = shutil.which("sumo")
         if sumo:
             command = [
                 sumo,
                 "-n",
-                artifacts.net_file,
+                str(net_path),
                 "--begin",
                 "0",
                 "--end",

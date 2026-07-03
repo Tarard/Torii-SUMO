@@ -66,10 +66,18 @@ def clean_intersection(
     )
     return {
         "status": validation.status,
+        "claim_status": final_ir.claim_status,
         "intersection_id": final_ir.intersection_id,
         "topology_type": final_ir.core.topology_type,
         "approach_count": len(final_ir.approaches),
         "movement_count": len(final_ir.movement_matrix.movements),
+        "sumo_load_status": validation.sumo_load_status,
+        "route_probe_status": validation.route_probe_status,
+        "tls_linkindex_status": validation.tls_linkindex_status,
+        "missing_movement_count": validation.missing_movement_count,
+        "disconnected_edge_count": validation.disconnected_edge_count,
+        "internal_fragment_count": validation.internal_fragment_count,
+        "warnings": validation.warnings,
         "intersection_ir_file": str(output_dir / "intersection_ir.json"),
         "validation_file": str(output_dir / "validation.json"),
         "net_file": artifacts.net_file,
