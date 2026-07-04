@@ -15,6 +15,7 @@ from .tools.evidence_tools import (
     sumo_config_pair_preflight,
 )
 from .tools.intersection_tools import (
+    sumo_nema_four_way_reference_workflow,
     sumo_intersection_clean,
     sumo_intersection_model,
     sumo_intersection_validate,
@@ -80,6 +81,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Validate a compiled IntersectionIR artifact with SUMO load evidence when available.")(
         sumo_intersection_validate
+    )
+    server.tool(description="Build a reusable four-way SUMO reference intersection with NEMA 8-phase dual-ring timing, channelized lanes, audit JSON, and optional SUMO smoke evidence.")(
+        sumo_nema_four_way_reference_workflow
     )
     server.tool(description="Low-level helper only: download/reuse OSM for an already chosen bbox, filter road classes, and build a raw SUMO network with netconvert. Do not use this as the full user-facing workflow.")(
         sumo_osm_build_network

@@ -16,6 +16,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_intersection_clean",
         "sumo_intersection_model",
         "sumo_intersection_validate",
+        "sumo_nema_four_way_reference_workflow",
         "torii_auto_workflow",
         "sumo_osm_resolve_place",
         "sumo_osm_cleanup_workflow",
