@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from torii_sumo.intersection.clean import build_intersection_ir, clean_intersection
+from torii_sumo.intersection.nema_reference import build_nema_four_way_reference
 from torii_sumo.intersection.schema import CompiledSUMOArtifacts, IntersectionIR, PatchSeed
 from torii_sumo.intersection.validate import (
     _approach_mode_counts,
@@ -101,3 +102,17 @@ def sumo_intersection_validate(
         "validation_file": str(validation_file),
         "claim_status": "intersection-cleaned" if validation.status == "pass" else "blocked",
     }
+
+
+def sumo_nema_four_way_reference_workflow(
+    output_dir: str,
+    prefix: str = "nema_four_way_reference",
+    run_sumo_smoke: bool = True,
+    require_real_sumo: bool = False,
+) -> dict[str, Any]:
+    return build_nema_four_way_reference(
+        Path(output_dir),
+        prefix=prefix,
+        run_sumo_smoke=run_sumo_smoke,
+        require_real_sumo=require_real_sumo,
+    )
