@@ -10,6 +10,8 @@ from .osm_area import osm_map_url_bbox, resolve_osm_place
 from .osm_network import audit_tls_multisource, build_osm_network
 from .osm_workflow import run_osm_cleanup_workflow
 from ..intersection.clean import clean_intersection
+from ..intersection.scene_spec import resolve_intersection_scene_prompt
+from ..intersection.scene_workflow import run_intersection_scene_workflow
 from ..intersection.schema import PatchSeed
 from .workflow_review_html import build_workflow_review_html
 from .workflow_state import NetworkQualityVector, StageResult, build_promotion_trace, summarize_workflow_stages
@@ -19,6 +21,10 @@ AUTONOMY_MODES = {"ask-first", "safe-autopilot", "inspect-only", "full-local-run
 
 
 WORKFLOW_RECIPES: dict[str, dict[str, Any]] = {
+    "intersection_scene": {
+        "description": "Resolve one sentence into a structured spec and build a synthetic four-way TLS SUMO scene with netconvert, SUMO load, routeability, and artifact-manifest checks.",
+        "tool_chain": ["sumo_intersection_scene_workflow"],
+    },
     "osm_to_sumo": {
         "description": "Resolve or infer a place/bbox, build an OSM-derived SUMO network with conservative defaults, audit TLS, check connectivity, and collect launch evidence.",
         "tool_chain": [
@@ -159,27 +165,41 @@ def _normalized(value: str) -> str:
 
 
 def _looks_like_osm_generation(text: str) -> bool:
-    generation_terms = (
-        "build",
-        "download",
-        "generate",
-        "netconvert",
-        "open it in sumo",
-        "from osm",
+    network = re.search(r"\b(?:osm|openstreetmap|map|network)\b|\bnet\.xml\b", text)
+    strong_generation = re.search(
+        r"\b(?:build|download|generate|netconvert)\b|open it in sumo|from osm",
+        text,
     )
-    network_terms = ("osm", "map", "network", "sumo network", "net.xml")
-    return any(token in text for token in generation_terms) and any(token in text for token in network_terms)
+    create_or_make = re.search(r"\b(?:create|make)\b", text)
+    explicit_osm_or_map = re.search(r"\b(?:osm|map|openstreetmap)\b", text)
+    return bool(
+        network
+        and (strong_generation or (create_or_make and explicit_osm_or_map))
+    )
 
 
 def _looks_like_intersection_clean(text: str) -> bool:
-    intersection_terms = ("intersection", "junction", "crossroad", "t3", "x4")
-    patch_terms = ("patch", "local osm", "osm file", "osm extract", "osm bbox", "bbox", "openstreetmap")
-    build_terms = ("clean", "compile", "generate", "build")
-    return (
-        any(token in text for token in intersection_terms)
-        and any(token in text for token in patch_terms)
-        and any(token in text for token in build_terms)
+    return bool(
+        re.search(r"\b(?:intersection|junction|crossroad|t3|x4)\b", text)
+        and re.search(
+            r"\bpatch\b|\blocal[- ](?:osm|openstreetmap)\b|"
+            r"\b(?:osm|openstreetmap)[- ](?:file|extract|bbox)\b|\bbbox\b",
+            text,
+        )
+        and re.search(r"\b(?:patch|clean|compile|generate|build|create|make)\b", text)
     )
+
+
+def _looks_like_intersection_scene(text: str) -> bool:
+    if not re.search(r"\b(?:build|generate|create|make)\b", text) or re.search(
+        r"\b(?:audit|review|repair|clean)\b", text
+    ):
+        return False
+    try:
+        resolve_intersection_scene_prompt(text)
+    except ValueError:
+        return False
+    return True
 
 
 def detect_workflow(user_request: str) -> str:
@@ -190,16 +210,30 @@ def detect_workflow(user_request: str) -> str:
         return "intersection_clean"
     if _looks_like_osm_generation(text):
         return "osm_to_sumo"
-    if any(token in text for token in ("compare", "baseline", "fixed-time", "fixed time", "max-pressure", "controller")):
+    if re.search(r"\b(?:compare|baseline|experiment|fixed[- ]time|max[- ]pressure|controllers?)\b", text):
         return "experiment_audit"
-    if (
+    if _looks_like_intersection_scene(text):
+        return "intersection_scene"
+    tls_signal = re.search(
+        r"\b(?:traffic[- ]lights?|tls|signals?|signalized|unsignalized)\b", text
+    )
+    network_review = (
         any(token in text for token in ("html", "review cockpit", "human review", "review"))
         and any(token in text for token in ("sumo network", "partial sumo network", "network", ".net.xml", "net.xml"))
-    ):
+    )
+    if network_review and re.search(r"\bhtml\b|\breview cockpit\b", text):
         return "network_review"
-    if any(token in text for token in ("traffic light", "traffic lights", "tls", "signal")):
+    if tls_signal and re.search(r"\b(?:audit|review)\b", text):
         return "tls_review"
-    if any(token in text for token in ("osm", "map", "network", "netconvert", "open it in sumo", "build a sumo")):
+    if network_review:
+        return "network_review"
+    if tls_signal:
+        return "tls_review"
+    if re.search(
+        r"\b(?:osm|openstreetmap|map|network|netconvert)\b|"
+        r"\bopen it in sumo\b|\bbuild a sumo\b",
+        text,
+    ):
         return "osm_to_sumo"
     if any(token in text for token in ("route", "from ", " to ", "connected", "routeability", "reachable")):
         return "routeability"
@@ -457,6 +491,7 @@ def run_auto_workflow(
     field_evidence_csv: Path | None = None,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     cleanup_workflow_func: Callable[..., dict[str, Any]] = run_osm_cleanup_workflow,
+    intersection_scene_func: Callable[..., dict[str, Any]] = run_intersection_scene_workflow,
     intersection_clean_func: Callable[..., dict[str, Any]] = clean_intersection,
     intersection_osm_build_func: Callable[..., dict[str, Any]] = build_osm_network,
     tls_review_func: Callable[..., dict[str, Any]] = audit_tls_multisource,
@@ -473,6 +508,37 @@ def run_auto_workflow(
     report["output_dir"] = str(output_dir)
     if work_dir is not None:
         report["work_dir"] = str(work_dir)
+
+    if workflow == "intersection_scene":
+        result = intersection_scene_func(
+            user_request,
+            output_dir,
+            launch_netedit_after_build=bool(launch_netedit_after_build),
+        )
+        report.update(
+            {
+                "status": result.get("status", "fail"),
+                "claim_status": result.get("claim_status", "blocked"),
+                "execution_status": "executed",
+                "tool_called": "sumo_intersection_scene_workflow",
+                "workflow_result": result,
+            }
+        )
+        for key in (
+            "artifact_manifest_file",
+            "net_file",
+            "sumocfg_file",
+            "netconvert_status",
+            "sumo_load_status",
+            "routeability_status",
+            "tls_status",
+            "netedit_status",
+            "resolved_spec",
+            "warnings",
+        ):
+            if key in result:
+                report[key] = result[key]
+        return report
 
     if workflow == "osm_to_sumo":
         return _run_osm_to_sumo(

@@ -1,0 +1,294 @@
+{
+  "schema_version": "intersection-scene-artifacts/v1",
+  "input_prompt": "Build a four-way TLS intersection for passenger cars.",
+  "resolved_spec": {
+    "schema_version": "intersection-scene/v1",
+    "topology": "four_way",
+    "approach_count": 4,
+    "control": "traffic_light",
+    "controller": "nema_reference",
+    "allowed_modes": [
+      "passenger"
+    ],
+    "link_length_m": 180.0,
+    "speed_mps": 13.89,
+    "smoke_route": [
+      "W",
+      "E"
+    ],
+    "assumptions": [
+      "NEMA is a synthetic/defaulted reference controller, not field-calibrated timing."
+    ]
+  },
+  "status": "pass",
+  "claim_status": "diagnostic-demo",
+  "path_contract": {
+    "output_files": "relative to the artifact manifest directory",
+    "commands": "verbatim execution evidence; path arguments may be absolute or relative to command cwd"
+  },
+  "output_files": {
+    "node_file": "intersection_scene.nod.xml",
+    "edge_file": "intersection_scene.edg.xml",
+    "connection_file": "intersection_scene.con.xml",
+    "tllogic_file": "intersection_scene.tll.xml",
+    "additional_file": "intersection_scene.add.xml",
+    "net_file": "intersection_scene.net.xml",
+    "route_file": "intersection_scene.rou.xml",
+    "sumocfg_file": "intersection_scene.sumocfg",
+    "summary_file": "intersection_scene_summary.xml",
+    "tripinfo_file": "intersection_scene_tripinfo.xml",
+    "audit_file": "intersection_scene_nema_audit.json",
+    "evidence_file": "intersection_scene_evidence.md",
+    "netconvert_report_file": "intersection_scene_netconvert_report.json",
+    "sumo_report_file": "intersection_scene_sumo_report.json",
+    "sumo_log_file": "intersection_scene_sumo.log",
+    "sumo_error_log_file": "intersection_scene_sumo_errors.log",
+    "artifact_manifest_file": "intersection_scene_artifact_manifest.json"
+  },
+  "commands": {
+    "netconvert": {
+      "command": [
+        "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\netconvert.EXE",
+        "-n",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.nod.xml",
+        "-e",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.edg.xml",
+        "-x",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.con.xml",
+        "--tllogic-files",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.tll.xml",
+        "-o",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.net.xml",
+        "--no-turnarounds",
+        "true",
+        "--tls.cycle.time",
+        "90"
+      ],
+      "cwd": null,
+      "status": "pass",
+      "returncode": 0,
+      "stdout": "Success.\n",
+      "stderr": "",
+      "error": ""
+    },
+    "sumo": {
+      "command": [
+        "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\sumo.EXE",
+        "-c",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.sumocfg",
+        "--log",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene_sumo.log",
+        "--error-log",
+        "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene_sumo_errors.log"
+      ],
+      "cwd": null,
+      "status": "pass",
+      "returncode": 0,
+      "stdout": "Loading net-file from 'C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.net.xml' ... done (7ms).\nLoading route-files incrementally from 'C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.rou.xml'\nLoading done.\nSimulation version 1.25.0 started with time: 0.00.\nSimulation ended at time: 600.00.\nReason: The final simulation step has been reached.\nPerformance:\n Duration: 0.07s\n Real time factor: 8571.43\n UPS: 57414.285714\nVehicles:\n Inserted: 78\n Running: 0\n Waiting: 0\nStatistics (avg of 78):\n RouteLength: 380.79\n Speed: 7.78\n Duration: 51.52\n WaitingTime: 12.53\n TimeLoss: 23.10\n DepartDelay: 0.00\n",
+      "stderr": "",
+      "error": ""
+    }
+  },
+  "checks": {
+    "cleanup": {
+      "status": "pass"
+    },
+    "netconvert": {
+      "status": "pass"
+    },
+    "sumo_load": {
+      "status": "pass"
+    },
+    "routeability": {
+      "status": "pass",
+      "claim_status": "diagnostic-demo",
+      "routeability_status": "pass",
+      "summary": {
+        "path": "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene_summary.xml",
+        "exists": true,
+        "valid_xml": true,
+        "last_time": 599.0,
+        "loaded": 78,
+        "inserted": 78,
+        "arrived": 78,
+        "running": 0,
+        "waiting": 0,
+        "teleports": 0,
+        "collisions": 0,
+        "completion_ratio": 1.0,
+        "warnings": []
+      },
+      "tripinfo": {
+        "path": "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene_tripinfo.xml",
+        "exists": true,
+        "valid_xml": true,
+        "trip_count": 78,
+        "mean_duration": 51.52564102564103,
+        "mean_waiting_time": 12.525641025641026,
+        "mean_time_loss": 23.10205128205128,
+        "warnings": []
+      },
+      "warnings": []
+    },
+    "tls": {
+      "status": "pass"
+    }
+  },
+  "tls_explanation": {
+    "source_model": "SUMO plain XML plus .tll signal groups and embedded NEMA",
+    "net": "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.net.xml",
+    "additional": "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.add.xml",
+    "tls_id": "J0",
+    "controlled_link_count": 12,
+    "tls_signal_group_count": 8,
+    "phase_order": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8"
+    ],
+    "params": {
+      "detector-length": "20",
+      "detector-length-leftTurnLane": "10",
+      "total-cycle-length": "90",
+      "ring1": "1,2,3,4",
+      "ring2": "5,6,7,8",
+      "barrierPhases": "2,6",
+      "coordinate-mode": "false",
+      "barrier2Phases": "4,8",
+      "minRecall": "2,6",
+      "maxRecall": "",
+      "whetherOutputState": "true",
+      "fixForceOff": "false"
+    },
+    "lane_rule": {
+      "lane0": "right turn",
+      "lane1": "through",
+      "lane2": "protected left turn"
+    },
+    "movement_map": [
+      {
+        "linkIndex": 0,
+        "from": "W_in",
+        "fromLane": "2",
+        "to": "N_out",
+        "toLane": "2",
+        "turn": "l",
+        "nemaPhase": "1"
+      },
+      {
+        "linkIndex": 1,
+        "from": "W_in",
+        "fromLane": "1",
+        "to": "E_out",
+        "toLane": "1",
+        "turn": "s",
+        "nemaPhase": "2"
+      },
+      {
+        "linkIndex": 1,
+        "from": "W_in",
+        "fromLane": "0",
+        "to": "S_out",
+        "toLane": "0",
+        "turn": "r",
+        "nemaPhase": "2"
+      },
+      {
+        "linkIndex": 2,
+        "from": "S_in",
+        "fromLane": "2",
+        "to": "W_out",
+        "toLane": "2",
+        "turn": "l",
+        "nemaPhase": "3"
+      },
+      {
+        "linkIndex": 3,
+        "from": "S_in",
+        "fromLane": "0",
+        "to": "E_out",
+        "toLane": "0",
+        "turn": "r",
+        "nemaPhase": "4"
+      },
+      {
+        "linkIndex": 3,
+        "from": "S_in",
+        "fromLane": "1",
+        "to": "N_out",
+        "toLane": "1",
+        "turn": "s",
+        "nemaPhase": "4"
+      },
+      {
+        "linkIndex": 4,
+        "from": "E_in",
+        "fromLane": "2",
+        "to": "S_out",
+        "toLane": "2",
+        "turn": "l",
+        "nemaPhase": "5"
+      },
+      {
+        "linkIndex": 5,
+        "from": "E_in",
+        "fromLane": "0",
+        "to": "N_out",
+        "toLane": "0",
+        "turn": "r",
+        "nemaPhase": "6"
+      },
+      {
+        "linkIndex": 5,
+        "from": "E_in",
+        "fromLane": "1",
+        "to": "W_out",
+        "toLane": "1",
+        "turn": "s",
+        "nemaPhase": "6"
+      },
+      {
+        "linkIndex": 6,
+        "from": "N_in",
+        "fromLane": "2",
+        "to": "E_out",
+        "toLane": "2",
+        "turn": "l",
+        "nemaPhase": "7"
+      },
+      {
+        "linkIndex": 7,
+        "from": "N_in",
+        "fromLane": "1",
+        "to": "S_out",
+        "toLane": "1",
+        "turn": "s",
+        "nemaPhase": "8"
+      },
+      {
+        "linkIndex": 7,
+        "from": "N_in",
+        "fromLane": "0",
+        "to": "W_out",
+        "toLane": "0",
+        "turn": "r",
+        "nemaPhase": "8"
+      }
+    ]
+  },
+  "netedit": {
+    "command": [
+      "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\netedit.EXE",
+      "-s",
+      "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.net.xml"
+    ],
+    "status": "pass",
+    "process_id": 23128
+  },
+  "warnings": []
+}

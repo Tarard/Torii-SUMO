@@ -18,6 +18,7 @@ from .tools.intersection_tools import (
     sumo_nema_four_way_reference_workflow,
     sumo_intersection_clean,
     sumo_intersection_model,
+    sumo_intersection_scene_workflow,
     sumo_intersection_validate,
 )
 from .tools.osm_tools import (
@@ -64,7 +65,7 @@ def create_server() -> FastMCP:
     server.tool(description="Write a JSON and Markdown evidence bundle.")(
         sumo_collect_evidence
     )
-    server.tool(description="Route one natural-language SUMO request, including OSM map URLs, into a full Torii workflow with cleanup, audits, review HTML, SUMO-GUI, and Netedit evidence.")(
+    server.tool(description="Conditionally route one natural-language SUMO request to the narrow Phase-1 synthetic four-way scene workflow or existing OSM, TLS/network review, routeability, debugging, and experiment paths.")(
         torii_auto_workflow
     )
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(
@@ -84,6 +85,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Build a reusable four-way SUMO reference intersection with NEMA 8-phase dual-ring timing, channelized lanes, audit JSON, and optional SUMO smoke evidence.")(
         sumo_nema_four_way_reference_workflow
+    )
+    server.tool(description="Run the narrow Phase-1 synthetic passenger-only four-way TLS workflow with a defaulted NEMA reference controller, load/routeability checks, and artifact manifest; this is not an OSM or city-network workflow.")(
+        sumo_intersection_scene_workflow
     )
     server.tool(description="Low-level helper only: download/reuse OSM for an already chosen bbox, filter road classes, and build a raw SUMO network with netconvert. Do not use this as the full user-facing workflow.")(
         sumo_osm_build_network
