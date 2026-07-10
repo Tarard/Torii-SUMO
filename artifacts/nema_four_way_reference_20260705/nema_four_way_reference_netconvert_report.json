@@ -1,0 +1,25 @@
+{
+  "command": [
+    "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\netconvert.EXE",
+    "-n",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.nod.xml",
+    "-e",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.edg.xml",
+    "-x",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.con.xml",
+    "--tllogic-files",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.tll.xml",
+    "-o",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.net.xml",
+    "--no-turnarounds",
+    "true",
+    "--tls.cycle.time",
+    "90"
+  ],
+  "cwd": null,
+  "status": "pass",
+  "returncode": 0,
+  "stdout": "Success.\n",
+  "stderr": "",
+  "error": ""
+}

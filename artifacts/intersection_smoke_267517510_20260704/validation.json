@@ -1,0 +1,50 @@
+{
+  "status": "blocked",
+  "sumo_load_status": "pass",
+  "route_probe_status": "skipped",
+  "approach_count": 6,
+  "movement_count": 30,
+  "missing_movement_count": 4,
+  "forbidden_movement_count": 18,
+  "internal_fragment_count": 2,
+  "duplicate_junction_count": 0,
+  "disconnected_edge_count": 4,
+  "tls_linkindex_status": "fail",
+  "approach_mode_counts": {
+    "passenger": 3,
+    "bicycle+pedestrian": 3
+  },
+  "vehicle_approach_count": 3,
+  "vehicle_topology_type": "T3",
+  "legal_movement_mode_counts": {
+    "passenger": 6,
+    "bicycle+pedestrian": 6
+  },
+  "forbidden_cross_mode_movement_count": 18,
+  "warning_records": [
+    {
+      "message": "compiled net tlLogic state length does not match controlled connection count",
+      "severity": "blocking",
+      "source": "torii"
+    },
+    {
+      "message": "custom plain tlLogic was omitted because netconvert crossing guessing was enabled",
+      "severity": "blocking",
+      "source": "torii"
+    },
+    {
+      "message": "missing SUMO crossing edge for OSM pedestrian crossing support",
+      "severity": "blocking",
+      "source": "torii"
+    }
+  ],
+  "warning_count_by_severity": {
+    "blocking": 3
+  },
+  "blocking_error_count": 9,
+  "warnings": [
+    "compiled net tlLogic state length does not match controlled connection count",
+    "custom plain tlLogic was omitted because netconvert crossing guessing was enabled",
+    "missing SUMO crossing edge for OSM pedestrian crossing support"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\sumo.EXE",
+    "-c",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.sumocfg",
+    "--log",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference_sumo.log",
+    "--error-log",
+    "artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference_sumo_errors.log"
+  ],
+  "cwd": null,
+  "status": "pass",
+  "returncode": 0,
+  "stdout": "Loading net-file from 'C:\\Users\\huqio\\Documents\\Torii-SUMO\\artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.net.xml' ... done (7ms).\nLoading route-files incrementally from 'C:\\Users\\huqio\\Documents\\Torii-SUMO\\artifacts\\nema_four_way_reference_20260705\\nema_four_way_reference.rou.xml'\nLoading done.\nSimulation version 1.26.0 started with time: 0.00.\nSimulation ended at time: 600.00.\nReason: The final simulation step has been reached.\nPerformance:\n Duration: 0.13s\n Real time factor: 4511.28\n UPS: 30218.045113\nVehicles:\n Inserted: 78\n Running: 0\n Waiting: 0\nStatistics (avg of 78):\n RouteLength: 380.79\n Speed: 7.78\n Duration: 51.52\n WaitingTime: 12.53\n TimeLoss: 23.10\n DepartDelay: 0.00\n",
+  "stderr": "",
+  "error": ""
+}

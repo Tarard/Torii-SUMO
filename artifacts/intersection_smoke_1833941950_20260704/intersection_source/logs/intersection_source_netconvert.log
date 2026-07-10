@@ -1,0 +1,91 @@
+Parsing types from 'C:\Program Files (x86)\Eclipse\Sumo\/data/typemap/osmNetconvert.typ.xml' ... done.
+Parsing nodes from osm-file 'osm/intersection_source_filtered.osm.xml.gz' ... done (20ms).
+Parsing edges from osm-file 'osm/intersection_source_filtered.osm.xml.gz' ... done (24ms).
+Removing duplicate edges ... done.
+Parsing relations from osm-file 'osm/intersection_source_filtered.osm.xml.gz' ...
+ done (11ms).
+ Import done:
+   220 nodes loaded.
+   38 types loaded.
+   338 edges loaded.
+Proj projection parameters used: '+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs'.
+Removing self-loops ... done (0ms).
+Processing public transport stops ... done (1ms).
+Align pt stop id signs with corresponding edge id signs ... done (1ms).
+Removing empty nodes ... done (0ms).
+   0 nodes removed.
+Moving network to origin ... done (2ms).
+Computing turning directions ... done (1ms).
+Assigning nodes to traffic lights ... done (0ms).
+Sorting nodes' edges ... done (1ms).
+Computing node shapes ... done (14ms).
+Computing edge shapes ... done (4ms).
+Computing node types ... done (1ms).
+Computing priorities ... done (1ms).
+Computing approached edges ... done (1ms).
+Guessing and setting roundabouts ... done (0ms).
+Computing approaching lanes ... done (2ms).
+Dividing of lanes on approached lanes ... done (2ms).
+Processing turnarounds ... done (1ms).
+Rechecking of lane endings ... done (0ms).
+Joining traffic light nodes ... done (0ms).
+Computing traffic light control information ... done (0ms).
+Computing node logics ... done (2ms).
+Computing traffic light logics ...
+ done (11ms).
+ 82 traffic light(s) computed.
+Building inner edges ... done (7ms).
+Find accesses for pt rail stops ... done (1ms).
+-----------------------------------------------------
+Summary:
+ Node type statistics:
+  Unregulated junctions       : 0
+  Dead-end junctions          : 17
+  Priority junctions          : 98
+  Right-before-left junctions : 3
+  Traffic light junctions      : 102
+ Network boundaries:
+  Original boundary  : 11.40,48.76,11.42,48.78
+  Applied offset     : -676313.36,-5404062.89
+  Converted boundary : 0.00,0.00,1585.92,1732.53
+-----------------------------------------------------
+Writing network ... done (132ms).
+Success.
+
+Warning: Discarding unknown compound 'psv' in type 'highway.secondary|psv' (first occurrence for edge '4942389').
+Warning: Discarding unknown compound 'psv' in type 'highway.tertiary|psv' (first occurrence for edge '10425609').
+Warning: Discarding unknown compound 'psv' in type 'highway.primary|psv' (first occurrence for edge '23166741').
+Warning: Discarding unknown compound 'cycleway.track' in type 'cycleway.track|highway.tertiary|psv' (first occurrence for edge '24693977').
+Warning: Discarding unknown compound 'psv' in type 'cycleway.track|highway.tertiary|psv' (first occurrence for edge '24693977').
+Warning: No way found for reference '18909063' in relation '12408900'
+Warning: Ignoring restriction relation '12408900' with unknown from-way.
+Warning: No way found for reference '18909063' in relation '12408905'
+Warning: Ignoring restriction relation '12408905' with unknown from-way.
+Warning: direction of restriction relation could not be determined
+Warning: Ignoring restriction relation '14718791'.
+Warning: direction of restriction relation could not be determined
+Warning: Ignoring restriction relation '14718792'.
+Warning: No way found for reference '25149219' in relation '16769122'
+Warning: Ignoring restriction relation '16769122' with unknown to-way.
+Warning: No node found for reference '32564066' in relation '20618488'.
+Warning: Ignoring restriction relation '20618488' with unknown via.
+Warning: No node found for reference '32564066' in relation '20618489'.
+Warning: No way found for reference '54169287' in relation '20618489'
+Warning: Ignoring restriction relation '20618489' with unknown to-way.
+Warning: Ignoring restriction relation '20618489' with unknown via.
+Warning: No way found for reference '25955175' in relation '20618491'
+Warning: No node found for reference '32564066' in relation '20618491'.
+Warning: Ignoring restriction relation '20618491' with unknown from-way.
+Warning: Ignoring restriction relation '20618491' with unknown via.
+Warning: The traffic light '12066236208' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '12066236208'
+Warning: The traffic light '13104203955' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '13104203955'
+Warning: The traffic light '1757370784' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '1757370784'
+Warning: The traffic light '359022505' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '359022505'
+Warning: The traffic light '9602656751' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '9602656751'
+Warning: 9 total messages of type: Discarding unknown compound '%' in type '%' (first occurrence for edge '%').
+
