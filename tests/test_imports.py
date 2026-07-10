@@ -15,6 +15,7 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_detector_route_support",
         "sumo_intersection_clean",
         "sumo_intersection_model",
+        "sumo_intersection_scene_workflow",
         "sumo_intersection_validate",
         "sumo_nema_four_way_reference_workflow",
         "torii_auto_workflow",
@@ -64,6 +65,24 @@ def test_server_registers_expected_tool_names() -> None:
         return sorted(tool.name for tool in tools)
 
     assert anyio.run(_list_tool_names) == EXPECTED_TOOL_NAMES
+
+
+def test_server_describes_narrow_scene_and_conditional_auto_routing() -> None:
+    from torii_sumo.server import create_server
+
+    async def _tool_descriptions() -> dict[str, str]:
+        tools = await create_server().list_tools()
+        return {tool.name: tool.description or "" for tool in tools}
+
+    descriptions = anyio.run(_tool_descriptions)
+    auto = descriptions["torii_auto_workflow"].casefold()
+    scene = descriptions["sumo_intersection_scene_workflow"].casefold()
+
+    assert all(term in auto for term in ("conditionally", "phase-1", "osm", "review"))
+    assert all(
+        term in scene
+        for term in ("synthetic", "passenger-only", "defaulted nema", "not an osm or city-network")
+    )
 
 
 def test_server_smoke_tool_reports_blocked_without_real_sumo(tmp_path) -> None:

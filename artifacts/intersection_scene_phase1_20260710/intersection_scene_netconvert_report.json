@@ -1,0 +1,25 @@
+{
+  "command": [
+    "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\netconvert.EXE",
+    "-n",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.nod.xml",
+    "-e",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.edg.xml",
+    "-x",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.con.xml",
+    "--tllogic-files",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.tll.xml",
+    "-o",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.net.xml",
+    "--no-turnarounds",
+    "true",
+    "--tls.cycle.time",
+    "90"
+  ],
+  "cwd": null,
+  "status": "pass",
+  "returncode": 0,
+  "stdout": "Success.\n",
+  "stderr": "",
+  "error": ""
+}

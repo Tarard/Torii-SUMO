@@ -6,6 +6,7 @@ from typing import Any
 
 from torii_sumo.intersection.clean import build_intersection_ir, clean_intersection
 from torii_sumo.intersection.nema_reference import build_nema_four_way_reference
+from torii_sumo.intersection.scene_workflow import run_intersection_scene_workflow
 from torii_sumo.intersection.schema import CompiledSUMOArtifacts, IntersectionIR, PatchSeed
 from torii_sumo.intersection.validate import (
     _approach_mode_counts,
@@ -115,4 +116,18 @@ def sumo_nema_four_way_reference_workflow(
         prefix=prefix,
         run_sumo_smoke=run_sumo_smoke,
         require_real_sumo=require_real_sumo,
+    )
+
+
+def sumo_intersection_scene_workflow(
+    prompt: str,
+    output_dir: str,
+    prefix: str = "intersection_scene",
+    launch_netedit_after_build: bool = False,
+) -> dict[str, Any]:
+    return run_intersection_scene_workflow(
+        prompt,
+        Path(output_dir),
+        prefix=prefix,
+        launch_netedit_after_build=launch_netedit_after_build,
     )

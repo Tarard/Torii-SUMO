@@ -362,11 +362,11 @@ def _write_routes(path: Path) -> None:
 def _write_config(config_path: Path, net_path: Path, route_path: Path, summary_path: Path, tripinfo_path: Path) -> None:
     config = ET.Element("configuration")
     inputs = ET.SubElement(config, "input")
-    ET.SubElement(inputs, "net-file", value=str(net_path.resolve()))
-    ET.SubElement(inputs, "route-files", value=str(route_path.resolve()))
+    ET.SubElement(inputs, "net-file", value=net_path.name)
+    ET.SubElement(inputs, "route-files", value=route_path.name)
     outputs = ET.SubElement(config, "output")
-    ET.SubElement(outputs, "summary-output", value=str(summary_path.resolve()))
-    ET.SubElement(outputs, "tripinfo-output", value=str(tripinfo_path.resolve()))
+    ET.SubElement(outputs, "summary-output", value=summary_path.name)
+    ET.SubElement(outputs, "tripinfo-output", value=tripinfo_path.name)
     time = ET.SubElement(config, "time")
     ET.SubElement(time, "begin", value="0")
     ET.SubElement(time, "end", value=str(SIM_END_S))
@@ -380,22 +380,51 @@ def _write_config(config_path: Path, net_path: Path, route_path: Path, summary_p
 
 def _audit_nema(net_path: Path, additional_path: Path) -> dict[str, Any]:
     net_root = ET.parse(net_path).getroot()
-    add_root = ET.parse(additional_path).getroot()
-    tl_logic = add_root.find("tlLogic")
+    tl_logic = net_root.find("tlLogic[@id='J0']")
     if tl_logic is None:
-        raise AssertionError("missing NEMA tlLogic")
+        raise AssertionError("compiled net missing J0 NEMA tlLogic")
     if tl_logic.attrib != {"id": "J0", "offset": "0", "programID": "NEMA", "type": "NEMA"}:
         raise AssertionError(f"NEMA tlLogic attributes do not match: {tl_logic.attrib}")
     params = {param.attrib["key"]: param.attrib["value"] for param in tl_logic.findall("param")}
     if params != NEMA_PARAMS:
         raise AssertionError(f"NEMA params do not match: {params}")
     phases = tl_logic.findall("phase")
-    if tuple(phase.attrib["name"] for phase in phases) != NEMA_PHASE_ORDER:
-        raise AssertionError("phase order mismatch")
-    if {len(phase.attrib.get("state", "")) for phase in phases} != {len(NEMA_PHASE_ORDER)}:
-        raise AssertionError("NEMA phase states must have length 8")
+    expected_phases = [
+        {
+            "duration": "99",
+            "minDur": "5",
+            "maxDur": "20" if phase in LEFT_PHASES else "35",
+            "vehext": "2",
+            "yellow": "3",
+            "red": "1",
+            "name": phase,
+            "state": _state_for_phase(phase),
+        }
+        for phase in NEMA_PHASE_ORDER
+    ]
+    if [phase.attrib for phase in phases] != expected_phases:
+        raise AssertionError("compiled NEMA phases do not match the reference plan")
 
     controlled = [connection for connection in net_root.findall("connection") if connection.attrib.get("tl") == "J0"]
+    expected_movements = set()
+    for from_edge, right_edge, through_edge, left_edge in _approach_connections():
+        for to_edge, lane, turn in ((right_edge, "0", "r"), (through_edge, "1", "s"), (left_edge, "2", "l")):
+            phase = _phase_for_connection(ET.Element("connection", **{"from": from_edge, "fromLane": lane, "dir": turn}))
+            expected_movements.add((from_edge, to_edge, lane, lane, turn, int(phase) - 1))
+    actual_movements = {
+        (
+            connection.attrib["from"],
+            connection.attrib["to"],
+            connection.attrib["fromLane"],
+            connection.attrib["toLane"],
+            connection.attrib["dir"],
+            int(connection.attrib["linkIndex"]),
+        )
+        for connection in controlled
+    }
+    if len(controlled) != len(expected_movements) or actual_movements != expected_movements:
+        raise AssertionError("compiled NEMA controlled movements do not match the 12-movement reference map")
+
     movement_rows = []
     for connection in controlled:
         phase = _phase_for_connection(connection)

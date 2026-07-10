@@ -5,6 +5,7 @@ from torii_sumo.tools import intersection_tools
 from torii_sumo.tools.intersection_tools import (
     sumo_intersection_clean,
     sumo_intersection_model,
+    sumo_intersection_scene_workflow,
     sumo_intersection_validate,
 )
 
@@ -65,3 +66,33 @@ def test_sumo_intersection_clean_wraps_clean_intersection(monkeypatch, tmp_path:
     )
 
     assert report == {"status": "blocked", "intersection_id": "core_1"}
+
+
+def test_sumo_intersection_scene_workflow_delegates_with_path_and_options(monkeypatch, tmp_path: Path) -> None:
+    calls = {}
+
+    def fake_workflow(prompt, output_dir, prefix, launch_netedit_after_build):
+        calls.update(
+            prompt=prompt,
+            output_dir=output_dir,
+            prefix=prefix,
+            launch_netedit_after_build=launch_netedit_after_build,
+        )
+        return {"status": "pass"}
+
+    monkeypatch.setattr(intersection_tools, "run_intersection_scene_workflow", fake_workflow)
+
+    report = sumo_intersection_scene_workflow(
+        "Make a four-way traffic-light intersection",
+        str(tmp_path),
+        prefix="demo",
+        launch_netedit_after_build=True,
+    )
+
+    assert report == {"status": "pass"}
+    assert calls == {
+        "prompt": "Make a four-way traffic-light intersection",
+        "output_dir": tmp_path,
+        "prefix": "demo",
+        "launch_netedit_after_build": True,
+    }
