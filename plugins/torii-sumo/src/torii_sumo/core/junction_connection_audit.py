@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import gzip
 import json
+import math
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -347,6 +348,438 @@ def compare_tls_movement_signatures(
             "teacher": [len(state) for state in teacher_phase_states],
             "candidate": [len(state) for state in candidate_phase_states],
         },
+        "tl_logic_phase_states_equal": phase_equal,
+    }
+
+
+def compare_tls_via_path_semantics(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    teacher_tls_id: str,
+    candidate_tls_id: str,
+    *,
+    teacher_edge_map: dict[str, str] | None = None,
+    teacher_internal_scope_id: str | None = None,
+    candidate_internal_scope_id: str | None = None,
+    shape_tolerance_m: float = 12.0,
+    length_tolerance_m: float = 8.0,
+) -> dict[str, Any]:
+    """Compare TLS movements without treating SUMO's internal-edge suffix as stable.
+
+    ``netconvert`` may renumber internal edge suffixes while preserving the
+    same signal link.  This audit therefore keeps the strict movement key
+    (mapped endpoints, lanes, linkIndex, dir, and state), then validates the
+    referenced ``via`` lane by transformed geometry and length.  A changed
+    linkIndex, direction, state, missing via lane, or materially different via
+    path remains a failure.
+    """
+
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_scope = teacher_internal_scope_id or teacher_tls_id
+    candidate_scope = candidate_internal_scope_id or candidate_tls_id
+    teacher_prefix = f":{teacher_scope}_"
+    candidate_prefix = f":{candidate_scope}_"
+    teacher_edge_map = teacher_edge_map or {}
+
+    def junction_xy(root: ET.Element, junction_id: str) -> tuple[float, float]:
+        junction = root.find(f"junction[@id='{junction_id}']")
+        if junction is None:
+            return 0.0, 0.0
+        try:
+            return float(junction.attrib.get("x", "0")), float(junction.attrib.get("y", "0"))
+        except (TypeError, ValueError):
+            return 0.0, 0.0
+
+    teacher_x, teacher_y = junction_xy(teacher_root, teacher_tls_id)
+    candidate_x, candidate_y = junction_xy(candidate_root, candidate_tls_id)
+    dx = candidate_x - teacher_x
+    dy = candidate_y - teacher_y
+
+    def parse_shape(value: str) -> list[tuple[float, float]]:
+        points: list[tuple[float, float]] = []
+        for token in value.split():
+            parts = token.split(",")
+            if len(parts) < 2:
+                continue
+            try:
+                points.append((float(parts[0]), float(parts[1])))
+            except ValueError:
+                continue
+        return points
+
+    def shape_distance(source: list[tuple[float, float]], target: list[tuple[float, float]]) -> float | None:
+        if not source or not target:
+            return None
+
+        def directed(points: list[tuple[float, float]], other: list[tuple[float, float]]) -> float:
+            return max(
+                min(math.hypot(point[0] - candidate[0], point[1] - candidate[1]) for candidate in other)
+                for point in points
+            )
+
+        translated = [(x + dx, y + dy) for x, y in source]
+        return max(directed(translated, target), directed(target, translated))
+
+    def scoped_connections(root: ET.Element, tls_id: str, scope_prefix: str) -> list[ET.Element]:
+        return [
+            connection
+            for connection in root.findall("connection")
+            if connection.attrib.get("tl") == tls_id
+            and connection.attrib.get("linkIndex")
+            and (
+                not scope_prefix
+                or connection.attrib.get("via", "").startswith(scope_prefix)
+            )
+        ]
+
+    def normalize_endpoint(value: str, edge_map: dict[str, str], scope_id: str) -> str:
+        if value.startswith(f":{scope_id}"):
+            return f":TARGET{value[len(scope_id) + 1:]}"
+        return edge_map.get(value, value)
+
+    def movement_key(connection: ET.Element, edge_map: dict[str, str], scope_id: str) -> tuple[str, ...]:
+        return (
+            normalize_endpoint(connection.attrib.get("from", ""), edge_map, scope_id),
+            normalize_endpoint(connection.attrib.get("to", ""), edge_map, scope_id),
+            connection.attrib.get("fromLane", ""),
+            connection.attrib.get("toLane", ""),
+            connection.attrib.get("linkIndex", ""),
+            connection.attrib.get("dir", ""),
+            connection.attrib.get("state", ""),
+        )
+
+    def internal_lanes(root: ET.Element, scope_prefix: str) -> dict[str, tuple[ET.Element, ET.Element]]:
+        lanes: dict[str, tuple[ET.Element, ET.Element]] = {}
+        for edge in root.findall("edge"):
+            edge_id = edge.attrib.get("id", "")
+            if not edge_id.startswith(scope_prefix):
+                continue
+            for lane in edge.findall("lane"):
+                lane_id = lane.attrib.get("id", "")
+                if lane_id:
+                    lanes[lane_id] = (edge, lane)
+        return lanes
+
+    teacher_connections = scoped_connections(teacher_root, teacher_tls_id, teacher_prefix)
+    candidate_connections = scoped_connections(candidate_root, candidate_tls_id, candidate_prefix)
+    teacher_by_key: dict[tuple[str, ...], list[ET.Element]] = {}
+    candidate_by_key: dict[tuple[str, ...], list[ET.Element]] = {}
+    for connection in teacher_connections:
+        teacher_by_key.setdefault(movement_key(connection, teacher_edge_map, teacher_scope), []).append(connection)
+    for connection in candidate_connections:
+        candidate_by_key.setdefault(movement_key(connection, {}, candidate_scope), []).append(connection)
+
+    missing_keys = []
+    extra_keys = []
+    via_checks: list[dict[str, Any]] = []
+    teacher_lanes = internal_lanes(teacher_root, teacher_prefix)
+    candidate_lanes = internal_lanes(candidate_root, candidate_prefix)
+    for key, teacher_items in sorted(teacher_by_key.items()):
+        candidate_items = candidate_by_key.get(key, [])
+        if len(candidate_items) < len(teacher_items):
+            missing_keys.extend([key] * (len(teacher_items) - len(candidate_items)))
+        for index, teacher_connection in enumerate(teacher_items):
+            if index >= len(candidate_items):
+                continue
+            candidate_connection = candidate_items[index]
+            teacher_via = teacher_connection.attrib.get("via", "")
+            candidate_via = candidate_connection.attrib.get("via", "")
+            teacher_via_record = teacher_lanes.get(teacher_via)
+            candidate_via_record = candidate_lanes.get(candidate_via)
+            check: dict[str, Any] = {
+                "linkIndex": teacher_connection.attrib.get("linkIndex", ""),
+                "teacher_via": teacher_via,
+                "candidate_via": candidate_via,
+                "teacher_via_present": teacher_via_record is not None,
+                "candidate_via_present": candidate_via_record is not None,
+            }
+            if teacher_via_record is not None and candidate_via_record is not None:
+                teacher_lane = teacher_via_record[1]
+                candidate_lane = candidate_via_record[1]
+                delta = shape_distance(
+                    parse_shape(teacher_lane.attrib.get("shape", "")),
+                    parse_shape(candidate_lane.attrib.get("shape", "")),
+                )
+                check["shape_delta_m"] = None if delta is None else round(delta, 6)
+                try:
+                    length_delta = abs(
+                        float(candidate_lane.attrib.get("length", "0"))
+                        - float(teacher_lane.attrib.get("length", "0"))
+                    )
+                except (TypeError, ValueError):
+                    length_delta = None
+                check["length_delta_m"] = None if length_delta is None else round(length_delta, 6)
+                check["path_within_tolerance"] = (
+                    delta is not None
+                    and delta <= shape_tolerance_m
+                    and length_delta is not None
+                    and length_delta <= length_tolerance_m
+                )
+            else:
+                check["shape_delta_m"] = None
+                check["length_delta_m"] = None
+                check["path_within_tolerance"] = False
+            via_checks.append(check)
+    for key, candidate_items in sorted(candidate_by_key.items()):
+        teacher_items = teacher_by_key.get(key, [])
+        if len(candidate_items) > len(teacher_items):
+            extra_keys.extend([key] * (len(candidate_items) - len(teacher_items)))
+
+    phase_states_teacher = _tls_phase_states(teacher_root, teacher_tls_id)
+    phase_states_candidate = _tls_phase_states(candidate_root, candidate_tls_id)
+    missing_via_count = sum(1 for check in via_checks if not check["candidate_via_present"])
+    path_failure_count = sum(1 for check in via_checks if not check["path_within_tolerance"])
+    movement_equal = not missing_keys and not extra_keys
+    phase_equal = phase_states_teacher == phase_states_candidate
+    via_geometry_status = "pass" if not path_failure_count else "needs_review"
+    status = "pass" if movement_equal and phase_equal and not missing_via_count else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "teacher_tls_id": teacher_tls_id,
+        "candidate_tls_id": candidate_tls_id,
+        "teacher_edge_map": dict(sorted(teacher_edge_map.items())),
+        "compared_fields": ["from", "to", "fromLane", "toLane", "linkIndex", "dir", "state", "via_path"],
+        "teacher_connection_count": len(teacher_connections),
+        "candidate_connection_count": len(candidate_connections),
+        "movement_key_equal": movement_equal,
+        "teacher_only_movement_keys": [list(key) for key in missing_keys],
+        "candidate_only_movement_keys": [list(key) for key in extra_keys],
+        "via_checks": via_checks,
+        "missing_via_count": missing_via_count,
+        "via_path_failure_count": path_failure_count,
+        "via_geometry_status": via_geometry_status,
+        "shape_tolerance_m": shape_tolerance_m,
+        "length_tolerance_m": length_tolerance_m,
+        "teacher_phase_states": phase_states_teacher,
+        "candidate_phase_states": phase_states_candidate,
+        "tl_logic_phase_states_equal": phase_equal,
+        "normalized_translation": {"dx": round(dx, 6), "dy": round(dy, 6)},
+    }
+
+
+def compare_shared_tls_via_path_semantics(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    teacher_tls_id: str,
+    candidate_tls_id: str,
+    *,
+    owner_map: dict[str, str],
+    teacher_edge_map: dict[str, str] | None = None,
+    shape_tolerance_m: float = 12.0,
+    length_tolerance_m: float = 8.0,
+) -> dict[str, Any]:
+    """Compare a shared controller by linkIndex across multiple ``via`` owners.
+
+    ``compare_tls_via_path_semantics`` intentionally scopes to one internal
+    prefix.  A shared SUMO controller has one tlLogic but several prefixes, so
+    this variant normalizes each reference owner to its explicit candidate
+    owner and pairs the resulting path by stable linkIndex.
+    """
+
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    clean_owner_map = {
+        str(key): str(value)
+        for key, value in (owner_map or {}).items()
+        if str(key) and str(value)
+    }
+    edge_map = {
+        str(key): str(value)
+        for key, value in (teacher_edge_map or {}).items()
+        if str(key) and str(value)
+    }
+    teacher_owner_ids = sorted(clean_owner_map, key=len, reverse=True)
+
+    def owner_for(value: str) -> str:
+        for owner_id in teacher_owner_ids:
+            if value.startswith(f":{owner_id}_"):
+                return owner_id
+        return ""
+
+    def map_ref(value: str) -> str:
+        owner_id = owner_for(value)
+        if owner_id:
+            prefix = f":{owner_id}_"
+            return f":{clean_owner_map[owner_id]}_{value[len(prefix):]}"
+        return edge_map.get(value, value)
+
+    def xy(root: ET.Element, junction_id: str) -> tuple[float, float]:
+        junction = root.find(f"junction[@id='{junction_id}']")
+        if junction is None:
+            return 0.0, 0.0
+        try:
+            return float(junction.attrib.get("x", "0")), float(junction.attrib.get("y", "0"))
+        except (TypeError, ValueError):
+            return 0.0, 0.0
+
+    def points(value: str) -> list[tuple[float, float]]:
+        result: list[tuple[float, float]] = []
+        for token in value.split():
+            parts = token.split(",")
+            if len(parts) < 2:
+                continue
+            try:
+                result.append((float(parts[0]), float(parts[1])))
+            except ValueError:
+                continue
+        return result
+
+    def directed_distance(source: list[tuple[float, float]], target: list[tuple[float, float]]) -> float:
+        return max(
+            min(math.hypot(point[0] - candidate[0], point[1] - candidate[1]) for candidate in target)
+            for point in source
+        )
+
+    def path_distance(
+        source: list[tuple[float, float]],
+        target: list[tuple[float, float]],
+        dx: float,
+        dy: float,
+    ) -> float | None:
+        if not source or not target:
+            return None
+        translated = [(x + dx, y + dy) for x, y in source]
+        return max(directed_distance(translated, target), directed_distance(target, translated))
+
+    teacher_connections = [
+        connection
+        for connection in teacher_root.findall("connection")
+        if connection.attrib.get("tl") == teacher_tls_id and connection.attrib.get("linkIndex") is not None
+    ]
+    candidate_connections = [
+        connection
+        for connection in candidate_root.findall("connection")
+        if connection.attrib.get("tl") == candidate_tls_id and connection.attrib.get("linkIndex") is not None
+    ]
+    teacher_key_counts = Counter(
+        (
+            map_ref(connection.attrib.get("from", "")),
+            map_ref(connection.attrib.get("to", "")),
+            connection.attrib.get("fromLane", ""),
+            connection.attrib.get("toLane", ""),
+            connection.attrib.get("linkIndex", ""),
+            connection.attrib.get("dir", ""),
+            connection.attrib.get("state", ""),
+        )
+        for connection in teacher_connections
+    )
+    candidate_key_counts = Counter(
+        (
+            connection.attrib.get("from", ""),
+            connection.attrib.get("to", ""),
+            connection.attrib.get("fromLane", ""),
+            connection.attrib.get("toLane", ""),
+            connection.attrib.get("linkIndex", ""),
+            connection.attrib.get("dir", ""),
+            connection.attrib.get("state", ""),
+        )
+        for connection in candidate_connections
+    )
+    missing_keys = list((teacher_key_counts - candidate_key_counts).elements())
+    extra_keys = list((candidate_key_counts - teacher_key_counts).elements())
+
+    teacher_lanes = {
+        lane.attrib.get("id", ""): lane
+        for edge in teacher_root.findall("edge")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    candidate_lanes = {
+        lane.attrib.get("id", ""): lane
+        for edge in candidate_root.findall("edge")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    candidate_by_link_index: dict[str, list[ET.Element]] = {}
+    for connection in candidate_connections:
+        candidate_by_link_index.setdefault(connection.attrib.get("linkIndex", ""), []).append(connection)
+    via_checks: list[dict[str, Any]] = []
+    for teacher_connection in teacher_connections:
+        link_index = teacher_connection.attrib.get("linkIndex", "")
+        candidate_items = candidate_by_link_index.get(link_index, [])
+        candidate_connection = candidate_items[0] if candidate_items else None
+        teacher_via = teacher_connection.attrib.get("via", "")
+        candidate_via = candidate_connection.attrib.get("via", "") if candidate_connection is not None else ""
+        owner_id = owner_for(teacher_via) or teacher_tls_id
+        candidate_owner_id = clean_owner_map.get(owner_id, candidate_tls_id)
+        teacher_via_lane = teacher_lanes.get(teacher_via)
+        candidate_via_lane = candidate_lanes.get(candidate_via)
+        teacher_xy = xy(teacher_root, owner_id)
+        candidate_xy = xy(candidate_root, candidate_owner_id)
+        dx = candidate_xy[0] - teacher_xy[0]
+        dy = candidate_xy[1] - teacher_xy[1]
+        shape_delta = (
+            path_distance(
+                points(teacher_via_lane.attrib.get("shape", "")),
+                points(candidate_via_lane.attrib.get("shape", "")),
+                dx,
+                dy,
+            )
+            if teacher_via_lane is not None and candidate_via_lane is not None
+            else None
+        )
+        try:
+            length_delta = (
+                abs(float(candidate_via_lane.attrib.get("length", "0")) - float(teacher_via_lane.attrib.get("length", "0")))
+                if teacher_via_lane is not None and candidate_via_lane is not None
+                else None
+            )
+        except (TypeError, ValueError):
+            length_delta = None
+        via_checks.append(
+            {
+                "linkIndex": link_index,
+                "teacher_via": teacher_via,
+                "candidate_via": candidate_via,
+                "owner_id": owner_id,
+                "candidate_owner_id": candidate_owner_id,
+                "teacher_via_present": teacher_via_lane is not None,
+                "candidate_via_present": candidate_via_lane is not None,
+                "shape_delta_m": None if shape_delta is None else round(shape_delta, 6),
+                "length_delta_m": None if length_delta is None else round(length_delta, 6),
+                "path_within_tolerance": (
+                    shape_delta is not None
+                    and length_delta is not None
+                    and shape_delta <= shape_tolerance_m
+                    and length_delta <= length_tolerance_m
+                ),
+            }
+        )
+
+    teacher_phases = _tls_phase_states(teacher_root, teacher_tls_id)
+    candidate_phases = _tls_phase_states(candidate_root, candidate_tls_id)
+    missing_via_count = sum(1 for item in via_checks if not item["candidate_via_present"])
+    path_failure_count = sum(1 for item in via_checks if not item["path_within_tolerance"])
+    movement_equal = not missing_keys and not extra_keys
+    phase_equal = teacher_phases == candidate_phases
+    status = "pass" if movement_equal and phase_equal and missing_via_count == 0 and path_failure_count == 0 else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "teacher_net_file": str(teacher_net_file),
+        "candidate_net_file": str(candidate_net_file),
+        "teacher_tls_id": teacher_tls_id,
+        "candidate_tls_id": candidate_tls_id,
+        "owner_map": dict(sorted(clean_owner_map.items())),
+        "teacher_edge_map": dict(sorted(edge_map.items())),
+        "compared_fields": ["from", "to", "fromLane", "toLane", "linkIndex", "dir", "state", "via_path"],
+        "teacher_connection_count": len(teacher_connections),
+        "candidate_connection_count": len(candidate_connections),
+        "movement_key_equal": movement_equal,
+        "teacher_only_movement_keys": [list(key) for key in missing_keys],
+        "candidate_only_movement_keys": [list(key) for key in extra_keys],
+        "via_checks": via_checks,
+        "missing_via_count": missing_via_count,
+        "via_path_failure_count": path_failure_count,
+        "via_geometry_status": "pass" if path_failure_count == 0 else "needs_review",
+        "shape_tolerance_m": shape_tolerance_m,
+        "length_tolerance_m": length_tolerance_m,
+        "teacher_phase_states": teacher_phases,
+        "candidate_phase_states": candidate_phases,
         "tl_logic_phase_states_equal": phase_equal,
     }
 

@@ -162,7 +162,7 @@ def _sumo_coordinate_converter(
 
     try:
         net = sumolib.net.readNet(str(net_file))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - optional sumolib parser failure is returned as evidence.
         return None, [f"sumolib could not read reference net for bbox derivation: {type(exc).__name__}: {exc}"]
     return lambda x, y: _net_xy_to_latlon(net, x, y), []
 

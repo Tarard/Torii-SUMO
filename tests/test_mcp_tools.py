@@ -1,19 +1,26 @@
 import json
+import inspect
 from pathlib import Path
 
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
 from torii_sumo.tools.osm_tools import (
+    sumo_network_connection_mode_audit,
+    sumo_network_connection_mode_regression_audit,
     sumo_network_review_html,
     sumo_network_junction_aggregation_variant,
     sumo_network_overlapping_junction_audit,
     sumo_network_reference_hierarchy_audit,
+    sumo_network_corridor_geometry_simplification_variant,
+    sumo_network_corridor_candidate_gates,
     sumo_network_reference_join_audit,
     sumo_network_reference_scope_audit,
     sumo_network_routeability_audit,
     sumo_network_scope_pruning_variant,
+    sumo_network_standard_nema_phase_binding,
     sumo_network_teacher_guided_junction_variant,
     sumo_network_teacher_guided_repair_queue,
     sumo_network_tls_aggregation_variant,
+    sumo_network_tls_reference_cleanup_variant,
     sumo_network_tls_warning_parity,
     sumo_network_topology_audit,
 )
@@ -438,6 +445,72 @@ def test_sumo_network_scope_pruning_variant_tool_returns_json_compatible_report(
     json.dumps(report)
 
 
+def test_corridor_candidate_gate_tool_accepts_only_persisted_evidence_files(monkeypatch, tmp_path: Path) -> None:
+    from torii_sumo.tools import osm_tools
+
+    materialization_file = tmp_path / "materialization.json"
+    review_file = tmp_path / "review.json"
+    materialization_file.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+    review_file.write_text(json.dumps({"status": "accepted"}), encoding="utf-8")
+
+    def fake_gates(**kwargs):
+        assert kwargs["materialization_report"]["_materialization_report_file"] == str(
+            materialization_file.resolve()
+        )
+        assert kwargs["review_decision"]["_review_decision_file"] == str(review_file.resolve())
+        return {"status": "blocked", "claim_status": "blocked"}
+
+    monkeypatch.setattr(osm_tools, "run_corridor_candidate_gates", fake_gates)
+    report = sumo_network_corridor_candidate_gates(
+        source_net_file=str(tmp_path / "source.net.xml"),
+        candidate_net_file=str(tmp_path / "candidate.net.xml"),
+        output_dir=str(tmp_path / "gates"),
+        materialization_report_file=str(materialization_file),
+        review_decision_file=str(review_file),
+    )
+
+    parameters = inspect.signature(sumo_network_corridor_candidate_gates).parameters
+    assert "semantic_allowances" not in parameters
+    assert "tls_logic_allowances" not in parameters
+    assert report["status"] == "blocked"
+
+
+def test_sumo_network_corridor_geometry_simplification_tool_returns_json_report(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "candidate.net.xml"
+    reference_file = tmp_path / "reference.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    reference_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_simplification(**kwargs):
+        assert kwargs["net_file"] == net_file
+        assert kwargs["reference_net_file"] == reference_file
+        assert kwargs["max_micro_edge_length_m"] == 0.75
+        return {
+            "status": "pass",
+            "claim_status": "blocked",
+            "corridor_geometry_simplification_status": "variant_created_for_review",
+            "candidate_node_count": 2,
+            "semantic_preservation_status": "pass",
+        }
+
+    monkeypatch.setattr(osm_tools, "build_corridor_geometry_simplification_variant", fake_simplification)
+
+    report = sumo_network_corridor_geometry_simplification_variant(
+        net_file=str(net_file),
+        reference_net_file=str(reference_file),
+        output_dir=str(tmp_path / "corridor"),
+        max_micro_edge_length_m=0.75,
+    )
+
+    assert report["status"] == "pass"
+    assert report["candidate_node_count"] == 2
+    json.dumps(report)
+
+
 def test_sumo_network_tls_aggregation_variant_tool_returns_json_compatible_report(monkeypatch, tmp_path: Path) -> None:
     from torii_sumo.tools import osm_tools
 
@@ -476,6 +549,155 @@ def test_sumo_network_tls_aggregation_variant_tool_returns_json_compatible_repor
 
     assert report["status"] == "pass"
     assert report["tls_physical_cluster_count"] == 2
+    json.dumps(report)
+
+
+def test_sumo_network_tls_reference_cleanup_tool_returns_json_compatible_report(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    net_file = tmp_path / "candidate.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    def fake_cleanup(net_file_arg, *, output_dir, prefix):
+        assert net_file_arg == net_file
+        assert output_dir == tmp_path / "cleanup"
+        assert prefix == "bounded"
+        return {
+            "status": "pass",
+            "tls_reference_cleanup_status": "no_change",
+            "effective_net_file": str(net_file),
+        }
+
+    monkeypatch.setattr(osm_tools, "build_tls_reference_cleanup_variant", fake_cleanup)
+    report = sumo_network_tls_reference_cleanup_variant(
+        net_file=str(net_file),
+        output_dir=str(tmp_path / "cleanup"),
+        prefix="bounded",
+    )
+
+    assert report["status"] == "pass"
+    assert report["tls_reference_cleanup_status"] == "no_change"
+
+
+def test_sumo_network_standard_nema_phase_binding_tool_returns_json_report(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    captured = {}
+
+    def fake_binding(net_file: Path, **kwargs):
+        captured.update({"net_file": net_file, **kwargs})
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "nema_binding_status": "scan_complete",
+            "scan_counts": {"eligible_count": 1},
+        }
+
+    monkeypatch.setattr(osm_tools, "build_standard_nema_phase_binding", fake_binding)
+
+    report = sumo_network_standard_nema_phase_binding(
+        net_file=str(tmp_path / "source.net.xml"),
+        output_dir=str(tmp_path / "review"),
+        junction_id="J0",
+        prefix="probe",
+        run_runtime_checks=False,
+        run_routeability=False,
+    )
+
+    assert report["status"] == "pass"
+    assert report["nema_binding_status"] == "scan_complete"
+    assert captured["net_file"] == tmp_path / "source.net.xml"
+    assert captured["output_dir"] == tmp_path / "review"
+    assert captured["junction_id"] == "J0"
+    assert captured["prefix"] == "probe"
+    assert captured["run_runtime_checks"] is False
+    assert captured["run_routeability"] is False
+    json.dumps(report)
+
+
+def test_sumo_network_connection_mode_audit_tool_returns_json_report(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    captured = {}
+
+    def fake_audit(net_file: Path, **kwargs):
+        captured.update({"net_file": net_file, **kwargs})
+        return {
+            "status": "review_required",
+            "automatic_promotion_gate": "blocked",
+            "review_required_count": 1,
+        }
+
+    monkeypatch.setattr(osm_tools, "build_network_connection_mode_audit", fake_audit)
+
+    report = sumo_network_connection_mode_audit(
+        net_file=str(tmp_path / "source.net.xml"),
+        output_dir=str(tmp_path / "connection-review"),
+        prefix="probe",
+        junction_ids=["J0"],
+    )
+
+    assert report["status"] == "review_required"
+    assert report["automatic_promotion_gate"] == "blocked"
+    assert captured["net_file"] == tmp_path / "source.net.xml"
+    assert captured["output_dir"] == tmp_path / "connection-review"
+    assert captured["prefix"] == "probe"
+    assert captured["junction_ids"] == ["J0"]
+    json.dumps(report)
+
+
+def test_sumo_network_connection_mode_regression_tool_returns_json_report(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    captured = {}
+
+    def fake_regression(source_net_file: Path, candidate_net_file: Path, **kwargs):
+        captured.update(
+            {
+                "source_net_file": source_net_file,
+                "candidate_net_file": candidate_net_file,
+                **kwargs,
+            }
+        )
+        return {
+            "status": "fail",
+            "automatic_promotion_gate": "blocked",
+            "outside_scope_new_review_finding_count": 2,
+        }
+
+    monkeypatch.setattr(
+        osm_tools,
+        "build_connection_mode_regression_audit",
+        fake_regression,
+    )
+
+    report = sumo_network_connection_mode_regression_audit(
+        source_net_file=str(tmp_path / "source.net.xml"),
+        candidate_net_file=str(tmp_path / "candidate.net.xml"),
+        output_dir=str(tmp_path / "regression"),
+        prefix="delta",
+        target_source_junction_ids=["old_j"],
+        target_candidate_junction_ids=["new_j"],
+    )
+
+    assert report["status"] == "fail"
+    assert captured["source_net_file"] == tmp_path / "source.net.xml"
+    assert captured["candidate_net_file"] == tmp_path / "candidate.net.xml"
+    assert captured["target_source_junction_ids"] == ["old_j"]
+    assert captured["target_candidate_junction_ids"] == ["new_j"]
+    assert captured["prefix"] == "delta"
     json.dumps(report)
 
 

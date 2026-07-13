@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 from collections import Counter
@@ -34,6 +35,7 @@ def audit_reference_hierarchy(
     match_distance_m: float = 35.0,
     oversplit_length_ratio: float = 0.6,
     min_extra_edges: int = 10,
+    resolve_equivalent_fragmentation: bool = False,
 ) -> dict[str, Any]:
     if match_distance_m <= 0:
         return _failure("match_distance_m must be positive")
@@ -69,6 +71,7 @@ def audit_reference_hierarchy(
             type_decisions=type_decisions,
             match_distance_m=match_distance_m,
             oversplit_length_ratio=oversplit_length_ratio,
+            resolve_equivalent_fragmentation=resolve_equivalent_fragmentation,
         )
         for edge in candidate_high_edges
     ]
@@ -80,10 +83,13 @@ def audit_reference_hierarchy(
         sorted(Counter(case["same_name_match_status"] for case in candidate_cases).items())
     )
     issue_count = sum(1 for case in candidate_cases if case["hierarchy_decision"] != "aligned")
+    equivalent_fragmentation_count = sum(
+        1 for case in candidate_cases if case.get("hierarchy_resolution") == "equivalent_fragmentation"
+    )
 
-    cases_file = output_dir / f"{prefix}_high_hierarchy_cases.csv"
-    type_comparison_file = output_dir / f"{prefix}_high_hierarchy_type_comparison.csv"
-    summary_file = output_dir / f"{prefix}_reference_hierarchy_audit.json"
+    cases_file = _short_output_path(output_dir, prefix, "_high_hierarchy_cases.csv")
+    type_comparison_file = _short_output_path(output_dir, prefix, "_high_hierarchy_type_comparison.csv")
+    summary_file = _short_output_path(output_dir, prefix, "_reference_hierarchy_audit.json")
     _write_cases_csv(cases_file, candidate_cases)
     _write_type_comparison_csv(type_comparison_file, type_comparisons)
 
@@ -98,9 +104,17 @@ def audit_reference_hierarchy(
         "match_distance_m": match_distance_m,
         "oversplit_length_ratio": oversplit_length_ratio,
         "min_extra_edges": min_extra_edges,
+        "resolve_equivalent_fragmentation": resolve_equivalent_fragmentation,
         "reference_high_hierarchy_edge_count": len(reference_high_edges),
         "candidate_high_hierarchy_edge_count": len(candidate_high_edges),
         "high_hierarchy_issue_count": issue_count,
+        "raw_high_hierarchy_issue_count": issue_count + equivalent_fragmentation_count,
+        "equivalent_fragmentation_count": equivalent_fragmentation_count,
+        "hierarchy_equivalence_policy": (
+            "same_high_type_and_nearby_reference_or_same_name_nearby_reference"
+            if resolve_equivalent_fragmentation
+            else "disabled"
+        ),
         "decision_counts": decision_counts,
         "corridor_match_basis_counts": corridor_match_basis_counts,
         "same_name_match_status_counts": same_name_match_status_counts,
@@ -136,9 +150,9 @@ def build_reference_hierarchy_type_repair_variant(
     repair_rows = _type_repair_rows(reference_hierarchy_report, max_same_name_distance_m=match_distance)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    plan_file = output_dir / f"{prefix}_plan.json"
-    repairs_file = output_dir / f"{prefix}_repairs.csv"
-    variant_file = output_dir / f"{prefix}_type_repaired.net.xml"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
+    repairs_file = _short_output_path(output_dir, prefix, "_repairs.csv")
+    variant_file = _short_output_path(output_dir, prefix, "_type_repaired.net.xml")
     _write_type_repair_csv(repairs_file, repair_rows)
     plan_file.write_text(
         json.dumps(
@@ -184,7 +198,7 @@ def build_reference_hierarchy_type_repair_variant(
         repair = repairs_by_edge.get(edge_id)
         if repair is None:
             continue
-        edge.set("type", repair["reference_edge_type"])
+        edge.set("type", repair["applied_edge_type"])
         applied_count += 1
     tree.write(variant_file, encoding="utf-8", xml_declaration=True)
 
@@ -403,6 +417,7 @@ def _classify_candidate_edge(
     type_decisions: dict[str, str],
     match_distance_m: float,
     oversplit_length_ratio: float,
+    resolve_equivalent_fragmentation: bool = False,
 ) -> dict[str, Any]:
     nearest_same = _nearest_edge(
         edge,
@@ -419,7 +434,21 @@ def _classify_candidate_edge(
     ]
     nearest_same_name = _nearest_edge(edge, same_name_candidates)
     nearest_any = _nearest_edge(edge, reference_edges)
-    if _is_link_or_slip_lane(edge) and nearest_same["distance_m"] > match_distance_m:
+    same_id_reference = next(
+        (item for item in reference_edges if str(item.get("id", "")) == str(edge.get("id", ""))),
+        None,
+    )
+    same_id_reference_type = str(same_id_reference.get("type", "")) if same_id_reference else ""
+    if (
+        same_id_reference is not None
+        and _explicit_road_hierarchy_token(same_id_reference_type) is not None
+        and not _has_matching_high_hierarchy_type(str(edge["type"]), same_id_reference_type)
+    ):
+        decision = "type_hierarchy_mismatch"
+        action = "copy_same_edge_id_reference_hierarchy"
+        reason = "same OSM edge id has a different reference hierarchy type"
+        corridor_match_basis = "same_edge_id"
+    elif _is_link_or_slip_lane(edge) and nearest_same["distance_m"] > match_distance_m:
         decision = "link_or_slip_lane"
         action = "protect_for_map_review"
         reason = "high-hierarchy link/slip lane requires map review before pruning or downgrading"
@@ -470,6 +499,23 @@ def _classify_candidate_edge(
         reason = "candidate high-road edge has no nearby reference geometry within the match distance"
         corridor_match_basis = "same_name" if nearest_same_name["edge"] is not None else "none"
 
+    raw_decision = decision
+    hierarchy_resolution = ""
+    if resolve_equivalent_fragmentation and _is_equivalent_fragmentation_case(
+        edge=edge,
+        decision=decision,
+        nearest_same=nearest_same,
+        nearest_same_name=nearest_same_name,
+        match_distance_m=match_distance_m,
+    ):
+        decision = "aligned"
+        action = "keep"
+        reason = (
+            "candidate high-road edge is an equivalent OSM fragmentation of a nearby reference corridor; "
+            "road and connection parity remain separate gates"
+        )
+        hierarchy_resolution = "equivalent_fragmentation"
+
     nearest_same_edge = nearest_same["edge"]
     nearest_same_name_edge = nearest_same_name["edge"]
     nearest_any_edge = nearest_any["edge"]
@@ -492,12 +538,59 @@ def _classify_candidate_edge(
         "same_name_reference_edge_id": str(nearest_same_name_edge.get("id", "")) if nearest_same_name_edge else "",
         "same_name_reference_edge_type": str(nearest_same_name_edge.get("type", "")) if nearest_same_name_edge else "",
         "same_name_reference_distance_m": _distance_field(nearest_same_name["distance_m"]),
+        "same_id_reference_edge_id": str(same_id_reference.get("id", "")) if same_id_reference else "",
+        "same_id_reference_edge_type": same_id_reference_type,
         "same_name_match_status": _same_name_match_status(edge, nearest_same_name_edge),
         "corridor_match_basis": corridor_match_basis,
         "hierarchy_decision": decision,
+        "raw_hierarchy_decision": raw_decision,
+        "hierarchy_resolution": hierarchy_resolution,
         "recommended_action": action,
         "reason": reason,
     }
+
+
+def _is_equivalent_fragmentation_case(
+    *,
+    edge: dict[str, Any],
+    decision: str,
+    nearest_same: dict[str, Any],
+    nearest_same_name: dict[str, Any],
+    match_distance_m: float,
+) -> bool:
+    """Recognize harmless OSM edge splitting without hiding a hierarchy mismatch.
+
+    A short fragment is only resolved when it already matched the strict
+    oversplit classifier, retains a high-hierarchy type, and has either a
+    same-type reference corridor within the ordinary distance gate or a
+    same-name reference corridor within a slightly wider name gate.  TLS,
+    topology, scope, and connection audits still evaluate the resulting
+    network independently.
+    """
+
+    if decision != "matched_but_oversplit" or _is_link_or_slip_lane(edge):
+        return False
+    candidate_types = _high_hierarchy_type_tokens(str(edge.get("type", "")))
+    if not candidate_types:
+        return False
+    same_edge = nearest_same.get("edge")
+    same_type_near = same_edge is not None and float(nearest_same.get("distance_m", math.inf)) <= match_distance_m
+    same_name_edge = nearest_same_name.get("edge")
+    same_name = bool(edge.get("normalized_name")) and bool(same_name_edge)
+    same_name_type_match = same_name and _has_matching_high_hierarchy_type(
+        str(edge.get("type", "")), str(same_name_edge.get("type", ""))
+    )
+    same_name_near = (
+        same_name_type_match
+        and float(nearest_same_name.get("distance_m", math.inf)) <= match_distance_m * 1.5
+    )
+    if not (same_type_near or same_name_near):
+        return False
+    if same_edge is not None and not _has_matching_high_hierarchy_type(
+        str(edge.get("type", "")), str(same_edge.get("type", ""))
+    ):
+        return False
+    return True
 
 
 def _is_same_name_oversplit_case(
@@ -509,6 +602,8 @@ def _is_same_name_oversplit_case(
 ) -> bool:
     type_decision = _edge_type_decision(edge, type_decisions)
     if type_decision not in {"overrepresented_in_candidate", "absent_in_reference"}:
+        return False
+    if not _has_matching_high_hierarchy_type(str(edge.get("type", "")), str(reference_edge.get("type", ""))):
         return False
     reference_length = float(reference_edge.get("length", 0.0))
     if reference_length <= 0:
@@ -545,27 +640,88 @@ def _type_repair_rows(
             continue
         if str(case.get("hierarchy_decision", "")) != "type_hierarchy_mismatch":
             continue
-        if str(case.get("same_name_match_status", "")) != "matched_by_name":
-            continue
         candidate_type = str(case.get("candidate_edge_type", ""))
-        reference_type = str(case.get("same_name_reference_edge_type", ""))
+        same_id_reference_type = str(case.get("same_id_reference_edge_type", ""))
+        same_id_edge_id = str(case.get("same_id_reference_edge_id", ""))
+        if str(case.get("corridor_match_basis", "")) == "same_edge_id" and same_id_edge_id:
+            reference_type = same_id_reference_type
+            repair_reason = "same_osm_edge_id_reference_hierarchy"
+            distance = 0.0
+            applied_type = _repaired_reference_hierarchy_type(candidate_type, reference_type)
+        else:
+            if str(case.get("same_name_match_status", "")) != "matched_by_name":
+                continue
+            reference_type = str(case.get("same_name_reference_edge_type", ""))
+            repair_reason = "same_name_reference_high_hierarchy_type"
+            distance = _float_field(case.get("same_name_reference_distance_m"))
+            applied_type = _repaired_high_hierarchy_type(candidate_type, reference_type)
+            if distance is None or distance > max_same_name_distance_m:
+                continue
         if not reference_type or reference_type == "<missing>" or reference_type == candidate_type:
             continue
-        distance = _float_field(case.get("same_name_reference_distance_m"))
-        if distance is None or distance > max_same_name_distance_m:
+        if not applied_type or applied_type == candidate_type:
             continue
         rows.append(
             {
                 "candidate_edge_id": str(case.get("candidate_edge_id", "")),
                 "candidate_edge_name": str(case.get("candidate_edge_name", "")),
                 "candidate_edge_type": candidate_type,
-                "reference_edge_id": str(case.get("same_name_reference_edge_id", "")),
+                "reference_edge_id": (
+                    same_id_edge_id
+                    if str(case.get("corridor_match_basis", "")) == "same_edge_id"
+                    else str(case.get("same_name_reference_edge_id", ""))
+                ),
                 "reference_edge_type": reference_type,
+                "applied_edge_type": applied_type,
                 "same_name_reference_distance_m": round(distance, 3),
-                "repair_reason": "same_name_reference_type",
+                "repair_reason": repair_reason,
             }
         )
     return [row for row in rows if row["candidate_edge_id"]]
+
+
+def _repaired_high_hierarchy_type(candidate_type: str, reference_type: str) -> str:
+    """Copy only the reference road hierarchy, preserving candidate modal decoration.
+
+    A manual reference may fuse pedestrian/cycleway support lanes into a compound
+    type. Copying that complete type onto a vehicle-only candidate edge claims
+    support lanes that do not exist. Keep the candidate's non-hierarchy tokens
+    and replace only its single high-road token with the reference token.
+    """
+    reference_high_tokens = [
+        token for token in str(reference_type).split("|") if token.strip() in HIGH_HIERARCHY_TYPES
+    ]
+    if len(reference_high_tokens) != 1:
+        return ""
+    candidate_support_tokens = [
+        token.strip()
+        for token in str(candidate_type).split("|")
+        if token.strip() and token.strip() not in HIGH_HIERARCHY_TYPES
+    ]
+    return "|".join([*candidate_support_tokens, reference_high_tokens[0].strip()])
+
+
+def _explicit_road_hierarchy_token(edge_type: str) -> str | None:
+    road_tokens = [token.strip() for token in str(edge_type).split("|") if token.strip().startswith("highway.")]
+    return road_tokens[0] if len(road_tokens) == 1 else None
+
+
+def _repaired_reference_hierarchy_type(candidate_type: str, reference_type: str) -> str:
+    """Apply the reference highway token for an exact OSM edge-id match.
+
+    This also handles deliberate downgrades such as ``tertiary`` to
+    ``unclassified`` while preserving candidate-side modal decoration.
+    """
+
+    reference_road_token = _explicit_road_hierarchy_token(reference_type)
+    if reference_road_token is None:
+        return ""
+    candidate_support_tokens = [
+        token.strip()
+        for token in str(candidate_type).split("|")
+        if token.strip() and not token.strip().startswith("highway.")
+    ]
+    return "|".join([*candidate_support_tokens, reference_road_token])
 
 
 def _float_field(value: Any) -> float | None:
@@ -707,9 +863,13 @@ def _write_cases_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "same_name_reference_edge_id",
         "same_name_reference_edge_type",
         "same_name_reference_distance_m",
+        "same_id_reference_edge_id",
+        "same_id_reference_edge_type",
         "same_name_match_status",
         "corridor_match_basis",
         "hierarchy_decision",
+        "raw_hierarchy_decision",
+        "hierarchy_resolution",
         "recommended_action",
         "reason",
     ]
@@ -741,6 +901,7 @@ def _write_type_repair_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "candidate_edge_type",
         "reference_edge_id",
         "reference_edge_type",
+        "applied_edge_type",
         "same_name_reference_distance_m",
         "repair_reason",
     ]
@@ -748,6 +909,15 @@ def _write_type_repair_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _short_output_path(output_dir: Path, prefix: str, suffix: str) -> Path:
+    """Keep hierarchy artifacts writable under Windows path limits."""
+    candidate = output_dir / f"{prefix}{suffix}"
+    if len(str(candidate.resolve())) < 239:
+        return candidate
+    digest = hashlib.sha1(str(candidate).encode("utf-8")).hexdigest()[:10]
+    return output_dir / f"p_{digest}{suffix}"
 
 
 def _warnings(issue_count: int) -> list[str]:

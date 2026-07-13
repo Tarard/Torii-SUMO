@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -31,7 +32,7 @@ def build_tls_signal_grouping_variant(
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     variant_file = output_dir / "tls_signal_grouped.net.xml"
-    plan_file = output_dir / f"{prefix}_plan.json"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
     variant_file.write_bytes(source_net_file.read_bytes())
     compression = _compress_identical_tls_signal_columns(
         variant_file,
@@ -118,7 +119,7 @@ def build_tls_low_vehicle_control_variant(
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     variant_file = output_dir / "tls_low_vehicle_control_review.net.xml"
-    plan_file = output_dir / f"{prefix}_plan.json"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
     variant_file.write_bytes(source_net_file.read_bytes())
     selected_tl_ids = [str(item["tl_id"]) for item in selected]
     demotion = _demote_tls_ids(variant_file, selected_tl_ids)
@@ -158,7 +159,7 @@ def build_tls_non_controller_junction_demotion_variant(
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     variant_file = output_dir / "tls_non_controller_junction_demoted.net.xml"
-    plan_file = output_dir / f"{prefix}_plan.json"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
     variant_file.write_bytes(source_net_file.read_bytes())
     demotion = _demote_non_controller_traffic_light_junctions(variant_file)
     if demotion["tls_non_controller_traffic_light_junction_demoted_count"] == 0:
@@ -213,10 +214,10 @@ def build_tls_aggregation_variant(
 
     cluster_count = _int_field(tls_audit_report, "tls_cluster_count")
     output_dir.mkdir(parents=True, exist_ok=True)
-    plan_file = output_dir / f"{prefix}_plan.json"
-    candidates_file = output_dir / f"{prefix}_representatives.csv"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
+    candidates_file = _short_output_path(output_dir, prefix, "_representatives.csv")
     variant_file = output_dir / "tls_aggregated.net.xml"
-    command_record = output_dir / f"{prefix}_netconvert.cmd.txt"
+    command_record = _short_output_path(output_dir, prefix, "_netconvert.cmd.txt")
     source_tls_counts = _source_tls_program_counts(net_file)
 
     if cluster_count == 0:
@@ -263,7 +264,7 @@ def build_tls_aggregation_variant(
             if controlled_nodes_by_tls_func is not None
             else _controlled_nodes_by_tls(net_file)
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - callback boundary is persisted as a blocked report.
         return {
             **_failure(f"could not derive TLS-controlled junctions: {type(exc).__name__}: {exc}"),
             "tls_aggregation_plan_file": str(plan_file),
@@ -495,8 +496,10 @@ def _controlled_nodes_by_tls(net_file: Path) -> dict[str, list[str]]:
         node_ids = []
         try:
             node_ids.append(net.getNode(tls.getID()).getID())
-        except Exception:
-            pass
+        except (KeyError, RuntimeError, ValueError):
+            # Some multi-node controllers do not have a node with the TLS id;
+            # connection endpoint nodes below remain authoritative.
+            node_ids = []
         for incoming_lane, outgoing_lane, _link in tls.getConnections():
             for node in (incoming_lane.getEdge().getToNode(), outgoing_lane.getEdge().getFromNode()):
                 node_id = node.getID()
@@ -851,6 +854,14 @@ def _tls_connection_preservation(source_counts: Mapping[str, int], variant_count
         "tls_controlled_connection_preservation_status": "fail" if regression else "pass",
         "tls_controlled_connection_regression_count": regression,
     }
+
+
+def _short_output_path(output_dir: Path, prefix: str, suffix: str) -> Path:
+    candidate = output_dir / f"{prefix}{suffix}"
+    if len(str(candidate.resolve())) < 239:
+        return candidate
+    digest = hashlib.sha1(prefix.encode("utf-8")).hexdigest()[:10]
+    return output_dir / f"p_{digest}{suffix}"
 
 
 def _int_field(report: Mapping[str, Any], key: str) -> int:

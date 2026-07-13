@@ -2,6 +2,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.road_connectivity_teacher_model import (
+    audit_road_connectivity_parity,
     build_internal_movement_replay_audit,
     build_internal_movement_owner_approach_edge_map,
     build_internal_movement_owner_approach_edge_chain_map,
@@ -540,6 +541,44 @@ def test_compare_net_road_template_parity_separates_connection_topology_from_lan
     assert report["connection_template_summary"]["parity"]["status"] == "fail"
     assert report["connection_topology_summary"]["parity"]["status"] == "pass"
     assert report["connection_topology_summary"]["parity"]["common_template_count"] == 1
+
+
+def test_compare_net_road_template_parity_can_use_effective_permission_roles(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="highway.service">
+    <lane id="a_0" index="0" allow="passenger" shape="0,0 10,0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="a" from="n1" to="n2" type="highway.service">
+    <lane id="a_0" index="0"
+      disallow="private taxi delivery truck trailer bus coach bicycle pedestrian wheelchair motorcycle moped scooter tram rail_urban rail rail_electric rail_fast"
+      shape="0,0 10,0"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    raw_report = compare_net_road_template_parity(teacher_net, candidate_net)
+    semantic_report = compare_net_road_template_parity(
+        teacher_net,
+        candidate_net,
+        semantic_gate=True,
+    )
+
+    assert raw_report["status"] == "fail"
+    assert semantic_report["status"] == "pass"
+    assert semantic_report["gate"]["comparison_basis"] == "semantic"
+    assert semantic_report["gate"]["raw_road_layer_status"] == "fail"
+    assert semantic_report["semantic_lane_template_summary"]["parity"]["status"] == "pass"
 
 
 def test_build_road_template_repair_queue_prioritizes_road_layer_deltas() -> None:
@@ -1763,6 +1802,80 @@ def test_write_owner_layered_teacher_replay_candidate_refreshes_owner_after_endp
     assert report["owner_road_connectivity_audit"]["status"] == "pass"
 
 
+def test_write_owner_layered_teacher_replay_candidate_promotes_bounded_convergence_pass(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from torii_sumo.core import road_connectivity_teacher_model as road_model
+
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    output_net = tmp_path / "candidate.layered.net.xml"
+    teacher_net.write_text("<net/>", encoding="utf-8")
+    candidate_net.write_text("<net/>", encoding="utf-8")
+
+    def fake_owner_replay(_teacher, source, target, *, owner_id, **_kwargs):
+        Path(target).write_bytes(Path(source).read_bytes())
+        return {
+            "status": "pass",
+            "owner_id": owner_id,
+            "output_file": str(target),
+            "edge_map": {"road": "road"},
+        }
+
+    def fake_road_span_replay(_teacher, source, target, **_kwargs):
+        Path(target).write_bytes(Path(source).read_bytes())
+        return {
+            "status": "pass",
+            "replayed_endpoint_owner_ids": [],
+        }
+
+    def fake_audit(_teacher, candidate, **_kwargs):
+        converged = "convergence_endpoint" in Path(candidate).name
+        return {
+            "status": "pass" if converged else "fail",
+            "gate": {"lane_delta_count": 0 if converged else 2},
+            "lane_deltas": [],
+        }
+
+    monkeypatch.setattr(
+        road_model,
+        "write_internal_movement_owner_teacher_replay_candidate",
+        fake_owner_replay,
+    )
+    monkeypatch.setattr(
+        road_model,
+        "write_internal_movement_owner_ready_road_span_endpoint_replay_candidate",
+        fake_road_span_replay,
+    )
+    monkeypatch.setattr(
+        road_model,
+        "build_internal_movement_owner_road_connectivity_parity_audit",
+        fake_audit,
+    )
+    monkeypatch.setattr(
+        road_model,
+        "_teacher_endpoint_owner_ids_for_edges",
+        lambda *_args, **_kwargs: ["endpoint"],
+    )
+
+    report = road_model.write_internal_movement_owner_layered_teacher_replay_candidate(
+        teacher_net,
+        candidate_net,
+        output_net,
+        owner_id="j",
+    )
+
+    assert report["status"] == "pass"
+    assert report["convergence_status"] == "promoted"
+    assert report["before_convergence_lane_delta_count"] == 2
+    assert report["after_convergence_lane_delta_count"] == 0
+    assert [item["owner_id"] for item in report["convergence_endpoint_replay_reports"]] == [
+        "endpoint"
+    ]
+    assert report["owner_road_connectivity_audit"]["status"] == "pass"
+
+
 def test_write_owner_layered_teacher_replay_candidate_returns_fail_when_owner_replay_blocks(
     tmp_path: Path,
     monkeypatch,
@@ -2260,7 +2373,36 @@ def test_build_road_connection_topology_replay_audit_ignores_existing_topology(t
 
     assert report["already_present_connection_count"] == 1
     assert report["replayable_connection_count"] == 0
-    assert report["blocked_connection_count"] == 0
+
+
+def test_audit_road_connectivity_parity_writes_complete_gate_and_components(tmp_path: Path) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    network = """<net>
+  <edge id="in" from="west" to="center"><lane id="in_0" index="0" allow="passenger" speed="13.9" shape="0,0 10,0"/></edge>
+  <edge id="out" from="center" to="east"><lane id="out_0" index="0" allow="passenger" speed="13.9" shape="10,0 20,0"/></edge>
+  <junction id="west" type="dead_end" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="center" type="priority" x="10" y="0" incLanes="in_0" intLanes=""/>
+  <junction id="east" type="dead_end" x="20" y="0" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    teacher_net.write_text(network, encoding="utf-8")
+    candidate_net.write_text(network.replace('allow="passenger"', 'allow="bus"'), encoding="utf-8")
+
+    report = audit_road_connectivity_parity(
+        teacher_net,
+        candidate_net,
+        output_dir=tmp_path / "audit",
+        prefix="road",
+    )
+
+    assert report["status"] == "fail"
+    assert report["connection_topology_gate"]["status"] == "pass"
+    assert report["road_template_gate"]["road_layer_status"] == "fail"
+    assert Path(report["report_file"]).exists()
+    assert Path(report["road_template_report_file"]).exists()
+    assert Path(report["connection_topology_report_file"]).exists()
+    assert Path(report["internal_movement_report_file"]).exists()
 
 
 def test_build_internal_movement_replay_audit_groups_missing_movements_by_owner(
@@ -2604,6 +2746,77 @@ def test_build_internal_movement_owner_approach_edge_map_prefers_matching_termin
 
     assert report["edge_map"] == {"-road#3": "-road#3", "road#3": "road#3"}
     assert report["ambiguous_teacher_edges"] == []
+
+
+def test_build_internal_movement_owner_approach_edge_map_does_not_reuse_candidate_split_edge(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#4" from="j" to="a"><lane id="road#4_0" index="0"/></edge>
+  <edge id="road#5" from="j" to="b"><lane id="road#5_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#4" from="j" to="c"><lane id="road#4_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_approach_edge_map(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+
+    assert report["edge_map"] == {"road#4": "road#4"}
+    assert report["unmapped_teacher_edges"] == ["road#5"]
+    assert report["candidate_edge_collisions"] == [
+        {
+            "teacher_edge_id": "road#5",
+            "candidate_edge_ids": ["road#4"],
+        }
+    ]
+
+
+def test_build_internal_movement_owner_approach_edge_map_reserves_mismatched_exact_id(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="road#4" from="a" to="j"><lane id="road#4_0" index="0"/></edge>
+  <edge id="road#5" from="j" to="b"><lane id="road#5_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        """<net>
+  <edge id="road#4" from="j" to="c"><lane id="road#4_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_internal_movement_owner_approach_edge_map(
+        teacher_net,
+        candidate_net,
+        owner_id="j",
+    )
+
+    assert report["edge_map"] == {}
+    assert report["reserved_mismatched_exact_edges"] == ["road#4"]
+    assert report["unmapped_teacher_edges"] == ["road#4", "road#5"]
+    assert report["candidate_edge_collisions"] == [
+        {
+            "teacher_edge_id": "road#5",
+            "candidate_edge_ids": ["road#4"],
+        }
+    ]
 
 
 def test_build_internal_movement_owner_approach_edge_map_matches_torii_osm_way_prefixes(

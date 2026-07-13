@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -8,6 +7,8 @@ from typing import Any, Callable, Mapping
 import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
+from .candidate_contracts import file_sha256
+from .artifact_io import write_json_atomic
 from .sumo_commands import discover_binaries
 from ..evidence.output_inspection import inspect_run_outputs
 
@@ -98,14 +99,30 @@ def run_routeability_audit(
     binaries: Mapping[str, str | None] | None = None,
     command_runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
+    output_dir = output_dir.resolve()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return _construction_invalid(f"could not create routeability output directory: {type(exc).__name__}: {exc}")
+    report_file = output_dir / f"{prefix}_routeability_audit.json"
+    manifest_file = output_dir / f"{prefix}_routeability_audit.manifest.json"
+
+    def finish(report: Mapping[str, Any]) -> dict[str, Any]:
+        return _write_routeability_outcome(
+            report=report,
+            report_file=report_file,
+            manifest_file=manifest_file,
+            net_file=net_file,
+        )
+
     if vehicle_count <= 0:
-        return _construction_invalid("vehicle_count must be positive")
+        return finish(_construction_invalid("vehicle_count must be positive"))
     if initial_end <= 0 or max_end <= 0:
-        return _construction_invalid("initial_end and max_end must be positive")
+        return finish(_construction_invalid("initial_end and max_end must be positive"))
     if initial_end > max_end:
-        return _construction_invalid("initial_end must be <= max_end")
+        return finish(_construction_invalid("initial_end must be <= max_end"))
     if not net_file.exists():
-        return _construction_invalid(f"net file does not exist: {net_file}")
+        return finish(_construction_invalid(f"net file does not exist: {net_file}"))
 
     selected = dict(binaries or discover_binaries())
     missing = [
@@ -113,16 +130,29 @@ def run_routeability_audit(
         if not selected.get(name)
     ]
     if missing:
-        return {
+        return finish({
             "status": "blocked",
             "claim_status": "blocked",
             "routeability_status": "blocked",
             "warnings": [f"missing required SUMO tool: {name}" for name in missing],
-        }
+        })
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     trip_file = output_dir / f"{prefix}.trips.xml"
     route_file = output_dir / f"{prefix}.rou.xml"
+    cleanup_errors = _remove_stale_outputs(trip_file, route_file)
+    if cleanup_errors:
+        return finish(
+            {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "routeability_status": "stale-output-cleanup-failed",
+                "net_file": str(net_file.resolve()),
+                "trip_file": str(trip_file),
+                "route_file": str(route_file),
+                "errors": cleanup_errors,
+                "warnings": ["route generation was not run because stale outputs could not be removed"],
+            }
+        )
     random_trips_command = _build_random_trips_command(
         random_trips=str(selected["randomTrips"]),
         net_file=net_file,
@@ -132,17 +162,39 @@ def run_routeability_audit(
         vehicle_count=vehicle_count,
         seed=seed,
     )
-    route_generation = _result_to_dict(
-        command_runner(random_trips_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+    try:
+        route_generation = _result_to_dict(
+            command_runner(random_trips_command, cwd=output_dir, timeout_seconds=timeout_seconds)
+        )
+    except (OSError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
+        route_generation = {
+            "status": "fail",
+            "returncode": None,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    route_generation_pass = (
+        route_generation.get("status") == "pass"
+        and type(route_generation.get("returncode")) is int
+        and route_generation.get("returncode") == 0
+        and route_file.is_file()
+        and trip_file.is_file()
     )
-    if route_generation.get("status") != "pass" or not route_file.exists():
-        return {
+    if not route_generation_pass:
+        return finish({
             "status": "fail",
             "claim_status": "construction-invalid",
             "routeability_status": "route-generation-failed",
+            "net_file": str(net_file.resolve()),
+            "net_sha256": file_sha256(net_file),
+            "route_file": str(route_file),
+            "trip_file": str(trip_file),
             "route_generation": route_generation,
-            "warnings": [f"route file was not created: {route_file}"] if not route_file.exists() else [],
-        }
+            "warnings": [
+                f"route generation output was not created: {path}"
+                for path in (trip_file, route_file)
+                if not path.is_file()
+            ],
+        })
 
     attempts: list[dict[str, Any]] = []
     final_attempt: dict[str, Any] | None = None
@@ -176,7 +228,8 @@ def run_routeability_audit(
         "status": status,
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "routeability_status": final_attempt["inspection"]["routeability_status"],
-        "net_file": str(net_file),
+        "net_file": str(net_file.resolve()),
+        "net_sha256": file_sha256(net_file),
         "output_dir": str(output_dir),
         "route_file": str(route_file),
         "trip_file": str(trip_file),
@@ -189,10 +242,7 @@ def run_routeability_audit(
         "final_attempt": final_attempt,
         "warnings": list(dict.fromkeys(warnings)),
     }
-    report_file = output_dir / f"{prefix}_routeability_audit.json"
-    report["report_file"] = str(report_file)
-    report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    return report
+    return finish(report)
 
 
 def _run_attempt(
@@ -211,31 +261,65 @@ def _run_attempt(
     summary_file = output_dir / f"{prefix}_end{end}_summary.xml"
     tripinfo_file = output_dir / f"{prefix}_end{end}_tripinfo.xml"
     config_file = output_dir / f"{prefix}_end{end}.sumocfg"
-    _write_sumocfg(
-        config_file,
-        net_file=net_file,
-        route_file=route_file,
-        summary_file=summary_file,
-        tripinfo_file=tripinfo_file,
-        end=end,
-        seed=seed,
-    )
+    cleanup_errors = _remove_stale_outputs(summary_file, tripinfo_file)
+    if cleanup_errors:
+        return _failed_attempt(
+            end=end,
+            config_file=config_file,
+            summary_file=summary_file,
+            tripinfo_file=tripinfo_file,
+            status="stale-output-cleanup-failed",
+            warnings=cleanup_errors,
+        )
+    try:
+        _write_sumocfg(
+            config_file,
+            net_file=net_file,
+            route_file=route_file,
+            summary_file=summary_file,
+            tripinfo_file=tripinfo_file,
+            end=end,
+            seed=seed,
+        )
+    except OSError as exc:
+        return _failed_attempt(
+            end=end,
+            config_file=config_file,
+            summary_file=summary_file,
+            tripinfo_file=tripinfo_file,
+            status="configuration-write-failed",
+            warnings=[f"{type(exc).__name__}: {exc}"],
+        )
     command = [
         sumo_binary,
         "-c",
         config_file.name,
         "--quit-on-end",
         "--duration-log.statistics",
+        "--collision.check-junctions",
+        "true",
     ]
-    command_result = _result_to_dict(
-        command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds)
-    )
+    try:
+        command_result = _result_to_dict(
+            command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds)
+        )
+    except (OSError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
+        command_result = {
+            "status": "fail",
+            "returncode": None,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     inspection = inspect_routeability_outputs(
         summary_path=summary_file,
         tripinfo_path=tripinfo_file,
         expected_vehicle_count=vehicle_count,
     )
-    if command_result.get("status") != "pass":
+    command_pass = (
+        command_result.get("status") == "pass"
+        and type(command_result.get("returncode")) is int
+        and command_result.get("returncode") == 0
+    )
+    if not command_pass:
         inspection["status"] = "fail"
         inspection["claim_status"] = "construction-invalid"
         inspection["routeability_status"] = "sumo-run-failed"
@@ -310,6 +394,109 @@ def _horizon_sequence(initial_end: int, max_end: int) -> list[int]:
         if current != values[-1]:
             values.append(current)
     return values
+
+
+def _remove_stale_outputs(*paths: Path) -> list[str]:
+    errors: list[str] = []
+    for path in paths:
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError as exc:
+            errors.append(f"could not remove stale output {path}: {type(exc).__name__}: {exc}")
+    return errors
+
+
+def _failed_attempt(
+    *,
+    end: int,
+    config_file: Path,
+    summary_file: Path,
+    tripinfo_file: Path,
+    status: str,
+    warnings: list[str],
+) -> dict[str, Any]:
+    return {
+        "end": end,
+        "sumocfg_file": str(config_file),
+        "summary_file": str(summary_file),
+        "tripinfo_file": str(tripinfo_file),
+        "command": {"status": "fail", "returncode": None, "error": "; ".join(warnings)},
+        "inspection": {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "routeability_status": status,
+            "summary": {},
+            "tripinfo": {},
+            "warnings": warnings,
+        },
+    }
+
+
+def _write_routeability_outcome(
+    *,
+    report: Mapping[str, Any],
+    report_file: Path,
+    manifest_file: Path,
+    net_file: Path,
+) -> dict[str, Any]:
+    persisted = dict(report)
+    persisted.setdefault("schema", "torii.routeability_audit.v2")
+    persisted.setdefault("net_file", str(net_file.resolve()))
+    if net_file.is_file():
+        persisted.setdefault("net_sha256", file_sha256(net_file))
+    persisted["report_file"] = str(report_file)
+    persisted["manifest_file"] = str(manifest_file)
+    write_json_atomic(report_file, persisted)
+
+    artifact_candidates: list[tuple[Path, str]] = []
+    if net_file.is_file():
+        artifact_candidates.append((net_file, "routeability_net"))
+    for key, kind in (("trip_file", "random_trips"), ("route_file", "route_file")):
+        value = persisted.get(key)
+        if value:
+            artifact_candidates.append((Path(str(value)), kind))
+    for attempt in persisted.get("attempts", []):
+        if not isinstance(attempt, Mapping):
+            continue
+        for key, kind in (
+            ("sumocfg_file", "sumo_config"),
+            ("summary_file", "sumo_summary"),
+            ("tripinfo_file", "sumo_tripinfo"),
+        ):
+            value = attempt.get(key)
+            if value:
+                artifact_candidates.append((Path(str(value)), kind))
+    artifact_candidates.append((report_file, "routeability_report"))
+
+    artifacts: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for path, kind in artifact_candidates:
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        if str(resolved) in seen_paths:
+            continue
+        seen_paths.add(str(resolved))
+        artifacts.append(
+            {
+                "kind": kind,
+                "path": str(resolved),
+                "size_bytes": resolved.stat().st_size,
+                "sha256": file_sha256(resolved),
+            }
+        )
+    manifest = {
+        "schema": "torii.routeability_manifest.v2",
+        "status": persisted.get("status", "fail"),
+        "claim_status": persisted.get("claim_status", "construction-invalid"),
+        "routeability_status": persisted.get("routeability_status", "construction-invalid"),
+        "net_file": persisted.get("net_file", ""),
+        "net_sha256": persisted.get("net_sha256", ""),
+        "artifacts": artifacts,
+    }
+    write_json_atomic(manifest_file, manifest)
+    return persisted
 
 
 def _result_to_dict(result: Any) -> dict[str, Any]:

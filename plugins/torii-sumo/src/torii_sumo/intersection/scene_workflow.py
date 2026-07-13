@@ -9,9 +9,11 @@ from typing import Any
 
 from torii_sumo.core.netedit import launch_netedit
 from torii_sumo.core.routeability_audit import inspect_routeability_outputs
+from torii_sumo.core.workflow_review_html import _artifact_hashes
 
 from .nema_reference import build_nema_four_way_reference
 from .scene_spec import resolve_intersection_scene_prompt
+from .signalized_reference import build_signalized_intersection_reference
 
 
 _COMMAND_FIELDS = ("command", "cwd", "status", "returncode", "stdout", "stderr", "error")
@@ -60,13 +62,22 @@ def run_intersection_scene_workflow(
         }
     else:
         try:
-            build = builder_func(
-                output_dir,
-                prefix=prefix,
-                run_sumo_smoke=True,
-                require_real_sumo=True,
-            )
-        except Exception as exc:  # The manifest is the workflow's failure record.
+            if builder_func is build_nema_four_way_reference and _needs_generic_builder(resolved_spec):
+                build = build_signalized_intersection_reference(
+                    output_dir,
+                    prefix=prefix,
+                    spec=resolved_spec,
+                    run_sumo_smoke=True,
+                    require_real_sumo=True,
+                )
+            else:
+                build = builder_func(
+                    output_dir,
+                    prefix=prefix,
+                    run_sumo_smoke=True,
+                    require_real_sumo=True,
+                )
+        except Exception as exc:  # noqa: BLE001 - the manifest is the workflow's failure record.
             build = {
                 "status": "fail",
                 "claim_status": "construction-invalid",
@@ -117,7 +128,7 @@ def run_intersection_scene_workflow(
                 summary_path=paths["summary_file"],
                 tripinfo_path=paths["tripinfo_file"],
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - inspection failures are persisted in the workflow manifest.
             routeability = {
                 "status": "fail",
                 "warnings": [f"routeability inspection failed: {type(exc).__name__}: {exc}"],
@@ -161,7 +172,7 @@ def run_intersection_scene_workflow(
         and sumo_report.get("status") == "pass"
         and sumo_evidence_ok
     )
-    tls_ok = _valid_tls(audit)
+    tls_ok = _valid_tls(audit, resolved_spec)
     netconvert_status = _check_status(
         netconvert_ok,
         build.get("netconvert_status"),
@@ -199,7 +210,7 @@ def run_intersection_scene_workflow(
         if build_ok:
             try:
                 launched = netedit_func(paths["net_file"])
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - external launcher failures are persisted, never promoted.
                 launched = {
                     "status": "fail",
                     "warnings": [f"NetEdit launch failed: {type(exc).__name__}: {exc}"],
@@ -269,6 +280,18 @@ def run_intersection_scene_workflow(
         "netedit": netedit,
         "warnings": warnings,
     }
+    artifact_paths = {
+        key: path
+        for key, path in paths.items()
+        if key == "artifact_manifest_file" or path.is_file()
+    }
+    artifact_hashes, artifact_hash_gate = _artifact_hashes(
+        artifact_paths,
+        base_dir=output_dir,
+        excluded_keys={"artifact_manifest_file"},
+    )
+    manifest["artifact_hashes"] = artifact_hashes
+    manifest["artifact_hash_gate"] = artifact_hash_gate
     manifest_path.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
     )
@@ -284,6 +307,9 @@ def run_intersection_scene_workflow(
         "input_prompt": prompt,
         "resolved_spec": resolved_spec,
         "artifact_manifest_file": str(manifest_path),
+        "artifact_hashes": artifact_hashes,
+        "artifact_hash_gate": artifact_hash_gate,
+        "artifact_hash_gate_status": artifact_hash_gate["status"],
         "net_file": str(paths["net_file"]),
         "sumocfg_file": str(paths["sumocfg_file"]),
         "warnings": warnings,
@@ -306,6 +332,7 @@ def _expected_paths(output_dir: Path, prefix: str) -> dict[str, Path]:
         "node_file": output_dir / f"{prefix}.nod.xml",
         "edge_file": output_dir / f"{prefix}.edg.xml",
         "connection_file": output_dir / f"{prefix}.con.xml",
+        "type_file": output_dir / f"{prefix}.typ.xml",
         "tllogic_file": output_dir / f"{prefix}.tll.xml",
         "additional_file": output_dir / f"{prefix}.add.xml",
         "net_file": output_dir / f"{prefix}.net.xml",
@@ -411,7 +438,20 @@ def _command_targets(report: dict[str, Any], option: str, expected: Path) -> boo
         return False
 
 
-def _valid_tls(audit: dict[str, Any]) -> bool:
+def _needs_generic_builder(spec: dict[str, Any]) -> bool:
+    return bool(
+        spec.get("topology") != "four_way"
+        or spec.get("approach_count") != 4
+        or spec.get("controller") != "nema_reference"
+        or spec.get("pedestrian_crossing")
+        or spec.get("bicycle_support")
+        or spec.get("ramp")
+    )
+
+
+def _valid_tls(audit: dict[str, Any], spec: dict[str, Any] | None = None) -> bool:
+    if audit.get("contract") == "generic-tls/v1":
+        return _valid_generic_tls(audit, spec or {})
     expected_phases = [str(index) for index in range(1, 9)]
     phase_order = audit.get("phase_order")
     movement_map = audit.get("movement_map")
@@ -449,6 +489,61 @@ def _valid_tls(audit: dict[str, Any]) -> bool:
         movements.add(movement)
         covered_groups.add(link_index)
     return covered_groups == set(range(8))
+
+
+def _valid_generic_tls(audit: dict[str, Any], spec: dict[str, Any]) -> bool:
+    movement_map = audit.get("movement_map")
+    phase_order = audit.get("phase_order")
+    phase_states = audit.get("phase_states")
+    feature_contract = audit.get("feature_contract")
+    if (
+        audit.get("tls_id") != "TLS0"
+        or audit.get("controller") != spec.get("controller")
+        or audit.get("tls_semantics") != spec.get("tls_semantics")
+        or audit.get("topology") != spec.get("topology")
+        or audit.get("approach_count") != spec.get("approach_count")
+        or not isinstance(movement_map, list)
+        or not movement_map
+        or audit.get("controlled_link_count") != len(movement_map)
+        or not isinstance(phase_order, list)
+        or not phase_order
+        or not isinstance(phase_states, list)
+        or len(phase_order) != len(phase_states)
+        or not isinstance(feature_contract, dict)
+    ):
+        return False
+    expected_indexes = list(range(len(movement_map)))
+    indexes = [row.get("linkIndex") for row in movement_map if isinstance(row, dict)]
+    if indexes != expected_indexes:
+        return False
+    if any(
+        not isinstance(row, dict)
+        or not all(isinstance(row.get(key), str) and row.get(key) for key in ("from", "to", "fromLane", "toLane", "mode"))
+        or row.get("turn") not in {"r", "s", "l", "u"}
+        for row in movement_map
+    ):
+        return False
+    if any(not isinstance(state, str) or len(state) < len(movement_map) for state in phase_states):
+        return False
+    expected_features = {
+        "pedestrian_crossing": bool(spec.get("pedestrian_crossing")),
+        "bicycle_support": bool(spec.get("bicycle_support")),
+        "ramp": bool(spec.get("ramp")),
+    }
+    if any(feature_contract.get(key) != value for key, value in expected_features.items()):
+        return False
+    if expected_features["bicycle_support"]:
+        if feature_contract.get("bicycle_connection_count", 0) <= 0:
+            return False
+        if not any(row.get("mode") == "bicycle" for row in movement_map):
+            return False
+    elif feature_contract.get("bicycle_connection_count", 0) != 0:
+        return False
+    if expected_features["ramp"] and not feature_contract.get("ramp_approach"):
+        return False
+    if expected_features["pedestrian_crossing"] and feature_contract.get("pedestrian_crossing_count", 0) <= 0:
+        return False
+    return True
 
 
 def _relative(path: Path, output_dir: Path) -> str:

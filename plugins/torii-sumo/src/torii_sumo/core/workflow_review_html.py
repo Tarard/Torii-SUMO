@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
+import csv
 import xml.etree.ElementTree as ET
 from html import escape
 from pathlib import Path
@@ -9,6 +11,7 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 
 from .network_visualization import build_network_review_visuals
+from .claim_tiers import evaluate_claim_tiers
 
 
 def _jsonable(value: Any) -> Any:
@@ -54,6 +57,82 @@ def _portable_path(path: str | Path | None, base_dir: Path) -> str:
             return os.path.relpath(resolved, base_dir.resolve()).replace("\\", "/")
         except ValueError:
             return str(path)
+
+
+def _hash_path(path: Path) -> tuple[str, int, str]:
+    """Return a deterministic SHA-256 digest, byte count, and kind for a file or directory."""
+    resolved = path.resolve()
+    if resolved.is_file():
+        digest = hashlib.sha256()
+        size_bytes = 0
+        with resolved.open("rb") as stream:
+            while True:
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size_bytes += len(chunk)
+        return digest.hexdigest(), size_bytes, "file"
+    if resolved.is_dir():
+        digest = hashlib.sha256()
+        size_bytes = 0
+        files = sorted(item for item in resolved.rglob("*") if item.is_file())
+        for child in files:
+            relative = child.relative_to(resolved).as_posix().encode("utf-8")
+            digest.update(relative)
+            digest.update(b"\0")
+            child_digest, child_size, _ = _hash_path(child)
+            digest.update(child_digest.encode("ascii"))
+            digest.update(b"\0")
+            size_bytes += child_size
+        return digest.hexdigest(), size_bytes, "directory"
+    raise FileNotFoundError(str(resolved))
+
+
+def _artifact_hashes(
+    artifacts: Mapping[str, Path | None],
+    *,
+    base_dir: Path,
+    excluded_keys: set[str] | None = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Hash every supplied artifact and report missing/unreadable paths explicitly."""
+    excluded = set(excluded_keys or set())
+    records: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    unreadable: list[str] = []
+    hashed_count = 0
+    for key, value in artifacts.items():
+        if value is None:
+            continue
+        path = Path(value)
+        record: dict[str, Any] = {"path": _portable_path(path, base_dir)}
+        if key in excluded:
+            record["status"] = "excluded"
+            record["reason"] = "self-referential artifact"
+            records[key] = record
+            continue
+        try:
+            sha256, size_bytes, kind = _hash_path(path)
+        except FileNotFoundError:
+            record["status"] = "missing"
+            missing.append(key)
+        except OSError as exc:
+            record["status"] = "unreadable"
+            record["error"] = str(exc)
+            unreadable.append(key)
+        else:
+            record.update({"status": "pass", "kind": kind, "sha256": sha256, "size_bytes": size_bytes})
+            hashed_count += 1
+        records[key] = record
+    gate = {
+        "status": "pass" if not missing and not unreadable else "fail",
+        "algorithm": "sha256",
+        "hashed_artifact_count": hashed_count,
+        "missing_artifacts": sorted(missing),
+        "unreadable_artifacts": sorted(unreadable),
+        "excluded_artifacts": sorted(excluded.intersection(records)),
+    }
+    return records, gate
 
 
 def _portable_href(path: Path, base_dir: Path) -> str:
@@ -266,6 +345,11 @@ def _evidence_rows(
     )
     road_connectivity_values = []
     for key in (
+        "road_connectivity_parity_audit_status",
+        "road_connectivity_parity_audit_report_file",
+        "reference_road_alignment_status",
+        "reference_road_alignment_report_file",
+        "reference_road_alignment_additional_file",
         "road_connectivity_replay_status",
         "road_connectivity_replay_gate_status",
         "road_connectivity_replay_sumo_load_status",
@@ -484,9 +568,10 @@ def _write_netedit_review_files(
     net_file: str | Path | None,
     map_layers: Mapping[str, Any] | None,
     junctions: Sequence[Mapping[str, Any]],
+    review_locations: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     net_path = _as_path(net_file)
-    if net_path is None or not junctions:
+    if net_path is None or (not junctions and not review_locations):
         return {"status": "skipped"}
 
     additional_file = output_dir / f"{prefix}_netedit_review.add.xml"
@@ -500,6 +585,8 @@ def _write_netedit_review_files(
         },
     )
     box_count = 0
+    review_overlay_count = 0
+    review_overlay_category_counts: dict[str, int] = {}
     cluster_selection_files: list[dict[str, Any]] = []
 
     for junction in junctions:
@@ -554,6 +641,33 @@ def _write_netedit_review_files(
                 }
             )
 
+    for location in review_locations:
+        location_id = str(location.get("location_id") or location.get("cluster_id") or "review")
+        try:
+            x = float(location["x"])
+            y = float(location["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        category = str(location.get("category") or "review")
+        color_group = str(location.get("color_group") or "amber")
+        radius = max(float(location.get("radius_m") or 8.0), 4.0)
+        review_overlay_count += 1
+        review_overlay_category_counts[category] = review_overlay_category_counts.get(category, 0) + 1
+        ET.SubElement(
+            root,
+            "poly",
+            {
+                "id": f"torii_{_safe_file_stem(location_id)}_review_overlay",
+                "type": f"torii.review.{_safe_file_stem(category)}",
+                "color": _review_color(color_group),
+                "fill": "false",
+                "layer": "100.00",
+                "lineWidth": "4.00",
+                "shape": _review_box_shape(x, y, radius),
+                "name": f"{location_id} {location.get('reason', 'review')}",
+            },
+        )
+
     ET.indent(root)
     ET.ElementTree(root).write(additional_file, encoding="utf-8", xml_declaration=True)
 
@@ -576,8 +690,10 @@ def _write_netedit_review_files(
         "cluster_selection_files": cluster_selection_files,
         "selection_file_count": len(cluster_selection_files),
         "viewsettings_file_count": sum(1 for item in cluster_selection_files if item.get("viewsettings_file")),
-        "edge_overlay_count": 0,
-        "junction_overlay_count": 0,
+        "edge_overlay_count": sum(1 for location in review_locations if location.get("edge_id")),
+        "junction_overlay_count": sum(1 for location in review_locations if location.get("junction_id")),
+        "review_overlay_count": review_overlay_count,
+        "review_overlay_category_counts": dict(sorted(review_overlay_category_counts.items())),
     }
 
 
@@ -1027,6 +1143,552 @@ def _junction_actions(junction_aggregation_report: Mapping[str, Any] | None) -> 
     return []
 
 
+def _review_overlay_locations(
+    workflow_summary: Mapping[str, Any],
+    net_file: str | Path | None,
+) -> list[dict[str, Any]]:
+    """Collect non-destructive review markers for the Netedit additional file."""
+
+    net_path = _as_path(net_file)
+    if net_path is None or not net_path.exists():
+        return []
+    try:
+        root = ET.parse(net_path).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    junction_xy = {
+        junction.attrib["id"]: (float(junction.attrib["x"]), float(junction.attrib["y"]))
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+        and junction.attrib.get("x") is not None
+        and junction.attrib.get("y") is not None
+    }
+    edge_xy: dict[str, tuple[float, float]] = {}
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id:
+            continue
+        points: list[tuple[float, float]] = []
+        for lane in edge.findall("lane"):
+            for raw_point in lane.attrib.get("shape", "").split():
+                try:
+                    x_text, y_text = raw_point.split(",", 1)
+                    points.append((float(x_text), float(y_text)))
+                except (ValueError, TypeError):
+                    continue
+            if points:
+                break
+        if len(points) >= 2:
+            edge_xy[edge_id] = (
+                (points[0][0] + points[-1][0]) / 2.0,
+                (points[0][1] + points[-1][1]) / 2.0,
+            )
+
+    reference_join = workflow_summary.get("reference_join_audit", {})
+    if not isinstance(reference_join, Mapping):
+        reference_join = {}
+    candidate_summary = reference_join.get("candidate_network_structural_summary", {})
+    candidate_records = (
+        candidate_summary.get("tl_logic_control_records", [])
+        if isinstance(candidate_summary, Mapping)
+        else []
+    )
+    candidate_by_tl = {
+        str(record.get("tl_id", "")): record
+        for record in candidate_records
+        if isinstance(record, Mapping) and record.get("tl_id")
+    }
+    alignment = reference_join.get("tls_controller_alignment", {})
+    if not isinstance(alignment, Mapping):
+        alignment = {}
+
+    locations: list[dict[str, Any]] = []
+
+    connection_mode = workflow_summary.get("connection_mode_audit", {})
+    if isinstance(connection_mode, Mapping):
+        for record in connection_mode.get("junctions", []) or []:
+            if not isinstance(record, Mapping):
+                continue
+            status = str(record.get("status", "pass"))
+            if status == "pass":
+                continue
+            junction_id = str(record.get("junction_id", "")).strip()
+            position = record.get("position", {})
+            point = junction_xy.get(junction_id)
+            if isinstance(position, Mapping):
+                try:
+                    point = (float(position.get("x", 0.0)), float(position.get("y", 0.0)))
+                except (TypeError, ValueError):
+                    pass
+            if not junction_id or point is None:
+                continue
+            connection_audit = record.get("connection_mode_audit", {})
+            tls_binding_audit = record.get("tls_link_binding_audit", {})
+            if not isinstance(connection_audit, Mapping):
+                connection_audit = {}
+            if not isinstance(tls_binding_audit, Mapping):
+                tls_binding_audit = {}
+            findings = [
+                str(item)
+                for key in ("structural_failures", "review_findings")
+                for source in (connection_audit, tls_binding_audit)
+                for item in source.get(key, []) or []
+            ]
+            shown = findings[:4]
+            suffix = f"; +{len(findings) - len(shown)} more" if len(findings) > len(shown) else ""
+            locations.append(
+                {
+                    "location_id": f"connection_mode_{junction_id}",
+                    "category": (
+                        "connection_mode_fail"
+                        if status == "fail"
+                        else "connection_mode_review"
+                    ),
+                    "color_group": "red" if status == "fail" else "amber",
+                    "reason": "Connection Mode code audit: "
+                    + ("; ".join(shown) or "unspecified finding")
+                    + suffix,
+                    "junction_id": junction_id,
+                    "tl_id": ",".join(map(str, record.get("controller_ids", []) or [])),
+                    "x": point[0],
+                    "y": point[1],
+                    "radius_m": 10.0,
+                    "connection_mode_status": status,
+                    "connection_mode_findings": findings,
+                    "netedit_required_for_gate": False,
+                }
+            )
+
+    standard_nema = workflow_summary.get("standard_nema_scan", {})
+    if isinstance(standard_nema, Mapping):
+        for record in standard_nema.get("candidates", []) or []:
+            if not isinstance(record, Mapping):
+                continue
+            junction_id = str(record.get("junction_id", "")).strip()
+            point = junction_xy.get(junction_id)
+            if not junction_id or point is None:
+                continue
+            eligibility = str(record.get("eligibility_status", "review_required"))
+            blockers = [str(item) for item in record.get("blockers", []) or []]
+            connection_mode_audit = record.get("connection_mode_audit", {})
+            if not isinstance(connection_mode_audit, Mapping):
+                connection_mode_audit = {}
+            connection_mode_status = str(connection_mode_audit.get("status", "not_run"))
+            connection_mode_blockers = [
+                blocker for blocker in blockers if blocker.startswith("connection_mode:")
+            ]
+            connection_mode_review_findings = [
+                str(item)
+                for item in connection_mode_audit.get("review_findings", []) or []
+            ]
+            if eligibility == "eligible":
+                category = "nema_candidate"
+                color_group = "amber"
+                reason = (
+                    "standard three/four-way NEMA candidate is structurally eligible; "
+                    "materialize one separate candidate and review movement phases and timing"
+                )
+            elif connection_mode_status == "fail":
+                category = "nema_connection_mode_blocked"
+                color_group = "red"
+                reason = "Connection Mode audit blocked automatic NEMA binding: " + (
+                    "; ".join(connection_mode_blockers) or "unspecified lane-binding blocker"
+                )
+            elif connection_mode_status == "review_required":
+                category = "nema_connection_mode_review"
+                color_group = "amber"
+                reason = "Connection Mode code audit requires map/lane evidence: " + (
+                    "; ".join(connection_mode_review_findings)
+                    or "; ".join(connection_mode_blockers)
+                    or "unspecified lane-binding review finding"
+                )
+            else:
+                category = "nema_blocked"
+                color_group = "red"
+                reason = "automatic NEMA binding blocked: " + ("; ".join(blockers) or "unspecified blocker")
+            locations.append(
+                {
+                    "location_id": f"standard_nema_{junction_id}",
+                    "category": category,
+                    "color_group": color_group,
+                    "reason": reason,
+                    "junction_id": junction_id,
+                    "tl_id": str(record.get("controller_id", "")),
+                    "x": point[0],
+                    "y": point[1],
+                    "radius_m": 12.0,
+                    "nema_layout_type": str(record.get("layout_type", "unknown")),
+                    "nema_eligibility_status": eligibility,
+                    "nema_blockers": blockers,
+                    "nema_connection_mode_status": connection_mode_status,
+                    "nema_connection_mode_blockers": connection_mode_blockers,
+                    "nema_connection_mode_review_findings": connection_mode_review_findings,
+                }
+            )
+
+    # Every physical TLS cluster is a review item, not only clusters that
+    # happen to have a movement-gap or controller-merge mismatch. This makes
+    # the external decision artifact complete: a clean TLS reality review must
+    # explicitly account for every signal cluster in the audited network.
+    tls_audit = workflow_summary.get("tls_audit", {})
+    tls_clusters_file = (
+        Path(str(tls_audit.get("clusters_file", "")))
+        if isinstance(tls_audit, Mapping) and tls_audit.get("clusters_file")
+        else None
+    )
+    if tls_clusters_file is not None and tls_clusters_file.exists():
+        try:
+            with tls_clusters_file.open("r", encoding="utf-8", newline="") as handle:
+                tls_cluster_rows = list(csv.DictReader(handle))
+        except (OSError, csv.Error):
+            tls_cluster_rows = []
+        for row in tls_cluster_rows:
+            cluster_id = str(row.get("cluster_id", "")).strip()
+            tls_ids = [item for item in str(row.get("tls_ids", "")).split(";") if item]
+            if not cluster_id:
+                continue
+            points: list[tuple[float, float]] = []
+            for tls_id in tls_ids:
+                point = junction_xy.get(tls_id)
+                if point is not None:
+                    points.append(point)
+                    continue
+                record = candidate_by_tl.get(tls_id, {})
+                points.extend(
+                    junction_xy[node_id]
+                    for node_id in _list_value(record.get("junction_ids"))
+                    if node_id in junction_xy
+                )
+            if not points:
+                continue
+            locations.append(
+                {
+                    "location_id": f"tls_reality_{cluster_id}",
+                    "category": "tls_reality",
+                    "color_group": "red",
+                    "reason": (
+                        f"TLS reality review: {len(tls_ids)} controller(s), "
+                        f"OSM signal evidence count={row.get('osm_signal_count', '')}; "
+                        "confirm existence, physical grouping, and current time scope"
+                    ),
+                    "tls_cluster_id": cluster_id,
+                    "tls_ids": tls_ids,
+                    "x": sum(point[0] for point in points) / len(points),
+                    "y": sum(point[1] for point in points) / len(points),
+                    "radius_m": 18.0,
+                    "google_maps_url": str(row.get("google_maps_url", "")),
+                }
+            )
+
+    def add_controller_location(
+        *,
+        location_id: str,
+        category: str,
+        color_group: str,
+        reason: str,
+        tl_id: str,
+        radius_m: float = 10.0,
+    ) -> None:
+        record = candidate_by_tl.get(tl_id, {})
+        node_ids = _list_value(record.get("junction_ids"))
+        points = [junction_xy[node_id] for node_id in node_ids if node_id in junction_xy]
+        if not points:
+            return
+        locations.append(
+            {
+                "location_id": location_id,
+                "category": category,
+                "color_group": color_group,
+                "reason": reason,
+                "tl_id": tl_id,
+                "junction_id": node_ids[0] if node_ids else "",
+                "node_ids": node_ids,
+                "x": sum(point[0] for point in points) / len(points),
+                "y": sum(point[1] for point in points) / len(points),
+                "radius_m": radius_m,
+            }
+        )
+
+    for index, item in enumerate(alignment.get("high_confidence_movement_gap_queue", []) or [], start=1):
+        if not isinstance(item, Mapping):
+            continue
+        tl_id = str(item.get("candidate_tl_id", ""))
+        add_controller_location(
+            location_id=f"tls_gap_{index:03d}_{tl_id}",
+            category="tls_movement_gap",
+            color_group="red",
+            reason=(
+                f"missing directions={item.get('missing_direction_counts', {})}; "
+                "destination/lane mapping required"
+            ),
+            tl_id=tl_id,
+            radius_m=12.0,
+        )
+
+    for index, group in enumerate(alignment.get("controller_groups", []) or [], start=1):
+        if not isinstance(group, Mapping):
+            continue
+        if int(group.get("reference_controller_count", 0) or 0) <= 1:
+            continue
+        for tl_id in _list_value(group.get("candidate_tl_ids")):
+            add_controller_location(
+                location_id=f"tls_merge_{index:03d}_{tl_id}",
+                category="tls_controller_merge",
+                color_group="amber",
+                reason="candidate controller is spatially associated with multiple reference controllers",
+                tl_id=tl_id,
+                radius_m=14.0,
+            )
+
+    hierarchy = workflow_summary.get("reference_hierarchy_audit", {})
+    for index, case in enumerate(
+        hierarchy.get("candidate_cases", []) if isinstance(hierarchy, Mapping) else [],
+        start=1,
+    ):
+        if not isinstance(case, Mapping) or str(case.get("hierarchy_decision", "")) == "aligned":
+            continue
+        try:
+            x = float(case["candidate_center_x"])
+            y = float(case["candidate_center_y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        edge_id = str(case.get("candidate_edge_id", ""))
+        locations.append(
+            {
+                "location_id": f"hierarchy_{index:03d}_{edge_id}",
+                "category": "hierarchy",
+                "color_group": "amber",
+                "reason": str(case.get("reason", "reference hierarchy review required")),
+                "edge_id": edge_id,
+                "x": x,
+                "y": y,
+                "radius_m": 8.0,
+            }
+        )
+
+    scope = workflow_summary.get("reference_scope_audit", {})
+    for index, case in enumerate(
+        scope.get("prune_candidates", []) if isinstance(scope, Mapping) else [],
+        start=1,
+    ):
+        if not isinstance(case, Mapping):
+            continue
+        edge_id = str(case.get("candidate_edge_id", case.get("edge_id", "")))
+        point = edge_xy.get(edge_id)
+        if point is None:
+            continue
+        locations.append(
+            {
+                "location_id": f"scope_{index:03d}_{edge_id}",
+                "category": "scope",
+                "color_group": "amber",
+                "reason": str(case.get("reason", "reference scope review required")),
+                "edge_id": edge_id,
+                "x": point[0],
+                "y": point[1],
+                "radius_m": 8.0,
+            }
+        )
+
+    # The complete road parity audit can identify missing teacher movements
+    # even when the junction-pattern comparator has no case mismatch.  Emit a
+    # stable marker for every affected owner so the additional.xml layer and
+    # the explicit decision artifact cover the whole road gap inventory.
+    road_parity = workflow_summary.get("road_connectivity_parity_audit", {})
+    movement_report = road_parity.get("internal_movement_report", {}) if isinstance(road_parity, Mapping) else {}
+    owners = movement_report.get("owners", []) if isinstance(movement_report, Mapping) else []
+    for item in owners:
+        if not isinstance(item, Mapping):
+            continue
+        owner_id = str(item.get("owner_id", "")).strip()
+        if not owner_id or int(item.get("missing_connection_count", 0) or 0) <= 0:
+            continue
+        point = junction_xy.get(owner_id)
+        if point is None:
+            example_points = []
+            for connection in item.get("example_connections", []) or []:
+                if not isinstance(connection, Mapping):
+                    continue
+                for edge_id in (str(connection.get("from", "")), str(connection.get("to", ""))):
+                    edge_point = edge_xy.get(edge_id)
+                    if edge_point is not None:
+                        example_points.append(edge_point)
+            if example_points:
+                point = (
+                    sum(value[0] for value in example_points) / len(example_points),
+                    sum(value[1] for value in example_points) / len(example_points),
+                )
+        if point is None:
+            continue
+        locations.append(
+            {
+                "location_id": f"road_connectivity_{owner_id}",
+                "category": "road_connectivity",
+                "color_group": "red",
+                "reason": (
+                    f"teacher movement parity gap at owner {owner_id}: "
+                    f"{int(item.get('missing_connection_count', 0) or 0)} missing connection(s); "
+                    "road/lane mapping and routeability evidence required"
+                ),
+                "junction_id": owner_id if owner_id in junction_xy else "",
+                "x": point[0],
+                "y": point[1],
+                "radius_m": 12.0,
+                "missing_connection_count": int(item.get("missing_connection_count", 0) or 0),
+                "tls_controlled_missing_count": int(item.get("tls_controlled_connection_count", 0) or 0),
+            }
+        )
+
+    # Source-way alignment is a separate, non-destructive road-quality layer.
+    # Its coordinates are already expressed in the candidate network frame,
+    # so they can be copied directly into the review additional.xml overlay.
+    reference_road_alignment = (
+        road_parity.get("reference_road_alignment", {})
+        if isinstance(road_parity, Mapping)
+        else {}
+    )
+    if isinstance(reference_road_alignment, Mapping):
+        for item in reference_road_alignment.get("review_locations", []) or []:
+            if not isinstance(item, Mapping):
+                continue
+            location_id = str(item.get("location_id", "")).strip()
+            try:
+                x = float(item["x"])
+                y = float(item["y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not location_id:
+                continue
+            locations.append(
+                {
+                    "location_id": location_id,
+                    "category": str(item.get("category", "road_way_semantics")),
+                    "color_group": str(item.get("color_group", "amber")),
+                    "reason": str(item.get("reason", "reference road alignment review")),
+                    "source_way_id": str(item.get("source_way_id", "")),
+                    "to_source_way_id": str(item.get("to_source_way_id", "")),
+                    "edge_id": str(item.get("edge_id", "")),
+                    "x": x,
+                    "y": y,
+                    "radius_m": float(item.get("radius_m", 8.0) or 8.0),
+                    "missing_connection_count": int(item.get("missing_connection_count", 0) or 0),
+                }
+            )
+
+    scoped_tls_batch = workflow_summary.get("teacher_guided_scoped_tls_cell_batch", {})
+    if isinstance(scoped_tls_batch, Mapping):
+        for cell in scoped_tls_batch.get("cell_reports", []) or []:
+            if not isinstance(cell, Mapping) or str(cell.get("status", "")) == "pass":
+                continue
+            candidate_tl_id = str(cell.get("candidate_tl_id", "")).strip()
+            if not candidate_tl_id:
+                continue
+            node_ids = _list_value(cell.get("candidate_junction_ids"))
+            if not node_ids:
+                node_ids = _list_value(candidate_by_tl.get(candidate_tl_id, {}).get("junction_ids", []))
+            points = [junction_xy[node_id] for node_id in node_ids if node_id in junction_xy]
+            if not points:
+                continue
+            direct_replay = cell.get("direct_replay", {})
+            variant_reports = direct_replay.get("variant_reports", []) if isinstance(direct_replay, Mapping) else []
+            first_variant = variant_reports[0] if variant_reports and isinstance(variant_reports[0], Mapping) else {}
+            coverage = first_variant.get("scoped_tls_replay_coverage", {})
+            ignored_count = (
+                int(coverage.get("ignored_off_scope_tls_connection_count", 0) or 0)
+                if isinstance(coverage, Mapping)
+                else 0
+            )
+            locations.append(
+                {
+                    "location_id": f"tls_scoped_scope_{candidate_tl_id}",
+                    "category": "tls_scoped_scope",
+                    "color_group": "red",
+                    "reason": (
+                        f"shared TLS scope review: candidate {candidate_tl_id} has "
+                        f"{ignored_count} teacher-controlled movement(s) outside the replay scope; "
+                        "expand and approve the multi-junction controller mapping before adoption"
+                    ),
+                    "tl_id": candidate_tl_id,
+                    "junction_id": node_ids[0] if node_ids else "",
+                    "node_ids": node_ids,
+                    "x": sum(point[0] for point in points) / len(points),
+                    "y": sum(point[1] for point in points) / len(points),
+                    "radius_m": 18.0,
+                    "ignored_off_scope_tls_connection_count": ignored_count,
+                }
+            )
+
+    # Context joins are intentionally emitted as non-destructive review
+    # markers.  The repaired network remains the source of truth; this list
+    # only gives Netedit/HTML a stable place to inspect each overlay decision.
+    for item in workflow_summary.get("context_join_review", []) or []:
+        if not isinstance(item, Mapping):
+            continue
+        location_id = str(item.get("location_id", "")).strip()
+        junction_id = str(item.get("junction_id", "")).strip()
+        point = junction_xy.get(junction_id)
+        if not location_id or point is None:
+            continue
+        locations.append(
+            {
+                "location_id": location_id,
+                "category": str(item.get("category", "context_join")),
+                "color_group": str(item.get("color_group", "amber")),
+                "reason": str(item.get("reason", "context join review")),
+                "junction_id": junction_id,
+                "node_ids": _list_value(item.get("node_ids", [])),
+                "x": point[0],
+                "y": point[1],
+                "radius_m": float(item.get("radius_m", 12.0) or 12.0),
+            }
+        )
+
+    # A connected-core extraction is a safe fallback, not a clean-network
+    # decision. Show every discarded component on the separate additional
+    # overlay so a reviewer can repair/reintegrate it or reject it with
+    # evidence. The overlay is intentionally non-destructive.
+    connected_core = workflow_summary.get("connected_core", {})
+    discarded_review_file_value = workflow_summary.get("connected_core_discarded_components_review_file")
+    if not discarded_review_file_value and isinstance(connected_core, Mapping):
+        discarded_review_file_value = connected_core.get("discarded_components_review_file")
+    discarded_review_file = _as_path(discarded_review_file_value)
+    if discarded_review_file is not None and discarded_review_file.exists():
+        try:
+            discarded_payload = json.loads(discarded_review_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            discarded_payload = {}
+        records = discarded_payload.get("records", []) if isinstance(discarded_payload, Mapping) else []
+        for item in records:
+            if not isinstance(item, Mapping):
+                continue
+            location_id = str(item.get("location_id", "")).strip()
+            try:
+                x = float(item["centroid_x"])
+                y = float(item["centroid_y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            size = int(item.get("component_size", 0) or 0)
+            rank = int(item.get("component_rank", 0) or 0)
+            locations.append(
+                {
+                    "location_id": location_id or f"disconnected_component_{rank:03d}",
+                    "category": "disconnected_component",
+                    "color_group": "red",
+                    "reason": (
+                        f"connected-core fallback excluded passenger component rank {rank} "
+                        f"({size} edge(s)); decide repair/reintegration or rejection with evidence"
+                    ),
+                    "x": x,
+                    "y": y,
+                    "radius_m": 12.0,
+                    "component_rank": rank,
+                    "component_size": size,
+                    "edge_ids": _list_value(item.get("edge_ids", [])),
+                }
+            )
+    return locations
+
+
 def build_workflow_review_html(
     *,
     output_dir: Path,
@@ -1066,6 +1728,7 @@ def build_workflow_review_html(
     actions = list(dict.fromkeys(actions))
 
     artifacts = {
+        "html_file": html_file,
         "net_file": _as_path(net_file),
         "raw_net_file": _as_path(raw_net_file),
         "connected_core_file": _as_path(connected_core_file),
@@ -1090,12 +1753,39 @@ def build_workflow_review_html(
         "reference_join_junction_teacher_delta_file",
         "reference_join_junction_pattern_comparisons_file",
         "reference_join_junction_pattern_templates_file",
+        "tls_gap_destination_mapping_report_file",
+        "tls_repair_variant_file",
+        "tls_repair_variant_report_file",
+        "tls_repair_variant_semantic_report_file",
+        "tls_repair_variant_reference_audit_report_file",
+        "tls_repair_decision_report_file",
         "teacher_guided_repair_queue_file",
         "teacher_guided_repair_queue_csv_file",
         "teacher_guided_repair_run_report_file",
         "teacher_guided_repair_promotion_gate_file",
+        "teacher_guided_scoped_tls_cell_batch_report_file",
+        "teacher_guided_scoped_tls_cell_batch_manifest_file",
         "road_connectivity_replay_best_variant_file",
         "road_connectivity_replay_run_report_file",
+        "road_connectivity_parity_audit_report_file",
+        "road_connectivity_parity_audit_road_template_report_file",
+        "road_connectivity_parity_audit_connection_topology_report_file",
+        "road_connectivity_parity_audit_internal_movement_report_file",
+        "reference_road_alignment_report_file",
+        "reference_road_alignment_additional_file",
+        "reference_scope_final_audit_report_file",
+        "reference_scope_final_pruning_variant_file",
+        "reference_scope_final_pruning_plan_file",
+        "reference_scope_final_post_prune_audit_report_file",
+        "review_decisions_source_file",
+        "connected_core_discarded_components_review_file",
+        "connection_mode_audit_report_file",
+        "connection_mode_review_overlay_file",
+        "connection_mode_manifest_file",
+        "standard_nema_report_file",
+        "standard_nema_connection_mode_report_file",
+        "standard_nema_review_overlay_file",
+        "standard_nema_review_html_file",
     ):
         if workflow_summary.get(key):
             artifacts[key] = _as_path(workflow_summary.get(key))
@@ -1128,12 +1818,77 @@ def build_workflow_review_html(
         base_dir=output_dir,
         map_bounds=_map_layer_bounds(visualization_report.get("map_layers")),
     )
+    review_overlay_locations = _review_overlay_locations(workflow_summary, review_net_file)
+    review_decision_locations: list[dict[str, Any]] = []
+    for junction in review_junctions:
+        review_decision_locations.append(
+            {
+                "location_id": str(junction.get("cluster_id", "")),
+                "category": "topology",
+                "reason": str(junction.get("status_label", "topology review")),
+            }
+        )
+    for location in review_overlay_locations:
+        location_id = str(location.get("location_id", ""))
+        if location_id and all(item.get("location_id") != location_id for item in review_decision_locations):
+            review_decision_locations.append(
+                {
+                    "location_id": location_id,
+                    "category": str(location.get("category", "review")),
+                    "reason": str(location.get("reason", "review required")),
+                }
+            )
+    review_decisions_file = output_dir / f"{prefix}_review_decisions.json"
+    existing_review_decisions: dict[str, Any] = {}
+    if review_decisions_file.exists():
+        try:
+            loaded_decisions = json.loads(review_decisions_file.read_text(encoding="utf-8"))
+            if isinstance(loaded_decisions, Mapping):
+                existing_review_decisions = dict(loaded_decisions)
+        except (OSError, json.JSONDecodeError):
+            existing_review_decisions = {}
+    if not existing_review_decisions and isinstance(workflow_summary.get("review_decisions"), Mapping):
+        existing_review_decisions = dict(workflow_summary["review_decisions"])
+    existing_by_id = {
+        str(item.get("location_id")): dict(item)
+        for item in existing_review_decisions.get("locations", []) or []
+        if isinstance(item, Mapping) and str(item.get("location_id", ""))
+    }
+    decision_locations = []
+    for location in review_decision_locations:
+        decision = existing_by_id.get(str(location["location_id"]), {})
+        decision_locations.append(
+            {
+                **location,
+                "decision": str(decision.get("decision", "pending")),
+                "evidence": str(decision.get("evidence", "")),
+                "reviewer": str(decision.get("reviewer", "")),
+                "updated_at": str(decision.get("updated_at", "")),
+            }
+        )
+    review_decisions = {
+        "schema_version": 1,
+        "decision_policy": "Use approved or rejected_with_evidence and provide non-empty evidence for every location.",
+        "locations": decision_locations,
+    }
+    _write_json(review_decisions_file, review_decisions)
+    review_tiers = evaluate_claim_tiers(
+        gate_status=gate_status,
+        review_locations=review_decision_locations,
+        review_decisions=review_decisions,
+    )
+    workflow_summary["claim_tiers"] = review_tiers
+    workflow_summary["review_decisions_file"] = str(review_decisions_file)
+    workflow_summary["review_decisions_status"] = review_tiers["manual_quality_reviewed"]["status"]
+    artifacts["review_decisions_file"] = review_decisions_file
+    _write_json(workflow_report_file, workflow_summary)
     netedit_review = _write_netedit_review_files(
         output_dir=output_dir,
         prefix=prefix,
         net_file=review_net_file,
         map_layers=visualization_report.get("map_layers"),
         junctions=review_junctions,
+        review_locations=review_overlay_locations,
     )
     if netedit_review.get("status") == "pass":
         artifacts["netedit_review_additional_file"] = _as_path(netedit_review.get("additional_file"))
@@ -1163,7 +1918,18 @@ def build_workflow_review_html(
         "netedit_command": _netedit_command(netedit_review.get("sumocfg_file"), output_dir),
         "cluster_selection_files": portable_cluster_selection_files,
         "selection_file_count": len(portable_cluster_selection_files),
+        "review_overlay_location_count": len(review_overlay_locations),
+        "review_overlay_category_counts": dict(
+            sorted(
+                {
+                    category: sum(1 for item in review_overlay_locations if item.get("category") == category)
+                    for category in {str(item.get("category", "review")) for item in review_overlay_locations}
+                }.items()
+            )
+        ),
     }
+    review_app["claim_tiers"] = review_tiers
+    review_app["review_decisions_file"] = _portable_path(review_decisions_file, output_dir)
 
     manifest = {
         "status": "pass",
@@ -1180,11 +1946,12 @@ def build_workflow_review_html(
         },
         "artifacts": {key: _portable_path(value, output_dir) for key, value in artifacts.items() if value is not None},
         "netedit_review": review_app["netedit_review"],
+        "claim_tiers": review_tiers,
+        "review_decisions_file": _portable_path(review_decisions_file, output_dir),
         "review_app": review_app,
         "review_queue": list(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
     }
-    _write_json(review_manifest_file, manifest)
 
     gate_counts = _gate_summary(gate_status)
     dashboard_status = "Not clean / not experiment-ready" if claim_status != "formal-evidence" else "Review required"
@@ -1687,8 +2454,16 @@ def build_workflow_review_html(
 {review_script}
 </body>
 </html>
-"""
+    """
     html_file.write_text(html, encoding="utf-8")
+    artifact_hashes, artifact_hash_gate = _artifact_hashes(
+        artifacts,
+        base_dir=output_dir,
+        excluded_keys={"review_manifest_file"},
+    )
+    manifest["artifact_hashes"] = artifact_hashes
+    manifest["artifact_hash_gate"] = artifact_hash_gate
+    _write_json(review_manifest_file, manifest)
     return {
         "status": "pass",
         "claim_status": claim_status,
@@ -1697,6 +2472,9 @@ def build_workflow_review_html(
         "workflow_review_net_file": str(review_net_file or ""),
         "workflow_report_file": str(workflow_report_file),
         "review_manifest_file": str(review_manifest_file),
+        "artifact_hashes": artifact_hashes,
+        "artifact_hash_gate": artifact_hash_gate,
+        "artifact_hash_gate_status": artifact_hash_gate["status"],
         "network_overview_png": str(visualization_report.get("network_overview_png", "")),
         "problem_overlay_png": str(visualization_report.get("problem_overlay_png", "")),
         "reference_comparison_png": str(visualization_report.get("reference_comparison_png", "")),
@@ -1714,6 +2492,18 @@ def build_workflow_review_html(
             for item in netedit_review.get("cluster_selection_files", []) or []
             if isinstance(item, Mapping)
         ],
+        "review_overlay_location_count": len(review_overlay_locations),
+        "review_overlay_category_counts": dict(
+            sorted(
+                {
+                    category: sum(1 for item in review_overlay_locations if item.get("category") == category)
+                    for category in {str(item.get("category", "review")) for item in review_overlay_locations}
+                }.items()
+            )
+        ),
+        "claim_tiers": review_tiers,
+        "review_decisions_file": str(review_decisions_file),
+        "review_decisions_status": review_tiers["manual_quality_reviewed"]["status"],
         "human_review_required_count": len(actions),
         "warnings": warning_list + list(visualization_report.get("warnings", [])),
     }

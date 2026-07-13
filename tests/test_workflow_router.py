@@ -122,18 +122,9 @@ def test_detect_workflow_does_not_treat_signalization_near_matches_as_scene(
 @pytest.mark.parametrize(
     "unsupported_feature",
     [
-        "pedestrian",
-        "ped",
-        "bike",
-        "cyclist",
-        "cyclists",
-        "biking",
-        "sidewalk",
-        "sidewalks",
         "taxi",
         "taxis",
         "all modes",
-        "ramp",
         "bus",
     ],
 )
@@ -143,6 +134,21 @@ def test_detect_workflow_shares_scene_feature_limits(unsupported_feature: str) -
             f"Build a four-way TLS intersection with {unsupported_feature} access"
         )
         == "tls_review"
+    )
+
+
+@pytest.mark.parametrize(
+    "supported_feature",
+    ["pedestrian", "ped", "bike", "cyclist", "cyclists", "biking", "sidewalk", "sidewalks", "ramp"],
+)
+def test_detect_workflow_routes_phase_two_scene_features_to_scene_builder(
+    supported_feature: str,
+) -> None:
+    assert (
+        detect_workflow(
+            f"Build a four-way TLS intersection with {supported_feature} access"
+        )
+        == "intersection_scene"
     )
 
 
@@ -808,8 +814,9 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "reference_join_post_teacher_audit_status": "pass",
             "routeability_audit_status": "pass",
             "reference_join_audit": {"junction_pattern_index": [{"junction_id": "cluster_a_b"}]},
-            "gate_status": {
-                "reference_join_audit": "pass",
+                "gate_status": {
+                    "connection_mode_audit": "review_required",
+                    "reference_join_audit": "pass",
                 "reference_join_aggregation": "blocked",
                 "netedit_connection_mode_review": "blocked",
                 "netedit": "blocked",
@@ -951,8 +958,14 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert promotion_trace["claim_status"] == "diagnostic-demo"
     assert [stage["stage_id"] for stage in promotion_trace["stages"]] == list(stage_results)
     assert promotion_trace["stages"][1]["promotion_decision"] == "pass"
-    assert "netedit_connection_mode_review" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
-    assert "netedit_connection_mode" not in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    assert (
+        "map_or_field_evidence_for_connection_review_findings"
+        in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    )
+    assert (
+        "netedit_connection_mode_review"
+        not in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    )
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "road_connectivity_parity" in report["network_plan"]["validation_gates"]
     assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]
