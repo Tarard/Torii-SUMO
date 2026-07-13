@@ -1,0 +1,55 @@
+name: Corridor Contract Freeze
+
+on:
+  push:
+    branches:
+      - html
+      - "codex/**"
+  pull_request:
+    branches:
+      - html
+
+permissions:
+  contents: read
+
+jobs:
+  stage-0-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up locked Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.13"
+          cache: pip
+
+      - name: Install locked contract dependencies
+        run: |
+          python -m pip install --disable-pip-version-check \
+            pydantic==2.13.4 \
+            pytest==9.1.1 \
+            ruff==0.15.21
+          python -m pip install --no-deps --editable .
+
+      - name: Lint the frozen contract layer
+        run: |
+          ruff check \
+            plugins/torii-sumo/src/torii_sumo/corridor \
+            plugins/torii-sumo/scripts/export_corridor_schema.py \
+            tests/test_corridor_stage0_contracts.py
+
+      - name: Verify schema regeneration is deterministic
+        run: |
+          python plugins/torii-sumo/scripts/export_corridor_schema.py \
+            --output generated.corridor.schema.json
+          diff --unified \
+            schemas/torii.corridor.research-bundle.v1.schema.json \
+            generated.corridor.schema.json
+
+      - name: Verify benchmark, toolchain, plan, and fail-closed contracts
+        run: |
+          pytest tests/test_corridor_stage0_contracts.py -q

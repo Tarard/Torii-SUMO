@@ -47,4 +47,5 @@ select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 "experiments/junction_aggregation_strategy_probe.py" = ["E402"]
+"plugins/torii-sumo/scripts/export_corridor_schema.py" = ["E402"]
 "plugins/torii-sumo/scripts/run_torii_sumo.py" = ["E402"]
