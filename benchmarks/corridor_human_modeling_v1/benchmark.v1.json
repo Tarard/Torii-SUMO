@@ -1,0 +1,223 @@
+{
+  "schema": "torii.corridor.benchmark/v1",
+  "benchmark_id": "manifest_26ff34c89ac98ec132b40eef",
+  "release": "v1",
+  "frozen": true,
+  "research_plan_path": "docs/torii-corridor-human-modeling-research-plan.md",
+  "dimensions": [
+    {
+      "name": "topology",
+      "values": [
+        "T3",
+        "X4",
+        "X5",
+        "offset",
+        "skew",
+        "divided",
+        "paired",
+        "channelized",
+        "shared-controller",
+        "split",
+        "merged"
+      ]
+    },
+    {
+      "name": "lane-configuration",
+      "values": [
+        "one-to-four-lanes",
+        "dedicated-left",
+        "dedicated-right",
+        "shared-left-through",
+        "lane-drop",
+        "lane-addition",
+        "asymmetric"
+      ]
+    },
+    {
+      "name": "mode",
+      "values": [
+        "motor-vehicle",
+        "bus",
+        "bicycle",
+        "pedestrian",
+        "rail"
+      ]
+    },
+    {
+      "name": "traffic-side",
+      "values": [
+        "right",
+        "left"
+      ]
+    },
+    {
+      "name": "fault-family",
+      "values": [
+        "wrong-to-lane",
+        "crossed-lane-map",
+        "duplicate-connection",
+        "missing-connection",
+        "incorrect-via",
+        "internal-cycle",
+        "target-mismatch",
+        "dangling-internal",
+        "endpoint-gap",
+        "wrong-turn",
+        "illegal-movement",
+        "missing-legal-movement",
+        "request-length",
+        "request-bit-order",
+        "asymmetric-foes",
+        "protected-green-conflict",
+        "shared-link-index-conflict",
+        "out-of-range-link-index",
+        "phase-state-length",
+        "missing-program",
+        "link-index-2",
+        "pedestrian-conflict",
+        "rail-conflict"
+      ]
+    },
+    {
+      "name": "osm-completeness",
+      "values": [
+        "high",
+        "partial",
+        "sparse",
+        "contradictory"
+      ]
+    }
+  ],
+  "families": [
+    {
+      "family_id": "synthetic-connection-mode-matrix",
+      "layer": "synthetic",
+      "status": "fixture-ready",
+      "required_tags": [
+        "clean-gold",
+        "single-fault",
+        "multi-fault",
+        "expected-finding",
+        "expected-scope",
+        "expected-abstention"
+      ],
+      "traffic_sides": [
+        "right",
+        "left"
+      ],
+      "required_faults": [
+        "all-fault-family-values"
+      ],
+      "expected_claim_boundary": "audit-only until each edit class is independently certified"
+    },
+    {
+      "family_id": "sumo-official-plain-connections",
+      "layer": "sumo-official",
+      "status": "planned",
+      "required_tags": [
+        "edge-to-edge",
+        "lane-to-lane"
+      ],
+      "traffic_sides": [
+        "right"
+      ],
+      "required_faults": [],
+      "expected_claim_boundary": "normative structural regression, not teacher imitation"
+    },
+    {
+      "family_id": "sumo-official-joined-and-internal-links",
+      "layer": "sumo-official",
+      "status": "planned",
+      "required_tags": [
+        "joined-junction",
+        "internal-links",
+        "no-internal-links"
+      ],
+      "traffic_sides": [
+        "right"
+      ],
+      "required_faults": [],
+      "expected_claim_boundary": "structural compatibility only"
+    },
+    {
+      "family_id": "sumo-official-nema",
+      "layer": "sumo-official",
+      "status": "planned",
+      "required_tags": [
+        "standard-X4",
+        "on-ramp",
+        "ring-barrier"
+      ],
+      "traffic_sides": [
+        "right"
+      ],
+      "required_faults": [
+        "protected-green-conflict",
+        "shared-link-index-conflict"
+      ],
+      "expected_claim_boundary": "canonical vehicle-only phase topology; never field timing"
+    },
+    {
+      "family_id": "sumo-official-pedestrian-and-rail",
+      "layer": "sumo-official",
+      "status": "planned",
+      "required_tags": [
+        "sidewalk",
+        "crossing",
+        "walkingarea",
+        "rail-signal",
+        "rail-crossing",
+        "shared-signal-index"
+      ],
+      "traffic_sides": [
+        "right"
+      ],
+      "required_faults": [
+        "pedestrian-conflict",
+        "rail-conflict"
+      ],
+      "expected_claim_boundary": "independent multimodal safety audit"
+    },
+    {
+      "family_id": "ingolstadt-development-corridors",
+      "layer": "real-osm",
+      "status": "fixture-ready",
+      "required_tags": [
+        "development-only",
+        "same-bbox",
+        "teacher-disagreement-recorded"
+      ],
+      "traffic_sides": [
+        "right"
+      ],
+      "required_faults": [],
+      "expected_claim_boundary": "development evidence; excluded from held-out generalization claims"
+    },
+    {
+      "family_id": "city-and-morphology-held-out-corridors",
+      "layer": "real-osm",
+      "status": "planned",
+      "required_tags": [
+        "grid",
+        "historic-core",
+        "suburban-arterial",
+        "divided-arterial",
+        "interchange",
+        "tram-or-rail",
+        "bridge-or-tunnel",
+        "multimodal",
+        "shared-controller",
+        "two-reviewers",
+        "adjudication"
+      ],
+      "traffic_sides": [
+        "right",
+        "left"
+      ],
+      "required_faults": [],
+      "expected_claim_boundary": "held-out selective automation and review-burden evaluation"
+    }
+  ],
+  "split_policy": "Split by city and road morphology. Neighboring slices of one physical junction may never cross train, development, and held-out partitions.",
+  "threshold_policy": "Hard-gate thresholds and untouched-baseline tolerances are preregistered before candidate evaluation. Safety, source identity, outside-scope exact delta, and protected review closure cannot be traded against aggregate scores."
+}
