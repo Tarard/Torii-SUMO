@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -5,9 +6,12 @@ from torii_sumo.core.network_permissions import apply_service_passenger_permissi
 from torii_sumo.core.network_plan import derive_network_plan
 from torii_sumo.core.osm_workflow import (
     _junction_semantic_gate,
+    _corridor_geometry_simplification_promotion_decision,
     _low_vehicle_control_candidate_limits,
     _movement_rebuild_reference_delta_promotion_decision,
     _reference_delta_promotion_decision,
+    _reference_hierarchy_type_repair_promotion_decision,
+    _scope_pruning_promotion_decision,
     _followup_reference_delta_structural_only,
     _teacher_guided_seed_candidate,
     _reference_join_audit_can_seed_teacher_guided_queue,
@@ -19,12 +23,174 @@ from torii_sumo.core.osm_workflow import (
     _teacher_guided_best_variant_file,
     _teacher_guided_direct_replay_needed,
     _teacher_guided_equivalent_approach_edge_map,
+    _run_direct_local_teacher_replay,
+    run_scoped_teacher_tls_cell_batch,
     _safe_path_part,
     _tls_connection_repair_promotion_decision,
     export_plain_net_for_teacher_guided_repair,
     run_osm_cleanup_workflow,
 )
 from torii_sumo.core.reference_bbox import derive_reference_net_bbox
+
+
+def test_corridor_geometry_simplification_promotes_only_monotonic_candidate() -> None:
+    variant = {
+        "status": "pass",
+        "semantic_preservation_status": "pass",
+        "alias_normalized_connection_audit": {
+            "normal_missing_count": 0,
+            "normal_extra_count": 0,
+            "controlled_missing_count": 0,
+            "controlled_extra_count": 0,
+        },
+    }
+    baseline_delta = {
+        "status": "pass",
+        "network_structural_missing_counts": {"tls_controlled_connection_count": 50},
+        "network_structural_extra_counts": {"tl_logic_count": 16, "traffic_light_junction_count": 16},
+    }
+    candidate_delta = {
+        "status": "pass",
+        "network_structural_missing_counts": {"tls_controlled_connection_count": 50},
+        "network_structural_extra_counts": {"tl_logic_count": 5, "traffic_light_junction_count": 16},
+    }
+    baseline_topology = {
+        "suspicious_cluster_count": 158,
+        "junction_aggregation_candidate_count": 94,
+        "physical_intersection_candidate_count": 65,
+        "topology_connection_cell_candidate_count": 64,
+        "max_cluster_node_count": 122,
+    }
+    candidate_topology = {**baseline_topology, "topology_connection_cell_candidate_count": 61}
+
+    decision = _corridor_geometry_simplification_promotion_decision(
+        variant_report=variant,
+        sumo_load_report={"status": "pass"},
+        baseline_delta_report=baseline_delta,
+        candidate_delta_report=candidate_delta,
+        baseline_topology_report=baseline_topology,
+        candidate_topology_report=candidate_topology,
+    )
+
+    assert decision["status"] == "pass"
+    assert decision["reason"] == "corridor_geometry_simplification_promoted_by_semantic_and_topology_gates"
+    assert decision["candidate_tls_semantic_delta_score"] < decision["baseline_tls_semantic_delta_score"]
+
+
+def test_scope_pruning_blocks_controlled_tls_regression(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    variant = tmp_path / "variant.net.xml"
+    source.write_text(
+        '<net><connection from="in" to="out" tl="tls" linkIndex="0"/></net>',
+        encoding="utf-8",
+    )
+    variant.write_text('<net><connection from="in" to="out"/></net>', encoding="utf-8")
+
+    decision = _scope_pruning_promotion_decision(
+        pruning_report={
+            "status": "pass",
+            "scope_pruning_netconvert": {"status": "pass"},
+            "scope_pruning_modal_only_status": "pass",
+            "scope_pruning_modal_leaf_continuity_status": "pass",
+            "scope_pruning_vehicle_core_impact_status": "pass",
+        },
+        post_scope_report={"status": "pass"},
+        sumo_load_report={"status": "pass"},
+        source_net_file=source,
+        variant_net_file=variant,
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["checks"]["controlled_tls_connection_preservation"] == "blocked"
+    assert decision["controlled_connection_regression_count"] == 1
+
+
+def test_corridor_geometry_simplification_blocks_topology_regression() -> None:
+    variant = {
+        "status": "pass",
+        "semantic_preservation_status": "pass",
+        "alias_normalized_connection_audit": {
+            "normal_missing_count": 0,
+            "normal_extra_count": 0,
+            "controlled_missing_count": 0,
+            "controlled_extra_count": 0,
+        },
+    }
+    delta = {"status": "pass", "network_structural_missing_counts": {}, "network_structural_extra_counts": {}}
+    baseline_topology = {
+        "suspicious_cluster_count": 10,
+        "junction_aggregation_candidate_count": 5,
+        "physical_intersection_candidate_count": 3,
+        "topology_connection_cell_candidate_count": 2,
+        "max_cluster_node_count": 8,
+    }
+
+    decision = _corridor_geometry_simplification_promotion_decision(
+        variant_report=variant,
+        sumo_load_report={"status": "pass"},
+        baseline_delta_report=delta,
+        candidate_delta_report=delta,
+        baseline_topology_report=baseline_topology,
+        candidate_topology_report={**baseline_topology, "physical_intersection_candidate_count": 4},
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "corridor_topology_regressed"
+
+
+def test_reference_hierarchy_type_repair_promotes_strict_partial_improvement() -> None:
+    decision = _reference_hierarchy_type_repair_promotion_decision(
+        baseline_audit_report={
+            "high_hierarchy_issue_count": 66,
+            "decision_counts": {
+                "aligned": 296,
+                "matched_but_oversplit": 46,
+                "type_hierarchy_mismatch": 20,
+            },
+        },
+        candidate_audit_report={
+            "status": "blocked",
+            "reference_hierarchy_status": "needs_review",
+            "high_hierarchy_issue_count": 51,
+            "decision_counts": {
+                "aligned": 311,
+                "matched_but_oversplit": 50,
+                "type_hierarchy_mismatch": 1,
+            },
+        },
+        sumo_load_report={"status": "pass"},
+    )
+
+    assert decision["status"] == "pass"
+    assert decision["reason"] == "reference_hierarchy_type_repair_promoted_by_strict_improvement"
+    assert decision["baseline_issue_count"] == 66
+    assert decision["candidate_issue_count"] == 51
+
+
+def test_reference_hierarchy_type_repair_blocks_new_scope_risk() -> None:
+    decision = _reference_hierarchy_type_repair_promotion_decision(
+        baseline_audit_report={
+            "high_hierarchy_issue_count": 5,
+            "decision_counts": {"aligned": 10, "type_hierarchy_mismatch": 5},
+        },
+        candidate_audit_report={
+            "status": "blocked",
+            "reference_hierarchy_status": "needs_review",
+            "high_hierarchy_issue_count": 4,
+            "decision_counts": {
+                "aligned": 11,
+                "type_hierarchy_mismatch": 2,
+                "out_of_reference_scope": 2,
+            },
+        },
+        sumo_load_report={"status": "pass"},
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "reference_hierarchy_type_repair_not_strictly_better"
+    assert decision["risk_regressions"] == {
+        "out_of_reference_scope": {"baseline": 0, "candidate": 2}
+    }
 
 
 def test_junction_semantic_gate_uses_comparison_evidence_when_case_counts_are_zero() -> None:
@@ -53,6 +219,101 @@ def test_direct_replay_path_part_is_short_and_stable_for_windows() -> None:
     assert len(path_part) <= 16
     assert path_part == _safe_path_part(long_junction_id)
     assert path_part != _safe_path_part(long_junction_id + "_different")
+
+
+def test_direct_local_teacher_replay_shortens_generated_net_paths_for_windows(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_net = tmp_path / "source.net.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    source_net.write_text("<net/>", encoding="utf-8")
+    teacher_net.write_text("<net/>", encoding="utf-8")
+    captured: dict[str, Path] = {}
+
+    def fake_replay(**kwargs):
+        captured["output_file"] = kwargs["output_file"]
+        return {"status": "fail"}
+
+    monkeypatch.setattr("torii_sumo.core.osm_workflow.write_teacher_target_internal_replay_net", fake_replay)
+    report = _run_direct_local_teacher_replay(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "ready_candidate_count": 1,
+            "repair_candidates": [
+                {
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "junction_id": "junction_" + "x" * 80,
+                    "reference_id": "teacher_junction",
+                    "edge_map": {"teacher_in": "candidate_in"},
+                }
+            ],
+        },
+        source_net_file=source_net,
+        output_dir=tmp_path / ("output_" + "y" * 100),
+        prefix="very_long_teacher_guided_direct_replay_prefix",
+        netconvert_binary="netconvert",
+        sumo_binary="sumo",
+        timeout_seconds=1.0,
+        command_runner=lambda *args, **kwargs: {"status": "fail"},
+    )
+
+    assert report["status"] == "blocked"
+    assert len(str(captured["output_file"].resolve())) < 260
+    assert captured["output_file"].name in {"target_internal_replay.net.xml", "tir.net.xml"}
+
+
+def test_scoped_teacher_tls_cell_batch_keeps_cells_as_independent_variants(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text("<net/>", encoding="utf-8")
+    calls = []
+
+    def fake_direct(**kwargs):
+        calls.append(kwargs["output_dir"])
+        kwargs["output_dir"].mkdir(parents=True, exist_ok=True)
+        (kwargs["output_dir"] / "normalized.net.xml").write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "variant_file": str(kwargs["output_dir"] / "normalized.net.xml"),
+            "variant_reports": [
+                {
+                    "status": "pass",
+                    "tls_via_path_semantics": {"status": "pass", "via_geometry_status": "pass"},
+                }
+            ],
+        }
+
+    monkeypatch.setattr("torii_sumo.core.osm_workflow._run_direct_local_teacher_replay", fake_direct)
+    report = run_scoped_teacher_tls_cell_batch(
+        queue_report={
+            "repair_candidates": [
+                {
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "tls_reference_tl_id": "teacher_tls",
+                    "tls_candidate_tl_id": "candidate_tls",
+                    "tls_candidate_junction_ids": ["candidate_tls", "member_tls"],
+                }
+            ]
+        },
+        source_net_file=source,
+        output_dir=tmp_path / "batch",
+        prefix="demo",
+        netconvert_binary="netconvert",
+        sumo_binary="sumo",
+        timeout_seconds=1.0,
+    )
+
+    assert report["status"] == "pass"
+    assert report["cell_count"] == 1
+    assert report["policy"].startswith("independent scoped variants")
+    assert len(calls) == 1
+    assert Path(report["report_file"]).is_file()
+    assert report["artifact_manifest_status"] == "pass"
+    assert Path(report["artifact_manifest_file"]).is_file()
+    manifest = json.loads(Path(report["artifact_manifest_file"]).read_text(encoding="utf-8"))
+    assert manifest["status"] == "pass"
+    assert manifest["artifact_hash_gate"]["status"] == "pass"
 
 
 def test_sumo_load_retries_netconvert_normalized_net_after_direct_failure(tmp_path: Path) -> None:
@@ -1412,6 +1673,43 @@ def test_movement_rebuild_promotion_uses_structural_guard_baseline() -> None:
     assert decision["guard_total_structural_delta_score"] == 715
 
 
+def test_movement_rebuild_promotion_blocks_controlled_tls_regression(tmp_path: Path) -> None:
+    baseline_net = tmp_path / "baseline.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    baseline_net.write_text(
+        '<net><connection from="a" to="b" fromLane="0" toLane="0" tl="tls" linkIndex="0" /></net>',
+        encoding="utf-8",
+    )
+    candidate_net.write_text(
+        '<net><connection from="a" to="b" fromLane="0" toLane="0" /></net>',
+        encoding="utf-8",
+    )
+
+    decision = _movement_rebuild_reference_delta_promotion_decision(
+        baseline_delta_report={
+            "status": "pass",
+            "candidate_net_file": str(baseline_net),
+            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 5},
+            "network_structural_missing_counts": {"connection_count": 10},
+            "network_structural_extra_counts": {},
+        },
+        candidate_delta_report={
+            "status": "pass",
+            "candidate_net_file": str(candidate_net),
+            "junction_pattern_mismatch_field_counts": {},
+            "network_structural_missing_counts": {},
+            "network_structural_extra_counts": {},
+        },
+        reason="final_movement_rebuild_promoted_by_reference_delta",
+    )
+
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "controlled_tls_connection_regressed"
+    assert decision["baseline_controlled_connection_count"] == 1
+    assert decision["candidate_controlled_connection_count"] == 0
+    assert decision["controlled_connection_regression_count"] == 1
+
+
 def test_reference_delta_promotion_prefers_candidate_with_lower_tls_semantic_score() -> None:
     decision = _reference_delta_promotion_decision(
         candidate_delta_report={
@@ -1528,6 +1826,7 @@ def test_network_plan_derives_reference_policy_from_reference_net(tmp_path: Path
     assert plan["reference_policy"]["visual_detail_edge_type_counts"]["highway.footway"] == 1
     assert plan["service_passenger_policy"] == "reference_match"
     assert "routeability_audit" in plan["validation_gates"]
+    assert "standard_nema_scan" in plan["validation_gates"]
     assert "scope_matched_reference_comparison" in plan["validation_gates"]
     assert "reference_join_audit" in plan["validation_gates"]
     assert "junction_pattern_index" in plan["validation_gates"]
@@ -1535,7 +1834,8 @@ def test_network_plan_derives_reference_policy_from_reference_net(tmp_path: Path
     assert "connection_semantics_parity" in plan["validation_gates"]
     assert "tls_semantics_parity" in plan["validation_gates"]
     assert "internal_junction_parity" in plan["validation_gates"]
-    assert "netedit_connection_mode_review" in plan["validation_gates"]
+    assert "connection_mode_audit" in plan["validation_gates"]
+    assert "netedit_connection_mode_review" not in plan["validation_gates"]
     assert "teacher_guided_junction_parity" in plan["validation_gates"]
 
 
@@ -1672,9 +1972,18 @@ def test_export_plain_net_for_teacher_guided_repair_resolves_relative_output_dir
 def test_export_plain_net_for_teacher_guided_repair_uses_short_source_copy(
     tmp_path: Path,
 ) -> None:
-    long_dir = tmp_path / ("source_" + "x" * 120)
-    net_file = long_dir / ("candidate_" + "y" * 120 + ".net.xml")
-    net_file.parent.mkdir(parents=True)
+    # Keep the fixture deliberately long while reserving room for the
+    # per-run pytest temp root on Windows, whose legacy path limit is still
+    # enforced by some Python installations.
+    short_root = tmp_path.parent.parent
+    source_name = f"source_{tmp_path.parent.name}_{tmp_path.name[-8:]}_"
+    file_name = "candidate_" + "y" * 48 + ".net.xml"
+    available_dir_chars = 220 - len(str(short_root)) - 1 - len(file_name)
+    long_dir = short_root / (
+        source_name + "x" * max(16, available_dir_chars - len(source_name))
+    )
+    net_file = long_dir / file_name
+    net_file.parent.mkdir(parents=True, exist_ok=True)
     net_file.write_text("<net/>", encoding="utf-8")
     calls: dict[str, object] = {}
 
@@ -2268,6 +2577,15 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
                 {"repair_category": "tls_controller_cardinality_repair", "review_type": "split_multi_junction_tls"},
                 {"repair_category": "tls_linkindex_phase_repair", "review_type": "restore_shared_linkindex_groups"},
             ],
+            "tls_controller_alignment": {
+                "status": "diagnostic",
+                "pair_count": 24,
+                "possible_candidate_split_reference_count": 2,
+                "possible_candidate_merge_controller_count": 5,
+                "high_confidence_movement_gap_candidate_count": 16,
+                "high_confidence_missing_direction_instance_count": 42,
+                "repair_safe": False,
+            },
             "warnings": [],
         }
 
@@ -2507,7 +2825,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["reference_join_candidate_net_file"] == visual_detail_net_file
     assert calls["reference_join_structural_only"] is True
     assert calls["aggregation_candidate_net_file"] == visual_detail_net_file
-    assert calls["teacher_guided_candidate_net_file"] == tmp_path / "aggregated.net.xml"
+    assert calls["teacher_guided_candidate_net_file"] == visual_detail_net_file
     assert calls["teacher_guided_queue_max_ready_candidates"] == 80
     assert calls["teacher_guided_plain_net_file"] == tmp_path / "road_connectivity_best_cluster_c_d.net.xml"
     assert calls["teacher_guided_plain_netconvert_binary"] == "netconvert-test"
@@ -2522,11 +2840,11 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert calls["teacher_guided_run_plain_exporter"] is fake_teacher_guided_plain_export
     assert calls["road_connectivity_teacher_net_file"] == reference_net_file
     assert calls["road_connectivity_candidate_net_files"] == [
-        tmp_path / "aggregated.net.xml",
+        visual_detail_net_file,
         tmp_path / "road_connectivity_best_cluster_a_b.net.xml",
     ]
     assert calls["road_connectivity_owner_ids"] == ["cluster_a_b", "cluster_c_d"]
-    assert Path(calls["workflow_review_net_file"]) == tmp_path / "aggregated.net.xml"
+    assert Path(calls["workflow_review_net_file"]) == visual_detail_net_file
     assert calls["aggregation_audit_report"]["matched_case_count"] == 2
     assert report["reference_join_audit_candidate_layer"] == "reference_visual_detail"
     assert report["reference_join_audit_mode"] == "full"
@@ -2574,6 +2892,14 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
         "tls_controller_cardinality_repair": 1,
         "tls_linkindex_phase_repair": 1,
     }
+    assert report["reference_join_tls_controller_alignment_status"] == "diagnostic"
+    assert report["reference_join_tls_controller_alignment_pair_count"] == 24
+    assert report["reference_join_tls_controller_possible_split_count"] == 2
+    assert report["reference_join_tls_controller_possible_merge_count"] == 5
+    assert report["reference_join_tls_high_confidence_movement_gap_candidate_count"] == 16
+    assert report["reference_join_tls_high_confidence_missing_direction_instance_count"] == 42
+    assert report["reference_join_tls_controller_alignment_repair_safe"] is False
+    assert report["reference_join_tls_controller_alignment"]["repair_safe"] is False
     assert report["reference_join_matched_case_count"] == 2
     assert report["reference_join_unmatched_case_count"] == 1
     assert report["reference_join_aggregation_status"] == "variant_created_for_review"
@@ -2593,7 +2919,7 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["reference_join_aggregation_preservation_audit_file"] == str(tmp_path / "aggregation_preservation.json")
     assert report["teacher_guided_repair_best_variant_file"] == ""
     assert report["teacher_guided_repair_best_expanded_scope_net_file"] == str(tmp_path / "expanded_scope.net.xml")
-    assert report["reference_visual_detail_comparison_net_file"] == str(tmp_path / "aggregated.net.xml")
+    assert report["reference_visual_detail_comparison_net_file"] == str(visual_detail_net_file)
     assert report["teacher_guided_repair_queue_status"] == "pass"
     assert report["teacher_guided_repair_tls_candidate_count"] == 2
     assert report["teacher_guided_repair_tls_category_counts"] == {
@@ -2661,13 +2987,13 @@ def test_reference_matched_workflow_audits_reference_join_on_visual_detail_layer
     assert report["road_connectivity_replay_gate_counts"] == {
         "owner_road_connectivity": {"pass": 2, "fail": 0, "failure_count": 0}
     }
-    assert report["workflow_review_net_file"] == str(tmp_path / "aggregated.net.xml")
+    assert report["workflow_review_net_file"] == str(visual_detail_net_file)
     assert report["gate_status"]["junction_pattern_index"] == "pass"
     assert report["gate_status"]["road_connectivity_parity"] == "pass"
     assert report["gate_status"]["connection_semantics_parity"] == "pass"
     assert report["gate_status"]["tls_semantics_parity"] == "pass"
     assert report["gate_status"]["internal_junction_parity"] == "blocked"
-    assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
+    assert report["gate_status"]["netedit_connection_mode_review"] == "pass"
     assert report["gate_status"]["teacher_guided_junction_parity"] == "blocked"
 
 
@@ -3144,7 +3470,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
     assert report["reference_hierarchy_type_repair_issue_count"] == 0
     assert report["reference_hierarchy_type_repair_promotion_status"] == "pass"
     assert report["gate_status"]["reference_join_aggregation"] == "skipped"
-    assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
+    assert report["gate_status"]["netedit_connection_mode_review"] == "pass"
     assert calls["post_repair_movement_equivalent_approach_edge_map"] == {
         "teacher_west": "candidate_west"
     }
@@ -3399,7 +3725,7 @@ def test_reference_matched_workflow_runs_post_repair_movement_rebuild_when_repai
     assert report["gate_status"]["tls_semantics_parity"] == "pass"
     assert report["gate_status"]["internal_junction_parity"] == "pass"
     assert report["gate_status"]["reference_join_aggregation"] == "skipped"
-    assert report["gate_status"]["netedit_connection_mode_review"] == "blocked"
+    assert report["gate_status"]["netedit_connection_mode_review"] == "pass"
 
 
 def test_reference_matched_workflow_promotes_post_teacher_non_controller_junction_demotion(
@@ -4048,6 +4374,7 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
             "claim_status": "diagnostic-demo",
             "variant_file": str(repaired_tls_net_file),
             "summary_file": str(summary_file),
+            "source_tls_controlled_connection_count": 9,
             "candidate_tls_controlled_connection_count_before": 7,
             "candidate_tls_controlled_connection_count_after": 9,
             "updated_connection_count": 2,
@@ -4157,6 +4484,12 @@ def test_reference_matched_workflow_promotes_repaired_tls_variant_when_gates_pas
     assert report["reference_visual_detail_tls_connection_repair_reference_delta_missing_counts"] == {
         "tls_controlled_connection_count": 90
     }
+    assert report["reference_visual_detail_tls_effective_source"] == "promoted_tls_connection_repair"
+    assert report["reference_visual_detail_tls_effective_network_file"] == str(repaired_tls_net_file)
+    assert report["reference_visual_detail_tls_effective_source_controlled_connection_count"] == 9
+    assert report["reference_visual_detail_tls_effective_controlled_connection_count"] == 9
+    assert report["reference_visual_detail_tls_effective_controlled_connection_preservation_status"] == "pass"
+    assert report["reference_visual_detail_tls_effective_controlled_connection_regression_count"] == 0
 
 
 def test_reference_matched_workflow_reviews_best_tls_aggregation_when_repair_is_unavailable(

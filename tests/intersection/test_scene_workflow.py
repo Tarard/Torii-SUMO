@@ -128,6 +128,10 @@ def test_scene_workflow_runs_real_sumo_toolchain(tmp_path: Path) -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["commands"]["netconvert"]["returncode"] == 0
     assert manifest["commands"]["sumo"]["returncode"] == 0
+    assert report["artifact_hash_gate_status"] == "pass"
+    assert manifest["artifact_hash_gate"]["algorithm"] == "sha256"
+    assert manifest["artifact_hashes"]["net_file"]["status"] == "pass"
+    assert manifest["artifact_hashes"]["artifact_manifest_file"]["status"] == "excluded"
 
 
 def test_scene_workflow_records_relative_output_inventory_and_verbatim_commands(
@@ -172,6 +176,8 @@ def test_scene_workflow_records_relative_output_inventory_and_verbatim_commands(
     assert manifest["resolved_spec"] == report["resolved_spec"]
     assert manifest["status"] == "pass"
     assert manifest["claim_status"] == "diagnostic-demo"
+    assert report["artifact_hash_gate_status"] == "pass"
+    assert manifest["artifact_hash_gate"]["status"] == "pass"
     assert manifest["path_contract"] == {
         "output_files": "relative to the artifact manifest directory",
         "commands": "verbatim execution evidence; path arguments may be absolute or relative to command cwd",

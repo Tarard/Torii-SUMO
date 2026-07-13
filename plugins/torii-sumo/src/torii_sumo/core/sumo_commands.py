@@ -42,18 +42,29 @@ def run_sumo_config(
 
 
 def discover_binaries() -> dict[str, str | None]:
-    sumo_home = os.environ.get("SUMO_HOME")
+    sumo_home_value = os.environ.get("SUMO_HOME", "").strip()
+    sumo_home = Path(sumo_home_value).resolve() if sumo_home_value else None
     random_trips = None
     if sumo_home:
-        candidate = Path(sumo_home) / "tools" / "randomTrips.py"
+        candidate = sumo_home / "tools" / "randomTrips.py"
         if candidate.exists():
             random_trips = str(candidate)
     return {
-        "netgenerate": shutil.which("netgenerate"),
+        "netgenerate": _sumo_home_binary(sumo_home, "netgenerate") or shutil.which("netgenerate"),
+        "netconvert": _sumo_home_binary(sumo_home, "netconvert") or shutil.which("netconvert"),
         "randomTrips": random_trips,
-        "duarouter": shutil.which("duarouter"),
-        "sumo": shutil.which("sumo"),
+        "duarouter": _sumo_home_binary(sumo_home, "duarouter") or shutil.which("duarouter"),
+        "sumo": _sumo_home_binary(sumo_home, "sumo") or shutil.which("sumo"),
     }
+
+
+def _sumo_home_binary(sumo_home: Path | None, name: str) -> str | None:
+    if sumo_home is None:
+        return None
+    for candidate in (sumo_home / "bin" / name, sumo_home / "bin" / f"{name}.exe"):
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def run_minimal_smoke(

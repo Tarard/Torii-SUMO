@@ -448,7 +448,7 @@ def _xy_to_latlon_with_sumolib(net: dict[str, Any], point: Point) -> tuple[float
         lon, lat = sumo_net.convertXY2LonLat(point[0], point[1])
         if math.isfinite(lat) and math.isfinite(lon):
             return (lat, lon)
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional sumolib conversion falls back to location bounds.
         return None
     return None
 

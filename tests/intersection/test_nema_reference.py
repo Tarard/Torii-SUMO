@@ -79,6 +79,16 @@ def test_build_nema_four_way_reference_writes_dual_ring_nema_artifacts(tmp_path:
     audit = json.loads(Path(report["audit_file"]).read_text(encoding="utf-8"))
     assert audit["phase_order"] == [str(i) for i in range(1, 9)]
     assert {row["linkIndex"] for row in audit["movement_map"]} == set(range(8))
+    phase_by_movement = {
+        (row["from"], row["turn"]): int(row["nemaPhase"])
+        for row in audit["movement_map"]
+    }
+    assert phase_by_movement[("W_in", "l")] == 5
+    assert phase_by_movement[("W_in", "s")] == 2
+    assert phase_by_movement[("E_in", "l")] == 1
+    assert phase_by_movement[("E_in", "s")] == 6
+    assert phase_by_movement[("S_in", "l")] == 7
+    assert phase_by_movement[("N_in", "l")] == 3
     json.dumps(report)
 
 

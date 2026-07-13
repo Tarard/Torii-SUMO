@@ -37,17 +37,67 @@ Torii has two layers:
 
 The architecture is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md): router, planner, executor, and reviewer.
 
-Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, TLS aggregation review variants, connectivity checks, connected-core extraction, routeability probes, completion-aware routeability audits, overlapping top-level junction audits, reference join audits, junction aggregation review variants, and Netedit launch evidence.
+Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, TLS aggregation review variants, code-native whole-network and source-to-candidate Connection Mode audits, strict standard three/four-way NEMA phase-binding candidates, connectivity checks, connected-core extraction, routeability probes, completion-aware routeability audits, overlapping top-level junction audits, reference join audits, junction aggregation review variants, and optional NetEdit launch evidence.
+
+### Current corridor acceptance boundary
+
+The implemented promotion contract is corridor-scale: accepted edits are materialized into a separate candidate, review locations are emitted as SUMO `additional.xml`, protected semantic or TLS deltas require an exact candidate-hash-bound review decision, and promotion remains blocked until identity, netconvert, XML, SUMO load, routeability, topology, and modal-connectivity evidence pass.
+
+Every materialized edit now produces one review package: `*.net.xml`, `*.map-review.json`, `*.accepted.review.add.xml`, `*.review.html`, `*.review.json`, and hash-bearing manifests. The `additional.xml` layer is display-only and restricted to `poi`, `poly`, and `param`; human decisions live in structured JSON. Google Maps, satellite, Mapillary, KartaView, or the regional map provider are auxiliary evidence, and become a hard gate only when an edit explicitly declares `map_review_required: true` with an explicit current or historical time scope.
+
+The reproducible real-SUMO runner covers four-way OSM sidewalk, official pedestrian crossing/TLS review, five-way bicycle, and five-way ramp scenarios:
+
+```powershell
+python plugins/torii-sumo/scripts/run_corridor_contract_regression.py
+```
+
+It rebuilds source networks instead of relying on old generated output. The current architecture and remaining debt are recorded in [`docs/architecture-audit-2026-07-13.md`](docs/architecture-audit-2026-07-13.md).
+
+### Code-native Connection Mode gate
+
+`sumo_network_connection_mode_audit` reconstructs NetEdit Connection Mode directly from `.net.xml`; the OSM cleanup workflow runs it by default, while its user-facing NetEdit launch now defaults to off. For every relevant junction it validates direct `fromLane -> toLane -> via` bindings, complete internal-lane continuation, lane and permission existence, request ordering and bitstrings, turn-lane order, lane-rank/crossed mappings, incoming and outgoing motor-lane coverage, TLS `linkIndex` bounds, controller state-string lengths, shared foe signal groups, and foe movements that receive protected `G` together. SUMO-managed `rail_signal` links are classified separately instead of being mistaken for missing road `tlLogic` programs.
+
+Results have three meanings: invalid XML/path/request/linkIndex structure is `fail`; legal but ambiguous merges, fanouts, lane drops, additions, or signal conflicts are `review_required`; only a finding-free junction is `pass`. Both non-pass classes block automatic candidate promotion. The tool writes JSON, a display-only review `additional.xml`, and a source-hash-bound manifest. NetEdit is therefore optional and limited to flagged visual review; routeability alone is never treated as lane-binding proof.
+
+`sumo_network_connection_mode_regression_audit` is the source-to-candidate gate. It audits both `.net.xml` files, closes the declared edit scope over touched TLS-controller members, and compares per-junction finding categories without relying on unstable internal connection indices. New structural or review findings inside the target scope, any regression outside it, and unexplained outside-scope junction identity changes all block promotion. The teacher-guided repair queue runs this differential gate automatically and records its JSON, display-only `additional.xml`, and SHA-256 manifest beside every materialized full-network candidate. A failed earlier semantic/parity gate does not suppress this diagnostic audit when a candidate file exists.
+
+On the current Ingolstadt same-bbox effective network, the whole-network audit covered 2,274 junctions and 13,169 direct movements, proving 13,169/13,169 internal paths. It found zero structural failures: 2,164 junctions pass and 110 require evidence review. The queue includes 27 incoming motor lanes without a junction connection, 19 outgoing motor lanes without a source connection, legal merge/fanout patterns, and one current TLS protected-green foe pair at junction `267517559`. Twelve implicit railway controllers are correctly recorded as SUMO runtime rail signals. No repair is inferred from those observations without OSM/map/lane evidence.
+
+The current Südliche Ringstraße reconstruction is deliberately not promoted. The differential gate exposed a plain-XML round-trip bug that re-applied type-level `sidewalkWidth`/`bikeLaneWidth`, shifted lane indices, and created 1,828 outside-scope review regressions. Round-trip type sanitization removed that global failure. The latest safe-default candidate now has zero outside-scope structural findings, review regressions, or junction identity changes, but remains blocked on 13 new target-scope structural findings and 27 target-scope review findings because only three nodes of a more complex signal cell are mapped. An experimental whole-controller join was also rejected. No routeability claim or source-network mutation is made for either blocked candidate.
+
+### Standard three/four-way NEMA binding
+
+`sumo_network_standard_nema_phase_binding` is now part of the OSM cleanup boundary. With no `junction_id`, it scans the effective cleaned network and emits an eligibility queue, a dedicated Connection Mode JSON report, display-only review `additional.xml`, HTML, decision contract, and hash-bearing manifest. It does not batch-edit the network. With one eligible `junction_id`, it creates a separate reversible candidate, maps protected lefts to odd NEMA phases and through/right movements to even phases, rewrites only the selected controller's `linkIndex` groups and `tlLogic`, then requires netconvert, SUMO load, and routeability gates.
+
+The canonical four-way mapping is cross-ring: one main approach uses left/through-right phases 5/2 and its opposite uses 1/6; the minor approaches use 7/4 and 3/8. This permits the documented compatible combinations 1+5, 1+6, 2+5, 2+6 and their minor-street equivalents. The three-way form uses SUMO NEMA missing-phase `0` placeholders and repeats phase 4 across the empty side of the second barrier. Before any candidate can be written, a hard Connection Mode gate traces every `fromLane -> toLane -> via` through its complete internal-lane chain, checks right-hand turn-lane order and lane-rank jumps, validates the request/foes matrix, and rejects any movement pair that canonical NEMA may serve concurrently when SUMO marks the pair as foes. Joined controllers, pedestrian/internal or rail links, bicycle-only movements, turnarounds, `linkIndex2`, ambiguous geometry, incomplete arm-to-arm movements, and non-dedicated protected-left lanes also fail closed. Even a fully passing candidate remains `review_required`, because the generic 90-second plan is not field-calibrated timing.
+
+The phase/ring contract follows the official [SUMO NEMA controller documentation](https://sumo.dlr.de/docs/Simulation/NEMA.html), signal groups follow SUMO's documented [`linkIndex` state-string semantics](https://sumo.dlr.de/docs/Simulation/Traffic_Lights.html), and request/foe indexing follows the official [SUMO road-network format](https://sumo.dlr.de/docs/Networks/SUMO_Road_Networks.html). Routeability runs enable SUMO junction-collision checking; graph reachability alone is never accepted as Connection Mode evidence.
+
+The local SUMO 1.27.1 reference acceptance passed both a standard four-way and a T-shaped three-way: each passed Connection Mode, candidate validation, netconvert round trip, SUMO load, and 12/12 routeability with junction collision checking enabled and zero collisions or teleports. The four-way verified 12 internal movement paths and bound them to phases 1–8; the three-way verified 6 paths and used phases 1/2/4/6 with rings `1,2,0,4` and `0,6,0,4`. The current Ingolstadt same-bbox scan runs against the effective TLS-cleaned network, which SUMO loads, and found 249 TLS-junction review records, including 24 three-way and 4 four-way geometric layouts, but deliberately auto-qualified none. All 1,617 request-bound movement paths are structurally valid: 221 TLS junctions pass the Connection Mode proof, 28 are `review_required`, and none has a structural failure. Among the 28 standard geometric layouts, 15 pass and 13 require evidence review. A review finding means automatic safety cannot yet be established, not that the marked link is certainly wrong. The unified display-only review layer keeps the 28 connection-review locations distinct from the 221 locations blocked only by other NEMA-scope conditions, without changing the effective network.
+
+### Ingolstadt teacher-corridor slice
+
+The first same-bbox teacher slice is now executable end to end:
+
+```powershell
+python plugins/torii-sumo/scripts/run_ingolstadt_corridor_teacher.py
+```
+
+It downloads the current OSM bbox, builds a raw visual-detail network, applies only a narrowly proven structural repair, runs SUMO load and completion-aware routeability, and compares junction `267517510` with the manually cleaned TUM cell. The structural repair is a separate candidate: it removed one stale TLS identity from an already-uncontrolled pedestrian-internal connection, left 58 embedded `tlLogic` programs and 12 implicit railway controllers intact, verified the source hash was unchanged, and emitted a rollback plan plus display-only review `additional.xml`.
+
+The latest local SUMO 1.27.1 acceptance run loaded successfully and completed 10/10 generated trips with zero collisions and teleports. Teacher transfer remains `review_required`: current OSM already supports the traffic-light control and contains three explicitly signalized crossing nodes, while the candidate still differs in pedestrian internal structure and movement signatures. Torii therefore does not replay the old teacher TLS blindly. The generated run manifest and HTML bind the exact OSM, source, candidate, map evidence, and review artifacts by SHA-256.
+
+For deterministic replay after an online acquisition, pass both `--candidate-net` and `--source-osm`; the runner skips Overpass but keeps the exact OSM evidence in the teacher comparison and manifest. A download failure remains a blocked run rather than silently reusing cached output.
 
 ## Example
 
 Use the prompt to test Torii:
 
 ```text
-Use Torii to clean the Ingolstadt city-center network from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, and open the cleaned network in Netedit.
+Use Torii to clean the Ingolstadt city-center network from OSM, compare it with the TUM-VT/sumo_ingolstadt cleaned network for the same bbox, run the code-native Connection Mode audit, and open only flagged junctions in NetEdit if visual review is needed.
 ```
 
-This demo uses Ingolstadt city center to test whether a Torii OSM-derived workflow becomes more auditable and closer to a manually cleaned reference network than raw import success alone.
+This demo uses Ingolstadt city center to test whether a Torii OSM-derived workflow becomes more auditable and closer to a manually cleaned reference network than raw import success alone. The proven acceptance claim is currently the single-corridor slice above; the older full-bbox table below remains diagnostic evidence, not a city-scale automatic-equivalence claim.
 
 ![TUM bbox reference compared with Torii 5.5 TLS-aggregated visual-detail](examples/02_one_prompt_osm_network/assets/tum_vs_torii_5_5_tls_aggregated_overview.png)
 
@@ -79,7 +129,7 @@ Full setup details: [Codex Plugin Installation](docs/codex-plugin-install.md).
 
 | Prompt | What Torii Does |
 |---|---|
-| "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt." | Builds from OSM, checks connectivity and routeability, compares topology/TLS evidence with the reference, and opens Netedit. |
+| "Use Torii to clean the Ingolstadt city-center network from OSM and compare it with TUM-VT/sumo_ingolstadt." | Builds from OSM, checks connectivity, routeability, and code-native lane bindings, compares topology/TLS evidence with the reference, and emits a review queue; NetEdit is optional for flagged locations. |
 | "Audit this TraCI signal controller before I compare it with fixed-time or max-pressure." | Checks controller identity, paired demand/seeds/horizon, TLS mapping, outputs, and completion before any performance claim. |
 | "This SUMO run finishes, but tripinfo and summary disagree." | Diagnoses output consistency, unfinished vehicles, teleports, route errors, and claim boundary. |
 

@@ -51,7 +51,9 @@ def test_routeability_audit_extends_horizon_until_all_vehicles_finish(tmp_path: 
         calls.append(command)
         assert cwd is not None
         if "randomTrips.py" in command:
+            trip_path = cwd / command[command.index("-o") + 1]
             route_path = cwd / command[command.index("-r") + 1]
+            trip_path.write_text("<trips/>", encoding="utf-8")
             route_path.write_text("<routes/>", encoding="utf-8")
             return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
 
@@ -103,6 +105,12 @@ def test_routeability_audit_extends_horizon_until_all_vehicles_finish(tmp_path: 
     assert report["final_attempt"]["inspection"]["summary"]["running"] == 0
     assert Path(report["report_file"]).is_file()
     assert any(command[0] == "sumo" for command in calls)
+    sumo_calls = [command for command in calls if command[0] == "sumo"]
+    assert all("--collision.check-junctions" in command for command in sumo_calls)
+    assert all(
+        command[command.index("--collision.check-junctions") + 1] == "true"
+        for command in sumo_calls
+    )
 
 
 def test_routeability_audit_passes_absolute_net_file_to_random_trips(tmp_path: Path) -> None:
@@ -114,7 +122,9 @@ def test_routeability_audit_passes_absolute_net_file_to_random_trips(tmp_path: P
         if "randomTrips.py" in command:
             net_arg = Path(command[command.index("-n") + 1])
             assert net_arg.is_absolute()
+            trip_path = cwd / command[command.index("-o") + 1]
             route_path = cwd / command[command.index("-r") + 1]
+            trip_path.write_text("<trips/>", encoding="utf-8")
             route_path.write_text("<routes/>", encoding="utf-8")
             return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
 
@@ -149,3 +159,58 @@ def test_routeability_audit_passes_absolute_net_file_to_random_trips(tmp_path: P
     )
 
     assert report["status"] == "pass"
+
+
+def test_routeability_audit_does_not_reuse_stale_route_generation_outputs(tmp_path: Path) -> None:
+    net_file = tmp_path / "network.net.xml"
+    output_dir = tmp_path / "audit"
+    output_dir.mkdir()
+    net_file.write_text("<net/>", encoding="utf-8")
+    (output_dir / "demo.trips.xml").write_text("<stale-trips/>", encoding="utf-8")
+    (output_dir / "demo.rou.xml").write_text("<stale-routes/>", encoding="utf-8")
+
+    report = run_routeability_audit(
+        net_file=net_file,
+        output_dir=output_dir,
+        prefix="demo",
+        vehicle_count=1,
+        initial_end=300,
+        max_end=300,
+        binaries={"sumo": "sumo", "randomTrips": "randomTrips.py"},
+        command_runner=lambda command, **_kwargs: {
+            "status": "pass",
+            "returncode": 0,
+            "command": command,
+        },
+    )
+
+    assert report["status"] == "fail"
+    assert report["routeability_status"] == "route-generation-failed"
+    assert not (output_dir / "demo.trips.xml").exists()
+    assert not (output_dir / "demo.rou.xml").exists()
+    assert Path(report["report_file"]).is_file()
+    assert Path(report["manifest_file"]).is_file()
+
+
+def test_routeability_audit_persists_external_runner_exception(tmp_path: Path) -> None:
+    net_file = tmp_path / "network.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+
+    def broken_runner(*_args, **_kwargs):
+        raise RuntimeError("runner unavailable")
+
+    report = run_routeability_audit(
+        net_file=net_file,
+        output_dir=tmp_path / "audit",
+        prefix="demo",
+        vehicle_count=1,
+        initial_end=300,
+        max_end=300,
+        binaries={"sumo": "sumo", "randomTrips": "randomTrips.py"},
+        command_runner=broken_runner,
+    )
+
+    assert report["status"] == "fail"
+    assert report["routeability_status"] == "route-generation-failed"
+    assert "runner unavailable" in report["route_generation"]["error"]
+    assert Path(report["manifest_file"]).is_file()

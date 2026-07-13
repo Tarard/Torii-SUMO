@@ -269,13 +269,13 @@ def _phase_for_connection(connection: ET.Element) -> str:
     from_edge = connection.attrib["from"]
     is_left = connection.attrib.get("dir", "").lower() == "l" or connection.attrib.get("fromLane") == "2"
     if from_edge == "W_in":
-        return "1" if is_left else "2"
+        return "5" if is_left else "2"
     if from_edge == "E_in":
-        return "5" if is_left else "6"
+        return "1" if is_left else "6"
     if from_edge == "S_in":
-        return "3" if is_left else "4"
+        return "7" if is_left else "4"
     if from_edge == "N_in":
-        return "7" if is_left else "8"
+        return "3" if is_left else "8"
     raise ValueError(from_edge)
 
 

@@ -1,5 +1,6 @@
 import csv
 import gzip
+import json
 import shutil
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -80,6 +81,7 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
         road_connectivity_replay_max_owners=2,
         road_connectivity_probe_edge_ids=["road#0"],
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
+        run_corridor_edit_ledger_after_build=True,
     )
 
     assert report["status"] == "pass"
@@ -88,6 +90,7 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
     assert captured["road_connectivity_replay_max_owners"] == 2
     assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
+    assert captured["run_corridor_edit_ledger_after_build"] is True
 
 
 def test_road_connectivity_owner_ids_include_seed_geometry_mismatch_endpoints(tmp_path: Path) -> None:
@@ -2086,6 +2089,9 @@ def test_extract_largest_passenger_component_core_writes_keep_and_discard_record
 
     keep_edges = Path(report["keep_edges_file"]).read_text(encoding="utf-8").splitlines()
     discard_rows = list(csv.DictReader(Path(report["discarded_components_file"]).open(encoding="utf-8")))
+    review_payload = json.loads(
+        Path(report["discarded_components_review_file"]).read_text(encoding="utf-8")
+    )
 
     assert report["status"] == "pass"
     assert report["network_quality"] == "connected-core"
@@ -2101,6 +2107,10 @@ def test_extract_largest_passenger_component_core_writes_keep_and_discard_record
             "discard_reason": "outside_largest_passenger_component",
         }
     ]
+    assert review_payload["status"] == "pending_review"
+    assert review_payload["component_count"] == 1
+    assert review_payload["records"][0]["location_id"] == "disconnected_component_002"
+    assert review_payload["records"][0]["decision"] == "pending"
     command = calls[0][0]
     assert command[:2] == ["netconvert", "--sumo-net-file"]
     assert "--keep-edges.input-file" in command
@@ -2140,6 +2150,44 @@ def test_extract_largest_passenger_component_core_uses_cwd_relative_paths(
 
     assert report["status"] == "pass"
     assert Path(report["connected_core_file"]).exists()
+
+
+def test_extract_largest_passenger_component_core_falls_back_without_postload(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "raw.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="a" from="n0" to="n1"><lane id="a_0" allow="passenger" speed="13.9" length="10.0"/></edge>
+  <edge id="b" from="n1" to="n2"><lane id="b_0" allow="passenger" speed="13.9" length="10.0"/></edge>
+  <edge id="c" from="n3" to="n4"><lane id="c_0" allow="passenger" speed="13.9" length="10.0"/></edge>
+  <connection from="a" to="b"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    calls = []
+
+    def fake_command_runner(command, **kwargs):
+        calls.append(command)
+        if "--keep-edges.postload" not in command:
+            output_file = Path(kwargs["cwd"]) / command[command.index("--output-file") + 1]
+            output_file.write_text("<net/>", encoding="utf-8")
+            return {"status": "pass", "returncode": 0, "stdout": "Success.", "stderr": "", "error": ""}
+        return {"status": "fail", "returncode": 1, "stdout": "", "stderr": "PositionVector", "error": ""}
+
+    report = extract_largest_passenger_component_core(
+        net_file,
+        output_dir=tmp_path / "core",
+        prefix="fallback",
+        command_runner=fake_command_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["fallback_used"] is True
+    assert len(report["command_attempts"]) == 2
+    assert "--keep-edges.postload" in calls[0]
+    assert "--keep-edges.postload" not in calls[1]
 
 
 def test_launch_netedit_reports_unavailable_when_binary_missing(tmp_path: Path) -> None:
@@ -2557,6 +2605,47 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
             "warnings": [],
         }
 
+    def fake_standard_nema_scan(net_path, **kwargs):
+        assert net_path == net_file
+        assert kwargs["output_dir"] == tmp_path / "standard_nema_review"
+        assert kwargs["prefix"] == "demo_standard_nema"
+        assert kwargs["junction_id"] is None
+        assert kwargs["run_runtime_checks"] is False
+        assert kwargs["run_routeability"] is False
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "nema_binding_status": "scan_complete",
+            "scan_counts": {"eligible_count": 1, "review_required_count": 2},
+            "report_file": str(tmp_path / "standard_nema_review" / "demo_standard_nema.json"),
+            "connection_mode_report_file": str(
+                tmp_path / "standard_nema_review" / "demo_standard_nema.connection_mode.json"
+            ),
+            "review_overlay_file": str(tmp_path / "standard_nema_review" / "demo_standard_nema.review.add.xml"),
+            "review_html_file": str(tmp_path / "standard_nema_review" / "demo_standard_nema.review.html"),
+            "warnings": [],
+        }
+
+    def fake_connection_mode_audit(net_path, **kwargs):
+        assert net_path == net_file
+        assert kwargs["output_dir"] == tmp_path / "connection_mode_audit"
+        assert kwargs["prefix"] == "demo_connection_mode"
+        return {
+            "status": "review_required",
+            "automatic_promotion_gate": "blocked",
+            "pass_count": 10,
+            "review_required_count": 1,
+            "fail_count": 0,
+            "report_file": str(tmp_path / "connection_mode_audit" / "demo_connection_mode.json"),
+            "review_overlay_file": str(
+                tmp_path / "connection_mode_audit" / "demo_connection_mode.review.add.xml"
+            ),
+            "manifest_file": str(
+                tmp_path / "connection_mode_audit" / "demo_connection_mode.manifest.json"
+            ),
+            "warnings": [],
+        }
+
     report = run_osm_cleanup_workflow(
         bbox="13.6,50.9,13.9,51.1",
         output_dir=tmp_path,
@@ -2568,6 +2657,8 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
         connectivity_func=fake_connectivity,
         netedit_func=fake_netedit,
         sumo_gui_func=fake_sumo_gui,
+        connection_mode_audit_func=fake_connection_mode_audit,
+        standard_nema_binding_func=fake_standard_nema_scan,
     )
 
     assert report["status"] == "fail"
@@ -2578,11 +2669,24 @@ def test_osm_cleanup_workflow_runs_build_tls_connectivity_and_netedit(tmp_path: 
         "road_level_scope": "pass",
         "network_build": "pass",
         "tls_reality_audit": "blocked",
-        "connectivity": "pass",
-        "topology_audit": "pass",
-        "netedit": "pass",
+            "connectivity": "pass",
+            "topology_audit": "pass",
+            "connection_mode_audit": "review_required",
+            "netedit": "pass",
         "sumo_gui": "pass",
+        "tls_scoped_cell_batch": "skipped",
+        "standard_nema_scan": "pass",
     }
+    assert report["standard_nema_scan_status"] == "scan_complete"
+    assert report["standard_nema_eligible_count"] == 1
+    assert report["standard_nema_review_required_count"] == 2
+    assert report["standard_nema_connection_mode_report_file"].endswith(
+        "demo_standard_nema.connection_mode.json"
+    )
+    assert report["standard_nema_scan"]["scan_counts"]["eligible_count"] == 1
+    assert report["connection_mode_audit_status"] == "review_required"
+    assert report["connection_mode_audit_review_required_count"] == 1
+    assert report["connection_mode_audit"]["automatic_promotion_gate"] == "blocked"
     assert report["tls_review_complete"] == "no"
     assert report["tls_google_maps_review_status"] == "needs_google_review"
     assert report["tls_google_maps_review_required"] == "yes"

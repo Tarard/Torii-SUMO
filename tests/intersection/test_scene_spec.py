@@ -15,6 +15,10 @@ def test_resolve_four_way_signalized_scene() -> None:
         "control": "traffic_light",
         "controller": "nema_reference",
         "allowed_modes": ["passenger"],
+        "pedestrian_crossing": False,
+        "bicycle_support": False,
+        "ramp": False,
+        "tls_semantics": "nema",
         "link_length_m": 180.0,
         "speed_mps": 13.89,
         "smoke_route": ["W", "E"],
@@ -36,6 +40,40 @@ def test_resolves_supported_signalization_terms(signalization: str) -> None:
 def test_rejects_unsupported_three_way_priority_scene() -> None:
     with pytest.raises(ValueError, match="Phase 1.*four-way signalized"):
         resolve_intersection_scene_prompt("Build a three-way priority intersection.")
+
+
+@pytest.mark.parametrize(
+    ("prompt", "topology", "approach_count", "controller"),
+    [
+        ("Build a three-way signalized intersection.", "three_way", 3, "fixed_time"),
+        ("Build a five-way signalized intersection.", "five_way", 5, "fixed_time"),
+        ("Build a four-way signalized intersection with fixed-time control.", "four_way", 4, "fixed_time"),
+        ("Build a four-way signalized intersection with protected-permissive control.", "four_way", 4, "protected_permissive"),
+    ],
+)
+def test_resolves_phase_two_topology_and_controller_terms(
+    prompt: str,
+    topology: str,
+    approach_count: int,
+    controller: str,
+) -> None:
+    spec = resolve_intersection_scene_prompt(prompt)
+
+    assert spec.topology == topology
+    assert spec.approach_count == approach_count
+    assert spec.controller == controller
+    assert spec.tls_semantics == controller if controller != "protected_permissive" else "protected_permissive"
+
+
+def test_resolves_phase_two_mode_and_ramp_features() -> None:
+    spec = resolve_intersection_scene_prompt(
+        "Build a five-way signalized intersection with pedestrian, bicycle and ramp support."
+    )
+
+    assert spec.pedestrian_crossing is True
+    assert spec.bicycle_support is True
+    assert spec.ramp is True
+    assert spec.allowed_modes == {"passenger", "pedestrian", "bicycle"}
 
 
 @pytest.mark.parametrize(
@@ -81,31 +119,9 @@ def test_rejects_signalization_token_near_matches(near_match: str) -> None:
 
 @pytest.mark.parametrize(
     "unsupported_feature",
-    [
-        "bus",
-        "truck",
-        "bicycle",
-        "bike",
-        "cycle",
-        "pedestrian",
-        "ped",
-        "cyclist",
-        "cyclists",
-        "biking",
-        "sidewalk",
-        "sidewalks",
-        "taxi",
-        "taxis",
-        "all modes",
-        "walking",
-        "crosswalk",
-        "ramp",
-        "tram",
-        "rail",
-        "motorcycle",
-    ],
+    ["bus", "truck", "taxi", "taxis", "all modes", "tram", "rail", "motorcycle"],
 )
-def test_rejects_explicit_phase_one_unsupported_features(
+def test_rejects_explicitly_unsupported_features(
     unsupported_feature: str,
 ) -> None:
     with pytest.raises(ValueError, match="Phase 1.*passenger"):

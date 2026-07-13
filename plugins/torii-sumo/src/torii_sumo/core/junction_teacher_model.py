@@ -355,9 +355,6 @@ def extract_junction_pattern_index(
             continue
 
         model = _extract_teacher_junction_model(root, net_file, junction_id)
-        summary = model["summary"]
-        in_edge_count = int(summary["incoming_vehicle_edge_count"])
-        out_edge_count = int(summary["outgoing_vehicle_edge_count"])
         arm_count = _approach_arm_count(model)
         if arm_count < min_approaches or arm_count > max_approaches:
             continue

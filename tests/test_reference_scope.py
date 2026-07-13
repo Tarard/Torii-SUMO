@@ -2,6 +2,7 @@ from pathlib import Path
 
 from torii_sumo.core.reference_scope import (
     audit_reference_scope,
+    build_reference_bbox_variant,
     build_scope_pruning_variant,
 )
 
@@ -111,3 +112,94 @@ def test_scope_pruning_variant_removes_only_audit_prune_candidates(tmp_path: Pat
     assert report["scope_pruned_edge_count"] == 1
     assert Path(report["scope_pruning_variant_file"]).is_file()
     assert "--remove-edges.input-file" in calls[0]
+
+
+def test_reference_scope_protects_short_detail_edges_with_tls_connections(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_net(
+        reference_net,
+        [("ref_main", "a", "b", "highway.residential", 120.0, "passenger")],
+    )
+    _write_net(
+        candidate_net,
+        [
+            ("cand_main", "a", "b", "highway.residential", 120.0, "passenger"),
+            ("cand_short", "b", "leaf", "highway.service", 20.0, "passenger"),
+        ],
+    )
+    candidate_net.write_text(
+        candidate_net.read_text(encoding="utf-8").replace(
+            "</net>",
+            '<connection from="cand_short" to="cand_main" fromLane="0" toLane="0" tl="tls" linkIndex="0"/>\n</net>',
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_reference_scope(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "scope_protected",
+        prefix="protected",
+        min_extra_edges=1,
+        max_prune_edge_length_m=40.0,
+    )
+
+    assert report["protected_controlled_edge_ids"] == ["cand_short"]
+    assert "cand_short" not in {row["edge_id"] for row in report["prune_candidates"]}
+    assert any("protected" in warning for warning in report["warnings"])
+
+
+def test_reference_bbox_variant_projects_bbox_and_keeps_source_unchanged(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    reference_net.write_text(
+        """<net>
+  <location netOffset="-672401.23,-5399632.08" projParameter="+proj=utm +zone=32 +ellps=WGS84 +units=m"/>
+  <junction id="a" x="4947.6" y="3455.8" type="priority"/>
+  <edge id="road" from="a" to="b" type="highway.primary">
+    <lane id="road_0" index="0" length="10.0" shape="4947.6,3455.8 4957.6,3455.8"/>
+  </edge>
+  <junction id="b" x="4957.6" y="3455.8" type="dead_end"/>
+</net>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_command_runner(command, **_kwargs):
+        calls.append(command)
+        output_file = Path(command[command.index("--output-file") + 1])
+        output_file.write_text(reference_net.read_text(encoding="utf-8"), encoding="utf-8")
+        return {"status": "pass", "returncode": 0, "stdout": "Success.", "stderr": "", "error": ""}
+
+    report = build_reference_bbox_variant(
+        reference_net_file=reference_net,
+        bbox="11.413800,48.755391,11.433800,48.775391",
+        output_dir=tmp_path / "bbox_scope",
+        prefix="teacher",
+        command_runner=fake_command_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["reference_bbox_scope_status"] == "variant_created"
+    assert report["reference_projection_zone"] == 32
+    assert report["reference_xy_boundary"]["min_x"] < report["reference_xy_boundary"]["max_x"]
+    assert report["reference_xy_boundary"]["min_y"] < report["reference_xy_boundary"]["max_y"]
+    assert calls[0][calls[0].index("--keep-edges.in-boundary") + 1] == "4935.864,3442.882,6476.162,5712.616"
+    assert "--keep-edges.postload" in calls[0]
+    assert reference_net.read_text(encoding="utf-8").startswith("<net>")
+    assert Path(report["variant_file"]).is_file()
+
+
+def test_reference_bbox_variant_blocks_without_projection_metadata(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    reference_net.write_text("<net/>\n", encoding="utf-8")
+
+    report = build_reference_bbox_variant(
+        reference_net_file=reference_net,
+        bbox="11.4,48.7,11.5,48.8",
+        output_dir=tmp_path / "bbox_scope",
+    )
+
+    assert report["status"] == "blocked"
+    assert report["reference_bbox_scope_status"] == "blocked"
+    assert "projection metadata" in report["error"]

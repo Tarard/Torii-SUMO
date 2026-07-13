@@ -6,6 +6,9 @@ import xml.etree.ElementTree as ET
 
 from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
+    _augment_candidate_edge_map_from_tls_approach_pairs,
+    _candidate_connection_mode_scope_ids,
+    _expand_fragmented_tls_join_scope_candidate,
     _compare_teacher_models,
     _expanded_scope_followup_candidate_for_unsafe_internal_replay,
     _endpoint_rewrite_old_endpoint_ids,
@@ -26,12 +29,16 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _stage_file,
     _teacher_guided_candidate_sort_key,
     build_rebuild_candidate,
+    build_scoped_teacher_tls_cell_replay_plan,
     build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
     build_tls_connection_repair_variant,
     run_teacher_guided_repair_matrix,
     run_teacher_guided_repair_queue,
+    restore_teacher_tls_connection_semantics_after_normalize,
+    restore_scoped_pedestrian_internal_semantics_after_normalize,
     write_expanded_scope_plain_inputs,
+    write_scoped_teacher_tls_cell_replay_net,
     write_teacher_target_internal_replay_net,
     write_teacher_connection_plan,
     write_teacher_endpoint_patch_nodes,
@@ -2695,6 +2702,147 @@ def test_run_teacher_guided_repair_queue_executes_ready_candidates(tmp_path: Pat
     assert variant_report["teacher_pattern_template_count"] == 127
 
 
+def test_candidate_connection_mode_scope_ids_maps_joined_cluster_scope() -> None:
+    source_ids, candidate_ids = _candidate_connection_mode_scope_ids(
+        {
+            "junction_id": "cluster_a_b",
+            "candidate_original_junction_id": "a",
+            "matched_candidate_node_ids": ["a", "b"],
+            "expanded_rebuild_scope": {
+                "core_junction_id": "teacher_j",
+                "junction_ids": ["a", "b", "boundary"],
+                "join_junction_ids": ["a", "b"],
+            },
+        }
+    )
+
+    assert source_ids == ["a", "b", "boundary"]
+    assert candidate_ids == ["a", "b", "boundary", "cluster_a_b"]
+
+
+def test_fragmented_tls_join_scope_expands_compact_shared_controller(
+    tmp_path: Path,
+) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="a" x="0" y="0" type="traffic_light" tl="tls"/>
+  <node id="b" x="20" y="0" type="traffic_light" tl="tls"/>
+  <node id="c" x="10" y="10" type="traffic_light" tl="tls"/>
+  <node id="outside" x="500" y="0" type="traffic_light" tl="other"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    candidate = {
+        "learned_rule": "tum_like_topology_fragmented_tls_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": ["a", "b", "boundary"],
+            "join_junction_ids": ["a", "b"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(candidate, nodes)
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == ["a", "b", "c"]
+    assert expanded["expanded_rebuild_scope"]["junction_ids"] == [
+        "a",
+        "b",
+        "boundary",
+        "c",
+    ]
+    assert expanded["tls_join_scope_expansion"]["status"] == "pass"
+    assert expanded["tls_join_scope_expansion"]["automatic_expansion_applied"] is True
+    assert expanded["tls_join_scope_expansion"]["controller_span_m"] == 20.0
+
+
+def test_tls_approach_pairs_augment_full_cell_edge_map() -> None:
+    candidate = _augment_candidate_edge_map_from_tls_approach_pairs(
+        {
+            "edge_map": {"teacher_existing": "candidate_existing"},
+            "tls_approach_pairs": [
+                {
+                    "reference_edge_id": "teacher_in",
+                    "candidate_edge_id": "candidate_in#0",
+                }
+            ],
+        }
+    )
+
+    assert candidate["edge_map"] == {
+        "teacher_existing": "candidate_existing",
+        "teacher_in": "candidate_in#0",
+    }
+    assert candidate["tls_approach_edge_map_evidence"]["status"] == "pass"
+    assert candidate["tls_approach_edge_map_evidence"]["added_or_overridden_count"] == 1
+
+
+def test_run_teacher_guided_repair_queue_blocks_connection_mode_regression(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_connections = tmp_path / "raw.con.xml"
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
+        path.write_text("<xml/>", encoding="utf-8")
+    regression_calls = []
+
+    def fake_variant(**kwargs):
+        final_net = kwargs["output_dir"] / "final.net.xml"
+        final_net.parent.mkdir(parents=True, exist_ok=True)
+        final_net.write_text("<net/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "junction_id": kwargs["junction_id"],
+            "final_net_file": str(final_net),
+            "parity_gate_status": "pass",
+        }
+
+    def fake_regression(**kwargs):
+        regression_calls.append(kwargs)
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "automatic_promotion_gate": "blocked",
+            "outside_scope_new_review_finding_count": 1,
+            "blockers": ["new_outside_scope_review_findings"],
+        }
+
+    report = run_teacher_guided_repair_queue(
+        queue_report={
+            "teacher_net_file": str(teacher_net),
+            "candidate_net_file": str(candidate_net),
+            "repair_candidates": [
+                {
+                    "reference_id": "teacher_j",
+                    "junction_id": "j",
+                    "matched_candidate_node_ids": ["j"],
+                    "candidate_status": "ready_for_teacher_guided_variant",
+                    "edge_map": {"teacher_in": "candidate_in"},
+                }
+            ],
+        },
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "run",
+        variant_builder=fake_variant,
+        connection_mode_regression_builder=fake_regression,
+    )
+
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["connection_mode_regression_status"] == "fail"
+    assert report["promotion_gate_status"] == "fail"
+    assert report["variant_reports"][0]["connection_mode_regression"]["status"] == "fail"
+    assert len(regression_calls) == 1
+    assert regression_calls[0]["source_net_file"] == candidate_net.resolve()
+    assert regression_calls[0]["target_source_junction_ids"] == ["j"]
+    assert regression_calls[0]["target_candidate_junction_ids"] == ["j"]
+
+
 def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_edges = tmp_path / "raw.edg.xml"
@@ -5050,7 +5198,7 @@ def test_run_teacher_guided_repair_queue_full_network_join_drops_absorbed_self_l
     raw_nodes.write_text(
         """<nodes>
   <node id="x" x="-10" y="0"/>
-  <node id="a" x="0" y="0"/>
+  <node id="a" x="0" y="0" controlledInner="cand_mid -cand_mid context_edge"/>
   <node id="b" x="1" y="0"/>
   <node id="y" x="10" y="0"/>
 </nodes>""",
@@ -5073,6 +5221,16 @@ def test_run_teacher_guided_repair_queue_full_network_join_drops_absorbed_self_l
   <connection from="cand_mid" to="cand_out" fromLane="0" toLane="0"/>
   <crossing node="a" edges="cand_mid -cand_mid" priority="0" width="4.00"/>
 </connections>
+""",
+        encoding="utf-8",
+    )
+    raw_tllogic = tmp_path / "raw.tll.xml"
+    raw_tllogic.write_text(
+        """<tlLogics>
+  <tlLogic id="tls" type="static" programID="0" offset="0"><phase duration="30" state="GG"/></tlLogic>
+  <connection from="cand_in" to="cand_mid" fromLane="0" toLane="0" tl="tls" linkIndex="0"/>
+  <connection from="cand_mid" to="cand_out" fromLane="0" toLane="0" tl="tls" linkIndex="1"/>
+</tlLogics>
 """,
         encoding="utf-8",
     )
@@ -5130,6 +5288,7 @@ def test_run_teacher_guided_repair_queue_full_network_join_drops_absorbed_self_l
         raw_node_file=raw_nodes,
         raw_edge_file=raw_edges,
         raw_connection_file=raw_connections,
+        raw_tllogic_file=raw_tllogic,
         output_dir=tmp_path / "run",
         netconvert_binary="netconvert-test",
         sumo_binary="sumo-test",
@@ -5145,6 +5304,18 @@ def test_run_teacher_guided_repair_queue_full_network_join_drops_absorbed_self_l
     assert sorted(scope_report["replay_absorbed_join_internal_edge_ids"]) == ["-cand_mid", "cand_mid"]
     assert "cand_mid" not in variant_calls[0]["raw_edge_file"].read_text(encoding="utf-8")
     assert "cand_mid" not in variant_calls[0]["raw_connection_file"].read_text(encoding="utf-8")
+    replay_nodes = variant_calls[0]["raw_node_file"].read_text(encoding="utf-8")
+    assert 'controlledInner="context_edge"' in replay_nodes
+    replay_tllogic = variant_calls[0]["raw_tllogic_file"].read_text(encoding="utf-8")
+    assert 'from="cand_in" to="cand_mid"' not in replay_tllogic
+    assert 'from="cand_mid" to="cand_out"' not in replay_tllogic
+    assert scope_report["full_network_join_controlled_inner_prune"] == {
+        "status": "pass",
+        "updated_node_count": 1,
+        "removed_edge_reference_count": 2,
+        "removed_edge_ids": ["-cand_mid", "cand_mid"],
+    }
+    assert scope_report["full_network_join_tllogic_connection_drop_count"] == 2
 
 
 def test_run_teacher_guided_repair_queue_prefers_full_context_join_replay_for_single_probe(
@@ -6467,6 +6638,78 @@ def test_write_expanded_scope_keeps_boundary_context_out_of_join(tmp_path: Path)
     assert scope_edges.find("edge[@id='short_out']").attrib["to"] == "e"
 
 
+def test_write_expanded_scope_restores_teacher_cluster_members_as_separate_joins(
+    tmp_path: Path,
+) -> None:
+    raw_nodes = tmp_path / "raw.nod.xml"
+    raw_nodes.write_text(
+        """<nodes>
+  <node id="w" x="-20" y="0"/>
+  <node id="a" x="-1" y="0"/>
+  <node id="b" x="1" y="0"/>
+  <node id="c" x="9" y="0"/>
+  <node id="d" x="11" y="0"/>
+  <node id="j" x="20" y="0"/>
+  <node id="e" x="30" y="0"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    raw_edges = tmp_path / "raw.edg.xml"
+    raw_edges.write_text(
+        """<edges>
+  <edge id="west" from="w" to="a"><lane index="0"/></edge>
+  <edge id="a_to_b" from="a" to="b"><lane index="0"/></edge>
+  <edge id="b_to_c" from="b" to="c"><lane index="0"/></edge>
+  <edge id="c_to_d" from="c" to="d"><lane index="0"/></edge>
+  <edge id="d_to_j" from="d" to="j"><lane index="0"/></edge>
+  <edge id="out" from="j" to="e"><lane index="0"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text("<connections/>\n", encoding="utf-8")
+
+    def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
+        if command[0] == "netconvert-test":
+            output_file = Path(cwd) / command[command.index("--output-file") + 1]
+            output_file.write_text(
+                """<net>
+  <junction id="j" type="priority" x="20" y="0" incLanes="" intLanes=""/>
+  <junction id="cluster_a_b" type="priority" x="0" y="0" incLanes="" intLanes=""/>
+  <junction id="cluster_c_d" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+</net>""",
+                encoding="utf-8",
+            )
+        return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
+
+    report = write_expanded_scope_plain_inputs(
+        raw_node_file=raw_nodes,
+        raw_edge_file=raw_edges,
+        raw_connection_file=raw_connections,
+        output_dir=tmp_path / "scope",
+        expanded_rebuild_scope={
+            "status": "review",
+            "core_junction_id": "j",
+            "junction_ids": ["j", "cluster_a_b", "cluster_c_d"],
+            "join_junction_ids": ["j"],
+            "blocked_teacher_edge_ids": [],
+            "missing_desired_endpoint_ids": ["cluster_a_b", "cluster_c_d"],
+        },
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["join_explicit_join_count"] == 2
+    assert report["joined_scope_junction_id"] == "j"
+    assert report["joined_scope_junction_ids"] == ["cluster_a_b", "cluster_c_d"]
+    assert report["join_groups"] == [["a", "b"], ["c", "d"]]
+    assert report["missing_node_ids"] == []
+    join_root = ET.parse(report["join_nodes_patch_file"]).getroot()
+    assert [join.attrib["nodes"] for join in join_root.findall("join")] == ["a b", "c d"]
+
+
 def test_run_teacher_guided_repair_queue_replays_existing_joined_expanded_scope(tmp_path: Path) -> None:
     raw_nodes = tmp_path / "raw.nod.xml"
     raw_nodes.write_text(
@@ -7454,7 +7697,6 @@ def test_run_teacher_guided_repair_queue_skips_review_expanded_scope(tmp_path: P
     )
     candidate_net = tmp_path / "candidate.net.xml"
     candidate_net.write_text("<net/>", encoding="utf-8")
-    variant_calls = []
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         if command[0] == "netconvert-test":
@@ -7960,6 +8202,7 @@ def test_run_teacher_guided_repair_queue_writes_promotion_gate_artifact(tmp_path
             "teacher_junction_id": "teacher_j",
             "status": "pass",
             "parity_gate_status": "pass",
+            "connection_mode_regression_status": "not_run",
             "final_net_file": str(final_net),
             "candidate_scope_status": "full_network",
             "global_candidate_eligible": True,
@@ -8554,7 +8797,7 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     assert report["lane_shape_translation_applied"] is True
 
 
-def test_teacher_target_replay_preserves_existing_candidate_edge_geometry(tmp_path: Path) -> None:
+def test_teacher_target_replay_uses_geometry_from_anchor_file(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
         """<net>
@@ -8573,7 +8816,7 @@ def test_teacher_target_replay_preserves_existing_candidate_edge_geometry(tmp_pa
     candidate_net.write_text(
         """<net>
   <edge id="cand_in" from="a" to="cj"><lane id="cand_in_0" index="0" shape="-10,0 0,0"/></edge>
-  <edge id="cand_out" from="cj" to="n" shape="0,0 8,30"><lane id="cand_out_0" index="0" shape="0,0 8,30"/></edge>
+  <edge id="cand_out" from="cj" to="n" shape="0,0 8,29"><lane id="cand_out_0" index="0" shape="0,0 8,29"/></edge>
   <junction id="cj" type="traffic_light" x="0" y="0" incLanes="cand_in_0" intLanes=""/>
   <junction id="n" type="priority" x="8" y="30" incLanes="" intLanes=""/>
 </net>
@@ -11183,6 +11426,213 @@ def test_write_teacher_target_internal_replay_net_maps_and_translates_teacher_su
     assert report["copied_connection_count"] == 3
 
 
+def test_write_scoped_teacher_tls_cell_replay_collapses_split_member_and_preserves_lane_capacity(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0"/><lane id="teacher_in_1" index="1"/></edge>
+  <edge id="teacher_out" from="j" to="b"><lane id="teacher_out_0" index="0"/><lane id="teacher_out_1" index="1"/></edge>
+  <edge id=":j_0_0" function="internal"><lane id=":j_0_0_0" index="0"/></edge>
+  <edge id=":j_1_0" function="internal"><lane id=":j_1_0_0" index="0"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="0" incLanes="teacher_in_0 teacher_in_1" intLanes=":j_0_0_0 :j_1_0_0"/>
+  <junction id=":j_0_0" type="internal" x="10" y="0"/>
+  <junction id=":j_1_0" type="internal" x="10" y="0"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0_0" tl="j" linkIndex="0" dir="s"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="1" toLane="1" via=":j_1_0" tl="j" linkIndex="1" dir="s"/>
+  <tlLogic id="j" type="static" programID="0" offset="0"><phase duration="30" state="GG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="candidate_in" from="a" to="member"><lane id="candidate_in_0" index="0"/><lane id="candidate_in_1" index="1"/></edge>
+  <edge id="candidate_out" from="member" to="b"><lane id="candidate_out_0" index="0"/><lane id="candidate_out_1" index="1"/></edge>
+  <edge id=":candidate_0" function="internal"><lane id=":candidate_0_0" index="0"/></edge>
+  <edge id=":member_0" function="internal"><lane id=":member_0_0" index="0"/></edge>
+  <junction id="candidate" type="traffic_light" x="10" y="0" incLanes="candidate_in_0 candidate_in_1" intLanes=":candidate_0_0"/>
+  <junction id="member" type="traffic_light" x="9" y="0" incLanes="" intLanes=":member_0_0"/>
+  <junction id=":candidate_0" type="internal" x="10" y="0"/>
+  <junction id=":member_0" type="internal" x="9" y="0"/>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" via=":candidate_0"/>
+  <tlLogic id="candidate" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_scoped_teacher_tls_cell_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "scoped.net.xml",
+        junction_id="candidate",
+        teacher_junction_id="j",
+        edge_map={"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+        collapse_junction_ids={"candidate", "member"},
+    )
+
+    assert report["status"] == "pass"
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("junction[@id='member']") is None
+    assert root.find("edge[@id=':member_0']") is None
+    assert root.find("edge[@id='candidate_in']").attrib["to"] == "candidate"
+    candidate_out = root.find("edge[@id='candidate_out']")
+    assert candidate_out.attrib["from"] == "candidate"
+    assert len(candidate_out.findall("lane")) == 2
+    assert len([connection for connection in root.findall("connection") if connection.attrib.get("tl") == "candidate"]) == 2
+
+
+def test_scoped_tls_plan_reports_shared_controller_owner_closure(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher_shared_tls.net.xml"
+    candidate = tmp_path / "candidate_shared_tls.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="j"><lane id="teacher_in_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="teacher_out" from="j" to="b"><lane id="teacher_out_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id="extra_in" from="c" to="x"><lane id="extra_in_0" index="0" shape="0,10 10,10"/></edge>
+  <edge id="extra_out" from="x" to="d"><lane id="extra_out_0" index="0" shape="10,10 20,10"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" shape="10,0 11,0"/></edge>
+  <edge id=":x_0" function="internal"><lane id=":x_0_0" index="0" shape="10,10 11,10"/></edge>
+  <junction id="j" type="traffic_light" x="10" y="0"/>
+  <junction id="x" type="traffic_light" x="10" y="10"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":j_0" tl="j" linkIndex="0"/>
+  <connection from="extra_in" to="extra_out" fromLane="0" toLane="0" via=":x_0" tl="j" linkIndex="1"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="candidate_in" from="a" to="c"><lane id="candidate_in_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="candidate_out" from="c" to="b"><lane id="candidate_out_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id="extra_in" from="d" to="x_candidate"><lane id="extra_in_0" index="0" shape="0,10 10,10"/></edge>
+  <edge id="extra_out" from="x_candidate" to="e"><lane id="extra_out_0" index="0" shape="10,10 20,10"/></edge>
+  <junction id="c" type="traffic_light" x="10" y="0"/>
+  <junction id="x_candidate" type="traffic_light" x="10" y="10"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_scoped_teacher_tls_cell_replay_plan(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        teacher_junction_id="j",
+        candidate_junction_id="c",
+        candidate_junction_ids={"c", "x_candidate"},
+    )
+
+    shared = report["shared_controller_scope"]
+    assert shared["status"] == "needs_expanded_scope"
+    assert shared["teacher_controller_connection_count"] == 2
+    assert shared["extra_teacher_internal_owner_ids"] == ["x"]
+    assert shared["candidate_owner_map"]["x"] == "x_candidate"
+    assert shared["teacher_internal_owner_connection_counts"]["x"] == 1
+
+
+def test_restore_teacher_tls_connection_semantics_after_normalize_by_link_index(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "teacher_tls.net.xml"
+    target = tmp_path / "normalized.net.xml"
+    source.write_text(
+        '<net><connection from="in" to="out" fromLane="0" toLane="0" via=":teacher_0_0" '
+        'tl="candidate" linkIndex="3" linkIndex2="2" dir="r" state="O" keepClear="0"/></net>',
+        encoding="utf-8",
+    )
+    target.write_text(
+        '<net><connection from="in" to="out" fromLane="0" toLane="0" via=":candidate_7_0" '
+        'tl="candidate" linkIndex="3" dir="s" state="m"/></net>',
+        encoding="utf-8",
+    )
+
+    report = restore_teacher_tls_connection_semantics_after_normalize(
+        source_net_file=source,
+        target_net_file=target,
+        junction_id="candidate",
+    )
+
+    assert report["status"] == "pass"
+    assert report["rewritten_connection_count"] == 1
+    connection = ET.parse(target).getroot().find("connection")
+    assert connection.attrib["via"] == ":candidate_7_0"
+    assert connection.attrib["dir"] == "r"
+    assert connection.attrib["state"] == "O"
+    assert connection.attrib["linkIndex2"] == "2"
+    assert connection.attrib["keepClear"] == "0"
+
+
+def test_restore_teacher_tls_connection_semantics_restores_phase_states(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "teacher_tls_with_logic.net.xml"
+    target = tmp_path / "normalized_tls_with_logic.net.xml"
+    source.write_text(
+        '<net><tlLogic id="candidate" type="actuated" programID="teacher" offset="7">'
+        '<phase duration="12" state="G"/><phase duration="3" state="r"/></tlLogic>'
+        '<connection from="in" to="out" fromLane="0" toLane="0" via=":teacher_0_0" '
+        'tl="candidate" linkIndex="0" dir="s" state="G"/></net>',
+        encoding="utf-8",
+    )
+    target.write_text(
+        '<net><tlLogic id="candidate" type="static" programID="0" offset="0">'
+        '<phase duration="5" state="r"/><phase duration="2" state="G"/></tlLogic>'
+        '<connection from="in" to="out" fromLane="0" toLane="0" via=":candidate_7_0" '
+        'tl="candidate" linkIndex="0" dir="s" state="r"/></net>',
+        encoding="utf-8",
+    )
+
+    report = restore_teacher_tls_connection_semantics_after_normalize(
+        source_net_file=source,
+        target_net_file=target,
+        junction_id="candidate",
+    )
+
+    assert report["status"] == "pass"
+    assert report["tl_logic_status"] == "pass"
+    root = ET.parse(target).getroot()
+    tl_logic = root.find("tlLogic[@id='candidate']")
+    assert tl_logic.attrib["type"] == "actuated"
+    assert tl_logic.attrib["programID"] == "teacher"
+    assert [phase.attrib["state"] for phase in tl_logic.findall("phase")] == ["G", "r"]
+    assert [phase.attrib["duration"] for phase in tl_logic.findall("phase")] == ["12", "3"]
+
+
+def test_restore_scoped_pedestrian_internal_semantics_after_normalize(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "teacher_pedestrian.net.xml"
+    target = tmp_path / "normalized_pedestrian.net.xml"
+    source.write_text(
+        """<net>
+  <edge id=":j_w0" function="walkingarea"><lane id=":j_w0_0" index="0" shape="0,0 1,0"/></edge>
+  <edge id=":j_c0" function="crossing" crossingEdges="teacher_in"><lane id=":j_c0_0" index="0" shape="1,0 2,0"/></edge>
+  <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" tl="j" linkIndex="4" dir="s" state="M"/>
+  <junction id="j" type="traffic_light" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target.write_text(
+        """<net>
+  <edge id="candidate_in"><lane id="candidate_in_0" index="0"/></edge>
+  <junction id="candidate" type="traffic_light" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = restore_scoped_pedestrian_internal_semantics_after_normalize(
+        source_net_file=source,
+        target_net_file=target,
+        junction_id="j",
+        edge_map={"teacher_in": "candidate_in"},
+    )
+
+    assert report["status"] == "pass"
+    root = ET.parse(target).getroot()
+    assert root.find("edge[@id=':j_w0']") is not None
+    assert root.find("edge[@id=':j_c0']").attrib["crossingEdges"] == "candidate_in"
+    assert root.find("connection[@tl='j'][@linkIndex='4']") is not None
+
+
 def test_write_teacher_target_internal_replay_net_removes_stale_candidate_boundary_edge(
     tmp_path: Path,
 ) -> None:
@@ -11273,6 +11723,50 @@ def test_write_teacher_target_internal_replay_net_replays_connectionless_boundar
     assert root.find("junction[@id='teacher_exit']") is not None
     assert root.find("junction[@id='wrong_exit']").attrib["incLanes"] == ""
     assert report["copied_boundary_edges"] == ["teacher_out"]
+
+
+def test_teacher_target_internal_replay_keeps_scoped_candidate_boundary(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_out" from="teacher_j" to="teacher_exit"><lane id="teacher_out_0" index="0"/></edge>
+  <edge id="teacher_unmapped" from="teacher_j" to="teacher_extra"><lane id="teacher_unmapped_0" index="0"/></edge>
+  <junction id="teacher_j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="teacher_exit" type="priority" x="20" y="0" incLanes="teacher_out_0" intLanes=""/>
+  <junction id="teacher_extra" type="priority" x="20" y="10" incLanes="teacher_unmapped_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="candidate_out" from="j" to="osm_exit"><lane id="candidate_out_0" index="0"/></edge>
+  <junction id="j" type="priority" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="osm_exit" type="priority" x="20" y="0" incLanes="candidate_out_0" intLanes=""/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "scoped.net.xml",
+        junction_id="j",
+        teacher_junction_id="teacher_j",
+        edge_map={"teacher_out": "candidate_out"},
+        copy_unmapped_boundary_edges=False,
+        preserve_mapped_boundary_endpoints=True,
+    )
+
+    root = ET.parse(report["net_file"]).getroot()
+    assert root.find("edge[@id='candidate_out']").attrib["to"] == "osm_exit"
+    assert root.find("junction[@id='teacher_exit']") is None
+    assert root.find("edge[@id='teacher_unmapped']") is None
+    assert root.find("junction[@id='teacher_extra']") is None
+    assert report["preserved_mapped_boundary_endpoint_count"] == 1
+    assert report["skipped_unmapped_teacher_boundary_edges"] == ["teacher_unmapped"]
 
 
 def test_write_teacher_target_internal_replay_net_maps_referenced_tls_logic(tmp_path: Path) -> None:
@@ -12521,12 +13015,21 @@ def test_build_teacher_guided_junction_variant_synthesizes_missing_copied_edge_t
     raw_connections = Path("raw.con.xml")
     raw_connections.write_text("<connections/>\n", encoding="utf-8")
     raw_types = Path("raw.typ.xml")
-    raw_types.write_text('<types><type id="highway.primary" priority="12" speed="13.89"/></types>', encoding="utf-8")
+    raw_types.write_text(
+        '<types><type id="highway.primary" priority="12" speed="13.89" '
+        'sidewalkWidth="2.00" bikeLaneWidth="1.50"/></types>',
+        encoding="utf-8",
+    )
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         if command[0] == "netconvert":
             type_file = Path(cwd) / command[command.index("--type-files") + 1]
-            assert ET.parse(type_file).getroot().find("type[@id='highway.secondary_link']") is not None
+            type_root = ET.parse(type_file).getroot()
+            assert type_root.find("type[@id='highway.secondary_link']") is not None
+            primary_type = type_root.find("type[@id='highway.primary']")
+            assert primary_type is not None
+            assert "sidewalkWidth" not in primary_type.attrib
+            assert "bikeLaneWidth" not in primary_type.attrib
             output = Path(cwd) / command[command.index("--output-file") + 1]
             output.write_text(
                 """<net>
@@ -12567,6 +13070,7 @@ def test_build_teacher_guided_junction_variant_synthesizes_missing_copied_edge_t
 
     assert report["status"] == "pass"
     assert report["type_patch"]["synthesized_edge_type_ids"] == ["highway.secondary_link"]
+    assert report["type_patch"]["roundtrip_lane_synthesis_attribute_removal_count"] == 2
 
 
 def test_build_teacher_guided_junction_variant_restores_non_target_internal_artifacts_after_plain_roundtrip(

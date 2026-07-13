@@ -92,6 +92,7 @@ def build_overpass_query(
     *,
     timeout: int,
     historical_date: str | None = None,
+    include_railway: bool = False,
 ) -> str:
     overpass_bbox = f"{bbox.south:g},{bbox.west:g},{bbox.north:g},{bbox.east:g}"
     historical_clause = ""
@@ -100,12 +101,15 @@ def build_overpass_query(
         if not historical_date:
             raise ValueError("historical_date must not be blank")
         historical_clause = f'[date:"{historical_date}"]'
+    selectors = [f'  way["highway"]({overpass_bbox});']
+    if include_railway:
+        selectors.append(f'  way["railway"]({overpass_bbox});')
+    selectors.append(f'  relation["type"="restriction"]({overpass_bbox});')
     return "\n".join(
         [
             f"[out:xml][timeout:{timeout}]{historical_clause};",
             "(",
-            f'  way["highway"]({overpass_bbox});',
-            f'  relation["type"="restriction"]({overpass_bbox});',
+            *selectors,
             ");",
             "(._;>;);",
             "out body;",
@@ -189,6 +193,7 @@ def robust_download_osm(
     max_retries: int = 2,
     retry_pause_seconds: float = 5.0,
     download_func: Callable[..., bytes] = download_osm,
+    include_railway: bool = False,
 ) -> tuple[bytes, dict[str, Any]]:
     if max_retries < 0:
         raise ValueError("max_retries must be non-negative")
@@ -202,6 +207,7 @@ def robust_download_osm(
             tile,
             timeout=int(timeout_seconds),
             historical_date=historical_date,
+            include_railway=include_railway,
         )
         last_error = ""
         for attempt in range(max_retries + 1):
@@ -264,6 +270,13 @@ def _highway_value(element: ET.Element) -> str | None:
     return None
 
 
+def _tag_value(element: ET.Element, key: str) -> str | None:
+    for tag in element.findall("tag"):
+        if tag.attrib.get("k") == key:
+            return tag.attrib.get("v")
+    return None
+
+
 def _way_node_refs(way: ET.Element) -> list[str]:
     return [node.attrib["ref"] for node in way.findall("nd")]
 
@@ -302,6 +315,8 @@ def filter_osm_by_highways(
     *,
     bbox: Bbox | None = None,
     allowed_way_ids: set[str] | None = None,
+    include_railway: bool = False,
+    allowed_railways: set[str] | None = None,
 ) -> dict[str, int]:
     with _open_xml(source, "rt") as handle:
         root = ET.parse(handle).getroot()
@@ -318,9 +333,14 @@ def filter_osm_by_highways(
     dropped_ways_outside_reference_scope = 0
     dropped_node_refs_outside_bbox = set()
     trimmed_ways = 0
+    kept_railway_ways = 0
     for way in root.findall("way"):
         highway = _highway_value(way)
-        if highway in allowed_highways:
+        railway = _tag_value(way, "railway")
+        keep_railway = include_railway and (
+            allowed_railways is None or railway in allowed_railways
+        )
+        if highway in allowed_highways or keep_railway:
             if allowed_way_ids is not None and way.attrib.get("id", "") not in allowed_way_ids:
                 dropped_ways_outside_reference_scope += 1
                 continue
@@ -337,6 +357,7 @@ def filter_osm_by_highways(
                 kept_ways.append(way)
             kept_way_ids.add(way.attrib["id"])
             kept_node_refs.update(kept_refs)
+            kept_railway_ways += int(keep_railway and highway is None)
         elif highway is not None:
             dropped_ways += 1
 
@@ -385,6 +406,8 @@ def filter_osm_by_highways(
         )
     if allowed_way_ids is not None:
         stats["dropped_ways_outside_reference_scope"] = dropped_ways_outside_reference_scope
+    if include_railway:
+        stats["kept_railway_ways"] = kept_railway_ways
     return stats
 
 
@@ -505,6 +528,9 @@ def build_osm_network(
     download_func: Callable[..., bytes] = download_osm,
     netconvert_profile: str | None = "vehicle_core",
     allowed_way_ids: set[str] | None = None,
+    include_railway: bool = False,
+    allowed_railways: set[str] | None = None,
+    netconvert_binary: str = "netconvert",
 ) -> dict[str, Any]:
     try:
         parsed_bbox = parse_bbox(bbox)
@@ -512,6 +538,7 @@ def build_osm_network(
             parsed_bbox,
             timeout=int(timeout_seconds),
             historical_date=historical_date,
+            include_railway=include_railway,
         )
         profile_options = _netconvert_profile_options(netconvert_profile)
         normalized_profile = _normalized_netconvert_profile(netconvert_profile)
@@ -546,6 +573,7 @@ def build_osm_network(
                 max_retries=max_retries,
                 retry_pause_seconds=retry_pause_seconds,
                 download_func=download_func,
+                include_railway=include_railway,
             )
             _write_payload(raw_osm, payload)
             source_osm = raw_osm
@@ -563,6 +591,8 @@ def build_osm_network(
             allowed,
             bbox=parsed_bbox,
             allowed_way_ids=allowed_way_ids,
+            include_railway=include_railway,
+            allowed_railways=allowed_railways,
         )
         turnaround_options = (
             []
@@ -575,7 +605,7 @@ def build_osm_network(
             else ([], [])
         )
         command = [
-            "netconvert",
+            netconvert_binary,
             "--osm-files",
             _relative_to_root(filtered_osm, root),
             "--output-file",
@@ -601,6 +631,9 @@ def build_osm_network(
                     "allowed_highways=" + ",".join(sorted(allowed)),
                     "allowed_way_ids_count="
                     + ("not_applied" if allowed_way_ids is None else str(len(allowed_way_ids))),
+                    f"include_railway={include_railway}",
+                    "allowed_railways="
+                    + ("all" if allowed_railways is None else ",".join(sorted(allowed_railways))),
                     f"overpass_strategy={overpass_report['strategy'] if overpass_report else 'source-osm'}",
                     f"overpass_tile_count={overpass_report['tile_count'] if overpass_report else 0}",
                     f"overpass_retry_count={overpass_report['retry_count'] if overpass_report else 0}",
@@ -641,6 +674,8 @@ def build_osm_network(
         "bbox": bbox,
         "road_classes": sorted(allowed),
         "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
+        "include_railway": include_railway,
+        "allowed_railways": None if allowed_railways is None else sorted(allowed_railways),
         "source_osm_file": str(source_osm),
         "filtered_osm_file": str(filtered_osm),
         "net_file": str(net_file),
@@ -1054,7 +1089,7 @@ def extract_tls_candidates(
         try:
             node = net.getNode(tls.getID())
             lat, lon = _net_xy_to_latlon(net, node.getCoord()[0], node.getCoord()[1])
-        except Exception:
+        except Exception:  # noqa: BLE001 - malformed third-party TLS objects use lane-shape fallback.
             points = []
             for incoming_lane, outgoing_lane, _ in connections:
                 for lane in (incoming_lane, outgoing_lane):

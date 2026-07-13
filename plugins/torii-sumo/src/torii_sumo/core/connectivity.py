@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections import deque
 from pathlib import Path
 from typing import Any, Mapping
@@ -81,6 +82,106 @@ def _passenger_components(net_file: Path) -> tuple[dict[str, Any], list[set[str]
     }, components
 
 
+def _write_component_review_file(
+    net_file: Path,
+    output_file: Path,
+    components: list[set[str]],
+) -> None:
+    """Write stable, map-addressable review records for discarded components."""
+
+    root = ET.parse(net_file).getroot()
+    node_xy: dict[str, tuple[float, float]] = {}
+    for node in root.findall("junction"):
+        node_id = node.attrib.get("id", "")
+        try:
+            node_xy[node_id] = (float(node.attrib["x"]), float(node.attrib["y"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    edge_endpoints: dict[str, tuple[str, str]] = {}
+    edge_shape_points: dict[str, list[tuple[float, float]]] = {}
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id:
+            continue
+        edge_endpoints[edge_id] = (
+            edge.attrib.get("from", ""),
+            edge.attrib.get("to", ""),
+        )
+        points: list[tuple[float, float]] = []
+        lane = edge.find("lane")
+        if lane is not None:
+            for raw_point in lane.attrib.get("shape", "").split():
+                try:
+                    x_text, y_text = raw_point.split(",", 1)
+                    points.append((float(x_text), float(y_text)))
+                except (ValueError, TypeError):
+                    continue
+        edge_shape_points[edge_id] = points
+
+    records: list[dict[str, Any]] = []
+    for rank, component in enumerate(components, start=2):
+        points: list[tuple[float, float]] = []
+        for edge_id in sorted(component):
+            from_node, to_node = edge_endpoints.get(edge_id, ("", ""))
+            endpoint_points = [
+                node_xy[node_id]
+                for node_id in (from_node, to_node)
+                if node_id in node_xy
+            ]
+            points.extend(endpoint_points or edge_shape_points.get(edge_id, []))
+        if points:
+            x_values = [point[0] for point in points]
+            y_values = [point[1] for point in points]
+            centroid_x = sum(x_values) / len(x_values)
+            centroid_y = sum(y_values) / len(y_values)
+            bounds = {
+                "min_x": min(x_values),
+                "min_y": min(y_values),
+                "max_x": max(x_values),
+                "max_y": max(y_values),
+            }
+        else:
+            centroid_x = None
+            centroid_y = None
+            bounds = {}
+        records.append(
+            {
+                "location_id": f"disconnected_component_{rank:03d}",
+                "component_rank": rank,
+                "component_size": len(component),
+                "edge_ids": sorted(component),
+                "discard_reason": "outside_largest_passenger_component",
+                "centroid_x": centroid_x,
+                "centroid_y": centroid_y,
+                "bounds": bounds,
+                "decision": "pending",
+                "evidence": "",
+                "reviewer": "",
+            }
+        )
+
+    output_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "status": "pending_review",
+                "source_net_file": str(net_file),
+                "decision_policy": (
+                    "Each discarded component must be repaired/reintegrated or "
+                    "explicitly rejected_with_evidence before a clean-network claim."
+                ),
+                "component_count": len(records),
+                "records": records,
+            },
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+
 def extract_largest_passenger_component_core(
     net_file: Path,
     *,
@@ -114,6 +215,7 @@ def extract_largest_passenger_component_core(
     core_file = output_dir / f"{prefix}_connected_core.net.xml"
     keep_edges_file = output_dir / f"{prefix}_connected_core.keep_edges.txt"
     discarded_components_file = output_dir / f"{prefix}_discarded_components.csv"
+    discarded_components_review_file = output_dir / f"{prefix}_discarded_components_review.json"
     command_record = output_dir / f"{prefix}_connected_core_command.txt"
 
     keep_edges_file.write_text("\n".join(core_edges) + "\n", encoding="utf-8")
@@ -145,9 +247,54 @@ def extract_largest_passenger_component_core(
         core_file.name,
     ]
     command_record.write_text(" ".join(command) + "\n", encoding="utf-8")
+    command_attempts = [list(command)]
     try:
         result = _result_to_dict(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
     except OSError as exc:
+        return _failure(f"{type(exc).__name__}: {exc}")
+
+    fallback_used = False
+    if result.get("status") != "pass" or not core_file.exists():
+        # Some visual-detail .net.xml files contain manually preserved internal
+        # geometry that makes --keep-edges.postload fail inside netconvert.  A
+        # plain keep-edges rebuild is still safe here because the keep list is
+        # restricted to the selected passenger component.  Keep the failed
+        # attempt in the report instead of silently replacing its result.
+        fallback_command = [
+            value
+            for value in command
+            if value != "--keep-edges.postload"
+        ]
+        command_attempts.append(list(fallback_command))
+        command_record.write_text(
+            "\n".join(" ".join(item) for item in command_attempts) + "\n",
+            encoding="utf-8",
+        )
+        try:
+            fallback_result = _result_to_dict(
+                command_runner(
+                    fallback_command,
+                    cwd=output_dir,
+                    timeout_seconds=timeout_seconds,
+                )
+            )
+        except OSError as exc:
+            fallback_result = _result_to_dict(
+                {
+                    "status": "fail",
+                    "returncode": None,
+                    "stdout": "",
+                    "stderr": "",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+        if fallback_result.get("status") == "pass" and core_file.exists():
+            result = fallback_result
+            fallback_used = True
+
+    try:
+        _write_component_review_file(net_file, discarded_components_review_file, discarded_components)
+    except (OSError, ET.ParseError, KeyError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
     status = "pass" if result.get("status") == "pass" and core_file.exists() else "fail"
@@ -168,7 +315,10 @@ def extract_largest_passenger_component_core(
         "connected_core_file": str(core_file),
         "keep_edges_file": str(keep_edges_file),
         "discarded_components_file": str(discarded_components_file),
+        "discarded_components_review_file": str(discarded_components_review_file),
         "command_record": str(command_record),
+        "command_attempts": command_attempts,
+        "fallback_used": fallback_used,
         "raw_passenger_edge_count": raw_summary["passenger_edge_count"],
         "raw_passenger_component_count": raw_summary["passenger_component_count"],
         "core_passenger_edge_count": len(core_edges),

@@ -13,6 +13,17 @@ VEHICLE_HIGHWAY_CLASSES = set(HIGHWAY_CLASS_PRESETS["full_vehicle"])
 BICYCLE_HIGHWAYS = {"cycleway", "path"}
 PEDESTRIAN_HIGHWAYS = {"footway", "pedestrian", "path", "steps"}
 REFERENCE_PASSENGER_RATIO_THRESHOLD = 0.5
+REFERENCE_MODAL_WAY_CLASSES = {
+    "railway": {
+        "rail",
+        "light_rail",
+        "tram",
+        "subway",
+        "monorail",
+        "narrow_gauge",
+        "funicular",
+    },
+}
 
 
 def _base_highway_class(edge_type: str) -> str:
@@ -87,6 +98,8 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
     visual_detail_highways: set[str] = set()
     source_way_ids: set[str] = set()
     visual_detail_edge_type_counts: Counter[str] = Counter()
+    visual_detail_modal_way_tags: dict[str, set[str]] = defaultdict(set)
+    visual_detail_modal_edge_type_counts: Counter[str] = Counter()
     auxiliary_highways: dict[str, set[str]] = defaultdict(set)
 
     root = ET.parse(net_file).getroot()
@@ -105,6 +118,11 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
         if edge_type.startswith("highway."):
             visual_detail_highways.add(base_class)
             visual_detail_edge_type_counts[edge_type] += 1
+        else:
+            tag_key, _, tag_value = edge_type.partition(".")
+            if tag_value in REFERENCE_MODAL_WAY_CLASSES.get(tag_key, set()):
+                visual_detail_modal_way_tags[tag_key].add(tag_value)
+                visual_detail_modal_edge_type_counts[edge_type] += 1
         allows_passenger = _edge_allows(edge, "passenger", base_class=base_class)
         allows_bicycle = _edge_allows(edge, "bicycle", base_class=base_class)
         allows_pedestrian = _edge_allows(edge, "pedestrian", base_class=base_class)
@@ -163,6 +181,13 @@ def analyze_reference_network_policy(reference_net_file: str | Path) -> dict[str
         "service_passenger_ratio": round(service_ratio, 3),
         "edge_type_counts": _sorted_counter(edge_type_counts),
         "visual_detail_edge_type_counts": _sorted_counter(visual_detail_edge_type_counts),
+        "visual_detail_modal_way_tags": {
+            key: sorted(values)
+            for key, values in sorted(visual_detail_modal_way_tags.items())
+        },
+        "visual_detail_modal_edge_type_counts": _sorted_counter(
+            visual_detail_modal_edge_type_counts
+        ),
         "passenger_edge_type_counts": _sorted_counter(passenger_edge_type_counts),
         "bicycle_edge_type_counts": _sorted_counter(bicycle_edge_type_counts),
         "pedestrian_edge_type_counts": _sorted_counter(pedestrian_edge_type_counts),
