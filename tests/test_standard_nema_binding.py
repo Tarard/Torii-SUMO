@@ -621,6 +621,93 @@ def test_network_connection_mode_audit_replaces_gui_as_automatic_gate(
     assert len(manifest["artifacts"]) == 2
 
 
+def test_width_transition_centerline_offset_is_review_not_structural_failure() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="bicycle" width="1.0" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" width="8.4" shape="10,3.7 20,3.7"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" allow="bicycle" width="1.0" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    )
+
+    report = audit_network_connection_mode(root, endpoint_tolerance_m=0.2)
+
+    assert report["status"] == "review_required"
+    junction = next(item for item in report["junctions"] if item["junction_id"] == "j")
+    audit = junction["connection_mode_audit"]
+    assert audit["structural_failures"] == []
+    assert audit["review_findings"] == [
+        "connection_mode:path_width_transition_centerline_offset:0:exit:3.700m:0.000m"
+    ]
+    path = audit["movement_checks"][0]["internal_path"]
+    assert path["endpoint_gaps_m"] == [0.0, 3.7]
+    assert path["endpoint_effective_gaps_m"] == [0.0, 0.0]
+    assert path["endpoint_width_transition_offsets_m"] == [0.0, 3.7]
+    assert path["max_endpoint_gap_m"] == 3.7
+    assert path["max_effective_endpoint_gap_m"] == 0.0
+
+    calibration = calibrate_connection_mode_audit(
+        root,
+        source_sha256="a" * 64,
+        traffic_side=TrafficSide.RIGHT,
+    )
+    assert calibration.status is GateStatus.REVIEW
+    assert calibration.maximum_observed_gap_m == 0.0
+    assert not any(
+        finding.startswith("baseline_endpoint_gap_exceeds_lane_scale_cap")
+        for finding in calibration.findings
+    )
+
+
+def test_lane_width_change_does_not_hide_longitudinal_endpoint_break() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="bicycle" width="1.0" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" width="8.4" shape="13.7,0 20,0"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" allow="bicycle" width="1.0" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    )
+
+    report = audit_network_connection_mode(root, endpoint_tolerance_m=0.2)
+
+    assert report["status"] == "fail"
+    junction = next(item for item in report["junctions"] if item["junction_id"] == "j")
+    audit = junction["connection_mode_audit"]
+    assert any(
+        failure.startswith("connection_mode:path_endpoint_gap:0:exit:3.700m")
+        for failure in audit["structural_failures"]
+    )
+    path = audit["movement_checks"][0]["internal_path"]
+    assert path["endpoint_gaps_m"] == [0.0, 3.7]
+    assert path["endpoint_effective_gaps_m"] == [0.0, 3.7]
+
+
 def test_internal_path_trace_uses_subgraph_bound_not_fixed_sixteen_hops() -> None:
     root = ET.Element("net")
     incoming = ET.SubElement(root, "edge", {"id": "in", "from": "a", "to": "j"})
@@ -976,6 +1063,52 @@ def test_endpoint_tolerance_is_calibrated_from_precision_and_lane_scale(
     assert calibration.coordinate_precision_m == 0.1
     assert calibration.lane_width_evidence == "locked_sumo_default_lane_width"
     assert calibration.endpoint_sample_count == 24
+    assert calibration.endpoint_tolerance_m == 0.2
+
+
+def test_endpoint_calibration_excludes_walkingarea_display_distance() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" width="3.2" shape="-10.0,0.0 0.0,0.0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" width="3.2" shape="10.0,0.0 20.0,0.0"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" width="3.2" shape="0.0,0.0 10.0,0.0"/>
+  </edge>
+  <edge id=":p_w0" function="walkingarea">
+    <lane id=":p_w0_0" index="0" allow="pedestrian" width="2.0" shape="100.0,0.0 101.0,0.0"/>
+  </edge>
+  <edge id=":p_c0" function="crossing">
+    <lane id=":p_c0_0" index="0" allow="pedestrian" width="4.0" shape="103.0,0.0 104.0,0.0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <junction id="p" type="priority" incLanes=":p_w0_0" intLanes=":p_c0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from=":p_w0" to=":p_c0" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    )
+
+    calibration = calibrate_connection_mode_audit(
+        root,
+        source_sha256="b" * 64,
+        traffic_side=TrafficSide.RIGHT,
+        policy=ConnectionAuditCalibrationPolicy.build(minimum_endpoint_samples=1),
+    )
+
+    assert calibration.status is GateStatus.PASS
+    assert calibration.endpoint_path_count == 1
+    assert calibration.endpoint_sample_count == 2
+    assert calibration.maximum_observed_gap_m == 0.0
     assert calibration.endpoint_tolerance_m == 0.2
 
 

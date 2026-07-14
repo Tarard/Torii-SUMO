@@ -138,10 +138,20 @@ def calibrate_connection_mode_audit(
             if trace.get("status") != "pass":
                 rejected_path_count += 1
                 continue
+            if trace.get("endpoint_gap_policy") in {
+                "nearest_endpoint_diagnostic_only",
+                "not_available_in_network_mode",
+            }:
+                continue
             endpoint_path_count += 1
+            effective_gaps = trace.get("endpoint_effective_gaps_m")
             gaps.extend(
                 float(value)
-                for value in trace.get("endpoint_gaps_m", [])
+                for value in (
+                    effective_gaps
+                    if isinstance(effective_gaps, list)
+                    else trace.get("endpoint_gaps_m", [])
+                )
                 if _finite_nonnegative(value)
             )
 
