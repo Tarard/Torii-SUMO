@@ -307,12 +307,30 @@ def crop_city_extract(
     selected_way_ids: dict[str, set[int]] = {
         case.selection_id: set() for case in selections
     }
+    roundabout_way_nodes: dict[int, frozenset[int]] = {}
     for entity in osmium.FileProcessor(source).with_locations():
         if not entity.is_way() or not _is_transport_way(entity):
             continue
+        entity_id = int(entity.id)
+        if _is_roundabout_way(entity):
+            roundabout_way_nodes[entity_id] = frozenset(
+                int(node.ref) for node in entity.nodes
+            )
         for case in selections:
             if _way_intersects_bbox(entity, case.bbox):
-                selected_way_ids[case.selection_id].add(int(entity.id))
+                selected_way_ids[case.selection_id].add(entity_id)
+
+    roundabout_component_by_way = _roundabout_component_by_way(
+        roundabout_way_nodes
+    )
+    for way_ids in selected_way_ids.values():
+        touched_components = {
+            roundabout_component_by_way[way_id]
+            for way_id in way_ids
+            if way_id in roundabout_component_by_way
+        }
+        for component in touched_components:
+            way_ids.update(component)
 
     output_paths = {
         case.selection_id: destination / f"{case.corridor_key}.osm.xml"
@@ -441,6 +459,41 @@ def _hashes_and_size(path: Path) -> tuple[str, str, int]:
 
 def _is_transport_way(way: Any) -> bool:
     return bool(way.tags.get("highway") or way.tags.get("railway"))
+
+
+def _is_roundabout_way(way: Any) -> bool:
+    return str(way.tags.get("junction", "")).strip().lower() == "roundabout"
+
+
+def _roundabout_component_by_way(
+    roundabout_way_nodes: dict[int, frozenset[int]],
+) -> dict[int, frozenset[int]]:
+    node_to_way_ids: dict[int, set[int]] = {}
+    for way_id, node_ids in roundabout_way_nodes.items():
+        for node_id in node_ids:
+            node_to_way_ids.setdefault(node_id, set()).add(way_id)
+    unseen = set(roundabout_way_nodes)
+    component_by_way: dict[int, frozenset[int]] = {}
+    while unseen:
+        seed = min(unseen)
+        unseen.remove(seed)
+        stack = [seed]
+        component: set[int] = set()
+        while stack:
+            way_id = stack.pop()
+            component.add(way_id)
+            neighbors = {
+                neighbor
+                for node_id in roundabout_way_nodes[way_id]
+                for neighbor in node_to_way_ids[node_id]
+            }
+            for neighbor in sorted(neighbors & unseen, reverse=True):
+                unseen.remove(neighbor)
+                stack.append(neighbor)
+        frozen = frozenset(component)
+        for way_id in frozen:
+            component_by_way[way_id] = frozen
+    return component_by_way
 
 
 def _way_intersects_bbox(way: Any, bbox: GeographicBbox) -> bool:
