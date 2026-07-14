@@ -1863,6 +1863,9 @@ def _trace_internal_path(
         "endpoint_width_transition_offsets_m": [],
         "max_endpoint_gap_m": None,
         "max_effective_endpoint_gap_m": None,
+        "path_permission_status": "not-verified",
+        "path_permission_basis": "",
+        "path_permission_overlap": [],
         "internal_lane_chain_length": 0,
         "bounded_hop_limit": 0,
         "unusually_long": False,
@@ -1882,7 +1885,19 @@ def _trace_internal_path(
         ):
             trace["path_kind"] = "direct_no_internal_links"
             trace["endpoint_gap_policy"] = "not_available_in_network_mode"
+            _audit_path_permissions(
+                trace,
+                elements=(
+                    _lane_element(source_lane),
+                    connection,
+                    _lane_element(target_lane),
+                ),
+                connection_index=connection_index,
+                failures=failures,
+            )
             trace["status"] = "pass"
+            if failures:
+                trace["status"] = "fail"
             return trace, failures, review_findings
         if source_function == "walkingarea" and target_function == "crossing":
             source_shape = list(source_lane.get("shape", [])) if source_lane else []
@@ -1908,6 +1923,16 @@ def _trace_internal_path(
             trace["max_effective_endpoint_gap_m"] = (
                 round(max(gaps), 6) if gaps else None
             )
+            _audit_path_permissions(
+                trace,
+                elements=(
+                    _lane_element(source_lane),
+                    connection,
+                    _lane_element(target_lane),
+                ),
+                connection_index=connection_index,
+                failures=failures,
+            )
             trace["status"] = "pass" if not failures else "fail"
             return trace, failures, review_findings
         failures.append(f"missing_direct_via_lane:{connection_index}")
@@ -1926,6 +1951,12 @@ def _trace_internal_path(
 
     effective_gaps: list[float] = []
     width_transition_offsets: list[float] = []
+    permission_elements: list[ET.Element | None] = [
+        _lane_element(source_lane),
+        connection,
+        _lane_element(via_lane),
+    ]
+    path_complete = False
     _check_shape_gap(
         source_lane,
         via_lane,
@@ -1959,6 +1990,7 @@ def _trace_internal_path(
             break
         internal_connection_index, internal_connection = candidates[0]
         trace["internal_connection_indices"].append(internal_connection_index)
+        permission_elements.append(internal_connection)
         declared_target = internal_connection.attrib.get("to", "")
         declared_target_index = _as_int(internal_connection.attrib.get("toLane"))
         continuation_id = internal_connection.attrib.get("via", "")
@@ -1995,6 +2027,7 @@ def _trace_internal_path(
                 failures=failures,
                 review_findings=review_findings,
             )
+            permission_elements.append(_lane_element(next_lane))
             current_lane = next_lane
             continue
 
@@ -2019,6 +2052,8 @@ def _trace_internal_path(
         )
         if target_lane is not None and str(final_lane.get("id", "")) != str(target_lane.get("id", "")):
             failures.append(f"internal_path_final_lane_mismatch:{connection_index}")
+        permission_elements.append(_lane_element(final_lane))
+        path_complete = True
         break
     else:
         failures.append(
@@ -2038,6 +2073,13 @@ def _trace_internal_path(
     )
     trace["internal_lane_chain_length"] = len(trace["internal_lane_chain"])
     trace["unusually_long"] = len(trace["internal_lane_chain"]) > 16
+    if path_complete:
+        _audit_path_permissions(
+            trace,
+            elements=permission_elements,
+            connection_index=connection_index,
+            failures=failures,
+        )
     trace["status"] = "pass" if not failures else "fail"
     return trace, failures, review_findings
 
@@ -2171,6 +2213,48 @@ def _lane_width_m(lane: Mapping[str, Any] | None) -> float:
         return 3.2
     width = _as_float(element.attrib.get("width"), 3.2)
     return width if width > 0.0 else 3.2
+
+
+def _lane_element(lane: Mapping[str, Any] | None) -> ET.Element | None:
+    element = lane.get("element") if lane is not None else None
+    return element if isinstance(element, ET.Element) else None
+
+
+def _audit_path_permissions(
+    trace: dict[str, Any],
+    *,
+    elements: Sequence[ET.Element | None],
+    connection_index: int,
+    failures: list[str],
+) -> None:
+    available = tuple(element for element in elements if element is not None)
+    if len(available) != len(elements):
+        return
+    overlap, basis = _permission_intersection(available)
+    trace["path_permission_basis"] = basis
+    trace["path_permission_overlap"] = list(overlap)
+    trace["path_permission_status"] = "pass" if overlap else "fail"
+    if not overlap:
+        failures.append(f"internal_path_mode_permission_empty:{connection_index}")
+
+
+def _permission_intersection(
+    elements: Sequence[ET.Element],
+) -> tuple[tuple[str, ...], str]:
+    explicit: set[str] | None = None
+    disallowed: set[str] = set()
+    for element in elements:
+        allowed = set(element.attrib.get("allow", "").split())
+        denied = set(element.attrib.get("disallow", "").split())
+        if "all" in denied:
+            return (), "explicit_empty"
+        disallowed.update(denied)
+        if allowed and "all" not in allowed:
+            explicit = allowed if explicit is None else explicit & allowed
+    if explicit is None:
+        return ("*",), "implicit_all_except_disallow"
+    overlap = tuple(sorted(explicit - disallowed))
+    return overlap, "explicit_allow_intersection"
 
 
 def _audit_lane_order(
