@@ -337,3 +337,19 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 - `london-kings-cross`、`melbourne-royal-parade` 和 `sydney-cross-city-tunnel` 仍按 replay-invalid 单列，没有进入上述 27 个模型质量样本。
 
 该结果只证明压缩器在现有候选快照上的机器闭合与确定性，不证明 finding 对应现实缺陷，不证明 cluster 内人工决定可传播，也不构成 Stage 1-M provenance。权威证据仍必须在实现提交后，由 clean producer commit 重新生成并纳入完整 manifest。
+
+### 11.2 ROW-1 开发运行（非权威 provenance）
+
+截至 2026-07-14，ROW-1 已使用锁定的 SUMO/netconvert 1.27.1 完成两次独立开发运行。两次完整 `row-1-experiment-report.json` 的 SHA-256 均为 `80a540c1045639d2a834ceaddd4e4b913980aec93fb277501089c335a84a02e8`，报告身份均为 `manifest_63f6594cbc1bb25cde1b605d`。结果为：
+
+- 15 个 experiment case，包含 priority、unprioritized、signalized、unknown、shared-space、split crossing、左右侧通行、直/左/右 movement 和四类 mutation；
+- 12 个真实双主体 SUMO runtime probe，固定 seed、速度和三种到达顺序；
+- case failure 为 0，unsafe false pass 为 0，source-insufficient forced decision 为 0，expected-answer 读取 request/foes 的次数为 0；
+- 右侧通行 priority straight 的 simultaneous probe 观察到 vehicle yield，unprioritized straight 观察到 pedestrian yield；左侧通行 priority straight 使用实际对应的另一侧 crossing 后观察到 vehicle yield；
+- signalized g/G closure、多阶段 crossing、shared-space、unknown priority 和带 internal continuation 的 turning movement 均保持 `review`，没有被静态 request/foes 分类强制通过；
+- request-only reversal 被 source/model contradiction 阻断，并在运行时产生 emergency-braking blocker；完整 opposite-model reversal 即使在 geometry、request/foes 和运行行为上彼此自洽，仍被独立 source evidence 检出；
+- 所有 case 的 `automatic_promotion_gate` 和总报告的 promotion gate 均保持 `blocked`。
+
+第一版开发运行曾正确阻断 6 个 case。复核发现其中包含两类实验定义错误：左侧通行的行人实际使用东侧 crossing，而夹具仍审核西侧 crossing；退出 junction 后与 crossing 冲突的 turning movement 只检查了第一段 internal lane。实现随后改为绑定实际 crossing，并追踪 source lane、全部 internal continuation 和 target lane 组成的完整 occupancy path。另一个结果没有被“修成通过”：unprioritized turning movement 的 request closure 包含 `cont` 和内部 waiting junction，当前 oracle 无法独立证明完整关系，因此被正式改为 abstain/review。
+
+以上仍是 dirty-development execution，不是绑定 clean producer commit 的权威 Stage 1-M evidence，也不证明现场道路事实、signal phase 安全或 turning movement 的完整 runtime oracle。正式证据必须在实现提交后由 clean worktree 重跑，并进入 provenance v3/后继 artifact DAG。

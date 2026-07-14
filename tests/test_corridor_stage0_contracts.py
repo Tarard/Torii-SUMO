@@ -44,6 +44,7 @@ from torii_sumo.corridor.schema import (
     build_controlled_pedestrian_binding_census_schema,
     build_corridor_schema,
     build_effective_tls_program_inventory_schema,
+    build_row1_experiment_report_schema,
 )
 from torii_sumo.corridor.toolchain import ToolIdentity, ToolchainLock
 from torii_sumo.corridor.workflow import (
@@ -450,6 +451,10 @@ def test_exported_contract_schema_is_current() -> None:
         (
             "torii.corridor.controlled-pedestrian-binding-census.v1.schema.json",
             build_controlled_pedestrian_binding_census_schema,
+        ),
+        (
+            "torii.corridor.row-1-experiment-report.v1.schema.json",
+            build_row1_experiment_report_schema,
         ),
     ),
 )

@@ -18,6 +18,7 @@ from torii_sumo.corridor.schema import (
     build_controlled_pedestrian_binding_census_schema,
     build_effective_tls_program_inventory_schema,
     build_lossless_review_compression_schema,
+    build_row1_experiment_report_schema,
 )
 
 
@@ -60,6 +61,14 @@ def main() -> None:
             / "torii.corridor.lossless-review-compression.v1.schema.json"
         ),
     )
+    parser.add_argument(
+        "--row-experiment-output",
+        type=Path,
+        default=(
+            SCHEMA_DIR
+            / "torii.corridor.row-1-experiment-report.v1.schema.json"
+        ),
+    )
     args = parser.parse_args()
     for path, schema in (
         (
@@ -77,6 +86,10 @@ def main() -> None:
         (
             args.review_compression_output,
             build_lossless_review_compression_schema(),
+        ),
+        (
+            args.row_experiment_output,
+            build_row1_experiment_report_schema(),
         ),
     ):
         write_json_atomic(path, schema, sort_keys=True)
