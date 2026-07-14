@@ -26,6 +26,9 @@ v2 使用独立的：
 - `held_out_reserve_corpus.v2.json`
 - `held_out_replacement_policy.v2.json`
 - `held_out_replacement_plan.v2.json`
+- `held_out_source_snapshot_protocol.v2.json`
+- `held_out_effective_corpus.v2.json`
+- `held_out_replacement_attempt_ledger.v2.json`
 - `review_witness_sampling_policy.v2.json`
 - `held_out_review_parent.v2.json`
 - `held_out_review_preregistration.v2.json`
@@ -90,6 +93,19 @@ sha256(public_seed | invalid_corridor_key | reserve_selection_id)
 越界、source extraction 失败、netconvert build 失败、semantic replay invalid、
 artifact closure 不完整。所有失败尝试必须保留。机器标签、finding 数量/严重性、
 人工决定和材料是否“容易看”均禁止参与 replacement 选择。
+
+实际技术执行按同一 source-snapshot v2 协议从 rank-1 重新开始，结果为：
+
+- London：rank-1 `london-liverpool-street` 通过；
+- Melbourne：rank-1 semantic replay invalid，rank-2 `melbourne-dandenong-orrong` 通过；
+- Sydney：rank-1、rank-2 semantic replay invalid，rank-3 `sydney-m5-east-kingsgrove` 通过。
+
+source-snapshot v2 对被 bbox 触碰的 OSM `junction=roundabout` way 执行完整
+shared-node component closure。旧 bbox-only 尝试不删除，而是以
+`source-snapshot-protocol-superseded` 保留；v1 snapshot 不原地改写。每次有效尝试
+绑定 clean producer revision/tree、snapshot、run identity、machine report、net replay
+和 machine manifest。该结果只证明 replacement 的技术可执行性，不证明其机器 finding
+正确，也不授权自动晋级。
 
 ## 4. 无损 witness 结构
 

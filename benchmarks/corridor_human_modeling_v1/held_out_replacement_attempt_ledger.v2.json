@@ -1,0 +1,415 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "base_corpus_sha256": "df3480e4e6ababfce43dfd699cdcd75f41ec2dda8b2e1fa64cdf408b3460c618",
+  "effective_corpus_sha256": "a5a6669ac2da4451cc5a3ac863bbd46ab76216898a807f68d49a1b4bddc7ff58",
+  "human_decisions_consulted": false,
+  "ledger_id": "manifest_bf52c3aaf0d0512c24e63f2a",
+  "machine_labels_consulted": false,
+  "minimum_complete_replacement_count": 3,
+  "replacement_plan_sha256": "93653eb21133a6733fe566f5b44625452f653b1841de98b93dc59acb3237958e",
+  "reserve_corpus_sha256": "be9b3f30ef4ac4aae3f5350d8b415edb89a31724add8c018a6b494798f9b26b5",
+  "schema": "torii.corridor.held-out-replacement-attempt-ledger/v2",
+  "slots": [
+    {
+      "attempts": [
+        {
+          "artifact_closure_complete": true,
+          "artifacts": [
+            {
+              "path": "machine-rank1/held_out_corpus.machine-manifest.json",
+              "role": "machine-manifest",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "f5e5e86073582b0d7684a94cfc765674518a039b7be90fa6dfe664df7eaf6a04"
+            },
+            {
+              "path": "machine-rank1/held_out_corpus.machine-report.json",
+              "role": "machine-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "7c1c885cdfc3d5f549d525568c9dfa5b534286d49dd0ef7949b1f2935cb6f223"
+            },
+            {
+              "path": "machine-rank1/cases/london-liverpool-street/net-replay.json",
+              "role": "net-replay-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "666925ae65e95a10d7bbea1d47014c7af37fb2f66d5926e5f31f8ecbc540d020"
+            },
+            {
+              "path": "machine-rank1/held_out_corpus.run-identity.json",
+              "role": "run-identity",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "d3854ea4e244d007e72723363e6252ce2bfadcd69d26718690b10c022cba08b8"
+            },
+            {
+              "path": "reserve-corridor-osm/london-liverpool-street.osm.xml",
+              "role": "source-snapshot",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "24f5fd3af37c8484b4cc48d609ce807a664eff1b4e4d9aa9bf6911ca1399dcf1"
+            }
+          ],
+          "attempt_id": "manifest_bea27c269077078d58067e7f",
+          "corridor_key": "london-liverpool-street",
+          "failure_reason": null,
+          "finding_counts_consulted": false,
+          "finding_severity_consulted": false,
+          "human_decisions_consulted": false,
+          "invalid_corridor_key": "london-kings-cross",
+          "machine_labels_consulted": false,
+          "producer": {
+            "branch": "codex/ingolstadt-osm-baseline",
+            "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+            "revision": "dac6207a2f9dad40c44ca19c80d142f4fc5328f6",
+            "schema": "torii.corridor.contracts/v1",
+            "tree_revision": "e3e908ccb6bb6cd0b51db37093943ced3e44d60a",
+            "working_tree_clean": true
+          },
+          "rank": 1,
+          "reviewer_visibility_consulted": false,
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_dc76fac5446ea7fc1e1d3003",
+          "semantic_replay_status": "pass",
+          "snapshot_status": "pass",
+          "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+          "technical_outcome": "eligible"
+        }
+      ],
+      "invalid_corridor_key": "london-kings-cross",
+      "invalid_selection_id": "scope_a51954f45045f6c56b6fdc45",
+      "resolution_status": "technical-pass",
+      "schema": "torii.corridor.contracts/v1",
+      "selected_corridor_key": "london-liverpool-street",
+      "selected_rank": 1,
+      "selected_selection_id": "scope_dc76fac5446ea7fc1e1d3003"
+    },
+    {
+      "attempts": [
+        {
+          "artifact_closure_complete": true,
+          "artifacts": [
+            {
+              "path": "machine-rank1/held_out_corpus.machine-manifest.json",
+              "role": "machine-manifest",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "f5e5e86073582b0d7684a94cfc765674518a039b7be90fa6dfe664df7eaf6a04"
+            },
+            {
+              "path": "machine-rank1/held_out_corpus.machine-report.json",
+              "role": "machine-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "7c1c885cdfc3d5f549d525568c9dfa5b534286d49dd0ef7949b1f2935cb6f223"
+            },
+            {
+              "path": "machine-rank1/cases/melbourne-st-kilda-domain/net-replay.json",
+              "role": "net-replay-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "6969f990a7c6fba574eaa1e3425ca7af8a216a8e5ee58d7eec64e9d74bb2b05f"
+            },
+            {
+              "path": "machine-rank1/held_out_corpus.run-identity.json",
+              "role": "run-identity",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "d3854ea4e244d007e72723363e6252ce2bfadcd69d26718690b10c022cba08b8"
+            },
+            {
+              "path": "reserve-corridor-osm/melbourne-st-kilda-domain.osm.xml",
+              "role": "source-snapshot",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "ca45bd708a2f92c14f3b6004d4adb5c942ca0bdce097d1071e0fe529d30820c1"
+            }
+          ],
+          "attempt_id": "manifest_11912521fc7d2b995cea40f3",
+          "corridor_key": "melbourne-st-kilda-domain",
+          "failure_reason": "semantic-replay-invalid",
+          "finding_counts_consulted": false,
+          "finding_severity_consulted": false,
+          "human_decisions_consulted": false,
+          "invalid_corridor_key": "melbourne-royal-parade",
+          "machine_labels_consulted": false,
+          "producer": {
+            "branch": "codex/ingolstadt-osm-baseline",
+            "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+            "revision": "dac6207a2f9dad40c44ca19c80d142f4fc5328f6",
+            "schema": "torii.corridor.contracts/v1",
+            "tree_revision": "e3e908ccb6bb6cd0b51db37093943ced3e44d60a",
+            "working_tree_clean": true
+          },
+          "rank": 1,
+          "reviewer_visibility_consulted": false,
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_f88f31f3d09ba6162b5a1d3e",
+          "semantic_replay_status": "blocked",
+          "snapshot_status": "pass",
+          "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+          "technical_outcome": "failed"
+        },
+        {
+          "artifact_closure_complete": true,
+          "artifacts": [
+            {
+              "path": "machine-rank2/held_out_corpus.machine-manifest.json",
+              "role": "machine-manifest",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "bd4d094e214206a1e9f041a622326234ff964457fd178f9c986c7548369b9164"
+            },
+            {
+              "path": "machine-rank2/held_out_corpus.machine-report.json",
+              "role": "machine-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "74f24475a0842633a2ce81e4b5a30161d8322be2be0c2c4256d5e888ba078741"
+            },
+            {
+              "path": "machine-rank2/cases/melbourne-dandenong-orrong/net-replay.json",
+              "role": "net-replay-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "14caeda54067ceff2da856608da3b25c2eeacfe82e8209ff5a19f16250e1838f"
+            },
+            {
+              "path": "machine-rank2/held_out_corpus.run-identity.json",
+              "role": "run-identity",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "9cced44c5441ecd65a46a8ec14cae5e206a1bd4edc6c616f281e6b15a314a262"
+            },
+            {
+              "path": "reserve-corridor-osm/melbourne-dandenong-orrong.osm.xml",
+              "role": "source-snapshot",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "f08f0d0aa9c31e0a4e67f7f1ebe95e5bb0c6d6dbf2d08f7fa17333228276b151"
+            }
+          ],
+          "attempt_id": "manifest_bd246f0315acf0ebe1b78815",
+          "corridor_key": "melbourne-dandenong-orrong",
+          "failure_reason": null,
+          "finding_counts_consulted": false,
+          "finding_severity_consulted": false,
+          "human_decisions_consulted": false,
+          "invalid_corridor_key": "melbourne-royal-parade",
+          "machine_labels_consulted": false,
+          "producer": {
+            "branch": "codex/ingolstadt-osm-baseline",
+            "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+            "revision": "dac6207a2f9dad40c44ca19c80d142f4fc5328f6",
+            "schema": "torii.corridor.contracts/v1",
+            "tree_revision": "e3e908ccb6bb6cd0b51db37093943ced3e44d60a",
+            "working_tree_clean": true
+          },
+          "rank": 2,
+          "reviewer_visibility_consulted": false,
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_c6c5e1e65a9a552589d51319",
+          "semantic_replay_status": "pass",
+          "snapshot_status": "pass",
+          "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+          "technical_outcome": "eligible"
+        }
+      ],
+      "invalid_corridor_key": "melbourne-royal-parade",
+      "invalid_selection_id": "scope_78cfe45f3f16203803dd879c",
+      "resolution_status": "technical-pass",
+      "schema": "torii.corridor.contracts/v1",
+      "selected_corridor_key": "melbourne-dandenong-orrong",
+      "selected_rank": 2,
+      "selected_selection_id": "scope_c6c5e1e65a9a552589d51319"
+    },
+    {
+      "attempts": [
+        {
+          "artifact_closure_complete": true,
+          "artifacts": [
+            {
+              "path": "machine-rank1/held_out_corpus.machine-manifest.json",
+              "role": "machine-manifest",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "f5e5e86073582b0d7684a94cfc765674518a039b7be90fa6dfe664df7eaf6a04"
+            },
+            {
+              "path": "machine-rank1/held_out_corpus.machine-report.json",
+              "role": "machine-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "7c1c885cdfc3d5f549d525568c9dfa5b534286d49dd0ef7949b1f2935cb6f223"
+            },
+            {
+              "path": "machine-rank1/cases/sydney-eastern-distributor-surry-hills/net-replay.json",
+              "role": "net-replay-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "624a091b0d9a72e2e32b643da8fd20174c9c82ad50d27d9aec9761391767e310"
+            },
+            {
+              "path": "machine-rank1/held_out_corpus.run-identity.json",
+              "role": "run-identity",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "d3854ea4e244d007e72723363e6252ce2bfadcd69d26718690b10c022cba08b8"
+            },
+            {
+              "path": "reserve-corridor-osm/sydney-eastern-distributor-surry-hills.osm.xml",
+              "role": "source-snapshot",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "284f48b61cf4a1efa74db21d51b4259b297e9c92c4a532405216de1b4b5944a4"
+            }
+          ],
+          "attempt_id": "manifest_36cf5a78c3b8a09a24ca97ed",
+          "corridor_key": "sydney-eastern-distributor-surry-hills",
+          "failure_reason": "semantic-replay-invalid",
+          "finding_counts_consulted": false,
+          "finding_severity_consulted": false,
+          "human_decisions_consulted": false,
+          "invalid_corridor_key": "sydney-cross-city-tunnel",
+          "machine_labels_consulted": false,
+          "producer": {
+            "branch": "codex/ingolstadt-osm-baseline",
+            "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+            "revision": "dac6207a2f9dad40c44ca19c80d142f4fc5328f6",
+            "schema": "torii.corridor.contracts/v1",
+            "tree_revision": "e3e908ccb6bb6cd0b51db37093943ced3e44d60a",
+            "working_tree_clean": true
+          },
+          "rank": 1,
+          "reviewer_visibility_consulted": false,
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_fe7a0a420e826c470ef01f1d",
+          "semantic_replay_status": "blocked",
+          "snapshot_status": "pass",
+          "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+          "technical_outcome": "failed"
+        },
+        {
+          "artifact_closure_complete": true,
+          "artifacts": [
+            {
+              "path": "machine-rank2/held_out_corpus.machine-manifest.json",
+              "role": "machine-manifest",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "bd4d094e214206a1e9f041a622326234ff964457fd178f9c986c7548369b9164"
+            },
+            {
+              "path": "machine-rank2/held_out_corpus.machine-report.json",
+              "role": "machine-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "74f24475a0842633a2ce81e4b5a30161d8322be2be0c2c4256d5e888ba078741"
+            },
+            {
+              "path": "machine-rank2/cases/sydney-lane-cove-tunnel/net-replay.json",
+              "role": "net-replay-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "06e5e3229020f42103d29f4755f924859913b7423720c216745cbdeff7f28e0e"
+            },
+            {
+              "path": "machine-rank2/held_out_corpus.run-identity.json",
+              "role": "run-identity",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "9cced44c5441ecd65a46a8ec14cae5e206a1bd4edc6c616f281e6b15a314a262"
+            },
+            {
+              "path": "reserve-corridor-osm/sydney-lane-cove-tunnel.osm.xml",
+              "role": "source-snapshot",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "b574d6df17d85cf105e75f6770e73d4696b912b7724f61ae8c36ab88e426d5c5"
+            }
+          ],
+          "attempt_id": "manifest_131804c3f1fefb76cf042a6c",
+          "corridor_key": "sydney-lane-cove-tunnel",
+          "failure_reason": "semantic-replay-invalid",
+          "finding_counts_consulted": false,
+          "finding_severity_consulted": false,
+          "human_decisions_consulted": false,
+          "invalid_corridor_key": "sydney-cross-city-tunnel",
+          "machine_labels_consulted": false,
+          "producer": {
+            "branch": "codex/ingolstadt-osm-baseline",
+            "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+            "revision": "dac6207a2f9dad40c44ca19c80d142f4fc5328f6",
+            "schema": "torii.corridor.contracts/v1",
+            "tree_revision": "e3e908ccb6bb6cd0b51db37093943ced3e44d60a",
+            "working_tree_clean": true
+          },
+          "rank": 2,
+          "reviewer_visibility_consulted": false,
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_4fc379c495073f7625f237cd",
+          "semantic_replay_status": "blocked",
+          "snapshot_status": "pass",
+          "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+          "technical_outcome": "failed"
+        },
+        {
+          "artifact_closure_complete": true,
+          "artifacts": [
+            {
+              "path": "machine-rank3/held_out_corpus.machine-manifest.json",
+              "role": "machine-manifest",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "05c4d6c9712c4cc450dd6be61d2cdfe7608f62cee2261e3b25b3a769df21763b"
+            },
+            {
+              "path": "machine-rank3/held_out_corpus.machine-report.json",
+              "role": "machine-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "d6811b2b0d991e2b5292e505ee96baf212eb8c80d2eb90a523a062aeb8ea1ef4"
+            },
+            {
+              "path": "machine-rank3/cases/sydney-m5-east-kingsgrove/net-replay.json",
+              "role": "net-replay-report",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "8d52400f01d6ec0437d1dffe7839a9549a9d3f186f4cb38425a7e6a0facbb9a5"
+            },
+            {
+              "path": "machine-rank3/held_out_corpus.run-identity.json",
+              "role": "run-identity",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "503d8ad5478d0e23fcb0525bc13fca6764c838695123cac0d56c4f04252e550d"
+            },
+            {
+              "path": "reserve-corridor-osm/sydney-m5-east-kingsgrove.osm.xml",
+              "role": "source-snapshot",
+              "schema": "torii.corridor.contracts/v1",
+              "sha256": "ce10931f996164ba28b13af5ab488687dc069227702f2af9df1d3d88b5f0501f"
+            }
+          ],
+          "attempt_id": "manifest_a766c8d243a62ded09ab7199",
+          "corridor_key": "sydney-m5-east-kingsgrove",
+          "failure_reason": null,
+          "finding_counts_consulted": false,
+          "finding_severity_consulted": false,
+          "human_decisions_consulted": false,
+          "invalid_corridor_key": "sydney-cross-city-tunnel",
+          "machine_labels_consulted": false,
+          "producer": {
+            "branch": "codex/ingolstadt-osm-baseline",
+            "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+            "revision": "dac6207a2f9dad40c44ca19c80d142f4fc5328f6",
+            "schema": "torii.corridor.contracts/v1",
+            "tree_revision": "e3e908ccb6bb6cd0b51db37093943ced3e44d60a",
+            "working_tree_clean": true
+          },
+          "rank": 3,
+          "reviewer_visibility_consulted": false,
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_703379cba90731b448de2716",
+          "semantic_replay_status": "pass",
+          "snapshot_status": "pass",
+          "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+          "technical_outcome": "eligible"
+        }
+      ],
+      "invalid_corridor_key": "sydney-cross-city-tunnel",
+      "invalid_selection_id": "scope_f6c3767dbd66180090580eeb",
+      "resolution_status": "technical-pass",
+      "schema": "torii.corridor.contracts/v1",
+      "selected_corridor_key": "sydney-m5-east-kingsgrove",
+      "selected_rank": 3,
+      "selected_selection_id": "scope_703379cba90731b448de2716"
+    }
+  ],
+  "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+  "superseded_executions": [
+    {
+      "eligible_for_current_selection": false,
+      "machine_report_sha256s": [
+        "3e723cde1e06bbb6e469dc18026140128869a354a9f2da351ff6f2fd73a91d51",
+        "05b04d2841ffcf0eb301b5b04565743d96a4db77c20db7471e435ee358faf95a",
+        "c1070caa4eabaa2ec89ea9d800718beb78d2b09180b8bede5c1c428b6586ac50"
+      ],
+      "reason": "source-snapshot-protocol-superseded",
+      "schema": "torii.corridor.contracts/v1",
+      "source_snapshot_protocol": "bbox-intersection-without-roundabout-closure"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ from .base import ContractModel, Sha256, StableToken
 from .enums import GateStatus, TrafficSide
 from .held_out_corpus_contracts import HeldOutCorridorSelection, Morphology
 from .ids import require_stable_id, stable_id
+from .run_identity import CodeProducerIdentity
 
 
 AttentionLabel = Literal["attention-required", "acceptable", "ambiguous"]
@@ -98,10 +99,7 @@ class ReserveReplacementSlotV2(ContractModel):
                 raise ValueError("Reserve morphology does not match replacement slot.")
             if candidate.traffic_side is not self.required_stratum.traffic_side:
                 raise ValueError("Reserve traffic side does not match replacement slot.")
-            if (
-                selection.preregistered_feature_targets
-                != self.required_stratum.mode_features
-            ):
+            if selection.preregistered_feature_targets != self.required_stratum.mode_features:
                 raise ValueError("Reserve mode features do not match replacement slot.")
         return self
 
@@ -131,11 +129,7 @@ class HeldOutReserveCorpusV2(ContractModel):
         keys = [slot.invalid_corridor_key for slot in self.slots]
         if not keys or keys != sorted(keys) or len(keys) != len(set(keys)):
             raise ValueError("Reserve slots must be non-empty, sorted, and unique.")
-        candidate_ids = [
-            candidate.selection.selection_id
-            for slot in self.slots
-            for candidate in slot.candidates
-        ]
+        candidate_ids = [candidate.selection.selection_id for slot in self.slots for candidate in slot.candidates]
         if len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("Reserve candidate IDs must be globally unique.")
         if self.reserve_corpus_id != stable_id("manifest", self.identity_payload()):
@@ -149,9 +143,7 @@ class HeldOutReplacementPolicyV2(ContractModel):
     parent_corpus_sha256: Sha256
     reserve_corpus_sha256: Sha256
     public_selection_seed: str = Field(min_length=32)
-    ranking_algorithm: Literal[
-        "sha256(seed|invalid-corridor-key|selection-id)-ascending"
-    ]
+    ranking_algorithm: Literal["sha256(seed|invalid-corridor-key|selection-id)-ascending"]
     required_match_fields: tuple[str, ...]
     allowed_technical_failure_reasons: tuple[ReplacementFailureReason, ...]
     prohibited_selection_signals: tuple[str, ...]
@@ -169,10 +161,7 @@ class HeldOutReplacementPolicyV2(ContractModel):
         require_stable_id(self.policy_id, kind="policy")
         if self.required_match_fields != _REQUIRED_REPLACEMENT_MATCH_FIELDS:
             raise ValueError("Replacement matching fields are not the frozen tuple.")
-        if (
-            self.allowed_technical_failure_reasons
-            != _ALLOWED_REPLACEMENT_FAILURE_REASONS
-        ):
+        if self.allowed_technical_failure_reasons != _ALLOWED_REPLACEMENT_FAILURE_REASONS:
             raise ValueError("Replacement failure reasons are not the frozen tuple.")
         if self.prohibited_selection_signals != _PROHIBITED_REPLACEMENT_SIGNALS:
             raise ValueError("Replacement prohibited signals are not frozen.")
@@ -237,10 +226,176 @@ class HeldOutReplacementPlanV2(ContractModel):
             raise ValueError("Replacement plan slots must be sorted and unique.")
         if self.automatic_promotion_gate is not GateStatus.BLOCKED:
             raise ValueError("Replacement plans cannot authorize promotion.")
-        if self.replacement_plan_id != stable_id(
-            "manifest", self.identity_payload()
-        ):
+        if self.replacement_plan_id != stable_id("manifest", self.identity_payload()):
             raise ValueError("Replacement plan ID does not match its queues.")
+        return self
+
+
+class HeldOutSourceSnapshotProtocolV2(ContractModel):
+    schema_id: str = "torii.corridor.held-out-source-snapshot-protocol/v2"
+    protocol_id: StableToken
+    reference_complete_writer: Literal[True] = True
+    referenced_node_tags_retained: Literal[True] = True
+    closed_restriction_relations_only: Literal[True] = True
+    touched_roundabout_component_closure: Literal[True] = True
+    roundabout_component_connectivity: Literal["shared-osm-node"] = "shared-osm-node"
+    disconnected_roundabout_components_excluded: Literal[True] = True
+    frozen_v1_snapshots_rewritten: Literal[False] = False
+    automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
+
+    def identity_payload(self) -> dict[str, object]:
+        return self.model_dump(mode="json", by_alias=True, exclude={"protocol_id"})
+
+    @model_validator(mode="after")
+    def validate_protocol(self) -> HeldOutSourceSnapshotProtocolV2:
+        require_stable_id(self.protocol_id, kind="policy")
+        if self.automatic_promotion_gate is not GateStatus.BLOCKED:
+            raise ValueError("Source snapshot protocols cannot authorize promotion.")
+        if self.protocol_id != stable_id("policy", self.identity_payload()):
+            raise ValueError("Source snapshot protocol ID does not match its content.")
+        return self
+
+
+class ReplacementEvidenceArtifactV2(ContractModel):
+    role: Literal[
+        "source-snapshot",
+        "run-identity",
+        "machine-report",
+        "net-replay-report",
+        "machine-manifest",
+    ]
+    path: str
+    sha256: Sha256
+
+    @model_validator(mode="after")
+    def validate_path(self) -> ReplacementEvidenceArtifactV2:
+        normalized = self.path.replace("\\", "/")
+        if not normalized or normalized.startswith("/") or ".." in normalized.split("/"):
+            raise ValueError("Replacement evidence paths must be safe and relative.")
+        return self
+
+
+class ReplacementAttemptV2(ContractModel):
+    attempt_id: StableToken
+    invalid_corridor_key: str
+    rank: int = Field(ge=1)
+    corridor_key: str
+    selection_id: StableToken
+    source_snapshot_protocol_sha256: Sha256
+    producer: CodeProducerIdentity
+    snapshot_status: GateStatus
+    semantic_replay_status: GateStatus
+    artifact_closure_complete: bool
+    technical_outcome: Literal["eligible", "failed"]
+    failure_reason: ReplacementFailureReason | None = None
+    artifacts: tuple[ReplacementEvidenceArtifactV2, ...]
+    machine_labels_consulted: Literal[False] = False
+    finding_counts_consulted: Literal[False] = False
+    finding_severity_consulted: Literal[False] = False
+    human_decisions_consulted: Literal[False] = False
+    reviewer_visibility_consulted: Literal[False] = False
+
+    def identity_payload(self) -> dict[str, object]:
+        return self.model_dump(mode="json", by_alias=True, exclude={"attempt_id"})
+
+    @model_validator(mode="after")
+    def validate_attempt(self) -> ReplacementAttemptV2:
+        require_stable_id(self.attempt_id, kind="manifest")
+        require_stable_id(self.selection_id, kind="scope")
+        roles = [item.role for item in self.artifacts]
+        required_roles = {
+            "source-snapshot",
+            "run-identity",
+            "machine-report",
+            "net-replay-report",
+            "machine-manifest",
+        }
+        if set(roles) != required_roles or len(roles) != len(set(roles)):
+            raise ValueError("Replacement attempts require one artifact per frozen role.")
+        if self.technical_outcome == "eligible":
+            if (
+                self.snapshot_status is not GateStatus.PASS
+                or self.semantic_replay_status is not GateStatus.PASS
+                or not self.artifact_closure_complete
+                or self.failure_reason is not None
+            ):
+                raise ValueError("Eligible replacements must close every technical gate.")
+        elif self.failure_reason is None:
+            raise ValueError("Failed replacement attempts require a technical reason.")
+        if self.attempt_id != stable_id("manifest", self.identity_payload()):
+            raise ValueError("Replacement attempt ID does not match frozen evidence.")
+        return self
+
+
+class ReplacementSlotAttemptLedgerV2(ContractModel):
+    invalid_corridor_key: str
+    invalid_selection_id: StableToken
+    attempts: tuple[ReplacementAttemptV2, ...]
+    selected_rank: int = Field(ge=1)
+    selected_corridor_key: str
+    selected_selection_id: StableToken
+    resolution_status: Literal["technical-pass"] = "technical-pass"
+
+    @model_validator(mode="after")
+    def validate_slot(self) -> ReplacementSlotAttemptLedgerV2:
+        require_stable_id(self.invalid_selection_id, kind="scope")
+        require_stable_id(self.selected_selection_id, kind="scope")
+        ranks = [item.rank for item in self.attempts]
+        if not ranks or ranks != list(range(1, len(ranks) + 1)):
+            raise ValueError("Replacement attempts must be a contiguous rank prefix.")
+        if self.selected_rank != len(self.attempts):
+            raise ValueError("Selection must be the final attempted rank.")
+        selected = self.attempts[-1]
+        if selected.technical_outcome != "eligible":
+            raise ValueError("A resolved replacement slot must end in an eligible attempt.")
+        if any(item.technical_outcome != "failed" for item in self.attempts[:-1]):
+            raise ValueError("Every fallback requires all prior ranks to fail.")
+        if selected.corridor_key != self.selected_corridor_key or selected.selection_id != self.selected_selection_id:
+            raise ValueError("Selected replacement identity does not match final attempt.")
+        if any(item.invalid_corridor_key != self.invalid_corridor_key for item in self.attempts):
+            raise ValueError("Replacement slot attempts target different invalid cases.")
+        return self
+
+
+class SupersededReplacementExecutionV2(ContractModel):
+    source_snapshot_protocol: Literal["bbox-intersection-without-roundabout-closure"]
+    reason: Literal["source-snapshot-protocol-superseded"]
+    machine_report_sha256s: tuple[Sha256, ...]
+    eligible_for_current_selection: Literal[False] = False
+
+
+class HeldOutReplacementAttemptLedgerV2(ContractModel):
+    schema_id: str = "torii.corridor.held-out-replacement-attempt-ledger/v2"
+    ledger_id: StableToken
+    base_corpus_sha256: Sha256
+    reserve_corpus_sha256: Sha256
+    replacement_plan_sha256: Sha256
+    source_snapshot_protocol_sha256: Sha256
+    effective_corpus_sha256: Sha256
+    slots: tuple[ReplacementSlotAttemptLedgerV2, ...]
+    superseded_executions: tuple[SupersededReplacementExecutionV2, ...] = ()
+    minimum_complete_replacement_count: Literal[3] = 3
+    machine_labels_consulted: Literal[False] = False
+    human_decisions_consulted: Literal[False] = False
+    automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
+
+    def identity_payload(self) -> dict[str, object]:
+        return self.model_dump(mode="json", by_alias=True, exclude={"ledger_id"})
+
+    @model_validator(mode="after")
+    def validate_ledger(self) -> HeldOutReplacementAttemptLedgerV2:
+        require_stable_id(self.ledger_id, kind="manifest")
+        keys = [slot.invalid_corridor_key for slot in self.slots]
+        if (
+            len(self.slots) < self.minimum_complete_replacement_count
+            or keys != sorted(keys)
+            or len(keys) != len(set(keys))
+        ):
+            raise ValueError("Replacement ledger does not close its frozen slots.")
+        if self.automatic_promotion_gate is not GateStatus.BLOCKED:
+            raise ValueError("Replacement evidence cannot authorize promotion.")
+        if self.ledger_id != stable_id("manifest", self.identity_payload()):
+            raise ValueError("Replacement ledger ID does not match frozen attempts.")
         return self
 
 
@@ -322,9 +477,7 @@ class AuditAttentionCohortPolicyV2(ContractModel):
 
 class ProspectiveSafePassCohortPolicyV2(ContractModel):
     cohort: Literal["prospective-safe-pass"] = "prospective-safe-pass"
-    enrollment: Literal["all-consecutive-machine-acceptable"] = (
-        "all-consecutive-machine-acceptable"
-    )
+    enrollment: Literal["all-consecutive-machine-acceptable"] = "all-consecutive-machine-acceptable"
     retrospective_enrollment_forbidden: Literal[True] = True
     current_defect_only_corpus_eligible: Literal[False] = False
     minimum_machine_acceptable_count: Literal[600] = 600
@@ -367,10 +520,8 @@ class HeldOutReviewPolicyV2(ContractModel):
         require_stable_id(self.adjudicator_id, kind="review")
         if self.adjudicator_id in self.reviewer_ids:
             raise ValueError("V2 adjudicator must be independent.")
-        if (
-            not self.replay_invalid_corridor_keys
-            or self.replay_invalid_corridor_keys
-            != tuple(sorted(set(self.replay_invalid_corridor_keys)))
+        if not self.replay_invalid_corridor_keys or self.replay_invalid_corridor_keys != tuple(
+            sorted(set(self.replay_invalid_corridor_keys))
         ):
             raise ValueError("Replay-invalid keys must be sorted and unique.")
         if self.automatic_promotion_gate is not GateStatus.BLOCKED:
@@ -410,14 +561,9 @@ class BlindedClusterReviewUnitV2(ContractModel):
 
     @model_validator(mode="after")
     def validate_unit(self) -> BlindedClusterReviewUnitV2:
-        if not self.witness_codes or len(self.witness_codes) != len(
-            set(self.witness_codes)
-        ):
+        if not self.witness_codes or len(self.witness_codes) != len(set(self.witness_codes)):
             raise ValueError("Blinded witness codes must be non-empty and unique.")
-        if any(
-            not code.startswith("witness-") or len(code) != 20
-            for code in self.witness_codes
-        ):
+        if any(not code.startswith("witness-") or len(code) != 20 for code in self.witness_codes):
             raise ValueError("Invalid blinded witness code.")
         if not self.exact_question or not self.required_observations:
             raise ValueError("Cluster review units require a question and observations.")
@@ -468,9 +614,7 @@ class BlindedAttentionDatasetV2(ContractModel):
         case_codes = [case.case_code for case in self.cases]
         if not case_codes or len(case_codes) != len(set(case_codes)):
             raise ValueError("Blinded attention case codes must be unique.")
-        all_unit_codes = [
-            unit.unit_code for case in self.cases for unit in case.units
-        ]
+        all_unit_codes = [unit.unit_code for case in self.cases for unit in case.units]
         if len(all_unit_codes) != len(set(all_unit_codes)):
             raise ValueError("Blinded attention unit codes must be globally unique.")
         return self
@@ -495,10 +639,7 @@ class ClusterUnitUnblindingKeyV2(ContractModel):
             if not code.startswith("witness-") or len(code) != 20:
                 raise ValueError("Invalid blinded witness code in key.")
             require_stable_id(witness_id, kind="conflict")
-        if (
-            self.hidden_witness_code is not None
-            and self.hidden_witness_code not in self.witness_id_by_code
-        ):
+        if self.hidden_witness_code is not None and self.hidden_witness_code not in self.witness_id_by_code:
             raise ValueError("Hidden witness code is absent from the unit key.")
         normalized = self.machine_assessment_artifact_path.replace("\\", "/")
         if normalized.startswith("/") or ".." in normalized.split("/"):
@@ -624,10 +765,7 @@ class HeldOutReviewV2Report(ContractModel):
         require_stable_id(self.trial_id, kind="review")
         if self.automatic_promotion_gate is not GateStatus.BLOCKED:
             raise ValueError("V2 reports cannot authorize automatic promotion.")
-        if (
-            self.stage_1h_human_validation_gate is GateStatus.PASS
-            and self.status is not GateStatus.PASS
-        ):
+        if self.stage_1h_human_validation_gate is GateStatus.PASS and self.status is not GateStatus.PASS:
             raise ValueError("Human validation cannot pass a blocked trial.")
         return self
 

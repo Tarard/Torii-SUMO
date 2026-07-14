@@ -21,6 +21,7 @@ from torii_sumo.corridor.held_out_review_v2_preregistration import (  # noqa: E4
     build_held_out_reserve_corpus_v2,
     build_held_out_review_parent_v2,
     build_held_out_review_policy_v2,
+    build_held_out_source_snapshot_protocol_v2,
     build_review_witness_sampling_policy_v2,
 )
 
@@ -30,9 +31,7 @@ SCHEMA_DIR = REPOSITORY_ROOT / "schemas"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Freeze Torii Stage 1-M held-out review v2 contracts."
-    )
+    parser = argparse.ArgumentParser(description="Freeze Torii Stage 1-M held-out review v2 contracts.")
     parser.add_argument(
         "--base-benchmark",
         type=Path,
@@ -46,9 +45,7 @@ def main() -> None:
     parser.add_argument(
         "--compression-schema",
         type=Path,
-        default=(
-            SCHEMA_DIR / "torii.corridor.lossless-review-compression.v1.schema.json"
-        ),
+        default=(SCHEMA_DIR / "torii.corridor.lossless-review-compression.v1.schema.json"),
     )
     parser.add_argument(
         "--reserve-output",
@@ -80,11 +77,14 @@ def main() -> None:
         type=Path,
         default=BENCHMARK_DIR / "held_out_replacement_plan.v2.json",
     )
+    parser.add_argument(
+        "--source-snapshot-protocol-output",
+        type=Path,
+        default=BENCHMARK_DIR / "held_out_source_snapshot_protocol.v2.json",
+    )
     args = parser.parse_args()
 
-    reserve = build_held_out_reserve_corpus_v2(
-        parent_corpus_file=args.held_out_corpus
-    )
+    reserve = build_held_out_reserve_corpus_v2(parent_corpus_file=args.held_out_corpus)
     _write(args.reserve_output, reserve)
     replacement = build_held_out_replacement_policy_v2(
         parent_corpus_file=args.held_out_corpus,
@@ -114,6 +114,8 @@ def main() -> None:
         replacement_policy_file=args.replacement_policy_output,
     )
     _write(args.replacement_plan_output, plan)
+    protocol = build_held_out_source_snapshot_protocol_v2()
+    _write(args.source_snapshot_protocol_output, protocol)
 
 
 def _write(path: Path, model: object) -> None:

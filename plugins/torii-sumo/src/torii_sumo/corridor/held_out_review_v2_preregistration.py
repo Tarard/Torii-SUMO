@@ -17,6 +17,7 @@ from .held_out_review_v2_contracts import (
     HeldOutReserveCorpusV2,
     HeldOutReviewParentV2,
     HeldOutReviewPolicyV2,
+    HeldOutSourceSnapshotProtocolV2,
     ProspectiveSafePassCohortPolicyV2,
     ReplacementStratumV2,
     ReserveCorridorCandidateV2,
@@ -31,12 +32,8 @@ from .review_compression_contracts import RWC1_FROZEN_SAMPLING_SEED
 from .review_compression import ReviewCompressionPolicy
 
 
-V2_PUBLIC_REPLACEMENT_SEED = (
-    "torii-stage1m-held-out-review-v2-deterministic-reserve-selection-20260714"
-)
-V2_BLINDING_SEED_SHA256 = (
-    "6c05c9f65ebe101b5b3898caf8bf4e733b821ab3cd40a46efef0eedcafef9b6e"
-)
+V2_PUBLIC_REPLACEMENT_SEED = "torii-stage1m-held-out-review-v2-deterministic-reserve-selection-20260714"
+V2_BLINDING_SEED_SHA256 = "6c05c9f65ebe101b5b3898caf8bf4e733b821ab3cd40a46efef0eedcafef9b6e"
 
 _RESERVE_CANDIDATES = {
     "london-kings-cross": (
@@ -118,15 +115,9 @@ def build_held_out_reserve_corpus_v2(
     parent_corpus_file: Path,
 ) -> HeldOutReserveCorpusV2:
     corpus_path = parent_corpus_file.resolve()
-    corpus = HeldOutCorpusSpec.model_validate_json(
-        corpus_path.read_text(encoding="utf-8")
-    )
-    selection_by_key = {
-        selection.corridor_key: selection for selection in corpus.corridors
-    }
-    traffic_side_by_source = {
-        source.source_id: source.traffic_side for source in corpus.city_extracts
-    }
+    corpus = HeldOutCorpusSpec.model_validate_json(corpus_path.read_text(encoding="utf-8"))
+    selection_by_key = {selection.corridor_key: selection for selection in corpus.corridors}
+    traffic_side_by_source = {source.source_id: source.traffic_side for source in corpus.city_extracts}
     slots: list[ReserveReplacementSlotV2] = []
     for invalid_key in sorted(_RESERVE_CANDIDATES):
         invalid = selection_by_key[invalid_key]
@@ -183,13 +174,9 @@ def build_held_out_replacement_policy_v2(
         "parent_corpus_sha256": file_sha256(parent_corpus_file.resolve()),
         "reserve_corpus_sha256": file_sha256(reserve_corpus_file.resolve()),
         "public_selection_seed": V2_PUBLIC_REPLACEMENT_SEED,
-        "ranking_algorithm": (
-            "sha256(seed|invalid-corridor-key|selection-id)-ascending"
-        ),
+        "ranking_algorithm": ("sha256(seed|invalid-corridor-key|selection-id)-ascending"),
         "required_match_fields": _REQUIRED_REPLACEMENT_MATCH_FIELDS,
-        "allowed_technical_failure_reasons": (
-            _ALLOWED_REPLACEMENT_FAILURE_REASONS
-        ),
+        "allowed_technical_failure_reasons": (_ALLOWED_REPLACEMENT_FAILURE_REASONS),
         "prohibited_selection_signals": _PROHIBITED_REPLACEMENT_SIGNALS,
         "automatic_promotion_gate": GateStatus.BLOCKED,
     }
@@ -203,13 +190,23 @@ def build_held_out_replacement_policy_v2(
     )
 
 
+def build_held_out_source_snapshot_protocol_v2() -> HeldOutSourceSnapshotProtocolV2:
+    payload = {"automatic_promotion_gate": GateStatus.BLOCKED}
+    provisional = HeldOutSourceSnapshotProtocolV2.model_construct(
+        protocol_id=stable_id("policy", {"pending": True}),
+        **payload,
+    )
+    return HeldOutSourceSnapshotProtocolV2(
+        protocol_id=stable_id("policy", provisional.identity_payload()),
+        **payload,
+    )
+
+
 def build_review_witness_sampling_policy_v2() -> ReviewWitnessSamplingPolicyV2:
     rwc_policy = ReviewCompressionPolicy.build_default()
     payload = {
         "rwc_policy_id": rwc_policy.policy_id,
-        "rwc_sampling_seed_sha256": hashlib.sha256(
-            RWC1_FROZEN_SAMPLING_SEED.encode("utf-8")
-        ).hexdigest(),
+        "rwc_sampling_seed_sha256": hashlib.sha256(RWC1_FROZEN_SAMPLING_SEED.encode("utf-8")).hexdigest(),
         "automatic_promotion_gate": GateStatus.BLOCKED,
     }
     provisional = ReviewWitnessSamplingPolicyV2.model_construct(
@@ -235,13 +232,9 @@ def build_held_out_review_parent_v2(
         "base_benchmark_sha256": file_sha256(base_benchmark_file.resolve()),
         "held_out_corpus_v1_sha256": file_sha256(held_out_corpus_file.resolve()),
         "reserve_corpus_sha256": file_sha256(reserve_corpus_file.resolve()),
-        "replacement_policy_sha256": file_sha256(
-            replacement_policy_file.resolve()
-        ),
+        "replacement_policy_sha256": file_sha256(replacement_policy_file.resolve()),
         "sampling_policy_sha256": file_sha256(sampling_policy_file.resolve()),
-        "lossless_compression_schema_sha256": file_sha256(
-            lossless_compression_schema_file.resolve()
-        ),
+        "lossless_compression_schema_sha256": file_sha256(lossless_compression_schema_file.resolve()),
         "automatic_promotion_gate": GateStatus.BLOCKED,
     }
     provisional = HeldOutReviewParentV2.model_construct(
@@ -262,22 +255,16 @@ def build_held_out_review_policy_v2(
     sampling_policy_file: Path,
 ) -> HeldOutReviewPolicyV2:
     payload = {
-        "parent_review_benchmark_sha256": file_sha256(
-            parent_review_benchmark_file.resolve()
-        ),
+        "parent_review_benchmark_sha256": file_sha256(parent_review_benchmark_file.resolve()),
         "reserve_corpus_sha256": file_sha256(reserve_corpus_file.resolve()),
-        "replacement_policy_sha256": file_sha256(
-            replacement_policy_file.resolve()
-        ),
+        "replacement_policy_sha256": file_sha256(replacement_policy_file.resolve()),
         "sampling_policy_sha256": file_sha256(sampling_policy_file.resolve()),
         "blinding_seed_sha256": V2_BLINDING_SEED_SHA256,
         "reviewer_ids": (
             stable_id("review", {"trial": "v2", "role": "reviewer-a"}),
             stable_id("review", {"trial": "v2", "role": "reviewer-b"}),
         ),
-        "adjudicator_id": stable_id(
-            "review", {"trial": "v2", "role": "adjudicator"}
-        ),
+        "adjudicator_id": stable_id("review", {"trial": "v2", "role": "adjudicator"}),
         "replay_invalid_corridor_keys": tuple(sorted(_RESERVE_CANDIDATES)),
         "audit_attention": AuditAttentionCohortPolicyV2(),
         "prospective_safe_pass": ProspectiveSafePassCohortPolicyV2(),
