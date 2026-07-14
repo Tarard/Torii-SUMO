@@ -554,6 +554,14 @@ def _geometry_conflict(
     collinear_overlap = False
     for first_polyline in first.polylines:
         for second_polyline in second.polylines:
+            interior_crossing_angle = _interior_vertex_crossing_angle(
+                first_polyline,
+                second_polyline,
+            )
+            if interior_crossing_angle is not None:
+                proper_intersection = True
+                if best_angle is None or interior_crossing_angle > best_angle:
+                    best_angle = interior_crossing_angle
             for first_segment in _segments(first_polyline):
                 for second_segment in _segments(second_polyline):
                     relation = _segment_relation(first_segment, second_segment)
@@ -580,6 +588,32 @@ def _geometry_conflict(
     ):
         return ("lane-envelope-proximity", minimum_distance, best_angle)
     return None
+
+
+def _interior_vertex_crossing_angle(
+    first: tuple[tuple[float, float], ...],
+    second: tuple[tuple[float, float], ...],
+) -> float | None:
+    """Recognize a centerline crossing represented by a shared inner vertex.
+
+    Netconvert commonly emits two polylines whose conflict point is a vertex in
+    both paths. Segment-only strict intersection tests see four endpoint touches
+    and otherwise downgrade the relation to envelope proximity. A point that is
+    internal to both complete movement paths is not a shared boundary port; if
+    the local path directions are non-collinear it is a confirmed crossing.
+    """
+
+    crossing_angles: list[float] = []
+    for first_index, first_point in enumerate(first[1:-1], start=1):
+        first_chord = (first[first_index - 1], first[first_index + 1])
+        for second_index, second_point in enumerate(second[1:-1], start=1):
+            if math.dist(first_point, second_point) > 1e-9:
+                continue
+            second_chord = (second[second_index - 1], second[second_index + 1])
+            angle = _crossing_angle(first_chord, second_chord)
+            if angle is not None and angle > 1e-6:
+                crossing_angles.append(angle)
+    return max(crossing_angles) if crossing_angles else None
 
 
 def _segments(

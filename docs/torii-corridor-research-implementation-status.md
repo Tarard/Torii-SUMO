@@ -9,7 +9,7 @@
 ## 当前结论
 
 - Stage 0“规范冻结”已完成并推送：研究方案、稳定 ID、typed contracts、候选 DAG、scope/boundary-port、workflow state、toolchain lock、benchmark v1、JSON Schema 和 CI 已建立。
-- Stage 1“Audit-only”正在实施，核心架构已落地，但尚未达到阶段退出条件。尚缺完整故障注入矩阵、SUMO 官方场景矩阵、held-out corridor 双人审核和统计指标。
+- Stage 1“Audit-only”正在实施，核心架构和首版完整 fault-family 矩阵已落地，但尚未达到阶段退出条件。尚缺 SUMO 官方场景矩阵、held-out corridor 双人审核和统计指标。
 - Stage 2–7 与 MGE-1 尚未完成，不能宣称完整项目或任意城市自动清洗已经实现。
 - 当前产品承诺仍是 selective automation：高精度窄编辑类自动执行，其余输出候选、证据和 review case；不确定时 abstain/block。
 
@@ -43,6 +43,16 @@
 - pedestrian facility、bicycle-only、pedestrian-only、rail 或未知模式在尚未认证时进入 review 并阻断自动晋级。
 - 冲突分为 `confirmed` 与 `potential`：centerline crossing、shared-destination merge 和 collinear overlap 可作为 confirmed；仅 lane-envelope proximity 不能冒充确定安全错误，只生成精确 review。
 - protected `G`、permissive `g` 和 shared signal group 均通过独立 conflict graph 审核。
+- 两条 movement path 在各自内部顶点相交时会被识别为 confirmed centerline crossing，不再被 segment endpoint 逻辑误降级成 envelope proximity。
+
+### 合成故障注入 benchmark
+
+- `synthetic_fault_matrix.v1.json` 绑定冻结的 `benchmark.v1.json` SHA-256，覆盖其全部 23 个 fault family，并包含 right-hand 与 left-hand fixture。
+- runner 从不可变 clean gold 网络生成独立 mutant，不原地修改 fixture；每个 case 输出 mutant network、Connection Mode、independent safety、exact semantic diff、case result、总报告和 manifest。
+- 23 个 case 全部通过预注册 gold expectation：16 个必须被结构/安全审核直接检出，7 个因证据不足或适用域未认证必须精确 abstain。
+- H4 的合成反例已通过：request/foes 与旧 Connection Mode 可保持自洽 `pass`，但相交 movement 同时 protected `G` 会被独立 conflict graph 判为 hard safety block。
+- pedestrian 与 rail case 的合成冲突可被独立几何图检出，但因为对应 mode applicability 尚未认证，仍维持 `must-abstain`，不能据此宣称 Stage 5B 已完成。
+- clean vehicle fixture 的 right-hand、left-hand 和 parallel-lane 版本均为 `pass`；含 pedestrian/rail 的 clean fixture 按设计为 applicability `review`，不伪装成已认证自动域。
 
 ### 容差校准与 MCP 可用面
 
@@ -78,7 +88,6 @@ SHA-256：
 
 ## 当前阶段尚未满足的退出条件
 
-- 合成 fault-injection matrix 尚未覆盖研究方案列出的全部 connection/request/TLS/multimodal 故障。
 - SUMO 官方 PlainXML、joined junction、no-internal-links、NEMA、pedestrian、rail 和 shared-signal-index 场景尚未形成统一 benchmark runner。
 - independent conflict graph 尚无 held-out gold 标注和 precision/recall。
 - pedestrian-aware conflict、rail 专用安全、bicycle 专用语义尚未认证。
@@ -88,8 +97,8 @@ SHA-256：
 
 ## 下一实施顺序
 
-1. 建立 Stage 1 合成 mutation runner 与 gold findings，先回答 H1/H4。
-2. 纳入 SUMO 官方小场景并冻结误报基线。
+1. 纳入 SUMO 官方小场景并冻结误报基线。
+2. 为合成矩阵增加 mutation 组合、precision/recall 汇总和 OOD 分组；单故障 23-family gold 已完成。
 3. 实现 Stage 2 仅限可局部证明的 micro-repair，所有操作具备 precondition、forward/inverse patch 和 exact delta。
 4. 实现 H_S/H_M/H_P 三假设并行，不再从 shared TLS 推导 physical merge。
 5. 实现 boundary-port constrained road-ribbon solver，执行 MGE-1 的 V0–V4 盲化比较。

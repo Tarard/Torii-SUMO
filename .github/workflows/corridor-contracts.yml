@@ -40,6 +40,8 @@ jobs:
           ruff check \
             plugins/torii-sumo/src/torii_sumo/corridor \
             plugins/torii-sumo/scripts/export_corridor_schema.py \
+            plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
+            plugins/torii-sumo/scripts/run_synthetic_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py
 
       - name: Verify schema regeneration is deterministic
@@ -49,6 +51,15 @@ jobs:
           diff --unified \
             schemas/torii.corridor.research-bundle.v1.schema.json \
             generated.corridor.schema.json
+          python plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
+            --spec-output generated.synthetic-benchmark.schema.json \
+            --report-output generated.synthetic-benchmark-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.synthetic-fault-benchmark.v1.schema.json \
+            generated.synthetic-benchmark.schema.json
+          diff --unified \
+            schemas/torii.corridor.synthetic-fault-benchmark-report.v1.schema.json \
+            generated.synthetic-benchmark-report.schema.json
 
       - name: Verify benchmark, toolchain, plan, and fail-closed contracts
         run: |

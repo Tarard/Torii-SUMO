@@ -32,6 +32,11 @@ from .ids import (
 )
 from .manifest import ArtifactManifestV1, CorridorResearchBundle
 from .scope import BoundaryPort, ScopeSpec
+from .synthetic_benchmark_contracts import (
+    SyntheticFaultBenchmarkReport,
+    SyntheticFaultBenchmarkSpec,
+)
+from .synthetic_benchmark_runner import run_synthetic_fault_benchmark
 from .toolchain import ToolIdentity, ToolchainLock
 from .workflow import NetworkQualityVectorV1, StageOutcome, WorkflowExecution
 
@@ -57,6 +62,8 @@ __all__ = [
     "ScopeSpec",
     "SemanticDelta",
     "StageOutcome",
+    "SyntheticFaultBenchmarkReport",
+    "SyntheticFaultBenchmarkSpec",
     "ToolIdentity",
     "ToolchainLock",
     "TrafficSide",
@@ -80,5 +87,6 @@ __all__ = [
     "make_physical_cell_id",
     "make_signal_group_id",
     "compare_canonical_snapshots",
+    "run_synthetic_fault_benchmark",
     "stable_id",
 ]

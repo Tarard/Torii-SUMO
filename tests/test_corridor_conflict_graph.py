@@ -318,3 +318,17 @@ def test_lane_envelope_proximity_is_review_not_a_confirmed_safety_failure() -> N
     assert {
         finding.category for finding in report.findings
     } >= {"protected_green_potential_envelope_conflict"}
+
+
+def test_shared_inner_vertices_are_confirmed_centerline_crossings() -> None:
+    snapshot, _, _ = _crossing_snapshot(
+        shape_a=((-10.0, 0.0), (0.0, 0.0), (10.0, 0.0)),
+        shape_b=((0.0, -10.0), (0.0, 0.0), (0.0, 10.0)),
+    )
+
+    graph = build_movement_conflict_graph(snapshot)
+
+    assert len(graph.conflicts) == 1
+    assert graph.conflicts[0].reason == "centerline-crossing"
+    assert graph.conflicts[0].certainty == "confirmed"
+    assert graph.conflicts[0].crossing_angle_deg == 90.0
