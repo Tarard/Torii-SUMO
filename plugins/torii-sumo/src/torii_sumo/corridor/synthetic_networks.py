@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Callable, Literal
@@ -35,6 +36,23 @@ FIXTURES = {
     ),
     "pedestrian-x4": SyntheticFixtureDefinition("pedestrian-x4", GateStatus.REVIEW),
     "rail-x4": SyntheticFixtureDefinition("rail-x4", GateStatus.REVIEW),
+    "bicycle-x4": SyntheticFixtureDefinition("bicycle-x4", GateStatus.REVIEW),
+    "no-internal-x4": SyntheticFixtureDefinition(
+        "no-internal-x4",
+        GateStatus.REVIEW,
+    ),
+    "ramp-x4": SyntheticFixtureDefinition("ramp-x4", GateStatus.PASS),
+    "actuated-x4": SyntheticFixtureDefinition("actuated-x4", GateStatus.PASS),
+    "multi-program-x4": SyntheticFixtureDefinition(
+        "multi-program-x4",
+        GateStatus.PASS,
+    ),
+    "radial-t3": SyntheticFixtureDefinition("radial-t3", GateStatus.PASS),
+    "radial-x5": SyntheticFixtureDefinition("radial-x5", GateStatus.PASS),
+    "shared-controller-pair": SyntheticFixtureDefinition(
+        "shared-controller-pair",
+        GateStatus.PASS,
+    ),
 }
 
 
@@ -47,16 +65,33 @@ def build_synthetic_fixture(
         raise ValueError(f"Unknown synthetic fixture: {fixture_id}")
     if traffic_side is TrafficSide.UNKNOWN:
         raise ValueError("Synthetic fixtures require an explicit traffic side.")
-    modal_kind: Literal["pedestrian", "rail"] | None = None
+    if fixture_id == "radial-t3":
+        return _build_radial_tls(approach_count=3, traffic_side=traffic_side)
+    if fixture_id == "radial-x5":
+        return _build_radial_tls(approach_count=5, traffic_side=traffic_side)
+    if fixture_id == "shared-controller-pair":
+        return _build_shared_controller_pair(traffic_side=traffic_side)
+    modal_kind: Literal["pedestrian", "bicycle", "rail"] | None = None
     if fixture_id == "pedestrian-x4":
         modal_kind = "pedestrian"
+    elif fixture_id == "bicycle-x4":
+        modal_kind = "bicycle"
     elif fixture_id == "rail-x4":
         modal_kind = "rail"
-    return _build_x4(
+    root = _build_x4(
         traffic_side=traffic_side,
         parallel_straight=fixture_id == "parallel-two-lane-x4",
         modal_kind=modal_kind,
     )
+    if fixture_id == "no-internal-x4":
+        _remove_internal_links(root)
+    elif fixture_id == "ramp-x4":
+        _mark_ramp_approach(root)
+    elif fixture_id == "actuated-x4":
+        _make_actuated(root)
+    elif fixture_id == "multi-program-x4":
+        _add_second_program(root)
+    return root
 
 
 def apply_synthetic_mutation(root: ET.Element, mutation_id: str) -> ET.Element:
@@ -73,7 +108,7 @@ def _build_x4(
     *,
     traffic_side: TrafficSide,
     parallel_straight: bool,
-    modal_kind: Literal["pedestrian", "rail"] | None,
+    modal_kind: Literal["pedestrian", "bicycle", "rail"] | None,
 ) -> ET.Element:
     root = ET.Element("net")
     if traffic_side is TrafficSide.LEFT:
@@ -163,7 +198,7 @@ def _build_x4(
             )
         )
     if modal_kind is not None:
-        prefix = "P" if modal_kind == "pedestrian" else "R"
+        prefix = {"pedestrian": "P", "bicycle": "B", "rail": "R"}[modal_kind]
         source_junction = f"{prefix}N"
         target_junction = f"{prefix}S"
         incoming_edge = f"{prefix}_in"
@@ -180,8 +215,10 @@ def _build_x4(
             "edge",
             {"id": outgoing_edge, "from": "J0", "to": target_junction, "priority": "4"},
         )
-        width = "2.0" if modal_kind == "pedestrian" else "3.2"
-        speed = "1.4" if modal_kind == "pedestrian" else "22.0"
+        width = "2.0" if modal_kind in {"pedestrian", "bicycle"} else "3.2"
+        speed = {"pedestrian": "1.4", "bicycle": "5.0", "rail": "22.0"}[
+            modal_kind
+        ]
         ET.SubElement(
             incoming,
             "lane",
@@ -245,8 +282,14 @@ def _build_x4(
                 "id": lane_id,
                 "index": "0",
                 "allow": movement.mode,
-                "width": "2.0" if movement.mode == "pedestrian" else "3.2",
-                "speed": "1.4" if movement.mode == "pedestrian" else "10.0",
+                "width": "2.0" if movement.mode in {"pedestrian", "bicycle"} else "3.2",
+                "speed": (
+                    "1.4"
+                    if movement.mode == "pedestrian"
+                    else "5.0"
+                    if movement.mode == "bicycle"
+                    else "10.0"
+                ),
                 "length": "12",
                 "shape": f"{_point(movement.start)} 0.0,0.0 {_point(movement.end)}",
             },
@@ -332,6 +375,350 @@ def _build_x4(
             },
         )
     return root
+
+
+def _build_radial_tls(
+    *,
+    approach_count: int,
+    traffic_side: TrafficSide,
+) -> ET.Element:
+    if approach_count not in {3, 5}:
+        raise ValueError("Radial synthetic TLS supports exactly three or five arms.")
+    root = ET.Element("net")
+    if traffic_side is TrafficSide.LEFT:
+        root.set("lefthand", "true")
+    labels = tuple(f"A{index}" for index in range(approach_count))
+    far_points = {
+        label: (
+            100.0 * math.cos(2.0 * math.pi * index / approach_count),
+            100.0 * math.sin(2.0 * math.pi * index / approach_count),
+        )
+        for index, label in enumerate(labels)
+    }
+    near_points = {
+        label: (point[0] * 0.05, point[1] * 0.05)
+        for label, point in far_points.items()
+    }
+    incoming_lanes: list[str] = []
+    for label in labels:
+        far = far_points[label]
+        near = near_points[label]
+        incoming = ET.SubElement(
+            root,
+            "edge",
+            {"id": f"{label}_in", "from": label, "to": "J0", "priority": "2"},
+        )
+        outgoing = ET.SubElement(
+            root,
+            "edge",
+            {"id": f"{label}_out", "from": "J0", "to": label, "priority": "2"},
+        )
+        incoming_lane = f"{label}_in_0"
+        incoming_lanes.append(incoming_lane)
+        ET.SubElement(
+            incoming,
+            "lane",
+            {
+                "id": incoming_lane,
+                "index": "0",
+                "allow": "passenger",
+                "width": "3.2",
+                "speed": "13.89",
+                "length": "100",
+                "shape": f"{_point(far)} {_point(near)}",
+            },
+        )
+        ET.SubElement(
+            outgoing,
+            "lane",
+            {
+                "id": f"{label}_out_0",
+                "index": "0",
+                "allow": "passenger",
+                "width": "3.2",
+                "speed": "13.89",
+                "length": "100",
+                "shape": f"{_point(near)} {_point(far)}",
+            },
+        )
+
+    movements: list[_MovementSpec] = []
+    for source in labels:
+        for target in labels:
+            if source == target:
+                continue
+            movements.append(
+                _MovementSpec(
+                    from_edge=f"{source}_in",
+                    to_edge=f"{target}_out",
+                    from_lane=0,
+                    to_lane=0,
+                    turn=_radial_turn_class(
+                        source=near_points[source],
+                        target=near_points[target],
+                    ),
+                    start=near_points[source],
+                    end=near_points[target],
+                )
+            )
+
+    internal_lane_ids: list[str] = []
+    internal_edge_ids: list[str] = []
+    for index, movement in enumerate(movements):
+        edge_id = f":J0_{index}"
+        lane_id = f"{edge_id}_0"
+        internal_edge_ids.append(edge_id)
+        internal_lane_ids.append(lane_id)
+        internal = ET.SubElement(root, "edge", {"id": edge_id, "function": "internal"})
+        ET.SubElement(
+            internal,
+            "lane",
+            {
+                "id": lane_id,
+                "index": "0",
+                "allow": "passenger",
+                "width": "3.2",
+                "speed": "10.0",
+                "length": "12",
+                "shape": f"{_point(movement.start)} 0.0,0.0 {_point(movement.end)}",
+            },
+        )
+
+    movement_count = len(movements)
+    logic = ET.SubElement(
+        root,
+        "tlLogic",
+        {"id": "J0", "type": "static", "programID": "gold", "offset": "0"},
+    )
+    first_green = ["r"] * movement_count
+    first_green[0] = "G"
+    ET.SubElement(logic, "phase", {"duration": "30", "state": "".join(first_green)})
+    ET.SubElement(logic, "phase", {"duration": "3", "state": "r" * movement_count})
+    junction = ET.SubElement(
+        root,
+        "junction",
+        {
+            "id": "J0",
+            "type": "traffic_light",
+            "x": "0",
+            "y": "0",
+            "incLanes": " ".join(incoming_lanes),
+            "intLanes": " ".join(internal_lane_ids),
+        },
+    )
+    for index in range(movement_count):
+        ET.SubElement(
+            junction,
+            "request",
+            {
+                "index": str(index),
+                "response": "0" * movement_count,
+                "foes": "0" * movement_count,
+                "cont": "0",
+            },
+        )
+    for label in labels:
+        x, y = far_points[label]
+        ET.SubElement(
+            root,
+            "junction",
+            {"id": label, "type": "priority", "x": str(x), "y": str(y)},
+        )
+    for index, movement in enumerate(movements):
+        ET.SubElement(
+            root,
+            "connection",
+            {
+                "from": movement.from_edge,
+                "to": movement.to_edge,
+                "fromLane": "0",
+                "toLane": "0",
+                "via": internal_lane_ids[index],
+                "tl": "J0",
+                "linkIndex": str(index),
+                "dir": movement.turn,
+                "state": "o",
+            },
+        )
+        ET.SubElement(
+            root,
+            "connection",
+            {
+                "from": internal_edge_ids[index],
+                "to": movement.to_edge,
+                "fromLane": "0",
+                "toLane": "0",
+                "dir": movement.turn,
+                "state": "M",
+            },
+        )
+    return root
+
+
+def _radial_turn_class(
+    *,
+    source: tuple[float, float],
+    target: tuple[float, float],
+) -> str:
+    incoming = (-source[0], -source[1])
+    outgoing = target
+    cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
+    dot = incoming[0] * outgoing[0] + incoming[1] * outgoing[1]
+    angle = math.degrees(math.atan2(cross, dot))
+    if abs(angle) <= 25.0:
+        return "s"
+    return "l" if angle > 0.0 else "r"
+
+
+def _remove_internal_links(root: ET.Element) -> None:
+    for edge in tuple(root.findall("edge")):
+        if edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}:
+            root.remove(edge)
+    for connection in tuple(root.findall("connection")):
+        if connection.attrib.get("from", "").startswith(":"):
+            root.remove(connection)
+        else:
+            connection.attrib.pop("via", None)
+    junction = root.find("junction[@id='J0']")
+    assert junction is not None
+    junction.set("intLanes", "")
+
+
+def _mark_ramp_approach(root: ET.Element) -> None:
+    for edge_id in ("W_in", "W_out"):
+        edge = root.find(f"edge[@id='{edge_id}']")
+        assert edge is not None
+        edge.set("type", "motorway_link")
+        edge.set("priority", "1")
+
+
+def _make_actuated(root: ET.Element) -> None:
+    logic = root.find("tlLogic[@id='J0']")
+    assert logic is not None
+    logic.set("type", "actuated")
+    for phase in logic.findall("phase"):
+        phase.set("minDur", "5")
+        phase.set("maxDur", "45")
+
+
+def _add_second_program(root: ET.Element) -> None:
+    logic = root.find("tlLogic[@id='J0']")
+    assert logic is not None
+    second = deepcopy(logic)
+    second.set("programID", "alternate")
+    root.insert(list(root).index(logic) + 1, second)
+
+
+def _build_shared_controller_pair(*, traffic_side: TrafficSide) -> ET.Element:
+    combined = ET.Element("net")
+    if traffic_side is TrafficSide.LEFT:
+        combined.set("lefthand", "true")
+    controlled_count = 0
+    for prefix, shift_x in (("A", -150.0), ("B", 150.0)):
+        local = _build_x4(
+            traffic_side=traffic_side,
+            parallel_straight=False,
+            modal_kind=None,
+        )
+        transformed, local_count = _prefix_and_shift_network(
+            local,
+            prefix=prefix,
+            shift_x=shift_x,
+            link_index_offset=controlled_count,
+        )
+        controlled_count += local_count
+        for child in transformed:
+            combined.append(child)
+    logic = ET.Element(
+        "tlLogic",
+        {"id": "SHARED", "type": "static", "programID": "gold", "offset": "0"},
+    )
+    first = ["r"] * controlled_count
+    second = ["r"] * controlled_count
+    first[1] = "G"
+    second[13] = "G"
+    ET.SubElement(logic, "phase", {"duration": "30", "state": "".join(first)})
+    ET.SubElement(logic, "phase", {"duration": "3", "state": "r" * controlled_count})
+    ET.SubElement(logic, "phase", {"duration": "30", "state": "".join(second)})
+    ET.SubElement(logic, "phase", {"duration": "3", "state": "r" * controlled_count})
+    combined.insert(
+        next(
+            (index for index, child in enumerate(combined) if child.tag == "junction"),
+            len(combined),
+        ),
+        logic,
+    )
+    return combined
+
+
+def _prefix_and_shift_network(
+    root: ET.Element,
+    *,
+    prefix: str,
+    shift_x: float,
+    link_index_offset: int,
+) -> tuple[ET.Element, int]:
+    transformed = deepcopy(root)
+    logic = transformed.find("tlLogic[@id='J0']")
+    assert logic is not None
+    transformed.remove(logic)
+    identifiers = {
+        element.attrib["id"]
+        for element in transformed.iter()
+        if element.tag in {"edge", "lane", "junction"} and element.attrib.get("id")
+    }
+    mapping = {identifier: _prefixed_identifier(identifier, prefix) for identifier in identifiers}
+    for element in transformed.iter():
+        identifier = element.attrib.get("id")
+        if identifier in mapping:
+            element.set("id", mapping[identifier])
+        for attribute in ("from", "to", "via"):
+            value = element.attrib.get(attribute)
+            if value in mapping:
+                element.set(attribute, mapping[value])
+        for attribute in ("incLanes", "intLanes"):
+            if attribute in element.attrib:
+                element.set(
+                    attribute,
+                    " ".join(
+                        mapping.get(token, token)
+                        for token in element.attrib[attribute].split()
+                    ),
+                )
+        if "shape" in element.attrib:
+            element.set("shape", _shift_shape_x(element.attrib["shape"], shift_x))
+        if element.tag == "junction" and "x" in element.attrib:
+            element.set("x", str(float(element.attrib["x"]) + shift_x))
+    controlled = [
+        connection
+        for connection in transformed.findall("connection")
+        if connection.attrib.get("tl")
+    ]
+    for connection in controlled:
+        connection.set("tl", "SHARED")
+        connection.set(
+            "linkIndex",
+            str(int(connection.attrib["linkIndex"]) + link_index_offset),
+        )
+    return transformed, len(controlled)
+
+
+def _prefixed_identifier(identifier: str, prefix: str) -> str:
+    if identifier.startswith(":"):
+        return f":{prefix}_{identifier[1:]}"
+    return f"{prefix}_{identifier}"
+
+
+def _shift_shape_x(shape: str, shift_x: float) -> str:
+    points: list[str] = []
+    for token in shape.split():
+        values = token.split(",")
+        if len(values) < 2:
+            points.append(token)
+            continue
+        values[0] = str(float(values[0]) + shift_x)
+        points.append(",".join(values))
+    return " ".join(points)
 
 
 def _lane_boundary(arm: str, lane_index: int, *, incoming: bool) -> tuple[float, float]:

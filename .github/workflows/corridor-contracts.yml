@@ -42,16 +42,19 @@ jobs:
             plugins/torii-sumo/scripts/export_composite_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_corridor_schema.py \
             plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
+            plugins/torii-sumo/scripts/export_ood_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_held_out_review_schema.py \
             plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
             plugins/torii-sumo/scripts/evaluate_held_out_review.py \
             plugins/torii-sumo/scripts/run_official_sumo_benchmark.py \
+            plugins/torii-sumo/scripts/run_ood_benchmark.py \
             plugins/torii-sumo/scripts/run_composite_fault_benchmark.py \
             plugins/torii-sumo/scripts/run_synthetic_fault_benchmark.py \
             tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
-            tests/test_official_sumo_benchmark.py
+            tests/test_official_sumo_benchmark.py \
+            tests/test_ood_benchmark.py
 
       - name: Verify schema regeneration is deterministic
         run: |
@@ -87,6 +90,23 @@ jobs:
           diff --unified \
             schemas/torii.corridor.official-sumo-benchmark-report.v1.schema.json \
             generated.official-sumo-benchmark-report.schema.json
+          python plugins/torii-sumo/scripts/export_ood_benchmark_schema.py \
+            --envelope-output generated.certification-envelope.schema.json \
+            --applicability-output generated.certification-applicability.schema.json \
+            --spec-output generated.ood-benchmark.schema.json \
+            --report-output generated.ood-benchmark-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.certification-envelope.v1.schema.json \
+            generated.certification-envelope.schema.json
+          diff --unified \
+            schemas/torii.corridor.certification-applicability-report.v1.schema.json \
+            generated.certification-applicability.schema.json
+          diff --unified \
+            schemas/torii.corridor.ood-benchmark.v1.schema.json \
+            generated.ood-benchmark.schema.json
+          diff --unified \
+            schemas/torii.corridor.ood-benchmark-report.v1.schema.json \
+            generated.ood-benchmark-report.schema.json
           python plugins/torii-sumo/scripts/export_held_out_review_schema.py \
             --policy-output generated.held-out-review-policy.schema.json \
             --bundle-output generated.held-out-review-bundle.schema.json \
@@ -108,5 +128,6 @@ jobs:
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_official_sumo_benchmark.py \
+            tests/test_ood_benchmark.py \
             tests/test_synthetic_fault_benchmark.py \
             -q

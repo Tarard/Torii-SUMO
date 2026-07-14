@@ -4,6 +4,10 @@ from .composite_benchmark_contracts import (
     CompositeFaultBenchmarkReport,
     CompositeFaultBenchmarkSpec,
 )
+from .applicability import (
+    CertificationApplicabilityReport,
+    CertificationEnvelope,
+)
 from .held_out_review_contracts import (
     HeldOutReviewContractBundle,
     HeldOutReviewPolicy,
@@ -14,6 +18,7 @@ from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkReport,
     OfficialSumoBenchmarkSpec,
 )
+from .ood_benchmark_contracts import OODBenchmarkReport, OODBenchmarkSpec
 from .synthetic_benchmark_contracts import (
     SyntheticFaultBenchmarkReport,
     SyntheticFaultBenchmarkSpec,
@@ -60,6 +65,38 @@ def build_composite_fault_benchmark_report_schema() -> dict[str, object]:
         CompositeFaultBenchmarkReport,
         "torii.corridor.composite-fault-benchmark-report.v1.schema.json",
         status="stage-1-compound-fault-evidence-contract",
+    )
+
+
+def build_certification_envelope_schema() -> dict[str, object]:
+    return _artifact_schema(
+        CertificationEnvelope,
+        "torii.corridor.certification-envelope.v1.schema.json",
+        status="stage-1-selective-domain-contract",
+    )
+
+
+def build_certification_applicability_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        CertificationApplicabilityReport,
+        "torii.corridor.certification-applicability-report.v1.schema.json",
+        status="stage-1-selective-domain-evidence-contract",
+    )
+
+
+def build_ood_benchmark_schema() -> dict[str, object]:
+    return _artifact_schema(
+        OODBenchmarkSpec,
+        "torii.corridor.ood-benchmark.v1.schema.json",
+        status="stage-1-ood-contract",
+    )
+
+
+def build_ood_benchmark_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        OODBenchmarkReport,
+        "torii.corridor.ood-benchmark-report.v1.schema.json",
+        status="stage-1-ood-evidence-contract",
     )
 
 

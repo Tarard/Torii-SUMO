@@ -9,7 +9,7 @@
 ## 当前结论
 
 - Stage 0“规范冻结”已完成并推送：研究方案、稳定 ID、typed contracts、候选 DAG、scope/boundary-port、workflow state、toolchain lock、benchmark v1、JSON Schema 和 CI 已建立。
-- Stage 1“Audit-only”正在实施，核心架构、完整单故障矩阵、首版组合故障交互矩阵、SUMO 1.27.1 官方规范场景矩阵和 held-out 盲审执行合同已落地，但尚未达到阶段退出条件。尚缺真实 held-out corridor 的双人决定、第三人 adjudication 和由这些人工证据产生的最终统计。
+- Stage 1“Audit-only”正在实施，核心架构、完整单故障矩阵、首版组合故障交互矩阵、首版适用域/OOD 矩阵、SUMO 1.27.1 官方规范场景矩阵和 held-out 盲审执行合同已落地，但尚未达到阶段退出条件。尚缺真实 held-out corridor 的双人决定、第三人 adjudication 和由这些人工证据产生的最终统计。
 - Stage 2–7 与 MGE-1 尚未完成，不能宣称完整项目或任意城市自动清洗已经实现。
 - 当前产品承诺仍是 selective automation：高精度窄编辑类自动执行，其余输出候选、证据和 review case；不确定时 abstain/block。
 
@@ -74,6 +74,15 @@
 - 已冻结负对照：`rail-conflict + phase-state-length` 中，错误 phase state shape 会遮蔽 protected rail conflict；runner 因 rail component witness 缺失明确失败，即使网络整体仍被其他结构错误阻断。
 - 该结果证明当前审核器能发现一组预注册的跨层遮蔽问题，不代表真实 OOD 组合、pedestrian 或 rail 安全域已经认证。
 
+### Selective-domain 与 OOD benchmark
+
+- `vehicle_x4_certification_envelope.v1.json` 将当前窄适用域显式固定为：左右侧通行、单物理四叉、vehicle-only、static 单 program、单 movement signal group、完整 internal geometry、无 `linkIndex2`、无 pedestrian facility、无 ramp/grade separation。
+- envelope 内容使用稳定 policy ID，OOD benchmark 同时绑定 envelope 和总 benchmark 的 SHA-256；修改声明边界后必须产生新身份和新实验。
+- 新增实际网络 fixture：clean T3、clean X5、bicycle、no-internal-links、ramp、actuated、multi-program，以及一个 controller 跨两个独立物理四叉口的 shared-controller pair。
+- 16-case 预注册矩阵包含 12 个域外案例和 4 个域内负对照；本机实测 OOD recall 12/12、in-domain acceptance 4/4、overconfidence 0、false OOD 0，所有 source fixture 哈希不变。
+- `protected-green-conflict` 被保留为 in-domain，但独立安全状态为 `blocked`；T3、X5、ramp、actuated、multi-program 和 shared-controller 可以结构/安全 `pass`，仍因不在当前认证域而阻断。这保证 domain shift 与 defect 是两个正交判断。
+- 这只是合成适用域回归，不是现实 OOD 泛化率；真实 city/morphology-held-out 数据仍必须单独统计。
+
 ### Held-out corridor 双人盲审门
 
 - 预注册 `held_out_review_preregistration.v1.json`：30 个 case、至少 3 个 held-out city group、6 类 morphology、每城市至少 5 个 case，同时覆盖左右侧通行和 pedestrian/bicycle/ramp/rail/bridge/tunnel。
@@ -118,7 +127,7 @@ SHA-256：
 ## 当前阶段尚未满足的退出条件
 
 - independent conflict graph 尚无真实 held-out gold 标注和由人工 adjudication 产生的 precision/recall。
-- 组合故障 benchmark 目前是 10 个预注册双故障；尚未覆盖随机多故障、未知 mutation 和分布外结构的 OOD 分组。
+- 组合故障 benchmark 目前是 10 个预注册双故障；尚未覆盖随机三重及以上故障和未知 mutation。首版分布外结构 OOD 分组已落地，但尚无真实城市 OOD 统计。
 - pedestrian-aware conflict、rail 专用安全、bicycle 专用语义尚未认证。
 - 盲审 package/evaluator 已实现，但尚无 30-case 真实双人决定和第三人 adjudication；因此 review time 与 reviewer agreement 仍没有实测结论。
 - Stage 2 的 certified micro-repair 还没有逐编辑类 held-out 认证证据。
@@ -126,8 +135,8 @@ SHA-256：
 
 ## 下一实施顺序
 
-1. 为合成矩阵增加 OOD 分组；单故障 23-family gold、10-case 组合故障交互矩阵与官方规范场景已完成。
-2. 按已冻结的 blind-review policy 填充 30 个真实 held-out corridor case，执行双人审核和 adjudication，生成不可事后调阈值的统计报告。
+1. 按已冻结的 blind-review policy 填充 30 个真实 held-out corridor case，执行双人审核和 adjudication，生成不可事后调阈值的统计报告。
+2. 为组合故障增加随机三重及以上故障和未知 mutation；单故障、双故障与首版结构 OOD 已完成。
 3. 实现 Stage 2 仅限可局部证明的 micro-repair，所有操作具备 precondition、forward/inverse patch 和 exact delta。
 4. 实现 H_S/H_M/H_P 三假设并行，不再从 shared TLS 推导 physical merge。
 5. 实现 boundary-port constrained road-ribbon solver，执行 MGE-1 的 V0–V4 盲化比较。
