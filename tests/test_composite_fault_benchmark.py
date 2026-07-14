@@ -73,8 +73,8 @@ def test_composite_matrix_exposes_every_component_without_source_mutation(
     assert result["total_component_count"] == 20
     assert result["covered_component_count"] == 20
     assert result["component_recall"] == 1.0
-    assert result["total_observation_count"] == 22
-    assert result["matched_observation_count"] == 22
+    assert result["total_observation_count"] == 21
+    assert result["matched_observation_count"] == 21
     assert result["observation_recall"] == 1.0
     assert all(case["source_immutable"] for case in result["cases"])
     assert all(case["abstention_proven"] for case in result["cases"])

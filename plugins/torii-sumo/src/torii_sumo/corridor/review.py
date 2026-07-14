@@ -1,12 +1,78 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import model_validator
 
 from .base import ContractModel, Sha256, StableToken
 from .enums import ReviewDecisionStatus
-from .ids import require_stable_id
+from .ids import require_stable_id, stable_id
+
+
+class PedestrianCrossingReviewSubject(ContractModel):
+    """Stable, raw-ID-free subject for one unmodeled pedestrian crossing."""
+
+    schema_id: str = "torii.corridor.pedestrian-crossing-review-subject/v1"
+    review_subject_id: StableToken
+    facility_kind: Literal["pedestrian-crossing"]
+    control_kind: Literal["signalized", "uncontrolled"]
+    crossing_shape_xy: tuple[tuple[float, float], ...]
+    crossing_width_m: float | None
+    source_endpoint_shape_xy: tuple[tuple[float, float], ...]
+    destination_endpoint_shape_xy: tuple[tuple[float, float], ...]
+    crossed_edge_signatures: tuple[StableToken, ...]
+    position_xy: tuple[float, float] | None
+    physical_cell_id: StableToken | None
+    boundary_port_ids: tuple[StableToken, ...]
+    permission_contract: dict[str, Any]
+    rejection_reasons: tuple[str, ...]
+    machine_question: str
+    required_observations: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_subject(self) -> PedestrianCrossingReviewSubject:
+        require_stable_id(self.review_subject_id, kind="review")
+        if self.physical_cell_id is not None:
+            require_stable_id(self.physical_cell_id, kind="cell")
+        for port_id in self.boundary_port_ids:
+            require_stable_id(port_id, kind="port")
+        for signature in self.crossed_edge_signatures:
+            require_stable_id(signature, kind="signature")
+        points = (
+            *self.crossing_shape_xy,
+            *self.source_endpoint_shape_xy,
+            *self.destination_endpoint_shape_xy,
+        )
+        if self.position_xy is not None:
+            points = (*points, self.position_xy)
+        if any(not math.isfinite(coordinate) for point in points for coordinate in point):
+            raise ValueError("Pedestrian review geometry must be finite.")
+        if self.crossing_width_m is not None and (
+            not math.isfinite(self.crossing_width_m)
+            or self.crossing_width_m <= 0
+        ):
+            raise ValueError("Pedestrian review width must be positive and finite.")
+        if not self.rejection_reasons or not self.required_observations:
+            raise ValueError(
+                "Pedestrian review subjects require rejection reasons and observations."
+            )
+        semantic_subject = {
+            "facility_kind": self.facility_kind,
+            "control_kind": self.control_kind,
+            "crossing_shape_xy": self.crossing_shape_xy,
+            "crossing_width_m": self.crossing_width_m,
+            "source_endpoint_shape_xy": self.source_endpoint_shape_xy,
+            "destination_endpoint_shape_xy": self.destination_endpoint_shape_xy,
+            "crossed_edge_signatures": self.crossed_edge_signatures,
+        }
+        expected_id = stable_id("review", semantic_subject)
+        if self.review_subject_id != expected_id:
+            raise ValueError(
+                "Pedestrian review subject ID does not match its semantic identity."
+            )
+        return self
 
 
 class ReviewTask(ContractModel):

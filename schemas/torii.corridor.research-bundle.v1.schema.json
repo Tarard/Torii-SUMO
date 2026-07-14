@@ -1247,6 +1247,17 @@
           "title": "Unmodeled Crossing Edge Count",
           "type": "integer"
         },
+        "unmodeled_pedestrian_crossings": {
+          "items": {
+            "$ref": "#/$defs/PedestrianCrossingReviewSubject"
+          },
+          "title": "Unmodeled Pedestrian Crossings",
+          "type": "array"
+        },
+        "unmodeled_pedestrian_review_subject_count": {
+          "title": "Unmodeled Pedestrian Review Subject Count",
+          "type": "integer"
+        },
         "unresolved_owner_record_count": {
           "title": "Unresolved Owner Record Count",
           "type": "integer"
@@ -1273,6 +1284,8 @@
         "modeled_uncontrolled_pedestrian_movement_count",
         "modeled_crossing_edge_count",
         "unmodeled_crossing_edge_count",
+        "unmodeled_pedestrian_review_subject_count",
+        "unmodeled_pedestrian_crossings",
         "link_index2_connection_count",
         "unresolved_owner_record_count",
         "movement_mode_class_counts"
@@ -1609,6 +1622,188 @@
         "inverse_patch"
       ],
       "title": "PatchOperation",
+      "type": "object"
+    },
+    "PedestrianCrossingReviewSubject": {
+      "additionalProperties": false,
+      "description": "Stable, raw-ID-free subject for one unmodeled pedestrian crossing.",
+      "properties": {
+        "boundary_port_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Boundary Port Ids",
+          "type": "array"
+        },
+        "control_kind": {
+          "enum": [
+            "signalized",
+            "uncontrolled"
+          ],
+          "title": "Control Kind",
+          "type": "string"
+        },
+        "crossed_edge_signatures": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Crossed Edge Signatures",
+          "type": "array"
+        },
+        "crossing_shape_xy": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Crossing Shape Xy",
+          "type": "array"
+        },
+        "crossing_width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Crossing Width M"
+        },
+        "destination_endpoint_shape_xy": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Destination Endpoint Shape Xy",
+          "type": "array"
+        },
+        "facility_kind": {
+          "const": "pedestrian-crossing",
+          "title": "Facility Kind",
+          "type": "string"
+        },
+        "machine_question": {
+          "title": "Machine Question",
+          "type": "string"
+        },
+        "permission_contract": {
+          "additionalProperties": true,
+          "title": "Permission Contract",
+          "type": "object"
+        },
+        "physical_cell_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Physical Cell Id"
+        },
+        "position_xy": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Position Xy"
+        },
+        "rejection_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rejection Reasons",
+          "type": "array"
+        },
+        "required_observations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Observations",
+          "type": "array"
+        },
+        "review_subject_id": {
+          "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+          "title": "Review Subject Id",
+          "type": "string"
+        },
+        "schema": {
+          "default": "torii.corridor.pedestrian-crossing-review-subject/v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "source_endpoint_shape_xy": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Source Endpoint Shape Xy",
+          "type": "array"
+        }
+      },
+      "required": [
+        "review_subject_id",
+        "facility_kind",
+        "control_kind",
+        "crossing_shape_xy",
+        "crossing_width_m",
+        "source_endpoint_shape_xy",
+        "destination_endpoint_shape_xy",
+        "crossed_edge_signatures",
+        "position_xy",
+        "physical_cell_id",
+        "boundary_port_ids",
+        "permission_contract",
+        "rejection_reasons",
+        "machine_question",
+        "required_observations"
+      ],
+      "title": "PedestrianCrossingReviewSubject",
       "type": "object"
     },
     "QualityDimension": {

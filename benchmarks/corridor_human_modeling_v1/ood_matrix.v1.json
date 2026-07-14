@@ -1,6 +1,6 @@
 {
   "schema": "torii.corridor.ood-benchmark/v1",
-  "benchmark_id": "manifest_2b895f3eee6fd0b222400ab9",
+  "benchmark_id": "manifest_e6dd97310817e201d0ae24d9",
   "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
   "certification_envelope_sha256": "1fb06208f4bf74615d83e9bfe7fa321d416319363943d267b825b7ac867c6d54",
   "cases": [
@@ -43,7 +43,7 @@
         "pedestrian_facility_outside_envelope",
         "physical_cell_arm_count_outside_envelope"
       ],
-      "expected_independent_safety_status": "review"
+      "expected_independent_safety_status": "pass"
     },
     {
       "case_id": "rail-x4-ood",

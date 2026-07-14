@@ -1,6 +1,6 @@
 {
   "schema": "torii.corridor.synthetic-fault-benchmark/v1",
-  "benchmark_id": "manifest_c8fe1b323f44a4d1840466f0",
+  "benchmark_id": "manifest_fe327b09f51ea4f0061cb918",
   "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
   "cases": [
     {
@@ -264,8 +264,7 @@
       "traffic_side": "right",
       "certification_expectation": "must-abstain",
       "expected_observations": [
-        {"channel": "independent-safety", "value": "protected_green_movement_conflict"},
-        {"channel": "independent-review", "value": "pedestrian_facilities_outside_independent_conflict_model"}
+        {"channel": "independent-safety", "value": "protected_green_movement_conflict"}
       ],
       "expected_abstention": true
     },

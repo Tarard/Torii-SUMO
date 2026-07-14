@@ -5,7 +5,7 @@ import math
 from collections import Counter, defaultdict
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import ValidationError, model_validator
 
 from .base import ContractModel, StableToken
 from .canonicalizer import CanonicalEntity, CanonicalNetworkSnapshot
@@ -13,6 +13,7 @@ from .enums import FindingSeverity, GateStatus
 from .evidence import Finding
 from .exact_diff import build_finding
 from .ids import require_stable_id, stable_id
+from .review import PedestrianCrossingReviewSubject
 
 
 class MovementConflict(ContractModel):
@@ -58,9 +59,24 @@ class IndependentSafetyCoverage(ContractModel):
     modeled_uncontrolled_pedestrian_movement_count: int
     modeled_crossing_edge_count: int
     unmodeled_crossing_edge_count: int
+    unmodeled_pedestrian_review_subject_count: int
+    unmodeled_pedestrian_crossings: tuple[
+        PedestrianCrossingReviewSubject,
+        ...,
+    ]
     link_index2_connection_count: int
     unresolved_owner_record_count: int
     movement_mode_class_counts: dict[str, int]
+
+    @model_validator(mode="after")
+    def validate_review_subject_count(self) -> IndependentSafetyCoverage:
+        if self.unmodeled_pedestrian_review_subject_count != len(
+            self.unmodeled_pedestrian_crossings
+        ):
+            raise ValueError(
+                "Pedestrian review-subject count must match the exact records."
+            )
+        return self
 
 
 class IndependentSafetyReport(ContractModel):
@@ -189,7 +205,33 @@ def audit_independent_movement_safety(
     shared_signal_group_conflict_count = 0
     potential_signal_conflict_count = 0
     coverage_entities = [entity for entity in snapshot.entities if entity.kind == "safety_coverage"]
-    coverage = _summarize_coverage(coverage_entities)
+    review_diagnostics: dict[
+        str,
+        tuple[
+            tuple[PedestrianCrossingReviewSubject, ...],
+            int,
+            tuple[str, ...],
+            tuple[str, ...],
+            tuple[str, ...],
+        ],
+    ] = {}
+    review_subjects: dict[str, PedestrianCrossingReviewSubject] = {}
+    review_subject_locations: dict[str, list[str]] = defaultdict(list)
+    for coverage_entity in coverage_entities:
+        diagnostic = _pedestrian_review_subject_diagnostic(coverage_entity)
+        review_diagnostics[coverage_entity.stable_entity_id] = diagnostic
+        for subject in diagnostic[0]:
+            review_subjects.setdefault(subject.review_subject_id, subject)
+            review_subject_locations[subject.review_subject_id].append(
+                coverage_entity.stable_entity_id
+            )
+    coverage = _summarize_coverage(
+        coverage_entities,
+        pedestrian_review_subjects=tuple(
+            review_subjects[subject_id]
+            for subject_id in sorted(review_subjects)
+        ),
+    )
     limitations: list[str] = []
 
     for movement in (entity for entity in snapshot.entities if entity.kind == "movement"):
@@ -221,8 +263,30 @@ def audit_independent_movement_safety(
             confidence=1.0,
         )
         findings[finding.finding_id] = finding
+    for review_subject_id, locations in sorted(
+        review_subject_locations.items()
+    ):
+        if len(locations) == 1:
+            continue
+        finding = build_finding(
+            category=(
+                "unmodeled_pedestrian_review_subject_duplicate_assignment"
+            ),
+            severity=FindingSeverity.SAFETY,
+            subject_id=review_subject_id,
+            witness={"coverage_entity_ids": tuple(sorted(locations))},
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
     for coverage_entity in coverage_entities:
         payload = coverage_entity.payload
+        (
+            exact_review_subjects,
+            review_record_count,
+            review_record_errors,
+            duplicate_review_subject_ids,
+            ownership_mismatch_subject_ids,
+        ) = review_diagnostics[coverage_entity.stable_entity_id]
         unsupported_count = int(payload.get("unsupported_controlled_connection_count", 0) or 0)
         if unsupported_count:
             finding = build_finding(
@@ -248,6 +312,40 @@ def audit_independent_movement_safety(
             )
             findings[finding.finding_id] = finding
         unmodeled_crossings = int(payload.get("unmodeled_crossing_edge_count", 0) or 0)
+        review_subject_ids = tuple(
+            subject.review_subject_id for subject in exact_review_subjects
+        )
+        if (
+            unmodeled_crossings != review_record_count
+            or review_record_count != len(exact_review_subjects)
+            or review_record_errors
+            or duplicate_review_subject_ids
+            or ownership_mismatch_subject_ids
+        ):
+            finding = build_finding(
+                category=(
+                    "unmodeled_pedestrian_review_subject_closure_mismatch"
+                ),
+                severity=FindingSeverity.SAFETY,
+                subject_id=coverage_entity.stable_entity_id,
+                witness={
+                    "unmodeled_crossing_edge_count": unmodeled_crossings,
+                    "review_subject_record_count": review_record_count,
+                    "valid_unique_review_subject_count": len(
+                        exact_review_subjects
+                    ),
+                    "review_subject_ids": review_subject_ids,
+                    "invalid_record_errors": review_record_errors,
+                    "duplicate_review_subject_ids": (
+                        duplicate_review_subject_ids
+                    ),
+                    "ownership_mismatch_subject_ids": (
+                        ownership_mismatch_subject_ids
+                    ),
+                },
+                confidence=1.0,
+            )
+            findings[finding.finding_id] = finding
         if unmodeled_crossings:
             limitation = "pedestrian_facilities_outside_independent_conflict_model"
             limitations.append(limitation)
@@ -263,6 +361,10 @@ def audit_independent_movement_safety(
                         0,
                     ),
                     "unmodeled_crossing_edge_count": unmodeled_crossings,
+                    "unmodeled_pedestrian_crossings": tuple(
+                        subject.model_dump(mode="python")
+                        for subject in exact_review_subjects
+                    ),
                 },
                 confidence=1.0,
             )
@@ -581,8 +683,79 @@ def audit_independent_movement_safety(
     )
 
 
+def _pedestrian_review_subject_diagnostic(
+    coverage_entity: CanonicalEntity,
+) -> tuple[
+    tuple[PedestrianCrossingReviewSubject, ...],
+    int,
+    tuple[str, ...],
+    tuple[str, ...],
+    tuple[str, ...],
+]:
+    raw_records = coverage_entity.payload.get(
+        "unmodeled_pedestrian_crossings",
+        (),
+    )
+    if not isinstance(raw_records, (list, tuple)):
+        return (), 0, ("records:not_a_sequence",), (), ()
+    subjects_by_id: dict[str, PedestrianCrossingReviewSubject] = {}
+    duplicate_ids: list[str] = []
+    errors: list[str] = []
+    ownership_mismatches: list[str] = []
+    ownership_status = str(
+        coverage_entity.payload.get("ownership_status", "unknown")
+    )
+    owner_cell_ids = set(coverage_entity.owner_physical_cell_ids)
+    for index, raw_record in enumerate(raw_records):
+        try:
+            subject = PedestrianCrossingReviewSubject.model_validate(
+                raw_record
+            )
+        except ValidationError as error:
+            details = ",".join(
+                f"{'.'.join(map(str, item['loc']))}:{item['type']}"
+                for item in error.errors(
+                    include_input=False,
+                    include_url=False,
+                )
+            )
+            errors.append(f"record:{index}:{details}")
+            continue
+        if subject.review_subject_id in subjects_by_id:
+            duplicate_ids.append(subject.review_subject_id)
+        else:
+            subjects_by_id[subject.review_subject_id] = subject
+        if ownership_status == "resolved":
+            if (
+                len(owner_cell_ids) != 1
+                or subject.physical_cell_id not in owner_cell_ids
+            ):
+                ownership_mismatches.append(subject.review_subject_id)
+        elif ownership_status == "unresolved":
+            if subject.physical_cell_id is not None:
+                ownership_mismatches.append(subject.review_subject_id)
+        else:
+            ownership_mismatches.append(subject.review_subject_id)
+    subjects = tuple(
+        subjects_by_id[subject_id]
+        for subject_id in sorted(subjects_by_id)
+    )
+    return (
+        subjects,
+        len(raw_records),
+        tuple(errors),
+        tuple(sorted(set(duplicate_ids))),
+        tuple(sorted(set(ownership_mismatches))),
+    )
+
+
 def _summarize_coverage(
     entities: list[CanonicalEntity],
+    *,
+    pedestrian_review_subjects: tuple[
+        PedestrianCrossingReviewSubject,
+        ...,
+    ],
 ) -> IndependentSafetyCoverage:
     mode_counts: Counter[str] = Counter()
     for entity in entities:
@@ -644,6 +817,10 @@ def _summarize_coverage(
         unmodeled_crossing_edge_count=sum(
             int(entity.payload.get("unmodeled_crossing_edge_count", 0) or 0) for entity in entities
         ),
+        unmodeled_pedestrian_review_subject_count=len(
+            pedestrian_review_subjects
+        ),
+        unmodeled_pedestrian_crossings=pedestrian_review_subjects,
         link_index2_connection_count=sum(
             int(entity.payload.get("link_index2_connection_count", 0) or 0) for entity in entities
         ),
