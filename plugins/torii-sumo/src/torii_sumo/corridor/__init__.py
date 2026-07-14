@@ -65,10 +65,20 @@ from .held_out_review_v2_contracts import (
     HeldOutReviewV2Report,
     HeldOutReviewTrialInstanceV2R2,
     HeldOutSourceSnapshotProtocolV2,
+    ReviewSamplingLedgerV2R2,
+    ReviewSamplingStratumV2R2,
     ReviewWitnessSamplingPolicyV2,
     ReviewStudySamplingPolicyV2R2,
 )
 from .held_out_review_v2_r2 import freeze_review_trial_v2_r2
+from .held_out_review_v2_r2_package import build_held_out_review_package_v2_r2
+from .held_out_review_v2_r2_sampling import (
+    allocate_stratified_sample_sizes,
+    deterministic_sample,
+    select_conflict_sites,
+    select_negative_pairs,
+    select_presented_site_witnesses,
+)
 from .held_out_review_v2_preregistration import (
     build_held_out_replacement_policy_v2,
     build_held_out_reserve_corpus_v2,
@@ -215,6 +225,8 @@ __all__ = [
     "PedestrianControlKind",
     "PedestrianCoverageGap",
     "ReviewCompressionPolicy",
+    "ReviewSamplingLedgerV2R2",
+    "ReviewSamplingStratumV2R2",
     "ReviewWitnessSamplingPolicyV2",
     "ReviewStudySamplingPolicyV2R2",
     "ROWExperimentCaseResult",
@@ -249,8 +261,14 @@ __all__ = [
     "build_held_out_review_policy_v2",
     "build_held_out_source_snapshot_protocol_v2",
     "build_review_witness_sampling_policy_v2",
+    "build_held_out_review_package_v2_r2",
+    "allocate_stratified_sample_sizes",
+    "deterministic_sample",
     "freeze_replacement_execution_v2",
     "freeze_review_trial_v2_r2",
+    "select_conflict_sites",
+    "select_negative_pairs",
+    "select_presented_site_witnesses",
     "build_exact_semantic_regression_artifacts",
     "build_connection_mode_calibration_artifact",
     "calibrate_connection_mode_audit",

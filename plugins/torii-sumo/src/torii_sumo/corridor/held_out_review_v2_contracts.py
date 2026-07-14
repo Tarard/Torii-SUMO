@@ -905,15 +905,20 @@ ReviewUnitKindV2R2 = Literal[
     "pedestrian-coverage-gap",
 ]
 
+ReviewDomainV2R2 = Literal[
+    "pedestrian-path-relation",
+    "signal-control-configuration",
+    "pedestrian-facility-coverage",
+]
+
 
 class BlindedReviewUnitV2R2(ContractModel):
     unit_code: str = Field(pattern=r"^unit-[0-9a-f]{12}$")
-    unit_kind: ReviewUnitKindV2R2
+    review_domain: ReviewDomainV2R2
     witness_codes: tuple[str, ...]
     exact_question: str
     required_observations: tuple[str, ...]
     evidence_path: str
-    inclusion_probability: float = Field(gt=0.0, le=1.0)
 
     @model_validator(mode="after")
     def validate_unit(self) -> BlindedReviewUnitV2R2:
@@ -1034,6 +1039,79 @@ class AttentionEvaluationKeyV2R2(ContractModel):
         return self
 
 
+class ReviewUnitDecisionV2R2(ContractModel):
+    schema_id: str = "torii.corridor.review-unit-decision/v2-r2"
+    decision_id: StableToken
+    trial_id: StableToken
+    case_code: str = Field(pattern=r"^case-[0-9a-f]{12}$")
+    unit_code: str = Field(pattern=r"^unit-[0-9a-f]{12}$")
+    reviewer_id: StableToken
+    label: AttentionLabel
+    witness_labels: dict[str, AttentionLabel]
+    within_unit_homogeneity_supported: bool | None
+    started_at: datetime
+    decided_at: datetime
+    observed_facts: tuple[str, ...]
+    rationale: str
+    machine_label_was_hidden: Literal[True] = True
+    peer_decision_was_hidden: Literal[True] = True
+    hidden_member_role_was_hidden: Literal[True] = True
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> ReviewUnitDecisionV2R2:
+        require_stable_id(self.decision_id, kind="review")
+        require_stable_id(self.trial_id, kind="review")
+        require_stable_id(self.reviewer_id, kind="review")
+        if self.started_at.tzinfo is None or self.decided_at.tzinfo is None:
+            raise ValueError("Review-unit decisions require timezone-aware timestamps.")
+        if self.decided_at <= self.started_at:
+            raise ValueError("Review-unit decision end must follow its start.")
+        if (
+            not self.witness_labels
+            or any(not code.startswith("witness-") or len(code) != 20 for code in self.witness_labels)
+            or not self.observed_facts
+            or not self.rationale
+        ):
+            raise ValueError("Review-unit decisions require witness labels and rationale.")
+        return self
+
+
+class ReviewUnitAdjudicationV2R2(ContractModel):
+    schema_id: str = "torii.corridor.review-unit-adjudication/v2-r2"
+    adjudication_id: StableToken
+    trial_id: StableToken
+    case_code: str = Field(pattern=r"^case-[0-9a-f]{12}$")
+    unit_code: str = Field(pattern=r"^unit-[0-9a-f]{12}$")
+    reviewer_decision_ids: tuple[StableToken, StableToken]
+    adjudicator_id: StableToken
+    final_label: AttentionLabel
+    witness_labels: dict[str, AttentionLabel]
+    within_unit_homogeneity_supported: bool | None
+    decided_at: datetime
+    observed_facts: tuple[str, ...]
+    rationale: str
+
+    @model_validator(mode="after")
+    def validate_adjudication(self) -> ReviewUnitAdjudicationV2R2:
+        require_stable_id(self.adjudication_id, kind="review")
+        require_stable_id(self.trial_id, kind="review")
+        require_stable_id(self.adjudicator_id, kind="review")
+        if len(set(self.reviewer_decision_ids)) != 2:
+            raise ValueError("Review-unit adjudication requires two independent decisions.")
+        for decision_id in self.reviewer_decision_ids:
+            require_stable_id(decision_id, kind="review")
+        if self.decided_at.tzinfo is None:
+            raise ValueError("Review-unit adjudications require a timezone.")
+        if (
+            not self.witness_labels
+            or any(not code.startswith("witness-") or len(code) != 20 for code in self.witness_labels)
+            or not self.observed_facts
+            or not self.rationale
+        ):
+            raise ValueError("Review-unit adjudications require evidence and rationale.")
+        return self
+
+
 class ReviewPackageArtifactV2R2(ContractModel):
     path: str
     sha256: Sha256
@@ -1045,15 +1123,171 @@ class ReviewPackageArtifactV2R2(ContractModel):
         return self
 
 
+class ReviewSamplingStratumV2R2(ContractModel):
+    stratum_id: StableToken
+    corridor_key: str
+    unit_kind: Literal["conflict-site", "negative-pair"]
+    stratum_key: tuple[str, ...]
+    selection_source: Literal[
+        "full-population",
+        "preselected-probability-sample",
+    ]
+    population_count: int = Field(ge=1)
+    available_sample_count: int = Field(ge=1)
+    selected_count: int = Field(ge=1)
+    inclusion_probability: float = Field(gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_stratum(self) -> ReviewSamplingStratumV2R2:
+        require_stable_id(self.stratum_id, kind="scope")
+        if not self.corridor_key or not self.stratum_key:
+            raise ValueError("Review sampling strata require a corridor and key.")
+        if self.available_sample_count > self.population_count:
+            raise ValueError("Available review sample exceeds its population.")
+        if self.selected_count > self.available_sample_count:
+            raise ValueError("Selected review sample exceeds available evidence.")
+        expected_probability = self.selected_count / self.population_count
+        if abs(self.inclusion_probability - expected_probability) > 1e-12:
+            raise ValueError("Review sampling inclusion probability is incorrect.")
+        expected_id = stable_id(
+            "scope",
+            {
+                "corridor_key": self.corridor_key,
+                "unit_kind": self.unit_kind,
+                "stratum_key": self.stratum_key,
+                "selection_source": self.selection_source,
+                "population_count": self.population_count,
+                "available_sample_count": self.available_sample_count,
+            },
+        )
+        if self.stratum_id != expected_id:
+            raise ValueError("Review sampling stratum ID does not match its population.")
+        return self
+
+
+class ReviewSamplingCorridorV2R2(ContractModel):
+    corridor_key: str
+    atomic_witness_population_count: int = Field(ge=0)
+    conflict_site_population_count: int = Field(ge=0)
+    selected_conflict_site_count: int = Field(ge=0)
+    negative_pair_population_count: int = Field(ge=0)
+    selected_negative_pair_count: int = Field(ge=0)
+    controlled_binding_hard_count: int = Field(ge=0)
+    selected_controlled_binding_count: int = Field(ge=0)
+    pedestrian_coverage_gap_count: int = Field(ge=0)
+    selected_pedestrian_coverage_gap_count: int = Field(ge=0)
+    independent_hidden_witness_count: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_corridor(self) -> ReviewSamplingCorridorV2R2:
+        if not self.corridor_key:
+            raise ValueError("Review sampling corridor keys cannot be empty.")
+        if self.selected_conflict_site_count > self.conflict_site_population_count:
+            raise ValueError("Selected conflict sites exceed the corridor population.")
+        if self.selected_negative_pair_count > self.negative_pair_population_count:
+            raise ValueError("Selected negative pairs exceed the corridor population.")
+        if self.selected_controlled_binding_count != self.controlled_binding_hard_count:
+            raise ValueError("Hard controlled bindings require census selection.")
+        if self.selected_pedestrian_coverage_gap_count != self.pedestrian_coverage_gap_count:
+            raise ValueError("Pedestrian coverage gaps require census selection.")
+        if self.independent_hidden_witness_count > self.selected_conflict_site_count:
+            raise ValueError("Hidden witness count exceeds selected conflict sites.")
+        return self
+
+
+class ReviewSamplingLedgerV2R2(ContractModel):
+    schema_id: str = "torii.corridor.review-sampling-ledger/v2-r2"
+    ledger_id: StableToken
+    trial_id: StableToken
+    execution_parent_sha256: Sha256
+    study_sampling_policy_sha256: Sha256
+    blinding_seed_sha256: Sha256
+    producer: CodeProducerIdentity
+    corridors: tuple[ReviewSamplingCorridorV2R2, ...]
+    strata: tuple[ReviewSamplingStratumV2R2, ...]
+    atomic_witness_population_count: int = Field(ge=0)
+    conflict_site_population_count: int = Field(ge=0)
+    selected_conflict_site_count: int = Field(ge=0)
+    negative_pair_population_count: int = Field(ge=0)
+    selected_negative_pair_count: int = Field(ge=0)
+    controlled_binding_hard_count: int = Field(ge=0)
+    pedestrian_coverage_gap_count: int = Field(ge=0)
+    independent_hidden_witness_count: int = Field(ge=0)
+    atomic_witness_machine_census_complete: Literal[True] = True
+    unselected_population_retained_and_unresolved: Literal[True] = True
+    machine_labels_consulted_for_sampling: Literal[False] = False
+    finding_counts_consulted_for_sampling: Literal[False] = False
+    human_decisions_present: Literal[False] = False
+    automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
+
+    def identity_payload(self) -> dict[str, object]:
+        return self.model_dump(mode="json", by_alias=True, exclude={"ledger_id"})
+
+    @model_validator(mode="after")
+    def validate_ledger(self) -> ReviewSamplingLedgerV2R2:
+        require_stable_id(self.ledger_id, kind="manifest")
+        require_stable_id(self.trial_id, kind="review")
+        corridor_keys = [corridor.corridor_key for corridor in self.corridors]
+        if len(self.corridors) != 30 or corridor_keys != sorted(set(corridor_keys)):
+            raise ValueError("Review sampling ledgers require 30 sorted unique corridors.")
+        stratum_ids = [stratum.stratum_id for stratum in self.strata]
+        if stratum_ids != sorted(set(stratum_ids)):
+            raise ValueError("Review sampling strata must be sorted and unique.")
+        totals = {
+            "atomic_witness_population_count": sum(
+                corridor.atomic_witness_population_count for corridor in self.corridors
+            ),
+            "conflict_site_population_count": sum(
+                corridor.conflict_site_population_count for corridor in self.corridors
+            ),
+            "selected_conflict_site_count": sum(
+                corridor.selected_conflict_site_count for corridor in self.corridors
+            ),
+            "negative_pair_population_count": sum(
+                corridor.negative_pair_population_count for corridor in self.corridors
+            ),
+            "selected_negative_pair_count": sum(
+                corridor.selected_negative_pair_count for corridor in self.corridors
+            ),
+            "controlled_binding_hard_count": sum(
+                corridor.controlled_binding_hard_count for corridor in self.corridors
+            ),
+            "pedestrian_coverage_gap_count": sum(
+                corridor.pedestrian_coverage_gap_count for corridor in self.corridors
+            ),
+            "independent_hidden_witness_count": sum(
+                corridor.independent_hidden_witness_count for corridor in self.corridors
+            ),
+        }
+        for field, expected in totals.items():
+            if getattr(self, field) != expected:
+                raise ValueError(f"Review sampling ledger total does not close: {field}.")
+        if self.automatic_promotion_gate is not GateStatus.BLOCKED:
+            raise ValueError("Review sampling ledgers cannot authorize promotion.")
+        if self.ledger_id != stable_id("manifest", self.identity_payload()):
+            raise ValueError("Review sampling ledger ID does not match its contents.")
+        return self
+
+
 class HeldOutReviewPackageManifestV2R2(ContractModel):
     schema_id: str = "torii.corridor.held-out-review-package-manifest/v2-r2"
     trial_id: StableToken
+    trial_instance_sha256: Sha256
+    execution_parent_sha256: Sha256
+    study_sampling_policy_sha256: Sha256
+    producer: CodeProducerIdentity
     dataset_path: str
     dataset_sha256: Sha256
     evaluation_key_path: str
     evaluation_key_sha256: Sha256
+    sampling_ledger_path: str
+    sampling_ledger_sha256: Sha256
     reviewer_visible_machine_label_count: Literal[0] = 0
     reviewer_visible_hidden_role_count: Literal[0] = 0
+    reviewer_visible_attention_role_count: Literal[0] = 0
+    machine_labels_consulted_for_sampling: Literal[False] = False
+    finding_counts_consulted_for_sampling: Literal[False] = False
+    human_decisions_present: Literal[False] = False
     artifacts: tuple[ReviewPackageArtifactV2R2, ...]
     automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
 
@@ -1062,6 +1296,7 @@ class HeldOutReviewPackageManifestV2R2(ContractModel):
         require_stable_id(self.trial_id, kind="review")
         _require_safe_relative_path(self.dataset_path)
         _require_safe_relative_path(self.evaluation_key_path)
+        _require_safe_relative_path(self.sampling_ledger_path)
         by_path = {item.path: item.sha256 for item in self.artifacts}
         if len(by_path) != len(self.artifacts):
             raise ValueError("Review package artifact paths must be unique.")
@@ -1069,6 +1304,8 @@ class HeldOutReviewPackageManifestV2R2(ContractModel):
             raise ValueError("Review package does not bind its dataset.")
         if by_path.get(self.evaluation_key_path) != self.evaluation_key_sha256:
             raise ValueError("Review package does not bind its evaluation key.")
+        if by_path.get(self.sampling_ledger_path) != self.sampling_ledger_sha256:
+            raise ValueError("Review package does not bind its sampling ledger.")
         if self.automatic_promotion_gate is not GateStatus.BLOCKED:
             raise ValueError("Review packages cannot authorize promotion.")
         return self

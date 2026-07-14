@@ -28,6 +28,9 @@ from .held_out_review_v2_contracts import (
     HeldOutReviewV2Report,
     HeldOutReviewTrialInstanceV2R2,
     HeldOutSourceSnapshotProtocolV2,
+    ReviewSamplingLedgerV2R2,
+    ReviewUnitAdjudicationV2R2,
+    ReviewUnitDecisionV2R2,
     ReviewWitnessSamplingPolicyV2,
     ReviewStudySamplingPolicyV2R2,
 )
@@ -290,6 +293,30 @@ def build_attention_evaluation_key_v2_r2_schema() -> dict[str, object]:
         AttentionEvaluationKeyV2R2,
         "torii.corridor.attention-evaluation-key.v2-r2.schema.json",
         status="stage-1m-restricted-unblinding-key",
+    )
+
+
+def build_review_sampling_ledger_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        ReviewSamplingLedgerV2R2,
+        "torii.corridor.review-sampling-ledger.v2-r2.schema.json",
+        status="stage-1m-restricted-sampling-evidence",
+    )
+
+
+def build_review_unit_decision_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        ReviewUnitDecisionV2R2,
+        "torii.corridor.review-unit-decision.v2-r2.schema.json",
+        status="stage-1h-independent-review-decision-contract",
+    )
+
+
+def build_review_unit_adjudication_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        ReviewUnitAdjudicationV2R2,
+        "torii.corridor.review-unit-adjudication.v2-r2.schema.json",
+        status="stage-1h-third-reviewer-adjudication-contract",
     )
 
 

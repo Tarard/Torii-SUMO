@@ -76,18 +76,21 @@
           "title": "Exact Question",
           "type": "string"
         },
-        "inclusion_probability": {
-          "exclusiveMinimum": 0.0,
-          "maximum": 1.0,
-          "title": "Inclusion Probability",
-          "type": "number"
-        },
         "required_observations": {
           "items": {
             "type": "string"
           },
           "title": "Required Observations",
           "type": "array"
+        },
+        "review_domain": {
+          "enum": [
+            "pedestrian-path-relation",
+            "signal-control-configuration",
+            "pedestrian-facility-coverage"
+          ],
+          "title": "Review Domain",
+          "type": "string"
         },
         "schema": {
           "default": "torii.corridor.contracts/v1",
@@ -97,16 +100,6 @@
         "unit_code": {
           "pattern": "^unit-[0-9a-f]{12}$",
           "title": "Unit Code",
-          "type": "string"
-        },
-        "unit_kind": {
-          "enum": [
-            "conflict-site",
-            "negative-pair",
-            "controlled-binding",
-            "pedestrian-coverage-gap"
-          ],
-          "title": "Unit Kind",
           "type": "string"
         },
         "witness_codes": {
@@ -119,12 +112,11 @@
       },
       "required": [
         "unit_code",
-        "unit_kind",
+        "review_domain",
         "witness_codes",
         "exact_question",
         "required_observations",
-        "evidence_path",
-        "inclusion_probability"
+        "evidence_path"
       ],
       "title": "BlindedReviewUnitV2R2",
       "type": "object"

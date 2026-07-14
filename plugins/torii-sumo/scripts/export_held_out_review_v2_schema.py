@@ -29,7 +29,10 @@ from torii_sumo.corridor.schema import (  # noqa: E402
     build_held_out_review_trial_instance_v2_r2_schema,
     build_held_out_source_snapshot_protocol_v2_schema,
     build_review_witness_sampling_policy_v2_schema,
+    build_review_sampling_ledger_v2_r2_schema,
     build_review_study_sampling_policy_v2_r2_schema,
+    build_review_unit_adjudication_v2_r2_schema,
+    build_review_unit_decision_v2_r2_schema,
 )
 
 
@@ -113,6 +116,21 @@ def main() -> None:
             "evaluation-key-r2",
             "torii.corridor.attention-evaluation-key.v2-r2.schema.json",
             build_attention_evaluation_key_v2_r2_schema,
+        ),
+        (
+            "sampling-ledger-r2",
+            "torii.corridor.review-sampling-ledger.v2-r2.schema.json",
+            build_review_sampling_ledger_v2_r2_schema,
+        ),
+        (
+            "unit-decision-r2",
+            "torii.corridor.review-unit-decision.v2-r2.schema.json",
+            build_review_unit_decision_v2_r2_schema,
+        ),
+        (
+            "unit-adjudication-r2",
+            "torii.corridor.review-unit-adjudication.v2-r2.schema.json",
+            build_review_unit_adjudication_v2_r2_schema,
         ),
         (
             "package-manifest-r2",
