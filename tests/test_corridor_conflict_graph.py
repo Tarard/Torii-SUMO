@@ -920,12 +920,119 @@ def test_permissive_conflict_requires_yield_review_not_a_claimed_safety_defect()
 
     assert report.status is GateStatus.REVIEW
     assert report.automatic_promotion_gate is GateStatus.BLOCKED
-    assert report.permissive_without_yield_count == 1
+    assert report.permissive_without_yield_count == 0
     assert report.protected_conflict_count == 0
     assert {finding.category for finding in report.findings} >= {
         "permissive_conflict_requires_independent_yield_review"
     }
     assert all(finding.severity.value != "safety" for finding in report.findings)
+
+
+def test_permissive_conflict_passes_with_explicit_request_yield_relation() -> None:
+    snapshot, movement_a, movement_b = _crossing_snapshot(
+        protected_both=False
+    )
+    movements = {
+        entity.stable_entity_id: entity
+        for entity in snapshot.entities
+        if entity.kind == "movement"
+    }
+    movements[movement_a].payload["variants"][0]["request_index"] = 0
+    movements[movement_b].payload["variants"][0]["request_index"] = 1
+    requests = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "request_foes"
+    ).payload["request_rows"]
+    requests[0].update(response="00", foes="10")
+    requests[1].update(response="01", foes="01")
+    program = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "controller_program"
+    )
+    program.payload["phases"][0]["group_states"][1]["states"] = ["g"]
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.PASS
+    assert report.permissive_without_yield_count == 0
+    assert report.findings == ()
+
+
+def test_permissive_conflict_blocks_when_rightmost_request_bit_is_clear() -> None:
+    snapshot, movement_a, movement_b = _crossing_snapshot(
+        protected_both=False
+    )
+    movements = {
+        entity.stable_entity_id: entity
+        for entity in snapshot.entities
+        if entity.kind == "movement"
+    }
+    movements[movement_a].payload["variants"][0]["request_index"] = 0
+    movements[movement_b].payload["variants"][0]["request_index"] = 1
+    requests = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "request_foes"
+    ).payload["request_rows"]
+    requests[0].update(response="00", foes="10")
+    # The leftmost bit represents request index 1, not request index 0.
+    requests[1].update(response="10", foes="01")
+    program = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "controller_program"
+    )
+    program.payload["phases"][0]["group_states"][1]["states"] = ["g"]
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    assert report.permissive_without_yield_count == 1
+    finding = next(
+        finding
+        for finding in report.findings
+        if finding.category == "permissive_conflict_without_yield_relation"
+    )
+    assert finding.severity.value == "safety"
+    assert finding.witness["request_relation"]["bit_order"] == (
+        "rightmost-bit-is-index-zero"
+    )
+
+
+def test_same_approach_adjacent_envelopes_are_not_conflicts() -> None:
+    snapshot, movement_a, movement_b = _crossing_snapshot(
+        shape_a=((-1.0, 0.0), (1.0, 0.0)),
+        shape_b=((0.0, 3.2), (1.0, 2.8)),
+    )
+    source_port_id = stable_id("port", {"test": "shared-approach"})
+    for movement in (
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "movement"
+        and entity.stable_entity_id in {movement_a, movement_b}
+    ):
+        movement.payload["variants"][0][
+            "source_boundary_port_id"
+        ] = source_port_id
+
+    graph = build_movement_conflict_graph(snapshot)
+
+    assert graph.conflicts == ()
+
+
+def test_canonicalizer_binds_vehicle_movement_to_request_not_tls_index() -> None:
+    snapshot = _pedestrian_tls_snapshot(protected_together=False)
+    vehicle_movement = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "movement"
+        and entity.payload["variants"][0].get("movement_kind")
+        != "pedestrian-crossing-occupancy"
+    )
+
+    assert vehicle_movement.payload["variants"][0]["request_index"] == 0
 
 
 def test_no_internal_links_geometry_is_reviewed_as_unavailable_by_design() -> None:

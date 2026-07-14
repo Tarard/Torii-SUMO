@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Torii XS-1 review</title>
+<style>
+body{font:15px/1.5 system-ui,sans-serif;max-width:980px;margin:32px auto;padding:0 20px;color:#17202a}
+h1{margin-bottom:4px} .sub{color:#52606d} .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{border:1px solid #d9e2ec;border-radius:10px;padding:14px;background:#f8fafc} table{border-collapse:collapse;width:100%}
+td,th{border-bottom:1px solid #e4e7eb;padding:8px;text-align:left} .pass{color:#087f5b;font-weight:700}
+.review,.pending{color:#b35c00;font-weight:700} .blocked,.fail{color:#c92a2a;font-weight:700}
+code{overflow-wrap:anywhere} @media(max-width:700px){.cards{grid-template-columns:1fr}}
+</style></head><body>
+<h1>XS-1 — one real four-way TLS intersection</h1>
+<p class="sub">Clean the frozen 400 m Ingolstadt OSM extract into one vehicle-only standard four-way traffic-light intersection, verify every lane movement and signal binding, and keep all outside semantics unchanged.</p>
+<div class="cards"><div class="card"><b>Machine state</b><br>review_ready_visual_checked</div>
+<div class="card"><b>Movements</b><br>12 / 12 traced</div>
+<div class="card"><b>Runtime</b><br>12 / 12 arrived</div></div>
+<h2>Hard evidence</h2><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody><tr><td>all turn routeability</td><td class='pass'>pass</td></tr><tr><td>candidate netconvert</td><td class='pass'>pass</td></tr><tr><td>finding continuity</td><td class='pass'>pass</td></tr><tr><td>frozen input identity</td><td class='pass'>pass</td></tr><tr><td>independent safety</td><td class='pass'>pass</td></tr><tr><td>outside scope zero delta</td><td class='pass'>pass</td></tr><tr><td>semantic reproduction</td><td class='pass'>pass</td></tr><tr><td>source netconvert</td><td class='pass'>pass</td></tr><tr><td>sumo load</td><td class='pass'>pass</td></tr><tr><td>target connection mode</td><td class='pass'>pass</td></tr><tr><td>netedit visual review</td><td class='pass'>pass</td></tr></tbody></table>
+<h2>Scope</h2><p>Outside-scope deltas: <b>0</b>. Outside-scope new findings: <b>0</b>.</p>
+<p>Independent safety: <b>pass</b>; protected conflicts 0, missing yield relations 0, potential signal conflicts 0.</p>
+<h2>Guard finding continuity</h2><p>4 findings are carried forward by exact category + witness tokens; none are silently resolved. Unpaired additions: 0.</p>
+<h2>Visual review</h2><p>pass — NetEdit 1.27.1 reloaded the portable relative-path candidate and display-only review.add.xml successfully., Connection Mode displayed all twelve continuous internal curves; no unexpected U-turn, crossed target-lane binding, or disconnected internal path was visible., Detailed lane selection confirmed the northwest three-lane approach maps one lane each to right, through, and left; each other approach has a shared right/through lane plus a dedicated left-turn lane., The translucent target overlay remains confined to the joined physical cell, while the four guard junctions and surrounding approach topology remain outside the edit.</p>
+<h2>Claim boundary</h2><p>one frozen, vehicle-only, standard four-way OSM intersection; no pedestrian, bicycle, rail, ramp, shared-controller, or city-scale claim</p>
+<p>Automatic promotion remains <b>blocked</b>. Candidate: <code>f5a8b7340eaee043088779bcba608aa5279e7c2ac0eec8684768c99d784f7fda</code></p>
+</body></html>

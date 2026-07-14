@@ -103,6 +103,10 @@ def canonicalize_raw_network(
     for connection in network.connections:
         if connection.from_lane is not None:
             outgoing_connections[(connection.from_edge, connection.from_lane)].append(connection)
+    request_index_by_connection = _junction_request_indices(
+        network,
+        outgoing_connections=outgoing_connections,
+    )
     maximum_internal_hops = max(
         1,
         sum(len(edge.lanes) for edge in network.edges.values() if not edge.external) + 1,
@@ -462,8 +466,7 @@ def canonicalize_raw_network(
             "signature",
             {"movement_id": movement_id, "path": path},
         )
-        movement_variants[movement_id].append(
-            {
+        movement_variant = {
                 "source_boundary_port_id": source_port_id,
                 "source_lane_role_id": source_role_id,
                 "destination_boundary_port_id": target_port_id,
@@ -475,7 +478,12 @@ def canonicalize_raw_network(
                 "path_signature": path_signature,
                 "path": path,
             }
+        request_index = request_index_by_connection.get(
+            connection.connection_index
         )
+        if request_index is not None:
+            movement_variant["request_index"] = request_index
+        movement_variants[movement_id].append(movement_variant)
         movement_owners[movement_id] = (
             cell_id,
             (source_port_id, target_port_id),
@@ -925,6 +933,63 @@ def _junction_requires_physical_cell(
     return any(
         connection.from_edge in incoming_edge_ids and connection.to_edge in outgoing_edge_ids
         for connection in network.connections
+    )
+
+
+def _junction_request_indices(
+    network: RawNetwork,
+    *,
+    outgoing_connections: dict[tuple[str, int], list[RawConnection]],
+) -> dict[int, int]:
+    """Bind raw connections to junction request rows without using TLS indices."""
+
+    result: dict[int, int] = {}
+    for junction in network.junctions.values():
+        if not junction.requests:
+            continue
+        ordered_connections: list[RawConnection] = []
+        for lane_id in junction.incoming_lane_ids:
+            lane = network.lanes.get(lane_id)
+            edge_id = network.lane_edge_ids.get(lane_id)
+            if lane is None or edge_id is None:
+                ordered_connections = []
+                break
+            ordered_connections.extend(
+                connection
+                for connection in outgoing_connections.get(
+                    (edge_id, lane.ordinal),
+                    (),
+                )
+                if _counts_as_junction_request(connection, network=network)
+            )
+        request_indices = {
+            request.index
+            for request in junction.requests
+            if request.index is not None
+        }
+        if (
+            len(ordered_connections) != len(junction.requests)
+            or request_indices != set(range(len(junction.requests)))
+        ):
+            continue
+        for request_index, connection in enumerate(ordered_connections):
+            result[connection.connection_index] = request_index
+    return result
+
+
+def _counts_as_junction_request(
+    connection: RawConnection,
+    *,
+    network: RawNetwork,
+) -> bool:
+    source_edge = network.edges.get(connection.from_edge)
+    target_edge = network.edges.get(connection.to_edge)
+    source_function = source_edge.function if source_edge is not None else ""
+    target_function = target_edge.function if target_edge is not None else ""
+    return not (
+        target_function == "walkingarea"
+        or source_function == "walkingarea"
+        and target_function != "crossing"
     )
 
 

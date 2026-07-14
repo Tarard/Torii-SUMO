@@ -1,0 +1,158 @@
+{
+  "all_turn_routeability": {
+    "arrived_vehicle_count": 12,
+    "movement_count": 12,
+    "runtime": {
+      "arrived": 12,
+      "collisions": 0,
+      "completion_ratio": 1.0,
+      "inserted": 12,
+      "loaded": 12,
+      "running": 0,
+      "teleports": 0,
+      "trip_count": 12,
+      "waiting": 0
+    },
+    "status": "pass",
+    "turn_counts": {
+      "l": 4,
+      "r": 4,
+      "s": 4
+    }
+  },
+  "automatic_promotion_gate": "blocked",
+  "bbox": {
+    "east": 11.424001,
+    "north": 48.771227,
+    "south": 48.767633,
+    "west": 11.418551
+  },
+  "candidate": {
+    "normalized_sha256": "513d7ae0dc18373dd521a327a6dbec22467b9bbb9b3c5e0c3dfc3296986121c2",
+    "path": "xs1-candidate.net.xml",
+    "sha256": "f5a8b7340eaee043088779bcba608aa5279e7c2ac0eec8684768c99d784f7fda"
+  },
+  "claim_boundary": "one frozen, vehicle-only, standard four-way OSM intersection; no pedestrian, bicycle, rail, ramp, shared-controller, or city-scale claim",
+  "exact_diff": {
+    "counts_by_scope": {
+      "boundary": 0,
+      "guard": 184,
+      "outside": 0,
+      "target": 415
+    },
+    "outside_scope_added_finding_count": 0,
+    "outside_scope_delta_count": 0,
+    "status": "pass"
+  },
+  "finding_continuity": {
+    "pair_count": 4,
+    "pairs": [
+      {
+        "candidate_finding_id": "finding_3911b2307ec0f05af96244c0",
+        "category": "ambiguous_target_lane_fanout",
+        "normalized_tokens": [
+          "29458097#2|0|815662202",
+          "0,1"
+        ],
+        "source_finding_id": "finding_effc12676b37403be1690d5d",
+        "status": "carried_forward_guard_finding"
+      },
+      {
+        "candidate_finding_id": "finding_e76ad742408e24ae0017627e",
+        "category": "ambiguous_target_lane_fanout",
+        "normalized_tokens": [
+          "-24972185|0|-1084717759#3",
+          "0,1"
+        ],
+        "source_finding_id": "finding_3a71e00484b500561f92679f",
+        "status": "carried_forward_guard_finding"
+      },
+      {
+        "candidate_finding_id": "finding_e92a65574d2e08f512626d93",
+        "category": "ambiguous_target_lane_fanout",
+        "normalized_tokens": [
+          "1227627543|1|993109789#0",
+          "1,2"
+        ],
+        "source_finding_id": "finding_4d2168a84c4d4a219d8e35e5",
+        "status": "carried_forward_guard_finding"
+      },
+      {
+        "candidate_finding_id": "finding_fde9343eecbdafaf30d0211c",
+        "category": "ambiguous_target_lane_fanout",
+        "normalized_tokens": [
+          "389840420|0|1084717760#0",
+          "0,1"
+        ],
+        "source_finding_id": "finding_63afd1def059d022d247c5f9",
+        "status": "carried_forward_guard_finding"
+      }
+    ],
+    "policy": "Only exact category plus normalized witness tokens may establish continuity; this does not waive or resolve the finding.",
+    "schema": "torii.xs1-finding-continuity/v1",
+    "status": "pass",
+    "unpaired_added_finding_ids": []
+  },
+  "gates": {
+    "all_turn_routeability": "pass",
+    "candidate_netconvert": "pass",
+    "finding_continuity": "pass",
+    "frozen_input_identity": "pass",
+    "independent_safety": "pass",
+    "netedit_visual_review": "pass",
+    "outside_scope_zero_delta": "pass",
+    "semantic_reproduction": "pass",
+    "source_netconvert": "pass",
+    "sumo_load": "pass",
+    "target_connection_mode": "pass"
+  },
+  "human_review_status": "pending",
+  "independent_safety": {
+    "finding_count": 0,
+    "permissive_without_yield_count": 0,
+    "potential_signal_conflict_count": 0,
+    "protected_conflict_count": 0,
+    "status": "pass"
+  },
+  "prompt": "Clean the frozen 400 m Ingolstadt OSM extract into one vehicle-only standard four-way traffic-light intersection, verify every lane movement and signal binding, and keep all outside semantics unchanged.",
+  "review_overlay_file": "review.add.xml",
+  "rollback_file": "rollback.public.json",
+  "schema": "torii.xs1-public-summary/v1",
+  "source": {
+    "normalized_sha256": "3d1e59628d5c1d30bfb8b57a2b8c4885735a9e25b5b15a22b2476e0ee4d4bc0b",
+    "path": "xs1-source.net.xml",
+    "sha256": "2d17f1a33b456d17bfaa46494f5bd03a76bbf429de3b547db6835b7b9afdc3a9"
+  },
+  "spec_id": "xs1-ingolstadt-89129156-v1",
+  "status": "review_ready_visual_checked",
+  "sumo_load": {
+    "status": "pass"
+  },
+  "target_connection": {
+    "direct_movement_count": 12,
+    "incoming_motorized_lane_count": 9,
+    "request_foes_status": "pass",
+    "review_finding_count": 0,
+    "status": "pass",
+    "structural_failure_count": 0,
+    "tls_binding_status": "pass",
+    "verified_internal_path_count": 12
+  },
+  "visual_review": {
+    "automatic_promotion_gate": "blocked",
+    "candidate_sha256": "f5a8b7340eaee043088779bcba608aa5279e7c2ac0eec8684768c99d784f7fda",
+    "decision": "pass",
+    "human_validation": false,
+    "observations": [
+      "NetEdit 1.27.1 reloaded the portable relative-path candidate and display-only review.add.xml successfully.",
+      "Connection Mode displayed all twelve continuous internal curves; no unexpected U-turn, crossed target-lane binding, or disconnected internal path was visible.",
+      "Detailed lane selection confirmed the northwest three-lane approach maps one lane each to right, through, and left; each other approach has a shared right/through lane plus a dedicated left-turn lane.",
+      "The translucent target overlay remains confined to the joined physical cell, while the four guard junctions and surrounding approach topology remain outside the edit."
+    ],
+    "reviewed_at": "2026-07-14T16:48:11.637195+00:00",
+    "reviewer": "Codex",
+    "reviewer_kind": "agent_netedit_visual",
+    "schema": "torii.xs1-visual-review/v1",
+    "screenshots": []
+  }
+}

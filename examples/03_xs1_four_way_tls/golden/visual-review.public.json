@@ -1,0 +1,17 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "candidate_sha256": "f5a8b7340eaee043088779bcba608aa5279e7c2ac0eec8684768c99d784f7fda",
+  "decision": "pass",
+  "human_validation": false,
+  "observations": [
+    "NetEdit 1.27.1 reloaded the portable relative-path candidate and display-only review.add.xml successfully.",
+    "Connection Mode displayed all twelve continuous internal curves; no unexpected U-turn, crossed target-lane binding, or disconnected internal path was visible.",
+    "Detailed lane selection confirmed the northwest three-lane approach maps one lane each to right, through, and left; each other approach has a shared right/through lane plus a dedicated left-turn lane.",
+    "The translucent target overlay remains confined to the joined physical cell, while the four guard junctions and surrounding approach topology remain outside the edit."
+  ],
+  "reviewed_at": "2026-07-14T16:48:11.637195+00:00",
+  "reviewer": "Codex",
+  "reviewer_kind": "agent_netedit_visual",
+  "schema": "torii.xs1-visual-review/v1",
+  "screenshots": []
+}
