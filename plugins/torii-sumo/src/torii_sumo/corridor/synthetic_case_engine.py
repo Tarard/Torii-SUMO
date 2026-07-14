@@ -42,6 +42,7 @@ class SyntheticMutationEvidence:
     mutant_sha256: str
     source_immutable: bool
     candidate_audit: dict[str, Any]
+    candidate_snapshot: Any
     candidate_safety: Any
     exact_diff: Any
     observed: dict[str, dict[str, int]]
@@ -172,6 +173,7 @@ def run_synthetic_mutation_sequence(
         mutant_sha256=mutant_sha256,
         source_immutable=source_immutable,
         candidate_audit=candidate_audit,
+        candidate_snapshot=candidate_snapshot,
         candidate_safety=candidate_safety,
         exact_diff=exact_diff,
         observed=observed,

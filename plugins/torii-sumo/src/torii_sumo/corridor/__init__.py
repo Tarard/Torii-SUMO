@@ -1,6 +1,12 @@
 """Typed contracts for the Torii corridor human-modeling research pipeline."""
 
 from .benchmark import BenchmarkLock, BenchmarkSpecV1
+from .applicability import (
+    CertificationApplicabilityReport,
+    CertificationEnvelope,
+    evaluate_certification_applicability,
+    extract_network_applicability_features,
+)
 from .audit_pipeline import build_exact_semantic_regression_artifacts
 from .calibration import (
     ConnectionAuditCalibration,
@@ -53,6 +59,8 @@ from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkSpec,
 )
 from .official_sumo_benchmark_runner import run_official_sumo_benchmark
+from .ood_benchmark_contracts import OODBenchmarkReport, OODBenchmarkSpec
+from .ood_benchmark_runner import run_ood_benchmark
 from .scope import BoundaryPort, ScopeSpec
 from .synthetic_benchmark_contracts import (
     SyntheticFaultBenchmarkReport,
@@ -70,6 +78,8 @@ __all__ = [
     "BoundaryPort",
     "CandidateGraph",
     "CandidateVariant",
+    "CertificationApplicabilityReport",
+    "CertificationEnvelope",
     "CanonicalEntity",
     "CanonicalNetworkSnapshot",
     "ConnectionAuditCalibration",
@@ -90,6 +100,8 @@ __all__ = [
     "MovementConflictGraph",
     "OfficialSumoBenchmarkReport",
     "OfficialSumoBenchmarkSpec",
+    "OODBenchmarkReport",
+    "OODBenchmarkSpec",
     "PatchOperation",
     "ScopeSpec",
     "SemanticDelta",
@@ -121,8 +133,11 @@ __all__ = [
     "make_signal_group_id",
     "compare_canonical_snapshots",
     "evaluate_held_out_review_trial",
+    "evaluate_certification_applicability",
+    "extract_network_applicability_features",
     "run_synthetic_fault_benchmark",
     "run_composite_fault_benchmark",
     "run_official_sumo_benchmark",
+    "run_ood_benchmark",
     "stable_id",
 ]
