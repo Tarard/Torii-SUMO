@@ -19,6 +19,7 @@ from .held_out_corpus_contracts import (
     HeldOutCorpusSpec,
 )
 from .manifest import CorridorResearchBundle
+from .net_replay import NetReplayReport
 from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkReport,
     OfficialSumoBenchmarkSpec,
@@ -166,6 +167,14 @@ def build_held_out_corpus_machine_report_schema() -> dict[str, object]:
         HeldOutCorpusMachineReport,
         "torii.corridor.held-out-corpus-machine-report.v1.schema.json",
         status="stage-1-held-out-corpus-machine-evidence-contract",
+    )
+
+
+def build_net_replay_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        NetReplayReport,
+        "torii.corridor.net-replay-report.v1.schema.json",
+        status="stage-1-reproducibility-evidence-contract",
     )
 
 

@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree as ET
+
+
+def normalized_net_sha256(path: Path) -> str:
+    """Hash network XML semantics while excluding generator comments/formatting."""
+
+    canonical = ET.canonicalize(
+        from_file=str(path.resolve(strict=True)),
+        with_comments=False,
+        strip_text=True,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)

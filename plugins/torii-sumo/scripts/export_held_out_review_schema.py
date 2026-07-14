@@ -20,6 +20,7 @@ from torii_sumo.corridor.schema import (
     build_held_out_review_contract_bundle_schema,
     build_held_out_review_policy_schema,
     build_held_out_review_report_schema,
+    build_net_replay_report_schema,
 )
 
 
@@ -68,6 +69,11 @@ def main() -> None:
             / "torii.corridor.held-out-corpus-snapshot-report.v1.schema.json"
         ),
     )
+    parser.add_argument(
+        "--net-replay-report-output",
+        type=Path,
+        default=SCHEMA_DIR / "torii.corridor.net-replay-report.v1.schema.json",
+    )
     args = parser.parse_args()
     for path, schema in (
         (args.policy_output, build_held_out_review_policy_schema()),
@@ -82,6 +88,7 @@ def main() -> None:
             args.corpus_machine_report_output,
             build_held_out_corpus_machine_report_schema(),
         ),
+        (args.net_replay_report_output, build_net_replay_report_schema()),
     ):
         write_json_atomic(path, schema, sort_keys=True)
 

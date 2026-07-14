@@ -220,6 +220,7 @@ def test_safety_coverage_gap_is_ambiguous_not_a_claimed_defect() -> None:
         calibration_status=GateStatus.PASS,
         safety_status=GateStatus.BLOCKED,
         safety_categories=("controlled_link_outside_independent_conflict_model",),
+        reproducibility_status=GateStatus.PASS,
         applicability=SimpleNamespace(decision="out-of-domain", findings=()),
         routeability={"status": "pass"},
     )
@@ -237,11 +238,30 @@ def test_confirmed_protected_green_conflict_is_a_machine_defect() -> None:
         calibration_status=GateStatus.PASS,
         safety_status=GateStatus.BLOCKED,
         safety_categories=("protected_green_movement_conflict",),
+        reproducibility_status=GateStatus.PASS,
         applicability=SimpleNamespace(decision="in-domain", findings=()),
         routeability={"status": "pass"},
     )
 
     assert label == "defect"
+
+
+def test_nonreproducible_network_is_a_machine_defect() -> None:
+    label, categories, _passed, unresolved = _classify_case(
+        build_report={"status": "pass"},
+        load_report={"status": "pass"},
+        connection_report={"status": "pass"},
+        calibration_status=GateStatus.PASS,
+        safety_status=GateStatus.PASS,
+        safety_categories=(),
+        reproducibility_status=GateStatus.BLOCKED,
+        applicability=SimpleNamespace(decision="in-domain", findings=()),
+        routeability={"status": "pass"},
+    )
+
+    assert label == "defect"
+    assert "normalized_net_replay_mismatch" in categories
+    assert "reproducibility" in unresolved
 
 
 def test_sydney_probe_evidence_remains_fail_closed() -> None:
@@ -263,9 +283,17 @@ def test_sydney_probe_evidence_remains_fail_closed() -> None:
     assert evidence["harbour_bridge_machine_evidence"]["connection_mode"][
         "structural_failure_count"
     ] == 0
+    replay = evidence["harbour_bridge_machine_evidence"]["netconvert_replay"]
+    assert replay["status"] == "pass"
+    assert replay["reproducible_semantics"] is True
+    assert replay["primary_normalized_sha256"] == replay[
+        "replay_normalized_sha256"
+    ]
     assert evidence["harbour_bridge_machine_evidence"]["independent_safety"][
         "status"
     ] == "blocked"
+    assert evidence["review_state"]["reviewer_visible_html_prepared"] is True
+    assert evidence["review_state"]["display_only_overlay_validated"] is True
     assert evidence["review_state"]["human_review_decision_count"] == 0
     assert evidence["review_state"]["automatic_promotion_gate"] == "blocked"
     assert evidence["claims_not_supported"]
