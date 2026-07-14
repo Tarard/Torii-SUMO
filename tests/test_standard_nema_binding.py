@@ -1263,6 +1263,102 @@ def test_no_internal_links_network_is_a_legal_explicit_network_mode() -> None:
     assert path["endpoint_gap_policy"] == "not_available_in_network_mode"
 
 
+def test_internal_path_requires_a_common_vehicle_permission() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" shape="10,0 20,0"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" allow="bicycle" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    )
+
+    report = audit_network_connection_mode(root)
+
+    assert report["status"] == "fail"
+    junction = next(item for item in report["junctions"] if item["junction_id"] == "j")
+    audit = junction["connection_mode_audit"]
+    assert audit["structural_failures"] == [
+        "connection_mode:internal_path_mode_permission_empty:0"
+    ]
+    path = audit["movement_checks"][0]["internal_path"]
+    assert path["path_permission_status"] == "fail"
+    assert path["path_permission_basis"] == "explicit_allow_intersection"
+    assert path["path_permission_overlap"] == []
+
+
+def test_path_permission_intersection_preserves_wildcard_semantics() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger bicycle" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" disallow="pedestrian" shape="10,0 20,0"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" allow="bicycle" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    )
+
+    report = audit_network_connection_mode(root)
+
+    assert report["status"] == "pass"
+    junction = next(item for item in report["junctions"] if item["junction_id"] == "j")
+    path = junction["connection_mode_audit"]["movement_checks"][0]["internal_path"]
+    assert path["path_permission_status"] == "pass"
+    assert path["path_permission_basis"] == "explicit_allow_intersection"
+    assert path["path_permission_overlap"] == ["bicycle"]
+
+
+def test_no_internal_links_connection_permission_can_block_the_path() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes="">
+    <request index="0" response="0" foes="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" allow="bicycle" dir="s" state="M"/>
+</net>"""
+    )
+
+    report = audit_network_connection_mode(root)
+
+    assert report["status"] == "fail"
+    junction = next(item for item in report["junctions"] if item["junction_id"] == "j")
+    path = junction["connection_mode_audit"]["movement_checks"][0]["internal_path"]
+    assert path["path_kind"] == "direct_no_internal_links"
+    assert path["path_permission_status"] == "fail"
+    assert path["path_permission_overlap"] == []
+
+
 def test_missing_via_in_mixed_internal_link_network_remains_a_hard_failure() -> None:
     root = ET.fromstring(
         """<net>
