@@ -9,7 +9,7 @@
 ## 当前结论
 
 - Stage 0“规范冻结”已完成并推送：研究方案、稳定 ID、typed contracts、候选 DAG、scope/boundary-port、workflow state、toolchain lock、benchmark v1、JSON Schema 和 CI 已建立。
-- Stage 1“Audit-only”正在实施，核心架构和首版完整 fault-family 矩阵已落地，但尚未达到阶段退出条件。尚缺 SUMO 官方场景矩阵、held-out corridor 双人审核和统计指标。
+- Stage 1“Audit-only”正在实施，核心架构、首版完整 fault-family 矩阵和 SUMO 1.27.1 官方规范场景矩阵已落地，但尚未达到阶段退出条件。尚缺 held-out corridor 双人审核、precision/recall 和 reviewer-agreement 统计。
 - Stage 2–7 与 MGE-1 尚未完成，不能宣称完整项目或任意城市自动清洗已经实现。
 - 当前产品承诺仍是 selective automation：高精度窄编辑类自动执行，其余输出候选、证据和 review case；不确定时 abstain/block。
 
@@ -44,6 +44,9 @@
 - 冲突分为 `confirmed` 与 `potential`：centerline crossing、shared-destination merge 和 collinear overlap 可作为 confirmed；仅 lane-envelope proximity 不能冒充确定安全错误，只生成精确 review。
 - protected `G`、permissive `g` 和 shared signal group 均通过独立 conflict graph 审核。
 - 两条 movement path 在各自内部顶点相交时会被识别为 confirmed centerline crossing，不再被 segment endpoint 逻辑误降级成 envelope proximity。
+- 合法 `--no-internal-links` 网络被显式识别，不再被误报为 missing-via；由于缺少 internal geometry，独立安全结论保持 `review` 并阻断自动晋级。
+- 无静态 `tlLogic` 的 SUMO runtime rail controller 可合法使用 `linkIndex=-1`，不再被普通道路 TLS 规则误判为结构错误。
+- permissive `g` 与冲突 movement 同时放行时，若尚无独立 yield closure，输出精确 review，而不把“缺少证明”冒充“已经证明的安全缺陷”。
 
 ### 合成故障注入 benchmark
 
@@ -53,6 +56,14 @@
 - H4 的合成反例已通过：request/foes 与旧 Connection Mode 可保持自洽 `pass`，但相交 movement 同时 protected `G` 会被独立 conflict graph 判为 hard safety block。
 - pedestrian 与 rail case 的合成冲突可被独立几何图检出，但因为对应 mode applicability 尚未认证，仍维持 `must-abstain`，不能据此宣称 Stage 5B 已完成。
 - clean vehicle fixture 的 right-hand、left-hand 和 parallel-lane 版本均为 `pass`；含 pedestrian/rail 的 clean fixture 按设计为 applicability `review`，不伪装成已认证自动域。
+
+### SUMO 1.27.1 官方规范场景 benchmark
+
+- 冻结 Eclipse SUMO `v1_27_1`、resolved commit `7717f2379d9e314a0c81c5cec748444de06a2a91` 的最小输入，并逐文件记录 upstream 与 vendored SHA-256、许可证和 notice。
+- 统一 runner 覆盖 9 类场景：edge-to-edge、lane-to-lane、joined junction、no-internal-links、NEMA 四叉、NEMA grouped signal index、pedestrian crossing/walkingarea、rail crossing 和 on-ramp。
+- 每个场景用锁定 netconvert 1.27.1 生成两次；原始文件保留各自哈希，去除时间戳/绝对输出路径注释后的 canonical XML 哈希必须一致。
+- 本机实测 9/9 netconvert 双重生成通过、9/9 canonical semantic replay 一致、9/9 SUMO load 通过、0 个 Connection Mode structural finding、source hash 全部保持不变。
+- 这些场景是 parser/fail-closed 规范回归，不是 teacher 网络：pedestrian 仍因 controlled pedestrian link 未进入独立模型而 `blocked`；rail、no-internal、ramp、NEMA 等保持精确 `review` 或 abstention，不伪装成自动认证成功。
 
 ### 容差校准与 MCP 可用面
 
@@ -88,7 +99,6 @@ SHA-256：
 
 ## 当前阶段尚未满足的退出条件
 
-- SUMO 官方 PlainXML、joined junction、no-internal-links、NEMA、pedestrian、rail 和 shared-signal-index 场景尚未形成统一 benchmark runner。
 - independent conflict graph 尚无 held-out gold 标注和 precision/recall。
 - pedestrian-aware conflict、rail 专用安全、bicycle 专用语义尚未认证。
 - review package 尚未完成盲审时间与 reviewer agreement 实验。
@@ -97,8 +107,8 @@ SHA-256：
 
 ## 下一实施顺序
 
-1. 纳入 SUMO 官方小场景并冻结误报基线。
-2. 为合成矩阵增加 mutation 组合、precision/recall 汇总和 OOD 分组；单故障 23-family gold 已完成。
+1. 为合成矩阵增加 mutation 组合、precision/recall 汇总和 OOD 分组；单故障 23-family gold 与官方规范场景已完成。
+2. 建立 held-out corridor 双人审核集和 adjudication，测量 safety-critical false negative、reviewer agreement 与 review 时间。
 3. 实现 Stage 2 仅限可局部证明的 micro-repair，所有操作具备 precondition、forward/inverse patch 和 exact delta。
 4. 实现 H_S/H_M/H_P 三假设并行，不再从 shared TLS 推导 physical merge。
 5. 实现 boundary-port constrained road-ribbon solver，执行 MGE-1 的 V0–V4 盲化比较。

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from xml.etree import ElementTree as ET
+
 from torii_sumo.corridor.canonicalizer import (
     CanonicalEntity,
     CanonicalNetworkSnapshot,
+    canonicalize_raw_network,
 )
 from torii_sumo.corridor.conflict_graph import (
     audit_independent_movement_safety,
@@ -10,6 +13,7 @@ from torii_sumo.corridor.conflict_graph import (
 )
 from torii_sumo.corridor.enums import GateStatus, TrafficSide
 from torii_sumo.corridor.ids import stable_id
+from torii_sumo.corridor.netxml import parse_net_xml
 
 
 def _entity(
@@ -318,6 +322,62 @@ def test_lane_envelope_proximity_is_review_not_a_confirmed_safety_failure() -> N
     assert {
         finding.category for finding in report.findings
     } >= {"protected_green_potential_envelope_conflict"}
+
+
+def test_permissive_conflict_requires_yield_review_not_a_claimed_safety_defect() -> None:
+    snapshot, _, _ = _crossing_snapshot(protected_both=False)
+    program = next(
+        entity for entity in snapshot.entities if entity.kind == "controller_program"
+    )
+    phases = program.payload["phases"]
+    phases[0]["group_states"][1]["states"] = ["g"]
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.REVIEW
+    assert report.automatic_promotion_gate is GateStatus.BLOCKED
+    assert report.permissive_without_yield_count == 1
+    assert report.protected_conflict_count == 0
+    assert {
+        finding.category for finding in report.findings
+    } >= {"permissive_conflict_requires_independent_yield_review"}
+    assert all(finding.severity.value != "safety" for finding in report.findings)
+
+
+def test_no_internal_links_geometry_is_reviewed_as_unavailable_by_design() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" width="3.2" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" width="3.2" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes="">
+    <request index="0" response="0" foes="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>"""
+    )
+    snapshot = canonicalize_raw_network(
+        parse_net_xml(root),
+        traffic_side=TrafficSide.RIGHT,
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.REVIEW
+    assert report.automatic_promotion_gate is GateStatus.BLOCKED
+    assert report.conflict_graph.geometry_missing_movement_ids == ()
+    assert len(
+        report.conflict_graph.geometry_unavailable_by_design_movement_ids
+    ) == 1
+    assert report.limitations == ("movement_geometry_unavailable_no_internal_links",)
+    categories = {finding.category for finding in report.findings}
+    assert "movement_geometry_unavailable_no_internal_links" in categories
+    assert "movement_geometry_missing_for_independent_safety" not in categories
 
 
 def test_shared_inner_vertices_are_confirmed_centerline_crossings() -> None:
