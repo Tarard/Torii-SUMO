@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from .composite_benchmark_contracts import (
+    CompositeFaultBenchmarkReport,
+    CompositeFaultBenchmarkSpec,
+)
 from .held_out_review_contracts import (
     HeldOutReviewContractBundle,
     HeldOutReviewPolicy,
@@ -40,6 +44,22 @@ def build_synthetic_fault_benchmark_report_schema() -> dict[str, object]:
         SyntheticFaultBenchmarkReport,
         "torii.corridor.synthetic-fault-benchmark-report.v1.schema.json",
         status="stage-1-evidence-contract",
+    )
+
+
+def build_composite_fault_benchmark_schema() -> dict[str, object]:
+    return _artifact_schema(
+        CompositeFaultBenchmarkSpec,
+        "torii.corridor.composite-fault-benchmark.v1.schema.json",
+        status="stage-1-compound-fault-contract",
+    )
+
+
+def build_composite_fault_benchmark_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        CompositeFaultBenchmarkReport,
+        "torii.corridor.composite-fault-benchmark-report.v1.schema.json",
+        status="stage-1-compound-fault-evidence-contract",
     )
 
 

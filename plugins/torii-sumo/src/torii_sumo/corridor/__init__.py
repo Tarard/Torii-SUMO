@@ -8,6 +8,11 @@ from .calibration import (
     build_connection_mode_calibration_artifact,
     calibrate_connection_mode_audit,
 )
+from .composite_benchmark_contracts import (
+    CompositeFaultBenchmarkReport,
+    CompositeFaultBenchmarkSpec,
+)
+from .composite_benchmark_runner import run_composite_fault_benchmark
 from .canonicalizer import CanonicalEntity, CanonicalNetworkSnapshot, canonicalize_net_xml_file
 from .conflict_graph import (
     IndependentSafetyReport,
@@ -69,6 +74,8 @@ __all__ = [
     "CanonicalNetworkSnapshot",
     "ConnectionAuditCalibration",
     "ConnectionAuditCalibrationPolicy",
+    "CompositeFaultBenchmarkReport",
+    "CompositeFaultBenchmarkSpec",
     "CorridorResearchBundle",
     "GateStatus",
     "BlindReviewDecision",
@@ -115,6 +122,7 @@ __all__ = [
     "compare_canonical_snapshots",
     "evaluate_held_out_review_trial",
     "run_synthetic_fault_benchmark",
+    "run_composite_fault_benchmark",
     "run_official_sumo_benchmark",
     "stable_id",
 ]
