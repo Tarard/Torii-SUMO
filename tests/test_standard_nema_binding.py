@@ -449,6 +449,12 @@ def test_internal_lane_connections_use_edge_ordinal_when_declared_indexes_repeat
     <lane id=":j_0_0" index="0" shape="0,0 1,0"/>
     <lane id=":j_0_1" index="0" shape="0,1 1,1"/>
   </edge>
+  <edge id="plain_internal" function="internal">
+    <lane id="plain_internal_0" index="0" shape="0,2 1,2"/>
+  </edge>
+  <edge id="walk" function="crossing">
+    <lane id="walk_0" index="0" allow="pedestrian" shape="0,3 1,3"/>
+  </edge>
   <edge id="out"><lane id="out_0" index="0" shape="1,0 2,0"/></edge>
   <connection from=":j_0" to="out" fromLane="0" toLane="0"/>
   <connection from=":j_0" to="out" fromLane="1" toLane="0"/>
@@ -461,6 +467,7 @@ def test_internal_lane_connections_use_edge_ordinal_when_declared_indexes_repeat
     assert catalog["lanes_by_edge"][":j_0"][1]["id"] == ":j_0_1"
     assert catalog["lane_catalog"][":j_0_1"]["index"] == 1
     assert catalog["lane_catalog"][":j_0_1"]["declared_index"] == 0
+    assert catalog["internal_lane_count"] == 3
     assert sorted(catalog["outgoing_by_lane"]) == [(":j_0", 0), (":j_0", 1)]
 
 

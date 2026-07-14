@@ -81,6 +81,17 @@ Sydney Harbour Bridge 首个机器闭环：
 - 左右侧矛盾继续 fail closed；
 - 同一冻结 Harbour Bridge 样本可进入后续审核。
 
+真实语料还暴露了两处重复全网扫描：
+
+- Connection Mode 曾为每条 movement 重算全网 internal-lane 数量；改为 catalog
+  单次预计算后，Berlin Alexanderplatz 的 2,527 个 junction、9,843 条
+  movement 核心报告逐字段不变，开发机核心审核约 1.39 秒。
+- canonicalizer 已有 outgoing connection 索引，却在每条 movement 内重新构建；
+  改为复用索引和单次 hop bound 后，Harbour Bridge 的 16,233 个 canonical
+  entity 逐字段不变，开发机约 4.12 秒。
+- 以上时间只用于确认可运行性，不是质量验收指标；等价回归和冻结 schema
+  仍是硬门。
+
 ## 最近的硬阻断项
 
 1. 其余 29 个走廊的 netconvert replay、Connection Mode、独立安全、routeability 和盲化机器证据尚未全部完成。
