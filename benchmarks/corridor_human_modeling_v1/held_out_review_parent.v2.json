@@ -1,0 +1,13 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "base_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "frozen": true,
+  "held_out_corpus_v1_sha256": "df3480e4e6ababfce43dfd699cdcd75f41ec2dda8b2e1fa64cdf408b3460c618",
+  "lossless_compression_schema_sha256": "016f300cd4caaf274c58e372a29c0ed66943ebd46fed79016a8d7d8ee8040eb6",
+  "parent_id": "manifest_14233bde0a855209270a2361",
+  "replacement_policy_sha256": "26685fb3bfd9074e21d63c8e0afa7b4717f48b78803d98ea743965f112abb1d5",
+  "reserve_corpus_sha256": "be9b3f30ef4ac4aae3f5350d8b415edb89a31724add8c018a6b494798f9b26b5",
+  "review_ready_is_not_stage1_exit": true,
+  "sampling_policy_sha256": "aa733c926a1b3edf53a29903c36e090b8e5e85111b5c9956a28c6cf1d5d80d99",
+  "schema": "torii.corridor.held-out-review-parent/v2"
+}

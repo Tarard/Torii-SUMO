@@ -13,6 +13,16 @@ from .held_out_review_contracts import (
     HeldOutReviewPolicy,
     HeldOutReviewReport,
 )
+from .held_out_review_v2_contracts import (
+    HeldOutReplacementPlanV2,
+    HeldOutReplacementPolicyV2,
+    HeldOutReserveCorpusV2,
+    HeldOutReviewParentV2,
+    HeldOutReviewPolicyV2,
+    HeldOutReviewV2ContractBundle,
+    HeldOutReviewV2Report,
+    ReviewWitnessSamplingPolicyV2,
+)
 from .held_out_corpus_contracts import (
     HeldOutCorpusMachineManifest,
     HeldOutCorpusMachineReport,
@@ -155,6 +165,70 @@ def build_held_out_review_report_schema() -> dict[str, object]:
         HeldOutReviewReport,
         "torii.corridor.held-out-review-report.v1.schema.json",
         status="stage-1-held-out-evidence-contract",
+    )
+
+
+def build_held_out_reserve_corpus_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReserveCorpusV2,
+        "torii.corridor.held-out-reserve-corpus.v2.schema.json",
+        status="stage-1m-frozen-reserve-corpus-contract",
+    )
+
+
+def build_held_out_replacement_policy_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReplacementPolicyV2,
+        "torii.corridor.held-out-replacement-policy.v2.schema.json",
+        status="stage-1m-deterministic-replacement-contract",
+    )
+
+
+def build_held_out_replacement_plan_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReplacementPlanV2,
+        "torii.corridor.held-out-replacement-plan.v2.schema.json",
+        status="stage-1m-deterministic-replacement-plan",
+    )
+
+
+def build_review_witness_sampling_policy_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        ReviewWitnessSamplingPolicyV2,
+        "torii.corridor.review-witness-sampling-policy.v2.schema.json",
+        status="stage-1m-lossless-human-sampling-contract",
+    )
+
+
+def build_held_out_review_parent_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewParentV2,
+        "torii.corridor.held-out-review-parent.v2.schema.json",
+        status="stage-1m-frozen-parent-benchmark-contract",
+    )
+
+
+def build_held_out_review_policy_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewPolicyV2,
+        "torii.corridor.held-out-review-policy.v2.schema.json",
+        status="stage-1m-preregistered-attention-and-safe-pass-contract",
+    )
+
+
+def build_held_out_review_v2_contract_bundle_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewV2ContractBundle,
+        "torii.corridor.held-out-review-contract-bundle.v2.schema.json",
+        status="stage-1m-finding-cluster-human-review-contract",
+    )
+
+
+def build_held_out_review_v2_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewV2Report,
+        "torii.corridor.held-out-review-report.v2.schema.json",
+        status="stage-1h-human-validation-evidence-contract",
     )
 
 
