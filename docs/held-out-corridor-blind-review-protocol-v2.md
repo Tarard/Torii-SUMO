@@ -1,6 +1,6 @@
 # Held-out corridor blind-review protocol v2
 
-> **Active Stage 1-M protocol.** 本协议冻结机器侧审核材料、抽样和统计设计，
+> **Frozen and executed Stage 1-M protocol.** 本协议冻结机器侧审核材料、抽样和统计设计，
 > 但不构成 Stage 1 退出。Stage 1-H 仍要求两名独立审核者和第三名
 > adjudicator 完成真实审核。任何自动晋级继续保持 `blocked`。
 
@@ -20,6 +20,14 @@ v2 使用独立的：
 - witness sampling policy；
 - blinding-seed SHA-256 commitment；
 - finding-cluster decision contract。
+
+实际执行版本是 `v2-R2`：
+
+- trial ID：`review_a784b285271ca7f510ed79f2`；
+- execution parent：`manifest_16660e5e00eeaccc7cb93526`；
+- study sampling policy：`policy_b8d470ed55e9c874512f680c`；
+- 30 个 effective-corpus package 全部在抽样前冻结 machine assessment；
+- reviewer-visible package 不保存 seed preimage、machine label、unit kind、sampling weight 或 hidden-member role。
 
 冻结文件位于 `benchmarks/corridor_human_modeling_v1`：
 
@@ -133,9 +141,18 @@ W = disjoint_union(C_i)
 
 ## 5. 抽样和统计
 
-rare、hard-safety、OOD、rail、grade-separated、unknown-control 和
-shared-controller strata 进入 census。高频同质 strata 使用冻结随机种子抽样，并为
-每个 unit 保存 inclusion probability `pi_i`。
+机器层对 102,398 个 atomic witness、全部 rare/hard/OOD/rail/grade/shared-controller
+实体保持全量 census；这不等于要求人工逐条审核。v2-R2 人工样本固定为：
+
+- 每个 corridor 8 个 conflict-site unit，共 240 个；
+- 每个 corridor 4 个 negative-pair unit，共 120 个；
+- 两个 hard controlled-binding class 的 21 条 assessment 全量进入人工 census；
+- 3 个稳定 pedestrian coverage gap 全量进入人工 census；
+- 共 384 个 review unit，其中 217 个 conflict site 含独立隐藏 witness。
+
+高频同质 strata 使用冻结随机种子抽样，并为每个 unit 保存 inclusion probability
+`pi_i`。unknown-control 等机器 population 必须保留，但不会仅因类别名称而强制整层
+进入人工 census；未抽中的 population 保持 unresolved。
 
 population attention 指标使用 Horvitz–Thompson 权重 `w_i = 1 / pi_i`：
 
@@ -164,6 +181,11 @@ reviewer-visible dataset 只能包含 blind case/unit/witness code、地图位�
 - peer decision；
 - blinding seed 或 unblinding key。
 
+正式包与独立重复包各 892 个文件，逐相对路径 SHA-256 差异为 0。manifest 绑定
+891 个子 artifact；dataset、sampling ledger 和 restricted evaluation key 只通过路径与
+哈希闭合。reviewer-visible scanner 对 machine label、attention role 和 hidden role 的
+命中数均为 0。
+
 restricted key 绑定 exact machine assessment artifact 的相对路径和 SHA-256。人工决定
 开始后修改 assessment、membership、sampling weight、case set 或 evidence hash，均使
 trial identity 失效。
@@ -176,17 +198,20 @@ trial identity 失效。
 OSM、合法可用的地图链接和现场观察只作为人工证据辅助。地图观察记录事实、时间、位置、
 来源和许可，不把商业影像副本默认纳入 artifact。
 
-`additional.xml` 仍是 display-only visual index，只能显示 case ID、位置、类别和简短说明。
+`additional.xml` 仍是 display-only visual index。非盲诊断包可以显示 case ID、位置、类别和
+简短说明；正式盲审包只显示 blind code 和中性定位信息，不显示 finding category、severity、
+machine label、unit kind 或 hidden role。
 它不得包含 `tlLogic`、route、vehicle 或任何能改变网络/仿真行为的元素。候选
 `.net.xml`、结构化 JSON、manifest 和人工决定分别承担操作、证据、provenance 和授权
 职责。
 
 ## 8. 状态门
 
-Stage 1-M 可以在以下机器条件闭合后标为 `REVIEW_READY`：合同 CI 全绿、至少 30 个完整
-盲化 package、三个 replay-invalid 单列、Paris coverage gap 完整、PCB-453 census
-闭合、RWC-1 无损且确定、ROW-1 通过预注册机器门、机器证据由 clean producer commit
-和完整 manifest 绑定。
+Stage 1-M 已在以下机器条件闭合后标为 `REVIEW_READY`：合同 CI 覆盖 v2-R2 与 provenance
+schema、30 个完整盲化 package、三个 replay-invalid 单列、3 个 stable coverage gap、
+冻结 PCB-453 与 effective PCB-459、冻结 RWC-1 与 effective 102,398-witness census、
+ROW-1 的两次相同开发报告，以及 clean producer 和完整 artifact DAG。权威记录见
+[`stage1m_machine_review_ready_provenance_20260714.v3.json`](../benchmarks/corridor_human_modeling_v1/evidence/stage1m_machine_review_ready_provenance_20260714.v3.json)。
 
 即使 Stage 1-M 通过：
 

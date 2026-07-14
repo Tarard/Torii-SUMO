@@ -41,6 +41,8 @@ Torii 有两层：
 
 ### 当前走廊级验收边界
 
+研究状态（2026-07-14）：Stage 1-M 已达到 **Machine REVIEW_READY**。30 个盲化 held-out 走廊包、完整机器 witness census、确定性抽样和 provenance 已冻结，可以进入真实人工验证。这不等于 Stage 1 退出、自动修复获得认证，也不证明任意 OSM 路网已经达到专家 NetEdit 质量。详见 [Stage 1-M 机器证据](docs/stage1-machine-review-ready-plan.md)。
+
 已经实现的晋级契约以走廊为尺度：接受的修改会物化为独立候选网络；审核位置写入 SUMO `additional.xml`；受保护的语义或 TLS 变化必须有绑定候选 SHA-256 的精确审核决定；身份、netconvert、XML、SUMO load、routeability、topology 和 modal connectivity 证据全部通过前不会晋级。
 
 每个物化修改现在都会生成一套审核包：`*.net.xml`、`*.map-review.json`、`*.accepted.review.add.xml`、`*.review.html`、`*.review.json` 和带哈希的 manifests。`additional.xml` 只负责展示，并且只允许 `poi`、`poly`、`param`；人工决定保存在结构化 JSON 中。Google Maps、卫星图、Mapillary、KartaView 或区域地图只是辅助证据；只有修改显式声明 `map_review_required: true`，并给出 current 或 historical 时间范围时，地图审核才成为硬门。
