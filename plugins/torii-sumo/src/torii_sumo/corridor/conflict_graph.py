@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Literal
 
 from pydantic import model_validator
@@ -87,6 +87,7 @@ def build_movement_conflict_graph(
     snapshot: CanonicalNetworkSnapshot,
     *,
     envelope_margin_m: float = 0.25,
+    use_spatial_broad_phase: bool = True,
 ) -> MovementConflictGraph:
     if envelope_margin_m < 0:
         raise ValueError("Conflict envelope margin must be non-negative.")
@@ -108,8 +109,15 @@ def build_movement_conflict_graph(
                 missing.append(movement_id)
         else:
             geometries[movement_id] = geometry
+    if use_spatial_broad_phase:
+        geometry_pairs = _candidate_geometry_pairs(
+            geometries,
+            envelope_margin_m=envelope_margin_m,
+        )
+    else:
+        geometry_pairs = itertools.combinations(sorted(geometries), 2)
     conflicts: list[MovementConflict] = []
-    for movement_a_id, movement_b_id in itertools.combinations(sorted(geometries), 2):
+    for movement_a_id, movement_b_id in geometry_pairs:
         geometry_a = geometries[movement_a_id]
         geometry_b = geometries[movement_b_id]
         result = _geometry_conflict(
@@ -511,6 +519,82 @@ class _MovementGeometry:
         self.half_width_m = half_width_m
         self.source_lane_role_id = source_lane_role_id
         self.destination_lane_role_id = destination_lane_role_id
+
+
+def _candidate_geometry_pairs(
+    geometries: dict[str, _MovementGeometry],
+    *,
+    envelope_margin_m: float,
+) -> tuple[tuple[str, str], ...]:
+    """Conservatively reject pairs whose expanded AABBs cannot interact."""
+
+    bounds = {
+        movement_id: _expanded_geometry_bounds(
+            geometry,
+            extra_margin_m=envelope_margin_m / 2.0,
+        )
+        for movement_id, geometry in geometries.items()
+    }
+    candidates: set[tuple[str, str]] = set()
+    records = sorted(
+        (
+            minimum_x,
+            maximum_x,
+            minimum_y,
+            maximum_y,
+            movement_id,
+        )
+        for movement_id, (
+            minimum_x,
+            minimum_y,
+            maximum_x,
+            maximum_y,
+        ) in bounds.items()
+    )
+    active: list[tuple[float, float, float, str]] = []
+    for minimum_x, maximum_x, minimum_y, maximum_y, movement_id in records:
+        active = [record for record in active if record[0] >= minimum_x]
+        geometry = geometries[movement_id]
+        for _, other_minimum_y, other_maximum_y, other_id in active:
+            other_geometry = geometries[other_id]
+            if geometry.source_lane_role_id == other_geometry.source_lane_role_id:
+                continue
+            if maximum_y < other_minimum_y or other_maximum_y < minimum_y:
+                continue
+            candidates.add(tuple(sorted((movement_id, other_id))))
+        active.append((maximum_x, minimum_y, maximum_y, movement_id))
+
+    by_destination: dict[str, list[str]] = defaultdict(list)
+    for movement_id, geometry in geometries.items():
+        if geometry.destination_lane_role_id:
+            by_destination[geometry.destination_lane_role_id].append(movement_id)
+    for movement_ids in by_destination.values():
+        for movement_a_id, movement_b_id in itertools.combinations(
+            sorted(movement_ids),
+            2,
+        ):
+            if (
+                geometries[movement_a_id].source_lane_role_id
+                == geometries[movement_b_id].source_lane_role_id
+            ):
+                continue
+            candidates.add((movement_a_id, movement_b_id))
+    return tuple(sorted(candidates))
+
+
+def _expanded_geometry_bounds(
+    geometry: _MovementGeometry,
+    *,
+    extra_margin_m: float,
+) -> tuple[float, float, float, float]:
+    points = [point for polyline in geometry.polylines for point in polyline]
+    margin = geometry.half_width_m + extra_margin_m
+    return (
+        min(point[0] for point in points) - margin,
+        min(point[1] for point in points) - margin,
+        max(point[0] for point in points) + margin,
+        max(point[1] for point in points) + margin,
+    )
 
 
 def _movement_geometry(

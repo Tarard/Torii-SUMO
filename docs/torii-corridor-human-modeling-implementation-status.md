@@ -15,7 +15,7 @@
 | 3. Physical-cell hypotheses | 未完成 | split/shared-controller、merge、partial 三假设尚未完成统一 held-out 比较。 |
 | 4. Local geometry solver / MGE-1 | 未完成 | 当前 arclength blend 仍仅是消融基线；boundary-port solver 尚未达到预注册退出条件。 |
 | 5A/5B. NEMA 与行人安全 | 未完成 | vehicle-only 严格扫描存在，但行人、自行车、共享 controller 和实际 timing 均未认证。 |
-| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市、左右侧通行和 8 类形态已预注册；目前只完成 Sydney OSM 快照试跑。 |
+| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；目前只完成 1 个走廊的完整机器审核，尚无人审。 |
 | 7. 城市级运行 | 未开始 | 阶段 6 未退出前不得启动自动语义扩张。 |
 
 ## 已冻结的真实 held-out 语料
@@ -26,6 +26,13 @@
 - 裁剪使用 reference-complete writer，并保留被引用交通信号灯和 crossing 节点标签。
 - feature targets 是预注册待验证目标，不是事后真值；冻结快照不支持时必须报告 review/replacement。
 - OSM 派生物明确记录 `© OpenStreetMap contributors` 和 ODbL。
+
+全量快照物化证据：
+
+- 6/6 城市源均通过 provider MD5、下载字节数和本地 SHA-256 身份检查。
+- 30/30 走廊均 reference-complete，0 个预注册 feature target 未确认。
+- snapshot manifest 共绑定 40 个 artifact，逐项复核哈希失败为 0。
+- 该 pass 只认证输入身份和裁剪闭包，不认证 SUMO 建模质量。
 
 ## Sydney 试跑证据
 
@@ -42,6 +49,10 @@ Sydney Harbour Bridge 首个机器闭环：
 - 20 车 routeability：pass，零未完成、碰撞和 teleport。
 - Connection Mode：715 个 junction 中 703 pass、12 review-required、0 structural fail，共 29 个 review finding。
 - 独立冲突审核：blocked。当前模型尚未覆盖 9 个受控 pedestrian walkingarea→crossing link，并产生其他多模式/潜在冲突审核项。
+- 独立冲突 broad-phase 已从全量 2,487,565 个 movement pair 保守缩减到
+  7,728 个精确几何判断（0.31%）；3,723 条 conflict 与保存的 exhaustive
+  结果逐字段完全一致。该开发机上的单图计算由两分钟级降至约 0.64 秒；
+  时间仅作诊断，不作为验收阈值。
 - certification applicability：out-of-domain。
 - 三档机器分类：ambiguous（安全覆盖不足不是已确认 defect）。
 - 自动晋级：blocked。
@@ -72,7 +83,7 @@ Sydney Harbour Bridge 首个机器闭环：
 
 ## 最近的硬阻断项
 
-1. 其余 5 个城市的 hash-pinned 快照和 29 个机器走廊证据尚未全部完成。
+1. 其余 29 个走廊的 netconvert replay、Connection Mode、独立安全、routeability 和盲化机器证据尚未全部完成。
 2. 需要两名真实独立审核者逐案作答；分歧由第三名 adjudicator 裁决。机器不得代填。
 3. Stage 1 的 raw agreement、Cohen's kappa、attention precision/recall、AutoPrecision 和 review time 尚无真实数值。
 4. pedestrian-aware independent conflict model 尚未完成，因此多模式 TLS 不可自动认证。

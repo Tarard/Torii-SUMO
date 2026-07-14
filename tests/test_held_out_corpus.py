@@ -292,8 +292,52 @@ def test_sydney_probe_evidence_remains_fail_closed() -> None:
     assert evidence["harbour_bridge_machine_evidence"]["independent_safety"][
         "status"
     ] == "blocked"
+    broad_phase = evidence["harbour_bridge_machine_evidence"][
+        "independent_safety"
+    ]["broad_phase"]
+    assert broad_phase["name"] == "aabb-sweep-v1"
+    assert broad_phase["evaluated_geometry_pair_count"] < broad_phase[
+        "geometry_pair_count"
+    ]
+    assert broad_phase[
+        "conflicts_exactly_equal_to_saved_exhaustive_result"
+    ] is True
     assert evidence["review_state"]["reviewer_visible_html_prepared"] is True
     assert evidence["review_state"]["display_only_overlay_validated"] is True
     assert evidence["review_state"]["human_review_decision_count"] == 0
     assert evidence["review_state"]["automatic_promotion_gate"] == "blocked"
     assert evidence["claims_not_supported"]
+
+
+def test_full_held_out_snapshot_evidence_closes_identity_not_model_quality() -> None:
+    evidence = json.loads(
+        (
+            BENCHMARK_DIR
+            / "evidence"
+            / "held_out_corpus_snapshot_20260714.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    corpus_path = BENCHMARK_DIR / "held_out_corpus.v1.json"
+    corpus = HeldOutCorpusSpec.model_validate_json(
+        corpus_path.read_text(encoding="utf-8")
+    )
+
+    assert evidence["corpus_id"] == corpus.corpus_id
+    assert evidence["corpus_spec_sha256"] == file_sha256(corpus_path)
+    assert evidence["status"] == "pass"
+    assert evidence["blockers"] == []
+    closure = evidence["identity_closure"]
+    assert closure["city_extract_count"] == len(corpus.city_extracts) == 6
+    assert closure["corridor_count"] == len(corpus.corridors) == 30
+    assert closure["reference_complete_corridor_count"] == 30
+    assert closure["unconfirmed_preregistered_feature_case_count"] == 0
+    assert closure["manifest_hash_failure_count"] == 0
+    assert {item["source_id"] for item in evidence["city_extracts"]} == {
+        source.source_id for source in corpus.city_extracts
+    }
+    assert all(
+        item["provider_identity_matched"] for item in evidence["city_extracts"]
+    )
+    assert "All 30 SUMO networks are correctly modeled" in evidence[
+        "claims_not_supported"
+    ]
