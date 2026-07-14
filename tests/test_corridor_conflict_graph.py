@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from xml.etree import ElementTree as ET
 
 from torii_sumo.corridor.canonicalizer import (
@@ -234,6 +235,80 @@ def _crossing_snapshot(
     )
 
 
+def _movement_only_snapshot(
+    shapes: tuple[tuple[tuple[float, float], ...], ...],
+    *,
+    shared_destination: tuple[int, int] | None = None,
+) -> CanonicalNetworkSnapshot:
+    cell_id = stable_id("cell", {"test": "broad-phase-equivalence"})
+    shared_destination_id = stable_id(
+        "lane_role",
+        {"test": "shared-destination"},
+    )
+    entities: list[CanonicalEntity] = []
+    for index, shape in enumerate(shapes):
+        movement_id = stable_id("movement", {"index": index})
+        path_id = stable_id("path", {"movement_id": movement_id})
+        source_role_id = stable_id("lane_role", {"source": index})
+        destination_role_id = (
+            shared_destination_id
+            if shared_destination is not None and index in shared_destination
+            else stable_id("lane_role", {"destination": index})
+        )
+        entities.extend(
+            (
+                _entity(
+                    "internal_path",
+                    path_id,
+                    {
+                        "movement_id": movement_id,
+                        "multiplicity": 1,
+                        "path_variants": [
+                            {
+                                "path_signature": stable_id(
+                                    "signature",
+                                    {"movement_id": movement_id, "shape": shape},
+                                ),
+                                "path": {
+                                    "status": "pass",
+                                    "segments": [
+                                        {
+                                            "shape_xy": shape,
+                                            "width_m": 3.2,
+                                        }
+                                    ],
+                                    "failures": [],
+                                },
+                            }
+                        ],
+                    },
+                    cell_id=cell_id,
+                ),
+                _entity(
+                    "movement",
+                    movement_id,
+                    {
+                        "multiplicity": 1,
+                        "variants": [
+                            {
+                                "source_lane_role_id": source_role_id,
+                                "destination_lane_role_id": destination_role_id,
+                                "mode": "passenger",
+                                "turn_class": "straight",
+                            }
+                        ],
+                        "internal_path_id": path_id,
+                    },
+                    cell_id=cell_id,
+                ),
+            )
+        )
+    return CanonicalNetworkSnapshot(
+        traffic_side=TrafficSide.RIGHT,
+        entities=tuple(entities),
+    )
+
+
 def test_independent_conflict_graph_ignores_request_foes_self_consistency() -> None:
     snapshot, movement_a, movement_b = _crossing_snapshot()
 
@@ -392,3 +467,49 @@ def test_shared_inner_vertices_are_confirmed_centerline_crossings() -> None:
     assert graph.conflicts[0].reason == "centerline-crossing"
     assert graph.conflicts[0].certainty == "confirmed"
     assert graph.conflicts[0].crossing_angle_deg == 90.0
+
+
+def test_spatial_broad_phase_is_exactly_equivalent_to_exhaustive_pairs() -> None:
+    snapshot = _movement_only_snapshot(
+        (
+            ((-10.0, 0.0), (10.0, 0.0)),
+            ((0.0, -10.0), (0.0, 10.0)),
+            ((90.0, 100.0), (110.0, 100.0)),
+            ((100.0, 90.0), (100.0, 110.0)),
+            ((1000.0, 1000.0), (1010.0, 1000.0)),
+            ((2000.0, 2000.0), (2010.0, 2000.0)),
+        ),
+        shared_destination=(4, 5),
+    )
+
+    broad = build_movement_conflict_graph(snapshot)
+    exhaustive = build_movement_conflict_graph(
+        snapshot,
+        use_spatial_broad_phase=False,
+    )
+
+    assert broad.conflicts == exhaustive.conflicts
+    assert {conflict.reason for conflict in broad.conflicts} == {
+        "centerline-crossing",
+        "shared-destination-merge",
+    }
+
+
+def test_spatial_broad_phase_matches_seeded_random_exhaustive_reference() -> None:
+    generator = random.Random(20260714)
+    shapes = tuple(
+        (
+            (generator.uniform(-250, 250), generator.uniform(-250, 250)),
+            (generator.uniform(-250, 250), generator.uniform(-250, 250)),
+        )
+        for _ in range(48)
+    )
+    snapshot = _movement_only_snapshot(shapes)
+
+    broad = build_movement_conflict_graph(snapshot)
+    exhaustive = build_movement_conflict_graph(
+        snapshot,
+        use_spatial_broad_phase=False,
+    )
+
+    assert broad.conflicts == exhaustive.conflicts

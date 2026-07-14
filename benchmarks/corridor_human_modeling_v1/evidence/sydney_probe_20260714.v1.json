@@ -70,18 +70,18 @@
     "same_frozen_snapshot_rerun": "entered full machine audit"
   },
   "harbour_bridge_machine_evidence": {
-    "candidate_net_sha256": "26eb9caf65b2c69a9522907f7b64aef21340bbf16f824ba839621e8941689719",
+    "candidate_net_sha256": "ae8eb471108d854a72823552c02a6d90463f6e8f6aa709ee11ea669758cdb953",
     "pipeline_status": "pass",
     "machine_label": "ambiguous",
     "netconvert_status": "pass",
     "netconvert_replay": {
       "status": "pass",
-      "primary_raw_sha256": "26eb9caf65b2c69a9522907f7b64aef21340bbf16f824ba839621e8941689719",
-      "replay_raw_sha256": "dd27b55a8d2eab12aacf5d3216cc43f0820cb0f8bc6af3f71735431457103712",
+      "primary_raw_sha256": "ae8eb471108d854a72823552c02a6d90463f6e8f6aa709ee11ea669758cdb953",
+      "replay_raw_sha256": "50edebfcc4d01b748aca4eab0930d09942edba4f68c63b92d299cda357218b7c",
       "primary_normalized_sha256": "dd0ae52b3059f63a27b8210a000c0cbc139311ff28d4e8ccfd3a989dc8a45a29",
       "replay_normalized_sha256": "dd0ae52b3059f63a27b8210a000c0cbc139311ff28d4e8ccfd3a989dc8a45a29",
       "reproducible_semantics": true,
-      "report_sha256": "28d646d12003956e069460cc00b540841570ca8d413465c952881891944f4106"
+      "report_sha256": "f3568843291506c66b377657141e34e3363558fbaf9f8b9e18ccb20817d73c55"
     },
     "sumo_load_status": "pass",
     "routeability": {
@@ -90,7 +90,7 @@
       "collision_count": 0,
       "teleport_count": 0,
       "unfinished_trip_count": 0,
-      "report_sha256": "a4f958feaf25afc759efc6e04f3acbaf79d0bb793a7335cee47cc811688da61f"
+      "report_sha256": "0dc6f9e906eeca3461297ab3a4e177230aea1e9f66caf9d8555337b60ba66cfb"
     },
     "connection_mode": {
       "status": "review_required",
@@ -100,12 +100,21 @@
       "fail_count": 0,
       "structural_failure_count": 0,
       "review_finding_count": 29,
-      "report_sha256": "32efc51827ef3ccfc4a30f4ecd6f4277e487053b291df8f60d4eaaca1b1c33b1"
+      "report_sha256": "7b768ac18ee67e460406009d72f38d3df0a33bea98e12b83aae1695645b9a4b8"
     },
     "independent_safety": {
       "status": "blocked",
+      "movement_count": 2231,
       "conflict_count": 3723,
       "finding_count": 439,
+      "broad_phase": {
+        "name": "aabb-sweep-v1",
+        "geometry_pair_count": 2487565,
+        "evaluated_geometry_pair_count": 7728,
+        "evaluation_fraction": 0.00310665,
+        "conflicts_exactly_equal_to_saved_exhaustive_result": true,
+        "diagnostic_elapsed_seconds_on_development_machine": 0.636745
+      },
       "finding_category_counts": {
         "controlled_link_outside_independent_conflict_model": 9,
         "movement_modes_outside_certified_conflict_applicability": 156,
