@@ -33,6 +33,11 @@ SCHEMA_FILE = (
     REPOSITORY_ROOT
     / "schemas/torii.corridor.stage1m-machine-review-ready-provenance.v3.schema.json"
 )
+PROVENANCE_FILE = (
+    REPOSITORY_ROOT
+    / "benchmarks/corridor_human_modeling_v1/evidence/"
+    "stage1m_machine_review_ready_provenance_20260714.v3.json"
+)
 
 _GATE_IDS = (
     "contract-conformance",
@@ -95,6 +100,25 @@ def test_stage1_machine_review_ready_schema_is_current() -> None:
     )
 
     assert SCHEMA_FILE.read_text(encoding="utf-8") == expected
+
+
+def test_authoritative_stage1_machine_review_ready_provenance_is_closed() -> None:
+    raw = PROVENANCE_FILE.read_text(encoding="utf-8")
+    provenance = Stage1MachineReviewReadyProvenance.model_validate_json(raw)
+
+    assert provenance.producer.revision == "fcc88e261c96d0a86be12b5687eb10f7976810e4"
+    assert provenance.machine_evidence_producer.revision == "f14eb888b25ffec7f27cdbe0c40ce10a481fb544"
+    assert provenance.review_package_producer.revision == "c5c9cef9410b373f38390420409548eaaeca67d3"
+    assert provenance.snapshot.manifest_artifact_count == 40
+    assert provenance.machine.manifest_artifact_count == 1404
+    assert provenance.pcb.effective_unresolved_binding_count == 459
+    assert provenance.rwc.effective_atomic_witness_count == 102398
+    assert provenance.coverage.effective_coverage_gap_count == 3
+    assert provenance.review_package.review_unit_count == 384
+    assert provenance.review_package.repeat_hash_difference_count == 0
+    assert all(gate.status is GateStatus.PASS for gate in provenance.gates)
+    assert '"blinding_seed"' not in raw
+    assert "restricted-blinding-seed" not in raw
 
 
 def _valid_provenance() -> Stage1MachineReviewReadyProvenance:
@@ -249,4 +273,3 @@ def _valid_provenance() -> Stage1MachineReviewReadyProvenance:
         provenance_id=stable_id("manifest", provisional.identity_payload()),
         **payload,
     )
-
