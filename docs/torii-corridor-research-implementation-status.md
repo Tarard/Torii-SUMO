@@ -9,7 +9,7 @@
 ## 当前结论
 
 - Stage 0“规范冻结”已完成并推送：研究方案、稳定 ID、typed contracts、候选 DAG、scope/boundary-port、workflow state、toolchain lock、benchmark v1、JSON Schema 和 CI 已建立。
-- Stage 1“Audit-only”正在实施，核心架构、首版完整 fault-family 矩阵和 SUMO 1.27.1 官方规范场景矩阵已落地，但尚未达到阶段退出条件。尚缺 held-out corridor 双人审核、precision/recall 和 reviewer-agreement 统计。
+- Stage 1“Audit-only”正在实施，核心架构、首版完整 fault-family 矩阵、SUMO 1.27.1 官方规范场景矩阵和 held-out 盲审执行合同已落地，但尚未达到阶段退出条件。尚缺真实 held-out corridor 的双人决定、第三人 adjudication 和由这些人工证据产生的最终统计。
 - Stage 2–7 与 MGE-1 尚未完成，不能宣称完整项目或任意城市自动清洗已经实现。
 - 当前产品承诺仍是 selective automation：高精度窄编辑类自动执行，其余输出候选、证据和 review case；不确定时 abstain/block。
 
@@ -65,6 +65,15 @@
 - 本机实测 9/9 netconvert 双重生成通过、9/9 canonical semantic replay 一致、9/9 SUMO load 通过、0 个 Connection Mode structural finding、source hash 全部保持不变。
 - 这些场景是 parser/fail-closed 规范回归，不是 teacher 网络：pedestrian 仍因 controlled pedestrian link 未进入独立模型而 `blocked`；rail、no-internal、ramp、NEMA 等保持精确 `review` 或 abstention，不伪装成自动认证成功。
 
+### Held-out corridor 双人盲审门
+
+- 预注册 `held_out_review_preregistration.v1.json`：30 个 case、至少 3 个 held-out city group、6 类 morphology、每城市至少 5 个 case，同时覆盖左右侧通行和 pedestrian/bicycle/ramp/rail/bridge/tunnel。
+- reviewer-visible dataset 与 restricted unblinding key 物理分离并分别哈希；前者只含随机 case/variant code，后者保存真实 ID、machine label、safety-critical 标记和 strata。
+- 两名固定 reviewer 必须逐案独立提交带时区的开始/结束时间、观察事实和理由，并显式证明 machine recommendation 与 peer decision 被隐藏。
+- 第三名 adjudicator 必须逐案绑定两份 decision ID；缺少 reviewer、重复 decision、错误 variant、错误 trial、错误 adjudicator 或未闭合哈希均阻断。
+- evaluator 已实现 raw agreement、Cohen's kappa、attention precision/recall、auto precision/coverage、abstention rate、median review time、strata coverage 和 safety-critical false negative 统计。
+- 合成合同测试可证明完整、互相一致的人类证据能够通过，也可证明单个 safety-critical false negative 或任何缺失人工证据会保持 `blocked`；这不是实际人工实验结果。
+
 ### 容差校准与 MCP 可用面
 
 - source baseline calibration 使用坐标序列化精度、endpoint gap 分布和 lane-width cap 推导 endpoint tolerance。
@@ -99,16 +108,16 @@ SHA-256：
 
 ## 当前阶段尚未满足的退出条件
 
-- independent conflict graph 尚无 held-out gold 标注和 precision/recall。
+- independent conflict graph 尚无真实 held-out gold 标注和由人工 adjudication 产生的 precision/recall。
 - pedestrian-aware conflict、rail 专用安全、bicycle 专用语义尚未认证。
-- review package 尚未完成盲审时间与 reviewer agreement 实验。
+- 盲审 package/evaluator 已实现，但尚无 30-case 真实双人决定和第三人 adjudication；因此 review time 与 reviewer agreement 仍没有实测结论。
 - Stage 2 的 certified micro-repair 还没有逐编辑类 held-out 认证证据。
 - H_S/H_M/H_P physical-cell hypothesis engine、boundary-port geometry solver 和 MGE-1 尚未实现完毕。
 
 ## 下一实施顺序
 
-1. 为合成矩阵增加 mutation 组合、precision/recall 汇总和 OOD 分组；单故障 23-family gold 与官方规范场景已完成。
-2. 建立 held-out corridor 双人审核集和 adjudication，测量 safety-critical false negative、reviewer agreement 与 review 时间。
+1. 为合成矩阵增加 mutation 组合与 OOD 分组；单故障 23-family gold 与官方规范场景已完成。
+2. 按已冻结的 blind-review policy 填充 30 个真实 held-out corridor case，执行双人审核和 adjudication，生成不可事后调阈值的统计报告。
 3. 实现 Stage 2 仅限可局部证明的 micro-repair，所有操作具备 precondition、forward/inverse patch 和 exact delta。
 4. 实现 H_S/H_M/H_P 三假设并行，不再从 shared TLS 推导 physical merge。
 5. 实现 boundary-port constrained road-ribbon solver，执行 MGE-1 的 V0–V4 盲化比较。

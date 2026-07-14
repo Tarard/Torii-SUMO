@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from .held_out_review_contracts import (
+    HeldOutReviewContractBundle,
+    HeldOutReviewPolicy,
+    HeldOutReviewReport,
+)
 from .manifest import CorridorResearchBundle
 from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkReport,
@@ -51,6 +56,30 @@ def build_official_sumo_benchmark_report_schema() -> dict[str, object]:
         OfficialSumoBenchmarkReport,
         "torii.corridor.official-sumo-benchmark-report.v1.schema.json",
         status="stage-1-normative-evidence-contract",
+    )
+
+
+def build_held_out_review_policy_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewPolicy,
+        "torii.corridor.held-out-review-policy.v1.schema.json",
+        status="stage-1-preregistered-human-review-contract",
+    )
+
+
+def build_held_out_review_contract_bundle_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewContractBundle,
+        "torii.corridor.held-out-review-contract-bundle.v1.schema.json",
+        status="stage-1-blinded-human-review-contract",
+    )
+
+
+def build_held_out_review_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewReport,
+        "torii.corridor.held-out-review-report.v1.schema.json",
+        status="stage-1-held-out-evidence-contract",
     )
 
 

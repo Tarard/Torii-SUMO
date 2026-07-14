@@ -18,6 +18,18 @@ from .conflict_graph import (
 from .candidates import CandidateGraph, CandidateVariant, Hypothesis, PatchOperation, SemanticDelta
 from .enums import AutomationAction, GateStatus, TrafficSide, WorkflowStage
 from .exact_diff import ExactSemanticDiffReport, build_finding, compare_canonical_snapshots
+from .held_out_review_contracts import (
+    BlindReviewDecision,
+    BlindedReviewDataset,
+    HeldOutAdjudication,
+    HeldOutEvaluationKey,
+    HeldOutReviewPolicy,
+    HeldOutReviewReport,
+)
+from .held_out_review_runner import (
+    build_blinded_review_artifacts,
+    evaluate_held_out_review_trial,
+)
 from .ids import (
     canonical_json_bytes,
     make_approach_id,
@@ -59,6 +71,12 @@ __all__ = [
     "ConnectionAuditCalibrationPolicy",
     "CorridorResearchBundle",
     "GateStatus",
+    "BlindReviewDecision",
+    "BlindedReviewDataset",
+    "HeldOutAdjudication",
+    "HeldOutEvaluationKey",
+    "HeldOutReviewPolicy",
+    "HeldOutReviewReport",
     "Hypothesis",
     "IndependentSafetyReport",
     "NetworkQualityVectorV1",
@@ -78,6 +96,7 @@ __all__ = [
     "WorkflowStage",
     "ExactSemanticDiffReport",
     "build_finding",
+    "build_blinded_review_artifacts",
     "build_exact_semantic_regression_artifacts",
     "build_connection_mode_calibration_artifact",
     "calibrate_connection_mode_audit",
@@ -94,6 +113,7 @@ __all__ = [
     "make_physical_cell_id",
     "make_signal_group_id",
     "compare_canonical_snapshots",
+    "evaluate_held_out_review_trial",
     "run_synthetic_fault_benchmark",
     "run_official_sumo_benchmark",
     "stable_id",

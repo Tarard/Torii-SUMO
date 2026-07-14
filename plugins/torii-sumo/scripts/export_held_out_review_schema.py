@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+
+PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = PLUGIN_ROOT.parents[1]
+SRC_ROOT = PLUGIN_ROOT / "src"
+
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from torii_sumo.core.artifact_io import write_json_atomic
+from torii_sumo.corridor.schema import (
+    build_held_out_review_contract_bundle_schema,
+    build_held_out_review_policy_schema,
+    build_held_out_review_report_schema,
+)
+
+
+SCHEMA_DIR = REPOSITORY_ROOT / "schemas"
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Export Torii Stage-1 held-out blind-review JSON Schemas."
+    )
+    parser.add_argument(
+        "--policy-output",
+        type=Path,
+        default=SCHEMA_DIR / "torii.corridor.held-out-review-policy.v1.schema.json",
+    )
+    parser.add_argument(
+        "--bundle-output",
+        type=Path,
+        default=(
+            SCHEMA_DIR
+            / "torii.corridor.held-out-review-contract-bundle.v1.schema.json"
+        ),
+    )
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        default=SCHEMA_DIR / "torii.corridor.held-out-review-report.v1.schema.json",
+    )
+    args = parser.parse_args()
+    for path, schema in (
+        (args.policy_output, build_held_out_review_policy_schema()),
+        (args.bundle_output, build_held_out_review_contract_bundle_schema()),
+        (args.report_output, build_held_out_review_report_schema()),
+    ):
+        write_json_atomic(path, schema, sort_keys=True)
+
+
+if __name__ == "__main__":
+    main()
