@@ -455,6 +455,58 @@ def test_no_internal_links_geometry_is_reviewed_as_unavailable_by_design() -> No
     assert "movement_geometry_missing_for_independent_safety" not in categories
 
 
+def test_permission_incompatible_path_is_blocked_and_excluded_from_conflicts() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" width="3.2" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" width="3.2" shape="10,0 20,0"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" allow="bicycle" width="1.0" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" allow="bicycle" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+</net>"""
+    )
+    snapshot = canonicalize_raw_network(
+        parse_net_xml(root),
+        traffic_side=TrafficSide.RIGHT,
+    )
+
+    movement = next(entity for entity in snapshot.entities if entity.kind == "movement")
+    variant = movement.payload["variants"][0]
+    assert variant["mode_classes"] == ("incompatible",)
+    path = next(
+        entity for entity in snapshot.entities if entity.kind == "internal_path"
+    ).payload["path_variants"][0]["path"]
+    assert path["permission_contract"] == {
+        "coverage": "complete",
+        "status": "fail",
+        "basis": "explicit_allow_intersection",
+        "allow": (),
+        "disallow": (),
+        "element_count": 5,
+    }
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    assert report.conflict_graph.movement_ids == ()
+    assert report.conflict_graph.geometry_missing_movement_ids == ()
+    assert report.coverage.movement_mode_class_counts["incompatible"] == 1
+    assert "movement_path_permission_empty" in {
+        finding.category for finding in report.findings
+    }
+
+
 def test_shared_inner_vertices_are_confirmed_centerline_crossings() -> None:
     snapshot, _, _ = _crossing_snapshot(
         shape_a=((-10.0, 0.0), (0.0, 0.0), (10.0, 0.0)),

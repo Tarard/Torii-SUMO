@@ -249,6 +249,23 @@ def test_confirmed_protected_green_conflict_is_a_machine_defect() -> None:
     assert label == "defect"
 
 
+def test_empty_movement_path_permission_is_a_machine_defect() -> None:
+    label, categories, _passed, _unresolved = _classify_case(
+        build_report={"status": "pass"},
+        load_report={"status": "pass"},
+        connection_report={"status": "pass"},
+        calibration_status=GateStatus.PASS,
+        safety_status=GateStatus.BLOCKED,
+        safety_categories=("movement_path_permission_empty",),
+        reproducibility_status=GateStatus.PASS,
+        applicability=SimpleNamespace(decision="in-domain", findings=()),
+        routeability={"status": "pass"},
+    )
+
+    assert label == "defect"
+    assert "movement_path_permission_empty" in categories
+
+
 def test_nonreproducible_network_is_a_machine_defect() -> None:
     label, categories, _passed, unresolved = _classify_case(
         build_report={"status": "pass"},

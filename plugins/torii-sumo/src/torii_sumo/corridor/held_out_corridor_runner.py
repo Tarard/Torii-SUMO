@@ -692,6 +692,7 @@ def _classify_case(
     definitive_safety_defects = {
         "conflicting_movements_share_signal_group",
         "movement_geometry_missing_for_independent_safety",
+        "movement_path_permission_empty",
         "protected_green_movement_conflict",
         "signal_group_phase_state_inconsistent",
     }
