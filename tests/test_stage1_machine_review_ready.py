@@ -106,7 +106,7 @@ def test_authoritative_stage1_machine_review_ready_provenance_is_closed() -> Non
     raw = PROVENANCE_FILE.read_text(encoding="utf-8")
     provenance = Stage1MachineReviewReadyProvenance.model_validate_json(raw)
 
-    assert provenance.producer.revision == "fcc88e261c96d0a86be12b5687eb10f7976810e4"
+    assert provenance.producer.revision == "a21fc73ace1c6f68a6931ef6455b62311a89cbae"
     assert provenance.machine_evidence_producer.revision == "f14eb888b25ffec7f27cdbe0c40ce10a481fb544"
     assert provenance.review_package_producer.revision == "c5c9cef9410b373f38390420409548eaaeca67d3"
     assert provenance.snapshot.manifest_artifact_count == 40
