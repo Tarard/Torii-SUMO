@@ -19,7 +19,10 @@ from torii_sumo.corridor.netxml import parse_net_xml
 from torii_sumo.corridor.pedestrian_crossings import (
     infer_pedestrian_facility_owners,
 )
-from torii_sumo.corridor.review import PedestrianCrossingReviewSubject
+from torii_sumo.corridor.review import (
+    PedestrianCrossingReviewSubject,
+    build_pedestrian_coverage_gap,
+)
 
 
 def _entity(
@@ -48,7 +51,7 @@ def _pedestrian_review_subject(
 ) -> dict:
     semantic_subject = {
         "facility_kind": "pedestrian-crossing",
-        "control_kind": "uncontrolled",
+        "control_kind": "unknown-unsignalized",
         "crossing_shape_xy": ((float(index), -1.0), (float(index), 1.0)),
         "crossing_width_m": 4.0,
         "source_endpoint_shape_xy": ((float(index) - 1.0, -1.0),),
@@ -207,6 +210,27 @@ def _crossing_snapshot(
             )
         )
     program_id = stable_id("program", {"controller": controller_id})
+    review_subject_records = [
+        _pedestrian_review_subject(
+            cell_id=cell_id,
+            index=index,
+        )
+        for index in range(pedestrian_facilities)
+    ]
+    for review_subject_record in review_subject_records:
+        gap = build_pedestrian_coverage_gap(
+            PedestrianCrossingReviewSubject.model_validate(
+                review_subject_record
+            )
+        )
+        entities.append(
+            _entity(
+                "pedestrian_coverage_gap",
+                gap.coverage_gap_id,
+                gap.model_dump(mode="python"),
+                cell_id=cell_id,
+            )
+        )
     entities.append(
         _entity(
             "controller_program",
@@ -258,13 +282,7 @@ def _crossing_snapshot(
                 "modeled_controlled_pedestrian_movement_count": 0,
                 "modeled_crossing_edge_count": 0,
                 "unmodeled_crossing_edge_count": pedestrian_facilities,
-                "unmodeled_pedestrian_crossings": [
-                    _pedestrian_review_subject(
-                        cell_id=cell_id,
-                        index=index,
-                    )
-                    for index in range(pedestrian_facilities)
-                ],
+                "unmodeled_pedestrian_crossings": review_subject_records,
                 "link_index2_connection_count": 0,
                 "movement_mode_class_counts": {"road-motorized": 2},
                 "ownership_status": "resolved",
@@ -492,6 +510,8 @@ def test_unmodelled_pedestrian_facilities_block_automatic_promotion_as_review() 
     assert report.coverage.crossing_edge_count == 1
     assert report.coverage.unmodeled_pedestrian_review_subject_count == 1
     assert len(report.coverage.unmodeled_pedestrian_crossings) == 1
+    assert report.coverage.pedestrian_coverage_gap_count == 1
+    assert len(report.coverage.pedestrian_coverage_gaps) == 1
     review_finding = next(
         finding
         for finding in report.findings
@@ -573,6 +593,10 @@ def test_controlled_pedestrian_crossing_is_a_stable_canonical_movement() -> None
     )
     assert binding.payload["control_kind"] == "signalized"
     assert binding.payload["source_link_indices"] == (1,)
+    assert binding.payload["raw_controller_ids"] == ("tls",)
+    assert binding.payload["program_sources"] == ("embedded-net",)
+    assert binding.payload["classification_status"] == "unclassified"
+    assert len(binding.payload["evidence_refs"]) == 1
 
 
 def test_protected_vehicle_and_pedestrian_green_is_a_hard_failure() -> None:
@@ -624,7 +648,7 @@ def test_malformed_controlled_pedestrian_chain_remains_fail_closed() -> None:
     )
 
 
-def test_uncontrolled_crossing_is_modeled_but_right_of_way_stays_review_only() -> None:
+def test_unknown_unsignalized_crossing_stays_right_of_way_review_only() -> None:
     snapshot = _pedestrian_tls_snapshot(
         protected_together=False,
         controlled_crossing=False,
@@ -636,17 +660,18 @@ def test_uncontrolled_crossing_is_modeled_but_right_of_way_stays_review_only() -
     assert report.coverage.modeled_pedestrian_movement_count == 1
     assert report.coverage.modeled_controlled_pedestrian_movement_count == 0
     assert report.coverage.modeled_uncontrolled_pedestrian_movement_count == 1
+    assert report.coverage.modeled_unsignalized_pedestrian_movement_count == 1
     assert report.coverage.modeled_crossing_edge_count == 1
     assert report.coverage.unmodeled_crossing_edge_count == 0
     assert report.coverage.unsupported_controlled_connection_count == 0
     assert report.protected_conflict_count == 0
     assert len(report.conflict_graph.conflicts) == 1
     assert (
-        "uncontrolled_pedestrian_right_of_way_not_independently_verified"
+        "pedestrian_unsignalized_right_of_way_not_independently_verified"
         in report.limitations
     )
     assert {finding.category for finding in report.findings} >= {
-        "uncontrolled_pedestrian_vehicle_conflict_requires_right_of_way_review"
+        "pedestrian_vehicle_conflict_requires_right_of_way_review"
     }
     pedestrian_id = next(
         entity.stable_entity_id
@@ -668,11 +693,13 @@ def test_uncontrolled_crossing_is_modeled_but_right_of_way_stays_review_only() -
         if entity.kind == "pedestrian_control_binding"
     )
     assert binding.payload["movement_id"] == pedestrian_id
-    assert binding.payload["control_kind"] == "uncontrolled"
+    assert binding.payload["control_kind"] == "unknown-unsignalized"
     assert binding.payload["source_link_indices"] == ()
+    assert binding.payload["raw_controller_ids"] == ()
+    assert binding.payload["program_sources"] == ("not-applicable",)
 
 
-def test_controlled_pedestrian_without_program_is_not_downgraded_to_uncontrolled() -> None:
+def test_controlled_pedestrian_without_program_is_not_downgraded_to_unsignalized() -> None:
     snapshot = _pedestrian_tls_snapshot(
         protected_together=False,
         include_tls_program=False,
@@ -684,12 +711,18 @@ def test_controlled_pedestrian_without_program_is_not_downgraded_to_uncontrolled
     assert report.coverage.modeled_controlled_pedestrian_movement_count == 1
     assert report.coverage.modeled_uncontrolled_pedestrian_movement_count == 0
     assert {finding.category for finding in report.findings} >= {
-        "controlled_pedestrian_signal_group_missing"
+        "controlled_pedestrian_effective_program_unresolved"
     }
+    binding = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "pedestrian_control_binding"
+    )
+    assert binding.payload["program_sources"] == ("unresolved",)
     assert not {
         finding.category
         for finding in report.findings
-        if finding.category.startswith("uncontrolled_pedestrian_vehicle")
+        if finding.category.startswith("pedestrian_vehicle")
     }
 
 
@@ -793,16 +826,44 @@ def test_rejected_owner_unresolved_crossing_has_stable_raw_id_free_review_subjec
     assert ":first" not in serialized
     assert ":renumbered" not in serialized
 
+    def coverage_gap(snapshot: CanonicalNetworkSnapshot) -> dict:
+        gaps = [
+            entity.payload
+            for entity in snapshot.entities
+            if entity.kind == "pedestrian_coverage_gap"
+        ]
+        assert len(gaps) == 1
+        return gaps[0]
+
+    first_gap = coverage_gap(first)
+    second_gap = coverage_gap(second)
+    assert first_gap["coverage_gap_id"] == second_gap["coverage_gap_id"]
+    assert first_gap["source_crossing_edge_signature"] == second_gap[
+        "source_crossing_edge_signature"
+    ]
+
     report = audit_independent_movement_safety(first)
 
     assert report.status is GateStatus.REVIEW
     assert report.coverage.unmodeled_crossing_edge_count == 1
     assert report.coverage.unmodeled_pedestrian_review_subject_count == 1
+    assert report.coverage.pedestrian_coverage_gap_count == 1
+    coverage_gap = report.coverage.pedestrian_coverage_gaps[0]
+    assert coverage_gap.position_xy == (0.0, 0.0)
+    assert coverage_gap.primary_classification == "safety-coverage-blocker"
+    assert coverage_gap.review_subject_id == first_subject[
+        "review_subject_id"
+    ]
     assert not {
         finding.category
         for finding in report.findings
         if finding.category
         == "unmodeled_pedestrian_review_subject_closure_mismatch"
+    }
+    assert not {
+        finding.category
+        for finding in report.findings
+        if finding.category == "pedestrian_coverage_gap_closure_mismatch"
     }
 
 

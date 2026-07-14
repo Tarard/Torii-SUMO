@@ -28,6 +28,7 @@ from .pedestrian_crossings import (
     infer_pedestrian_facility_owners,
     model_pedestrian_crossing,
 )
+from .review import build_pedestrian_coverage_gap
 
 
 class CanonicalEntity(ContractModel):
@@ -280,6 +281,7 @@ def canonicalize_raw_network(
     movement_owners: dict[str, tuple[str, tuple[str, ...]]] = {}
     pedestrian_rejection_reasons: dict[str, tuple[str, ...]] = {}
     pedestrian_review_subjects: dict[str, dict[str, Any]] = {}
+    pedestrian_coverage_gaps: dict[str, dict[str, Any]] = {}
     modeled_pedestrian_crossing_edges: dict[str, set[str]] = defaultdict(set)
     modeled_controlled_pedestrian_movement_ids: dict[str, set[str]] = (
         defaultdict(set)
@@ -291,6 +293,22 @@ def canonicalize_raw_network(
         tuple[str, str],
         set[int],
     ] = defaultdict(set)
+    pedestrian_control_binding_raw_controllers: dict[
+        tuple[str, str],
+        set[str],
+    ] = defaultdict(set)
+    pedestrian_control_binding_states: dict[
+        tuple[str, str],
+        set[str],
+    ] = defaultdict(set)
+    pedestrian_control_binding_evidence_refs: dict[
+        tuple[str, str],
+        set[str],
+    ] = defaultdict(set)
+    pedestrian_control_binding_link_index2: dict[
+        tuple[str, str],
+        bool,
+    ] = defaultdict(bool)
     for connection in network.connections:
         source_edge = network.edges.get(connection.from_edge)
         target_edge = network.edges.get(connection.to_edge)
@@ -330,6 +348,27 @@ def canonicalize_raw_network(
                     pedestrian_review_subjects[review_subject_id] = (
                         review_subject
                     )
+                    coverage_gap = build_pedestrian_coverage_gap(
+                        attempt.review_subject
+                    )
+                    coverage_gap_payload = coverage_gap.model_dump(
+                        mode="python"
+                    )
+                    coverage_gap_id = str(coverage_gap.coverage_gap_id)
+                    existing_gap = pedestrian_coverage_gaps.get(
+                        coverage_gap_id
+                    )
+                    if (
+                        existing_gap is not None
+                        and existing_gap != coverage_gap_payload
+                    ):
+                        raise ValueError(
+                            "Pedestrian coverage-gap identity collision: "
+                            f"{coverage_gap_id}"
+                        )
+                    pedestrian_coverage_gaps[coverage_gap_id] = (
+                        coverage_gap_payload
+                    )
                 continue
             model = attempt.model
             for role_id, role_payload in model.lane_role_payloads:
@@ -356,7 +395,11 @@ def canonicalize_raw_network(
                 model.physical_cell_id,
                 model.boundary_port_ids,
             )
-            control_kind = "signalized" if model.controlled else "uncontrolled"
+            control_kind = (
+                "signalized"
+                if model.controlled
+                else "unknown-unsignalized"
+            )
             source_link_indices = tuple(
                 index
                 for index in (connection.link_index, connection.link_index2)
@@ -365,6 +408,15 @@ def canonicalize_raw_network(
             pedestrian_control_binding_indices[
                 (model.movement_id, control_kind)
             ].update(source_link_indices)
+            _record_pedestrian_control_binding_evidence(
+                connection=connection,
+                movement_id=model.movement_id,
+                control_kind=control_kind,
+                raw_controllers=pedestrian_control_binding_raw_controllers,
+                states=pedestrian_control_binding_states,
+                evidence_refs=pedestrian_control_binding_evidence_refs,
+                link_index2=pedestrian_control_binding_link_index2,
+            )
             modeled_pedestrian_crossing_edges[model.physical_cell_id].add(model.crossing_edge_id)
             target = (
                 modeled_controlled_pedestrian_movement_ids
@@ -441,7 +493,7 @@ def canonicalize_raw_network(
             control_kind = (
                 "signalized"
                 if connection.controller_id
-                else "uncontrolled"
+                else "unknown-unsignalized"
             )
             source_link_indices = {
                 index
@@ -454,6 +506,15 @@ def canonicalize_raw_network(
             pedestrian_control_binding_indices[
                 (movement_id, control_kind)
             ].update(source_link_indices)
+            _record_pedestrian_control_binding_evidence(
+                connection=connection,
+                movement_id=movement_id,
+                control_kind=control_kind,
+                raw_controllers=pedestrian_control_binding_raw_controllers,
+                states=pedestrian_control_binding_states,
+                evidence_refs=pedestrian_control_binding_evidence_refs,
+                link_index2=pedestrian_control_binding_link_index2,
+            )
             target = (
                 modeled_controlled_pedestrian_movement_ids
                 if connection.controller_id
@@ -511,6 +572,37 @@ def canonicalize_raw_network(
     ):
         cell_id, boundary_port_ids = movement_owners[movement_id]
         sorted_indices = tuple(sorted(source_link_indices))
+        binding_key = (movement_id, control_kind)
+        raw_controller_ids = tuple(
+            sorted(
+                pedestrian_control_binding_raw_controllers.get(
+                    binding_key,
+                    (),
+                )
+            )
+        )
+        program_sources = tuple(
+            sorted(
+                {
+                    (
+                        "embedded-net"
+                        if controller_id in network.tls_programs
+                        else "unresolved"
+                    )
+                    for controller_id in raw_controller_ids
+                }
+                or {"not-applicable"}
+            )
+        )
+        owner_junction_types = tuple(
+            sorted(
+                {
+                    junction.junction_type
+                    for junction_id, junction in network.junctions.items()
+                    if junction_cell_ids.get(junction_id) == cell_id
+                }
+            )
+        )
         _put_entity(
             entities,
             kind="pedestrian_control_binding",
@@ -528,6 +620,32 @@ def canonicalize_raw_network(
                 "control_kind": control_kind,
                 "source_link_indices": sorted_indices,
                 "multiple_source_indices": len(sorted_indices) > 1,
+                "raw_controller_ids": raw_controller_ids,
+                "owner_junction_types": owner_junction_types,
+                "program_sources": program_sources,
+                "source_connection_states": tuple(
+                    sorted(
+                        pedestrian_control_binding_states.get(
+                            binding_key,
+                            (),
+                        )
+                    )
+                ),
+                "link_index2_present": (
+                    pedestrian_control_binding_link_index2.get(
+                        binding_key,
+                        False,
+                    )
+                ),
+                "evidence_refs": tuple(
+                    sorted(
+                        pedestrian_control_binding_evidence_refs.get(
+                            binding_key,
+                            (),
+                        )
+                    )
+                ),
+                "classification_status": "unclassified",
             },
         )
 
@@ -647,6 +765,22 @@ def canonicalize_raw_network(
             },
         )
 
+    for coverage_gap_id, coverage_gap in sorted(
+        pedestrian_coverage_gaps.items()
+    ):
+        _put_entity(
+            entities,
+            kind="pedestrian_coverage_gap",
+            entity_id=coverage_gap_id,
+            owner_cell_ids=tuple(
+                coverage_gap["owner_candidate_physical_cell_ids"]
+            ),
+            boundary_port_ids=tuple(
+                coverage_gap["boundary_port_candidate_ids"]
+            ),
+            payload=coverage_gap,
+        )
+
     _add_safety_coverage_entities(
         entities,
         network=network,
@@ -714,6 +848,43 @@ def _put_entity(
     if key in entities:
         raise ValueError(f"Canonical entity collision: {kind}/{entity_id}")
     entities[key] = entity
+
+
+def _record_pedestrian_control_binding_evidence(
+    *,
+    connection: RawConnection,
+    movement_id: str,
+    control_kind: str,
+    raw_controllers: dict[tuple[str, str], set[str]],
+    states: dict[tuple[str, str], set[str]],
+    evidence_refs: dict[tuple[str, str], set[str]],
+    link_index2: dict[tuple[str, str], bool],
+) -> None:
+    key = (movement_id, control_kind)
+    if connection.controller_id:
+        raw_controllers[key].add(connection.controller_id)
+    if connection.state:
+        states[key].add(connection.state)
+    link_index2[key] = (
+        link_index2[key] or connection.link_index2 is not None
+    )
+    evidence_refs[key].add(
+        stable_id(
+            "evidence",
+            {
+                "movement_id": movement_id,
+                "from_edge": connection.from_edge,
+                "to_edge": connection.to_edge,
+                "from_lane": connection.from_lane,
+                "to_lane": connection.to_lane,
+                "direction": connection.direction,
+                "state": connection.state,
+                "controller_id": connection.controller_id,
+                "link_index": connection.link_index,
+                "link_index2": connection.link_index2,
+            },
+        )
+    )
 
 
 def _incident_external_edges(
@@ -1112,6 +1283,9 @@ def _add_safety_coverage_entities(
             "modeled_uncontrolled_pedestrian_movement_count": (
                 uncontrolled_pedestrian_count
             ),
+            "modeled_unsignalized_pedestrian_movement_count": (
+                uncontrolled_pedestrian_count
+            ),
             "modeled_crossing_edge_count": modeled_crossing_edge_count,
             "unmodeled_crossing_edge_count": max(
                 0,
@@ -1164,6 +1338,7 @@ def _add_safety_coverage_entities(
             "modeled_pedestrian_movement_count": 0,
             "modeled_controlled_pedestrian_movement_count": 0,
             "modeled_uncontrolled_pedestrian_movement_count": 0,
+            "modeled_unsignalized_pedestrian_movement_count": 0,
             "modeled_crossing_edge_count": 0,
             "unmodeled_crossing_edge_count": unresolved_facilities["crossing"],
             "unmodeled_pedestrian_crossings": sorted(

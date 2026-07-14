@@ -481,7 +481,9 @@ def _build_rejected_crossing_review_subject(
     )
     semantic_subject = {
         "facility_kind": "pedestrian-crossing",
-        "control_kind": "signalized" if controlled else "uncontrolled",
+        "control_kind": (
+            "signalized" if controlled else "unknown-unsignalized"
+        ),
         "crossing_shape_xy": crossing_shape,
         "crossing_width_m": (
             crossing_lane.width if crossing_lane is not None else None
