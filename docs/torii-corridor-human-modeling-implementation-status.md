@@ -95,6 +95,41 @@ Sydney Harbour Bridge 首个机器闭环：
 - 对 London 显式添加 `--seed 42` 后双重重放仍不一致；随机种子必须进入工具链
   身份，但仅锁 seed 不能解决该不确定性。
 
+进一步检查 SUMO 1.27.1 源码（tag `v1_27_1`，commit
+`7717f2379d9e314a0c81c5cec748444de06a2a91`）后，已定位到
+`NBEdgeCont::extractRoundabouts()`：它以 `std::set<NBEdge*>` 的指针顺序选择
+起始边，并在多条候选 outgoing edge 中取第一个匹配项。不同进程因而可能把
+同一组 OSM `junction=roundabout` 边切成不同 `EdgeSet`。后续
+`markRoundabouts()` 又按该分组设置优先权和删除外部回转连接，所以这是真实语义
+不确定性，不是序列化噪声。
+
+现已建立隔离的 PlainXML 确定性输入实验：
+
+- 第一段锁定 `seed=42`、`--no-turnarounds`、`--roundabouts.guess false`、
+  `--plain-output.lanes` 和通行侧；
+- source PlainXML 从不原地修改，blocked 时删除陈旧 candidate；
+- OSM 标记边只有在形成单一有向闭环，或按完整 edge/lane permission contract
+  能唯一分解成若干有向闭环时，才生成规范化 bundle；
+- open component、特殊节点、未知环岛记录或权限分解不完整均 fail closed；
+- 回转连接只记录、不删除，其合法性留给后续 Connection Mode 和证据审核。
+
+三例结果：
+
+- London 两次均因 Percy Circus 的 6-edge/7-node 断裂环岛和 dead-end 节点阻断；
+- Sydney 两次均因一个 1-edge/2-node 环岛断片阻断；
+- Melbourne 的 7 个物理组件可确定分解为 8 个循环，两次规范化 PlainXML bundle
+  SHA-256 均为
+  `01e36eaed20927d696287ce4f11345074a28790b256789eb8c27be79e5f2b406`，
+  两次重建网络的规范化语义 SHA-256 均为
+  `ceb8d397c23b936f553f3b04885654f04405633e47c053a0378615aaae44adba`，
+  且 SUMO load pass。
+
+该实验没有进入现有 v1 晋级路径。Melbourne 的确定性两段式网络相对旧的一步式
+网络仍产生 141,141 个稳定实体 delta，说明全网 PlainXML 重建只能作为新的、版本化
+初始 source 协议评估，不能作为局部 candidate repair，也不能替换冻结 v1 source。
+完整机器证据保存在
+`benchmarks/corridor_human_modeling_v1/evidence/netconvert_plainxml_determinism_probe_20260714.v1.json`。
+
 首次运行报告 SHA-256 为
 `565c9e11b22d6d0dc3e3dd0ff950fb7c292341c3911f6bb626042d7d43b68b3c`，
 manifest SHA-256 为
@@ -141,7 +176,7 @@ Berlin Alexanderplatz 还暴露了一个审核口径错误：79 个旧
 
 ## 最近的硬阻断项
 
-1. 修正后的 Connection Mode 尚未对 30 个走廊全量重跑；首次运行中的 3 个 netconvert nondeterministic case 仍需可复现构建协议，不能绕过 replay gate。
+1. 修正后的 Connection Mode 尚未对 30 个走廊全量重跑；实验性 v2 确定性输入协议只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且该协议不得改写冻结 v1 结果。
 2. 需要两名真实独立审核者逐案作答；分歧由第三名 adjudicator 裁决。机器不得代填。
 3. Stage 1 的 raw agreement、Cohen's kappa、attention precision/recall、AutoPrecision 和 review time 尚无真实数值。
 4. pedestrian-aware independent conflict model 尚未完成，因此多模式 TLS 不可自动认证。

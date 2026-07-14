@@ -20,6 +20,7 @@ from .held_out_corpus_contracts import (
 )
 from .manifest import CorridorResearchBundle
 from .net_replay import NetReplayReport
+from .plainxml_normalization import PlainXmlNormalizationReport
 from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkReport,
     OfficialSumoBenchmarkSpec,
@@ -175,6 +176,14 @@ def build_net_replay_report_schema() -> dict[str, object]:
         NetReplayReport,
         "torii.corridor.net-replay-report.v1.schema.json",
         status="stage-1-reproducibility-evidence-contract",
+    )
+
+
+def build_plainxml_normalization_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        PlainXmlNormalizationReport,
+        "torii.corridor.plainxml-normalization-report.v1.schema.json",
+        status="stage-1-experimental-deterministic-ingest-contract",
     )
 
 
