@@ -39,13 +39,16 @@ jobs:
         run: |
           ruff check \
             plugins/torii-sumo/src/torii_sumo/corridor \
+            plugins/torii-sumo/scripts/export_composite_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_corridor_schema.py \
             plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_held_out_review_schema.py \
             plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
             plugins/torii-sumo/scripts/evaluate_held_out_review.py \
             plugins/torii-sumo/scripts/run_official_sumo_benchmark.py \
+            plugins/torii-sumo/scripts/run_composite_fault_benchmark.py \
             plugins/torii-sumo/scripts/run_synthetic_fault_benchmark.py \
+            tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_official_sumo_benchmark.py
@@ -66,6 +69,15 @@ jobs:
           diff --unified \
             schemas/torii.corridor.synthetic-fault-benchmark-report.v1.schema.json \
             generated.synthetic-benchmark-report.schema.json
+          python plugins/torii-sumo/scripts/export_composite_benchmark_schema.py \
+            --spec-output generated.composite-benchmark.schema.json \
+            --report-output generated.composite-benchmark-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.composite-fault-benchmark.v1.schema.json \
+            generated.composite-benchmark.schema.json
+          diff --unified \
+            schemas/torii.corridor.composite-fault-benchmark-report.v1.schema.json \
+            generated.composite-benchmark-report.schema.json
           python plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
             --spec-output generated.official-sumo-benchmark.schema.json \
             --report-output generated.official-sumo-benchmark-report.schema.json
@@ -92,7 +104,9 @@ jobs:
       - name: Verify benchmark, toolchain, plan, and fail-closed contracts
         run: |
           pytest \
+            tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_official_sumo_benchmark.py \
+            tests/test_synthetic_fault_benchmark.py \
             -q

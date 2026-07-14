@@ -1,31 +1,23 @@
 from __future__ import annotations
 
-from collections import Counter
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree as ET
 
 from torii_sumo.core.artifact_io import write_json_atomic
 from torii_sumo.core.candidate_contracts import file_sha256
-from torii_sumo.core.connection_mode_audit import audit_network_connection_mode
-
-from .audit_adapter import (
-    build_scope_from_junction_ids,
-    canonicalize_connection_mode_findings,
-)
-from .canonicalizer import canonicalize_net_xml_file
-from .conflict_graph import audit_independent_movement_safety
-from .enums import FindingSeverity, GateStatus
-from .exact_diff import compare_canonical_snapshots
+from .enums import GateStatus
 from .synthetic_benchmark_contracts import (
-    GoldObservation,
-    ObservationMatch,
     SyntheticFaultBenchmarkReport,
     SyntheticFaultBenchmarkSpec,
     SyntheticFaultCaseResult,
 )
-from .synthetic_networks import FIXTURES, apply_synthetic_mutation, build_synthetic_fixture
+from .synthetic_case_engine import (
+    CleanSyntheticFixture,
+    match_synthetic_observation,
+    materialize_clean_synthetic_fixture,
+    run_synthetic_mutation_sequence,
+)
+from .synthetic_networks import FIXTURES
 
 
 def run_synthetic_fault_benchmark(
@@ -51,7 +43,7 @@ def run_synthetic_fault_benchmark(
     fixture_dir.mkdir(parents=True, exist_ok=True)
     case_dir.mkdir(parents=True, exist_ok=True)
 
-    fixture_cache: dict[tuple[str, str], dict[str, Any]] = {}
+    fixture_cache: dict[tuple[str, str], CleanSyntheticFixture] = {}
     clean_fixture_statuses: dict[str, GateStatus] = {}
     global_blockers: list[str] = []
     results: list[SyntheticFaultCaseResult] = []
@@ -61,21 +53,21 @@ def run_synthetic_fault_benchmark(
         fixture_key = (case.fixture_id, case.traffic_side.value)
         fixture = fixture_cache.get(fixture_key)
         if fixture is None:
-            fixture = _materialize_clean_fixture(
+            fixture = materialize_clean_synthetic_fixture(
                 fixture_id=case.fixture_id,
                 traffic_side=case.traffic_side,
                 fixture_dir=fixture_dir,
             )
             fixture_cache[fixture_key] = fixture
             clean_key = f"{case.fixture_id}:{case.traffic_side.value}"
-            clean_fixture_statuses[clean_key] = fixture["status"]
+            clean_fixture_statuses[clean_key] = fixture.status
             expected = FIXTURES[case.fixture_id].expected_clean_status
-            if fixture["status"] is not expected:
+            if fixture.status is not expected:
                 global_blockers.append(
                     f"clean_fixture_status_mismatch:{clean_key}:"
-                    f"expected_{expected.value}:observed_{fixture['status'].value}"
+                    f"expected_{expected.value}:observed_{fixture.status.value}"
                 )
-            artifact_paths.update(fixture["artifact_paths"])
+            artifact_paths.update(fixture.artifact_paths)
 
         result, case_artifacts = _run_case(
             case=case,
@@ -153,112 +145,27 @@ def run_synthetic_fault_benchmark(
     }
 
 
-def _materialize_clean_fixture(
-    *,
-    fixture_id: str,
-    traffic_side: Any,
-    fixture_dir: Path,
-) -> dict[str, Any]:
-    root = build_synthetic_fixture(fixture_id, traffic_side=traffic_side)
-    path = fixture_dir / f"{fixture_id}.{traffic_side.value}.clean.net.xml"
-    _write_xml(path, root)
-    source_sha256 = file_sha256(path)
-    audit = audit_network_connection_mode(
-        ET.parse(path).getroot(),
-        traffic_side=traffic_side.value,
-        endpoint_tolerance_m=0.01,
-    )
-    snapshot = canonicalize_net_xml_file(path, traffic_side=traffic_side)
-    safety = audit_independent_movement_safety(snapshot)
-    connection_path = fixture_dir / f"{fixture_id}.{traffic_side.value}.connection-mode.json"
-    safety_path = fixture_dir / f"{fixture_id}.{traffic_side.value}.independent-safety.json"
-    write_json_atomic(connection_path, audit, sort_keys=True)
-    write_json_atomic(
-        safety_path,
-        safety.model_dump(mode="json", by_alias=True),
-        sort_keys=True,
-    )
-    return {
-        "path": path,
-        "sha256": source_sha256,
-        "audit": audit,
-        "snapshot": snapshot,
-        "safety": safety,
-        "status": _combined_status(audit, safety.status),
-        "artifact_paths": {path, connection_path, safety_path},
-    }
-
-
 def _run_case(
     *,
     case: Any,
-    clean_fixture: dict[str, Any],
+    clean_fixture: CleanSyntheticFixture,
     case_dir: Path,
 ) -> tuple[SyntheticFaultCaseResult, set[Path]]:
-    source_path: Path = clean_fixture["path"]
-    source_sha256 = clean_fixture["sha256"]
-    source_root = ET.parse(source_path).getroot()
-    mutant_root = apply_synthetic_mutation(source_root, case.mutation_id)
-    mutant_path = case_dir / f"{case.case_id}.mutant.net.xml"
-    _write_xml(mutant_path, mutant_root)
-    mutant_sha256 = file_sha256(mutant_path)
-    candidate_audit = audit_network_connection_mode(
-        ET.parse(mutant_path).getroot(),
-        traffic_side=case.traffic_side.value,
-        endpoint_tolerance_m=0.01,
-    )
-    candidate_snapshot = canonicalize_net_xml_file(
-        mutant_path,
+    evidence = run_synthetic_mutation_sequence(
+        case_id=case.case_id,
+        mutation_ids=(case.mutation_id,),
+        clean_fixture=clean_fixture,
         traffic_side=case.traffic_side,
-    )
-    candidate_safety = audit_independent_movement_safety(candidate_snapshot)
-    source_snapshot = clean_fixture["snapshot"]
-    source_audit = clean_fixture["audit"]
-    source_safety = clean_fixture["safety"]
-    scope = build_scope_from_junction_ids(
-        source_snapshot,
-        candidate_snapshot,
-        target_source_junction_ids=("J0",),
-        target_candidate_junction_ids=("J0",),
-    )
-    source_connection_findings = canonicalize_connection_mode_findings(
-        source_audit,
-        source_snapshot,
-    )
-    candidate_connection_findings = canonicalize_connection_mode_findings(
-        candidate_audit,
-        candidate_snapshot,
-    )
-    exact_diff = compare_canonical_snapshots(
-        source_snapshot,
-        candidate_snapshot,
-        scope=scope,
-        source_findings=(*source_connection_findings, *source_safety.findings),
-        candidate_findings=(
-            *candidate_connection_findings,
-            *candidate_safety.findings,
-        ),
-    )
-    observed = _observations(
-        connection_findings=candidate_connection_findings,
-        safety_findings=candidate_safety.findings,
-        exact_diff=exact_diff,
+        case_dir=case_dir,
     )
     matches = tuple(
-        _match_observation(expectation, observed)
+        match_synthetic_observation(expectation, evidence.observed)
         for expectation in case.expected_observations
     )
-    source_immutable = file_sha256(source_path) == source_sha256
-    exact_delta_count = len(exact_diff.entity_deltas)
-    abstention_proven = bool(
-        candidate_audit.get("automatic_promotion_gate") == "blocked"
-        or candidate_safety.automatic_promotion_gate is GateStatus.BLOCKED
-        or exact_delta_count
-    )
     blockers: list[str] = []
-    if not source_immutable:
+    if not evidence.source_immutable:
         blockers.append("source_fixture_mutated")
-    if source_sha256 == mutant_sha256:
+    if evidence.source_sha256 == evidence.mutant_sha256:
         blockers.append("mutation_did_not_change_fixture")
     for match in matches:
         if not match.matched:
@@ -266,110 +173,31 @@ def _run_case(
                 f"gold_observation_missing:{match.channel}:{match.value}:"
                 f"{match.observed_count}/{match.expected_minimum_count}"
             )
-    if not abstention_proven:
+    if not evidence.abstention_proven:
         blockers.append("fault_not_blocked_or_exposed_as_exact_delta")
     status = GateStatus.FAIL if blockers else GateStatus.PASS
-    connection_path = case_dir / f"{case.case_id}.connection-mode.json"
-    safety_path = case_dir / f"{case.case_id}.independent-safety.json"
-    diff_path = case_dir / f"{case.case_id}.exact-diff.json"
     result_path = case_dir / f"{case.case_id}.result.json"
-    write_json_atomic(connection_path, candidate_audit, sort_keys=True)
-    write_json_atomic(
-        safety_path,
-        candidate_safety.model_dump(mode="json", by_alias=True),
-        sort_keys=True,
-    )
-    write_json_atomic(
-        diff_path,
-        exact_diff.model_dump(mode="json", by_alias=True),
-        sort_keys=True,
-    )
     result = SyntheticFaultCaseResult(
         case_id=case.case_id,
         fault_family=case.fault_family,
         certification_expectation=case.certification_expectation,
         status=status,
-        source_sha256=source_sha256,
-        mutant_sha256=mutant_sha256,
-        source_immutable=source_immutable,
-        connection_status=str(candidate_audit.get("status", "unknown")),
-        independent_safety_status=candidate_safety.status,
-        exact_delta_count=exact_delta_count,
+        source_sha256=evidence.source_sha256,
+        mutant_sha256=evidence.mutant_sha256,
+        source_immutable=evidence.source_immutable,
+        connection_status=str(evidence.candidate_audit.get("status", "unknown")),
+        independent_safety_status=evidence.candidate_safety.status,
+        exact_delta_count=evidence.exact_delta_count,
         observation_matches=matches,
-        observed=observed,
-        abstention_proven=abstention_proven,
+        observed=evidence.observed,
+        abstention_proven=evidence.abstention_proven,
         blockers=tuple(blockers),
-        source_net_path=str(source_path),
-        mutant_net_path=str(mutant_path),
+        source_net_path=str(evidence.source_path),
+        mutant_net_path=str(evidence.mutant_path),
     )
     write_json_atomic(
         result_path,
         result.model_dump(mode="json", by_alias=True),
         sort_keys=True,
     )
-    return result, {mutant_path, connection_path, safety_path, diff_path, result_path}
-
-
-def _observations(
-    *,
-    connection_findings: tuple[Any, ...],
-    safety_findings: tuple[Any, ...],
-    exact_diff: Any,
-) -> dict[str, dict[str, int]]:
-    channels: dict[str, Counter[str]] = {
-        "connection-structural": Counter(),
-        "connection-review": Counter(),
-        "independent-safety": Counter(),
-        "independent-review": Counter(),
-        "exact-delta": Counter(),
-    }
-    for finding in connection_findings:
-        channel = (
-            "connection-structural"
-            if finding.severity is FindingSeverity.STRUCTURAL
-            else "connection-review"
-        )
-        channels[channel][finding.category] += 1
-    for finding in safety_findings:
-        channel = (
-            "independent-safety"
-            if finding.severity is FindingSeverity.SAFETY
-            else "independent-review"
-        )
-        channels[channel][finding.category] += 1
-    for delta in exact_diff.entity_deltas:
-        channels["exact-delta"][f"{delta.entity_kind}:{delta.action.value}"] += 1
-    return {
-        channel: dict(sorted(counts.items()))
-        for channel, counts in channels.items()
-    }
-
-
-def _match_observation(
-    expectation: GoldObservation,
-    observed: dict[str, dict[str, int]],
-) -> ObservationMatch:
-    count = observed.get(expectation.channel, {}).get(expectation.value, 0)
-    return ObservationMatch(
-        channel=expectation.channel,
-        value=expectation.value,
-        expected_minimum_count=expectation.minimum_count,
-        observed_count=count,
-        matched=count >= expectation.minimum_count,
-    )
-
-
-def _combined_status(audit: dict[str, Any], safety_status: GateStatus) -> GateStatus:
-    connection_status = str(audit.get("status", "fail"))
-    if connection_status == "fail" or safety_status in {GateStatus.FAIL, GateStatus.BLOCKED}:
-        return GateStatus.BLOCKED
-    if connection_status == "review_required" or safety_status is GateStatus.REVIEW:
-        return GateStatus.REVIEW
-    return GateStatus.PASS
-
-
-def _write_xml(path: Path, root: ET.Element) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    serializable = deepcopy(root)
-    ET.indent(serializable, space="    ")
-    ET.ElementTree(serializable).write(path, encoding="utf-8", xml_declaration=True)
+    return result, {*evidence.artifact_paths, result_path}

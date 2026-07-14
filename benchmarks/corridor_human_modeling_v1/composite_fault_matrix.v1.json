@@ -1,0 +1,240 @@
+{
+  "schema": "torii.corridor.composite-fault-benchmark/v1",
+  "benchmark_id": "manifest_9763619a03fed8e1198e2be5",
+  "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "single_fault_benchmark_sha256": "a38bcc19fa852556569b9c08967536c20ca54368c7856178282ac51702fd4abe",
+  "cases": [
+    {
+      "case_id": "x4-binding-plus-tls-range",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "interaction_class": "lane-binding-and-controller-range",
+      "components": [
+        {
+          "fault_family": "wrong-to-lane",
+          "mutation_id": "wrong-to-lane",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "internal_path_final_lane_mismatch"}
+          ]
+        },
+        {
+          "fault_family": "out-of-range-link-index",
+          "mutation_id": "out-of-range-link-index",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "link_index_out_of_program_state"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-duplicate-plus-state-length",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "interaction_class": "connection-cardinality-and-program-shape",
+      "components": [
+        {
+          "fault_family": "duplicate-connection",
+          "mutation_id": "duplicate-connection",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "duplicate_direct_connection"}
+          ]
+        },
+        {
+          "fault_family": "phase-state-length",
+          "mutation_id": "phase-state-length",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "controller_program_state_lengths_inconsistent"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-via-plus-program",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "interaction_class": "internal-path-and-controller-ownership",
+      "components": [
+        {
+          "fault_family": "incorrect-via",
+          "mutation_id": "incorrect-via",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "internal_path_target_mismatch"}
+          ]
+        },
+        {
+          "fault_family": "missing-program",
+          "mutation_id": "missing-program",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "controller_logic_missing"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-geometry-plus-protected-conflict",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "interaction_class": "geometry-and-independent-safety",
+      "components": [
+        {
+          "fault_family": "endpoint-gap",
+          "mutation_id": "endpoint-gap",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "path_endpoint_gap"}
+          ]
+        },
+        {
+          "fault_family": "protected-green-conflict",
+          "mutation_id": "protected-green-conflict",
+          "expected_observations": [
+            {"channel": "independent-safety", "value": "protected_green_movement_conflict"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-request-plus-link-index-2",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "interaction_class": "request-shape-and-secondary-signal-index",
+      "components": [
+        {
+          "fault_family": "request-length",
+          "mutation_id": "request-length",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "request_foes_bitstring_invalid"}
+          ]
+        },
+        {
+          "fault_family": "link-index-2",
+          "mutation_id": "link-index-2",
+          "expected_observations": [
+            {"channel": "independent-safety", "value": "link_index2_outside_independent_conflict_model"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-lane-map-plus-shared-group",
+      "fixture_id": "parallel-two-lane-x4",
+      "traffic_side": "right",
+      "interaction_class": "lane-order-and-signal-group",
+      "components": [
+        {
+          "fault_family": "crossed-lane-map",
+          "mutation_id": "crossed-lane-map",
+          "expected_observations": [
+            {"channel": "connection-review", "value": "crossed_lane_mapping"}
+          ]
+        },
+        {
+          "fault_family": "shared-link-index-conflict",
+          "mutation_id": "shared-link-index-conflict",
+          "expected_observations": [
+            {"channel": "independent-safety", "value": "conflicting_movements_share_signal_group"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-missing-plus-link-index-2",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "interaction_class": "movement-removal-and-secondary-signal-index",
+      "components": [
+        {
+          "fault_family": "missing-connection",
+          "mutation_id": "missing-connection",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "request_count_mismatch"}
+          ]
+        },
+        {
+          "fault_family": "link-index-2",
+          "mutation_id": "link-index-2",
+          "expected_observations": [
+            {"channel": "independent-safety", "value": "link_index2_outside_independent_conflict_model"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-pedestrian-plus-link-index-range",
+      "fixture_id": "pedestrian-x4",
+      "traffic_side": "right",
+      "interaction_class": "pedestrian-safety-and-controller-range",
+      "components": [
+        {
+          "fault_family": "pedestrian-conflict",
+          "mutation_id": "pedestrian-conflict",
+          "expected_observations": [
+            {"channel": "independent-safety", "value": "protected_green_movement_conflict"},
+            {"channel": "independent-review", "value": "pedestrian_facilities_outside_independent_conflict_model"}
+          ]
+        },
+        {
+          "fault_family": "out-of-range-link-index",
+          "mutation_id": "out-of-range-link-index",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "link_index_out_of_program_state"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-rail-plus-request-shape",
+      "fixture_id": "rail-x4",
+      "traffic_side": "right",
+      "interaction_class": "rail-safety-and-request-shape",
+      "components": [
+        {
+          "fault_family": "rail-conflict",
+          "mutation_id": "rail-conflict",
+          "expected_observations": [
+            {"channel": "independent-safety", "value": "protected_green_movement_conflict"},
+            {"channel": "independent-review", "value": "movement_modes_outside_certified_conflict_applicability"}
+          ]
+        },
+        {
+          "fault_family": "request-length",
+          "mutation_id": "request-length",
+          "expected_observations": [
+            {"channel": "connection-structural", "value": "request_foes_bitstring_invalid"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-request-order-plus-protected-conflict",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "interaction_class": "request-semantics-and-independent-safety",
+      "components": [
+        {
+          "fault_family": "request-bit-order",
+          "mutation_id": "request-bit-order",
+          "expected_observations": [
+            {"channel": "exact-delta", "value": "request_foes:modified"}
+          ]
+        },
+        {
+          "fault_family": "protected-green-conflict",
+          "mutation_id": "protected-green-conflict",
+          "expected_observations": [
+            {"channel": "independent-safety", "value": "protected_green_movement_conflict"}
+          ]
+        }
+      ],
+      "expected_abstention": true
+    }
+  ]
+}

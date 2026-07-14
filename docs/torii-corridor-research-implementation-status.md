@@ -9,7 +9,7 @@
 ## 当前结论
 
 - Stage 0“规范冻结”已完成并推送：研究方案、稳定 ID、typed contracts、候选 DAG、scope/boundary-port、workflow state、toolchain lock、benchmark v1、JSON Schema 和 CI 已建立。
-- Stage 1“Audit-only”正在实施，核心架构、首版完整 fault-family 矩阵、SUMO 1.27.1 官方规范场景矩阵和 held-out 盲审执行合同已落地，但尚未达到阶段退出条件。尚缺真实 held-out corridor 的双人决定、第三人 adjudication 和由这些人工证据产生的最终统计。
+- Stage 1“Audit-only”正在实施，核心架构、完整单故障矩阵、首版组合故障交互矩阵、SUMO 1.27.1 官方规范场景矩阵和 held-out 盲审执行合同已落地，但尚未达到阶段退出条件。尚缺真实 held-out corridor 的双人决定、第三人 adjudication 和由这些人工证据产生的最终统计。
 - Stage 2–7 与 MGE-1 尚未完成，不能宣称完整项目或任意城市自动清洗已经实现。
 - 当前产品承诺仍是 selective automation：高精度窄编辑类自动执行，其余输出候选、证据和 review case；不确定时 abstain/block。
 
@@ -65,6 +65,15 @@
 - 本机实测 9/9 netconvert 双重生成通过、9/9 canonical semantic replay 一致、9/9 SUMO load 通过、0 个 Connection Mode structural finding、source hash 全部保持不变。
 - 这些场景是 parser/fail-closed 规范回归，不是 teacher 网络：pedestrian 仍因 controlled pedestrian link 未进入独立模型而 `blocked`；rail、no-internal、ramp、NEMA 等保持精确 `review` 或 abstention，不伪装成自动认证成功。
 
+### 组合故障交互 benchmark
+
+- `composite_fault_matrix.v1.json` 同时绑定冻结的总 benchmark 和 23-family 单故障 benchmark 哈希；每个组成故障只能沿用已预注册的 mutation 与 gold witness。
+- 10 个双故障 case 覆盖 lane binding、internal path、geometry、request/foes、TLS program/link index、lane ordering、pedestrian 和 rail 的跨层交互。
+- 每个组成故障必须至少拥有一个不与同 case 其他组成共享的独占 witness；整体被阻断不等于组成故障均被检出。
+- 本机实测 10/10 case、20/20 组成故障、22/22 gold observation 通过，所有 clean source fixture 在运行前后哈希不变。
+- 已冻结负对照：`rail-conflict + phase-state-length` 中，错误 phase state shape 会遮蔽 protected rail conflict；runner 因 rail component witness 缺失明确失败，即使网络整体仍被其他结构错误阻断。
+- 该结果证明当前审核器能发现一组预注册的跨层遮蔽问题，不代表真实 OOD 组合、pedestrian 或 rail 安全域已经认证。
+
 ### Held-out corridor 双人盲审门
 
 - 预注册 `held_out_review_preregistration.v1.json`：30 个 case、至少 3 个 held-out city group、6 类 morphology、每城市至少 5 个 case，同时覆盖左右侧通行和 pedestrian/bicycle/ramp/rail/bridge/tunnel。
@@ -109,6 +118,7 @@ SHA-256：
 ## 当前阶段尚未满足的退出条件
 
 - independent conflict graph 尚无真实 held-out gold 标注和由人工 adjudication 产生的 precision/recall。
+- 组合故障 benchmark 目前是 10 个预注册双故障；尚未覆盖随机多故障、未知 mutation 和分布外结构的 OOD 分组。
 - pedestrian-aware conflict、rail 专用安全、bicycle 专用语义尚未认证。
 - 盲审 package/evaluator 已实现，但尚无 30-case 真实双人决定和第三人 adjudication；因此 review time 与 reviewer agreement 仍没有实测结论。
 - Stage 2 的 certified micro-repair 还没有逐编辑类 held-out 认证证据。
@@ -116,7 +126,7 @@ SHA-256：
 
 ## 下一实施顺序
 
-1. 为合成矩阵增加 mutation 组合与 OOD 分组；单故障 23-family gold 与官方规范场景已完成。
+1. 为合成矩阵增加 OOD 分组；单故障 23-family gold、10-case 组合故障交互矩阵与官方规范场景已完成。
 2. 按已冻结的 blind-review policy 填充 30 个真实 held-out corridor case，执行双人审核和 adjudication，生成不可事后调阈值的统计报告。
 3. 实现 Stage 2 仅限可局部证明的 micro-repair，所有操作具备 precondition、forward/inverse patch 和 exact delta。
 4. 实现 H_S/H_M/H_P 三假设并行，不再从 shared TLS 推导 physical merge。
