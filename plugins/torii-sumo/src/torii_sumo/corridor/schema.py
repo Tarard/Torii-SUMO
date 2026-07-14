@@ -14,16 +14,22 @@ from .held_out_review_contracts import (
     HeldOutReviewReport,
 )
 from .held_out_review_v2_contracts import (
+    AttentionEvaluationKeyV2R2,
+    BlindedAttentionDatasetV2R2,
     HeldOutReplacementAttemptLedgerV2,
     HeldOutReplacementPlanV2,
     HeldOutReplacementPolicyV2,
     HeldOutReserveCorpusV2,
     HeldOutReviewParentV2,
+    HeldOutReviewExecutionParentV2R2,
+    HeldOutReviewPackageManifestV2R2,
     HeldOutReviewPolicyV2,
     HeldOutReviewV2ContractBundle,
     HeldOutReviewV2Report,
+    HeldOutReviewTrialInstanceV2R2,
     HeldOutSourceSnapshotProtocolV2,
     ReviewWitnessSamplingPolicyV2,
+    ReviewStudySamplingPolicyV2R2,
 )
 from .held_out_corpus_contracts import (
     HeldOutCorpusMachineManifest,
@@ -244,6 +250,54 @@ def build_held_out_review_v2_report_schema() -> dict[str, object]:
         HeldOutReviewV2Report,
         "torii.corridor.held-out-review-report.v2.schema.json",
         status="stage-1h-human-validation-evidence-contract",
+    )
+
+
+def build_review_study_sampling_policy_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        ReviewStudySamplingPolicyV2R2,
+        "torii.corridor.review-study-sampling-policy.v2-r2.schema.json",
+        status="stage-1m-reviewable-validation-sampling-contract",
+    )
+
+
+def build_held_out_review_execution_parent_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewExecutionParentV2R2,
+        "torii.corridor.held-out-review-execution-parent.v2-r2.schema.json",
+        status="stage-1m-frozen-machine-evidence-parent",
+    )
+
+
+def build_held_out_review_trial_instance_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewTrialInstanceV2R2,
+        "torii.corridor.held-out-review-trial-instance.v2-r2.schema.json",
+        status="stage-1m-pre-sampling-trial-commitment",
+    )
+
+
+def build_blinded_attention_dataset_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        BlindedAttentionDatasetV2R2,
+        "torii.corridor.blinded-attention-dataset.v2-r2.schema.json",
+        status="stage-1m-reviewer-visible-blinded-dataset",
+    )
+
+
+def build_attention_evaluation_key_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        AttentionEvaluationKeyV2R2,
+        "torii.corridor.attention-evaluation-key.v2-r2.schema.json",
+        status="stage-1m-restricted-unblinding-key",
+    )
+
+
+def build_held_out_review_package_manifest_v2_r2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReviewPackageManifestV2R2,
+        "torii.corridor.held-out-review-package-manifest.v2-r2.schema.json",
+        status="stage-1m-review-package-provenance",
     )
 
 
