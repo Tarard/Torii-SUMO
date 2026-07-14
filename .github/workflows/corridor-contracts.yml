@@ -118,7 +118,10 @@ jobs:
             --report-output generated.held-out-review-report.schema.json \
             --corpus-output generated.held-out-corpus.schema.json \
             --corpus-report-output generated.held-out-corpus-report.schema.json \
-            --corpus-machine-report-output generated.held-out-corpus-machine-report.schema.json
+            --corpus-machine-report-output generated.held-out-corpus-machine-report.schema.json \
+            --run-identity-output generated.held-out-machine-run-identity.schema.json \
+            --corpus-machine-manifest-output generated.held-out-corpus-machine-manifest.schema.json \
+            --net-replay-report-output generated.net-replay-report.schema.json
           diff --unified \
             schemas/torii.corridor.held-out-review-policy.v1.schema.json \
             generated.held-out-review-policy.schema.json
@@ -135,8 +138,17 @@ jobs:
             schemas/torii.corridor.held-out-corpus-snapshot-report.v1.schema.json \
             generated.held-out-corpus-report.schema.json
           diff --unified \
-            schemas/torii.corridor.held-out-corpus-machine-report.v1.schema.json \
+            schemas/torii.corridor.held-out-corpus-machine-report.v2.schema.json \
             generated.held-out-corpus-machine-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-machine-run-identity.v1.schema.json \
+            generated.held-out-machine-run-identity.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-corpus-machine-manifest.v2.schema.json \
+            generated.held-out-corpus-machine-manifest.schema.json
+          diff --unified \
+            schemas/torii.corridor.net-replay-report.v1.schema.json \
+            generated.net-replay-report.schema.json
           python plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
             --output generated.held-out-corpus.json
           diff --unified \
