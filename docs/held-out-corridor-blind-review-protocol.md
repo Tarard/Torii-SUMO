@@ -1,5 +1,9 @@
 # Held-out corridor blind-review protocol v1
 
+> **Frozen pilot artifact.** This file and its v1 policy are retained unchanged
+> as a historical pilot contract. They are not the active Stage 1-M trial and
+> must not be edited in place to make the current corpus pass.
+
 This protocol implements the Stage 1 human-evidence gate defined by the
 Torii-SUMO corridor research plan. It is a preregistered pilot protocol, not a
 claim that human validation has already happened.
@@ -75,3 +79,18 @@ The contracts, blinding packager, evaluator, metrics, schemas, and fail-closed
 tests are implemented. No real held-out human decisions or adjudications are
 present in the repository, so Stage 1 remains incomplete and automatic
 promotion remains blocked.
+
+The current machine corpus also exposes a structural v1 trial contradiction:
+
+- only 27 corridors have complete review packages; three are replay-invalid;
+- every current machine label is `defect`, so the prospective auto-pass count
+  is zero;
+- v1 correctly reports auto precision as undefined when that denominator is
+  zero, while its frozen gate requires auto precision of at least 0.99.
+
+Neither lowering the case count nor treating undefined precision as 1.0 is
+allowed. The active successor is a new v2 trial with a separate audit-attention
+cohort and a future prospective safe-pass cohort, a new parent benchmark hash,
+trial ID, schema, deterministic reserve replacements, and finding-cluster
+decisions. Its design is frozen by
+[`stage1-machine-review-ready-plan.md`](stage1-machine-review-ready-plan.md).

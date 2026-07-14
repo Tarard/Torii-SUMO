@@ -1,5 +1,11 @@
 # Torii-SUMO 走廊级人类建模闭环：实施状态
 
+> **历史状态页。** 当前 active goal、Stage 1-M/1-H 切分和退出门以
+> [`stage1-machine-review-ready-plan.md`](stage1-machine-review-ready-plan.md)
+> 与 [`torii-corridor-human-modeling-implementation-status.md`](torii-corridor-human-modeling-implementation-status.md)
+> 为准。当前 30 条多城市走廊属于 Stage 1 held-out 数据收集，不是 Stage 6；
+> `REVIEW_READY` 不等于 Stage 1 退出。
+
 更新时间：2026-07-14（Europe/Berlin）
 
 权威研究方案：[`docs/torii-corridor-human-modeling-research-plan.md`](torii-corridor-human-modeling-research-plan.md)
