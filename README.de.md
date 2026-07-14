@@ -35,6 +35,8 @@ Torii hat zwei Schichten:
 | Reasoning layer | SUMO Expert Skills stellen die richtigen Fragen, waehlen einen Workflow und begrenzen Aussagen. |
 | Execution layer | Lokale sichere stdio MCP Tools fuehren begrenzte SUMO-Checks aus und liefern strukturierte Beobachtungen. |
 
+Forschungsstand (2026-07-14): Stage 1-M ist **Machine REVIEW_READY**. Dreissig verblindete Held-out-Korridorpakete, der vollstaendige maschinelle Witness-Census, deterministisches Sampling und Provenance sind fuer die menschliche Validierung eingefroren. Das ist weder ein Stage-1-Abschluss noch eine Zertifizierung automatischer Reparaturen oder ein Nachweis, dass beliebige OSM-Netze bereits Expertenqualitaet in NetEdit erreichen. Details stehen im [Stage-1-M-Nachweis](docs/stage1-machine-review-ready-plan.md).
+
 Die Architektur ist in [`ARCHITECTURE.md`](ARCHITECTURE.md) dokumentiert: Router, Planner, Executor und Reviewer.
 
 Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.

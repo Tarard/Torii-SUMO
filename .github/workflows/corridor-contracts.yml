@@ -51,6 +51,10 @@ jobs:
             plugins/torii-sumo/scripts/build_held_out_corridor_evidence.py \
             plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
             plugins/torii-sumo/scripts/freeze_held_out_review_v2.py \
+            plugins/torii-sumo/scripts/freeze_held_out_replacement_execution_v2.py \
+            plugins/torii-sumo/scripts/freeze_held_out_review_trial_v2_r2.py \
+            plugins/torii-sumo/scripts/build_held_out_review_package_v2_r2.py \
+            plugins/torii-sumo/scripts/freeze_stage1_machine_review_ready.py \
             plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
             plugins/torii-sumo/scripts/evaluate_held_out_review.py \
             plugins/torii-sumo/scripts/run_official_sumo_benchmark.py \
@@ -62,6 +66,8 @@ jobs:
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_held_out_review_v2.py \
+            tests/test_held_out_review_v2_r2.py \
+            tests/test_stage1_machine_review_ready.py \
             tests/test_held_out_corpus.py \
             tests/test_pedestrian_control_census.py \
             tests/test_pedestrian_row_oracle.py \
@@ -162,11 +168,22 @@ jobs:
             --reserve-output generated.held-out-reserve-corpus-v2.schema.json \
             --replacement-policy-output generated.held-out-replacement-policy-v2.schema.json \
             --replacement-plan-output generated.held-out-replacement-plan-v2.schema.json \
+            --source-snapshot-protocol-output generated.held-out-source-snapshot-protocol-v2.schema.json \
+            --replacement-attempt-ledger-output generated.held-out-replacement-attempt-ledger-v2.schema.json \
             --sampling-policy-output generated.review-witness-sampling-policy-v2.schema.json \
             --parent-output generated.held-out-review-parent-v2.schema.json \
             --policy-output generated.held-out-review-policy-v2.schema.json \
             --bundle-output generated.held-out-review-bundle-v2.schema.json \
-            --report-output generated.held-out-review-report-v2.schema.json
+            --report-output generated.held-out-review-report-v2.schema.json \
+            --study-sampling-policy-r2-output generated.review-study-sampling-policy-v2-r2.schema.json \
+            --execution-parent-r2-output generated.held-out-review-execution-parent-v2-r2.schema.json \
+            --trial-instance-r2-output generated.held-out-review-trial-instance-v2-r2.schema.json \
+            --blinded-dataset-r2-output generated.blinded-attention-dataset-v2-r2.schema.json \
+            --evaluation-key-r2-output generated.attention-evaluation-key-v2-r2.schema.json \
+            --sampling-ledger-r2-output generated.review-sampling-ledger-v2-r2.schema.json \
+            --unit-decision-r2-output generated.review-unit-decision-v2-r2.schema.json \
+            --unit-adjudication-r2-output generated.review-unit-adjudication-v2-r2.schema.json \
+            --package-manifest-r2-output generated.held-out-review-package-manifest-v2-r2.schema.json
           diff --unified \
             schemas/torii.corridor.held-out-reserve-corpus.v2.schema.json \
             generated.held-out-reserve-corpus-v2.schema.json
@@ -176,6 +193,12 @@ jobs:
           diff --unified \
             schemas/torii.corridor.held-out-replacement-plan.v2.schema.json \
             generated.held-out-replacement-plan-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-source-snapshot-protocol.v2.schema.json \
+            generated.held-out-source-snapshot-protocol-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-replacement-attempt-ledger.v2.schema.json \
+            generated.held-out-replacement-attempt-ledger-v2.schema.json
           diff --unified \
             schemas/torii.corridor.review-witness-sampling-policy.v2.schema.json \
             generated.review-witness-sampling-policy-v2.schema.json
@@ -191,12 +214,40 @@ jobs:
           diff --unified \
             schemas/torii.corridor.held-out-review-report.v2.schema.json \
             generated.held-out-review-report-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.review-study-sampling-policy.v2-r2.schema.json \
+            generated.review-study-sampling-policy-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-review-execution-parent.v2-r2.schema.json \
+            generated.held-out-review-execution-parent-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-review-trial-instance.v2-r2.schema.json \
+            generated.held-out-review-trial-instance-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.blinded-attention-dataset.v2-r2.schema.json \
+            generated.blinded-attention-dataset-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.attention-evaluation-key.v2-r2.schema.json \
+            generated.attention-evaluation-key-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.review-sampling-ledger.v2-r2.schema.json \
+            generated.review-sampling-ledger-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.review-unit-decision.v2-r2.schema.json \
+            generated.review-unit-decision-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.review-unit-adjudication.v2-r2.schema.json \
+            generated.review-unit-adjudication-v2-r2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-review-package-manifest.v2-r2.schema.json \
+            generated.held-out-review-package-manifest-v2-r2.schema.json
           python plugins/torii-sumo/scripts/export_stage1_review_ready_schema.py \
             --program-inventory-output generated.effective-tls-program-inventory.schema.json \
             --binding-census-output generated.controlled-pedestrian-binding-census.schema.json \
             --atomic-conflict-ledger-output generated.atomic-conflict-ledger.schema.json \
             --review-compression-output generated.lossless-review-compression.schema.json \
-            --row-experiment-output generated.row-1-experiment-report.schema.json
+            --row-experiment-output generated.row-1-experiment-report.schema.json \
+            --machine-review-ready-provenance-output generated.stage1m-machine-review-ready-provenance.schema.json
           diff --unified \
             schemas/torii.corridor.effective-tls-program-inventory.v1.schema.json \
             generated.effective-tls-program-inventory.schema.json
@@ -212,6 +263,9 @@ jobs:
           diff --unified \
             schemas/torii.corridor.row-1-experiment-report.v1.schema.json \
             generated.row-1-experiment-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.stage1m-machine-review-ready-provenance.v3.schema.json \
+            generated.stage1m-machine-review-ready-provenance.schema.json
           python plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
             --output generated.held-out-corpus.json
           diff --unified \
@@ -250,6 +304,8 @@ jobs:
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_held_out_review_v2.py \
+            tests/test_held_out_review_v2_r2.py \
+            tests/test_stage1_machine_review_ready.py \
             tests/test_held_out_corpus.py \
             tests/test_pedestrian_control_census.py \
             tests/test_pedestrian_row_oracle.py \

@@ -19,6 +19,7 @@ from torii_sumo.corridor.schema import (
     build_effective_tls_program_inventory_schema,
     build_lossless_review_compression_schema,
     build_row1_experiment_report_schema,
+    build_stage1_machine_review_ready_provenance_schema,
 )
 
 
@@ -69,6 +70,14 @@ def main() -> None:
             / "torii.corridor.row-1-experiment-report.v1.schema.json"
         ),
     )
+    parser.add_argument(
+        "--machine-review-ready-provenance-output",
+        type=Path,
+        default=(
+            SCHEMA_DIR
+            / "torii.corridor.stage1m-machine-review-ready-provenance.v3.schema.json"
+        ),
+    )
     args = parser.parse_args()
     for path, schema in (
         (
@@ -90,6 +99,10 @@ def main() -> None:
         (
             args.row_experiment_output,
             build_row1_experiment_report_schema(),
+        ),
+        (
+            args.machine_review_ready_provenance_output,
+            build_stage1_machine_review_ready_provenance_schema(),
         ),
     ):
         write_json_atomic(path, schema, sort_keys=True)

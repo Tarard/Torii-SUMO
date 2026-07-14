@@ -1,7 +1,7 @@
 # Torii-SUMO Stage 1-M — Machine REVIEW_READY 执行规范
 
 更新时间：2026-07-14  
-状态：active goal，机器侧里程碑；自动晋级保持阻断  
+状态：**Machine REVIEW_READY**；Stage 1-H 与自动晋级保持阻断
 上位规范：[`torii-corridor-human-modeling-research-plan.md`](torii-corridor-human-modeling-research-plan.md)
 
 ## 1. 目标定义
@@ -21,15 +21,18 @@
 
 ## 2. 当前机器基线的正确解释
 
-冻结的最新运行报告记录：
+权威 REVIEW_READY 运行记录：
 
-- 30 条走廊均被尝试；27 条形成完整机器审核包，3 条因 `netconvert` 语义重放不一致而 fail closed。
-- 18,313 个 crossing edge 中，18,311 个形成当前模型可识别的 pedestrian movement；剩余 2 个位于 Paris Porte Maillot。
-- 当前输出包含 453 个受控行人 effective-program 未闭合 finding。
-- 当前输出包含 34,493 个 confirmed centerline conflict witness 和 53,930 个 potential envelope witness。
-- 所有 promotion gate 仍然 blocked；尚无真实人工标签、precision、recall、kappa、AutoPrecision、AutoCoverage 或 review-time 结论。
+- 6/6 城市源和 30/30 effective-corpus 走廊快照通过身份与引用闭包；snapshot manifest 绑定 40 个 artifact，缺失和哈希失败均为 0。
+- 30/30 走廊完成机器流水线，30/30 通过 normalized semantic replay；machine manifest 绑定 1,404 个 artifact，缺失和哈希失败均为 0。
+- 冻结的 `PCB-453` 保留为 27 条原始有效走廊基线；三个 replacement 新增 6 条 assessment，因此 effective corpus 的权威 census 是 `PCB-459`：438 条 `runtime-special-controller`、21 条 `ordinary-program-truly-absent`、0 条 ambiguous。459/459 均有唯一 primary class 和精确审核位置。
+- 冻结的 `RWC-1` 基线仍为 88,423 个 atomic witness；三个 replacement 新增 13,975 个，effective corpus 共 102,398 个：39,725 confirmed、62,673 potential、98,041 clusters、15,878 site review cases。lost、duplicate、extraneous 和 mixed-hard-key violation 均为 0。
+- effective corpus 有 3 个稳定 `PedestrianCoverageGap`：Paris Porte Maillot 2 个、London Liverpool Street 1 个。它们都是 safety coverage blocker + OOD/review task，不是已证明的现场结构缺陷；Paris 两个不得当成两个独立认证地点。
+- v2-R2 盲审包包含 30 个 corridor package、384 个 review unit：240 个 conflict site、120 个 negative pair、21 个 hard controlled-binding census 和 3 个 coverage-gap census；217 个 conflict site 带独立隐藏 witness。
+- 正式盲审包与独立重复包各有 892 个文件，逐相对路径 SHA-256 差异为 0；reviewer-visible machine-label、attention-role 和 hidden-role 泄漏均为 0。
+- 30 个 corridor-level machine label 仍全部为 `defect`，这不是人工标签，也不能产生 AutoPrecision。所有 promotion gate 仍为 `blocked`。
 
-这些数字目前是机器运行结果，不是真实缺陷数量，也不是质量认证结果。已有 provenance v3 绑定旧 producer `be15f6e…`；Stage 1-M 仍需生成一份绑定新合同、精确 clean producer、tree、工具链和完整 artifact DAG 的 REVIEW_READY 权威 provenance。旧 artifact 不得覆盖或改写。
+权威机器证据冻结在 [`stage1m_machine_review_ready_provenance_20260714.v3.json`](../benchmarks/corridor_human_modeling_v1/evidence/stage1m_machine_review_ready_provenance_20260714.v3.json)。它保留旧 provenance v3，不覆盖历史 artifact，并绑定精确 clean producer、tree、工具链、输入/输出哈希和 artifact DAG。
 
 ## 3. Stage 1-M 十项退出门
 
@@ -38,9 +41,9 @@ Stage 1-M 只有在下列十项同时关闭后才能标记为 `REVIEW_READY`：
 1. 当前 head 的 Corridor Contract Freeze CI 全绿。
 2. REVIEW_READY provenance 与精确 clean producer commit、tree revision、工具链、全部输入及输出哈希绑定。
 3. 至少 30 个有效、完整、盲化的 review case；3 个 replay-invalid corridor 单独进入 reproducibility 统计，不计入模型质量样本。
-4. Paris 两个 residual crossing 各自具有稳定实体、完整拒绝原因、精确审核位置和 OOD 维度。
-5. 453 个 controlled-binding finding 完成全量、确定性的技术分类。
-6. 88,423 个 atomic conflict witness 全部进入无损 cluster ledger，丢失和重复均为零。
+4. Paris 两个 residual crossing 及 replacement 新增的 London gap 各自具有稳定实体、完整拒绝原因、精确审核位置和 OOD 维度。
+5. 冻结 `PCB-453` 与 effective `PCB-459` 均完成全量、确定性的技术分类。
+6. 冻结 88,423-witness 基线与 effective 102,398-witness census 全部进入无损 cluster ledger，丢失和重复均为零。
 7. cluster 抽样概率、代表 witness、extremal witness 和隐藏成员验证协议冻结。
 8. v2 human-review trial、阈值、replacement policy、统计方法和 schema 冻结。
 9. 所有自动 promotion gate 明确保持 blocked。
@@ -235,11 +238,11 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 
 ### 7.1 PCB-453 — Controlled Pedestrian Binding Census
 
-**假设**：453 条 finding 可仅凭冻结机器证据被确定性分入七个 primary classes。
+**假设**：冻结基线的 453 条 finding 可仅凭冻结机器证据被确定性分入七个 primary classes。replacement 不改写该实验身份，而是形成 effective-corpus 扩展 `PCB-459`。
 
 **机器成功门**：
 
-- 453/453 唯一 primary class；
+- 基线 453/453、effective corpus 459/459 均有唯一 primary class；
 - unknown 不超过预注册的 5%；
 - effective external program 被误分为 ordinary missing：0；
 - runtime special 被误分为普通道路 missing：0；
@@ -261,7 +264,7 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 
 ### 7.3 RWC-1 — Lossless Review Witness Compression
 
-**假设**：88,423 个 atomic witness 可压缩成 crossing-level review cases 和 population strata，同时保持完整 witness、可逆 membership 和无偏抽样能力。
+**假设**：冻结的 88,423 个 atomic witness 可压缩成 crossing-level review cases 和 population strata，同时保持完整 witness、可逆 membership 和无偏抽样能力。effective-corpus 扩展对 replacement 新增的 13,975 个 witness 应满足相同不变量，总数为 102,398。
 
 **机器 REVIEW_READY 门**：
 
@@ -278,10 +281,11 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 
 ## 8. 抽样协议
 
-- 453 个 controlled-binding finding：机器全量 census。
-- Paris 两个 residual crossing：全量审核任务，但同一复杂地点不得计作两个独立认证样本。
-- rare、rail、grade-separated、unknown-control、shared-controller：全量抽样或 census。
-- 高频 homogeneous cluster：冻结种子下分层随机抽样，并记录每个 cluster/member 的 inclusion probability。
+- 459 个 controlled-binding assessment：机器全量 census；人工包只对 21 个 hard class assessment 全量审核。
+- Paris 两个 residual crossing和 London replacement 的一个 gap：全量审核任务；Paris 两个不得计作两个独立认证地点。
+- rare、rail、grade-separated、unknown-control、shared-controller：机器全量保留；是否进入人工 census 由冻结 v2-R2 sampling policy 决定，不因“稀有”自动扩大人工样本。
+- 高频 homogeneous cluster：每 corridor 冻结抽取 8 个 conflict site，并记录每个 unit 的 inclusion probability。
+- 每 corridor 冻结抽取 4 个 negative pair，用于估计漏检和 attention recall。
 - 每个大型 cluster：代表、extremal 和隐藏随机成员。
 - 从未产生 conflict finding 的 crossing × vehicle pair 抽取负样本，用于估计漏检和 recall。
 
@@ -323,7 +327,7 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 - stale-evidence 检查；
 - artifact DAG closure。
 
-本规范采用的研究方法：预注册假设、机器与人工阶段分离、失败可证伪、确定性重复、冻结阈值与不可变证据。当前证据成熟度为 **machine evidence under construction**，不是 human-validated result。
+本规范采用的研究方法：预注册假设、机器与人工阶段分离、失败可证伪、确定性重复、冻结阈值与不可变证据。当前证据成熟度为 **Machine REVIEW_READY**，不是 human-validated result，也不是自动修复认证。
 
 ## 11. 开发运行记录（非权威 provenance）
 
@@ -336,7 +340,7 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 - 每个 corridor 的 automatic promotion gate 仍为 blocked；
 - `london-kings-cross`、`melbourne-royal-parade` 和 `sydney-cross-city-tunnel` 仍按 replay-invalid 单列，没有进入上述 27 个模型质量样本。
 
-该结果只证明压缩器在现有候选快照上的机器闭合与确定性，不证明 finding 对应现实缺陷，不证明 cluster 内人工决定可传播，也不构成 Stage 1-M provenance。权威证据仍必须在实现提交后，由 clean producer commit 重新生成并纳入完整 manifest。
+该历史开发结果只证明压缩器在旧候选快照上的机器闭合与确定性，不证明 finding 对应现实缺陷，也不证明 cluster 内人工决定可传播。它后来由第 2 节所列 clean-producer effective-corpus provenance 取代为当前机器证据，但仍保留为 88,423-witness 基线。
 
 ### 11.2 ROW-1 开发运行（非权威 provenance）
 
@@ -352,4 +356,4 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 
 第一版开发运行曾正确阻断 6 个 case。复核发现其中包含两类实验定义错误：左侧通行的行人实际使用东侧 crossing，而夹具仍审核西侧 crossing；退出 junction 后与 crossing 冲突的 turning movement 只检查了第一段 internal lane。实现随后改为绑定实际 crossing，并追踪 source lane、全部 internal continuation 和 target lane 组成的完整 occupancy path。另一个结果没有被“修成通过”：unprioritized turning movement 的 request closure 包含 `cont` 和内部 waiting junction，当前 oracle 无法独立证明完整关系，因此被正式改为 abstain/review。
 
-以上仍是 dirty-development execution，不是绑定 clean producer commit 的权威 Stage 1-M evidence，也不证明现场道路事实、signal phase 安全或 turning movement 的完整 runtime oracle。正式证据必须在实现提交后由 clean worktree 重跑，并进入 provenance v3/后继 artifact DAG。
+以上两次 ROW-1 输出是开发实验，不证明现场道路事实、signal phase 安全或 turning movement 的完整 runtime oracle。其相同报告哈希、工具链和非声明边界现已由第 2 节所列 REVIEW_READY provenance 绑定；ROW-1 的 `automatic_promotion_gate` 仍为 blocked。

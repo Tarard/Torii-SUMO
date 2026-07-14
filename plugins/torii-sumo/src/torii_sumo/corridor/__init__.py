@@ -153,6 +153,8 @@ from .review_compression import (
 from .ood_benchmark_contracts import OODBenchmarkReport, OODBenchmarkSpec
 from .ood_benchmark_runner import run_ood_benchmark
 from .scope import BoundaryPort, ScopeSpec
+from .stage1_review_ready import freeze_stage1_machine_review_ready_provenance
+from .stage1_review_ready_contracts import Stage1MachineReviewReadyProvenance
 from .synthetic_benchmark_contracts import (
     SyntheticFaultBenchmarkReport,
     SyntheticFaultBenchmarkSpec,
@@ -238,6 +240,7 @@ __all__ = [
     "ScopeSpec",
     "SemanticDelta",
     "StageOutcome",
+    "Stage1MachineReviewReadyProvenance",
     "SyntheticFaultBenchmarkReport",
     "SyntheticFaultBenchmarkSpec",
     "SourceROWBundle",
@@ -266,6 +269,7 @@ __all__ = [
     "deterministic_sample",
     "freeze_replacement_execution_v2",
     "freeze_review_trial_v2_r2",
+    "freeze_stage1_machine_review_ready_provenance",
     "select_conflict_sites",
     "select_negative_pairs",
     "select_presented_site_witnesses",

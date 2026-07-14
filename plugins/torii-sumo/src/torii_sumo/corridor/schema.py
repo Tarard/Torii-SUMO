@@ -62,6 +62,7 @@ from .synthetic_benchmark_contracts import (
     SyntheticFaultBenchmarkSpec,
 )
 from .run_identity import HeldOutMachineRunIdentity
+from .stage1_review_ready_contracts import Stage1MachineReviewReadyProvenance
 
 
 def build_corridor_schema() -> dict[str, object]:
@@ -421,6 +422,14 @@ def build_row1_experiment_report_schema() -> dict[str, object]:
         ROWExperimentReport,
         "torii.corridor.row-1-experiment-report.v1.schema.json",
         status="stage-1m-row-1-independent-right-of-way-contract",
+    )
+
+
+def build_stage1_machine_review_ready_provenance_schema() -> dict[str, object]:
+    return _artifact_schema(
+        Stage1MachineReviewReadyProvenance,
+        "torii.corridor.stage1m-machine-review-ready-provenance.v3.schema.json",
+        status="stage-1m-machine-review-ready-provenance-contract",
     )
 
 

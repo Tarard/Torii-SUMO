@@ -41,6 +41,8 @@ Current MCP tools cover the `torii_auto_workflow` router, environment checks, co
 
 ### Current corridor acceptance boundary
 
+Research status (2026-07-14): Stage 1-M is **Machine REVIEW_READY**. Thirty blinded held-out corridor packages, the full machine witness census, deterministic sampling, and provenance are frozen for human validation. This is not Stage 1 exit, an automatic-repair certification, or evidence that arbitrary OSM networks already reach expert NetEdit quality. See the [Stage 1-M evidence](docs/stage1-machine-review-ready-plan.md).
+
 The implemented promotion contract is corridor-scale: accepted edits are materialized into a separate candidate, review locations are emitted as SUMO `additional.xml`, protected semantic or TLS deltas require an exact candidate-hash-bound review decision, and promotion remains blocked until identity, netconvert, XML, SUMO load, routeability, topology, and modal-connectivity evidence pass.
 
 Every materialized edit now produces one review package: `*.net.xml`, `*.map-review.json`, `*.accepted.review.add.xml`, `*.review.html`, `*.review.json`, and hash-bearing manifests. The `additional.xml` layer is display-only and restricted to `poi`, `poly`, and `param`; human decisions live in structured JSON. Google Maps, satellite, Mapillary, KartaView, or the regional map provider are auxiliary evidence, and become a hard gate only when an edit explicitly declares `map_review_required: true` with an explicit current or historical time scope.
