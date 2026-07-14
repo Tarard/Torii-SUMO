@@ -40,7 +40,11 @@ from torii_sumo.corridor.ids import (
 )
 from torii_sumo.corridor.manifest import ArtifactIdentity, ArtifactManifestV1
 from torii_sumo.corridor.scope import BoundaryPort, ScopeSpec
-from torii_sumo.corridor.schema import build_corridor_schema
+from torii_sumo.corridor.schema import (
+    build_controlled_pedestrian_binding_census_schema,
+    build_corridor_schema,
+    build_effective_tls_program_inventory_schema,
+)
 from torii_sumo.corridor.toolchain import ToolIdentity, ToolchainLock
 from torii_sumo.corridor.workflow import (
     NetworkQualityVectorV1,
@@ -429,6 +433,33 @@ def test_exported_contract_schema_is_current() -> None:
     schema_path = REPOSITORY_ROOT / "schemas/torii.corridor.research-bundle.v1.schema.json"
     expected = json.dumps(
         build_corridor_schema(),
+        indent=2,
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    assert schema_path.read_text(encoding="utf-8") == expected
+
+
+@pytest.mark.parametrize(
+    ("filename", "builder"),
+    (
+        (
+            "torii.corridor.effective-tls-program-inventory.v1.schema.json",
+            build_effective_tls_program_inventory_schema,
+        ),
+        (
+            "torii.corridor.controlled-pedestrian-binding-census.v1.schema.json",
+            build_controlled_pedestrian_binding_census_schema,
+        ),
+    ),
+)
+def test_exported_stage1m_pcb_schemas_are_current(
+    filename: str,
+    builder,
+) -> None:
+    schema_path = REPOSITORY_ROOT / "schemas" / filename
+    expected = json.dumps(
+        builder(),
         indent=2,
         ensure_ascii=False,
         sort_keys=True,

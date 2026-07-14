@@ -22,6 +22,10 @@ from .held_out_corpus_contracts import (
 from .manifest import CorridorResearchBundle
 from .net_replay import NetReplayReport
 from .plainxml_normalization import PlainXmlNormalizationReport
+from .pedestrian_control_census import (
+    ControlledPedestrianBindingCensus,
+    EffectiveTLSProgramInventory,
+)
 from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkReport,
     OfficialSumoBenchmarkSpec,
@@ -202,6 +206,22 @@ def build_plainxml_normalization_report_schema() -> dict[str, object]:
         PlainXmlNormalizationReport,
         "torii.corridor.plainxml-normalization-report.v1.schema.json",
         status="stage-1-experimental-deterministic-ingest-contract",
+    )
+
+
+def build_effective_tls_program_inventory_schema() -> dict[str, object]:
+    return _artifact_schema(
+        EffectiveTLSProgramInventory,
+        "torii.corridor.effective-tls-program-inventory.v1.schema.json",
+        status="stage-1m-pcb-effective-program-evidence-contract",
+    )
+
+
+def build_controlled_pedestrian_binding_census_schema() -> dict[str, object]:
+    return _artifact_schema(
+        ControlledPedestrianBindingCensus,
+        "torii.corridor.controlled-pedestrian-binding-census.v1.schema.json",
+        status="stage-1m-pcb-453-census-contract",
     )
 
 

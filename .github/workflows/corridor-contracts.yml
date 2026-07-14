@@ -45,6 +45,7 @@ jobs:
             plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_ood_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_held_out_review_schema.py \
+            plugins/torii-sumo/scripts/export_stage1_review_ready_schema.py \
             plugins/torii-sumo/scripts/build_held_out_corpus.py \
             plugins/torii-sumo/scripts/build_held_out_corridor_evidence.py \
             plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
@@ -58,6 +59,7 @@ jobs:
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_held_out_corpus.py \
+            tests/test_pedestrian_control_census.py \
             tests/test_official_sumo_benchmark.py \
             tests/test_ood_benchmark.py
 
@@ -149,6 +151,15 @@ jobs:
           diff --unified \
             schemas/torii.corridor.net-replay-report.v1.schema.json \
             generated.net-replay-report.schema.json
+          python plugins/torii-sumo/scripts/export_stage1_review_ready_schema.py \
+            --program-inventory-output generated.effective-tls-program-inventory.schema.json \
+            --binding-census-output generated.controlled-pedestrian-binding-census.schema.json
+          diff --unified \
+            schemas/torii.corridor.effective-tls-program-inventory.v1.schema.json \
+            generated.effective-tls-program-inventory.schema.json
+          diff --unified \
+            schemas/torii.corridor.controlled-pedestrian-binding-census.v1.schema.json \
+            generated.controlled-pedestrian-binding-census.schema.json
           python plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
             --output generated.held-out-corpus.json
           diff --unified \
@@ -162,6 +173,7 @@ jobs:
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_held_out_corpus.py \
+            tests/test_pedestrian_control_census.py \
             tests/test_official_sumo_benchmark.py \
             tests/test_ood_benchmark.py \
             tests/test_synthetic_fault_benchmark.py \
