@@ -42,10 +42,7 @@ class MovementConflictGraph(ContractModel):
     geometry_unavailable_by_design_movement_ids: tuple[StableToken, ...] = ()
 
     def conflict_index(self) -> dict[frozenset[str], MovementConflict]:
-        return {
-            frozenset((conflict.movement_a_id, conflict.movement_b_id)): conflict
-            for conflict in self.conflicts
-        }
+        return {frozenset((conflict.movement_a_id, conflict.movement_b_id)): conflict for conflict in self.conflicts}
 
 
 class IndependentSafetyCoverage(ContractModel):
@@ -56,6 +53,9 @@ class IndependentSafetyCoverage(ContractModel):
     unsupported_controlled_connection_count: int
     crossing_edge_count: int
     walkingarea_edge_count: int
+    modeled_controlled_pedestrian_movement_count: int
+    modeled_crossing_edge_count: int
+    unmodeled_crossing_edge_count: int
     link_index2_connection_count: int
     unresolved_owner_record_count: int
     movement_mode_class_counts: dict[str, int]
@@ -93,9 +93,7 @@ def build_movement_conflict_graph(
         raise ValueError("Conflict envelope margin must be non-negative.")
     entities = snapshot.entity_index()
     all_movement_entities = {
-        entity.stable_entity_id: entity
-        for entity in snapshot.entities
-        if entity.kind == "movement"
+        entity.stable_entity_id: entity for entity in snapshot.entities if entity.kind == "movement"
     }
     movement_entities = {
         movement_id: entity
@@ -145,9 +143,7 @@ def build_movement_conflict_graph(
                 movement_a_id=movement_a_id,
                 movement_b_id=movement_b_id,
                 reason=reason,
-                certainty=(
-                    "potential" if reason == "lane-envelope-proximity" else "confirmed"
-                ),
+                certainty=("potential" if reason == "lane-envelope-proximity" else "confirmed"),
                 minimum_centerline_distance_m=round(distance, 6),
                 crossing_angle_deg=round(angle, 6) if angle is not None else None,
             )
@@ -156,9 +152,7 @@ def build_movement_conflict_graph(
         movement_ids=tuple(sorted(movement_entities)),
         conflicts=tuple(conflicts),
         geometry_missing_movement_ids=tuple(sorted(missing)),
-        geometry_unavailable_by_design_movement_ids=tuple(
-            sorted(unavailable_by_design)
-        ),
+        geometry_unavailable_by_design_movement_ids=tuple(sorted(unavailable_by_design)),
     )
 
 
@@ -172,25 +166,17 @@ def audit_independent_movement_safety(
         envelope_margin_m=envelope_margin_m,
     )
     conflict_index = graph.conflict_index()
-    signal_groups = {
-        entity.stable_entity_id: entity
-        for entity in snapshot.entities
-        if entity.kind == "signal_group"
-    }
+    signal_groups = {entity.stable_entity_id: entity for entity in snapshot.entities if entity.kind == "signal_group"}
     findings: dict[str, Finding] = {}
     protected_conflict_count = 0
     permissive_without_yield_count = 0
     shared_signal_group_conflict_count = 0
     potential_signal_conflict_count = 0
-    coverage_entities = [
-        entity for entity in snapshot.entities if entity.kind == "safety_coverage"
-    ]
+    coverage_entities = [entity for entity in snapshot.entities if entity.kind == "safety_coverage"]
     coverage = _summarize_coverage(coverage_entities)
     limitations: list[str] = []
 
-    for movement in (
-        entity for entity in snapshot.entities if entity.kind == "movement"
-    ):
+    for movement in (entity for entity in snapshot.entities if entity.kind == "movement"):
         incompatible_signatures = _incompatible_path_signatures(movement)
         if not incompatible_signatures:
             continue
@@ -221,9 +207,7 @@ def audit_independent_movement_safety(
         findings[finding.finding_id] = finding
     for coverage_entity in coverage_entities:
         payload = coverage_entity.payload
-        unsupported_count = int(
-            payload.get("unsupported_controlled_connection_count", 0) or 0
-        )
+        unsupported_count = int(payload.get("unsupported_controlled_connection_count", 0) or 0)
         if unsupported_count:
             finding = build_finding(
                 category="controlled_link_outside_independent_conflict_model",
@@ -247,10 +231,8 @@ def audit_independent_movement_safety(
                 confidence=1.0,
             )
             findings[finding.finding_id] = finding
-        pedestrian_facilities = int(payload.get("crossing_edge_count", 0) or 0) + int(
-            payload.get("walkingarea_edge_count", 0) or 0
-        )
-        if pedestrian_facilities:
+        unmodeled_crossings = int(payload.get("unmodeled_crossing_edge_count", 0) or 0)
+        if unmodeled_crossings:
             limitation = "pedestrian_facilities_outside_independent_conflict_model"
             limitations.append(limitation)
             finding = build_finding(
@@ -260,6 +242,29 @@ def audit_independent_movement_safety(
                 witness={
                     "crossing_edge_count": payload.get("crossing_edge_count", 0),
                     "walkingarea_edge_count": payload.get("walkingarea_edge_count", 0),
+                    "modeled_crossing_edge_count": payload.get(
+                        "modeled_crossing_edge_count",
+                        0,
+                    ),
+                    "unmodeled_crossing_edge_count": unmodeled_crossings,
+                },
+                confidence=1.0,
+            )
+            findings[finding.finding_id] = finding
+        pedestrian_facilities = int(payload.get("crossing_edge_count", 0) or 0) + int(
+            payload.get("walkingarea_edge_count", 0) or 0
+        )
+        if pedestrian_facilities and payload.get("ownership_status", "unknown") != "resolved":
+            limitation = "pedestrian_facility_ownership_unresolved"
+            limitations.append(limitation)
+            finding = build_finding(
+                category=limitation,
+                severity=FindingSeverity.REVIEW,
+                subject_id=coverage_entity.stable_entity_id,
+                witness={
+                    "crossing_edge_count": payload.get("crossing_edge_count", 0),
+                    "walkingarea_edge_count": payload.get("walkingarea_edge_count", 0),
+                    "ownership_status": payload.get("ownership_status", "unknown"),
                 },
                 confidence=1.0,
             )
@@ -269,7 +274,6 @@ def audit_independent_movement_safety(
             mode: int(mode_counts.get(mode, 0) or 0)
             for mode in (
                 "bicycle",
-                "pedestrian",
                 "rail",
                 "unspecified",
                 "incompatible",
@@ -305,9 +309,7 @@ def audit_independent_movement_safety(
                     if confirmed
                     else "potentially_conflicting_movements_share_signal_group"
                 ),
-                severity=(
-                    FindingSeverity.SAFETY if confirmed else FindingSeverity.REVIEW
-                ),
+                severity=(FindingSeverity.SAFETY if confirmed else FindingSeverity.REVIEW),
                 subject_id=signal_group_id,
                 witness={
                     "movement_ids": (movement_a_id, movement_b_id),
@@ -317,9 +319,7 @@ def audit_independent_movement_safety(
             )
             findings[finding.finding_id] = finding
 
-    for program in (
-        entity for entity in snapshot.entities if entity.kind == "controller_program"
-    ):
+    for program in (entity for entity in snapshot.entities if entity.kind == "controller_program"):
         for phase_index, phase in enumerate(program.payload.get("phases", ())):
             protected: set[str] = set()
             permissive: set[str] = set()
@@ -367,9 +367,7 @@ def audit_independent_movement_safety(
                         if confirmed
                         else "protected_green_potential_envelope_conflict"
                     ),
-                    severity=(
-                        FindingSeverity.SAFETY if confirmed else FindingSeverity.REVIEW
-                    ),
+                    severity=(FindingSeverity.SAFETY if confirmed else FindingSeverity.REVIEW),
                     subject_id=program.stable_entity_id,
                     witness={
                         "phase_index": phase_index,
@@ -439,38 +437,20 @@ def audit_independent_movement_safety(
             confidence=1.0,
         )
         findings[finding.finding_id] = finding
-    safety_findings = [
-        finding
-        for finding in findings.values()
-        if finding.severity is FindingSeverity.SAFETY
-    ]
-    review_findings = [
-        finding
-        for finding in findings.values()
-        if finding.severity is FindingSeverity.REVIEW
-    ]
+    safety_findings = [finding for finding in findings.values() if finding.severity is FindingSeverity.SAFETY]
+    review_findings = [finding for finding in findings.values() if finding.severity is FindingSeverity.REVIEW]
     blockers = []
     if safety_findings:
         blockers.append("independent_movement_safety_not_proven")
     if review_findings:
         blockers.append(
-            "independent_safety_applicability_incomplete"
-            if limitations
-            else "independent_safety_review_required"
+            "independent_safety_applicability_incomplete" if limitations else "independent_safety_review_required"
         )
-    status = (
-        GateStatus.BLOCKED
-        if safety_findings
-        else GateStatus.REVIEW
-        if review_findings
-        else GateStatus.PASS
-    )
+    status = GateStatus.BLOCKED if safety_findings else GateStatus.REVIEW if review_findings else GateStatus.PASS
     applicability_status = GateStatus.REVIEW if limitations else GateStatus.PASS
     return IndependentSafetyReport(
         status=status,
-        automatic_promotion_gate=(
-            GateStatus.PASS if status is GateStatus.PASS else GateStatus.BLOCKED
-        ),
+        automatic_promotion_gate=(GateStatus.PASS if status is GateStatus.PASS else GateStatus.BLOCKED),
         applicability_status=applicability_status,
         coverage=coverage,
         conflict_graph=graph,
@@ -490,46 +470,45 @@ def _summarize_coverage(
     mode_counts: Counter[str] = Counter()
     for entity in entities:
         mode_counts.update(
-            {
-                str(mode): int(count)
-                for mode, count in entity.payload.get(
-                    "movement_mode_class_counts", {}
-                ).items()
-            }
+            {str(mode): int(count) for mode, count in entity.payload.get("movement_mode_class_counts", {}).items()}
         )
     return IndependentSafetyCoverage(
         coverage_entity_count=len(entities),
         canonical_movement_count=sum(
-            int(entity.payload.get("canonical_movement_count", 0) or 0)
-            for entity in entities
+            int(entity.payload.get("canonical_movement_count", 0) or 0) for entity in entities
         ),
         controlled_connection_count=sum(
-            int(entity.payload.get("controlled_connection_count", 0) or 0)
-            for entity in entities
+            int(entity.payload.get("controlled_connection_count", 0) or 0) for entity in entities
         ),
         mapped_controlled_movement_count=sum(
-            int(entity.payload.get("mapped_controlled_movement_count", 0) or 0)
-            for entity in entities
+            int(entity.payload.get("mapped_controlled_movement_count", 0) or 0) for entity in entities
         ),
         unsupported_controlled_connection_count=sum(
-            int(entity.payload.get("unsupported_controlled_connection_count", 0) or 0)
+            int(entity.payload.get("unsupported_controlled_connection_count", 0) or 0) for entity in entities
+        ),
+        crossing_edge_count=sum(int(entity.payload.get("crossing_edge_count", 0) or 0) for entity in entities),
+        walkingarea_edge_count=sum(int(entity.payload.get("walkingarea_edge_count", 0) or 0) for entity in entities),
+        modeled_controlled_pedestrian_movement_count=sum(
+            int(
+                entity.payload.get(
+                    "modeled_controlled_pedestrian_movement_count",
+                    0,
+                )
+                or 0
+            )
             for entity in entities
         ),
-        crossing_edge_count=sum(
-            int(entity.payload.get("crossing_edge_count", 0) or 0)
-            for entity in entities
+        modeled_crossing_edge_count=sum(
+            int(entity.payload.get("modeled_crossing_edge_count", 0) or 0) for entity in entities
         ),
-        walkingarea_edge_count=sum(
-            int(entity.payload.get("walkingarea_edge_count", 0) or 0)
-            for entity in entities
+        unmodeled_crossing_edge_count=sum(
+            int(entity.payload.get("unmodeled_crossing_edge_count", 0) or 0) for entity in entities
         ),
         link_index2_connection_count=sum(
-            int(entity.payload.get("link_index2_connection_count", 0) or 0)
-            for entity in entities
+            int(entity.payload.get("link_index2_connection_count", 0) or 0) for entity in entities
         ),
         unresolved_owner_record_count=sum(
-            entity.payload.get("ownership_status") == "unresolved"
-            for entity in entities
+            entity.payload.get("ownership_status") == "unresolved" for entity in entities
         ),
         movement_mode_class_counts=dict(sorted(mode_counts.items())),
     )
@@ -602,10 +581,7 @@ def _candidate_geometry_pairs(
             sorted(movement_ids),
             2,
         ):
-            if (
-                geometries[movement_a_id].source_lane_role_id
-                == geometries[movement_b_id].source_lane_role_id
-            ):
+            if geometries[movement_a_id].source_lane_role_id == geometries[movement_b_id].source_lane_role_id:
                 continue
             candidates.add((movement_a_id, movement_b_id))
     return tuple(sorted(candidates))
@@ -645,10 +621,7 @@ def _movement_geometry(
         path = path_variant.get("path", {})
         points: list[tuple[float, float]] = []
         for segment in path.get("segments", ()):
-            shape = tuple(
-                (float(point[0]), float(point[1]))
-                for point in segment.get("shape_xy", ())
-            )
+            shape = tuple((float(point[0]), float(point[1])) for point in segment.get("shape_xy", ()))
             if not shape:
                 continue
             if points and points[-1] == shape[0]:
@@ -667,9 +640,7 @@ def _movement_geometry(
         polylines=tuple(polylines),
         half_width_m=(max(widths) / 2.0 if widths else 1.6),
         source_lane_role_id=str(first_variant.get("source_lane_role_id", "")),
-        destination_lane_role_id=str(
-            first_variant.get("destination_lane_role_id", "")
-        ),
+        destination_lane_role_id=str(first_variant.get("destination_lane_role_id", "")),
     )
 
 
@@ -680,8 +651,7 @@ def _incompatible_path_signatures(
         sorted(
             str(variant.get("path_signature", ""))
             for variant in movement.payload.get("variants", ())
-            if "incompatible" in set(map(str, variant.get("mode_classes", ())))
-            and variant.get("path_signature")
+            if "incompatible" in set(map(str, variant.get("mode_classes", ()))) and variant.get("path_signature")
         )
     )
 
@@ -691,8 +661,7 @@ def _all_movement_variants_permission_incompatible(
 ) -> bool:
     variants = tuple(movement.payload.get("variants", ()))
     return bool(variants) and all(
-        "incompatible" in set(map(str, variant.get("mode_classes", ())))
-        for variant in variants
+        "incompatible" in set(map(str, variant.get("mode_classes", ()))) for variant in variants
     )
 
 
@@ -717,10 +686,7 @@ def _geometry_conflict(
     *,
     envelope_margin_m: float,
 ) -> tuple[str, float, float | None] | None:
-    if (
-        first.source_lane_role_id
-        and first.source_lane_role_id == second.source_lane_role_id
-    ):
+    if first.source_lane_role_id and first.source_lane_role_id == second.source_lane_role_id:
         return None
     minimum_distance = math.inf
     best_angle: float | None = None
@@ -752,14 +718,8 @@ def _geometry_conflict(
         return ("centerline-crossing", minimum_distance, best_angle)
     if collinear_overlap:
         return ("collinear-path-overlap", minimum_distance, best_angle)
-    envelope_distance = (
-        first.half_width_m + second.half_width_m + envelope_margin_m
-    )
-    if (
-        minimum_distance <= envelope_distance
-        and best_angle is not None
-        and best_angle >= 20.0
-    ):
+    envelope_distance = first.half_width_m + second.half_width_m + envelope_margin_m
+    if minimum_distance <= envelope_distance and best_angle is not None and best_angle >= 20.0:
         return ("lane-envelope-proximity", minimum_distance, best_angle)
     return None
 
@@ -809,9 +769,7 @@ def _segment_relation(
     if o1 * o2 < 0 and o3 * o4 < 0:
         return "proper"
     if all(abs(value) <= 1e-9 for value in (o1, o2, o3, o4)):
-        if _projection_overlap(a[0], b[0], c[0], d[0]) and _projection_overlap(
-            a[1], b[1], c[1], d[1]
-        ):
+        if _projection_overlap(a[0], b[0], c[0], d[0]) and _projection_overlap(a[1], b[1], c[1], d[1]):
             return "collinear-overlap"
     return "none"
 
@@ -821,9 +779,7 @@ def _orientation(
     b: tuple[float, float],
     c: tuple[float, float],
 ) -> float:
-    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (
-        c[0] - a[0]
-    )
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
 
 def _projection_overlap(a: float, b: float, c: float, d: float) -> bool:
@@ -847,11 +803,7 @@ def _crossing_angle(
     if not first_length or not second_length:
         return None
     cosine = abs(
-        (
-            first_vector[0] * second_vector[0]
-            + first_vector[1] * second_vector[1]
-        )
-        / (first_length * second_length)
+        (first_vector[0] * second_vector[0] + first_vector[1] * second_vector[1]) / (first_length * second_length)
     )
     return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
 
@@ -880,9 +832,7 @@ def _point_segment_distance(
     denominator = dx * dx + dy * dy
     if denominator == 0:
         return math.dist(point, start)
-    ratio = (
-        (point[0] - start[0]) * dx + (point[1] - start[1]) * dy
-    ) / denominator
+    ratio = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / denominator
     ratio = max(0.0, min(1.0, ratio))
     projection = (start[0] + ratio * dx, start[1] + ratio * dy)
     return math.dist(point, projection)

@@ -100,7 +100,10 @@ def test_official_sumo_scenarios_regenerate_load_and_abstain(
     assert cases["no-internal-links"]["connection_status"] == "pass"
     assert cases["no-internal-links"]["independent_safety_status"] == "review"
     assert cases["rail-crossing"]["connection_status"] == "pass"
-    assert cases["pedestrian-crossing"]["independent_safety_status"] == "blocked"
+    assert cases["pedestrian-crossing"]["independent_safety_status"] == "pass"
+    assert cases["pedestrian-crossing"]["movement_count"] == 5
+    assert cases["pedestrian-crossing"]["conflict_count"] == 4
+    assert cases["pedestrian-crossing"]["abstention_proven"] is True
     manifest = json.loads(Path(report["manifest_file"]).read_text(encoding="utf-8"))
     assert manifest["status"] == "pass"
     assert manifest["source_immutable"] is True

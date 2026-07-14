@@ -1,6 +1,6 @@
 {
   "schema": "torii.corridor.official-sumo-benchmark/v1",
-  "benchmark_id": "manifest_7de6449ebb25f44398f060f5",
+  "benchmark_id": "manifest_974df08bc44585a80b0a8bf9",
   "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
   "toolchain_lock_sha256": "9fd07c42362f70f129d11fe21b85a4b304f22c493366f6cd125ed30424e49c55",
   "upstream_repository": "https://github.com/eclipse-sumo/sumo.git",
@@ -388,13 +388,10 @@
         "incoming_motorized_lane_without_connection": 4,
         "outgoing_motorized_lane_without_connection": 4
       },
-      "expected_independent_safety_status": "blocked",
-      "expected_safety_category_counts": {
-        "controlled_link_outside_independent_conflict_model": 1,
-        "pedestrian_facilities_outside_independent_conflict_model": 2
-      },
-      "expected_movement_count": 4,
-      "expected_conflict_count": 0,
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
+      "expected_movement_count": 5,
+      "expected_conflict_count": 4,
       "expected_abstention": true
     },
     {

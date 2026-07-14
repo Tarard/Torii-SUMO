@@ -23,6 +23,11 @@ from .ids import (
     stable_id,
 )
 from .netxml import RawConnection, RawEdge, RawLane, RawNetwork, parse_net_xml_file
+from .pedestrian_crossings import (
+    PedestrianFacilityOwner,
+    infer_pedestrian_facility_owners,
+    model_controlled_pedestrian_crossing,
+)
 
 
 class CanonicalEntity(ContractModel):
@@ -61,10 +66,7 @@ class CanonicalNetworkSnapshot(ContractModel):
         return self
 
     def entity_index(self) -> dict[tuple[str, str], CanonicalEntity]:
-        return {
-            (entity.kind, entity.stable_entity_id): entity
-            for entity in self.entities
-        }
+        return {(entity.kind, entity.stable_entity_id): entity for entity in self.entities}
 
 
 def canonicalize_net_xml_file(
@@ -102,12 +104,7 @@ def canonicalize_raw_network(
             outgoing_connections[(connection.from_edge, connection.from_lane)].append(connection)
     maximum_internal_hops = max(
         1,
-        sum(
-            len(edge.lanes)
-            for edge in network.edges.values()
-            if not edge.external
-        )
-        + 1,
+        sum(len(edge.lanes) for edge in network.edges.values() if not edge.external) + 1,
     )
 
     entities: dict[tuple[str, str], CanonicalEntity] = {}
@@ -139,8 +136,7 @@ def canonicalize_raw_network(
             port_ids_by_edge_flow[key] = descriptor["port_id"]
         cell_id = make_physical_cell_id(
             boundary_port_ids=tuple(
-                port_ids_by_edge_flow[(junction_id, edge.edge_id, flow)]
-                for edge, flow in incident
+                port_ids_by_edge_flow[(junction_id, edge.edge_id, flow)] for edge, flow in incident
             ),
             grade_separation_signature=_grade_separation_signature(incident),
         )
@@ -213,10 +209,7 @@ def canonicalize_raw_network(
                     "tangent_xy": descriptor["tangent_xy"],
                     "normal_xy": descriptor["normal_xy"],
                     "lane_role_ids": lane_ids_for_port,
-                    "lane_widths_m": [
-                        lane.width if lane.width is not None else 3.2
-                        for lane in edge.lanes
-                    ],
+                    "lane_widths_m": [lane.width if lane.width is not None else 3.2 for lane in edge.lanes],
                     "traffic_side": traffic_side.value,
                     "edge_semantics": {
                         "type": edge.edge_type,
@@ -255,17 +248,13 @@ def canonicalize_raw_network(
             entity_id=cell_id,
             owner_cell_ids=(cell_id,),
             boundary_port_ids=tuple(
-                sorted(
-                    port_ids_by_edge_flow[(junction_id, edge.edge_id, flow)]
-                    for edge, flow in incident
-                )
+                sorted(port_ids_by_edge_flow[(junction_id, edge.edge_id, flow)] for edge, flow in incident)
             ),
             payload={
                 "junction_type": junction.junction_type,
                 "position_xy": _rounded_point((junction.x, junction.y)),
                 "boundary_port_ids": sorted(
-                    port_ids_by_edge_flow[(junction_id, edge.edge_id, flow)]
-                    for edge, flow in incident
+                    port_ids_by_edge_flow[(junction_id, edge.edge_id, flow)] for edge, flow in incident
                 ),
                 "requests": request_payload,
             },
@@ -282,9 +271,16 @@ def canonicalize_raw_network(
             },
         )
 
+    pedestrian_facility_owners = infer_pedestrian_facility_owners(
+        network,
+        junction_cell_ids=junction_cell_ids,
+    )
     connection_movement_ids: dict[str, str] = {}
     movement_variants: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    movement_owners: dict[str, tuple[str, str, str]] = {}
+    movement_owners: dict[str, tuple[str, tuple[str, ...]]] = {}
+    pedestrian_rejection_reasons: dict[str, tuple[str, ...]] = {}
+    modeled_pedestrian_crossing_edges: dict[str, set[str]] = defaultdict(set)
+    modeled_pedestrian_movement_ids: dict[str, set[str]] = defaultdict(set)
     for connection in network.connections:
         source_edge = network.edges.get(connection.from_edge)
         target_edge = network.edges.get(connection.to_edge)
@@ -295,17 +291,52 @@ def canonicalize_raw_network(
             or not target_edge.external
             or source_edge.to_junction != target_edge.from_junction
         ):
+            attempt = model_controlled_pedestrian_crossing(
+                connection,
+                network=network,
+                facility_owners=pedestrian_facility_owners,
+                port_ids_by_edge_flow=port_ids_by_edge_flow,
+                outgoing_connections=outgoing_connections,
+            )
+            if not attempt.is_candidate:
+                continue
+            if attempt.model is None:
+                pedestrian_rejection_reasons[str(connection.connection_index)] = attempt.rejection_reasons
+                continue
+            model = attempt.model
+            for role_id, role_payload in model.lane_role_payloads:
+                key = ("lane_role", role_id)
+                existing = entities.get(key)
+                if existing is None:
+                    _put_entity(
+                        entities,
+                        kind="lane_role",
+                        entity_id=role_id,
+                        owner_cell_ids=(model.physical_cell_id,),
+                        boundary_port_ids=model.boundary_port_ids,
+                        payload=role_payload,
+                    )
+                elif (
+                    existing.payload != role_payload
+                    or existing.owner_physical_cell_ids != (model.physical_cell_id,)
+                    or existing.boundary_port_ids != model.boundary_port_ids
+                ):
+                    raise ValueError(f"Pedestrian crossing lane-role identity collision: {role_id}")
+            connection_movement_ids[str(connection.connection_index)] = model.movement_id
+            movement_variants[model.movement_id].append({**model.movement_variant, "path": model.path})
+            movement_owners[model.movement_id] = (
+                model.physical_cell_id,
+                model.boundary_port_ids,
+            )
+            modeled_pedestrian_crossing_edges[model.physical_cell_id].add(model.crossing_edge_id)
+            modeled_pedestrian_movement_ids[model.physical_cell_id].add(model.movement_id)
             continue
         junction_id = source_edge.to_junction
         cell_id = junction_cell_ids.get(junction_id)
         source_port_id = port_ids_by_edge_flow.get((junction_id, source_edge.edge_id, "incoming"))
         target_port_id = port_ids_by_edge_flow.get((junction_id, target_edge.edge_id, "outgoing"))
-        source_role_id = lane_role_ids.get(
-            (junction_id, source_edge.edge_id, "incoming", connection.from_lane)
-        )
-        target_role_id = lane_role_ids.get(
-            (junction_id, target_edge.edge_id, "outgoing", connection.to_lane)
-        )
+        source_role_id = lane_role_ids.get((junction_id, source_edge.edge_id, "incoming", connection.from_lane))
+        target_role_id = lane_role_ids.get((junction_id, target_edge.edge_id, "outgoing", connection.to_lane))
         if not all((cell_id, source_port_id, target_port_id, source_role_id, target_role_id)):
             continue
         source_lane = _lane_by_ordinal(source_edge, connection.from_lane)
@@ -351,10 +382,13 @@ def canonicalize_raw_network(
                 "path": path,
             }
         )
-        movement_owners[movement_id] = (cell_id, source_port_id, target_port_id)
+        movement_owners[movement_id] = (
+            cell_id,
+            (source_port_id, target_port_id),
+        )
 
     for movement_id, variants in sorted(movement_variants.items()):
-        cell_id, source_port_id, target_port_id = movement_owners[movement_id]
+        cell_id, boundary_port_ids = movement_owners[movement_id]
         normalized_variants = sorted(variants, key=lambda value: stable_digest("movement-variant", value))
         path_id = stable_id("path", {"movement_id": movement_id})
         _put_entity(
@@ -362,7 +396,7 @@ def canonicalize_raw_network(
             kind="internal_path",
             entity_id=path_id,
             owner_cell_ids=(cell_id,),
-            boundary_port_ids=(source_port_id, target_port_id),
+            boundary_port_ids=boundary_port_ids,
             payload={
                 "movement_id": movement_id,
                 "multiplicity": len(normalized_variants),
@@ -380,16 +414,11 @@ def canonicalize_raw_network(
             kind="movement",
             entity_id=movement_id,
             owner_cell_ids=(cell_id,),
-            boundary_port_ids=(source_port_id, target_port_id),
+            boundary_port_ids=boundary_port_ids,
             payload={
                 "multiplicity": len(normalized_variants),
                 "variants": [
-                    {
-                        key: value
-                        for key, value in variant.items()
-                        if key != "path"
-                    }
-                    for variant in normalized_variants
+                    {key: value for key, value in variant.items() if key != "path"} for variant in normalized_variants
                 ],
                 "internal_path_id": path_id,
             },
@@ -405,9 +434,7 @@ def canonicalize_raw_network(
         ]
         if not controlled:
             continue
-        movement_ids = sorted(
-            {connection_movement_ids[str(connection.connection_index)] for connection in controlled}
-        )
+        movement_ids = sorted({connection_movement_ids[str(connection.connection_index)] for connection in controlled})
         owner_cells = sorted(
             {
                 cell_id
@@ -468,10 +495,7 @@ def canonicalize_raw_network(
             for phase in program.phases:
                 group_states = []
                 for signal_group_id, indices, _ in signal_groups:
-                    states = tuple(
-                        phase.state[index] if 0 <= index < len(phase.state) else "?"
-                        for index in indices
-                    )
+                    states = tuple(phase.state[index] if 0 <= index < len(phase.state) else "?" for index in indices)
                     group_states.append(
                         {
                             "signal_group_id": signal_group_id,
@@ -524,6 +548,10 @@ def canonicalize_raw_network(
         connection_movement_ids=connection_movement_ids,
         movement_variants=movement_variants,
         movement_owners=movement_owners,
+        pedestrian_facility_owners=pedestrian_facility_owners,
+        modeled_pedestrian_crossing_edges=modeled_pedestrian_crossing_edges,
+        modeled_pedestrian_movement_ids=modeled_pedestrian_movement_ids,
+        pedestrian_rejection_reasons=pedestrian_rejection_reasons,
     )
 
     return CanonicalNetworkSnapshot(
@@ -540,18 +568,11 @@ def canonicalize_raw_network(
             "junction_to_physical_cell": junction_cell_ids,
             "connection_index_to_movement": connection_movement_ids,
             "tls_to_controller": tls_controller_ids,
-            "edge_flow_to_boundary_port": {
-                "|".join(key): value
-                for key, value in port_ids_by_edge_flow.items()
-            },
+            "edge_flow_to_boundary_port": {"|".join(key): value for key, value in port_ids_by_edge_flow.items()},
             "edge_flow_lane_to_lane_role": {
-                "|".join((*key[:3], str(key[3]))): value
-                for key, value in lane_role_ids.items()
+                "|".join((*key[:3], str(key[3]))): value for key, value in lane_role_ids.items()
             },
-            "junction_lane_to_lane_role": {
-                "|".join(key): value
-                for key, value in raw_lane_role_ids.items()
-            },
+            "junction_lane_to_lane_role": {"|".join(key): value for key, value in raw_lane_role_ids.items()},
         },
     )
 
@@ -615,15 +636,10 @@ def _junction_requires_physical_cell(
         "rail_signal",
     }:
         return True
-    incoming_edge_ids = {
-        edge.edge_id for edge, flow in incident if flow == "incoming"
-    }
-    outgoing_edge_ids = {
-        edge.edge_id for edge, flow in incident if flow == "outgoing"
-    }
+    incoming_edge_ids = {edge.edge_id for edge, flow in incident if flow == "incoming"}
+    outgoing_edge_ids = {edge.edge_id for edge, flow in incident if flow == "outgoing"}
     return any(
-        connection.from_edge in incoming_edge_ids
-        and connection.to_edge in outgoing_edge_ids
+        connection.from_edge in incoming_edge_ids and connection.to_edge in outgoing_edge_ids
         for connection in network.connections
     )
 
@@ -656,10 +672,7 @@ def _port_descriptor(
         for lane in edge.lanes
     ]
     source_anchor_refs = _source_anchor_refs(edge)
-    far_geometry = [
-        _far_shape(lane.shape, flow=flow)
-        for lane in edge.lanes
-    ]
+    far_geometry = [_far_shape(lane.shape, flow=flow) for lane in edge.lanes]
     source_geometry_sha256 = stable_digest(
         "boundary-port-source-geometry/v1",
         far_geometry,
@@ -670,11 +683,7 @@ def _port_descriptor(
         lane_semantic_keys=lane_semantics,
         traffic_side=traffic_side.value,
     )
-    far_points = [
-        lane.shape[0] if flow == "incoming" else lane.shape[-1]
-        for lane in edge.lanes
-        if lane.shape
-    ]
+    far_points = [lane.shape[0] if flow == "incoming" else lane.shape[-1] for lane in edge.lanes if lane.shape]
     center = _mean_point(far_points)
     tangent = _mean_tangent(edge.lanes, flow=flow)
     normal = (-tangent[1], tangent[0])
@@ -741,12 +750,7 @@ def _grade_separation_signature(
     incident: list[tuple[RawEdge, str]],
 ) -> dict[str, Any]:
     return {
-        "layers": sorted(
-            {
-                edge.params.get("layer", "0")
-                for edge, _ in incident
-            }
-        ),
+        "layers": sorted({edge.params.get("layer", "0") for edge, _ in incident}),
         "bridge": any(edge.params.get("bridge", "") not in {"", "no", "false", "0"} for edge, _ in incident),
         "tunnel": any(edge.params.get("tunnel", "") not in {"", "no", "false", "0"} for edge, _ in incident),
     }
@@ -777,8 +781,7 @@ def _lane_role(
         {
             _turn_class(connection.direction)
             for connection in outgoing_connections.get((edge.edge_id, lane.ordinal), [])
-            if network.edges.get(connection.to_edge) is not None
-            and network.edges[connection.to_edge].external
+            if network.edges.get(connection.to_edge) is not None and network.edges[connection.to_edge].external
         }
     )
     return "+".join(turns) if turns else "unconnected"
@@ -814,11 +817,7 @@ def _movement_mode_classes(
     *,
     path: Mapping[str, Any] | None = None,
 ) -> tuple[str, ...]:
-    permission_contract = (
-        path.get("permission_contract", {})
-        if isinstance(path, Mapping)
-        else {}
-    )
+    permission_contract = path.get("permission_contract", {}) if isinstance(path, Mapping) else {}
     if permission_contract.get("coverage") == "complete":
         if permission_contract.get("status") == "fail":
             return ("incompatible",)
@@ -837,6 +836,7 @@ def _movement_mode_classes(
                 source_lane,
                 mode,
             ) and _lane_allows_mode(target_lane, mode)
+
     road_modes = {
         "passenger",
         "private",
@@ -885,11 +885,7 @@ def _permission_contract_allows_mode(
         return False
     allowed = set(map(str, contract.get("allow", ())))
     disallowed = set(map(str, contract.get("disallow", ())))
-    return (
-        mode not in disallowed
-        if "*" in allowed
-        else mode in allowed and mode not in disallowed
-    )
+    return mode not in disallowed if "*" in allowed else mode in allowed and mode not in disallowed
 
 
 def _add_safety_coverage_entities(
@@ -900,12 +896,14 @@ def _add_safety_coverage_entities(
     junction_cell_ids: dict[str, str],
     connection_movement_ids: dict[str, str],
     movement_variants: dict[str, list[dict[str, Any]]],
-    movement_owners: dict[str, tuple[str, str, str]],
+    movement_owners: dict[str, tuple[str, tuple[str, ...]]],
+    pedestrian_facility_owners: Mapping[str, PedestrianFacilityOwner],
+    modeled_pedestrian_crossing_edges: Mapping[str, set[str]],
+    modeled_pedestrian_movement_ids: Mapping[str, set[str]],
+    pedestrian_rejection_reasons: Mapping[str, tuple[str, ...]],
 ) -> None:
     movement_ids_by_cell: dict[str, set[str]] = defaultdict(set)
-    movement_mode_counts_by_cell: dict[str, dict[str, int]] = defaultdict(
-        lambda: defaultdict(int)
-    )
+    movement_mode_counts_by_cell: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for movement_id, variants in movement_variants.items():
         cell_id = movement_owners[movement_id][0]
         movement_ids_by_cell[cell_id].add(movement_id)
@@ -932,52 +930,54 @@ def _add_safety_coverage_entities(
         else:
             controlled_by_cell[cell_id].append(connection)
 
-    facility_counts_by_cell: dict[str, dict[str, int]] = defaultdict(
-        lambda: defaultdict(int)
-    )
+    facility_counts_by_cell: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     unresolved_facilities: dict[str, int] = defaultdict(int)
     for edge in network.edges.values():
         if edge.function not in {"crossing", "walkingarea"}:
             continue
-        lane_ids = {lane.lane_id for lane in edge.lanes}
-        owner_cells = {
-            junction_cell_ids[junction_id]
-            for junction_id, junction in network.junctions.items()
-            if junction_id in junction_cell_ids
-            and lane_ids & set(junction.internal_lane_ids)
-        }
-        if not owner_cells:
+        owner = pedestrian_facility_owners.get(edge.edge_id)
+        if owner is None:
             unresolved_facilities[edge.function] += 1
-        for cell_id in owner_cells:
-            facility_counts_by_cell[cell_id][edge.function] += 1
+            continue
+        facility_counts_by_cell[owner.physical_cell_id][edge.function] += 1
 
     for cell_id in sorted(set(junction_cell_ids.values())):
         controlled = controlled_by_cell.get(cell_id, [])
         unsupported = [
-            _unsupported_controlled_connection_payload(connection, network)
+            _unsupported_controlled_connection_payload(
+                connection,
+                network,
+                rejection_reasons=pedestrian_rejection_reasons.get(
+                    str(connection.connection_index),
+                    (),
+                ),
+            )
             for connection in controlled
             if str(connection.connection_index) not in connection_movement_ids
         ]
+        crossing_edge_count = facility_counts_by_cell[cell_id]["crossing"]
+        modeled_crossing_edge_count = len(modeled_pedestrian_crossing_edges.get(cell_id, set()))
         payload = {
             "canonical_movement_count": len(movement_ids_by_cell.get(cell_id, set())),
             "controlled_connection_count": len(controlled),
             "mapped_controlled_movement_count": sum(
-                str(connection.connection_index) in connection_movement_ids
-                for connection in controlled
+                str(connection.connection_index) in connection_movement_ids for connection in controlled
             ),
             "unsupported_controlled_connection_count": len(unsupported),
             "unsupported_controlled_connections": sorted(
                 unsupported,
                 key=lambda value: stable_digest("unsupported-controlled-link", value),
             ),
-            "crossing_edge_count": facility_counts_by_cell[cell_id]["crossing"],
+            "crossing_edge_count": crossing_edge_count,
             "walkingarea_edge_count": facility_counts_by_cell[cell_id]["walkingarea"],
-            "link_index2_connection_count": sum(
-                connection.link_index2 is not None for connection in controlled
+            "modeled_controlled_pedestrian_movement_count": len(modeled_pedestrian_movement_ids.get(cell_id, set())),
+            "modeled_crossing_edge_count": modeled_crossing_edge_count,
+            "unmodeled_crossing_edge_count": max(
+                0,
+                crossing_edge_count - modeled_crossing_edge_count,
             ),
-            "movement_mode_class_counts": dict(
-                sorted(movement_mode_counts_by_cell[cell_id].items())
-            ),
+            "link_index2_connection_count": sum(connection.link_index2 is not None for connection in controlled),
+            "movement_mode_class_counts": dict(sorted(movement_mode_counts_by_cell[cell_id].items())),
             "ownership_status": "resolved",
         }
         _put_entity(
@@ -1002,16 +1002,25 @@ def _add_safety_coverage_entities(
             "unsupported_controlled_connection_count": len(unresolved_controlled),
             "unsupported_controlled_connections": sorted(
                 (
-                    _unsupported_controlled_connection_payload(connection, network)
+                    _unsupported_controlled_connection_payload(
+                        connection,
+                        network,
+                        rejection_reasons=pedestrian_rejection_reasons.get(
+                            str(connection.connection_index),
+                            (),
+                        ),
+                    )
                     for connection in unresolved_controlled
                 ),
                 key=lambda value: stable_digest("unsupported-controlled-link", value),
             ),
             "crossing_edge_count": unresolved_facilities["crossing"],
             "walkingarea_edge_count": unresolved_facilities["walkingarea"],
+            "modeled_controlled_pedestrian_movement_count": 0,
+            "modeled_crossing_edge_count": 0,
+            "unmodeled_crossing_edge_count": unresolved_facilities["crossing"],
             "link_index2_connection_count": sum(
-                connection.link_index2 is not None
-                for connection in unresolved_controlled
+                connection.link_index2 is not None for connection in unresolved_controlled
             ),
             "movement_mode_class_counts": {},
             "ownership_status": "unresolved",
@@ -1043,12 +1052,7 @@ def _infer_connection_cell_id(
         junction_candidates.add(source_edge.to_junction)
     if target_edge is not None and target_edge.from_junction in junction_cell_ids:
         junction_candidates.add(target_edge.from_junction)
-    lane_ids = {
-        lane.lane_id
-        for edge in (source_edge, target_edge)
-        if edge is not None
-        for lane in edge.lanes
-    }
+    lane_ids = {lane.lane_id for edge in (source_edge, target_edge) if edge is not None for lane in edge.lanes}
     for junction_id, junction in network.junctions.items():
         if junction_id in junction_cell_ids and lane_ids & set(junction.internal_lane_ids):
             junction_candidates.add(junction_id)
@@ -1060,19 +1064,13 @@ def _infer_connection_cell_id(
 def _unsupported_controlled_connection_payload(
     connection: RawConnection,
     network: RawNetwork,
+    *,
+    rejection_reasons: Sequence[str] = (),
 ) -> dict[str, Any]:
     source_edge = network.edges.get(connection.from_edge)
     target_edge = network.edges.get(connection.to_edge)
-    source_lane = (
-        _lane_by_ordinal(source_edge, connection.from_lane)
-        if source_edge is not None
-        else None
-    )
-    target_lane = (
-        _lane_by_ordinal(target_edge, connection.to_lane)
-        if target_edge is not None
-        else None
-    )
+    source_lane = _lane_by_ordinal(source_edge, connection.from_lane) if source_edge is not None else None
+    target_lane = _lane_by_ordinal(target_edge, connection.to_lane) if target_edge is not None else None
     return {
         "from_function": source_edge.function if source_edge is not None else "missing",
         "to_function": target_edge.function if target_edge is not None else "missing",
@@ -1081,6 +1079,7 @@ def _unsupported_controlled_connection_payload(
         "direction": _turn_class(connection.direction),
         "has_link_index": connection.link_index is not None,
         "has_link_index2": connection.link_index2 is not None,
+        "rejection_reasons": tuple(sorted(set(rejection_reasons))),
     }
 
 
@@ -1111,16 +1110,8 @@ def _trace_internal_semantics(
 ) -> dict[str, Any]:
     source_edge = network.edges.get(direct.from_edge)
     target_edge = network.edges.get(direct.to_edge)
-    source_lane = (
-        _lane_by_ordinal(source_edge, direct.from_lane)
-        if source_edge is not None
-        else None
-    )
-    target_lane = (
-        _lane_by_ordinal(target_edge, direct.to_lane)
-        if target_edge is not None
-        else None
-    )
+    source_lane = _lane_by_ordinal(source_edge, direct.from_lane) if source_edge is not None else None
+    target_lane = _lane_by_ordinal(target_edge, direct.to_lane) if target_edge is not None else None
     permission_records: list[RawLane | RawConnection | None] = [
         source_lane,
         direct,

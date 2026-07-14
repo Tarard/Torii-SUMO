@@ -1215,6 +1215,14 @@
           "title": "Mapped Controlled Movement Count",
           "type": "integer"
         },
+        "modeled_controlled_pedestrian_movement_count": {
+          "title": "Modeled Controlled Pedestrian Movement Count",
+          "type": "integer"
+        },
+        "modeled_crossing_edge_count": {
+          "title": "Modeled Crossing Edge Count",
+          "type": "integer"
+        },
         "movement_mode_class_counts": {
           "additionalProperties": {
             "type": "integer"
@@ -1226,6 +1234,10 @@
           "default": "torii.corridor.contracts/v1",
           "title": "Schema",
           "type": "string"
+        },
+        "unmodeled_crossing_edge_count": {
+          "title": "Unmodeled Crossing Edge Count",
+          "type": "integer"
         },
         "unresolved_owner_record_count": {
           "title": "Unresolved Owner Record Count",
@@ -1248,6 +1260,9 @@
         "unsupported_controlled_connection_count",
         "crossing_edge_count",
         "walkingarea_edge_count",
+        "modeled_controlled_pedestrian_movement_count",
+        "modeled_crossing_edge_count",
+        "unmodeled_crossing_edge_count",
         "link_index2_connection_count",
         "unresolved_owner_record_count",
         "movement_mode_class_counts"
