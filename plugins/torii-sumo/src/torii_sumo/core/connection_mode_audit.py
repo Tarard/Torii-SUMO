@@ -51,6 +51,59 @@ _THREE_WAY_COMPATIBLE_PHASE_PAIRS = frozenset(
         frozenset({2, 6}),
     }
 )
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+_TRAFFIC_SIDE_ALIASES = {
+    "auto": "auto",
+    "right": "right",
+    "right_hand": "right",
+    "right-hand": "right",
+    "left": "left",
+    "left_hand": "left",
+    "left-hand": "left",
+}
+
+
+def resolve_network_traffic_side(
+    root: ET.Element,
+    requested: str = "auto",
+) -> dict[str, Any]:
+    """Resolve traffic side from explicit evidence and SUMO's net contract.
+
+    SUMO lane index zero is always the physical right-most lane.  A missing
+    ``lefthand`` attribute means right-hand traffic by SUMO's documented
+    default; an explicit request that contradicts the network is a hard
+    configuration failure rather than an alternate interpretation.
+    """
+
+    normalized = _TRAFFIC_SIDE_ALIASES.get(str(requested).strip().casefold())
+    if normalized is None:
+        raise ValueError("traffic_side must be auto, right, or left")
+    raw = root.attrib.get("lefthand")
+    failures: list[str] = []
+    if raw is None:
+        declared = "right"
+        evidence = "sumo_default"
+    elif raw.strip().casefold() in _TRUE_VALUES:
+        declared = "left"
+        evidence = "net_attribute"
+    elif raw.strip().casefold() in _FALSE_VALUES:
+        declared = "right"
+        evidence = "net_attribute"
+    else:
+        declared = normalized if normalized in {"right", "left"} else "right"
+        evidence = "invalid_net_attribute"
+        failures.append(f"invalid_net_lefthand_attribute:{raw}")
+    if normalized in {"right", "left"} and normalized != declared:
+        failures.append(f"traffic_side_mismatch:requested_{normalized}:network_{declared}")
+    return {
+        "status": "fail" if failures else "pass",
+        "requested": normalized,
+        "effective": declared,
+        "evidence": evidence,
+        "net_lefthand_attribute": raw,
+        "failures": failures,
+    }
 
 
 def build_connection_mode_catalog(root: ET.Element) -> dict[str, Any]:
@@ -103,6 +156,7 @@ def build_network_connection_mode_audit(
     output_dir: Path,
     prefix: str = "connection_mode_audit",
     junction_ids: Sequence[str] | None = None,
+    traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
 ) -> dict[str, Any]:
@@ -124,6 +178,7 @@ def build_network_connection_mode_audit(
     report = audit_network_connection_mode(
         root,
         junction_ids=junction_ids,
+        traffic_side=traffic_side,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
     )
@@ -175,6 +230,7 @@ def build_connection_mode_regression_audit(
     prefix: str = "connection_mode_regression",
     target_source_junction_ids: Sequence[str] = (),
     target_candidate_junction_ids: Sequence[str] = (),
+    traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
 ) -> dict[str, Any]:
@@ -192,11 +248,13 @@ def build_connection_mode_regression_audit(
     candidate_root = ET.parse(candidate).getroot()
     source_audit = audit_network_connection_mode(
         source_root,
+        traffic_side=traffic_side,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
     )
     candidate_audit = audit_network_connection_mode(
         candidate_root,
+        traffic_side=traffic_side,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
     )
@@ -291,7 +349,13 @@ def compare_connection_mode_audits(
     target_source_junction_ids: Sequence[str] = (),
     target_candidate_junction_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """Compare per-junction finding counts without relying on unstable indices."""
+    """Compare exact per-junction findings and retain category counts as diagnostics.
+
+    This legacy comparator now fails closed when one witness is resolved and a
+    different witness of the same category appears.  The corridor stage-1
+    comparator remains the promotion-grade path because it first maps raw
+    connection indices to stable movement identities.
+    """
 
     source_records = {
         str(record.get("junction_id", "")): record
@@ -318,59 +382,60 @@ def compare_connection_mode_audits(
     resolved_structural_count = 0
     compared_ids = sorted(source_outside_ids & candidate_outside_ids)
     for junction_id in compared_ids:
-        source_review, source_structural = _junction_finding_categories(
-            source_records[junction_id]
+        source_review = Counter(
+            _junction_findings(source_records[junction_id], finding_kind="review")
         )
-        candidate_review, candidate_structural = _junction_finding_categories(
-            candidate_records[junction_id]
+        source_structural = Counter(
+            _junction_findings(source_records[junction_id], finding_kind="structural")
+        )
+        candidate_review = Counter(
+            _junction_findings(candidate_records[junction_id], finding_kind="review")
+        )
+        candidate_structural = Counter(
+            _junction_findings(candidate_records[junction_id], finding_kind="structural")
         )
         review_regressions.extend(
-            _positive_category_deltas(
+            _positive_finding_deltas(
                 junction_id,
                 source_review,
                 candidate_review,
-                candidate_records[junction_id],
-                finding_kind="review",
             )
         )
         structural_regressions.extend(
-            _positive_category_deltas(
+            _positive_finding_deltas(
                 junction_id,
                 source_structural,
                 candidate_structural,
-                candidate_records[junction_id],
-                finding_kind="structural",
             )
         )
         resolved_review_count += sum(
-            max(0, source_review[category] - candidate_review[category])
-            for category in source_review.keys() | candidate_review.keys()
+            max(0, source_review[finding] - candidate_review[finding])
+            for finding in source_review.keys() | candidate_review.keys()
         )
         resolved_structural_count += sum(
-            max(0, source_structural[category] - candidate_structural[category])
-            for category in source_structural.keys() | candidate_structural.keys()
+            max(0, source_structural[finding] - candidate_structural[finding])
+            for finding in source_structural.keys() | candidate_structural.keys()
         )
 
     for junction_id in added_outside_ids:
-        candidate_review, candidate_structural = _junction_finding_categories(
-            candidate_records[junction_id]
+        candidate_review = Counter(
+            _junction_findings(candidate_records[junction_id], finding_kind="review")
+        )
+        candidate_structural = Counter(
+            _junction_findings(candidate_records[junction_id], finding_kind="structural")
         )
         review_regressions.extend(
-            _positive_category_deltas(
+            _positive_finding_deltas(
                 junction_id,
                 Counter(),
                 candidate_review,
-                candidate_records[junction_id],
-                finding_kind="review",
             )
         )
         structural_regressions.extend(
-            _positive_category_deltas(
+            _positive_finding_deltas(
                 junction_id,
                 Counter(),
                 candidate_structural,
-                candidate_records[junction_id],
-                finding_kind="structural",
             )
         )
 
@@ -400,11 +465,29 @@ def compare_connection_mode_audits(
     candidate_target_review, candidate_target_structural = _aggregate_finding_categories(
         candidate_target_records
     )
-    target_review_regressions = _scope_category_deltas(
-        source_target_review, candidate_target_review
+    source_target_review_findings = _aggregate_finding_witnesses(
+        source_target_records,
+        finding_kind="review",
     )
-    target_structural_regressions = _scope_category_deltas(
-        source_target_structural, candidate_target_structural
+    candidate_target_review_findings = _aggregate_finding_witnesses(
+        candidate_target_records,
+        finding_kind="review",
+    )
+    source_target_structural_findings = _aggregate_finding_witnesses(
+        source_target_records,
+        finding_kind="structural",
+    )
+    candidate_target_structural_findings = _aggregate_finding_witnesses(
+        candidate_target_records,
+        finding_kind="structural",
+    )
+    target_review_regressions = _scope_finding_deltas(
+        source_target_review_findings,
+        candidate_target_review_findings,
+    )
+    target_structural_regressions = _scope_finding_deltas(
+        source_target_structural_findings,
+        candidate_target_structural_findings,
     )
     target_new_review_count = sum(
         int(item["delta"]) for item in target_review_regressions
@@ -422,6 +505,10 @@ def compare_connection_mode_audits(
     )
 
     blockers = []
+    source_traffic_side = str(source_audit.get("traffic_side", ""))
+    candidate_traffic_side = str(candidate_audit.get("traffic_side", ""))
+    if source_traffic_side != candidate_traffic_side:
+        blockers.append("source_candidate_traffic_side_mismatch")
     if new_structural_count:
         blockers.append("new_outside_scope_structural_findings")
     if new_review_count:
@@ -441,6 +528,8 @@ def compare_connection_mode_audits(
         "claim_status": "verified" if status == "pass" else "construction-invalid",
         "automatic_promotion_gate": "pass" if status == "pass" else "blocked",
         "audit_engine": "static_net_xml_connection_graph_delta",
+        "source_traffic_side": source_traffic_side,
+        "candidate_traffic_side": candidate_traffic_side,
         "netedit_required_for_gate": False,
         "target_source_junction_ids": sorted(source_scope),
         "target_candidate_junction_ids": sorted(candidate_scope),
@@ -455,6 +544,22 @@ def compare_connection_mode_audits(
         "outside_scope_resolved_structural_finding_count": resolved_structural_count,
         "outside_scope_review_regressions": review_regressions,
         "outside_scope_structural_regressions": structural_regressions,
+        "outside_scope_review_category_regressions": _scope_category_deltas(
+            _aggregate_finding_categories(
+                [source_records[junction_id] for junction_id in sorted(source_outside_ids)]
+            )[0],
+            _aggregate_finding_categories(
+                [candidate_records[junction_id] for junction_id in sorted(candidate_outside_ids)]
+            )[0],
+        ),
+        "outside_scope_structural_category_regressions": _scope_category_deltas(
+            _aggregate_finding_categories(
+                [source_records[junction_id] for junction_id in sorted(source_outside_ids)]
+            )[1],
+            _aggregate_finding_categories(
+                [candidate_records[junction_id] for junction_id in sorted(candidate_outside_ids)]
+            )[1],
+        ),
         "outside_scope_regression_junction_ids": affected_ids,
         "target_scope_source_review_finding_count": sum(source_target_review.values()),
         "target_scope_source_structural_finding_count": sum(source_target_structural.values()),
@@ -464,10 +569,19 @@ def compare_connection_mode_audits(
         "target_scope_new_structural_finding_count": target_new_structural_count,
         "target_scope_review_regressions": target_review_regressions,
         "target_scope_structural_regressions": target_structural_regressions,
+        "target_scope_review_category_regressions": _scope_category_deltas(
+            source_target_review,
+            candidate_target_review,
+        ),
+        "target_scope_structural_category_regressions": _scope_category_deltas(
+            source_target_structural,
+            candidate_target_structural,
+        ),
         "target_scope_flagged_junction_ids": target_flagged_ids,
         "blockers": blockers,
         "warnings": [
-            "new target-scope review findings require review and block automatic promotion"
+            "new target-scope review findings require review and block automatic promotion",
+            "raw finding witnesses can contain unstable connection indices; use the stable corridor exact-semantic audit for promotion",
         ],
     }
 
@@ -476,11 +590,14 @@ def audit_network_connection_mode(
     root: ET.Element,
     *,
     junction_ids: Sequence[str] | None = None,
+    traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
 ) -> dict[str, Any]:
     """Reconstruct and audit Connection Mode for every relevant junction."""
 
+    traffic_side_contract = resolve_network_traffic_side(root, traffic_side)
+    effective_traffic_side = str(traffic_side_contract["effective"])
     catalog = build_connection_mode_catalog(root)
     requested = None if junction_ids is None else {str(value) for value in junction_ids}
     missing_requested = sorted(
@@ -500,6 +617,7 @@ def audit_network_connection_mode(
             junction_id=junction_id,
             movement_rows=(),
             layout_type="unknown",
+            traffic_side=effective_traffic_side,
             endpoint_tolerance_m=endpoint_tolerance_m,
             normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
             catalog=catalog,
@@ -555,9 +673,20 @@ def audit_network_connection_mode(
         connection_findings[_finding_category(str(finding))] += 1
     for finding in tls_audit.get("review_findings", []):
         connection_findings[_finding_category(str(finding))] += 1
+    configuration_failures = [
+        f"connection_mode:{failure}"
+        for failure in traffic_side_contract["failures"]
+    ]
+    for finding in configuration_failures:
+        connection_findings[_finding_category(finding)] += 1
     status = (
         "fail"
-        if missing_requested or status_counts["fail"] or tls_audit["status"] == "fail"
+        if (
+            missing_requested
+            or configuration_failures
+            or status_counts["fail"]
+            or tls_audit["status"] == "fail"
+        )
         else "review_required"
         if status_counts["review_required"] or tls_audit["status"] == "review_required"
         else "pass"
@@ -568,6 +697,9 @@ def audit_network_connection_mode(
         "claim_status": "verified" if status == "pass" else "diagnostic-demo",
         "automatic_promotion_gate": "pass" if status == "pass" else "blocked",
         "audit_engine": "static_net_xml_connection_graph",
+        "traffic_side": effective_traffic_side,
+        "traffic_side_contract": traffic_side_contract,
+        "configuration_failures": configuration_failures,
         "netedit_required_for_gate": False,
         "netedit_role": "optional visual review for flagged junctions only",
         "requested_junction_ids": sorted(requested or []),
@@ -588,7 +720,8 @@ def audit_network_connection_mode(
             len(record["connection_mode_audit"].get("structural_failures", []))
             for record in junction_records
         )
-        + len(tls_audit.get("structural_failures", [])),
+        + len(tls_audit.get("structural_failures", []))
+        + len(configuration_failures),
         "review_finding_count": sum(
             len(record["connection_mode_audit"].get("review_findings", []))
             for record in junction_records
@@ -609,6 +742,7 @@ def audit_standard_connection_mode(
     junction_id: str,
     movement_rows: Sequence[Mapping[str, Any]],
     layout_type: str,
+    traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
     catalog: Mapping[str, Any] | None = None,
@@ -617,13 +751,17 @@ def audit_standard_connection_mode(
 
     The audit models the information visible in NetEdit Connection Mode: the
     direct ``fromLane -> toLane -> via`` binding, the complete internal-lane
-    continuation, right-hand lane ordering, the junction request/foe matrix,
+    continuation, traffic-side-aware lane roles, the junction request/foe matrix,
     and every movement pair that a canonical NEMA controller may serve at the
     same time. It deliberately remains stricter than SUMO's graph-level
     routeability test.
     """
 
+    traffic_side_contract = resolve_network_traffic_side(root, traffic_side)
+    effective_traffic_side = str(traffic_side_contract["effective"])
     hard_blockers: list[str] = []
+    for failure in traffic_side_contract["failures"]:
+        _block(hard_blockers, failure)
     review_findings: list[str] = []
     warnings = [
         "map imagery or lane-tag evidence remains required for flagged semantic ambiguities; NetEdit is optional"
@@ -734,14 +872,23 @@ def audit_standard_connection_mode(
                 "motorized" if motorized_movement else "non_motorized_or_mixed"
             )
             if motorized_movement:
-                source_rank = (source_motorized.index(source_index) + 0.5) / len(source_motorized)
-                target_rank = (target_motorized.index(target_index) + 0.5) / len(target_motorized)
+                source_from_curb = _lane_indices_from_curb(
+                    source_motorized,
+                    traffic_side=effective_traffic_side,
+                )
+                target_from_curb = _lane_indices_from_curb(
+                    target_motorized,
+                    traffic_side=effective_traffic_side,
+                )
+                source_rank = (source_from_curb.index(source_index) + 0.5) / len(source_from_curb)
+                target_rank = (target_from_curb.index(target_index) + 0.5) / len(target_from_curb)
                 rank_delta = abs(source_rank - target_rank)
                 check.update(
                     {
                         "normalized_source_lane_rank": round(source_rank, 6),
                         "normalized_target_lane_rank": round(target_rank, 6),
                         "normalized_lane_rank_delta": round(rank_delta, 6),
+                        "normalized_lane_rank_basis": "curb_to_inner",
                     }
                 )
                 if rank_delta > normalized_lane_rank_tolerance:
@@ -820,6 +967,7 @@ def audit_standard_connection_mode(
     lane_order_checks = _audit_lane_order(
         valid_lane_rows,
         lanes_by_edge=lanes_by_edge,
+        traffic_side=effective_traffic_side,
         review_findings=review_findings,
     )
     _audit_lane_mapping_monotonicity(valid_lane_rows, review_findings=review_findings)
@@ -862,7 +1010,8 @@ def audit_standard_connection_mode(
         "automatic_nema_gate": "pass" if not unique_blockers else "blocked",
         "junction_id": junction_id,
         "layout_type": layout_type,
-        "traffic_side_assumption": "right_hand",
+        "traffic_side": effective_traffic_side,
+        "traffic_side_contract": traffic_side_contract,
         "endpoint_tolerance_m": endpoint_tolerance_m,
         "normalized_lane_rank_tolerance": normalized_lane_rank_tolerance,
         "direct_movement_count": len(rows),
@@ -1572,36 +1721,47 @@ def _junction_finding_categories(
     )
 
 
-def _positive_category_deltas(
-    junction_id: str,
-    source_categories: Counter[str],
-    candidate_categories: Counter[str],
-    candidate_record: Mapping[str, Any],
+def _aggregate_finding_witnesses(
+    records: Sequence[Mapping[str, Any]],
     *,
     finding_kind: str,
+) -> Counter[str]:
+    findings: Counter[str] = Counter()
+    for record in records:
+        findings.update(_junction_findings(record, finding_kind=finding_kind))
+    return findings
+
+
+def _scope_finding_deltas(
+    source_findings: Counter[str],
+    candidate_findings: Counter[str],
 ) -> list[dict[str, Any]]:
-    candidate_findings = _junction_findings(
-        candidate_record,
-        finding_kind=finding_kind,
+    return _positive_finding_deltas(
+        "target-scope",
+        source_findings,
+        candidate_findings,
     )
+
+
+def _positive_finding_deltas(
+    junction_id: str,
+    source_findings: Counter[str],
+    candidate_findings: Counter[str],
+) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for category in sorted(source_categories.keys() | candidate_categories.keys()):
-        delta = candidate_categories[category] - source_categories[category]
+    for finding in sorted(source_findings.keys() | candidate_findings.keys()):
+        delta = candidate_findings[finding] - source_findings[finding]
         if delta <= 0:
             continue
-        examples = [
-            finding
-            for finding in candidate_findings
-            if _finding_category(finding) == category
-        ][: min(delta, 5)]
         records.append(
             {
                 "junction_id": junction_id,
-                "category": category,
-                "source_count": source_categories[category],
-                "candidate_count": candidate_categories[category],
+                "category": _finding_category(finding),
+                "finding_witness": finding,
+                "source_count": source_findings[finding],
+                "candidate_count": candidate_findings[finding],
                 "delta": delta,
-                "examples": examples,
+                "examples": [finding],
             }
         )
     return records
@@ -1861,6 +2021,7 @@ def _audit_lane_order(
     rows: Sequence[Mapping[str, Any]],
     *,
     lanes_by_edge: Mapping[str, Mapping[int, Mapping[str, Any]]],
+    traffic_side: str,
     review_findings: list[str],
 ) -> list[dict[str, Any]]:
     by_edge: dict[str, dict[str, set[int]]] = defaultdict(lambda: defaultdict(set))
@@ -1882,13 +2043,25 @@ def _audit_lane_order(
                 _review(review_findings, failure)
         lane_count = len(lanes_by_edge.get(edge_id, {}))
         motorized_lanes = _motorized_lane_indices(lanes_by_edge.get(edge_id, {}))
+        curb_lane = (
+            (min(motorized_lanes) if traffic_side == "right" else max(motorized_lanes))
+            if motorized_lanes
+            else None
+        )
+        inner_lane = (
+            (max(motorized_lanes) if traffic_side == "right" else min(motorized_lanes))
+            if motorized_lanes
+            else None
+        )
         if turns.get("r") and motorized_lanes and min(turns["r"]) != min(motorized_lanes):
-            failure = f"right_turn_not_curb_lane:{edge_id}:{min(turns['r'])}"
+            role = "curb" if traffic_side == "right" else "innermost"
+            failure = f"right_turn_not_{role}_lane:{edge_id}:{min(turns['r'])}"
             failures.append(failure)
             _review(review_findings, failure)
         if turns.get("l") and motorized_lanes and max(turns["l"]) != max(motorized_lanes):
+            role = "innermost" if traffic_side == "right" else "curb"
             failure = (
-                f"left_turn_not_innermost_lane:{edge_id}:{max(turns['l'])}:"
+                f"left_turn_not_{role}_lane:{edge_id}:{max(turns['l'])}:"
                 f"{max(motorized_lanes)}"
             )
             failures.append(failure)
@@ -1897,7 +2070,10 @@ def _audit_lane_order(
             {
                 "incoming_edge": edge_id,
                 "lane_count": lane_count,
+                "traffic_side": traffic_side,
                 "motorized_lane_indices": motorized_lanes,
+                "curb_lane_index": curb_lane,
+                "innermost_lane_index": inner_lane,
                 "turn_lanes": {turn: sorted(indices) for turn, indices in sorted(turns.items())},
                 "status": "pass" if not failures else "review_required",
                 "failures": failures,
@@ -2212,6 +2388,15 @@ def _motorized_lane_indices(lanes: Mapping[int, Mapping[str, Any]]) -> list[int]
         for lane_index, record in lanes.items()
         if lane_supports_motorized(record.get("element"))
     )
+
+
+def _lane_indices_from_curb(
+    lane_indices: Sequence[int],
+    *,
+    traffic_side: str,
+) -> list[int]:
+    ordered = sorted(lane_indices)
+    return ordered if traffic_side == "right" else list(reversed(ordered))
 
 
 def _as_int(value: Any) -> int | None:

@@ -23,12 +23,14 @@ from .tools.intersection_tools import (
 )
 from .tools.osm_tools import (
     sumo_network_connection_mode_audit,
+    sumo_network_connection_mode_calibration,
     sumo_network_connection_mode_regression_audit,
     sumo_network_connected_core,
     sumo_network_corridor_candidate_gates,
     sumo_network_corridor_edit_ledger,
     sumo_network_corridor_geometry_simplification_variant,
     sumo_network_corridor_materialize_variant,
+    sumo_network_exact_semantic_regression_audit,
     sumo_network_junction_aggregation_variant,
     sumo_network_overlapping_junction_audit,
     sumo_network_reference_hierarchy_audit,
@@ -119,8 +121,14 @@ def create_server() -> FastMCP:
     server.tool(description="Reconstruct NetEdit Connection Mode directly from SUMO net.xml and fail closed on invalid lane/via/request/linkIndex bindings; emit a display-only additional.xml review layer so NetEdit is optional for flagged visual review only.")(
         sumo_network_connection_mode_audit
     )
+    server.tool(description="Calibrate the Connection Mode endpoint tolerance from an immutable, hash-bound source baseline using serialized coordinate precision and lane scale; block gross source gaps instead of falling back to a global 2 m threshold.")(
+        sumo_network_connection_mode_calibration
+    )
     server.tool(description="Compare a source and candidate SUMO net.xml with a code-native Connection Mode differential gate; block new lane/via/request/TLS regressions and emit a display-only additional.xml plus a SHA-bound manifest.")(
         sumo_network_connection_mode_regression_audit
+    )
+    server.tool(description="Run the promotion-grade corridor regression gate with stable semantic entities, exact finding witnesses, explicit traffic side, independent movement-conflict safety, source immutability, and a hash-closed artifact manifest.")(
+        sumo_network_exact_semantic_regression_audit
     )
     server.tool(description="Audit dense SUMO junction clusters, including physical cross/T approach-axis shape scoring for over-fragmented OSM topology.")(
         sumo_network_topology_audit

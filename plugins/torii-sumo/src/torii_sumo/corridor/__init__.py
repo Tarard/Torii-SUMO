@@ -2,6 +2,12 @@
 
 from .benchmark import BenchmarkLock, BenchmarkSpecV1
 from .audit_pipeline import build_exact_semantic_regression_artifacts
+from .calibration import (
+    ConnectionAuditCalibration,
+    ConnectionAuditCalibrationPolicy,
+    build_connection_mode_calibration_artifact,
+    calibrate_connection_mode_audit,
+)
 from .canonicalizer import CanonicalEntity, CanonicalNetworkSnapshot, canonicalize_net_xml_file
 from .conflict_graph import (
     IndependentSafetyReport,
@@ -39,6 +45,8 @@ __all__ = [
     "CandidateVariant",
     "CanonicalEntity",
     "CanonicalNetworkSnapshot",
+    "ConnectionAuditCalibration",
+    "ConnectionAuditCalibrationPolicy",
     "CorridorResearchBundle",
     "GateStatus",
     "Hypothesis",
@@ -57,6 +65,8 @@ __all__ = [
     "ExactSemanticDiffReport",
     "build_finding",
     "build_exact_semantic_regression_artifacts",
+    "build_connection_mode_calibration_artifact",
+    "calibrate_connection_mode_audit",
     "audit_independent_movement_safety",
     "build_movement_conflict_graph",
     "canonicalize_net_xml_file",

@@ -539,6 +539,217 @@
       "title": "CanonicalNetworkSnapshot",
       "type": "object"
     },
+    "ConnectionAuditCalibration": {
+      "additionalProperties": false,
+      "properties": {
+        "calibration_id": {
+          "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+          "title": "Calibration Id",
+          "type": "string"
+        },
+        "coordinate_precision_evidence": {
+          "title": "Coordinate Precision Evidence",
+          "type": "string"
+        },
+        "coordinate_precision_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coordinate Precision M"
+        },
+        "endpoint_path_count": {
+          "minimum": 0,
+          "title": "Endpoint Path Count",
+          "type": "integer"
+        },
+        "endpoint_sample_count": {
+          "minimum": 0,
+          "title": "Endpoint Sample Count",
+          "type": "integer"
+        },
+        "endpoint_tolerance_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endpoint Tolerance M"
+        },
+        "findings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "lane_width_cap_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lane Width Cap M"
+        },
+        "lane_width_evidence": {
+          "title": "Lane Width Evidence",
+          "type": "string"
+        },
+        "maximum_observed_gap_m": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum Observed Gap M"
+        },
+        "median_lane_width_m": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Median Lane Width M"
+        },
+        "observed_gap_quantile_m": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed Gap Quantile M"
+        },
+        "policy": {
+          "$ref": "#/$defs/ConnectionAuditCalibrationPolicy"
+        },
+        "rejected_path_count": {
+          "minimum": 0,
+          "title": "Rejected Path Count",
+          "type": "integer"
+        },
+        "schema": {
+          "default": "torii.corridor.connection-audit-calibration/v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/GateStatus"
+        },
+        "traffic_side": {
+          "$ref": "#/$defs/TrafficSide"
+        }
+      },
+      "required": [
+        "calibration_id",
+        "source_sha256",
+        "traffic_side",
+        "policy",
+        "status",
+        "endpoint_path_count",
+        "endpoint_sample_count",
+        "rejected_path_count",
+        "coordinate_precision_evidence",
+        "lane_width_evidence"
+      ],
+      "title": "ConnectionAuditCalibration",
+      "type": "object"
+    },
+    "ConnectionAuditCalibrationPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "endpoint_gap_quantile": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Endpoint Gap Quantile",
+          "type": "number"
+        },
+        "implicit_sumo_lane_width_m": {
+          "exclusiveMinimum": 0.0,
+          "title": "Implicit Sumo Lane Width M",
+          "type": "number"
+        },
+        "maximum_lane_width_fraction": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Maximum Lane Width Fraction",
+          "type": "number"
+        },
+        "minimum_endpoint_samples": {
+          "minimum": 1,
+          "title": "Minimum Endpoint Samples",
+          "type": "integer"
+        },
+        "normalized_lane_rank_tolerance": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Normalized Lane Rank Tolerance",
+          "type": "number"
+        },
+        "policy_id": {
+          "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+          "title": "Policy Id",
+          "type": "string"
+        },
+        "precision_margin_units": {
+          "exclusiveMinimum": 0.0,
+          "title": "Precision Margin Units",
+          "type": "number"
+        },
+        "schema": {
+          "default": "torii.corridor.connection-audit-calibration-policy/v1",
+          "title": "Schema",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy_id",
+        "endpoint_gap_quantile",
+        "precision_margin_units",
+        "maximum_lane_width_fraction",
+        "minimum_endpoint_samples",
+        "implicit_sumo_lane_width_m",
+        "normalized_lane_rank_tolerance"
+      ],
+      "title": "ConnectionAuditCalibrationPolicy",
+      "type": "object"
+    },
     "DeltaAction": {
       "enum": [
         "added",
@@ -977,9 +1188,79 @@
       "title": "HypothesisType",
       "type": "string"
     },
+    "IndependentSafetyCoverage": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_movement_count": {
+          "title": "Canonical Movement Count",
+          "type": "integer"
+        },
+        "controlled_connection_count": {
+          "title": "Controlled Connection Count",
+          "type": "integer"
+        },
+        "coverage_entity_count": {
+          "title": "Coverage Entity Count",
+          "type": "integer"
+        },
+        "crossing_edge_count": {
+          "title": "Crossing Edge Count",
+          "type": "integer"
+        },
+        "link_index2_connection_count": {
+          "title": "Link Index2 Connection Count",
+          "type": "integer"
+        },
+        "mapped_controlled_movement_count": {
+          "title": "Mapped Controlled Movement Count",
+          "type": "integer"
+        },
+        "movement_mode_class_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Movement Mode Class Counts",
+          "type": "object"
+        },
+        "schema": {
+          "default": "torii.corridor.contracts/v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "unresolved_owner_record_count": {
+          "title": "Unresolved Owner Record Count",
+          "type": "integer"
+        },
+        "unsupported_controlled_connection_count": {
+          "title": "Unsupported Controlled Connection Count",
+          "type": "integer"
+        },
+        "walkingarea_edge_count": {
+          "title": "Walkingarea Edge Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "coverage_entity_count",
+        "canonical_movement_count",
+        "controlled_connection_count",
+        "mapped_controlled_movement_count",
+        "unsupported_controlled_connection_count",
+        "crossing_edge_count",
+        "walkingarea_edge_count",
+        "link_index2_connection_count",
+        "unresolved_owner_record_count",
+        "movement_mode_class_counts"
+      ],
+      "title": "IndependentSafetyCoverage",
+      "type": "object"
+    },
     "IndependentSafetyReport": {
       "additionalProperties": false,
       "properties": {
+        "applicability_status": {
+          "$ref": "#/$defs/GateStatus"
+        },
         "automatic_promotion_gate": {
           "$ref": "#/$defs/GateStatus"
         },
@@ -993,6 +1274,9 @@
         "conflict_graph": {
           "$ref": "#/$defs/MovementConflictGraph"
         },
+        "coverage": {
+          "$ref": "#/$defs/IndependentSafetyCoverage"
+        },
         "findings": {
           "items": {
             "$ref": "#/$defs/Finding"
@@ -1000,8 +1284,19 @@
           "title": "Findings",
           "type": "array"
         },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
         "permissive_without_yield_count": {
           "title": "Permissive Without Yield Count",
+          "type": "integer"
+        },
+        "potential_signal_conflict_count": {
+          "title": "Potential Signal Conflict Count",
           "type": "integer"
         },
         "protected_conflict_count": {
@@ -1024,12 +1319,16 @@
       "required": [
         "status",
         "automatic_promotion_gate",
+        "applicability_status",
+        "coverage",
         "conflict_graph",
         "findings",
         "protected_conflict_count",
         "permissive_without_yield_count",
         "shared_signal_group_conflict_count",
-        "blockers"
+        "potential_signal_conflict_count",
+        "blockers",
+        "limitations"
       ],
       "title": "IndependentSafetyReport",
       "type": "object"
@@ -1092,6 +1391,14 @@
     "MovementConflict": {
       "additionalProperties": false,
       "properties": {
+        "certainty": {
+          "enum": [
+            "confirmed",
+            "potential"
+          ],
+          "title": "Certainty",
+          "type": "string"
+        },
         "conflict_id": {
           "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
           "title": "Conflict Id",
@@ -1138,6 +1445,7 @@
         "movement_a_id",
         "movement_b_id",
         "reason",
+        "certainty",
         "minimum_centerline_distance_m"
       ],
       "title": "MovementConflict",
@@ -2105,6 +2413,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/CanonicalNetworkSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "connection_audit_calibration": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConnectionAuditCalibration"
         },
         {
           "type": "null"

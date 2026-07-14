@@ -31,7 +31,15 @@ def _entity(
     )
 
 
-def _crossing_snapshot(*, shared_signal_group: bool = False):
+def _crossing_snapshot(
+    *,
+    shared_signal_group: bool = False,
+    protected_both: bool = True,
+    pedestrian_facilities: int = 0,
+    unsupported_controlled_links: int = 0,
+    shape_a=((-10.0, 0.0), (10.0, 0.0)),
+    shape_b=((0.0, -10.0), (0.0, 10.0)),
+):
     cell_id = stable_id("cell", {"test": "crossing"})
     controller_id = stable_id("controller", {"cell": cell_id})
     source_a = stable_id("lane_role", {"lane": "west-in"})
@@ -95,13 +103,13 @@ def _crossing_snapshot(*, shared_signal_group: bool = False):
         _entity(
             "internal_path",
             path_a,
-            path_payload(movement_a, [(-10.0, 0.0), (10.0, 0.0)]),
+            path_payload(movement_a, shape_a),
             cell_id=cell_id,
         ),
         _entity(
             "internal_path",
             path_b,
-            path_payload(movement_b, [(0.0, -10.0), (0.0, 10.0)]),
+            path_payload(movement_b, shape_b),
             cell_id=cell_id,
         ),
         _entity(
@@ -168,13 +176,46 @@ def _crossing_snapshot(*, shared_signal_group: bool = False):
                         "group_states": [
                             {
                                 "signal_group_id": group_id,
-                                "states": ["G"],
+                                "states": [
+                                    "G"
+                                    if protected_both or group_id == group_ids[0]
+                                    else "r"
+                                ],
                                 "consistent": True,
                             }
                             for group_id in group_ids
                         ],
                     }
                 ],
+            },
+            cell_id=cell_id,
+        )
+    )
+    entities.append(
+        _entity(
+            "safety_coverage",
+            stable_id("coverage", {"cell": cell_id}),
+            {
+                "canonical_movement_count": 2,
+                "controlled_connection_count": 2 + unsupported_controlled_links,
+                "mapped_controlled_movement_count": 2,
+                "unsupported_controlled_connection_count": unsupported_controlled_links,
+                "unsupported_controlled_connections": (
+                    [
+                        {
+                            "from_function": "walkingarea",
+                            "to_function": "crossing",
+                            "direction": "straight",
+                        }
+                    ]
+                    if unsupported_controlled_links
+                    else []
+                ),
+                "crossing_edge_count": pedestrian_facilities,
+                "walkingarea_edge_count": pedestrian_facilities,
+                "link_index2_connection_count": 0,
+                "movement_mode_class_counts": {"road-motorized": 2},
+                "ownership_status": "resolved",
             },
             cell_id=cell_id,
         )
@@ -201,6 +242,7 @@ def test_independent_conflict_graph_ignores_request_foes_self_consistency() -> N
         movement_b,
     }
     assert conflict.reason == "centerline-crossing"
+    assert conflict.certainty == "confirmed"
 
 
 def test_protected_green_crossing_is_a_hard_independent_safety_failure() -> None:
@@ -226,3 +268,53 @@ def test_conflicting_movements_cannot_share_one_signal_group() -> None:
     assert {
         finding.category for finding in report.findings
     } >= {"conflicting_movements_share_signal_group"}
+
+
+def test_unmodelled_pedestrian_facilities_block_automatic_promotion_as_review() -> None:
+    snapshot, _, _ = _crossing_snapshot(
+        protected_both=False,
+        pedestrian_facilities=1,
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.REVIEW
+    assert report.automatic_promotion_gate is GateStatus.BLOCKED
+    assert report.applicability_status is GateStatus.REVIEW
+    assert report.coverage.crossing_edge_count == 1
+    assert "pedestrian_facilities_outside_independent_conflict_model" in (
+        report.limitations
+    )
+
+
+def test_unmapped_controlled_link_is_a_hard_safety_coverage_failure() -> None:
+    snapshot, _, _ = _crossing_snapshot(
+        protected_both=False,
+        unsupported_controlled_links=1,
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    assert report.coverage.unsupported_controlled_connection_count == 1
+    assert {
+        finding.category for finding in report.findings
+    } >= {"controlled_link_outside_independent_conflict_model"}
+
+
+def test_lane_envelope_proximity_is_review_not_a_confirmed_safety_failure() -> None:
+    snapshot, _, _ = _crossing_snapshot(
+        shape_a=((-1.0, 0.0), (1.0, 0.0)),
+        shape_b=((0.0, 3.2), (1.0, 2.8)),
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert len(report.conflict_graph.conflicts) == 1
+    assert report.conflict_graph.conflicts[0].certainty == "potential"
+    assert report.status is GateStatus.REVIEW
+    assert report.protected_conflict_count == 0
+    assert report.potential_signal_conflict_count == 1
+    assert {
+        finding.category for finding in report.findings
+    } >= {"protected_green_potential_envelope_conflict"}

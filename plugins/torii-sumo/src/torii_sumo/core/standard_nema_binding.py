@@ -19,6 +19,7 @@ from .connection_mode_audit import (
     audit_standard_connection_mode,
     build_connection_mode_catalog,
     lane_supports_motorized,
+    resolve_network_traffic_side,
 )
 from .routeability_audit import run_routeability_audit
 from .sumo_commands import discover_binaries
@@ -125,6 +126,7 @@ def build_standard_nema_phase_binding(
         requested_junction=requested_junction,
         records=records,
         counts=counts,
+        traffic_side=str(catalog["traffic_side"]["effective"]),
     )
 
     if not requested_junction:
@@ -484,6 +486,7 @@ def _build_catalog(root: ET.Element) -> dict[str, Any]:
         )
     return {
         "root": root,
+        "traffic_side": resolve_network_traffic_side(root),
         "junctions": junctions,
         "edges": edges,
         "connections": connections,
@@ -552,6 +555,16 @@ def _classify_standard_junction(catalog: Mapping[str, Any], junction_id: str) ->
     owners: list[str | None] = catalog["connection_owners"]
     blockers: list[str] = []
     warnings: list[str] = []
+
+    traffic_side = catalog["traffic_side"]
+    blockers.extend(
+        f"traffic_side_contract:{failure}"
+        for failure in traffic_side.get("failures", [])
+    )
+    if traffic_side.get("effective") != "right":
+        blockers.append(
+            f"traffic_side_not_certified_for_vehicle_nema:{traffic_side.get('effective', 'unknown')}"
+        )
 
     junction_type = junction.attrib.get("type", "")
     if junction_type not in _SUPPORTED_JUNCTION_TYPES:
@@ -1896,6 +1909,7 @@ def _base_plan(
     requested_junction: str,
     records: list[dict[str, Any]],
     counts: Mapping[str, int],
+    traffic_side: str,
 ) -> dict[str, Any]:
     return {
         "schema": "torii.standard_nema_binding_plan.v1",
@@ -1906,8 +1920,9 @@ def _base_plan(
         "source_network_mutation": False,
         "requested_junction_id": requested_junction,
         "scan_counts": dict(counts),
+        "network_traffic_side": traffic_side,
         "eligibility_policy": {
-            "traffic_side": "right_hand",
+            "traffic_side": "right_hand_only_certified; left-hand networks fail closed",
             "junction_types": sorted(_SUPPORTED_JUNCTION_TYPES),
             "arm_counts": [3, 4],
             "controller_scope": "one explicit program controlling exactly one physical junction",
@@ -1918,7 +1933,7 @@ def _base_plan(
             "left_turns": "protected left requires a dedicated incoming lane",
             "movement_completeness": "every non-U-turn arm-to-arm movement must exist",
             "connection_mode": (
-                "hard gate on fromLane-toLane-via continuity, right-hand lane order, "
+                "hard gate on fromLane-toLane-via continuity, explicit traffic-side lane roles, "
                 "request/foe integrity, and every concurrently serviceable NEMA movement pair"
             ),
             "promotion": "human review required even after all runtime gates pass",

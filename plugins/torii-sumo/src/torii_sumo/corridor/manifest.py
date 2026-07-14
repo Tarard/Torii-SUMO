@@ -6,6 +6,7 @@ from pydantic import model_validator
 
 from .base import ContractModel, Sha256, StableToken
 from .candidates import CandidateGraph, Hypothesis
+from .calibration import ConnectionAuditCalibration
 from .canonicalizer import CanonicalNetworkSnapshot
 from .conflict_graph import IndependentSafetyReport
 from .enums import ArtifactRole, GateStatus
@@ -108,6 +109,7 @@ class CorridorResearchBundle(ContractModel):
     scope: ScopeSpec
     canonical_source: CanonicalNetworkSnapshot | None = None
     canonical_candidate: CanonicalNetworkSnapshot | None = None
+    connection_audit_calibration: ConnectionAuditCalibration | None = None
     exact_semantic_diff: ExactSemanticDiffReport | None = None
     independent_safety: IndependentSafetyReport | None = None
     evidence: tuple[EvidenceRecord, ...] = ()

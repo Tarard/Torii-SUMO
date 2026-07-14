@@ -5,7 +5,9 @@ from pathlib import Path
 from torii_sumo.tools.evidence_tools import sumo_collect_evidence, sumo_compare_outputs
 from torii_sumo.tools.osm_tools import (
     sumo_network_connection_mode_audit,
+    sumo_network_connection_mode_calibration,
     sumo_network_connection_mode_regression_audit,
+    sumo_network_exact_semantic_regression_audit,
     sumo_network_review_html,
     sumo_network_junction_aggregation_variant,
     sumo_network_overlapping_junction_audit,
@@ -699,6 +701,76 @@ def test_sumo_network_connection_mode_regression_tool_returns_json_report(
     assert captured["target_candidate_junction_ids"] == ["new_j"]
     assert captured["prefix"] == "delta"
     json.dumps(report)
+
+
+def test_connection_mode_calibration_tool_requires_and_forwards_traffic_side(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    captured = {}
+
+    class FakeCalibration:
+        def model_dump(self, **_kwargs):
+            return {"status": "pass", "endpoint_tolerance_m": 0.02}
+
+    def fake_calibration(net_file: Path, **kwargs):
+        captured.update({"net_file": net_file, **kwargs})
+        return FakeCalibration()
+
+    monkeypatch.setattr(
+        osm_tools,
+        "build_connection_mode_calibration_artifact",
+        fake_calibration,
+    )
+
+    report = sumo_network_connection_mode_calibration(
+        net_file=str(tmp_path / "source.net.xml"),
+        output_dir=str(tmp_path / "calibration"),
+        traffic_side="left",
+        prefix="baseline",
+    )
+
+    assert report["status"] == "pass"
+    assert captured["traffic_side"].value == "left"
+    assert captured["output_file"] == tmp_path / "calibration" / "baseline.json"
+
+
+def test_exact_semantic_regression_tool_forwards_hash_bound_contract(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from torii_sumo.tools import osm_tools
+
+    captured = {}
+
+    def fake_exact(source: Path, candidate: Path, **kwargs):
+        captured.update({"source": source, "candidate": candidate, **kwargs})
+        return {"status": "pass", "automatic_promotion_gate": "pass"}
+
+    monkeypatch.setattr(
+        osm_tools,
+        "build_exact_semantic_regression_artifacts",
+        fake_exact,
+    )
+
+    report = sumo_network_exact_semantic_regression_audit(
+        source_net_file=str(tmp_path / "source.net.xml"),
+        candidate_net_file=str(tmp_path / "candidate.net.xml"),
+        output_dir=str(tmp_path / "audit"),
+        toolchain_lock_file=str(tmp_path / "toolchain.json"),
+        traffic_side="right",
+        target_source_junction_ids=["old"],
+        target_candidate_junction_ids=["new"],
+        calibration_file=str(tmp_path / "calibration.json"),
+    )
+
+    assert report["automatic_promotion_gate"] == "pass"
+    assert captured["traffic_side"].value == "right"
+    assert captured["calibration_file"] == tmp_path / "calibration.json"
+    assert captured["target_source_junction_ids"] == ["old"]
+    assert captured["target_candidate_junction_ids"] == ["new"]
 
 
 def test_sumo_network_tls_warning_parity_tool_writes_reference_aware_report(tmp_path: Path) -> None:
