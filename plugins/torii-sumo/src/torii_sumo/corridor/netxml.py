@@ -60,6 +60,8 @@ class RawConnection:
     via: str
     direction: str
     state: str
+    allow: tuple[str, ...]
+    disallow: tuple[str, ...]
     controller_id: str
     link_index: int | None
     link_index2: int | None
@@ -179,6 +181,8 @@ def parse_net_xml(root: ET.Element) -> RawNetwork:
             via=element.attrib.get("via", ""),
             direction=element.attrib.get("dir", ""),
             state=element.attrib.get("state", ""),
+            allow=_tokens(element.attrib.get("allow")),
+            disallow=_tokens(element.attrib.get("disallow")),
             controller_id=element.attrib.get("tl", ""),
             link_index=_integer(element.attrib.get("linkIndex")),
             link_index2=_integer(element.attrib.get("linkIndex2")),

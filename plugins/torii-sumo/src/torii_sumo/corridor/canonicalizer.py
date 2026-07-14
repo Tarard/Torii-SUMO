@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -310,7 +311,6 @@ def canonicalize_raw_network(
         source_lane = _lane_by_ordinal(source_edge, connection.from_lane)
         target_lane = _lane_by_ordinal(target_edge, connection.to_lane)
         mode = _movement_mode(source_lane, target_lane)
-        mode_classes = _movement_mode_classes(source_lane, target_lane)
         turn_class = _turn_class(connection.direction)
         movement_id = make_movement_id(
             physical_cell_id=cell_id,
@@ -327,6 +327,11 @@ def canonicalize_raw_network(
             network,
             outgoing_connections=outgoing_connections,
             maximum_hops=maximum_internal_hops,
+        )
+        mode_classes = _movement_mode_classes(
+            source_lane,
+            target_lane,
+            path=path,
         )
         path_signature = stable_id(
             "signature",
@@ -806,9 +811,32 @@ def _movement_mode(source_lane: RawLane | None, target_lane: RawLane | None) -> 
 def _movement_mode_classes(
     source_lane: RawLane | None,
     target_lane: RawLane | None,
+    *,
+    path: Mapping[str, Any] | None = None,
 ) -> tuple[str, ...]:
-    if source_lane is None or target_lane is None:
-        return ("unspecified",)
+    permission_contract = (
+        path.get("permission_contract", {})
+        if isinstance(path, Mapping)
+        else {}
+    )
+    if permission_contract.get("coverage") == "complete":
+        if permission_contract.get("status") == "fail":
+            return ("incompatible",)
+
+        def allows_mode(mode: str) -> bool:
+            return _permission_contract_allows_mode(
+                permission_contract,
+                mode,
+            )
+    else:
+        if source_lane is None or target_lane is None:
+            return ("unspecified",)
+
+        def allows_mode(mode: str) -> bool:
+            return _lane_allows_mode(
+                source_lane,
+                mode,
+            ) and _lane_allows_mode(target_lane, mode)
     road_modes = {
         "passenger",
         "private",
@@ -832,23 +860,13 @@ def _movement_mode_classes(
         "rail_fast",
         "rail_slow",
     }
-    if any(
-        _lane_allows_mode(source_lane, mode) and _lane_allows_mode(target_lane, mode)
-        for mode in road_modes
-    ):
+    if any(allows_mode(mode) for mode in road_modes):
         return ("road-motorized",)
-    if any(
-        _lane_allows_mode(source_lane, mode) and _lane_allows_mode(target_lane, mode)
-        for mode in rail_modes
-    ):
+    if any(allows_mode(mode) for mode in rail_modes):
         return ("rail",)
-    if _lane_allows_mode(source_lane, "bicycle") and _lane_allows_mode(
-        target_lane, "bicycle"
-    ):
+    if allows_mode("bicycle"):
         return ("bicycle",)
-    if _lane_allows_mode(source_lane, "pedestrian") and _lane_allows_mode(
-        target_lane, "pedestrian"
-    ):
+    if allows_mode("pedestrian"):
         return ("pedestrian",)
     return ("unspecified",)
 
@@ -857,6 +875,21 @@ def _lane_allows_mode(lane: RawLane, mode: str) -> bool:
     if lane.allow:
         return mode in lane.allow
     return mode not in lane.disallow
+
+
+def _permission_contract_allows_mode(
+    contract: Mapping[str, Any],
+    mode: str,
+) -> bool:
+    if contract.get("status") != "pass":
+        return False
+    allowed = set(map(str, contract.get("allow", ())))
+    disallowed = set(map(str, contract.get("disallow", ())))
+    return (
+        mode not in disallowed
+        if "*" in allowed
+        else mode in allowed and mode not in disallowed
+    )
 
 
 def _add_safety_coverage_entities(
@@ -1076,21 +1109,61 @@ def _trace_internal_semantics(
     outgoing_connections: dict[tuple[str, int], list[RawConnection]],
     maximum_hops: int,
 ) -> dict[str, Any]:
+    source_edge = network.edges.get(direct.from_edge)
+    target_edge = network.edges.get(direct.to_edge)
+    source_lane = (
+        _lane_by_ordinal(source_edge, direct.from_lane)
+        if source_edge is not None
+        else None
+    )
+    target_lane = (
+        _lane_by_ordinal(target_edge, direct.to_lane)
+        if target_edge is not None
+        else None
+    )
+    permission_records: list[RawLane | RawConnection | None] = [
+        source_lane,
+        direct,
+    ]
     if not direct.via:
+        permission_records.append(target_lane)
         if _raw_network_internal_link_mode(network) == "no-internal-links":
             return {
                 "status": "no-internal-links",
                 "segments": (),
                 "failures": (),
+                "permission_contract": _path_permission_contract(
+                    permission_records,
+                    complete=True,
+                ),
             }
-        return {"status": "missing-via", "segments": (), "failures": ("missing-via",)}
+        return {
+            "status": "missing-via",
+            "segments": (),
+            "failures": ("missing-via",),
+            "permission_contract": _path_permission_contract(
+                permission_records,
+                complete=False,
+            ),
+        }
     lane = network.lanes.get(direct.via)
     if lane is None:
-        return {"status": "invalid", "segments": (), "failures": ("via-not-found",)}
+        permission_records.append(None)
+        return {
+            "status": "invalid",
+            "segments": (),
+            "failures": ("via-not-found",),
+            "permission_contract": _path_permission_contract(
+                permission_records,
+                complete=False,
+            ),
+        }
+    permission_records.append(lane)
     segments: list[dict[str, Any]] = []
     failures: list[str] = []
     visited: set[str] = set()
     current = lane
+    path_complete = False
     for _ in range(maximum_hops):
         if current.lane_id in visited:
             failures.append("cycle")
@@ -1110,15 +1183,20 @@ def _trace_internal_semantics(
             failures.append(f"outgoing-count:{len(candidates)}")
             break
         continuation = candidates[0]
+        permission_records.append(continuation)
         if continuation.to_edge != direct.to_edge or continuation.to_lane != direct.to_lane:
             failures.append("target-mismatch")
         if continuation.via:
             next_lane = network.lanes.get(continuation.via)
             if next_lane is None:
+                permission_records.append(None)
                 failures.append("continuation-not-found")
                 break
+            permission_records.append(next_lane)
             current = next_lane
             continue
+        permission_records.append(target_lane)
+        path_complete = target_lane is not None
         break
     else:
         failures.append("bounded-trace-exhausted")
@@ -1126,6 +1204,47 @@ def _trace_internal_semantics(
         "status": "pass" if not failures else "invalid",
         "segments": segments,
         "failures": tuple(failures),
+        "permission_contract": _path_permission_contract(
+            permission_records,
+            complete=path_complete,
+        ),
+    }
+
+
+def _path_permission_contract(
+    records: Sequence[RawLane | RawConnection | None],
+    *,
+    complete: bool,
+) -> dict[str, Any]:
+    available = tuple(record for record in records if record is not None)
+    coverage = "complete" if complete and len(available) == len(records) else "partial"
+    explicit: set[str] | None = None
+    disallowed: set[str] = set()
+    forced_empty = False
+    for record in available:
+        allowed = set(record.allow)
+        denied = set(record.disallow)
+        if "all" in denied:
+            forced_empty = True
+        disallowed.update(denied - {"all"})
+        if allowed and "all" not in allowed:
+            explicit = allowed if explicit is None else explicit & allowed
+    if forced_empty:
+        overlap: tuple[str, ...] = ()
+        basis = "explicit_empty"
+    elif explicit is None:
+        overlap = ("*",)
+        basis = "implicit_all_except_disallow"
+    else:
+        overlap = tuple(sorted(explicit - disallowed))
+        basis = "explicit_allow_intersection"
+    return {
+        "coverage": coverage,
+        "status": "fail" if not overlap else "pass" if coverage == "complete" else "unresolved",
+        "basis": basis,
+        "allow": overlap,
+        "disallow": tuple(sorted(disallowed)),
+        "element_count": len(available),
     }
 
 

@@ -92,10 +92,15 @@ def build_movement_conflict_graph(
     if envelope_margin_m < 0:
         raise ValueError("Conflict envelope margin must be non-negative.")
     entities = snapshot.entity_index()
-    movement_entities = {
+    all_movement_entities = {
         entity.stable_entity_id: entity
         for entity in snapshot.entities
         if entity.kind == "movement"
+    }
+    movement_entities = {
+        movement_id: entity
+        for movement_id, entity in all_movement_entities.items()
+        if not _all_movement_variants_permission_incompatible(entity)
     }
     geometries: dict[str, _MovementGeometry] = {}
     missing: list[str] = []
@@ -183,6 +188,24 @@ def audit_independent_movement_safety(
     coverage = _summarize_coverage(coverage_entities)
     limitations: list[str] = []
 
+    for movement in (
+        entity for entity in snapshot.entities if entity.kind == "movement"
+    ):
+        incompatible_signatures = _incompatible_path_signatures(movement)
+        if not incompatible_signatures:
+            continue
+        finding = build_finding(
+            category="movement_path_permission_empty",
+            severity=FindingSeverity.SAFETY,
+            subject_id=movement.stable_entity_id,
+            witness={
+                "incompatible_path_signatures": incompatible_signatures,
+                "variant_count": len(movement.payload.get("variants", ())),
+            },
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
+
     if not coverage_entities:
         limitations.append("canonical_safety_coverage_missing")
         finding = build_finding(
@@ -244,7 +267,13 @@ def audit_independent_movement_safety(
         mode_counts = payload.get("movement_mode_class_counts", {})
         unsupported_modes = {
             mode: int(mode_counts.get(mode, 0) or 0)
-            for mode in ("bicycle", "pedestrian", "rail", "unspecified")
+            for mode in (
+                "bicycle",
+                "pedestrian",
+                "rail",
+                "unspecified",
+                "incompatible",
+            )
             if int(mode_counts.get(mode, 0) or 0)
         }
         if unsupported_modes:
@@ -607,9 +636,12 @@ def _movement_geometry(
     if not variants or path_entity is None:
         return None
     path_variants = tuple(path_entity.payload.get("path_variants", ()))
+    incompatible_signatures = set(_incompatible_path_signatures(movement))
     polylines: list[tuple[tuple[float, float], ...]] = []
     widths: list[float] = []
     for path_variant in path_variants:
+        if str(path_variant.get("path_signature", "")) in incompatible_signatures:
+            continue
         path = path_variant.get("path", {})
         points: list[tuple[float, float]] = []
         for segment in path.get("segments", ()):
@@ -638,6 +670,29 @@ def _movement_geometry(
         destination_lane_role_id=str(
             first_variant.get("destination_lane_role_id", "")
         ),
+    )
+
+
+def _incompatible_path_signatures(
+    movement: CanonicalEntity,
+) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            str(variant.get("path_signature", ""))
+            for variant in movement.payload.get("variants", ())
+            if "incompatible" in set(map(str, variant.get("mode_classes", ())))
+            and variant.get("path_signature")
+        )
+    )
+
+
+def _all_movement_variants_permission_incompatible(
+    movement: CanonicalEntity,
+) -> bool:
+    variants = tuple(movement.payload.get("variants", ()))
+    return bool(variants) and all(
+        "incompatible" in set(map(str, variant.get("mode_classes", ())))
+        for variant in variants
     )
 
 
