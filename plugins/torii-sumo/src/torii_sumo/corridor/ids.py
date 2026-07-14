@@ -19,6 +19,7 @@ _KNOWN_KINDS = frozenset(
     {
         "approach",
         "artifact",
+        "binding",
         "calibration",
         "candidate",
         "cell",

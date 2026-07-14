@@ -1223,6 +1223,14 @@
           "title": "Modeled Crossing Edge Count",
           "type": "integer"
         },
+        "modeled_pedestrian_movement_count": {
+          "title": "Modeled Pedestrian Movement Count",
+          "type": "integer"
+        },
+        "modeled_uncontrolled_pedestrian_movement_count": {
+          "title": "Modeled Uncontrolled Pedestrian Movement Count",
+          "type": "integer"
+        },
         "movement_mode_class_counts": {
           "additionalProperties": {
             "type": "integer"
@@ -1260,7 +1268,9 @@
         "unsupported_controlled_connection_count",
         "crossing_edge_count",
         "walkingarea_edge_count",
+        "modeled_pedestrian_movement_count",
         "modeled_controlled_pedestrian_movement_count",
+        "modeled_uncontrolled_pedestrian_movement_count",
         "modeled_crossing_edge_count",
         "unmodeled_crossing_edge_count",
         "link_index2_connection_count",

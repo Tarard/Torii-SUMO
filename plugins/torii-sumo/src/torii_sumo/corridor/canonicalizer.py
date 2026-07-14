@@ -26,7 +26,7 @@ from .netxml import RawConnection, RawEdge, RawLane, RawNetwork, parse_net_xml_f
 from .pedestrian_crossings import (
     PedestrianFacilityOwner,
     infer_pedestrian_facility_owners,
-    model_controlled_pedestrian_crossing,
+    model_pedestrian_crossing,
 )
 
 
@@ -280,7 +280,12 @@ def canonicalize_raw_network(
     movement_owners: dict[str, tuple[str, tuple[str, ...]]] = {}
     pedestrian_rejection_reasons: dict[str, tuple[str, ...]] = {}
     modeled_pedestrian_crossing_edges: dict[str, set[str]] = defaultdict(set)
-    modeled_pedestrian_movement_ids: dict[str, set[str]] = defaultdict(set)
+    modeled_controlled_pedestrian_movement_ids: dict[str, set[str]] = (
+        defaultdict(set)
+    )
+    modeled_uncontrolled_pedestrian_movement_ids: dict[str, set[str]] = (
+        defaultdict(set)
+    )
     for connection in network.connections:
         source_edge = network.edges.get(connection.from_edge)
         target_edge = network.edges.get(connection.to_edge)
@@ -291,7 +296,7 @@ def canonicalize_raw_network(
             or not target_edge.external
             or source_edge.to_junction != target_edge.from_junction
         ):
-            attempt = model_controlled_pedestrian_crossing(
+            attempt = model_pedestrian_crossing(
                 connection,
                 network=network,
                 facility_owners=pedestrian_facility_owners,
@@ -328,8 +333,38 @@ def canonicalize_raw_network(
                 model.physical_cell_id,
                 model.boundary_port_ids,
             )
+            control_kind = "signalized" if model.controlled else "uncontrolled"
+            source_link_indices = tuple(
+                index
+                for index in (connection.link_index, connection.link_index2)
+                if index is not None
+            )
+            _put_entity(
+                entities,
+                kind="pedestrian_control_binding",
+                entity_id=stable_id(
+                    "binding",
+                    {
+                        "movement_id": model.movement_id,
+                        "control_kind": control_kind,
+                    },
+                ),
+                owner_cell_ids=(model.physical_cell_id,),
+                boundary_port_ids=model.boundary_port_ids,
+                payload={
+                    "movement_id": model.movement_id,
+                    "control_kind": control_kind,
+                    "source_link_indices": source_link_indices,
+                    "multiple_source_indices": len(source_link_indices) > 1,
+                },
+            )
             modeled_pedestrian_crossing_edges[model.physical_cell_id].add(model.crossing_edge_id)
-            modeled_pedestrian_movement_ids[model.physical_cell_id].add(model.movement_id)
+            target = (
+                modeled_controlled_pedestrian_movement_ids
+                if model.controlled
+                else modeled_uncontrolled_pedestrian_movement_ids
+            )
+            target[model.physical_cell_id].add(model.movement_id)
             continue
         junction_id = source_edge.to_junction
         cell_id = junction_cell_ids.get(junction_id)
@@ -550,7 +585,12 @@ def canonicalize_raw_network(
         movement_owners=movement_owners,
         pedestrian_facility_owners=pedestrian_facility_owners,
         modeled_pedestrian_crossing_edges=modeled_pedestrian_crossing_edges,
-        modeled_pedestrian_movement_ids=modeled_pedestrian_movement_ids,
+        modeled_controlled_pedestrian_movement_ids=(
+            modeled_controlled_pedestrian_movement_ids
+        ),
+        modeled_uncontrolled_pedestrian_movement_ids=(
+            modeled_uncontrolled_pedestrian_movement_ids
+        ),
         pedestrian_rejection_reasons=pedestrian_rejection_reasons,
     )
 
@@ -899,7 +939,8 @@ def _add_safety_coverage_entities(
     movement_owners: dict[str, tuple[str, tuple[str, ...]]],
     pedestrian_facility_owners: Mapping[str, PedestrianFacilityOwner],
     modeled_pedestrian_crossing_edges: Mapping[str, set[str]],
-    modeled_pedestrian_movement_ids: Mapping[str, set[str]],
+    modeled_controlled_pedestrian_movement_ids: Mapping[str, set[str]],
+    modeled_uncontrolled_pedestrian_movement_ids: Mapping[str, set[str]],
     pedestrian_rejection_reasons: Mapping[str, tuple[str, ...]],
 ) -> None:
     movement_ids_by_cell: dict[str, set[str]] = defaultdict(set)
@@ -957,6 +998,12 @@ def _add_safety_coverage_entities(
         ]
         crossing_edge_count = facility_counts_by_cell[cell_id]["crossing"]
         modeled_crossing_edge_count = len(modeled_pedestrian_crossing_edges.get(cell_id, set()))
+        controlled_pedestrian_count = len(
+            modeled_controlled_pedestrian_movement_ids.get(cell_id, set())
+        )
+        uncontrolled_pedestrian_count = len(
+            modeled_uncontrolled_pedestrian_movement_ids.get(cell_id, set())
+        )
         payload = {
             "canonical_movement_count": len(movement_ids_by_cell.get(cell_id, set())),
             "controlled_connection_count": len(controlled),
@@ -970,7 +1017,15 @@ def _add_safety_coverage_entities(
             ),
             "crossing_edge_count": crossing_edge_count,
             "walkingarea_edge_count": facility_counts_by_cell[cell_id]["walkingarea"],
-            "modeled_controlled_pedestrian_movement_count": len(modeled_pedestrian_movement_ids.get(cell_id, set())),
+            "modeled_pedestrian_movement_count": (
+                controlled_pedestrian_count + uncontrolled_pedestrian_count
+            ),
+            "modeled_controlled_pedestrian_movement_count": (
+                controlled_pedestrian_count
+            ),
+            "modeled_uncontrolled_pedestrian_movement_count": (
+                uncontrolled_pedestrian_count
+            ),
             "modeled_crossing_edge_count": modeled_crossing_edge_count,
             "unmodeled_crossing_edge_count": max(
                 0,
@@ -1016,7 +1071,9 @@ def _add_safety_coverage_entities(
             ),
             "crossing_edge_count": unresolved_facilities["crossing"],
             "walkingarea_edge_count": unresolved_facilities["walkingarea"],
+            "modeled_pedestrian_movement_count": 0,
             "modeled_controlled_pedestrian_movement_count": 0,
+            "modeled_uncontrolled_pedestrian_movement_count": 0,
             "modeled_crossing_edge_count": 0,
             "unmodeled_crossing_edge_count": unresolved_facilities["crossing"],
             "link_index2_connection_count": sum(
