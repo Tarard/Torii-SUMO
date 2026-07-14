@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
@@ -22,6 +21,7 @@ from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkSpec,
     OfficialSumoCaseResult,
 )
+from .netxml import normalized_net_sha256
 
 
 def run_official_sumo_benchmark(
@@ -225,8 +225,8 @@ def _run_case(
     artifacts.update({generated_net, replay_net})
     generated_sha = file_sha256(generated_net)
     replay_sha = file_sha256(replay_net)
-    normalized_sha = _normalized_net_sha256(generated_net)
-    replay_normalized_sha = _normalized_net_sha256(replay_net)
+    normalized_sha = normalized_net_sha256(generated_net)
+    replay_normalized_sha = normalized_net_sha256(replay_net)
     reproducible = normalized_sha == replay_normalized_sha
     if not reproducible:
         blockers.append("canonical_net_replay_mismatch")
@@ -366,15 +366,6 @@ def _netconvert_command(
         else:
             command.append(argument)
     return command
-
-
-def _normalized_net_sha256(path: Path) -> str:
-    canonical = ET.canonicalize(
-        from_file=str(path),
-        with_comments=False,
-        strip_text=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _tool_identity(binary: str, *, expected_version: str) -> dict[str, object]:

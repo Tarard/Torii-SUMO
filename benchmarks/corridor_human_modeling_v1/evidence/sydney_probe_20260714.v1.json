@@ -70,10 +70,19 @@
     "same_frozen_snapshot_rerun": "entered full machine audit"
   },
   "harbour_bridge_machine_evidence": {
-    "candidate_net_sha256": "daa851ae1e3e606c13b468ff904889a192c28087469456af002a90ad1e4a52da",
+    "candidate_net_sha256": "26eb9caf65b2c69a9522907f7b64aef21340bbf16f824ba839621e8941689719",
     "pipeline_status": "pass",
     "machine_label": "ambiguous",
     "netconvert_status": "pass",
+    "netconvert_replay": {
+      "status": "pass",
+      "primary_raw_sha256": "26eb9caf65b2c69a9522907f7b64aef21340bbf16f824ba839621e8941689719",
+      "replay_raw_sha256": "dd27b55a8d2eab12aacf5d3216cc43f0820cb0f8bc6af3f71735431457103712",
+      "primary_normalized_sha256": "dd0ae52b3059f63a27b8210a000c0cbc139311ff28d4e8ccfd3a989dc8a45a29",
+      "replay_normalized_sha256": "dd0ae52b3059f63a27b8210a000c0cbc139311ff28d4e8ccfd3a989dc8a45a29",
+      "reproducible_semantics": true,
+      "report_sha256": "28d646d12003956e069460cc00b540841570ca8d413465c952881891944f4106"
+    },
     "sumo_load_status": "pass",
     "routeability": {
       "status": "pass",
@@ -81,7 +90,7 @@
       "collision_count": 0,
       "teleport_count": 0,
       "unfinished_trip_count": 0,
-      "report_sha256": "85a2c49b7b9d3a2c0bb1c6c2b2103a398fa2e62b7a96793c78e8db14d2bd74c2"
+      "report_sha256": "a4f958feaf25afc759efc6e04f3acbaf79d0bb793a7335cee47cc811688da61f"
     },
     "connection_mode": {
       "status": "review_required",
@@ -91,7 +100,7 @@
       "fail_count": 0,
       "structural_failure_count": 0,
       "review_finding_count": 29,
-      "report_sha256": "e2ad463204bcd6039c10ea8256f079de2d3db86ec37f8bf5afb0c8fdd18320a8"
+      "report_sha256": "32efc51827ef3ccfc4a30f4ecd6f4277e487053b291df8f60d4eaaca1b1c33b1"
     },
     "independent_safety": {
       "status": "blocked",
@@ -111,6 +120,10 @@
   },
   "review_state": {
     "blinded_package_prepared": true,
+    "reviewer_visible_html_prepared": true,
+    "display_only_overlay_validated": true,
+    "candidate_hash_bound": true,
+    "machine_label_hidden_from_reviewer_html": true,
     "human_review_decision_count": 0,
     "human_adjudication_count": 0,
     "automatic_promotion_gate": "blocked",

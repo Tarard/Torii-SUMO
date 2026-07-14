@@ -37,6 +37,7 @@ from .held_out_review_contracts import (
 )
 from .held_out_review_runner import build_blinded_review_artifacts
 from .ids import stable_id
+from .net_replay import compare_netconvert_replay
 from .review import ReviewCase
 
 
@@ -291,20 +292,23 @@ def _build_case_evidence(
     if source_sha256 != snapshot.sha256:
         raise ValueError("Cropped OSM snapshot hash mismatch before netconvert.")
     profile = spec.network_build_profile
+    build_kwargs = {
+        "bbox": case.bbox.as_sumo_string(),
+        "prefix": case.corridor_key,
+        "source_osm_path": source_osm,
+        "allowed_highways": set(profile.allowed_highways),
+        "include_railway": profile.include_railway,
+        "allowed_railways": set(profile.allowed_railways),
+        "netconvert_profile": profile.netconvert_profile,
+        "netconvert_binary": str(netconvert_binary),
+        "clip_source_ways_to_bbox": profile.clip_source_ways_to_bbox,
+        "sumo_home": sumo_root,
+        "traffic_side": traffic_side.value,
+        "timeout_seconds": timeout_seconds,
+    }
     build_report = build_osm_network(
-        bbox=case.bbox.as_sumo_string(),
         output_dir=destination / "network-build",
-        prefix=case.corridor_key,
-        source_osm_path=source_osm,
-        allowed_highways=set(profile.allowed_highways),
-        include_railway=profile.include_railway,
-        allowed_railways=set(profile.allowed_railways),
-        netconvert_profile=profile.netconvert_profile,
-        netconvert_binary=str(netconvert_binary),
-        clip_source_ways_to_bbox=profile.clip_source_ways_to_bbox,
-        sumo_home=sumo_root,
-        traffic_side=traffic_side.value,
-        timeout_seconds=timeout_seconds,
+        **build_kwargs,
     )
     build_report_path = destination / "network-build.json"
     write_json_atomic(build_report_path, build_report, sort_keys=True)
@@ -316,6 +320,33 @@ def _build_case_evidence(
     if not net_file.is_file():
         raise RuntimeError("netconvert reported success without a network artifact.")
     net_sha256 = file_sha256(net_file)
+    replay_build_report = build_osm_network(
+        output_dir=destination / "network-build-replay",
+        **build_kwargs,
+    )
+    replay_build_report_path = destination / "network-build-replay.json"
+    write_json_atomic(
+        replay_build_report_path,
+        replay_build_report,
+        sort_keys=True,
+    )
+    if replay_build_report.get("status") != "pass":
+        raise RuntimeError(
+            "netconvert replay failed: "
+            + str(replay_build_report.get("error", "unknown"))
+        )
+    replay_net_file = Path(str(replay_build_report["net_file"])).resolve()
+    if not replay_net_file.is_file():
+        raise RuntimeError("netconvert replay succeeded without a network artifact.")
+    replay = compare_netconvert_replay(net_file, replay_net_file)
+    replay_report_path = destination / "net-replay.json"
+    write_json_atomic(
+        replay_report_path,
+        replay.model_dump(mode="json", by_alias=True),
+        sort_keys=True,
+    )
+    if replay.status is not GateStatus.PASS:
+        raise RuntimeError("netconvert normalized replay identity mismatch.")
     load_report = run_sumo_load_audit(
         net_file=net_file,
         output_dir=destination / "sumo-load",
@@ -380,6 +411,7 @@ def _build_case_evidence(
         calibration_status=calibration.status,
         safety_status=safety.status,
         safety_categories=tuple(finding.category for finding in safety.findings),
+        reproducibility_status=replay.status,
         applicability=applicability,
         routeability=routeability,
     )
@@ -431,6 +463,7 @@ def _build_case_evidence(
         for kind, sha256 in (
             ("osm", source_sha256),
             ("net", net_sha256),
+            ("net-replay", file_sha256(replay_report_path)),
             ("connection-mode", file_sha256(Path(connection_report["report_file"]))),
             ("independent-safety", file_sha256(safety_path)),
             ("routeability", file_sha256(Path(routeability["report_file"]))),
@@ -502,6 +535,10 @@ def _build_case_evidence(
             "unresolved_gates": unresolved_gates,
             "source_osm_sha256": source_sha256,
             "candidate_net_sha256": net_sha256,
+            "candidate_net_normalized_sha256": replay.primary_normalized_sha256,
+            "replay_net_sha256": replay.replay_net_sha256,
+            "replay_net_normalized_sha256": replay.replay_normalized_sha256,
+            "reproducible_semantics": replay.reproducible_semantics,
             "source_osm_immutable": source_immutable,
             "map_links": map_links,
             "map_links_are_human_review_aids_only": True,
@@ -509,6 +546,9 @@ def _build_case_evidence(
                 "source_osm": str(source_osm),
                 "candidate_net": str(net_file),
                 "network_build": str(build_report_path),
+                "network_build_replay": str(replay_build_report_path),
+                "replay_net": str(replay_net_file),
+                "net_replay": str(replay_report_path),
                 "sumo_load": str(load_report["report_file"]),
                 "connection_mode": str(connection_report["report_file"]),
                 "connection_overlay": str(connection_report["review_overlay_file"]),
@@ -555,6 +595,9 @@ def _build_case_evidence(
         source_osm,
         net_file,
         build_report_path,
+        replay_build_report_path,
+        replay_net_file,
+        replay_report_path,
         Path(load_report["report_file"]),
         Path(load_report["manifest_file"]),
         Path(connection_report["report_file"]),
@@ -603,6 +646,7 @@ def _classify_case(
     calibration_status: GateStatus,
     safety_status: GateStatus,
     safety_categories: tuple[str, ...],
+    reproducibility_status: GateStatus,
     applicability: Any,
     routeability: dict[str, Any],
 ) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
@@ -614,6 +658,7 @@ def _classify_case(
         "connection_mode": str(connection_report.get("status", "fail")),
         "calibration": calibration_status.value,
         "independent_safety": safety_status.value,
+        "reproducibility": reproducibility_status.value,
         "applicability": str(applicability.decision),
     }
     if statuses["connection_mode"] == "fail":
@@ -630,6 +675,8 @@ def _classify_case(
         categories.add("sumo_load_failure")
     if statuses["routeability"] != "pass":
         categories.add("routeability_failure")
+    if statuses["reproducibility"] != "pass":
+        categories.add("normalized_net_replay_mismatch")
     definitive_safety_defects = {
         "conflicting_movements_share_signal_group",
         "movement_geometry_missing_for_independent_safety",
@@ -641,6 +688,7 @@ def _classify_case(
         or statuses["sumo_load"] != "pass"
         or statuses["routeability"] != "pass"
         or statuses["connection_mode"] == "fail"
+        or statuses["reproducibility"] != "pass"
         or bool(definitive_safety_defects & set(safety_categories))
     )
     ambiguous = (
