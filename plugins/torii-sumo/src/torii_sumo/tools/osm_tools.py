@@ -43,6 +43,9 @@ from torii_sumo.core.topology_audit import audit_topology_fragmentation
 from torii_sumo.core.teacher_corridor import build_teacher_corridor_comparison
 from torii_sumo.core.tls_reference_cleanup import build_tls_reference_cleanup_variant
 from torii_sumo.core.workflow_review_html import build_workflow_review_html
+from torii_sumo.corridor.audit_pipeline import build_exact_semantic_regression_artifacts
+from torii_sumo.corridor.calibration import build_connection_mode_calibration_artifact
+from torii_sumo.corridor.enums import TrafficSide
 
 
 def resolve_highway_classes(value: str | None) -> set[str]:
@@ -466,6 +469,7 @@ def sumo_network_connection_mode_audit(
     output_dir: str,
     prefix: str = "connection_mode_audit",
     junction_ids: list[str] | None = None,
+    traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
 ) -> dict[str, Any]:
@@ -475,9 +479,72 @@ def sumo_network_connection_mode_audit(
         output_dir=Path(output_dir),
         prefix=prefix,
         junction_ids=junction_ids,
+        traffic_side=traffic_side,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
     )
+
+
+def sumo_network_connection_mode_calibration(
+    net_file: str,
+    output_dir: str,
+    traffic_side: str,
+    prefix: str = "connection_mode_calibration",
+) -> dict[str, Any]:
+    """Calibrate endpoint tolerance from an immutable source baseline."""
+
+    side = _required_traffic_side(traffic_side)
+    output_file = Path(output_dir) / f"{prefix}.json"
+    calibration = build_connection_mode_calibration_artifact(
+        Path(net_file),
+        output_file=output_file,
+        traffic_side=side,
+    )
+    return calibration.model_dump(mode="json", by_alias=True)
+
+
+def sumo_network_exact_semantic_regression_audit(
+    source_net_file: str,
+    candidate_net_file: str,
+    output_dir: str,
+    toolchain_lock_file: str,
+    traffic_side: str,
+    target_source_junction_ids: list[str],
+    target_candidate_junction_ids: list[str],
+    guard_source_junction_ids: list[str] | None = None,
+    guard_candidate_junction_ids: list[str] | None = None,
+    endpoint_tolerance_m: float | None = None,
+    normalized_lane_rank_tolerance: float | None = None,
+    calibration_file: str | None = None,
+    prefix: str = "exact_semantic_regression",
+) -> dict[str, Any]:
+    """Run the stable-entity, exact-witness, independent-safety regression gate."""
+
+    return build_exact_semantic_regression_artifacts(
+        Path(source_net_file),
+        Path(candidate_net_file),
+        output_dir=Path(output_dir),
+        toolchain_lock_file=Path(toolchain_lock_file),
+        traffic_side=_required_traffic_side(traffic_side),
+        target_source_junction_ids=target_source_junction_ids,
+        target_candidate_junction_ids=target_candidate_junction_ids,
+        guard_source_junction_ids=guard_source_junction_ids or (),
+        guard_candidate_junction_ids=guard_candidate_junction_ids or (),
+        endpoint_tolerance_m=endpoint_tolerance_m,
+        normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
+        calibration_file=Path(calibration_file) if calibration_file else None,
+        prefix=prefix,
+    )
+
+
+def _required_traffic_side(value: str) -> TrafficSide:
+    try:
+        traffic_side = TrafficSide(str(value).strip().casefold())
+    except ValueError as exc:
+        raise ValueError("traffic_side must be explicitly set to right or left") from exc
+    if traffic_side is TrafficSide.UNKNOWN:
+        raise ValueError("traffic_side must be explicitly set to right or left")
+    return traffic_side
 
 
 def sumo_network_connection_mode_regression_audit(
@@ -487,6 +554,7 @@ def sumo_network_connection_mode_regression_audit(
     prefix: str = "connection_mode_regression",
     target_source_junction_ids: list[str] | None = None,
     target_candidate_junction_ids: list[str] | None = None,
+    traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
 ) -> dict[str, Any]:
@@ -498,6 +566,7 @@ def sumo_network_connection_mode_regression_audit(
         prefix=prefix,
         target_source_junction_ids=target_source_junction_ids or (),
         target_candidate_junction_ids=target_candidate_junction_ids or (),
+        traffic_side=traffic_side,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
     )

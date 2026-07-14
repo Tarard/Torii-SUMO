@@ -93,6 +93,8 @@ class RawTLSProgram:
 
 @dataclass(frozen=True)
 class RawNetwork:
+    lefthand: bool
+    lefthand_attribute: str | None
     edges: dict[str, RawEdge]
     lanes: dict[str, RawLane]
     lane_edge_ids: dict[str, str]
@@ -106,6 +108,8 @@ def parse_net_xml_file(path: Path) -> RawNetwork:
 
 
 def parse_net_xml(root: ET.Element) -> RawNetwork:
+    lefthand_attribute = root.attrib.get("lefthand")
+    lefthand = _boolean(lefthand_attribute, default=False)
     edges: dict[str, RawEdge] = {}
     lanes: dict[str, RawLane] = {}
     lane_edge_ids: dict[str, str] = {}
@@ -225,6 +229,8 @@ def parse_net_xml(root: ET.Element) -> RawNetwork:
         )
 
     return RawNetwork(
+        lefthand=lefthand,
+        lefthand_attribute=lefthand_attribute,
         edges=edges,
         lanes=lanes,
         lane_edge_ids=lane_edge_ids,
@@ -255,6 +261,17 @@ def _number(value: str | None) -> float | None:
         return None
 
 
+def _boolean(value: str | None, *, default: bool) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"Invalid SUMO boolean value: {value!r}")
+
+
 def _shape(value: str) -> tuple[tuple[float, float], ...]:
     points: list[tuple[float, float]] = []
     for token in value.split():
@@ -266,4 +283,3 @@ def _shape(value: str) -> tuple[tuple[float, float], ...]:
         except ValueError as exc:
             raise ValueError(f"Invalid SUMO shape point: {token!r}") from exc
     return tuple(points)
-

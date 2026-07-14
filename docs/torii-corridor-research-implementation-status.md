@@ -1,0 +1,96 @@
+# Torii-SUMO 走廊级人类建模闭环：实施状态
+
+更新时间：2026-07-14（Europe/Berlin）
+
+权威研究方案：[`docs/torii-corridor-human-modeling-research-plan.md`](torii-corridor-human-modeling-research-plan.md)
+
+本文件只记录已经由代码、测试或实测证明的状态，不替代研究方案，也不把未完成阶段描述为成功。
+
+## 当前结论
+
+- Stage 0“规范冻结”已完成并推送：研究方案、稳定 ID、typed contracts、候选 DAG、scope/boundary-port、workflow state、toolchain lock、benchmark v1、JSON Schema 和 CI 已建立。
+- Stage 1“Audit-only”正在实施，核心架构已落地，但尚未达到阶段退出条件。尚缺完整故障注入矩阵、SUMO 官方场景矩阵、held-out corridor 双人审核和统计指标。
+- Stage 2–7 与 MGE-1 尚未完成，不能宣称完整项目或任意城市自动清洗已经实现。
+- 当前产品承诺仍是 selective automation：高精度窄编辑类自动执行，其余输出候选、证据和 review case；不确定时 abstain/block。
+
+## 已实现并验证
+
+### 身份、规范与可复现性
+
+- source/candidate 路径和 SHA-256 分离，禁止同路径或同内容冒充候选。
+- artifact manifest 使用逻辑产物名称、内容哈希、schema、producer 和 toolchain 构建闭合 DAG。
+- source 运行前后重新哈希；审核路径只读。
+- 显式 traffic-side contract；`.net.xml` 的 `lefthand` 与外部证据冲突时硬阻断。
+
+### 稳定语义图与精确差分
+
+- 从 `.net.xml` 构建 physical cell、boundary port、approach、lane role、movement、internal path、request/foes、signal group、controller/program 和 safety coverage 实体。
+- internal edge ID、TLS ID 和 connection 顺序不进入语义身份；原始 ID 只用于诊断映射。
+- exact entity signature diff 与 exact finding-witness diff 已实现；同类别“一处消失、一处新增”不能再通过数量抵消。
+- 旧 Connection Mode differential gate 也升级为 exact raw-witness 比较；它保留 category count 作为粗筛，并明确提示 promotion 应使用稳定实体版审核。
+
+### Connection Mode 审核
+
+- lane-to-lane、via、完整 internal continuation、target lane、request/foes、TLS/linkIndex、phase state length、shared signal group 和 connection completeness 均可代码审核，不要求每次打开 NetEdit。
+- internal path 使用 internal 子图大小约束的有界遍历，不再使用固定 16-hop 失败门；超过 16 只生成 unusually-long review finding。
+- lane rank 统一为 curb-to-inner，curb/inner 角色随通行侧变化。
+- promotion-grade 接口不使用固定 2 m 默认值，必须传入预注册参数或 source-hash-bound calibration artifact。
+
+### 独立安全图
+
+- movement conflict graph 从 internal path geometry/lane envelope 独立计算，不信任同一生成过程产生的 request/foes。
+- 每个 physical cell 生成 safety coverage；未映射 controlled link 和 `linkIndex2` 为硬安全失败。
+- pedestrian facility、bicycle-only、pedestrian-only、rail 或未知模式在尚未认证时进入 review 并阻断自动晋级。
+- 冲突分为 `confirmed` 与 `potential`：centerline crossing、shared-destination merge 和 collinear overlap 可作为 confirmed；仅 lane-envelope proximity 不能冒充确定安全错误，只生成精确 review。
+- protected `G`、permissive `g` 和 shared signal group 均通过独立 conflict graph 审核。
+
+### 容差校准与 MCP 可用面
+
+- source baseline calibration 使用坐标序列化精度、endpoint gap 分布和 lane-width cap 推导 endpoint tolerance。
+- calibration 发现 gross source gap、样本不足、坐标精度未知或 traffic-side 冲突时 fail closed。
+- 新增 MCP 工具：
+  - `sumo_network_connection_mode_calibration`
+  - `sumo_network_exact_semantic_regression_audit`
+- 后者同时运行稳定语义差分、Connection Mode、独立安全、source immutability 和 hash-closed manifest。
+
+## 真实 Ingolstadt 只读证据
+
+冻结输入：
+
+`outputs/ingolstadt_full_authoritative_20260714_retry18/sumo/ingolstadt_authoritative18.net.xml`
+
+SHA-256：
+
+`52114063a325b26f1b50ca08d4686697cc03ea1767dce1dc3815f4a5ae362f57`
+
+2026-07-14 的 Stage 1 只读实测：
+
+- 914 条 canonical movement。
+- 1,846 个 endpoint interface sample。
+- 0 条无法追踪的 internal path。
+- 坐标精度 0.01 m，median lane width 3.0 m。
+- endpoint gap 的 99.5% 分位数和最大值均为 0.0 m。
+- 校准 endpoint tolerance 为 0.02 m，calibration status 为 `pass`。
+- 219 个 controlled connection 全部进入 canonical movement model；0 个 unsupported controlled link；0 个 `linkIndex2`。
+- 独立图发现 0 个 confirmed protected-green conflict、1 个 potential lane-envelope review。
+- 该 potential case 是两条相邻直行 lane 的短 internal shape 在约 3.19 m 的 envelope proximity，不被误报为 confirmed safety failure。
+- 当前结论为 `review`，automatic promotion 仍为 `blocked`；这不是清洗成功声明。
+
+## 当前阶段尚未满足的退出条件
+
+- 合成 fault-injection matrix 尚未覆盖研究方案列出的全部 connection/request/TLS/multimodal 故障。
+- SUMO 官方 PlainXML、joined junction、no-internal-links、NEMA、pedestrian、rail 和 shared-signal-index 场景尚未形成统一 benchmark runner。
+- independent conflict graph 尚无 held-out gold 标注和 precision/recall。
+- pedestrian-aware conflict、rail 专用安全、bicycle 专用语义尚未认证。
+- review package 尚未完成盲审时间与 reviewer agreement 实验。
+- Stage 2 的 certified micro-repair 还没有逐编辑类 held-out 认证证据。
+- H_S/H_M/H_P physical-cell hypothesis engine、boundary-port geometry solver 和 MGE-1 尚未实现完毕。
+
+## 下一实施顺序
+
+1. 建立 Stage 1 合成 mutation runner 与 gold findings，先回答 H1/H4。
+2. 纳入 SUMO 官方小场景并冻结误报基线。
+3. 实现 Stage 2 仅限可局部证明的 micro-repair，所有操作具备 precondition、forward/inverse patch 和 exact delta。
+4. 实现 H_S/H_M/H_P 三假设并行，不再从 shared TLS 推导 physical merge。
+5. 实现 boundary-port constrained road-ribbon solver，执行 MGE-1 的 V0–V4 盲化比较。
+6. 在上述门通过后再推进 vehicle-only NEMA、pedestrian-aware signal、多城市走廊和城市级队列。

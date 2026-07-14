@@ -14,6 +14,7 @@ from .audit_adapter import (
     build_scope_from_junction_ids,
     canonicalize_connection_mode_findings,
 )
+from .calibration import ConnectionAuditCalibration
 from .canonicalizer import canonicalize_net_xml_file
 from .conflict_graph import audit_independent_movement_safety
 from .enums import ArtifactRole, GateStatus, TrafficSide
@@ -38,8 +39,9 @@ def build_exact_semantic_regression_artifacts(
     target_candidate_junction_ids: Sequence[str],
     guard_source_junction_ids: Sequence[str] = (),
     guard_candidate_junction_ids: Sequence[str] = (),
-    endpoint_tolerance_m: float,
-    normalized_lane_rank_tolerance: float,
+    endpoint_tolerance_m: float | None = None,
+    normalized_lane_rank_tolerance: float | None = None,
+    calibration_file: Path | None = None,
     prefix: str = "exact_semantic_regression",
 ) -> dict[str, Any]:
     """Run the stage-1 read-only audit and emit a hash-closed artifact DAG."""
@@ -56,6 +58,42 @@ def build_exact_semantic_regression_artifacts(
         raise ValueError("Source and candidate contents must be distinct.")
     if traffic_side is TrafficSide.UNKNOWN:
         raise ValueError("Exact semantic audit requires an explicit traffic side.")
+    calibration: ConnectionAuditCalibration | None = None
+    calibration_path: Path | None = None
+    if calibration_file is not None:
+        if endpoint_tolerance_m is not None:
+            raise ValueError(
+                "Use either calibration_file or endpoint_tolerance_m, not both."
+            )
+        calibration_path = calibration_file.resolve()
+        calibration = ConnectionAuditCalibration.model_validate_json(
+            calibration_path.read_text(encoding="utf-8")
+        )
+        if calibration.source_sha256 != source_sha256:
+            raise ValueError("Calibration is not bound to the source network hash.")
+        if calibration.traffic_side is not traffic_side:
+            raise ValueError("Calibration traffic side does not match the audit.")
+        if (
+            calibration.status is not GateStatus.PASS
+            or calibration.endpoint_tolerance_m is None
+        ):
+            raise ValueError("Only a passing calibration may drive a promotion-grade audit.")
+        endpoint_tolerance_m = calibration.endpoint_tolerance_m
+        calibrated_lane_rank_tolerance = (
+            calibration.policy.normalized_lane_rank_tolerance
+        )
+        if (
+            normalized_lane_rank_tolerance is not None
+            and normalized_lane_rank_tolerance != calibrated_lane_rank_tolerance
+        ):
+            raise ValueError("Lane-rank tolerance contradicts the bound calibration.")
+        normalized_lane_rank_tolerance = calibrated_lane_rank_tolerance
+    if endpoint_tolerance_m is None or normalized_lane_rank_tolerance is None:
+        raise ValueError(
+            "Exact semantic audit requires either a passing calibration or explicit tolerances."
+        )
+    if endpoint_tolerance_m <= 0 or not 0 <= normalized_lane_rank_tolerance <= 1:
+        raise ValueError("Audit tolerances are outside their valid ranges.")
     toolchain = ToolchainLock.model_validate_json(lock_file.read_text(encoding="utf-8"))
     destination.mkdir(parents=True, exist_ok=True)
 
@@ -63,11 +101,13 @@ def build_exact_semantic_regression_artifacts(
     candidate_root = ET.parse(candidate).getroot()
     source_audit = audit_network_connection_mode(
         source_root,
+        traffic_side=traffic_side.value,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
     )
     candidate_audit = audit_network_connection_mode(
         candidate_root,
+        traffic_side=traffic_side.value,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
     )
@@ -162,6 +202,8 @@ def build_exact_semantic_regression_artifacts(
         "candidate_independent_safety": candidate_safety.status,
         "exact_semantic_diff": exact_diff.status,
     }
+    if calibration is not None:
+        gate_trace["connection_audit_calibration"] = calibration.status
     artifacts = [
         _artifact(
             source,
@@ -188,6 +230,17 @@ def build_exact_semantic_regression_artifacts(
             toolchain_id=toolchain.toolchain_id,
         ),
     ]
+    if calibration_path is not None:
+        artifacts.append(
+            _artifact(
+                calibration_path,
+                logical_name="connection_audit_calibration",
+                role=ArtifactRole.PLAN,
+                artifact_schema="torii.corridor.connection-audit-calibration/v1",
+                producer="torii-stage-1-calibration",
+                toolchain_id=toolchain.toolchain_id,
+            )
+        )
     report_specs = (
         ("source_connection_audit", "torii.network_connection_mode_audit.v1"),
         ("candidate_connection_audit", "torii.network_connection_mode_audit.v1"),
@@ -212,7 +265,7 @@ def build_exact_semantic_regression_artifacts(
     by_path = {Path(artifact.path): artifact for artifact in artifacts}
     source_artifact = by_path[source]
     candidate_artifact = by_path[candidate]
-    dependencies = (
+    dependency_list = [
         ArtifactDependency(
             parent_artifact_id=source_artifact.artifact_id,
             child_artifact_id=by_path[paths["source_connection_audit"]].artifact_id,
@@ -268,7 +321,24 @@ def build_exact_semantic_regression_artifacts(
             child_artifact_id=by_path[paths["exact_diff"]].artifact_id,
             relation="finding-diff-candidate",
         ),
-    )
+    ]
+    if calibration_path is not None:
+        calibration_artifact = by_path[calibration_path]
+        dependency_list.extend(
+            (
+                ArtifactDependency(
+                    parent_artifact_id=calibration_artifact.artifact_id,
+                    child_artifact_id=by_path[paths["source_connection_audit"]].artifact_id,
+                    relation="calibrates-source-audit",
+                ),
+                ArtifactDependency(
+                    parent_artifact_id=calibration_artifact.artifact_id,
+                    child_artifact_id=by_path[paths["candidate_connection_audit"]].artifact_id,
+                    relation="calibrates-candidate-audit",
+                ),
+            )
+        )
+    dependencies = tuple(dependency_list)
     manifest = ArtifactManifestV1(
         manifest_id=stable_id(
             "manifest",
@@ -310,7 +380,19 @@ def build_exact_semantic_regression_artifacts(
         "resolved_finding_count": len(exact_diff.finding_delta.resolved),
         "candidate_conflict_count": len(candidate_safety.conflict_graph.conflicts),
         "candidate_safety_finding_count": len(candidate_safety.findings),
-        "files": {key: str(path) for key, path in paths.items()},
+        "tolerance_provenance": (
+            "hash_bound_calibration" if calibration is not None else "explicit_parameters"
+        ),
+        "endpoint_tolerance_m": endpoint_tolerance_m,
+        "normalized_lane_rank_tolerance": normalized_lane_rank_tolerance,
+        "files": {
+            **{key: str(path) for key, path in paths.items()},
+            **(
+                {"connection_audit_calibration": str(calibration_path)}
+                if calibration_path is not None
+                else {}
+            ),
+        },
     }
 
 

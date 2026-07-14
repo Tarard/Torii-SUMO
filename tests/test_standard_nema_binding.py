@@ -18,6 +18,11 @@ from torii_sumo.core.connection_mode_audit import (
     compare_connection_mode_audits,
 )
 from torii_sumo.core.standard_nema_binding import build_standard_nema_phase_binding
+from torii_sumo.corridor.calibration import (
+    ConnectionAuditCalibrationPolicy,
+    calibrate_connection_mode_audit,
+)
+from torii_sumo.corridor.enums import GateStatus, TrafficSide
 
 
 def _write_standard_network(
@@ -25,8 +30,9 @@ def _write_standard_network(
     *,
     arm_names: tuple[str, ...] = ("W", "E", "S", "N"),
     include_turnaround: bool = False,
+    lefthand: bool = False,
 ) -> None:
-    root = ET.Element("net")
+    root = ET.Element("net", lefthand="true") if lefthand else ET.Element("net")
     coordinates = {"W": (-100, 0), "E": (100, 0), "S": (0, -100), "N": (0, 100)}
 
     def lane_boundary(arm: str, lane_index: int, *, incoming: bool) -> tuple[float, float]:
@@ -853,6 +859,32 @@ def test_connection_mode_regression_gate_allows_unchanged_scoped_review_finding(
     assert comparison["target_scope_new_review_finding_count"] == 0
 
 
+def test_legacy_regression_gate_does_not_cancel_equal_category_witnesses(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    _write_standard_network(source)
+    source_audit = audit_network_connection_mode(ET.parse(source).getroot())
+    source_record = source_audit["junctions"][0]
+    source_record["connection_mode_audit"]["review_findings"] = [
+        "connection_mode:lane_rank_jump:0:0.750"
+    ]
+    candidate_audit = json.loads(json.dumps(source_audit))
+    candidate_audit["junctions"][0]["connection_mode_audit"]["review_findings"] = [
+        "connection_mode:lane_rank_jump:7:0.750"
+    ]
+
+    comparison = compare_connection_mode_audits(source_audit, candidate_audit)
+
+    assert comparison["status"] == "fail"
+    assert comparison["outside_scope_new_review_finding_count"] == 1
+    assert comparison["outside_scope_resolved_review_finding_count"] == 1
+    assert comparison["outside_scope_review_regressions"][0]["finding_witness"] == (
+        "connection_mode:lane_rank_jump:7:0.750"
+    )
+    assert comparison["outside_scope_review_category_regressions"] == []
+
+
 def test_network_connection_mode_audit_flags_foe_movements_with_protected_green(
     tmp_path: Path,
 ) -> None:
@@ -889,6 +921,120 @@ def test_network_connection_mode_audit_flags_foe_movements_with_protected_green(
         finding.startswith("tls_link_binding:protected_green_foes:J0:J0")
         for finding in tls["review_findings"]
     )
+
+
+def test_left_hand_connection_audit_uses_explicit_curb_and_inner_roles(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "left-hand.net.xml"
+    _write_standard_network(source, lefthand=True)
+    root = ET.parse(source).getroot()
+
+    audit = audit_network_connection_mode(root)
+
+    assert audit["traffic_side"] == "left"
+    assert audit["traffic_side_contract"]["evidence"] == "net_attribute"
+    junction_audit = audit["junctions"][0]["connection_mode_audit"]
+    west = next(
+        check
+        for check in junction_audit["lane_order_checks"]
+        if check["incoming_edge"] == "W_in"
+    )
+    assert west["curb_lane_index"] == 2
+    assert west["innermost_lane_index"] == 0
+    west_right = next(
+        check
+        for check in junction_audit["movement_checks"]
+        if check["from"] == "W_in" and check["turn"] == "r"
+    )
+    assert west_right["normalized_lane_rank_basis"] == "curb_to_inner"
+    assert west_right["normalized_source_lane_rank"] == 0.833333
+
+
+def test_endpoint_tolerance_is_calibrated_from_precision_and_lane_scale(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "calibration.net.xml"
+    _write_standard_network(source)
+    policy = ConnectionAuditCalibrationPolicy.build(minimum_endpoint_samples=20)
+
+    calibration = calibrate_connection_mode_audit(
+        ET.parse(source).getroot(),
+        source_sha256=file_sha256(source),
+        traffic_side=TrafficSide.RIGHT,
+        policy=policy,
+    )
+
+    assert calibration.status is GateStatus.PASS
+    assert calibration.coordinate_precision_m == 0.1
+    assert calibration.lane_width_evidence == "locked_sumo_default_lane_width"
+    assert calibration.endpoint_sample_count == 24
+    assert calibration.endpoint_tolerance_m == 0.2
+
+
+def test_endpoint_calibration_blocks_gross_gap_in_source_baseline(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "invalid-calibration.net.xml"
+    _write_standard_network(source)
+    root = ET.parse(source).getroot()
+    internal_lane = root.find("edge[@id=':J0_0']/lane")
+    assert internal_lane is not None
+    points = internal_lane.attrib["shape"].split()
+    points[0] = "10.0,10.0"
+    internal_lane.set("shape", " ".join(points))
+
+    calibration = calibrate_connection_mode_audit(
+        root,
+        source_sha256=file_sha256(source),
+        traffic_side=TrafficSide.RIGHT,
+        policy=ConnectionAuditCalibrationPolicy.build(minimum_endpoint_samples=1),
+    )
+
+    assert calibration.status is GateStatus.BLOCKED
+    assert calibration.endpoint_tolerance_m is None
+    assert any(
+        finding.startswith("baseline_endpoint_gap_exceeds_lane_scale_cap")
+        for finding in calibration.findings
+    )
+
+
+def test_explicit_traffic_side_mismatch_is_a_hard_configuration_failure(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "left-hand.net.xml"
+    _write_standard_network(source, lefthand=True)
+
+    audit = audit_network_connection_mode(
+        ET.parse(source).getroot(),
+        traffic_side="right",
+    )
+
+    assert audit["status"] == "fail"
+    assert audit["automatic_promotion_gate"] == "blocked"
+    assert audit["configuration_failures"] == [
+        "connection_mode:traffic_side_mismatch:requested_right:network_left"
+    ]
+
+
+def test_vehicle_nema_materialization_fails_closed_for_left_hand_network(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "left-hand.net.xml"
+    _write_standard_network(source, lefthand=True)
+
+    report = build_standard_nema_phase_binding(
+        source,
+        output_dir=tmp_path / "candidate",
+        junction_id="J0",
+        run_runtime_checks=False,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["candidate_net_file"] == ""
+    assert "traffic_side_not_certified_for_vehicle_nema:left" in report[
+        "selected_candidate"
+    ]["blockers"]
 
 
 def test_network_connection_mode_audit_fails_invalid_tls_link_index(

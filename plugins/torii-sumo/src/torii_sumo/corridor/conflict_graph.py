@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import itertools
 import math
+from collections import Counter
+from typing import Literal
 
 from pydantic import model_validator
 
@@ -18,6 +20,7 @@ class MovementConflict(ContractModel):
     movement_a_id: StableToken
     movement_b_id: StableToken
     reason: str
+    certainty: Literal["confirmed", "potential"]
     minimum_centerline_distance_m: float
     crossing_angle_deg: float | None = None
 
@@ -44,16 +47,33 @@ class MovementConflictGraph(ContractModel):
         }
 
 
+class IndependentSafetyCoverage(ContractModel):
+    coverage_entity_count: int
+    canonical_movement_count: int
+    controlled_connection_count: int
+    mapped_controlled_movement_count: int
+    unsupported_controlled_connection_count: int
+    crossing_edge_count: int
+    walkingarea_edge_count: int
+    link_index2_connection_count: int
+    unresolved_owner_record_count: int
+    movement_mode_class_counts: dict[str, int]
+
+
 class IndependentSafetyReport(ContractModel):
     schema_id: str = "torii.corridor.independent-safety-audit/v1"
     status: GateStatus
     automatic_promotion_gate: GateStatus
+    applicability_status: GateStatus
+    coverage: IndependentSafetyCoverage
     conflict_graph: MovementConflictGraph
     findings: tuple[Finding, ...]
     protected_conflict_count: int
     permissive_without_yield_count: int
     shared_signal_group_conflict_count: int
+    potential_signal_conflict_count: int
     blockers: tuple[str, ...]
+    limitations: tuple[str, ...]
 
     @model_validator(mode="after")
     def validate_report(self) -> IndependentSafetyReport:
@@ -107,6 +127,9 @@ def build_movement_conflict_graph(
                 movement_a_id=movement_a_id,
                 movement_b_id=movement_b_id,
                 reason=reason,
+                certainty=(
+                    "potential" if reason == "lane-envelope-proximity" else "confirmed"
+                ),
                 minimum_centerline_distance_m=round(distance, 6),
                 crossing_angle_deg=round(angle, 6) if angle is not None else None,
             )
@@ -137,6 +160,88 @@ def audit_independent_movement_safety(
     protected_conflict_count = 0
     permissive_without_yield_count = 0
     shared_signal_group_conflict_count = 0
+    potential_signal_conflict_count = 0
+    coverage_entities = [
+        entity for entity in snapshot.entities if entity.kind == "safety_coverage"
+    ]
+    coverage = _summarize_coverage(coverage_entities)
+    limitations: list[str] = []
+
+    if not coverage_entities:
+        limitations.append("canonical_safety_coverage_missing")
+        finding = build_finding(
+            category="canonical_safety_coverage_missing",
+            severity=FindingSeverity.REVIEW,
+            subject_id=stable_id(
+                "manifest",
+                {"canonical_snapshot": snapshot.source_sha256 or "in-memory"},
+            ),
+            witness={"coverage_entity_count": 0},
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
+    for coverage_entity in coverage_entities:
+        payload = coverage_entity.payload
+        unsupported_count = int(
+            payload.get("unsupported_controlled_connection_count", 0) or 0
+        )
+        if unsupported_count:
+            finding = build_finding(
+                category="controlled_link_outside_independent_conflict_model",
+                severity=FindingSeverity.SAFETY,
+                subject_id=coverage_entity.stable_entity_id,
+                witness={
+                    "count": unsupported_count,
+                    "connections": payload.get("unsupported_controlled_connections", ()),
+                    "ownership_status": payload.get("ownership_status", "unknown"),
+                },
+                confidence=1.0,
+            )
+            findings[finding.finding_id] = finding
+        link_index2_count = int(payload.get("link_index2_connection_count", 0) or 0)
+        if link_index2_count:
+            finding = build_finding(
+                category="link_index2_outside_independent_conflict_model",
+                severity=FindingSeverity.SAFETY,
+                subject_id=coverage_entity.stable_entity_id,
+                witness={"count": link_index2_count},
+                confidence=1.0,
+            )
+            findings[finding.finding_id] = finding
+        pedestrian_facilities = int(payload.get("crossing_edge_count", 0) or 0) + int(
+            payload.get("walkingarea_edge_count", 0) or 0
+        )
+        if pedestrian_facilities:
+            limitation = "pedestrian_facilities_outside_independent_conflict_model"
+            limitations.append(limitation)
+            finding = build_finding(
+                category=limitation,
+                severity=FindingSeverity.REVIEW,
+                subject_id=coverage_entity.stable_entity_id,
+                witness={
+                    "crossing_edge_count": payload.get("crossing_edge_count", 0),
+                    "walkingarea_edge_count": payload.get("walkingarea_edge_count", 0),
+                },
+                confidence=1.0,
+            )
+            findings[finding.finding_id] = finding
+        mode_counts = payload.get("movement_mode_class_counts", {})
+        unsupported_modes = {
+            mode: int(mode_counts.get(mode, 0) or 0)
+            for mode in ("bicycle", "pedestrian", "rail", "unspecified")
+            if int(mode_counts.get(mode, 0) or 0)
+        }
+        if unsupported_modes:
+            limitation = "movement_modes_outside_certified_conflict_applicability"
+            limitations.append(limitation)
+            finding = build_finding(
+                category=limitation,
+                severity=FindingSeverity.REVIEW,
+                subject_id=coverage_entity.stable_entity_id,
+                witness={"mode_counts": unsupported_modes},
+                confidence=1.0,
+            )
+            findings[finding.finding_id] = finding
 
     for signal_group_id, signal_group in signal_groups.items():
         movement_ids = tuple(sorted(map(str, signal_group.payload.get("movement_ids", ()))))
@@ -144,10 +249,20 @@ def audit_independent_movement_safety(
             conflict = conflict_index.get(frozenset((movement_a_id, movement_b_id)))
             if conflict is None:
                 continue
-            shared_signal_group_conflict_count += 1
+            confirmed = conflict.certainty == "confirmed"
+            if confirmed:
+                shared_signal_group_conflict_count += 1
+            else:
+                potential_signal_conflict_count += 1
             finding = build_finding(
-                category="conflicting_movements_share_signal_group",
-                severity=FindingSeverity.SAFETY,
+                category=(
+                    "conflicting_movements_share_signal_group"
+                    if confirmed
+                    else "potentially_conflicting_movements_share_signal_group"
+                ),
+                severity=(
+                    FindingSeverity.SAFETY if confirmed else FindingSeverity.REVIEW
+                ),
                 subject_id=signal_group_id,
                 witness={
                     "movement_ids": (movement_a_id, movement_b_id),
@@ -196,10 +311,20 @@ def audit_independent_movement_safety(
                 conflict = conflict_index.get(frozenset((movement_a_id, movement_b_id)))
                 if conflict is None:
                     continue
-                protected_conflict_count += 1
+                confirmed = conflict.certainty == "confirmed"
+                if confirmed:
+                    protected_conflict_count += 1
+                else:
+                    potential_signal_conflict_count += 1
                 finding = build_finding(
-                    category="protected_green_movement_conflict",
-                    severity=FindingSeverity.SAFETY,
+                    category=(
+                        "protected_green_movement_conflict"
+                        if confirmed
+                        else "protected_green_potential_envelope_conflict"
+                    ),
+                    severity=(
+                        FindingSeverity.SAFETY if confirmed else FindingSeverity.REVIEW
+                    ),
                     subject_id=program.stable_entity_id,
                     witness={
                         "phase_index": phase_index,
@@ -216,10 +341,22 @@ def audit_independent_movement_safety(
                     conflict = conflict_index.get(frozenset((permissive_id, other_id)))
                     if conflict is None:
                         continue
-                    permissive_without_yield_count += 1
+                    confirmed = conflict.certainty == "confirmed"
+                    if confirmed:
+                        permissive_without_yield_count += 1
+                    else:
+                        potential_signal_conflict_count += 1
                     finding = build_finding(
-                        category="permissive_conflict_without_independent_yield_evidence",
-                        severity=FindingSeverity.SAFETY,
+                        category=(
+                            "permissive_conflict_without_independent_yield_evidence"
+                            if confirmed
+                            else "permissive_potential_envelope_conflict_requires_review"
+                        ),
+                        severity=(
+                            FindingSeverity.SAFETY
+                            if confirmed
+                            else FindingSeverity.REVIEW
+                        ),
                         subject_id=program.stable_entity_id,
                         witness={
                             "phase_index": phase_index,
@@ -245,19 +382,99 @@ def audit_independent_movement_safety(
             confidence=1.0,
         )
         findings[finding.finding_id] = finding
+    safety_findings = [
+        finding
+        for finding in findings.values()
+        if finding.severity is FindingSeverity.SAFETY
+    ]
+    review_findings = [
+        finding
+        for finding in findings.values()
+        if finding.severity is FindingSeverity.REVIEW
+    ]
     blockers = []
-    if findings:
+    if safety_findings:
         blockers.append("independent_movement_safety_not_proven")
-    status = GateStatus.BLOCKED if blockers else GateStatus.PASS
+    if review_findings:
+        blockers.append(
+            "independent_safety_applicability_incomplete"
+            if limitations
+            else "independent_safety_review_required"
+        )
+    status = (
+        GateStatus.BLOCKED
+        if safety_findings
+        else GateStatus.REVIEW
+        if review_findings
+        else GateStatus.PASS
+    )
+    applicability_status = GateStatus.REVIEW if limitations else GateStatus.PASS
     return IndependentSafetyReport(
         status=status,
-        automatic_promotion_gate=status,
+        automatic_promotion_gate=(
+            GateStatus.PASS if status is GateStatus.PASS else GateStatus.BLOCKED
+        ),
+        applicability_status=applicability_status,
+        coverage=coverage,
         conflict_graph=graph,
         findings=tuple(findings[finding_id] for finding_id in sorted(findings)),
         protected_conflict_count=protected_conflict_count,
         permissive_without_yield_count=permissive_without_yield_count,
         shared_signal_group_conflict_count=shared_signal_group_conflict_count,
+        potential_signal_conflict_count=potential_signal_conflict_count,
         blockers=tuple(blockers),
+        limitations=tuple(sorted(set(limitations))),
+    )
+
+
+def _summarize_coverage(
+    entities: list[CanonicalEntity],
+) -> IndependentSafetyCoverage:
+    mode_counts: Counter[str] = Counter()
+    for entity in entities:
+        mode_counts.update(
+            {
+                str(mode): int(count)
+                for mode, count in entity.payload.get(
+                    "movement_mode_class_counts", {}
+                ).items()
+            }
+        )
+    return IndependentSafetyCoverage(
+        coverage_entity_count=len(entities),
+        canonical_movement_count=sum(
+            int(entity.payload.get("canonical_movement_count", 0) or 0)
+            for entity in entities
+        ),
+        controlled_connection_count=sum(
+            int(entity.payload.get("controlled_connection_count", 0) or 0)
+            for entity in entities
+        ),
+        mapped_controlled_movement_count=sum(
+            int(entity.payload.get("mapped_controlled_movement_count", 0) or 0)
+            for entity in entities
+        ),
+        unsupported_controlled_connection_count=sum(
+            int(entity.payload.get("unsupported_controlled_connection_count", 0) or 0)
+            for entity in entities
+        ),
+        crossing_edge_count=sum(
+            int(entity.payload.get("crossing_edge_count", 0) or 0)
+            for entity in entities
+        ),
+        walkingarea_edge_count=sum(
+            int(entity.payload.get("walkingarea_edge_count", 0) or 0)
+            for entity in entities
+        ),
+        link_index2_connection_count=sum(
+            int(entity.payload.get("link_index2_connection_count", 0) or 0)
+            for entity in entities
+        ),
+        unresolved_owner_record_count=sum(
+            entity.payload.get("ownership_status") == "unresolved"
+            for entity in entities
+        ),
+        movement_mode_class_counts=dict(sorted(mode_counts.items())),
     )
 
 
