@@ -40,14 +40,12 @@ class RawEdge:
     priority: int | None
     name: str
     params: dict[str, str]
+    crossing_edge_ids: tuple[str, ...]
     lanes: tuple[RawLane, ...]
 
     @property
     def external(self) -> bool:
-        return (
-            not self.edge_id.startswith(":")
-            and self.function not in {"internal", "crossing", "walkingarea"}
-        )
+        return not self.edge_id.startswith(":") and self.function not in {"internal", "crossing", "walkingarea"}
 
 
 @dataclass(frozen=True)
@@ -168,6 +166,7 @@ def parse_net_xml(root: ET.Element) -> RawNetwork:
             priority=_integer(edge_element.attrib.get("priority")),
             name=edge_element.attrib.get("name", ""),
             params=params,
+            crossing_edge_ids=_tokens(edge_element.attrib.get("crossingEdges")),
             lanes=tuple(raw_lanes),
         )
 
@@ -253,8 +252,7 @@ def parse_net_xml(root: ET.Element) -> RawNetwork:
         connections=connections,
         junctions=junctions,
         tls_programs={
-            controller_id: tuple(controller_programs)
-            for controller_id, controller_programs in programs.items()
+            controller_id: tuple(controller_programs) for controller_id, controller_programs in programs.items()
         },
     )
 

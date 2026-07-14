@@ -15,6 +15,9 @@ from torii_sumo.corridor.conflict_graph import (
 from torii_sumo.corridor.enums import GateStatus, TrafficSide
 from torii_sumo.corridor.ids import stable_id
 from torii_sumo.corridor.netxml import parse_net_xml
+from torii_sumo.corridor.pedestrian_crossings import (
+    infer_pedestrian_facility_owners,
+)
 
 
 def _entity(
@@ -181,11 +184,7 @@ def _crossing_snapshot(
                         "group_states": [
                             {
                                 "signal_group_id": group_id,
-                                "states": [
-                                    "G"
-                                    if protected_both or group_id == group_ids[0]
-                                    else "r"
-                                ],
+                                "states": ["G" if protected_both or group_id == group_ids[0] else "r"],
                                 "consistent": True,
                             }
                             for group_id in group_ids
@@ -218,6 +217,9 @@ def _crossing_snapshot(
                 ),
                 "crossing_edge_count": pedestrian_facilities,
                 "walkingarea_edge_count": pedestrian_facilities,
+                "modeled_controlled_pedestrian_movement_count": 0,
+                "modeled_crossing_edge_count": 0,
+                "unmodeled_crossing_edge_count": pedestrian_facilities,
                 "link_index2_connection_count": 0,
                 "movement_mode_class_counts": {"road-motorized": 2},
                 "ownership_status": "resolved",
@@ -232,6 +234,77 @@ def _crossing_snapshot(
         ),
         movement_a,
         movement_b,
+    )
+
+
+def _pedestrian_tls_snapshot(
+    *,
+    protected_together: bool,
+    controlled_crossing: bool = True,
+    include_continuation: bool = True,
+    link_index2: bool = False,
+    facility_prefix: str = ":j",
+) -> CanonicalNetworkSnapshot:
+    crossing_id = f"{facility_prefix}_c0"
+    source_walkingarea_id = f"{facility_prefix}_w1"
+    destination_walkingarea_id = f"{facility_prefix}_w0"
+    crossing_control = (
+        'tl="tls" linkIndex="1"' + (' linkIndex2="2"' if link_index2 else "") if controlled_crossing else ""
+    )
+    if link_index2:
+        phases = (
+            '<phase duration="30" state="GGG"/>' if protected_together else '<phase duration="30" state="Grr"/>'
+        ) + '<phase duration="30" state="rGG"/>'
+    else:
+        phases = (
+            '<phase duration="30" state="GG"/>' if protected_together else '<phase duration="30" state="Gr"/>'
+        ) + '<phase duration="30" state="rG"/>'
+    continuation = (
+        f'<connection from="{crossing_id}" '
+        f'to="{destination_walkingarea_id}" fromLane="0" toLane="0" '
+        'dir="s" state="M"/>'
+        if include_continuation
+        else ""
+    )
+    root = ET.fromstring(
+        f"""<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" width="3.2" shape="-10,0 -1,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" width="3.2" shape="1,0 10,0"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" allow="passenger" width="3.2" shape="-1,0 1,0"/>
+  </edge>
+  <edge id="{crossing_id}" function="crossing" crossingEdges="in out">
+    <lane id="{crossing_id}_0" index="0" allow="pedestrian" width="4" shape="0,-5 0,5"/>
+  </edge>
+  <edge id="{source_walkingarea_id}" function="walkingarea">
+    <lane id="{source_walkingarea_id}_0" index="0" allow="pedestrian" width="4" shape="-2,-5 2,-5"/>
+  </edge>
+  <edge id="{destination_walkingarea_id}" function="walkingarea">
+    <lane id="{destination_walkingarea_id}_0" index="0" allow="pedestrian" width="4" shape="-2,5 2,5"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="traffic_light" incLanes="in_0 {source_walkingarea_id}_0"
+            intLanes=":j_0_0 {crossing_id}_0">
+    <request index="0" response="10" foes="10" cont="0"/>
+    <request index="1" response="00" foes="01" cont="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0"
+              tl="tls" linkIndex="0" dir="s" state="O"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s" state="M"/>
+  {continuation}
+  <connection from="{source_walkingarea_id}" to="{crossing_id}"
+              fromLane="0" toLane="0" {crossing_control} dir="s" state="M"/>
+  <tlLogic id="tls" type="static" programID="0" offset="0">{phases}</tlLogic>
+</net>"""
+    )
+    return canonicalize_raw_network(
+        parse_net_xml(root),
+        traffic_side=TrafficSide.RIGHT,
     )
 
 
@@ -332,9 +405,7 @@ def test_protected_green_crossing_is_a_hard_independent_safety_failure() -> None
     assert report.status is GateStatus.BLOCKED
     assert report.automatic_promotion_gate is GateStatus.BLOCKED
     assert report.protected_conflict_count == 1
-    assert {
-        finding.category for finding in report.findings
-    } >= {"protected_green_movement_conflict"}
+    assert {finding.category for finding in report.findings} >= {"protected_green_movement_conflict"}
 
 
 def test_conflicting_movements_cannot_share_one_signal_group() -> None:
@@ -344,9 +415,7 @@ def test_conflicting_movements_cannot_share_one_signal_group() -> None:
 
     assert report.status is GateStatus.BLOCKED
     assert report.shared_signal_group_conflict_count == 1
-    assert {
-        finding.category for finding in report.findings
-    } >= {"conflicting_movements_share_signal_group"}
+    assert {finding.category for finding in report.findings} >= {"conflicting_movements_share_signal_group"}
 
 
 def test_unmodelled_pedestrian_facilities_block_automatic_promotion_as_review() -> None:
@@ -361,9 +430,7 @@ def test_unmodelled_pedestrian_facilities_block_automatic_promotion_as_review() 
     assert report.automatic_promotion_gate is GateStatus.BLOCKED
     assert report.applicability_status is GateStatus.REVIEW
     assert report.coverage.crossing_edge_count == 1
-    assert "pedestrian_facilities_outside_independent_conflict_model" in (
-        report.limitations
-    )
+    assert "pedestrian_facilities_outside_independent_conflict_model" in (report.limitations)
 
 
 def test_unmapped_controlled_link_is_a_hard_safety_coverage_failure() -> None:
@@ -376,9 +443,153 @@ def test_unmapped_controlled_link_is_a_hard_safety_coverage_failure() -> None:
 
     assert report.status is GateStatus.BLOCKED
     assert report.coverage.unsupported_controlled_connection_count == 1
-    assert {
-        finding.category for finding in report.findings
-    } >= {"controlled_link_outside_independent_conflict_model"}
+    assert {finding.category for finding in report.findings} >= {"controlled_link_outside_independent_conflict_model"}
+
+
+def test_controlled_pedestrian_crossing_is_a_stable_canonical_movement() -> None:
+    snapshot = _pedestrian_tls_snapshot(protected_together=False)
+    movements = [entity for entity in snapshot.entities if entity.kind == "movement"]
+    pedestrian = next(
+        movement
+        for movement in movements
+        if movement.payload["variants"][0].get("movement_kind") == "pedestrian-crossing-occupancy"
+    )
+    coverage = next(entity for entity in snapshot.entities if entity.kind == "safety_coverage")
+
+    assert len(movements) == 2
+    assert pedestrian.payload["variants"][0]["mode_classes"] == ("pedestrian",)
+    assert len(pedestrian.boundary_port_ids) == 2
+    assert coverage.payload["controlled_connection_count"] == 2
+    assert coverage.payload["mapped_controlled_movement_count"] == 2
+    assert coverage.payload["unsupported_controlled_connection_count"] == 0
+    assert coverage.payload["modeled_controlled_pedestrian_movement_count"] == 1
+    assert coverage.payload["modeled_crossing_edge_count"] == 1
+    assert coverage.payload["unmodeled_crossing_edge_count"] == 0
+    assert coverage.payload["movement_mode_class_counts"] == {
+        "pedestrian": 1,
+        "road-motorized": 1,
+    }
+
+
+def test_protected_vehicle_and_pedestrian_green_is_a_hard_failure() -> None:
+    snapshot = _pedestrian_tls_snapshot(protected_together=True)
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    assert report.protected_conflict_count == 1
+    assert len(report.conflict_graph.conflicts) == 1
+    assert {finding.category for finding in report.findings} >= {"protected_green_movement_conflict"}
+
+
+def test_separated_vehicle_and_pedestrian_phases_pass_independent_safety() -> None:
+    snapshot = _pedestrian_tls_snapshot(protected_together=False)
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.PASS
+    assert report.automatic_promotion_gate is GateStatus.PASS
+    assert report.coverage.modeled_controlled_pedestrian_movement_count == 1
+    assert report.coverage.unmodeled_crossing_edge_count == 0
+    assert report.conflict_graph.conflicts[0].reason == "centerline-crossing"
+    assert report.findings == ()
+
+
+def test_malformed_controlled_pedestrian_chain_remains_fail_closed() -> None:
+    snapshot = _pedestrian_tls_snapshot(
+        protected_together=False,
+        include_continuation=False,
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    assert report.coverage.unsupported_controlled_connection_count == 1
+    assert report.coverage.modeled_controlled_pedestrian_movement_count == 0
+    controlled_finding = next(
+        finding
+        for finding in report.findings
+        if finding.category == "controlled_link_outside_independent_conflict_model"
+    )
+    assert controlled_finding.witness["connections"][0]["rejection_reasons"] == (
+        "controlled_pedestrian_continuation_count:0",
+        "controlled_pedestrian_permission_incompatible",
+    )
+
+
+def test_uncontrolled_crossing_stays_review_only_and_unmodelled() -> None:
+    snapshot = _pedestrian_tls_snapshot(
+        protected_together=False,
+        controlled_crossing=False,
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.REVIEW
+    assert report.coverage.unmodeled_crossing_edge_count == 1
+    assert report.coverage.unsupported_controlled_connection_count == 0
+    assert "pedestrian_facilities_outside_independent_conflict_model" in (report.limitations)
+
+
+def test_pedestrian_link_index2_is_still_fail_closed() -> None:
+    snapshot = _pedestrian_tls_snapshot(
+        protected_together=False,
+        link_index2=True,
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    assert report.coverage.link_index2_connection_count == 1
+    assert {finding.category for finding in report.findings} >= {"link_index2_outside_independent_conflict_model"}
+
+
+def test_pedestrian_movement_identity_ignores_internal_facility_ids() -> None:
+    first = _pedestrian_tls_snapshot(
+        protected_together=False,
+        facility_prefix=":first",
+    )
+    second = _pedestrian_tls_snapshot(
+        protected_together=False,
+        facility_prefix=":renumbered",
+    )
+
+    def pedestrian_movement_id(snapshot: CanonicalNetworkSnapshot) -> str:
+        return next(
+            entity.stable_entity_id
+            for entity in snapshot.entities
+            if entity.kind == "movement"
+            and entity.payload["variants"][0].get("movement_kind") == "pedestrian-crossing-occupancy"
+        )
+
+    assert pedestrian_movement_id(first) == pedestrian_movement_id(second)
+
+
+def test_crossed_edge_neighbour_cell_does_not_claim_crossing_ownership() -> None:
+    network = parse_net_xml(
+        ET.fromstring(
+            """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_c0" function="crossing" crossingEdges="in out">
+    <lane id=":j_c0_0" index="0" allow="pedestrian" shape="0,-1 0,1"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=":j_c0_0"/>
+  <junction id="b" type="traffic_light" incLanes="out_0" intLanes=""/>
+</net>"""
+        )
+    )
+    owner_cell = stable_id("cell", {"junction": "j"})
+    neighbour_cell = stable_id("cell", {"junction": "b"})
+
+    owners = infer_pedestrian_facility_owners(
+        network,
+        junction_cell_ids={"j": owner_cell, "b": neighbour_cell},
+    )
+
+    assert owners[":j_c0"].physical_cell_id == owner_cell
+    assert owners[":j_c0"].junction_id == "j"
 
 
 def test_lane_envelope_proximity_is_review_not_a_confirmed_safety_failure() -> None:
@@ -394,16 +605,12 @@ def test_lane_envelope_proximity_is_review_not_a_confirmed_safety_failure() -> N
     assert report.status is GateStatus.REVIEW
     assert report.protected_conflict_count == 0
     assert report.potential_signal_conflict_count == 1
-    assert {
-        finding.category for finding in report.findings
-    } >= {"protected_green_potential_envelope_conflict"}
+    assert {finding.category for finding in report.findings} >= {"protected_green_potential_envelope_conflict"}
 
 
 def test_permissive_conflict_requires_yield_review_not_a_claimed_safety_defect() -> None:
     snapshot, _, _ = _crossing_snapshot(protected_both=False)
-    program = next(
-        entity for entity in snapshot.entities if entity.kind == "controller_program"
-    )
+    program = next(entity for entity in snapshot.entities if entity.kind == "controller_program")
     phases = program.payload["phases"]
     phases[0]["group_states"][1]["states"] = ["g"]
 
@@ -413,9 +620,9 @@ def test_permissive_conflict_requires_yield_review_not_a_claimed_safety_defect()
     assert report.automatic_promotion_gate is GateStatus.BLOCKED
     assert report.permissive_without_yield_count == 1
     assert report.protected_conflict_count == 0
-    assert {
-        finding.category for finding in report.findings
-    } >= {"permissive_conflict_requires_independent_yield_review"}
+    assert {finding.category for finding in report.findings} >= {
+        "permissive_conflict_requires_independent_yield_review"
+    }
     assert all(finding.severity.value != "safety" for finding in report.findings)
 
 
@@ -446,9 +653,7 @@ def test_no_internal_links_geometry_is_reviewed_as_unavailable_by_design() -> No
     assert report.status is GateStatus.REVIEW
     assert report.automatic_promotion_gate is GateStatus.BLOCKED
     assert report.conflict_graph.geometry_missing_movement_ids == ()
-    assert len(
-        report.conflict_graph.geometry_unavailable_by_design_movement_ids
-    ) == 1
+    assert len(report.conflict_graph.geometry_unavailable_by_design_movement_ids) == 1
     assert report.limitations == ("movement_geometry_unavailable_no_internal_links",)
     categories = {finding.category for finding in report.findings}
     assert "movement_geometry_unavailable_no_internal_links" in categories
@@ -484,9 +689,9 @@ def test_permission_incompatible_path_is_blocked_and_excluded_from_conflicts() -
     movement = next(entity for entity in snapshot.entities if entity.kind == "movement")
     variant = movement.payload["variants"][0]
     assert variant["mode_classes"] == ("incompatible",)
-    path = next(
-        entity for entity in snapshot.entities if entity.kind == "internal_path"
-    ).payload["path_variants"][0]["path"]
+    path = next(entity for entity in snapshot.entities if entity.kind == "internal_path").payload["path_variants"][0][
+        "path"
+    ]
     assert path["permission_contract"] == {
         "coverage": "complete",
         "status": "fail",
@@ -502,9 +707,7 @@ def test_permission_incompatible_path_is_blocked_and_excluded_from_conflicts() -
     assert report.conflict_graph.movement_ids == ()
     assert report.conflict_graph.geometry_missing_movement_ids == ()
     assert report.coverage.movement_mode_class_counts["incompatible"] == 1
-    assert "movement_path_permission_empty" in {
-        finding.category for finding in report.findings
-    }
+    assert "movement_path_permission_empty" in {finding.category for finding in report.findings}
 
 
 def test_shared_inner_vertices_are_confirmed_centerline_crossings() -> None:
