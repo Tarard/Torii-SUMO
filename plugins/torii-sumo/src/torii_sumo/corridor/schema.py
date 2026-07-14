@@ -26,6 +26,7 @@ from .pedestrian_control_census import (
     ControlledPedestrianBindingCensus,
     EffectiveTLSProgramInventory,
 )
+from .pedestrian_row_contracts import ROWExperimentReport
 from .review_compression import (
     AtomicConflictLedger,
     LosslessReviewCompressionReport,
@@ -242,6 +243,14 @@ def build_lossless_review_compression_schema() -> dict[str, object]:
         LosslessReviewCompressionReport,
         "torii.corridor.lossless-review-compression.v1.schema.json",
         status="stage-1m-rwc-1-review-compression-contract",
+    )
+
+
+def build_row1_experiment_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        ROWExperimentReport,
+        "torii.corridor.row-1-experiment-report.v1.schema.json",
+        status="stage-1m-row-1-independent-right-of-way-contract",
     )
 
 

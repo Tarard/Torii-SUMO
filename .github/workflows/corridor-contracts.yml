@@ -55,11 +55,14 @@ jobs:
             plugins/torii-sumo/scripts/run_ood_benchmark.py \
             plugins/torii-sumo/scripts/run_composite_fault_benchmark.py \
             plugins/torii-sumo/scripts/run_synthetic_fault_benchmark.py \
+            plugins/torii-sumo/scripts/run_pedestrian_row_experiment.py \
             tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
             tests/test_held_out_corpus.py \
             tests/test_pedestrian_control_census.py \
+            tests/test_pedestrian_row_oracle.py \
+            tests/test_pedestrian_row_runtime.py \
             tests/test_review_compression.py \
             tests/test_official_sumo_benchmark.py \
             tests/test_ood_benchmark.py
@@ -156,7 +159,8 @@ jobs:
             --program-inventory-output generated.effective-tls-program-inventory.schema.json \
             --binding-census-output generated.controlled-pedestrian-binding-census.schema.json \
             --atomic-conflict-ledger-output generated.atomic-conflict-ledger.schema.json \
-            --review-compression-output generated.lossless-review-compression.schema.json
+            --review-compression-output generated.lossless-review-compression.schema.json \
+            --row-experiment-output generated.row-1-experiment-report.schema.json
           diff --unified \
             schemas/torii.corridor.effective-tls-program-inventory.v1.schema.json \
             generated.effective-tls-program-inventory.schema.json
@@ -169,6 +173,9 @@ jobs:
           diff --unified \
             schemas/torii.corridor.lossless-review-compression.v1.schema.json \
             generated.lossless-review-compression.schema.json
+          diff --unified \
+            schemas/torii.corridor.row-1-experiment-report.v1.schema.json \
+            generated.row-1-experiment-report.schema.json
           python plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
             --output generated.held-out-corpus.json
           diff --unified \
@@ -183,6 +190,8 @@ jobs:
             tests/test_held_out_review_trial.py \
             tests/test_held_out_corpus.py \
             tests/test_pedestrian_control_census.py \
+            tests/test_pedestrian_row_oracle.py \
+            tests/test_pedestrian_row_runtime.py \
             tests/test_review_compression.py \
             tests/test_official_sumo_benchmark.py \
             tests/test_ood_benchmark.py \
