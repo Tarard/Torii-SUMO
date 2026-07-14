@@ -30,6 +30,7 @@ Stage 1-H 的两名独立审核者、第三名 adjudicator 和预注册统计门
 - 左右侧通行分开；目标覆盖 pedestrian、bicycle、ramp、rail、bridge、tunnel。
 - 城市源使用 BBBike 发布的 OSM PBF；provider MD5、HTTP identity、下载字节数和本地 SHA-256 均进入 manifest。
 - 裁剪使用 reference-complete writer，并保留被引用交通信号灯和 crossing 节点标签。
+- 后续 v2 snapshot 构建对被 bbox 触碰的 OSM `junction=roundabout` way 执行完整同节点组件闭包；否则 bbox 外的一段环岛会被漏掉，并在 netconvert 中变成伪 `dead_end` 和非确定性 roundabout 分组。已冻结的 v1 snapshot 不原地改写。
 - feature targets 是预注册待验证目标，不是事后真值；冻结快照不支持时必须报告 review/replacement。
 - OSM 派生物明确记录 `© OpenStreetMap contributors` 和 ODbL。
 

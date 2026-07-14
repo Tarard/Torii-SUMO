@@ -137,6 +137,75 @@ def test_crop_keeps_segment_crossing_bbox_node_tags_and_closed_restriction(
     }
 
 
+def test_crop_closes_a_touched_osm_roundabout_component(tmp_path: Path) -> None:
+    source = tmp_path / "roundabout-city.osm.xml"
+    source.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6">
+  <node id="1" lat="0" lon="-0.2"/>
+  <node id="2" lat="0" lon="0.2"/>
+  <node id="3" lat="0.2" lon="0.2"/>
+  <node id="4" lat="0.2" lon="-0.2"/>
+  <node id="5" lat="0.5" lon="0.5"/>
+  <node id="6" lat="0.6" lon="0.6"/>
+  <way id="100"><nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="tertiary"/><tag k="junction" v="roundabout"/>
+    <tag k="sidewalk" v="both"/>
+  </way>
+  <way id="101"><nd ref="2"/><nd ref="3"/>
+    <tag k="highway" v="tertiary"/><tag k="junction" v="roundabout"/>
+  </way>
+  <way id="102"><nd ref="3"/><nd ref="4"/>
+    <tag k="highway" v="tertiary"/><tag k="junction" v="roundabout"/>
+  </way>
+  <way id="103"><nd ref="4"/><nd ref="1"/>
+    <tag k="highway" v="tertiary"/><tag k="junction" v="roundabout"/>
+  </way>
+  <way id="200"><nd ref="5"/><nd ref="6"/>
+    <tag k="highway" v="tertiary"/><tag k="junction" v="roundabout"/>
+  </way>
+</osm>
+""",
+        encoding="utf-8",
+    )
+    base = _selection()
+    payload = base.model_dump(mode="json", by_alias=True)
+    payload["preregistered_feature_targets"] = ("pedestrian",)
+    payload["selection_id"] = stable_id(
+        "scope",
+        {
+            key: payload[key]
+            for key in (
+                "corridor_key",
+                "city_source_id",
+                "center_lat",
+                "center_lon",
+                "bbox",
+                "morphology",
+                "preregistered_feature_targets",
+            )
+        },
+    )
+    selection = HeldOutCorridorSelection.model_validate(payload)
+
+    snapshot = crop_city_extract(
+        source,
+        city_extract_sha256=file_sha256(source),
+        selections=(selection,),
+        output_dir=tmp_path / "roundabout-crops",
+    )[0]
+
+    assert snapshot.status is GateStatus.PASS
+    assert snapshot.selected_way_count == 4
+    root = ET.parse(snapshot.path).getroot()
+    assert {way.attrib["id"] for way in root.findall("way")} == {
+        "100",
+        "101",
+        "102",
+        "103",
+    }
+
+
 def test_download_reuses_only_provider_verified_content(tmp_path: Path) -> None:
     payload = b"frozen-city-extract"
     target = tmp_path / "city.osm.pbf"
