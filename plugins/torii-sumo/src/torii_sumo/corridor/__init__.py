@@ -59,6 +59,10 @@ from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkSpec,
 )
 from .official_sumo_benchmark_runner import run_official_sumo_benchmark
+from .plainxml_normalization import (
+    PlainXmlNormalizationReport,
+    normalize_osm_plainxml_bundle,
+)
 from .ood_benchmark_contracts import OODBenchmarkReport, OODBenchmarkSpec
 from .ood_benchmark_runner import run_ood_benchmark
 from .scope import BoundaryPort, ScopeSpec
@@ -100,6 +104,7 @@ __all__ = [
     "MovementConflictGraph",
     "OfficialSumoBenchmarkReport",
     "OfficialSumoBenchmarkSpec",
+    "PlainXmlNormalizationReport",
     "OODBenchmarkReport",
     "OODBenchmarkSpec",
     "PatchOperation",
@@ -138,6 +143,7 @@ __all__ = [
     "run_synthetic_fault_benchmark",
     "run_composite_fault_benchmark",
     "run_official_sumo_benchmark",
+    "normalize_osm_plainxml_bundle",
     "run_ood_benchmark",
     "stable_id",
 ]
