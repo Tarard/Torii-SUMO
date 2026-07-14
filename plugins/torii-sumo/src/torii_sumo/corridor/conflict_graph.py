@@ -218,6 +218,7 @@ def audit_independent_movement_safety(
         for entity in snapshot.entities
         if entity.kind == "movement"
     }
+    request_rows_by_cell = _request_rows_by_physical_cell(snapshot)
     pedestrian_control_bindings: dict[str, list[CanonicalEntity]] = defaultdict(
         list
     )
@@ -753,23 +754,40 @@ def audit_independent_movement_safety(
                     if conflict is None:
                         continue
                     confirmed = conflict.certainty == "confirmed"
-                    if confirmed:
+                    yield_status, yield_witness = _permissive_yield_status(
+                        permissive_id,
+                        other_id,
+                        movement_entities=movement_entities,
+                        request_rows_by_cell=request_rows_by_cell,
+                        allow_reverse=other_id in permissive,
+                    )
+                    if yield_status == "proven":
+                        continue
+                    if confirmed and yield_status == "absent":
                         permissive_without_yield_count += 1
-                    else:
+                    elif not confirmed:
                         potential_signal_conflict_count += 1
                     finding = build_finding(
                         category=(
-                            "permissive_conflict_requires_independent_yield_review"
+                            "permissive_conflict_without_yield_relation"
+                            if confirmed and yield_status == "absent"
+                            else "permissive_conflict_requires_independent_yield_review"
                             if confirmed
                             else "permissive_potential_envelope_conflict_requires_review"
                         ),
-                        severity=FindingSeverity.REVIEW,
+                        severity=(
+                            FindingSeverity.SAFETY
+                            if confirmed and yield_status == "absent"
+                            else FindingSeverity.REVIEW
+                        ),
                         subject_id=program.stable_entity_id,
                         witness={
                             "phase_index": phase_index,
                             "permissive_movement_id": permissive_id,
                             "conflicting_movement_id": other_id,
                             "conflict_id": conflict.conflict_id,
+                            "yield_status": yield_status,
+                            "request_relation": yield_witness,
                         },
                         confidence=1.0,
                     )
@@ -830,6 +848,169 @@ def audit_independent_movement_safety(
         blockers=tuple(blockers),
         limitations=tuple(sorted(set(limitations))),
     )
+
+
+def _request_rows_by_physical_cell(
+    snapshot: CanonicalNetworkSnapshot,
+) -> dict[str, dict[int, dict]]:
+    result: dict[str, dict[int, dict]] = {}
+    invalid_cells: set[str] = set()
+    for entity in snapshot.entities:
+        if entity.kind != "request_foes":
+            continue
+        cell_id = str(entity.payload.get("physical_cell_id", ""))
+        raw_rows = entity.payload.get("request_rows", ())
+        if not cell_id or not isinstance(raw_rows, (list, tuple)):
+            continue
+        rows: dict[int, dict] = {}
+        valid = True
+        for raw_row in raw_rows:
+            if not isinstance(raw_row, dict):
+                valid = False
+                break
+            index = raw_row.get("index")
+            if not isinstance(index, int) or index in rows:
+                valid = False
+                break
+            rows[index] = raw_row
+        if (
+            not valid
+            or set(rows) != set(range(len(rows)))
+            or cell_id in result
+        ):
+            invalid_cells.add(cell_id)
+            continue
+        result[cell_id] = rows
+    for cell_id in invalid_cells:
+        result.pop(cell_id, None)
+    return result
+
+
+def _permissive_yield_status(
+    permissive_movement_id: str,
+    conflicting_movement_id: str,
+    *,
+    movement_entities: dict[str, CanonicalEntity],
+    request_rows_by_cell: dict[str, dict[int, dict]],
+    allow_reverse: bool,
+) -> tuple[Literal["proven", "absent", "unresolved"], dict]:
+    relations = [
+        _directional_yield_relation(
+            permissive_movement_id,
+            conflicting_movement_id,
+            movement_entities=movement_entities,
+            request_rows_by_cell=request_rows_by_cell,
+        )
+    ]
+    if allow_reverse:
+        relations.append(
+            _directional_yield_relation(
+                conflicting_movement_id,
+                permissive_movement_id,
+                movement_entities=movement_entities,
+                request_rows_by_cell=request_rows_by_cell,
+            )
+        )
+    statuses = {relation[0] for relation in relations}
+    status: Literal["proven", "absent", "unresolved"]
+    if "proven" in statuses:
+        status = "proven"
+    elif statuses == {"absent"}:
+        status = "absent"
+    else:
+        status = "unresolved"
+    return status, {
+        "bit_order": "rightmost-bit-is-index-zero",
+        "allow_reverse": allow_reverse,
+        "directions": tuple(relation[1] for relation in relations),
+    }
+
+
+def _directional_yield_relation(
+    yielding_movement_id: str,
+    priority_movement_id: str,
+    *,
+    movement_entities: dict[str, CanonicalEntity],
+    request_rows_by_cell: dict[str, dict[int, dict]],
+) -> tuple[Literal["proven", "absent", "unresolved"], dict]:
+    yielding = movement_entities.get(yielding_movement_id)
+    priority = movement_entities.get(priority_movement_id)
+    witness: dict = {
+        "yielding_movement_id": yielding_movement_id,
+        "priority_movement_id": priority_movement_id,
+    }
+    if yielding is None or priority is None:
+        witness["reason"] = "movement_entity_missing"
+        return "unresolved", witness
+    yielding_cells = tuple(yielding.owner_physical_cell_ids)
+    priority_cells = tuple(priority.owner_physical_cell_ids)
+    if (
+        len(yielding_cells) != 1
+        or yielding_cells != priority_cells
+    ):
+        witness["reason"] = "request_scope_not_shared_single_cell"
+        return "unresolved", witness
+    cell_id = yielding_cells[0]
+    rows = request_rows_by_cell.get(cell_id)
+    yielding_index = _movement_request_index(yielding)
+    priority_index = _movement_request_index(priority)
+    witness.update(
+        {
+            "physical_cell_id": cell_id,
+            "yielding_request_index": yielding_index,
+            "priority_request_index": priority_index,
+        }
+    )
+    if rows is None or yielding_index is None or priority_index is None:
+        witness["reason"] = "request_binding_unresolved"
+        return "unresolved", witness
+    row = rows.get(yielding_index)
+    if row is None:
+        witness["reason"] = "yielding_request_row_missing"
+        return "unresolved", witness
+    response = str(row.get("response", ""))
+    foes = str(row.get("foes", ""))
+    if (
+        len(response) != len(rows)
+        or len(foes) != len(rows)
+        or set(response) - {"0", "1"}
+        or set(foes) - {"0", "1"}
+        or not 0 <= priority_index < len(rows)
+    ):
+        witness["reason"] = "request_bit_matrix_invalid"
+        return "unresolved", witness
+    response_bit = _request_bit(response, priority_index)
+    foe_bit = _request_bit(foes, priority_index)
+    witness.update(
+        {
+            "response": response,
+            "foes": foes,
+            "response_bit": response_bit,
+            "foe_bit": foe_bit,
+            "reason": (
+                "explicit_response_and_foe_relation"
+                if response_bit and foe_bit
+                else "explicit_yield_relation_absent"
+            ),
+        }
+    )
+    return (
+        "proven" if response_bit and foe_bit else "absent",
+        witness,
+    )
+
+
+def _movement_request_index(movement: CanonicalEntity) -> int | None:
+    indices = {
+        index
+        for variant in movement.payload.get("variants", ())
+        if isinstance((index := variant.get("request_index")), int)
+    }
+    return indices.pop() if len(indices) == 1 else None
+
+
+def _request_bit(value: str, index: int) -> bool:
+    return value[-1 - index] == "1"
 
 
 def _pedestrian_review_subject_diagnostic(
@@ -1002,11 +1183,13 @@ class _MovementGeometry:
         *,
         polylines: tuple[tuple[tuple[float, float], ...], ...],
         half_width_m: float,
+        source_boundary_port_id: str,
         source_lane_role_id: str,
         destination_lane_role_id: str,
     ) -> None:
         self.polylines = polylines
         self.half_width_m = half_width_m
+        self.source_boundary_port_id = source_boundary_port_id
         self.source_lane_role_id = source_lane_role_id
         self.destination_lane_role_id = destination_lane_role_id
 
@@ -1121,6 +1304,9 @@ def _movement_geometry(
     return _MovementGeometry(
         polylines=tuple(polylines),
         half_width_m=(max(widths) / 2.0 if widths else 1.6),
+        source_boundary_port_id=str(
+            first_variant.get("source_boundary_port_id", "")
+        ),
         source_lane_role_id=str(first_variant.get("source_lane_role_id", "")),
         destination_lane_role_id=str(first_variant.get("destination_lane_role_id", "")),
     )
@@ -1209,6 +1395,13 @@ def _geometry_conflict(
         return ("centerline-crossing", minimum_distance, best_angle)
     if collinear_overlap:
         return ("collinear-path-overlap", minimum_distance, best_angle)
+    if (
+        first.source_boundary_port_id
+        and first.source_boundary_port_id == second.source_boundary_port_id
+    ):
+        # Adjacent lanes from one approach share an envelope while diverging.
+        # A real crossing or overlap was already handled above.
+        return None
     envelope_distance = first.half_width_m + second.half_width_m + envelope_margin_m
     if minimum_distance <= envelope_distance and best_angle is not None and best_angle >= 20.0:
         return ("lane-envelope-proximity", minimum_distance, best_angle)

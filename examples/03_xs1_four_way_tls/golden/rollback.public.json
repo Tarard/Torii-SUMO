@@ -1,0 +1,24 @@
+{
+  "candidate_operation": {
+    "node_ids": [
+      "89129156",
+      "9197167804",
+      "7622194981",
+      "4622372941",
+      "321573215",
+      "359022505",
+      "321573214",
+      "9602656752",
+      "9602656749",
+      "9602656751",
+      "9602656750"
+    ],
+    "type": "join_physical_tls_cell"
+  },
+  "candidate_operation_count": 1,
+  "candidate_sha256": "f5a8b7340eaee043088779bcba608aa5279e7c2ac0eec8684768c99d784f7fda",
+  "inverse_operation": "omit the one join patch and rerun source_command",
+  "reproduction_command": ".\\.venv\\Scripts\\python.exe plugins\\torii-sumo\\scripts\\run_xs1_four_way.py",
+  "schema": "torii.xs1-public-rollback/v1",
+  "source_sha256": "2d17f1a33b456d17bfaa46494f5bd03a76bbf429de3b547db6835b7b9afdc3a9"
+}
