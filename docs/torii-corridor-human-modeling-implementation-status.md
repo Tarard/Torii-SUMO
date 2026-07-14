@@ -5,17 +5,23 @@
 本文件只记录可复现的实施证据，不改变
 `torii-corridor-human-modeling-research-plan.md` 的验收门。
 
+当前 active goal 与机器侧退出门以
+[`stage1-machine-review-ready-plan.md`](stage1-machine-review-ready-plan.md)
+为准：`Stage 1-M REVIEW_READY != Stage 1 exit`。完整 Stage 1 仍需后续
+Stage 1-H 的两名独立审核者、第三名 adjudicator 和预注册统计门。
+
 ## 阶段状态
 
 | 阶段 | 状态 | 当前证据或阻断项 |
 |---|---|---|
-| 0. 规范冻结 | 完成 | schema、稳定语义 ID、工具链、manifest、source/candidate 身份和 CI 已冻结。 |
-| 1. Audit-only | 进行中 | 合成单故障、复合故障、SUMO 官方场景和 OOD 适用域测试已建立；18,313 个 crossing 中 18,311 个已纳入独立冲突图；30/30 真实 held-out 走廊已在锁定 Python/SUMO 和 clean producer commit 上复跑，27 个形成完整审核包、3 个因 netconvert 重放不确定性 fail-closed；剩余 2 个 crossing 尚缺精确 review task，两名独立人工审核和第三方裁决尚未发生。 |
-| 2. 认证 micro-repair | 未完成 | 不得以现有候选契约或旧局部修复代替逐编辑类型的 held-out 认证。 |
+| 0. 规范冻结 | 架构完成；当前 head conformance 修复中 | schema、稳定语义 ID、工具链、manifest 和 source/candidate 身份已冻结。旧工作流把 v2 生成结果与 v1 schema 比对；`74c5773` 已修正并在本地通过确定性重生成、54 项合同测试和 lint，远端当前-head CI 结果仍须进入权威 provenance。 |
+| 1-M. Machine REVIEW_READY | 进行中 | 30/30 真实 held-out 走廊已运行；27 个完整包、3 个 replay-invalid；18,311/18,313 crossing 已建模。尚缺权威新 provenance、Paris 两个 coverage-gap 实体、PCB-453、RWC-1、ROW-1、v2 trial 和 30 个有效盲化 case。所有 promotion blocked。 |
+| 1-H. Human Validation | 未开始 | 必须由两名真实审核者独立作答，第三人 adjudication，并通过预注册统计门；机器不能代填。 |
+| 2. 认证 micro-repair | 认证暂停；development-only 可并行 | 合成/官方场景的开发研究允许在隔离语料继续；不得使用 Stage 1 blinded held-out 调参或宣称编辑类型已认证。 |
 | 3. Physical-cell hypotheses | 未完成 | split/shared-controller、merge、partial 三假设尚未完成统一 held-out 比较。 |
-| 4. Local geometry solver / MGE-1 | 未完成 | 当前 arclength blend 仍仅是消融基线；boundary-port solver 尚未达到预注册退出条件。 |
+| 4. Local geometry solver / MGE-1 | 暂停 | 当前 arclength blend 仍仅是消融基线；MGE-1 保留为后续实验，不再是 Stage 1-M 主目标。 |
 | 5A/5B. NEMA 与行人安全 | 未完成 | vehicle-only 严格扫描、受控和无信号 crossing 独立冲突审核已存在；无信号 right-of-way、自行车、共享 controller、clearance 和实际 timing 均未认证。 |
-| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；provenance v3 全语料机器重跑已结束并保持 blocked，尚无人审，也尚未达到 held-out 退出阈值。 |
+| 6. 多城市迁移 | 未开始 | 当前 30 个走廊、6 个城市及左右侧通行快照属于 Stage 1 held-out 数据收集，不是 Stage 6。Stage 6 必须等待前序方法完成认证后再验证迁移。 |
 | 7. 城市级运行 | 未开始 | 阶段 6 未退出前不得启动自动语义扩张。 |
 
 ## 已冻结的真实 held-out 语料
@@ -287,11 +293,13 @@ Berlin Alexanderplatz 还暴露了一个审核口径错误：79 个旧
 
 ## 最近的硬阻断项
 
-1. provenance v3 全量重跑已完成，但 354 个机器结构 finding 的真实 precision 尚无人审验证；实验性确定性输入协议也只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且不得改写冻结 v1 结果。
-2. 需要两名真实独立审核者逐案作答；分歧由第三名 adjudicator 裁决。机器不得代填。
-3. Stage 1 的 raw agreement、Cohen's kappa、attention precision/recall、AutoPrecision 和 review time 尚无真实数值。
-4. Paris Porte Maillot 的 2 个 crossing 尚未生成绑定稳定实体、拒绝原因和地图位置的精确 review task。
-5. 34,493 个 confirmed 与 53,930 个 potential uncontrolled-pedestrian finding 尚未聚类成可承受的人工审核单位；聚类不得删除原始 witness。
-6. 453 个 signalized pedestrian movement 缺失 signal group/program，且 bicycle/rail/shared-controller/clearance 仍未闭合，因此多模式 TLS 不可自动认证。
+1. 已有 provenance v3 绑定旧 producer `be15f6e…`；仍需生成绑定 Stage 1-M 新合同、精确 clean producer/tree、工具链和完整 artifact DAG 的权威 provenance，且不得覆盖旧 artifact。
+2. Paris Porte Maillot 的两个 crossing 已有稳定 review subject 和精确位置，但尚未升级为完整 `PedestrianCoverageGap` 实体；它们当前是 safety coverage blocker，不是已证明 structural defect。
+3. 453 个受控行人 finding 尚未按 ordinary missing、external program、runtime special、invalid link、scope incomplete、stale/ambiguous 和 unsupported form 完成全量 census。
+4. 34,493 个 confirmed 与 53,930 个 potential witness 尚未进入 100% membership、无重复/丢失、带 inclusion probability 的无损 cluster ledger。
+5. v1 trial 只有 27 个完整 case 且无 machine acceptable，结构上无法同时满足 30-case 与 AutoPrecision 门；v1 必须冻结为 pilot，不能放宽阈值。
+6. v2 attention cohort、prospective safe-pass cohort、三个确定性 replacement、cluster decision schema 和抽样统计尚未冻结。
+7. ROW-1 尚未证明 source evidence、geometry、model claim 和 runtime behavior 四条证据通道相互独立。
+8. Stage 1-H 尚无两名真实独立审核者、第三名 adjudicator 或任何可报告的 precision、recall、kappa、AutoPrecision、AutoCoverage 和 review time。
 
-只有以上项目关闭并满足预注册阈值后，Stage 1 才能退出。
+上述机器侧第 1–7 项关闭后只能得到 Stage 1-M `REVIEW_READY`；只有第 8 项按预注册门完成，Stage 1 才能退出。所有自动晋级继续保持 blocked。

@@ -4,6 +4,9 @@
 > 文档状态：本项目后续研究、架构重构、实验和产品声明的权威执行规范。
 > 实施原则：未满足本文件定义的硬门、退出条件和适用域时，不得宣称完成。
 
+> **2026-07-14 执行修订：** 当前 active goal 是
+> [Stage 1-M — Machine REVIEW_READY](stage1-machine-review-ready-plan.md)。它只完成机器证据冻结、无损审核压缩、盲审材料和抽样协议；所有自动晋级继续阻断。Stage 1 只有在后续 Stage 1-H 完成两名独立审核者、第三名 adjudicator 和预注册统计门后才可退出。当前 30 条多城市走廊是 Stage 1 held-out 数据收集，不是 Stage 6 泛化验证。
+
 文中标记含义：
 
 - **【证据支持】**：当前仓库、实验或官方规范已经支持。
@@ -1233,7 +1236,10 @@ SUMO 或 netconvert 版本变化可能改变生成的 internal IDs、junction sh
 
 ---
 
-## 14. 下一步最小实验
+## 14. 后续几何实验（当前暂停）
+
+MGE-1 保留为预注册的后续实验，但不再是当前主执行目标。Stage 1-M 的三个当前实验是 PCB-453、ROW-1 和 RWC-1，定义见
+[`stage1-machine-review-ready-plan.md`](stage1-machine-review-ready-plan.md)。在 Stage 1-M 证据冻结前，不得以 MGE-1、Stage 3 拓扑候选或 Stage 5 控制器实验替代审核证据闭环。
 
 ### 实验名称
 
