@@ -10,12 +10,12 @@
 | 阶段 | 状态 | 当前证据或阻断项 |
 |---|---|---|
 | 0. 规范冻结 | 完成 | schema、稳定语义 ID、工具链、manifest、source/candidate 身份和 CI 已冻结。 |
-| 1. Audit-only | 进行中 | 合成单故障、复合故障、SUMO 官方场景和 OOD 适用域测试已建立；30/30 真实 held-out 走廊已用修正版完成全量机器重跑，27 个形成完整审核包、3 个因 netconvert 重放不确定性 fail-closed；两名独立人工审核和第三方裁决尚未发生。 |
+| 1. Audit-only | 进行中 | 合成单故障、复合故障、SUMO 官方场景和 OOD 适用域测试已建立；受控 walkingarea→crossing→walkingarea 已纳入独立冲突图；30/30 真实 held-out 走廊已在锁定 Python/SUMO 和 clean producer commit 上复跑，27 个形成完整审核包、3 个因 netconvert 重放不确定性 fail-closed；两名独立人工审核和第三方裁决尚未发生。 |
 | 2. 认证 micro-repair | 未完成 | 不得以现有候选契约或旧局部修复代替逐编辑类型的 held-out 认证。 |
 | 3. Physical-cell hypotheses | 未完成 | split/shared-controller、merge、partial 三假设尚未完成统一 held-out 比较。 |
 | 4. Local geometry solver / MGE-1 | 未完成 | 当前 arclength blend 仍仅是消融基线；boundary-port solver 尚未达到预注册退出条件。 |
-| 5A/5B. NEMA 与行人安全 | 未完成 | vehicle-only 严格扫描存在，但行人、自行车、共享 controller 和实际 timing 均未认证。 |
-| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；修正后的全语料机器重跑已结束并保持 blocked，尚无人审，也尚未达到 held-out 退出阈值。 |
+| 5A/5B. NEMA 与行人安全 | 未完成 | vehicle-only 严格扫描和受控行人 crossing 独立冲突审核已存在；其余行人设施、自行车、共享 controller、clearance 和实际 timing 均未认证。 |
+| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；provenance v2 全语料机器重跑已结束并保持 blocked，尚无人审，也尚未达到 held-out 退出阈值。 |
 | 7. 城市级运行 | 未开始 | 阶段 6 未退出前不得启动自动语义扩张。 |
 
 ## 已冻结的真实 held-out 语料
@@ -170,6 +170,49 @@ manifest SHA-256 为
 完整静态证据保存在
 `benchmarks/corridor_human_modeling_v1/evidence/held_out_machine_run_corrected_20260714.v1.json`。
 
+## 受控行人冲突与 provenance v2 全量重跑
+
+在 clean commit
+`e552b82165bef0c4c2b6ca95afdb437c525d5c66` 上，冻结语料已使用 Python
+3.12.13、SUMO/netconvert 1.27.1 和锁定依赖完成第三次 30/30 机器运行：
+
+- producer repository、branch、commit、tree、clean worktree、Python/SUMO 可执行文件
+  SHA-256、`randomTrips.py`、三个 typemap、依赖版本、超时和 blinding seed hash
+  均进入 content-derived run identity；最初检测到 Python 3.14.6 漂移时流水线直接
+  阻断，未放宽 toolchain lock。
+- machine report 和 manifest 升级为 v2。顶层 manifest 绑定 1,243 个 artifact，
+  缺失 0、SHA-256 错误 0，输出目录中未列入 manifest 的文件为 0；旧版只绑定
+  497 个 artifact 的 provenance 缺口已经关闭。
+- 30 个 source OSM 均保持 immutable，Ingolstadt authoritative source SHA-256
+  仍为
+  `52114063a325b26f1b50ca08d4686697cc03ea1767dce1dc3815f4a5ae362f57`。
+- 非 safety 结果逐走廊与前一轮完全一致：27 pipeline pass、3 replay blocked；
+  SUMO load 22 pass/5 fail/3 not-run；routeability 14 pass/13 fail/3 not-run；
+  Connection Mode 1 review-required/26 fail/3 not-run；30 个机器标签仍全部为
+  defect。这种一致性只证明复跑稳定，不证明机器标签是真值。
+- 只有证据闭合的 `walkingarea → crossing → walkingarea` 受控链才生成稳定行人
+  movement；owner、权限、几何、continuation、crossingEdges 和 signal group 任一
+  不闭合就 fail closed。`crossingEdges` 只用于边界端口证据，不能反推物理 owner。
+- 先前 4,529 个 unsupported controlled pedestrian link 现已全部映射；受控
+  movement 覆盖由 27,996 增至 32,525，unsupported 由 4,529 降至 0，新增
+  4,529 个受控行人 movement。
+- 独立冲突图的 `protected_green_movement_conflict` 从 1,465 增至 2,500；新增
+  1,035 个是受控行人进入独立几何审核后暴露的机器 finding，不是人工确认的现场
+  缺陷。27 个完整 case 中 3 个 safety status 为 review、24 个仍 blocked；另 3 个
+  replay failure 在顶层保持 blocked。
+- 当前仍有 18,313 个 crossing edge 中的 13,784 个未进入该严格受控链模型，
+  另有 27 个 facility owner 未能唯一解析；因此 pedestrian-aware 不等于完整
+  pedestrian safety，更不能据此晋级 NEMA 或自动修复。
+- 27 个新盲化 review case 已绑定候选哈希；真实人工 decision 和 adjudication
+  仍均为 0。
+
+本次 report SHA-256 为
+`17f7126b466960cf61288b59c81f8b1a2d53dd5a4a704c8ed24409825722fa79`，
+manifest SHA-256 为
+`c8b8b20216306da8d535998f26d30488f92b0d4ac02c5906dc186869867e08dd`。
+完整静态证据保存在
+`benchmarks/corridor_human_modeling_v1/evidence/held_out_machine_run_pedestrian_provenance_20260714.v2.json`。
+
 ## 真实样本发现并修复的架构缺陷
 
 首轮 Sydney 构建被 canonicalizer 阻断：审核输入声明 left-hand traffic，
@@ -211,9 +254,9 @@ Berlin Alexanderplatz 还暴露了一个审核口径错误：79 个旧
 
 ## 最近的硬阻断项
 
-1. 修正版全量重跑已完成，但 354 个机器结构 finding 的真实 precision 尚无人审验证；实验性 v2 确定性输入协议也只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且不得改写冻结 v1 结果。
+1. provenance v2 全量重跑已完成，但 354 个机器结构 finding 的真实 precision 尚无人审验证；实验性确定性输入协议也只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且不得改写冻结 v1 结果。
 2. 需要两名真实独立审核者逐案作答；分歧由第三名 adjudicator 裁决。机器不得代填。
 3. Stage 1 的 raw agreement、Cohen's kappa、attention precision/recall、AutoPrecision 和 review time 尚无真实数值。
-4. pedestrian-aware independent conflict model 尚未完成，因此多模式 TLS 不可自动认证。
+4. 受控行人链已进入 independent conflict model，但 13,784 个 crossing edge、27 个 owner ambiguity 及 bicycle/rail/shared-controller/clearance 仍未闭合，因此多模式 TLS 不可自动认证。
 
 只有以上项目关闭并满足预注册阈值后，Stage 1 才能退出。
