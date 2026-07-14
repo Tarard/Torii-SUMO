@@ -20,7 +20,10 @@ from torii_sumo.corridor.held_out_corpus_runner import (
     crop_city_extract,
     download_city_extract,
 )
-from torii_sumo.corridor.held_out_corridor_runner import _classify_case
+from torii_sumo.corridor.held_out_corridor_runner import (
+    _classify_case,
+    _connection_audit_tolerance,
+)
 from torii_sumo.corridor.held_out_corpus_contracts import HeldOutCorpusSpec
 from torii_sumo.corridor.held_out_corpus_preregistration import (
     build_preregistered_held_out_corpus,
@@ -262,6 +265,24 @@ def test_nonreproducible_network_is_a_machine_defect() -> None:
     assert label == "defect"
     assert "normalized_net_replay_mismatch" in categories
     assert "reproducibility" in unresolved
+
+
+def test_connection_audit_uses_source_calibration_when_available() -> None:
+    tolerance, source = _connection_audit_tolerance(
+        SimpleNamespace(endpoint_tolerance_m=0.038742)
+    )
+
+    assert tolerance == 0.038742
+    assert source == "source_baseline_calibration"
+
+
+def test_blocked_calibration_has_diagnostic_only_fallback() -> None:
+    tolerance, source = _connection_audit_tolerance(
+        SimpleNamespace(endpoint_tolerance_m=None)
+    )
+
+    assert tolerance == 2.0
+    assert source == "diagnostic_fallback_due_blocked_calibration"
 
 
 def test_sydney_probe_evidence_remains_fail_closed() -> None:

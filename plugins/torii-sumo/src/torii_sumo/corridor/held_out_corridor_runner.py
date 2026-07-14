@@ -353,19 +353,22 @@ def _build_case_evidence(
         sumo_binary=str(sumo_binary),
         timeout_seconds=timeout_seconds,
     )
-    connection_report = build_network_connection_mode_audit(
-        net_file,
-        output_dir=destination / "connection-mode",
-        prefix="connection-mode",
-        traffic_side=traffic_side.value,
-        endpoint_tolerance_m=2.0,
-        normalized_lane_rank_tolerance=0.5,
-    )
     calibration_path = destination / "connection-mode" / "calibration.json"
     calibration = build_connection_mode_calibration_artifact(
         net_file,
         output_file=calibration_path,
         traffic_side=traffic_side,
+    )
+    endpoint_tolerance_m, endpoint_tolerance_source = (
+        _connection_audit_tolerance(calibration)
+    )
+    connection_report = build_network_connection_mode_audit(
+        net_file,
+        output_dir=destination / "connection-mode",
+        prefix="connection-mode",
+        traffic_side=traffic_side.value,
+        endpoint_tolerance_m=endpoint_tolerance_m,
+        normalized_lane_rank_tolerance=0.5,
     )
     canonical = canonicalize_net_xml_file(net_file, traffic_side=traffic_side)
     canonical_path = destination / "canonical-network.json"
@@ -540,6 +543,8 @@ def _build_case_evidence(
             "replay_net_normalized_sha256": replay.replay_normalized_sha256,
             "reproducible_semantics": replay.reproducible_semantics,
             "source_osm_immutable": source_immutable,
+            "connection_mode_endpoint_tolerance_m": endpoint_tolerance_m,
+            "connection_mode_endpoint_tolerance_source": endpoint_tolerance_source,
             "map_links": map_links,
             "map_links_are_human_review_aids_only": True,
             "artifacts": {
@@ -636,6 +641,13 @@ def _build_case_evidence(
         blockers=(),
     )
     return result, review_case, assessment, stratum, material
+
+
+def _connection_audit_tolerance(calibration: Any) -> tuple[float, str]:
+    calibrated = getattr(calibration, "endpoint_tolerance_m", None)
+    if calibrated is None:
+        return 2.0, "diagnostic_fallback_due_blocked_calibration"
+    return float(calibrated), "source_baseline_calibration"
 
 
 def _classify_case(
