@@ -40,6 +40,10 @@ from .held_out_review_contracts import (
 from .held_out_review_runner import build_blinded_review_artifacts
 from .ids import stable_id
 from .net_replay import compare_netconvert_replay
+from .pedestrian_control_census import (
+    build_effective_tls_program_inventory,
+    classify_controlled_pedestrian_bindings,
+)
 from .review import ReviewCase
 from .run_identity import capture_held_out_machine_run_identity
 
@@ -445,6 +449,27 @@ def _build_case_evidence(
         canonical.model_dump(mode="json", by_alias=True),
         sort_keys=True,
     )
+    program_inventory = build_effective_tls_program_inventory(net_file)
+    program_inventory_path = (
+        destination / "effective-tls-program-inventory.json"
+    )
+    write_json_atomic(
+        program_inventory_path,
+        program_inventory.model_dump(mode="json", by_alias=True),
+        sort_keys=True,
+    )
+    pedestrian_binding_census = classify_controlled_pedestrian_bindings(
+        canonical,
+        program_inventory,
+    )
+    pedestrian_binding_census_path = (
+        destination / "controlled-pedestrian-binding-census.json"
+    )
+    write_json_atomic(
+        pedestrian_binding_census_path,
+        pedestrian_binding_census.model_dump(mode="json", by_alias=True),
+        sort_keys=True,
+    )
     safety = audit_independent_movement_safety(canonical)
     safety_path = destination / "independent-safety.json"
     write_json_atomic(
@@ -482,6 +507,9 @@ def _build_case_evidence(
         calibration_status=calibration.status,
         safety_status=safety.status,
         safety_categories=tuple(finding.category for finding in safety.findings),
+        controlled_pedestrian_binding_classes=tuple(
+            pedestrian_binding_census.class_counts
+        ),
         reproducibility_status=replay.status,
         applicability=applicability,
         routeability=routeability,
@@ -537,6 +565,10 @@ def _build_case_evidence(
             ("net-replay", file_sha256(replay_report_path)),
             ("connection-mode", file_sha256(Path(connection_report["report_file"]))),
             ("independent-safety", file_sha256(safety_path)),
+            (
+                "controlled-pedestrian-binding-census",
+                file_sha256(pedestrian_binding_census_path),
+            ),
             ("routeability", file_sha256(Path(routeability["report_file"]))),
         )
     )
@@ -628,6 +660,12 @@ def _build_case_evidence(
                 "calibration": str(calibration_path),
                 "canonical_network": str(canonical_path),
                 "independent_safety": str(safety_path),
+                "effective_tls_program_inventory": str(
+                    program_inventory_path
+                ),
+                "controlled_pedestrian_binding_census": str(
+                    pedestrian_binding_census_path
+                ),
                 "applicability": str(applicability_path),
                 "routeability": str(routeability["report_file"]),
             },
@@ -714,11 +752,16 @@ def _classify_case(
     calibration_status: GateStatus,
     safety_status: GateStatus,
     safety_categories: tuple[str, ...],
+    controlled_pedestrian_binding_classes: tuple[str, ...] = (),
     reproducibility_status: GateStatus,
     applicability: Any,
     routeability: dict[str, Any],
 ) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     categories: set[str] = set(safety_categories)
+    categories.update(
+        f"controlled_pedestrian_binding:{primary_class}"
+        for primary_class in controlled_pedestrian_binding_classes
+    )
     statuses = {
         "netconvert": str(build_report.get("status", "fail")),
         "sumo_load": str(load_report.get("status", "fail")),
@@ -752,6 +795,10 @@ def _classify_case(
         "protected_green_movement_conflict",
         "signal_group_phase_state_inconsistent",
     }
+    definitive_binding_defects = {
+        "ordinary-program-truly-absent",
+        "program-present-link-invalid",
+    }
     defect = (
         statuses["netconvert"] != "pass"
         or statuses["sumo_load"] != "pass"
@@ -759,6 +806,10 @@ def _classify_case(
         or statuses["connection_mode"] == "fail"
         or statuses["reproducibility"] != "pass"
         or bool(definitive_safety_defects & set(safety_categories))
+        or bool(
+            definitive_binding_defects
+            & set(controlled_pedestrian_binding_classes)
+        )
     )
     ambiguous = (
         statuses["connection_mode"] != "pass"

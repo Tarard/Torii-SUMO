@@ -63,6 +63,14 @@ from .plainxml_normalization import (
     PlainXmlNormalizationReport,
     normalize_osm_plainxml_bundle,
 )
+from .pedestrian_control_census import (
+    ControlledPedestrianBindingAssessment,
+    ControlledPedestrianBindingCensus,
+    EffectiveTLSProgramEvidence,
+    EffectiveTLSProgramInventory,
+    build_effective_tls_program_inventory,
+    classify_controlled_pedestrian_bindings,
+)
 from .review import (
     PedestrianControlKind,
     PedestrianCoverageGap,
@@ -95,6 +103,8 @@ __all__ = [
     "ConnectionAuditCalibrationPolicy",
     "CompositeFaultBenchmarkReport",
     "CompositeFaultBenchmarkSpec",
+    "ControlledPedestrianBindingAssessment",
+    "ControlledPedestrianBindingCensus",
     "CorridorResearchBundle",
     "GateStatus",
     "BlindReviewDecision",
@@ -126,7 +136,10 @@ __all__ = [
     "WorkflowExecution",
     "WorkflowStage",
     "ExactSemanticDiffReport",
+    "EffectiveTLSProgramEvidence",
+    "EffectiveTLSProgramInventory",
     "build_finding",
+    "build_effective_tls_program_inventory",
     "build_pedestrian_coverage_gap",
     "build_blinded_review_artifacts",
     "build_exact_semantic_regression_artifacts",
@@ -145,6 +158,7 @@ __all__ = [
     "make_physical_cell_id",
     "make_signal_group_id",
     "compare_canonical_snapshots",
+    "classify_controlled_pedestrian_bindings",
     "evaluate_held_out_review_trial",
     "evaluate_certification_applicability",
     "extract_network_applicability_features",
