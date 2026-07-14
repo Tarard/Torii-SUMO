@@ -14,6 +14,7 @@ from .held_out_review_contracts import (
     HeldOutReviewReport,
 )
 from .held_out_corpus_contracts import (
+    HeldOutCorpusMachineManifest,
     HeldOutCorpusMachineReport,
     HeldOutCorpusSnapshotReport,
     HeldOutCorpusSpec,
@@ -30,6 +31,7 @@ from .synthetic_benchmark_contracts import (
     SyntheticFaultBenchmarkReport,
     SyntheticFaultBenchmarkSpec,
 )
+from .run_identity import HeldOutMachineRunIdentity
 
 
 def build_corridor_schema() -> dict[str, object]:
@@ -166,8 +168,24 @@ def build_held_out_corpus_snapshot_report_schema() -> dict[str, object]:
 def build_held_out_corpus_machine_report_schema() -> dict[str, object]:
     return _artifact_schema(
         HeldOutCorpusMachineReport,
-        "torii.corridor.held-out-corpus-machine-report.v1.schema.json",
+        "torii.corridor.held-out-corpus-machine-report.v2.schema.json",
         status="stage-1-held-out-corpus-machine-evidence-contract",
+    )
+
+
+def build_held_out_machine_run_identity_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutMachineRunIdentity,
+        "torii.corridor.held-out-machine-run-identity.v1.schema.json",
+        status="stage-1-held-out-producer-toolchain-identity-contract",
+    )
+
+
+def build_held_out_corpus_machine_manifest_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutCorpusMachineManifest,
+        "torii.corridor.held-out-corpus-machine-manifest.v2.schema.json",
+        status="stage-1-held-out-artifact-closure-contract",
     )
 
 

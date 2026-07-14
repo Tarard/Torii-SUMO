@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 from .base import ContractModel, Sha256, StableToken
 from .enums import GateStatus, TrafficSide
 from .ids import require_stable_id, stable_id
+from .run_identity import CodeProducerIdentity
 
 
 Morphology = Literal[
@@ -340,11 +341,16 @@ class HeldOutCorridorMachineResult(ContractModel):
 
 
 class HeldOutCorpusMachineReport(ContractModel):
-    schema_id: str = "torii.corridor.held-out-corpus-machine-report/v1"
+    schema_id: str = "torii.corridor.held-out-corpus-machine-report/v2"
     corpus_id: StableToken
     corpus_spec_sha256: Sha256
     snapshot_report_sha256: Sha256
     certification_envelope_sha256: Sha256
+    toolchain_lock_path: str
+    toolchain_lock_sha256: Sha256
+    run_identity_id: StableToken
+    run_identity_path: str
+    run_identity_sha256: Sha256
     evidence_build_status: GateStatus
     automatic_promotion_gate: Literal["blocked"] = "blocked"
     expected_case_count: int = Field(ge=1)
@@ -359,6 +365,11 @@ class HeldOutCorpusMachineReport(ContractModel):
     @model_validator(mode="after")
     def validate_machine_report(self) -> HeldOutCorpusMachineReport:
         require_stable_id(self.corpus_id, kind="manifest")
+        require_stable_id(self.run_identity_id, kind="toolchain")
+        if not self.run_identity_path.strip() or not self.toolchain_lock_path.strip():
+            raise ValueError(
+                "Held-out machine reports require run-identity and toolchain paths."
+            )
         if self.processed_case_count != len(self.results):
             raise ValueError("Held-out machine result count does not close.")
         paired = (
@@ -380,4 +391,47 @@ class HeldOutCorpusMachineReport(ContractModel):
             or self.blockers
         ):
             raise ValueError("Passing held-out evidence cannot hide missing cases.")
+        return self
+
+
+class HeldOutMachineArtifactIdentity(ContractModel):
+    path: str
+    sha256: Sha256
+
+
+class HeldOutCorpusMachineManifest(ContractModel):
+    schema_id: str = "torii.corridor.held-out-corpus-machine-manifest/v2"
+    corpus_id: StableToken
+    evidence_build_status: GateStatus
+    automatic_promotion_gate: Literal["blocked"] = "blocked"
+    human_review_decisions_present: Literal[False] = False
+    toolchain_lock_path: str
+    toolchain_lock_sha256: Sha256
+    run_identity_id: StableToken
+    run_identity_path: str
+    run_identity_sha256: Sha256
+    producer: CodeProducerIdentity
+    artifacts: tuple[HeldOutMachineArtifactIdentity, ...]
+
+    @model_validator(mode="after")
+    def validate_manifest(self) -> HeldOutCorpusMachineManifest:
+        require_stable_id(self.corpus_id, kind="manifest")
+        require_stable_id(self.run_identity_id, kind="toolchain")
+        by_path = {artifact.path: artifact.sha256 for artifact in self.artifacts}
+        if len(by_path) != len(self.artifacts):
+            raise ValueError("Held-out machine manifest artifact paths must be unique.")
+        required = {
+            self.toolchain_lock_path: self.toolchain_lock_sha256,
+            self.run_identity_path: self.run_identity_sha256,
+        }
+        missing_or_mismatched = {
+            path: digest
+            for path, digest in required.items()
+            if by_path.get(path) != digest
+        }
+        if missing_or_mismatched:
+            raise ValueError(
+                "Held-out machine manifest does not close provenance artifacts: "
+                f"{sorted(missing_or_mismatched)}"
+            )
         return self

@@ -24,10 +24,12 @@ from .conflict_graph import audit_independent_movement_safety
 from .enums import GateStatus
 from .held_out_corpus_contracts import (
     CroppedCorridorSnapshot,
+    HeldOutCorpusMachineManifest,
     HeldOutCorpusMachineReport,
     HeldOutCorpusSnapshotReport,
     HeldOutCorpusSpec,
     HeldOutCorridorMachineResult,
+    HeldOutMachineArtifactIdentity,
 )
 from .held_out_review_contracts import (
     HeldOutCaseStratum,
@@ -39,6 +41,7 @@ from .held_out_review_runner import build_blinded_review_artifacts
 from .ids import stable_id
 from .net_replay import compare_netconvert_replay
 from .review import ReviewCase
+from .run_identity import capture_held_out_machine_run_identity
 
 
 def build_held_out_corridor_machine_evidence(
@@ -47,6 +50,7 @@ def build_held_out_corridor_machine_evidence(
     snapshot_report_file: Path,
     held_out_review_policy_file: Path,
     certification_envelope_file: Path,
+    toolchain_lock_file: Path,
     output_dir: Path,
     sumo_home: Path,
     only_corridor_keys: Sequence[str] = (),
@@ -59,6 +63,7 @@ def build_held_out_corridor_machine_evidence(
     snapshot_path = snapshot_report_file.resolve()
     policy_path = held_out_review_policy_file.resolve()
     envelope_path = certification_envelope_file.resolve()
+    toolchain_path = toolchain_lock_file.resolve()
     destination = output_dir.resolve()
     sumo_root = sumo_home.resolve()
     spec = HeldOutCorpusSpec.model_validate_json(spec_path.read_text(encoding="utf-8"))
@@ -104,6 +109,45 @@ def build_held_out_corridor_machine_evidence(
         if (not requested_keys or case.corridor_key in requested_keys)
         and case.selection_id in snapshot_by_selection
     )
+    effective_blinding_seed = blinding_seed or secrets.token_hex(32)
+    run_identity = capture_held_out_machine_run_identity(
+        repository_root=spec_path.parents[2],
+        entrypoint="plugins/torii-sumo/scripts/build_held_out_corridor_evidence.py",
+        toolchain_lock_file=toolchain_path,
+        runtime_tool_paths={
+            "netconvert": netconvert_binary,
+            "sumo": sumo_binary,
+        },
+        support_file_paths={
+            "randomTrips.py": random_trips,
+            "osmNetconvert.typ.xml": (
+                sumo_root / "data" / "typemap" / "osmNetconvert.typ.xml"
+            ),
+            "osmNetconvertBicycle.typ.xml": (
+                sumo_root
+                / "data"
+                / "typemap"
+                / "osmNetconvertBicycle.typ.xml"
+            ),
+            "osmNetconvertPedestrians.typ.xml": (
+                sumo_root
+                / "data"
+                / "typemap"
+                / "osmNetconvertPedestrians.typ.xml"
+            ),
+        },
+        selected_corridor_keys=tuple(
+            case.corridor_key for case in selected_cases
+        ),
+        timeout_seconds=timeout_seconds,
+        blinding_seed=effective_blinding_seed,
+    )
+    run_identity_path = destination / "held_out_corpus.run-identity.json"
+    write_json_atomic(
+        run_identity_path,
+        run_identity.model_dump(mode="json", by_alias=True),
+        sort_keys=True,
+    )
     blockers: list[str] = []
     if len(selected_cases) != len(spec.corridors):
         blockers.append(
@@ -118,6 +162,7 @@ def build_held_out_corridor_machine_evidence(
     for case in selected_cases:
         snapshot = snapshot_by_selection[case.selection_id]
         city_source = source_by_id[case.city_source_id]
+        case_destination = destination / "cases" / case.corridor_key
         try:
             result, review_case, assessment, stratum, material = _build_case_evidence(
                 spec=spec,
@@ -126,7 +171,7 @@ def build_held_out_corridor_machine_evidence(
                 city_group=city_source.city_group,
                 traffic_side=city_source.traffic_side,
                 envelope=envelope,
-                destination=destination / "cases" / case.corridor_key,
+                destination=case_destination,
                 sumo_root=sumo_root,
                 netconvert_binary=netconvert_binary,
                 sumo_binary=sumo_binary,
@@ -148,11 +193,16 @@ def build_held_out_corridor_machine_evidence(
                 f"{type(exc).__name__}:{exc}"
             )
             blockers.append(case_blocker)
-            source_artifacts = (
-                {str(source_path): file_sha256(source_path)}
-                if source_path.is_file()
-                else {}
-            )
+            partial_artifacts = {
+                path.resolve()
+                for path in case_destination.rglob("*")
+                if path.is_file()
+            }
+            if source_path.is_file():
+                partial_artifacts.add(source_path)
+            source_artifacts = {
+                str(path): file_sha256(path) for path in partial_artifacts
+            }
             results.append(
                 HeldOutCorridorMachineResult(
                     selection_id=case.selection_id,
@@ -183,7 +233,7 @@ def build_held_out_corridor_machine_evidence(
             case_strata=case_strata,
             trial_id=policy.trial_id,
             created_at=datetime.now(UTC),
-            blinding_seed=blinding_seed or secrets.token_hex(32),
+            blinding_seed=effective_blinding_seed,
             output_dir=destination / "review-package",
             review_materials=review_materials,
         )
@@ -210,6 +260,11 @@ def build_held_out_corridor_machine_evidence(
         corpus_spec_sha256=file_sha256(spec_path),
         snapshot_report_sha256=file_sha256(snapshot_path),
         certification_envelope_sha256=file_sha256(envelope_path),
+        toolchain_lock_path=str(toolchain_path.resolve()),
+        toolchain_lock_sha256=file_sha256(toolchain_path),
+        run_identity_id=run_identity.run_identity_id,
+        run_identity_path=str(run_identity_path.resolve()),
+        run_identity_sha256=file_sha256(run_identity_path),
         evidence_build_status=evidence_status,
         expected_case_count=len(spec.corridors),
         processed_case_count=len(results),
@@ -226,35 +281,48 @@ def build_held_out_corridor_machine_evidence(
         report.model_dump(mode="json", by_alias=True),
         sort_keys=True,
     )
-    artifacts = [spec_path, snapshot_path, policy_path, envelope_path, report_path]
+    artifacts = [
+        spec_path,
+        snapshot_path,
+        policy_path,
+        envelope_path,
+        toolchain_path,
+        run_identity_path,
+        report_path,
+        *(Path(item.path) for item in run_identity.runtime_tools),
+        *(Path(item.path) for item in run_identity.support_files),
+    ]
     for result in results:
         artifacts.extend(Path(path) for path in result.artifact_sha256_by_path)
     if package:
+        review_package_root = (destination / "review-package").resolve()
         artifacts.extend(
-            Path(package[key])
-            for key in (
-                "blinded_dataset_file",
-                "evaluation_key_file",
-                "manifest_file",
-            )
+            path for path in review_package_root.rglob("*") if path.is_file()
         )
     manifest_path = destination / "held_out_corpus.machine-manifest.json"
+    manifest = HeldOutCorpusMachineManifest(
+        corpus_id=spec.corpus_id,
+        evidence_build_status=evidence_status,
+        toolchain_lock_path=str(toolchain_path.resolve()),
+        toolchain_lock_sha256=file_sha256(toolchain_path),
+        run_identity_id=run_identity.run_identity_id,
+        run_identity_path=str(run_identity_path.resolve()),
+        run_identity_sha256=file_sha256(run_identity_path),
+        producer=run_identity.producer,
+        artifacts=tuple(
+            HeldOutMachineArtifactIdentity(
+                path=str(path.resolve()),
+                sha256=file_sha256(path.resolve()),
+            )
+            for path in sorted(
+                {path for path in artifacts if path.is_file()},
+                key=lambda item: item.as_posix(),
+            )
+        ),
+    )
     write_json_atomic(
         manifest_path,
-        {
-            "schema": "torii.corridor.held-out-corpus-machine-manifest/v1",
-            "corpus_id": spec.corpus_id,
-            "evidence_build_status": evidence_status.value,
-            "automatic_promotion_gate": "blocked",
-            "human_review_decisions_present": False,
-            "artifacts": [
-                {"path": str(path.resolve()), "sha256": file_sha256(path.resolve())}
-                for path in sorted(
-                    {path for path in artifacts if path.is_file()},
-                    key=lambda item: item.as_posix(),
-                )
-            ],
-        },
+        manifest.model_dump(mode="json", by_alias=True),
         sort_keys=True,
     )
     return {
@@ -598,23 +666,11 @@ def _build_case_evidence(
     )
     artifact_paths = {
         source_osm,
-        net_file,
-        build_report_path,
-        replay_build_report_path,
-        replay_net_file,
-        replay_report_path,
-        Path(load_report["report_file"]),
-        Path(load_report["manifest_file"]),
-        Path(connection_report["report_file"]),
-        Path(connection_report["review_overlay_file"]),
-        Path(connection_report["manifest_file"]),
-        calibration_path,
-        canonical_path,
-        safety_path,
-        applicability_path,
-        Path(routeability["report_file"]),
-        Path(routeability["manifest_file"]),
-        machine_report_path,
+        *(
+            path.resolve()
+            for path in destination.rglob("*")
+            if path.is_file()
+        ),
     }
     artifact_hashes = {
         str(path.resolve()): file_sha256(path.resolve())
