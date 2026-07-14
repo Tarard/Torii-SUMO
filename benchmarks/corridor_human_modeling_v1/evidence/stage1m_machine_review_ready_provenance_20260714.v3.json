@@ -5,7 +5,7 @@
       "path": ".github/workflows/corridor-contracts.yml",
       "role": "contract-ci",
       "schema": "torii.corridor.contracts/v1",
-      "sha256": "2b4144064d82d88ccda34f2c3037fe44d1cd1cc3749a254d9b5b352e0a28fbef",
+      "sha256": "d33e009a5fefc5106721c75a4c94d7cd1366d77e463968b340b8555007531f5d",
       "tracked_in_git": true,
       "visibility": "tracked-public"
     },
@@ -637,13 +637,13 @@
   "producer": {
     "branch": "codex/ingolstadt-osm-baseline",
     "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
-    "revision": "fcc88e261c96d0a86be12b5687eb10f7976810e4",
+    "revision": "a21fc73ace1c6f68a6931ef6455b62311a89cbae",
     "schema": "torii.corridor.contracts/v1",
-    "tree_revision": "097d7ac775c0997461c9bd47c54a114463d8f993",
+    "tree_revision": "3645e30b1cf34e0a45bbea035e375cc3bed1d021",
     "working_tree_clean": true
   },
-  "provenance_id": "manifest_b7a5d0b19dc11a38d9f8dbed",
-  "recorded_at": "2026-07-14T14:17:56+02:00",
+  "provenance_id": "manifest_91a3d4702ae8b2079d5b6b00",
+  "recorded_at": "2026-07-14T14:24:50+02:00",
   "review_package": {
     "atomic_witness_population_count": 102398,
     "automatic_promotion_gate": "blocked",
