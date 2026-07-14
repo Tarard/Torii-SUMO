@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 from xml.etree import ElementTree as ET
 
@@ -18,6 +19,7 @@ from torii_sumo.corridor.netxml import parse_net_xml
 from torii_sumo.corridor.pedestrian_crossings import (
     infer_pedestrian_facility_owners,
 )
+from torii_sumo.corridor.review import PedestrianCrossingReviewSubject
 
 
 def _entity(
@@ -37,6 +39,42 @@ def _entity(
         owner_physical_cell_ids=(cell_id,),
         payload=payload,
     )
+
+
+def _pedestrian_review_subject(
+    *,
+    cell_id: str,
+    index: int,
+) -> dict:
+    semantic_subject = {
+        "facility_kind": "pedestrian-crossing",
+        "control_kind": "uncontrolled",
+        "crossing_shape_xy": ((float(index), -1.0), (float(index), 1.0)),
+        "crossing_width_m": 4.0,
+        "source_endpoint_shape_xy": ((float(index) - 1.0, -1.0),),
+        "destination_endpoint_shape_xy": ((float(index) + 1.0, 1.0),),
+        "crossed_edge_signatures": (
+            stable_id("signature", {"crossed_edge": index}),
+        ),
+    }
+    return PedestrianCrossingReviewSubject(
+        review_subject_id=stable_id("review", semantic_subject),
+        **semantic_subject,
+        position_xy=(float(index), 0.0),
+        physical_cell_id=cell_id,
+        boundary_port_ids=(),
+        permission_contract={
+            "coverage": "complete",
+            "status": "pass",
+            "basis": "explicit_allow_intersection",
+            "allow": ("pedestrian",),
+            "disallow": (),
+            "element_count": 3,
+        },
+        rejection_reasons=("test_unmodeled_crossing",),
+        machine_question="Which physical cell owns this crossing?",
+        required_observations=("crossing ownership",),
+    ).model_dump(mode="python")
 
 
 def _crossing_snapshot(
@@ -220,6 +258,13 @@ def _crossing_snapshot(
                 "modeled_controlled_pedestrian_movement_count": 0,
                 "modeled_crossing_edge_count": 0,
                 "unmodeled_crossing_edge_count": pedestrian_facilities,
+                "unmodeled_pedestrian_crossings": [
+                    _pedestrian_review_subject(
+                        cell_id=cell_id,
+                        index=index,
+                    )
+                    for index in range(pedestrian_facilities)
+                ],
                 "link_index2_connection_count": 0,
                 "movement_mode_class_counts": {"road-motorized": 2},
                 "ownership_status": "resolved",
@@ -245,6 +290,7 @@ def _pedestrian_tls_snapshot(
     include_tls_program: bool = True,
     link_index2: bool = False,
     facility_prefix: str = ":j",
+    declare_facility_ownership: bool = True,
 ) -> CanonicalNetworkSnapshot:
     crossing_id = f"{facility_prefix}_c0"
     source_walkingarea_id = f"{facility_prefix}_w1"
@@ -272,6 +318,14 @@ def _pedestrian_tls_snapshot(
         if include_continuation
         else ""
     )
+    facility_incoming_lane = (
+        f" {source_walkingarea_id}_0"
+        if declare_facility_ownership
+        else ""
+    )
+    facility_internal_lane = (
+        f" {crossing_id}_0" if declare_facility_ownership else ""
+    )
     root = ET.fromstring(
         f"""<net>
   <edge id="in" from="a" to="j">
@@ -293,8 +347,8 @@ def _pedestrian_tls_snapshot(
     <lane id="{destination_walkingarea_id}_0" index="0" allow="pedestrian" width="4" shape="-2,5 2,5"/>
   </edge>
   <junction id="a" type="dead_end" incLanes="" intLanes=""/>
-  <junction id="j" type="traffic_light" incLanes="in_0 {source_walkingarea_id}_0"
-            intLanes=":j_0_0 {crossing_id}_0">
+  <junction id="j" type="traffic_light" incLanes="in_0{facility_incoming_lane}"
+            intLanes=":j_0_0{facility_internal_lane}">
     <request index="0" response="10" foes="10" cont="0"/>
     <request index="1" response="00" foes="01" cont="0"/>
   </junction>
@@ -436,7 +490,42 @@ def test_unmodelled_pedestrian_facilities_block_automatic_promotion_as_review() 
     assert report.automatic_promotion_gate is GateStatus.BLOCKED
     assert report.applicability_status is GateStatus.REVIEW
     assert report.coverage.crossing_edge_count == 1
+    assert report.coverage.unmodeled_pedestrian_review_subject_count == 1
+    assert len(report.coverage.unmodeled_pedestrian_crossings) == 1
+    review_finding = next(
+        finding
+        for finding in report.findings
+        if finding.category
+        == "pedestrian_facilities_outside_independent_conflict_model"
+    )
+    assert len(
+        review_finding.witness["unmodeled_pedestrian_crossings"]
+    ) == 1
     assert "pedestrian_facilities_outside_independent_conflict_model" in (report.limitations)
+
+
+def test_unmodeled_pedestrian_review_subject_closure_mismatch_is_hard_failure() -> None:
+    snapshot, _, _ = _crossing_snapshot(
+        protected_both=False,
+        pedestrian_facilities=1,
+    )
+    coverage = next(
+        entity for entity in snapshot.entities if entity.kind == "safety_coverage"
+    )
+    coverage.payload["unmodeled_pedestrian_crossings"] = []
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    closure = next(
+        finding
+        for finding in report.findings
+        if finding.category
+        == "unmodeled_pedestrian_review_subject_closure_mismatch"
+    )
+    assert closure.witness["unmodeled_crossing_edge_count"] == 1
+    assert closure.witness["review_subject_record_count"] == 0
+    assert closure.witness["valid_unique_review_subject_count"] == 0
 
 
 def test_unmapped_controlled_link_is_a_hard_safety_coverage_failure() -> None:
@@ -660,6 +749,61 @@ def test_uncontrolled_pedestrian_identity_ignores_internal_facility_ids() -> Non
         )
 
     assert pedestrian_movement_id(first) == pedestrian_movement_id(second)
+
+
+def test_rejected_owner_unresolved_crossing_has_stable_raw_id_free_review_subject() -> None:
+    first = _pedestrian_tls_snapshot(
+        protected_together=False,
+        controlled_crossing=False,
+        facility_prefix=":first",
+        declare_facility_ownership=False,
+    )
+    second = _pedestrian_tls_snapshot(
+        protected_together=False,
+        controlled_crossing=False,
+        facility_prefix=":renumbered",
+        declare_facility_ownership=False,
+    )
+
+    def review_subject(snapshot: CanonicalNetworkSnapshot) -> dict:
+        records = [
+            record
+            for entity in snapshot.entities
+            if entity.kind == "safety_coverage"
+            for record in entity.payload.get(
+                "unmodeled_pedestrian_crossings",
+                (),
+            )
+        ]
+        assert len(records) == 1
+        return records[0]
+
+    first_subject = review_subject(first)
+    second_subject = review_subject(second)
+    assert first_subject["review_subject_id"] == second_subject[
+        "review_subject_id"
+    ]
+    assert first_subject["physical_cell_id"] is None
+    assert first_subject["rejection_reasons"] == (
+        "pedestrian_crossed_ports_empty",
+        "pedestrian_destination_owner_unresolved",
+        "pedestrian_owner_unresolved",
+    )
+    serialized = json.dumps(first_subject, sort_keys=True)
+    assert ":first" not in serialized
+    assert ":renumbered" not in serialized
+
+    report = audit_independent_movement_safety(first)
+
+    assert report.status is GateStatus.REVIEW
+    assert report.coverage.unmodeled_crossing_edge_count == 1
+    assert report.coverage.unmodeled_pedestrian_review_subject_count == 1
+    assert not {
+        finding.category
+        for finding in report.findings
+        if finding.category
+        == "unmodeled_pedestrian_review_subject_closure_mismatch"
+    }
 
 
 def test_crossed_edge_neighbour_cell_does_not_claim_crossing_ownership() -> None:

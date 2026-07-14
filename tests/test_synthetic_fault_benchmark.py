@@ -58,7 +58,7 @@ def test_synthetic_matrix_detects_or_abstains_on_all_gold_mutations(
     assert result["must_abstain_passed_count"] == 7
     assert result["clean_fixture_statuses"] == {
         "parallel-two-lane-x4:right": "pass",
-        "pedestrian-x4:right": "review",
+        "pedestrian-x4:right": "pass",
         "rail-x4:right": "review",
         "standard-x4:left": "pass",
         "standard-x4:right": "pass",

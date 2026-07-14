@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .ids import stable_id
-from .netxml import RawConnection, RawLane, RawNetwork
+from .netxml import RawConnection, RawEdge, RawLane, RawNetwork
+from .review import PedestrianCrossingReviewSubject
 
 
 PEDESTRIAN_FACILITY_FUNCTIONS = frozenset({"crossing", "walkingarea"})
@@ -39,6 +40,7 @@ class PedestrianCrossingAttempt:
     is_candidate: bool
     model: PedestrianCrossingModel | None = None
     rejection_reasons: tuple[str, ...] = ()
+    review_subject: PedestrianCrossingReviewSubject | None = None
 
 
 def infer_pedestrian_facility_owners(
@@ -199,30 +201,39 @@ def model_pedestrian_crossing(
         rejection_reasons.append("pedestrian_crossing_edges_missing")
 
     crossed_boundary_ports: list[str] = []
-    if crossing_owner is not None:
+    crossed_edge_signatures: list[str] = []
+    for crossed_edge_id in crossing_edge.crossing_edge_ids:
+        crossed_edge = network.edges.get(crossed_edge_id)
+        if crossed_edge is None or not crossed_edge.external:
+            rejection_reasons.append(
+                "pedestrian_crossed_edge_missing_or_internal"
+            )
+            continue
+        crossed_edge_signatures.append(
+            _external_edge_semantic_signature(crossed_edge)
+        )
+        if crossing_owner is None:
+            continue
         junction_id = crossing_owner.junction_id
-        for crossed_edge_id in crossing_edge.crossing_edge_ids:
-            crossed_edge = network.edges.get(crossed_edge_id)
-            if crossed_edge is None or not crossed_edge.external:
-                rejection_reasons.append(
-                    "pedestrian_crossed_edge_missing_or_internal"
-                )
-                continue
-            candidate_ports: list[str] = []
-            if crossed_edge.to_junction == junction_id:
-                port_id = port_ids_by_edge_flow.get((junction_id, crossed_edge.edge_id, "incoming"))
-                if port_id:
-                    candidate_ports.append(port_id)
-            if crossed_edge.from_junction == junction_id:
-                port_id = port_ids_by_edge_flow.get((junction_id, crossed_edge.edge_id, "outgoing"))
-                if port_id:
-                    candidate_ports.append(port_id)
-            if len(candidate_ports) != 1:
-                rejection_reasons.append(
-                    "pedestrian_crossed_port_unresolved"
-                )
-                continue
-            crossed_boundary_ports.append(candidate_ports[0])
+        candidate_ports: list[str] = []
+        if crossed_edge.to_junction == junction_id:
+            port_id = port_ids_by_edge_flow.get(
+                (junction_id, crossed_edge.edge_id, "incoming")
+            )
+            if port_id:
+                candidate_ports.append(port_id)
+        if crossed_edge.from_junction == junction_id:
+            port_id = port_ids_by_edge_flow.get(
+                (junction_id, crossed_edge.edge_id, "outgoing")
+            )
+            if port_id:
+                candidate_ports.append(port_id)
+        if len(candidate_ports) != 1:
+            rejection_reasons.append(
+                "pedestrian_crossed_port_unresolved"
+            )
+            continue
+        crossed_boundary_ports.append(candidate_ports[0])
     if crossing_edge.crossing_edge_ids and not crossed_boundary_ports:
         rejection_reasons.append("pedestrian_crossed_ports_empty")
 
@@ -235,9 +246,27 @@ def model_pedestrian_crossing(
         rejection_reasons.append("pedestrian_permission_incompatible")
 
     if rejection_reasons:
+        sorted_reasons = tuple(sorted(set(rejection_reasons)))
         return PedestrianCrossingAttempt(
             is_candidate=True,
-            rejection_reasons=tuple(sorted(set(rejection_reasons))),
+            rejection_reasons=sorted_reasons,
+            review_subject=_build_rejected_crossing_review_subject(
+                controlled=controlled,
+                source_lane=source_lane,
+                crossing_lane=crossing_lane,
+                destination_lane=destination_lane,
+                physical_cell_id=(
+                    crossing_owner.physical_cell_id
+                    if crossing_owner is not None
+                    else None
+                ),
+                boundary_port_ids=tuple(sorted(set(crossed_boundary_ports))),
+                crossed_edge_signatures=tuple(
+                    sorted(set(crossed_edge_signatures))
+                ),
+                permission_contract=permission_contract,
+                rejection_reasons=sorted_reasons,
+            ),
         )
 
     assert source_lane is not None
@@ -394,3 +423,99 @@ def _contract_allows_pedestrian(contract: Mapping[str, Any]) -> bool:
 
 def _rounded_point(point: tuple[float, float]) -> tuple[float, float]:
     return (round(point[0], 6), round(point[1], 6))
+
+
+def _external_edge_semantic_signature(edge: RawEdge) -> str:
+    return stable_id(
+        "signature",
+        {
+            "edge_type": edge.edge_type,
+            "priority": edge.priority,
+            "name": edge.name,
+            "params": edge.params,
+            "lanes": tuple(
+                {
+                    "ordinal": lane.ordinal,
+                    "shape_xy": tuple(
+                        _rounded_point(point) for point in lane.shape
+                    ),
+                    "permissions": _lane_permissions(lane),
+                    "width_m": lane.width,
+                    "speed_mps": lane.speed,
+                }
+                for lane in edge.lanes
+            ),
+        },
+    )
+
+
+def _build_rejected_crossing_review_subject(
+    *,
+    controlled: bool,
+    source_lane: RawLane | None,
+    crossing_lane: RawLane | None,
+    destination_lane: RawLane | None,
+    physical_cell_id: str | None,
+    boundary_port_ids: tuple[str, ...],
+    crossed_edge_signatures: tuple[str, ...],
+    permission_contract: Mapping[str, Any],
+    rejection_reasons: tuple[str, ...],
+) -> PedestrianCrossingReviewSubject:
+    crossing_shape = tuple(
+        _rounded_point(point)
+        for point in (crossing_lane.shape if crossing_lane is not None else ())
+    )
+    all_points = crossing_shape or tuple(
+        point
+        for lane in (source_lane, destination_lane)
+        if lane is not None
+        for point in (_rounded_point(value) for value in lane.shape)
+    )
+    position_xy = (
+        (
+            round(sum(point[0] for point in all_points) / len(all_points), 6),
+            round(sum(point[1] for point in all_points) / len(all_points), 6),
+        )
+        if all_points
+        else None
+    )
+    semantic_subject = {
+        "facility_kind": "pedestrian-crossing",
+        "control_kind": "signalized" if controlled else "uncontrolled",
+        "crossing_shape_xy": crossing_shape,
+        "crossing_width_m": (
+            crossing_lane.width if crossing_lane is not None else None
+        ),
+        "source_endpoint_shape_xy": tuple(
+            _rounded_point(point)
+            for point in (source_lane.shape if source_lane is not None else ())
+        ),
+        "destination_endpoint_shape_xy": tuple(
+            _rounded_point(point)
+            for point in (
+                destination_lane.shape if destination_lane is not None else ()
+            )
+        ),
+        "crossed_edge_signatures": crossed_edge_signatures,
+    }
+    review_subject_id = stable_id("review", semantic_subject)
+    return PedestrianCrossingReviewSubject(
+        review_subject_id=review_subject_id,
+        **semantic_subject,
+        position_xy=position_xy,
+        physical_cell_id=physical_cell_id,
+        boundary_port_ids=boundary_port_ids,
+        permission_contract=dict(permission_contract),
+        rejection_reasons=rejection_reasons,
+        machine_question=(
+            "Which physical cell and boundary ports own this pedestrian "
+            "crossing, or should it remain outside the canonical junction model?"
+        ),
+        required_observations=(
+            "physical crossing location",
+            "crossed carriageway",
+            "adjacent walkingarea continuity",
+            "junction ownership",
+            "traffic-control evidence",
+        ),
+    )

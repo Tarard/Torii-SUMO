@@ -1,8 +1,8 @@
 {
   "schema": "torii.corridor.composite-fault-benchmark/v1",
-  "benchmark_id": "manifest_9763619a03fed8e1198e2be5",
+  "benchmark_id": "manifest_f25aab74cefe3c639a54af46",
   "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
-  "single_fault_benchmark_sha256": "a38bcc19fa852556569b9c08967536c20ca54368c7856178282ac51702fd4abe",
+  "single_fault_benchmark_sha256": "550c7d38c6cb478b8acc42e8e2cf2d818351f933086a0f2036b16c827c4e0aba",
   "cases": [
     {
       "case_id": "x4-binding-plus-tls-range",
@@ -175,8 +175,7 @@
           "fault_family": "pedestrian-conflict",
           "mutation_id": "pedestrian-conflict",
           "expected_observations": [
-            {"channel": "independent-safety", "value": "protected_green_movement_conflict"},
-            {"channel": "independent-review", "value": "pedestrian_facilities_outside_independent_conflict_model"}
+            {"channel": "independent-safety", "value": "protected_green_movement_conflict"}
           ]
         },
         {

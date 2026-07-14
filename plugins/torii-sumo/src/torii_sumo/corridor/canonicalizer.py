@@ -279,6 +279,7 @@ def canonicalize_raw_network(
     movement_variants: dict[str, list[dict[str, Any]]] = defaultdict(list)
     movement_owners: dict[str, tuple[str, tuple[str, ...]]] = {}
     pedestrian_rejection_reasons: dict[str, tuple[str, ...]] = {}
+    pedestrian_review_subjects: dict[str, dict[str, Any]] = {}
     modeled_pedestrian_crossing_edges: dict[str, set[str]] = defaultdict(set)
     modeled_controlled_pedestrian_movement_ids: dict[str, set[str]] = (
         defaultdict(set)
@@ -286,6 +287,10 @@ def canonicalize_raw_network(
     modeled_uncontrolled_pedestrian_movement_ids: dict[str, set[str]] = (
         defaultdict(set)
     )
+    pedestrian_control_binding_indices: dict[
+        tuple[str, str],
+        set[int],
+    ] = defaultdict(set)
     for connection in network.connections:
         source_edge = network.edges.get(connection.from_edge)
         target_edge = network.edges.get(connection.to_edge)
@@ -307,6 +312,24 @@ def canonicalize_raw_network(
                 continue
             if attempt.model is None:
                 pedestrian_rejection_reasons[str(connection.connection_index)] = attempt.rejection_reasons
+                if attempt.review_subject is not None:
+                    review_subject = attempt.review_subject.model_dump(
+                        mode="python"
+                    )
+                    review_subject_id = str(
+                        attempt.review_subject.review_subject_id
+                    )
+                    existing = pedestrian_review_subjects.get(
+                        review_subject_id
+                    )
+                    if existing is not None and existing != review_subject:
+                        raise ValueError(
+                            "Pedestrian review-subject identity collision: "
+                            f"{review_subject_id}"
+                        )
+                    pedestrian_review_subjects[review_subject_id] = (
+                        review_subject
+                    )
                 continue
             model = attempt.model
             for role_id, role_payload in model.lane_role_payloads:
@@ -339,25 +362,9 @@ def canonicalize_raw_network(
                 for index in (connection.link_index, connection.link_index2)
                 if index is not None
             )
-            _put_entity(
-                entities,
-                kind="pedestrian_control_binding",
-                entity_id=stable_id(
-                    "binding",
-                    {
-                        "movement_id": model.movement_id,
-                        "control_kind": control_kind,
-                    },
-                ),
-                owner_cell_ids=(model.physical_cell_id,),
-                boundary_port_ids=model.boundary_port_ids,
-                payload={
-                    "movement_id": model.movement_id,
-                    "control_kind": control_kind,
-                    "source_link_indices": source_link_indices,
-                    "multiple_source_indices": len(source_link_indices) > 1,
-                },
-            )
+            pedestrian_control_binding_indices[
+                (model.movement_id, control_kind)
+            ].update(source_link_indices)
             modeled_pedestrian_crossing_edges[model.physical_cell_id].add(model.crossing_edge_id)
             target = (
                 modeled_controlled_pedestrian_movement_ids
@@ -388,7 +395,7 @@ def canonicalize_raw_network(
             turn_class=turn_class,
         )
         connection_movement_ids[str(connection.connection_index)] = movement_id
-        path = _trace_internal_semantics(
+        path, traversed_internal_edge_ids = _trace_internal_semantics(
             connection,
             network,
             outgoing_connections=outgoing_connections,
@@ -421,6 +428,38 @@ def canonicalize_raw_network(
             cell_id,
             (source_port_id, target_port_id),
         )
+        crossing_edge_ids = {
+            edge_id
+            for edge_id in traversed_internal_edge_ids
+            if (edge := network.edges.get(edge_id)) is not None
+            and edge.function == "crossing"
+        }
+        if crossing_edge_ids and "pedestrian" in mode_classes:
+            modeled_pedestrian_crossing_edges[cell_id].update(
+                crossing_edge_ids
+            )
+            control_kind = (
+                "signalized"
+                if connection.controller_id
+                else "uncontrolled"
+            )
+            source_link_indices = {
+                index
+                for index in (
+                    connection.link_index,
+                    connection.link_index2,
+                )
+                if index is not None
+            }
+            pedestrian_control_binding_indices[
+                (movement_id, control_kind)
+            ].update(source_link_indices)
+            target = (
+                modeled_controlled_pedestrian_movement_ids
+                if connection.controller_id
+                else modeled_uncontrolled_pedestrian_movement_ids
+            )
+            target[cell_id].add(movement_id)
 
     for movement_id, variants in sorted(movement_variants.items()):
         cell_id, boundary_port_ids = movement_owners[movement_id]
@@ -453,9 +492,42 @@ def canonicalize_raw_network(
             payload={
                 "multiplicity": len(normalized_variants),
                 "variants": [
-                    {key: value for key, value in variant.items() if key != "path"} for variant in normalized_variants
+                    {
+                        key: value
+                        for key, value in variant.items()
+                        if key != "path"
+                    }
+                    for variant in normalized_variants
                 ],
                 "internal_path_id": path_id,
+            },
+        )
+
+    for (
+        movement_id,
+        control_kind,
+    ), source_link_indices in sorted(
+        pedestrian_control_binding_indices.items()
+    ):
+        cell_id, boundary_port_ids = movement_owners[movement_id]
+        sorted_indices = tuple(sorted(source_link_indices))
+        _put_entity(
+            entities,
+            kind="pedestrian_control_binding",
+            entity_id=stable_id(
+                "binding",
+                {
+                    "movement_id": movement_id,
+                    "control_kind": control_kind,
+                },
+            ),
+            owner_cell_ids=(cell_id,),
+            boundary_port_ids=boundary_port_ids,
+            payload={
+                "movement_id": movement_id,
+                "control_kind": control_kind,
+                "source_link_indices": sorted_indices,
+                "multiple_source_indices": len(sorted_indices) > 1,
             },
         )
 
@@ -592,6 +664,7 @@ def canonicalize_raw_network(
             modeled_uncontrolled_pedestrian_movement_ids
         ),
         pedestrian_rejection_reasons=pedestrian_rejection_reasons,
+        pedestrian_review_subjects=pedestrian_review_subjects,
     )
 
     return CanonicalNetworkSnapshot(
@@ -942,6 +1015,7 @@ def _add_safety_coverage_entities(
     modeled_controlled_pedestrian_movement_ids: Mapping[str, set[str]],
     modeled_uncontrolled_pedestrian_movement_ids: Mapping[str, set[str]],
     pedestrian_rejection_reasons: Mapping[str, tuple[str, ...]],
+    pedestrian_review_subjects: Mapping[str, dict[str, Any]],
 ) -> None:
     movement_ids_by_cell: dict[str, set[str]] = defaultdict(set)
     movement_mode_counts_by_cell: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -981,6 +1055,18 @@ def _add_safety_coverage_entities(
             unresolved_facilities[edge.function] += 1
             continue
         facility_counts_by_cell[owner.physical_cell_id][edge.function] += 1
+
+    review_subjects_by_cell: dict[str, list[dict[str, Any]]] = defaultdict(
+        list
+    )
+    unresolved_review_subjects: list[dict[str, Any]] = []
+    known_cell_ids = set(junction_cell_ids.values())
+    for subject in pedestrian_review_subjects.values():
+        cell_id = subject.get("physical_cell_id")
+        if isinstance(cell_id, str) and cell_id in known_cell_ids:
+            review_subjects_by_cell[cell_id].append(subject)
+        else:
+            unresolved_review_subjects.append(subject)
 
     for cell_id in sorted(set(junction_cell_ids.values())):
         controlled = controlled_by_cell.get(cell_id, [])
@@ -1031,6 +1117,10 @@ def _add_safety_coverage_entities(
                 0,
                 crossing_edge_count - modeled_crossing_edge_count,
             ),
+            "unmodeled_pedestrian_crossings": sorted(
+                review_subjects_by_cell.get(cell_id, ()),
+                key=lambda value: str(value["review_subject_id"]),
+            ),
             "link_index2_connection_count": sum(connection.link_index2 is not None for connection in controlled),
             "movement_mode_class_counts": dict(sorted(movement_mode_counts_by_cell[cell_id].items())),
             "ownership_status": "resolved",
@@ -1076,6 +1166,10 @@ def _add_safety_coverage_entities(
             "modeled_uncontrolled_pedestrian_movement_count": 0,
             "modeled_crossing_edge_count": 0,
             "unmodeled_crossing_edge_count": unresolved_facilities["crossing"],
+            "unmodeled_pedestrian_crossings": sorted(
+                unresolved_review_subjects,
+                key=lambda value: str(value["review_subject_id"]),
+            ),
             "link_index2_connection_count": sum(
                 connection.link_index2 is not None for connection in unresolved_controlled
             ),
@@ -1164,7 +1258,7 @@ def _trace_internal_semantics(
     *,
     outgoing_connections: dict[tuple[str, int], list[RawConnection]],
     maximum_hops: int,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], tuple[str, ...]]:
     source_edge = network.edges.get(direct.from_edge)
     target_edge = network.edges.get(direct.to_edge)
     source_lane = _lane_by_ordinal(source_edge, direct.from_lane) if source_edge is not None else None
@@ -1176,40 +1270,50 @@ def _trace_internal_semantics(
     if not direct.via:
         permission_records.append(target_lane)
         if _raw_network_internal_link_mode(network) == "no-internal-links":
-            return {
-                "status": "no-internal-links",
+            return (
+                {
+                    "status": "no-internal-links",
+                    "segments": (),
+                    "failures": (),
+                    "permission_contract": _path_permission_contract(
+                        permission_records,
+                        complete=True,
+                    ),
+                },
+                (),
+            )
+        return (
+            {
+                "status": "missing-via",
                 "segments": (),
-                "failures": (),
+                "failures": ("missing-via",),
                 "permission_contract": _path_permission_contract(
                     permission_records,
-                    complete=True,
+                    complete=False,
                 ),
-            }
-        return {
-            "status": "missing-via",
-            "segments": (),
-            "failures": ("missing-via",),
-            "permission_contract": _path_permission_contract(
-                permission_records,
-                complete=False,
-            ),
-        }
+            },
+            (),
+        )
     lane = network.lanes.get(direct.via)
     if lane is None:
         permission_records.append(None)
-        return {
-            "status": "invalid",
-            "segments": (),
-            "failures": ("via-not-found",),
-            "permission_contract": _path_permission_contract(
-                permission_records,
-                complete=False,
-            ),
-        }
+        return (
+            {
+                "status": "invalid",
+                "segments": (),
+                "failures": ("via-not-found",),
+                "permission_contract": _path_permission_contract(
+                    permission_records,
+                    complete=False,
+                ),
+            },
+            (),
+        )
     permission_records.append(lane)
     segments: list[dict[str, Any]] = []
     failures: list[str] = []
     visited: set[str] = set()
+    traversed_edge_ids: list[str] = []
     current = lane
     path_complete = False
     for _ in range(maximum_hops):
@@ -1218,6 +1322,8 @@ def _trace_internal_semantics(
             break
         visited.add(current.lane_id)
         edge_id = network.lane_edge_ids.get(current.lane_id, "")
+        if edge_id:
+            traversed_edge_ids.append(edge_id)
         segments.append(
             {
                 "shape_xy": _rounded_shape(current.shape),
@@ -1248,15 +1354,18 @@ def _trace_internal_semantics(
         break
     else:
         failures.append("bounded-trace-exhausted")
-    return {
-        "status": "pass" if not failures else "invalid",
-        "segments": segments,
-        "failures": tuple(failures),
-        "permission_contract": _path_permission_contract(
-            permission_records,
-            complete=path_complete,
-        ),
-    }
+    return (
+        {
+            "status": "pass" if not failures else "invalid",
+            "segments": segments,
+            "failures": tuple(failures),
+            "permission_contract": _path_permission_contract(
+                permission_records,
+                complete=path_complete,
+            ),
+        },
+        tuple(traversed_edge_ids),
+    )
 
 
 def _path_permission_contract(

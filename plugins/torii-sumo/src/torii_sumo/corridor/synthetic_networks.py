@@ -34,7 +34,10 @@ FIXTURES = {
         "parallel-two-lane-x4",
         GateStatus.PASS,
     ),
-    "pedestrian-x4": SyntheticFixtureDefinition("pedestrian-x4", GateStatus.REVIEW),
+    "pedestrian-x4": SyntheticFixtureDefinition(
+        "pedestrian-x4",
+        GateStatus.PASS,
+    ),
     "rail-x4": SyntheticFixtureDefinition("rail-x4", GateStatus.REVIEW),
     "bicycle-x4": SyntheticFixtureDefinition("bicycle-x4", GateStatus.REVIEW),
     "no-internal-x4": SyntheticFixtureDefinition(
