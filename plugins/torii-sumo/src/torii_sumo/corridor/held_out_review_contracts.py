@@ -86,6 +86,14 @@ class BlindedReviewCase(ContractModel):
     candidate_sha256_by_variant_code: dict[str, Sha256]
     exact_question: str
     required_observations: tuple[str, ...]
+    candidate_artifact_path_by_variant_code: dict[str, str] = Field(
+        default_factory=dict
+    )
+    review_config_path_by_variant_code: dict[str, str] = Field(default_factory=dict)
+    review_html_path: str | None = None
+    review_overlay_path: str | None = None
+    map_evidence_urls: tuple[str, ...] = ()
+    osm_attribution: str | None = None
 
     @model_validator(mode="after")
     def validate_case(self) -> BlindedReviewCase:
@@ -94,8 +102,57 @@ class BlindedReviewCase(ContractModel):
         for code in self.candidate_sha256_by_variant_code:
             if not _is_variant_code(code):
                 raise ValueError(f"Invalid blind variant code: {code}")
+        for path_mapping in (
+            self.candidate_artifact_path_by_variant_code,
+            self.review_config_path_by_variant_code,
+        ):
+            if path_mapping and set(path_mapping) != set(
+                self.candidate_sha256_by_variant_code
+            ):
+                raise ValueError("Blinded artifact paths must exactly cover variants.")
+            for code, path in path_mapping.items():
+                if not _is_variant_code(code) or not _is_safe_relative_path(path):
+                    raise ValueError("Blinded artifact paths must be safe and coded.")
+        for path in (self.review_html_path, self.review_overlay_path):
+            if path is not None and not _is_safe_relative_path(path):
+                raise ValueError("Blinded review paths must be safe and relative.")
+        if any(not value.startswith("https://") for value in self.map_evidence_urls):
+            raise ValueError("Blinded map evidence URLs must use HTTPS.")
+        material_fields = (
+            bool(self.candidate_artifact_path_by_variant_code),
+            bool(self.review_config_path_by_variant_code),
+            self.review_html_path is not None,
+            self.review_overlay_path is not None,
+            bool(self.map_evidence_urls),
+            self.osm_attribution is not None,
+        )
+        if any(material_fields) and not all(material_fields):
+            raise ValueError("Reviewer-visible material identity must be complete.")
         if not self.required_observations:
             raise ValueError("Blinded cases require explicit observations.")
+        return self
+
+
+class HeldOutReviewMaterial(ContractModel):
+    candidate_artifact_path_by_variant: dict[StableToken, str]
+    review_overlay_path: str
+    map_evidence_urls: tuple[str, ...]
+    osm_attribution: Literal["© OpenStreetMap contributors"] = (
+        "© OpenStreetMap contributors"
+    )
+
+    @model_validator(mode="after")
+    def validate_material(self) -> HeldOutReviewMaterial:
+        if not self.candidate_artifact_path_by_variant:
+            raise ValueError("Review material requires candidate artifacts.")
+        for variant_id, path in self.candidate_artifact_path_by_variant.items():
+            require_stable_id(variant_id, kind="candidate")
+            if not path.strip():
+                raise ValueError("Review candidate artifact path cannot be empty.")
+        if not self.review_overlay_path.strip() or not self.map_evidence_urls:
+            raise ValueError("Review material requires an overlay and map evidence.")
+        if any(not value.startswith("https://") for value in self.map_evidence_urls):
+            raise ValueError("Review material map URLs must use HTTPS.")
         return self
 
 
@@ -326,3 +383,13 @@ def _is_variant_code(value: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _is_safe_relative_path(value: str) -> bool:
+    normalized = value.replace("\\", "/")
+    return bool(
+        normalized
+        and not normalized.startswith("/")
+        and ":" not in normalized.split("/", 1)[0]
+        and ".." not in normalized.split("/")
+    )
