@@ -14,8 +14,8 @@ Stage 1-H 的两名独立审核者、第三名 adjudicator 和预注册统计门
 
 | 阶段 | 状态 | 当前证据或阻断项 |
 |---|---|---|
-| 0. 规范冻结 | 架构完成；当前 head conformance 修复中 | schema、稳定语义 ID、工具链、manifest 和 source/candidate 身份已冻结。旧工作流把 v2 生成结果与 v1 schema 比对；`74c5773` 已修正并在本地通过确定性重生成、54 项合同测试和 lint，远端当前-head CI 结果仍须进入权威 provenance。 |
-| 1-M. Machine REVIEW_READY | 进行中 | 30/30 真实 held-out 走廊已运行；27 个完整包、3 个 replay-invalid；18,311/18,313 crossing 已建模。尚缺权威新 provenance、Paris 两个 coverage-gap 实体、PCB-453、RWC-1、ROW-1、v2 trial 和 30 个有效盲化 case。所有 promotion blocked。 |
+| 0. 规范冻结 | 架构完成；当前合同层本地全绿 | schema、稳定语义 ID、工具链、manifest 和 source/candidate 身份已冻结；schema 确定性重生成故障已修复。最终 Stage 1-M provenance 仍须绑定后续 clean producer commit 与对应远端 CI。 |
+| 1-M. Machine REVIEW_READY | 进行中 | Paris 两个 coverage-gap 已稳定实体化；PCB-453 完成 453/453 census；RWC-1 无损覆盖 88,423 个 witness；ROW-1 的 15-case 开发实验通过；v2 attention/safe-pass、reserve、replacement 和 sampling 合同已冻结。仍缺三个 replacement 的实际运行、至少 30 个完整 v2 盲化 package，以及绑定最终 clean commit 的权威 provenance。所有 promotion blocked。 |
 | 1-H. Human Validation | 未开始 | 必须由两名真实审核者独立作答，第三人 adjudication，并通过预注册统计门；机器不能代填。 |
 | 2. 认证 micro-repair | 认证暂停；development-only 可并行 | 合成/官方场景的开发研究允许在隔离语料继续；不得使用 Stage 1 blinded held-out 调参或宣称编辑类型已认证。 |
 | 3. Physical-cell hypotheses | 未完成 | split/shared-controller、merge、partial 三假设尚未完成统一 held-out 比较。 |
@@ -32,6 +32,16 @@ Stage 1-H 的两名独立审核者、第三名 adjudicator 和预注册统计门
 - 裁剪使用 reference-complete writer，并保留被引用交通信号灯和 crossing 节点标签。
 - feature targets 是预注册待验证目标，不是事后真值；冻结快照不支持时必须报告 review/replacement。
 - OSM 派生物明确记录 `© OpenStreetMap contributors` 和 ODbL。
+
+## 已冻结的盲审 v2
+
+- v1 保持不可变 pilot，不降低 30-case 门，也不把未定义 AutoPrecision 改成 1.0。
+- v2 attention cohort 只测 weighted attention precision/recall、审核者一致性、审核时间和 safety false negative；AutoPrecision 明确为 `not-applicable`。
+- future safe-pass cohort 只接受前瞻性、连续的 machine-acceptable 样本；至少 600 个样本，AutoPrecision 点估计和 95% 单侧 Wilson 下界均须达到 0.99。
+- `london-kings-cross`、`melbourne-royal-parade`、`sydney-cross-city-tunnel` 只进入 reproducibility census。
+- 三个 replacement slot 各有三个预先冻结候选，并按公开 seed 与 stable selection ID 的 SHA-256 排序；机器标签、finding 数量/严重性和人工可见性不得参与选择。
+- 当前 rank-1 分别为 `london-liverpool-street`、`melbourne-st-kilda-domain` 和 `sydney-eastern-distributor-surry-hills`；尚未宣称它们已通过 replay 或已形成完整审核包。
+- 完整协议见 [`held-out-corridor-blind-review-protocol-v2.md`](held-out-corridor-blind-review-protocol-v2.md)。
 
 全量快照物化证据：
 

@@ -93,4 +93,6 @@ allowed. The active successor is a new v2 trial with a separate audit-attention
 cohort and a future prospective safe-pass cohort, a new parent benchmark hash,
 trial ID, schema, deterministic reserve replacements, and finding-cluster
 decisions. Its design is frozen by
-[`stage1-machine-review-ready-plan.md`](stage1-machine-review-ready-plan.md).
+[`stage1-machine-review-ready-plan.md`](stage1-machine-review-ready-plan.md)
+and implemented by the active
+[`held-out-corridor-blind-review-protocol-v2.md`](held-out-corridor-blind-review-protocol-v2.md).

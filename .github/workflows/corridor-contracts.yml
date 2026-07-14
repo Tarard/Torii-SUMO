@@ -45,10 +45,12 @@ jobs:
             plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_ood_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_held_out_review_schema.py \
+            plugins/torii-sumo/scripts/export_held_out_review_v2_schema.py \
             plugins/torii-sumo/scripts/export_stage1_review_ready_schema.py \
             plugins/torii-sumo/scripts/build_held_out_corpus.py \
             plugins/torii-sumo/scripts/build_held_out_corridor_evidence.py \
             plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
+            plugins/torii-sumo/scripts/freeze_held_out_review_v2.py \
             plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
             plugins/torii-sumo/scripts/evaluate_held_out_review.py \
             plugins/torii-sumo/scripts/run_official_sumo_benchmark.py \
@@ -59,6 +61,7 @@ jobs:
             tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
+            tests/test_held_out_review_v2.py \
             tests/test_held_out_corpus.py \
             tests/test_pedestrian_control_census.py \
             tests/test_pedestrian_row_oracle.py \
@@ -155,6 +158,39 @@ jobs:
           diff --unified \
             schemas/torii.corridor.net-replay-report.v1.schema.json \
             generated.net-replay-report.schema.json
+          python plugins/torii-sumo/scripts/export_held_out_review_v2_schema.py \
+            --reserve-output generated.held-out-reserve-corpus-v2.schema.json \
+            --replacement-policy-output generated.held-out-replacement-policy-v2.schema.json \
+            --replacement-plan-output generated.held-out-replacement-plan-v2.schema.json \
+            --sampling-policy-output generated.review-witness-sampling-policy-v2.schema.json \
+            --parent-output generated.held-out-review-parent-v2.schema.json \
+            --policy-output generated.held-out-review-policy-v2.schema.json \
+            --bundle-output generated.held-out-review-bundle-v2.schema.json \
+            --report-output generated.held-out-review-report-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-reserve-corpus.v2.schema.json \
+            generated.held-out-reserve-corpus-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-replacement-policy.v2.schema.json \
+            generated.held-out-replacement-policy-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-replacement-plan.v2.schema.json \
+            generated.held-out-replacement-plan-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.review-witness-sampling-policy.v2.schema.json \
+            generated.review-witness-sampling-policy-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-review-parent.v2.schema.json \
+            generated.held-out-review-parent-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-review-policy.v2.schema.json \
+            generated.held-out-review-policy-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-review-contract-bundle.v2.schema.json \
+            generated.held-out-review-bundle-v2.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-review-report.v2.schema.json \
+            generated.held-out-review-report-v2.schema.json
           python plugins/torii-sumo/scripts/export_stage1_review_ready_schema.py \
             --program-inventory-output generated.effective-tls-program-inventory.schema.json \
             --binding-census-output generated.controlled-pedestrian-binding-census.schema.json \
@@ -181,6 +217,31 @@ jobs:
           diff --unified \
             benchmarks/corridor_human_modeling_v1/held_out_corpus.v1.json \
             generated.held-out-corpus.json
+          python plugins/torii-sumo/scripts/freeze_held_out_review_v2.py \
+            --reserve-output generated.held-out-reserve-corpus-v2.json \
+            --replacement-policy-output generated.held-out-replacement-policy-v2.json \
+            --sampling-policy-output generated.review-witness-sampling-policy-v2.json \
+            --parent-output generated.held-out-review-parent-v2.json \
+            --review-policy-output generated.held-out-review-policy-v2.json \
+            --replacement-plan-output generated.held-out-replacement-plan-v2.json
+          diff --unified \
+            benchmarks/corridor_human_modeling_v1/held_out_reserve_corpus.v2.json \
+            generated.held-out-reserve-corpus-v2.json
+          diff --unified \
+            benchmarks/corridor_human_modeling_v1/held_out_replacement_policy.v2.json \
+            generated.held-out-replacement-policy-v2.json
+          diff --unified \
+            benchmarks/corridor_human_modeling_v1/review_witness_sampling_policy.v2.json \
+            generated.review-witness-sampling-policy-v2.json
+          diff --unified \
+            benchmarks/corridor_human_modeling_v1/held_out_review_parent.v2.json \
+            generated.held-out-review-parent-v2.json
+          diff --unified \
+            benchmarks/corridor_human_modeling_v1/held_out_review_preregistration.v2.json \
+            generated.held-out-review-policy-v2.json
+          diff --unified \
+            benchmarks/corridor_human_modeling_v1/held_out_replacement_plan.v2.json \
+            generated.held-out-replacement-plan-v2.json
 
       - name: Verify benchmark, toolchain, plan, and fail-closed contracts
         run: |
@@ -188,6 +249,7 @@ jobs:
             tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
+            tests/test_held_out_review_v2.py \
             tests/test_held_out_corpus.py \
             tests/test_pedestrian_control_census.py \
             tests/test_pedestrian_row_oracle.py \
