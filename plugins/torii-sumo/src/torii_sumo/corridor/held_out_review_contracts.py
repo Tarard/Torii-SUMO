@@ -138,7 +138,7 @@ class HeldOutCaseStratum(ContractModel):
         "multimodal",
     ]
     traffic_side: TrafficSide
-    osm_completeness: Literal["high", "medium", "low"]
+    osm_completeness: Literal["high", "medium", "low", "unassessed"]
     mode_features: tuple[str, ...]
     development_set_overlap: Literal[False] = False
 

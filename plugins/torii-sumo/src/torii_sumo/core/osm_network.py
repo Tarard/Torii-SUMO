@@ -466,11 +466,21 @@ REFERENCE_VISUAL_SERVICE_TYPE_XML = """<types xmlns:xsi="http://www.w3.org/2001/
 """
 
 
-def _reference_visual_type_options(root: Path, logs_dir: Path, prefix: str) -> tuple[list[str], list[str]]:
-    sumo_home = os.environ.get("SUMO_HOME", "").strip()
-    if not sumo_home:
+def _reference_visual_type_options(
+    root: Path,
+    logs_dir: Path,
+    prefix: str,
+    *,
+    explicit_sumo_home: Path | None = None,
+) -> tuple[list[str], list[str]]:
+    sumo_home_value = (
+        str(explicit_sumo_home.resolve())
+        if explicit_sumo_home is not None
+        else os.environ.get("SUMO_HOME", "").strip()
+    )
+    if not sumo_home_value:
         return [], ["SUMO_HOME is not set; reference visual service typemap overlay skipped"]
-    typemap_dir = Path(sumo_home) / "data" / "typemap"
+    typemap_dir = Path(sumo_home_value) / "data" / "typemap"
     base_type_files = [typemap_dir / name for name in REFERENCE_VISUAL_SUMO_TYPEMAPS]
     missing = [str(path) for path in base_type_files if not path.exists()]
     if missing:
@@ -510,6 +520,15 @@ def _normalized_netconvert_profile(profile: str | None) -> str:
     return normalized
 
 
+def _traffic_side_options(traffic_side: str) -> tuple[str, list[str]]:
+    normalized = traffic_side.strip().lower().replace("_", "-")
+    if normalized in {"right", "right-hand", "rht"}:
+        return "right", []
+    if normalized in {"left", "left-hand", "lht"}:
+        return "left", ["--lefthand"]
+    raise ValueError("traffic_side must be explicitly 'right' or 'left'")
+
+
 def build_osm_network(
     *,
     bbox: str,
@@ -531,6 +550,9 @@ def build_osm_network(
     include_railway: bool = False,
     allowed_railways: set[str] | None = None,
     netconvert_binary: str = "netconvert",
+    clip_source_ways_to_bbox: bool = True,
+    sumo_home: Path | None = None,
+    traffic_side: str = "right",
 ) -> dict[str, Any]:
     try:
         parsed_bbox = parse_bbox(bbox)
@@ -542,6 +564,9 @@ def build_osm_network(
         )
         profile_options = _netconvert_profile_options(netconvert_profile)
         normalized_profile = _normalized_netconvert_profile(netconvert_profile)
+        normalized_traffic_side, traffic_side_options = _traffic_side_options(
+            traffic_side
+        )
     except ValueError as exc:
         return _failure(str(exc))
 
@@ -589,7 +614,7 @@ def build_osm_network(
             source_osm,
             filtered_osm,
             allowed,
-            bbox=parsed_bbox,
+            bbox=parsed_bbox if clip_source_ways_to_bbox else None,
             allowed_way_ids=allowed_way_ids,
             include_railway=include_railway,
             allowed_railways=allowed_railways,
@@ -600,7 +625,12 @@ def build_osm_network(
             else ["--no-turnarounds"]
         )
         type_options, type_warnings = (
-            _reference_visual_type_options(root, logs_dir, prefix)
+            _reference_visual_type_options(
+                root,
+                logs_dir,
+                prefix,
+                explicit_sumo_home=sumo_home,
+            )
             if normalized_profile in REFERENCE_VISUAL_PROFILES
             else ([], [])
         )
@@ -611,6 +641,7 @@ def build_osm_network(
             "--output-file",
             _relative_to_root(net_file, root),
             "--proj.utm",
+            *traffic_side_options,
             *turnaround_options,
             "--osm.all-attributes",
             "--tls.join",
@@ -632,6 +663,8 @@ def build_osm_network(
                     "allowed_way_ids_count="
                     + ("not_applied" if allowed_way_ids is None else str(len(allowed_way_ids))),
                     f"include_railway={include_railway}",
+                    f"clip_source_ways_to_bbox={clip_source_ways_to_bbox}",
+                    f"traffic_side={normalized_traffic_side}",
                     "allowed_railways="
                     + ("all" if allowed_railways is None else ",".join(sorted(allowed_railways))),
                     f"overpass_strategy={overpass_report['strategy'] if overpass_report else 'source-osm'}",
@@ -675,6 +708,8 @@ def build_osm_network(
         "road_classes": sorted(allowed),
         "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
         "include_railway": include_railway,
+        "clip_source_ways_to_bbox": clip_source_ways_to_bbox,
+        "traffic_side": normalized_traffic_side,
         "allowed_railways": None if allowed_railways is None else sorted(allowed_railways),
         "source_osm_file": str(source_osm),
         "filtered_osm_file": str(filtered_osm),

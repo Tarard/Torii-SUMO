@@ -13,6 +13,11 @@ from .held_out_review_contracts import (
     HeldOutReviewPolicy,
     HeldOutReviewReport,
 )
+from .held_out_corpus_contracts import (
+    HeldOutCorpusMachineReport,
+    HeldOutCorpusSnapshotReport,
+    HeldOutCorpusSpec,
+)
 from .manifest import CorridorResearchBundle
 from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkReport,
@@ -137,6 +142,30 @@ def build_held_out_review_report_schema() -> dict[str, object]:
         HeldOutReviewReport,
         "torii.corridor.held-out-review-report.v1.schema.json",
         status="stage-1-held-out-evidence-contract",
+    )
+
+
+def build_held_out_corpus_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutCorpusSpec,
+        "torii.corridor.held-out-corpus.v1.schema.json",
+        status="stage-1-held-out-corpus-contract",
+    )
+
+
+def build_held_out_corpus_snapshot_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutCorpusSnapshotReport,
+        "torii.corridor.held-out-corpus-snapshot-report.v1.schema.json",
+        status="stage-1-held-out-corpus-evidence-contract",
+    )
+
+
+def build_held_out_corpus_machine_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutCorpusMachineReport,
+        "torii.corridor.held-out-corpus-machine-report.v1.schema.json",
+        status="stage-1-held-out-corpus-machine-evidence-contract",
     )
 
 
