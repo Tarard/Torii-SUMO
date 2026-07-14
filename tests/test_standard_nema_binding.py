@@ -608,6 +608,103 @@ def test_network_connection_mode_audit_replaces_gui_as_automatic_gate(
     assert len(manifest["artifacts"]) == 2
 
 
+def test_internal_path_trace_uses_subgraph_bound_not_fixed_sixteen_hops() -> None:
+    root = ET.Element("net")
+    incoming = ET.SubElement(root, "edge", {"id": "in", "from": "a", "to": "j"})
+    ET.SubElement(
+        incoming,
+        "lane",
+        {
+            "id": "in_0",
+            "index": "0",
+            "allow": "passenger",
+            "shape": "-20,0 0,0",
+        },
+    )
+    outgoing = ET.SubElement(root, "edge", {"id": "out", "from": "j", "to": "b"})
+    ET.SubElement(
+        outgoing,
+        "lane",
+        {
+            "id": "out_0",
+            "index": "0",
+            "allow": "passenger",
+            "shape": "18,0 100,0",
+        },
+    )
+    internal_lane_ids = []
+    for index in range(18):
+        edge_id = f":j_{index}"
+        lane_id = f"{edge_id}_0"
+        internal_lane_ids.append(lane_id)
+        edge = ET.SubElement(root, "edge", {"id": edge_id, "function": "internal"})
+        ET.SubElement(
+            edge,
+            "lane",
+            {
+                "id": lane_id,
+                "index": "0",
+                "allow": "passenger",
+                "shape": f"{index},0 {index + 1},0",
+            },
+        )
+    junction = ET.SubElement(
+        root,
+        "junction",
+        {
+            "id": "j",
+            "type": "priority",
+            "incLanes": "in_0",
+            "intLanes": " ".join(internal_lane_ids),
+        },
+    )
+    ET.SubElement(
+        junction,
+        "request",
+        {"index": "0", "response": "0", "foes": "0", "cont": "0"},
+    )
+    ET.SubElement(
+        root,
+        "connection",
+        {
+            "from": "in",
+            "to": "out",
+            "fromLane": "0",
+            "toLane": "0",
+            "via": internal_lane_ids[0],
+            "dir": "s",
+        },
+    )
+    for index in range(18):
+        attributes = {
+            "from": f":j_{index}",
+            "to": "out",
+            "fromLane": "0",
+            "toLane": "0",
+            "dir": "s",
+        }
+        if index < 17:
+            attributes["via"] = internal_lane_ids[index + 1]
+        ET.SubElement(root, "connection", attributes)
+
+    audit = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+    )
+
+    movement = audit["movement_checks"][0]
+    assert movement["internal_path"]["status"] == "pass"
+    assert movement["internal_path"]["internal_lane_chain_length"] == 18
+    assert movement["internal_path"]["bounded_hop_limit"] == 19
+    assert audit["structural_failures"] == []
+    assert (
+        "connection_mode:internal_path_unusually_long:0:18"
+        in audit["review_findings"]
+    )
+
+
 def test_connection_mode_regression_gate_blocks_new_unconnected_lane(
     tmp_path: Path,
 ) -> None:

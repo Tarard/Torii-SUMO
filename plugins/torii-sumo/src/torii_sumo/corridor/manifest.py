@@ -6,8 +6,11 @@ from pydantic import model_validator
 
 from .base import ContractModel, Sha256, StableToken
 from .candidates import CandidateGraph, Hypothesis
+from .canonicalizer import CanonicalNetworkSnapshot
+from .conflict_graph import IndependentSafetyReport
 from .enums import ArtifactRole, GateStatus
 from .evidence import EvidenceRecord, Finding, InvariantResult
+from .exact_diff import ExactSemanticDiffReport
 from .ids import require_stable_id
 from .review import ReviewCase, ReviewDecision, ReviewTask
 from .scope import ScopeSpec
@@ -18,6 +21,7 @@ from .workflow import NetworkQualityVectorV1, StageOutcome, WorkflowExecution
 class ArtifactIdentity(ContractModel):
     artifact_schema: str
     artifact_id: StableToken
+    logical_name: str
     role: ArtifactRole
     path: str
     sha256: Sha256
@@ -28,6 +32,8 @@ class ArtifactIdentity(ContractModel):
     def validate_artifact(self) -> ArtifactIdentity:
         require_stable_id(self.artifact_id, kind="artifact")
         require_stable_id(self.toolchain_id, kind="toolchain")
+        if not self.logical_name:
+            raise ValueError("Artifacts require a logical_name.")
         if not self.path:
             raise ValueError("Artifacts require a path.")
         return self
@@ -100,6 +106,10 @@ class CorridorResearchBundle(ContractModel):
     schema_id: str = "torii.corridor.research-bundle/v1"
     toolchain: ToolchainLock
     scope: ScopeSpec
+    canonical_source: CanonicalNetworkSnapshot | None = None
+    canonical_candidate: CanonicalNetworkSnapshot | None = None
+    exact_semantic_diff: ExactSemanticDiffReport | None = None
+    independent_safety: IndependentSafetyReport | None = None
     evidence: tuple[EvidenceRecord, ...] = ()
     findings: tuple[Finding, ...] = ()
     hypotheses: tuple[Hypothesis, ...] = ()
