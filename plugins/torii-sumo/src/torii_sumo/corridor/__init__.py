@@ -41,13 +41,17 @@ from .held_out_review_runner import (
     build_blinded_review_artifacts,
     evaluate_held_out_review_trial,
 )
-from .held_out_review_v2 import build_deterministic_replacement_plan_v2
+from .held_out_review_v2 import (
+    build_deterministic_replacement_plan_v2,
+    freeze_replacement_execution_v2,
+)
 from .held_out_review_v2_contracts import (
     AttentionEvaluationKeyV2,
     BlindedAttentionDatasetV2,
     ClusterMachineAssessmentV2,
     ClusterReviewAdjudicationV2,
     ClusterReviewDecisionV2,
+    HeldOutReplacementAttemptLedgerV2,
     HeldOutReplacementPlanV2,
     HeldOutReplacementPolicyV2,
     HeldOutReserveCorpusV2,
@@ -55,6 +59,7 @@ from .held_out_review_v2_contracts import (
     HeldOutReviewPolicyV2,
     HeldOutReviewV2ContractBundle,
     HeldOutReviewV2Report,
+    HeldOutSourceSnapshotProtocolV2,
     ReviewWitnessSamplingPolicyV2,
 )
 from .held_out_review_v2_preregistration import (
@@ -62,6 +67,7 @@ from .held_out_review_v2_preregistration import (
     build_held_out_reserve_corpus_v2,
     build_held_out_review_parent_v2,
     build_held_out_review_policy_v2,
+    build_held_out_source_snapshot_protocol_v2,
     build_review_witness_sampling_policy_v2,
 )
 from .ids import (
@@ -175,12 +181,14 @@ __all__ = [
     "ClusterReviewAdjudicationV2",
     "ClusterReviewDecisionV2",
     "HeldOutReplacementPlanV2",
+    "HeldOutReplacementAttemptLedgerV2",
     "HeldOutReplacementPolicyV2",
     "HeldOutReserveCorpusV2",
     "HeldOutReviewParentV2",
     "HeldOutReviewPolicyV2",
     "HeldOutReviewV2ContractBundle",
     "HeldOutReviewV2Report",
+    "HeldOutSourceSnapshotProtocolV2",
     "Hypothesis",
     "IndependentSafetyReport",
     "NetworkQualityVectorV1",
@@ -226,7 +234,9 @@ __all__ = [
     "build_held_out_reserve_corpus_v2",
     "build_held_out_review_parent_v2",
     "build_held_out_review_policy_v2",
+    "build_held_out_source_snapshot_protocol_v2",
     "build_review_witness_sampling_policy_v2",
+    "freeze_replacement_execution_v2",
     "build_exact_semantic_regression_artifacts",
     "build_connection_mode_calibration_artifact",
     "calibrate_connection_mode_audit",

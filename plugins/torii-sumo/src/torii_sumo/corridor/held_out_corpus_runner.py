@@ -34,6 +34,7 @@ def build_held_out_osm_snapshots(
     *,
     held_out_review_policy_file: Path,
     output_dir: Path,
+    city_extract_cache_dir: Path | None = None,
     only_city_groups: Sequence[str] = (),
     user_agent: str = "Torii-SUMO held-out corridor research",
     timeout_seconds: float = 900.0,
@@ -43,10 +44,11 @@ def build_held_out_osm_snapshots(
     spec_path = spec_file.resolve()
     policy_path = held_out_review_policy_file.resolve()
     destination = output_dir.resolve()
-    spec = HeldOutCorpusSpec.model_validate_json(spec_path.read_text(encoding="utf-8"))
-    policy = HeldOutReviewPolicy.model_validate_json(
-        policy_path.read_text(encoding="utf-8")
+    extract_cache = (
+        city_extract_cache_dir.resolve() if city_extract_cache_dir is not None else destination / "city-extracts"
     )
+    spec = HeldOutCorpusSpec.model_validate_json(spec_path.read_text(encoding="utf-8"))
+    policy = HeldOutReviewPolicy.model_validate_json(policy_path.read_text(encoding="utf-8"))
     if file_sha256(policy_path) != spec.held_out_review_policy_sha256:
         raise ValueError("Held-out corpus policy hash mismatch.")
     if policy.parent_benchmark_sha256 != spec.parent_benchmark_sha256:
@@ -79,32 +81,23 @@ def build_held_out_osm_snapshots(
     if unknown_groups:
         raise ValueError(f"Unknown held-out city groups: {', '.join(unknown_groups)}")
     selected_sources = tuple(
-        source
-        for source in spec.city_extracts
-        if not requested_groups or source.city_group in requested_groups
+        source for source in spec.city_extracts if not requested_groups or source.city_group in requested_groups
     )
     selected_source_ids = {source.source_id for source in selected_sources}
-    selected_cases = tuple(
-        case for case in spec.corridors if case.city_source_id in selected_source_ids
-    )
+    selected_cases = tuple(case for case in spec.corridors if case.city_source_id in selected_source_ids)
     cases_by_source = {
-        source.source_id: tuple(
-            case for case in selected_cases if case.city_source_id == source.source_id
-        )
+        source.source_id: tuple(case for case in selected_cases if case.city_source_id == source.source_id)
         for source in selected_sources
     }
 
     blockers: list[str] = []
     if requested_groups and requested_groups != known_groups:
-        blockers.append(
-            "partial_corpus_run:" + ",".join(sorted(requested_groups))
-        )
+        blockers.append("partial_corpus_run:" + ",".join(sorted(requested_groups)))
     downloads: list[DownloadedCityExtract] = []
     snapshots: list[CroppedCorridorSnapshot] = []
-    extract_dir = destination / "city-extracts"
     corridor_dir = destination / "corridor-osm"
     for source in selected_sources:
-        extract_path = extract_dir / f"{source.source_id}.osm.pbf"
+        extract_path = extract_cache / f"{source.source_id}.osm.pbf"
         try:
             downloaded = download_city_extract(
                 source,
@@ -114,9 +107,7 @@ def build_held_out_osm_snapshots(
             )
             downloads.append(downloaded)
         except (OSError, RuntimeError, ValueError) as exc:
-            blockers.append(
-                f"city_extract_failed:{source.source_id}:{type(exc).__name__}:{exc}"
-            )
+            blockers.append(f"city_extract_failed:{source.source_id}:{type(exc).__name__}:{exc}")
             continue
         try:
             city_snapshots = crop_city_extract(
@@ -127,9 +118,7 @@ def build_held_out_osm_snapshots(
             )
             snapshots.extend(city_snapshots)
         except (OSError, RuntimeError, ValueError) as exc:
-            blockers.append(
-                f"corridor_crop_failed:{source.source_id}:{type(exc).__name__}:{exc}"
-            )
+            blockers.append(f"corridor_crop_failed:{source.source_id}:{type(exc).__name__}:{exc}")
 
     expected_case_ids = {case.selection_id for case in selected_cases}
     observed_case_ids = {case.selection_id for case in snapshots}
@@ -174,9 +163,7 @@ def build_held_out_osm_snapshots(
             "osm_license_url": spec.provider_license_url,
             "artifacts": [
                 {"path": str(path.resolve()), "sha256": file_sha256(path.resolve())}
-                for path in sorted(
-                    set(artifact_paths), key=lambda item: item.as_posix()
-                )
+                for path in sorted(set(artifact_paths), key=lambda item: item.as_posix())
             ],
         },
         sort_keys=True,
@@ -225,9 +212,7 @@ def download_city_extract(
     md5_digest = hashlib.md5(usedforsecurity=False)
     length = 0
     try:
-        with request.urlopen(req, timeout=timeout_seconds) as response, temporary.open(
-            "wb"
-        ) as handle:
+        with request.urlopen(req, timeout=timeout_seconds) as response, temporary.open("wb") as handle:
             observed_last_modified = str(response.headers.get("Last-Modified", ""))
             observed_etag = str(response.headers.get("ETag", ""))
             while True:
@@ -243,8 +228,7 @@ def download_city_extract(
         md5 = md5_digest.hexdigest()
         if md5 != source.provider_md5:
             raise RuntimeError(
-                f"provider MD5 mismatch for {source.source_id}: "
-                f"expected {source.provider_md5}, observed {md5}"
+                f"provider MD5 mismatch for {source.source_id}: expected {source.provider_md5}, observed {md5}"
             )
         if length != source.expected_content_length_bytes:
             raise RuntimeError(
@@ -259,8 +243,7 @@ def download_city_extract(
             )
         if observed_etag != source.expected_etag:
             raise RuntimeError(
-                f"ETag mismatch for {source.source_id}: expected "
-                f"{source.expected_etag!r}, observed {observed_etag!r}"
+                f"ETag mismatch for {source.source_id}: expected {source.expected_etag!r}, observed {observed_etag!r}"
             )
         os.replace(temporary, target)
     finally:
@@ -304,38 +287,27 @@ def crop_city_extract(
     selections_by_id = {case.selection_id: case for case in selections}
     if len(selections_by_id) != len(selections):
         raise ValueError("Corridor crop selections must be unique.")
-    selected_way_ids: dict[str, set[int]] = {
-        case.selection_id: set() for case in selections
-    }
+    selected_way_ids: dict[str, set[int]] = {case.selection_id: set() for case in selections}
     roundabout_way_nodes: dict[int, frozenset[int]] = {}
     for entity in osmium.FileProcessor(source).with_locations():
         if not entity.is_way() or not _is_transport_way(entity):
             continue
         entity_id = int(entity.id)
         if _is_roundabout_way(entity):
-            roundabout_way_nodes[entity_id] = frozenset(
-                int(node.ref) for node in entity.nodes
-            )
+            roundabout_way_nodes[entity_id] = frozenset(int(node.ref) for node in entity.nodes)
         for case in selections:
             if _way_intersects_bbox(entity, case.bbox):
                 selected_way_ids[case.selection_id].add(entity_id)
 
-    roundabout_component_by_way = _roundabout_component_by_way(
-        roundabout_way_nodes
-    )
+    roundabout_component_by_way = _roundabout_component_by_way(roundabout_way_nodes)
     for way_ids in selected_way_ids.values():
         touched_components = {
-            roundabout_component_by_way[way_id]
-            for way_id in way_ids
-            if way_id in roundabout_component_by_way
+            roundabout_component_by_way[way_id] for way_id in way_ids if way_id in roundabout_component_by_way
         }
         for component in touched_components:
             way_ids.update(component)
 
-    output_paths = {
-        case.selection_id: destination / f"{case.corridor_key}.osm.xml"
-        for case in selections
-    }
+    output_paths = {case.selection_id: destination / f"{case.corridor_key}.osm.xml" for case in selections}
     relation_counts = {case.selection_id: 0 for case in selections}
     with ExitStack() as stack:
         writers = {
@@ -357,11 +329,7 @@ def crop_city_extract(
                     if entity_id in way_ids:
                         writers[selection_id].add(entity)
             elif entity.is_relation() and entity.tags.get("type") == "restriction":
-                way_refs = {
-                    int(member.ref)
-                    for member in entity.members
-                    if str(member.type) in {"w", "way"}
-                }
+                way_refs = {int(member.ref) for member in entity.members if str(member.type) in {"w", "way"}}
                 if not way_refs:
                     continue
                 for selection_id, way_ids in selected_way_ids.items():
@@ -377,9 +345,7 @@ def crop_city_extract(
         reference_complete = _osm_xml_is_reference_complete(path)
         feature_counts = _scan_osm_feature_counts(path)
         unconfirmed = tuple(
-            feature
-            for feature in case.preregistered_feature_targets
-            if feature_counts.get(feature, 0) == 0
+            feature for feature in case.preregistered_feature_targets if feature_counts.get(feature, 0) == 0
         )
         if not reference_complete:
             status = GateStatus.BLOCKED
@@ -435,14 +401,9 @@ def _validate_policy_alignment(
             tuple(policy.required_mode_features),
         ),
     }
-    mismatches = [
-        key for key, (left, right) in comparisons.items() if left != right
-    ]
+    mismatches = [key for key, (left, right) in comparisons.items() if left != right]
     if mismatches:
-        raise ValueError(
-            "Held-out corpus contradicts review policy fields: "
-            + ", ".join(mismatches)
-        )
+        raise ValueError("Held-out corpus contradicts review policy fields: " + ", ".join(mismatches))
 
 
 def _hashes_and_size(path: Path) -> tuple[str, str, int]:
@@ -482,11 +443,7 @@ def _roundabout_component_by_way(
         while stack:
             way_id = stack.pop()
             component.add(way_id)
-            neighbors = {
-                neighbor
-                for node_id in roundabout_way_nodes[way_id]
-                for neighbor in node_to_way_ids[node_id]
-            }
+            neighbors = {neighbor for node_id in roundabout_way_nodes[way_id] for neighbor in node_to_way_ids[node_id]}
             for neighbor in sorted(neighbors & unseen, reverse=True):
                 unseen.remove(neighbor)
                 stack.append(neighbor)
@@ -506,10 +463,7 @@ def _way_intersects_bbox(way: Any, bbox: GeographicBbox) -> bool:
             continue
     if any(_point_in_bbox(point, bbox) for point in points):
         return True
-    return any(
-        _segment_intersects_bbox(start, end, bbox)
-        for start, end in zip(points, points[1:])
-    )
+    return any(_segment_intersects_bbox(start, end, bbox) for start, end in zip(points, points[1:]))
 
 
 def _point_in_bbox(point: tuple[float, float], bbox: GeographicBbox) -> bool:
@@ -572,29 +526,20 @@ def _scan_osm_feature_counts(path: Path) -> dict[str, int]:
     counts = {feature: 0 for feature in _FEATURE_NAMES}
     root = ET.parse(path).getroot()
     for element in _osm_tagged_elements(root):
-        tags = {
-            tag.attrib.get("k", ""): tag.attrib.get("v", "")
-            for tag in element.findall("tag")
-        }
+        tags = {tag.attrib.get("k", ""): tag.attrib.get("v", "") for tag in element.findall("tag")}
         highway = tags.get("highway", "")
         if (
             highway in {"footway", "path", "pedestrian", "steps"}
             or highway == "crossing"
             or _truthy(tags.get("sidewalk"))
-            or any(
-                key.startswith("sidewalk:") and _truthy(value)
-                for key, value in tags.items()
-            )
+            or any(key.startswith("sidewalk:") and _truthy(value) for key, value in tags.items())
             or tags.get("foot") in {"yes", "designated", "permissive"}
         ):
             counts["pedestrian"] += 1
         if (
             highway == "cycleway"
             or tags.get("bicycle") in {"yes", "designated", "permissive"}
-            or any(
-                key == "cycleway" or key.startswith("cycleway:")
-                for key in tags
-            )
+            or any(key == "cycleway" or key.startswith("cycleway:") for key in tags)
         ):
             counts["bicycle"] += 1
         if highway.endswith("_link"):

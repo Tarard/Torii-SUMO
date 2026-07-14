@@ -14,6 +14,7 @@ from .held_out_review_contracts import (
     HeldOutReviewReport,
 )
 from .held_out_review_v2_contracts import (
+    HeldOutReplacementAttemptLedgerV2,
     HeldOutReplacementPlanV2,
     HeldOutReplacementPolicyV2,
     HeldOutReserveCorpusV2,
@@ -21,6 +22,7 @@ from .held_out_review_v2_contracts import (
     HeldOutReviewPolicyV2,
     HeldOutReviewV2ContractBundle,
     HeldOutReviewV2Report,
+    HeldOutSourceSnapshotProtocolV2,
     ReviewWitnessSamplingPolicyV2,
 )
 from .held_out_corpus_contracts import (
@@ -56,10 +58,7 @@ from .run_identity import HeldOutMachineRunIdentity
 def build_corridor_schema() -> dict[str, object]:
     schema = CorridorResearchBundle.model_json_schema(by_alias=True)
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-    schema["$id"] = (
-        "https://github.com/Tarard/Torii-SUMO/"
-        "schemas/torii.corridor.research-bundle.v1.schema.json"
-    )
+    schema["$id"] = "https://github.com/Tarard/Torii-SUMO/schemas/torii.corridor.research-bundle.v1.schema.json"
     schema["x-torii-status"] = "frozen-stage-0-contract"
     return schema
 
@@ -189,6 +188,22 @@ def build_held_out_replacement_plan_v2_schema() -> dict[str, object]:
         HeldOutReplacementPlanV2,
         "torii.corridor.held-out-replacement-plan.v2.schema.json",
         status="stage-1m-deterministic-replacement-plan",
+    )
+
+
+def build_held_out_source_snapshot_protocol_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutSourceSnapshotProtocolV2,
+        "torii.corridor.held-out-source-snapshot-protocol.v2.schema.json",
+        status="stage-1m-source-semantic-closure-contract",
+    )
+
+
+def build_held_out_replacement_attempt_ledger_v2_schema() -> dict[str, object]:
+    return _artifact_schema(
+        HeldOutReplacementAttemptLedgerV2,
+        "torii.corridor.held-out-replacement-attempt-ledger.v2.schema.json",
+        status="stage-1m-deterministic-replacement-evidence",
     )
 
 

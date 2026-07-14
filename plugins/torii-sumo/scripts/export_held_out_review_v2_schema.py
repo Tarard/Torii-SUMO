@@ -14,6 +14,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from torii_sumo.core.artifact_io import write_json_atomic  # noqa: E402
 from torii_sumo.corridor.schema import (  # noqa: E402
+    build_held_out_replacement_attempt_ledger_v2_schema,
     build_held_out_replacement_plan_v2_schema,
     build_held_out_replacement_policy_v2_schema,
     build_held_out_reserve_corpus_v2_schema,
@@ -21,6 +22,7 @@ from torii_sumo.corridor.schema import (  # noqa: E402
     build_held_out_review_policy_v2_schema,
     build_held_out_review_v2_contract_bundle_schema,
     build_held_out_review_v2_report_schema,
+    build_held_out_source_snapshot_protocol_v2_schema,
     build_review_witness_sampling_policy_v2_schema,
 )
 
@@ -29,9 +31,7 @@ SCHEMA_DIR = REPOSITORY_ROOT / "schemas"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Export Torii Stage 1-M held-out review v2 schemas."
-    )
+    parser = argparse.ArgumentParser(description="Export Torii Stage 1-M held-out review v2 schemas.")
     outputs = (
         (
             "reserve",
@@ -47,6 +47,16 @@ def main() -> None:
             "replacement-plan",
             "torii.corridor.held-out-replacement-plan.v2.schema.json",
             build_held_out_replacement_plan_v2_schema,
+        ),
+        (
+            "source-snapshot-protocol",
+            "torii.corridor.held-out-source-snapshot-protocol.v2.schema.json",
+            build_held_out_source_snapshot_protocol_v2_schema,
+        ),
+        (
+            "replacement-attempt-ledger",
+            "torii.corridor.held-out-replacement-attempt-ledger.v2.schema.json",
+            build_held_out_replacement_attempt_ledger_v2_schema,
         ),
         (
             "sampling-policy",

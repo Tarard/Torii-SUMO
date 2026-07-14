@@ -23,10 +23,7 @@ BENCHMARK_DIR = REPOSITORY_ROOT / "benchmarks" / "corridor_human_modeling_v1"
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Build hash-pinned, reference-complete OSM snapshots for the Torii "
-            "real-corridor held-out corpus."
-        )
+        description=("Build hash-pinned, reference-complete OSM snapshots for the Torii real-corridor held-out corpus.")
     )
     parser.add_argument(
         "--spec",
@@ -40,6 +37,14 @@ def main() -> None:
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--city-extract-cache-dir",
+        type=Path,
+        help=(
+            "Reuse provider-verified frozen city PBFs from this directory while "
+            "writing new corridor snapshots to --output-dir."
+        ),
+    )
+    parser.add_argument(
         "--only-city",
         action="append",
         default=[],
@@ -51,6 +56,7 @@ def main() -> None:
         args.spec,
         held_out_review_policy_file=args.policy,
         output_dir=args.output_dir,
+        city_extract_cache_dir=args.city_extract_cache_dir,
         only_city_groups=tuple(args.only_city),
         timeout_seconds=args.timeout_seconds,
     )
@@ -60,9 +66,7 @@ def main() -> None:
                 "status": report["status"],
                 "city_extract_count": len(report["city_extracts"]),
                 "corridor_count": len(report["corridors"]),
-                "review_corridor_count": sum(
-                    item["status"] == "review" for item in report["corridors"]
-                ),
+                "review_corridor_count": sum(item["status"] == "review" for item in report["corridors"]),
                 "blockers": report["blockers"],
                 "report_file": report["report_file"],
                 "manifest_file": report["manifest_file"],

@@ -1,0 +1,12 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "closed_restriction_relations_only": true,
+  "disconnected_roundabout_components_excluded": true,
+  "frozen_v1_snapshots_rewritten": false,
+  "protocol_id": "policy_f4f8a371a9aff042f0fa71d9",
+  "reference_complete_writer": true,
+  "referenced_node_tags_retained": true,
+  "roundabout_component_connectivity": "shared-osm-node",
+  "schema": "torii.corridor.held-out-source-snapshot-protocol/v2",
+  "touched_roundabout_component_closure": true
+}

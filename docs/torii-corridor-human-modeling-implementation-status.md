@@ -15,7 +15,7 @@ Stage 1-H 的两名独立审核者、第三名 adjudicator 和预注册统计门
 | 阶段 | 状态 | 当前证据或阻断项 |
 |---|---|---|
 | 0. 规范冻结 | 架构完成；当前合同层本地全绿 | schema、稳定语义 ID、工具链、manifest 和 source/candidate 身份已冻结；schema 确定性重生成故障已修复。最终 Stage 1-M provenance 仍须绑定后续 clean producer commit 与对应远端 CI。 |
-| 1-M. Machine REVIEW_READY | 进行中 | Paris 两个 coverage-gap 已稳定实体化；PCB-453 完成 453/453 census；RWC-1 无损覆盖 88,423 个 witness；ROW-1 的 15-case 开发实验通过；v2 attention/safe-pass、reserve、replacement 和 sampling 合同已冻结。仍缺三个 replacement 的实际运行、至少 30 个完整 v2 盲化 package，以及绑定最终 clean commit 的权威 provenance。所有 promotion blocked。 |
+| 1-M. Machine REVIEW_READY | 进行中 | Paris 两个 coverage-gap 已稳定实体化；PCB-453 完成 453/453 census；RWC-1 无损覆盖 88,423 个 witness；ROW-1 的 15-case 开发实验通过；v2 attention/safe-pass、reserve、replacement、source-snapshot 和 sampling 合同已冻结。三个 replacement slot 已按技术 gate 顺序关闭并形成 30-case effective corpus；仍缺该 effective corpus 的全量同协议快照、完整 v2 盲化 package，以及绑定最终 clean commit 的权威 provenance。所有 promotion blocked。 |
 | 1-H. Human Validation | 未开始 | 必须由两名真实审核者独立作答，第三人 adjudication，并通过预注册统计门；机器不能代填。 |
 | 2. 认证 micro-repair | 认证暂停；development-only 可并行 | 合成/官方场景的开发研究允许在隔离语料继续；不得使用 Stage 1 blinded held-out 调参或宣称编辑类型已认证。 |
 | 3. Physical-cell hypotheses | 未完成 | split/shared-controller、merge、partial 三假设尚未完成统一 held-out 比较。 |
@@ -41,7 +41,8 @@ Stage 1-H 的两名独立审核者、第三名 adjudicator 和预注册统计门
 - future safe-pass cohort 只接受前瞻性、连续的 machine-acceptable 样本；至少 600 个样本，AutoPrecision 点估计和 95% 单侧 Wilson 下界均须达到 0.99。
 - `london-kings-cross`、`melbourne-royal-parade`、`sydney-cross-city-tunnel` 只进入 reproducibility census。
 - 三个 replacement slot 各有三个预先冻结候选，并按公开 seed 与 stable selection ID 的 SHA-256 排序；机器标签、finding 数量/严重性和人工可见性不得参与选择。
-- 当前 rank-1 分别为 `london-liverpool-street`、`melbourne-st-kilda-domain` 和 `sydney-eastern-distributor-surry-hills`；尚未宣称它们已通过 replay 或已形成完整审核包。
+- 最终技术选择为 London rank-1 `london-liverpool-street`、Melbourne rank-2 `melbourne-dandenong-orrong`、Sydney rank-3 `sydney-m5-east-kingsgrove`。Melbourne rank-1 及 Sydney rank-1/rank-2 的 normalized semantic replay failure 均保留；机器标签、finding 数量/严重性和人工可见性未参与选择。
+- 原 bbox-only 裁剪下的尝试保留为 superseded execution；新 trial 输入使用 `held_out_source_snapshot_protocol.v2.json`，并以 `held_out_replacement_attempt_ledger.v2.json` 绑定 clean producer、source snapshot、run identity、machine report、net replay 和 manifest 哈希。
 - 完整协议见 [`held-out-corridor-blind-review-protocol-v2.md`](held-out-corridor-blind-review-protocol-v2.md)。
 
 全量快照物化证据：
@@ -304,13 +305,9 @@ Berlin Alexanderplatz 还暴露了一个审核口径错误：79 个旧
 
 ## 最近的硬阻断项
 
-1. 已有 provenance v3 绑定旧 producer `be15f6e…`；仍需生成绑定 Stage 1-M 新合同、精确 clean producer/tree、工具链和完整 artifact DAG 的权威 provenance，且不得覆盖旧 artifact。
-2. Paris Porte Maillot 的两个 crossing 已有稳定 review subject 和精确位置，但尚未升级为完整 `PedestrianCoverageGap` 实体；它们当前是 safety coverage blocker，不是已证明 structural defect。
-3. 453 个受控行人 finding 尚未按 ordinary missing、external program、runtime special、invalid link、scope incomplete、stale/ambiguous 和 unsupported form 完成全量 census。
-4. 34,493 个 confirmed 与 53,930 个 potential witness 尚未进入 100% membership、无重复/丢失、带 inclusion probability 的无损 cluster ledger。
-5. v1 trial 只有 27 个完整 case 且无 machine acceptable，结构上无法同时满足 30-case 与 AutoPrecision 门；v1 必须冻结为 pilot，不能放宽阈值。
-6. v2 attention cohort、prospective safe-pass cohort、三个确定性 replacement、cluster decision schema 和抽样统计尚未冻结。
-7. ROW-1 尚未证明 source evidence、geometry、model claim 和 runtime behavior 四条证据通道相互独立。
-8. Stage 1-H 尚无两名真实独立审核者、第三名 adjudicator 或任何可报告的 precision、recall、kappa、AutoPrecision、AutoCoverage 和 review time。
+1. 仍需用最终 effective corpus 和同一 source-snapshot v2 协议重建 30/30 snapshot，在最终 clean producer 上完成全量机器证据，并生成绑定 producer/tree、工具链、全部输入输出哈希及 artifact DAG 的新权威 provenance；不得覆盖旧 artifact。
+2. 仍需把 30 个有效 corridor package 物化成 v2 finding-cluster/negative-unit 盲审数据集和受限 unblinding key，并证明 reviewer-visible 材料不泄露 machine label 或 hidden-member role。
+3. v1 trial 只有 27 个完整 case 且无 machine acceptable，结构上无法同时满足 30-case 与 AutoPrecision 门；v1 必须冻结为 pilot，不能放宽阈值。
+4. Stage 1-H 尚无两名真实独立审核者、第三名 adjudicator 或任何可报告的 precision、recall、kappa、AutoPrecision、AutoCoverage 和 review time。
 
-上述机器侧第 1–7 项关闭后只能得到 Stage 1-M `REVIEW_READY`；只有第 8 项按预注册门完成，Stage 1 才能退出。所有自动晋级继续保持 blocked。
+上述机器侧第 1–2 项关闭后只能得到 Stage 1-M `REVIEW_READY`；只有第 4 项按预注册门完成，Stage 1 才能退出。所有自动晋级继续保持 blocked。
