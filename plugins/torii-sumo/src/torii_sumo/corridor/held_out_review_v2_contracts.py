@@ -783,3 +783,298 @@ class HeldOutReviewV2ContractBundle(ContractModel):
     decisions: tuple[ClusterReviewDecisionV2, ...] = ()
     adjudications: tuple[ClusterReviewAdjudicationV2, ...] = ()
     report: HeldOutReviewV2Report | None = None
+
+
+class ReviewStudySamplingPolicyV2R2(ContractModel):
+    schema_id: str = "torii.corridor.review-study-sampling-policy/v2-r2"
+    policy_id: StableToken
+    parent_sampling_policy_sha256: Sha256
+    review_unit: Literal["pedestrian-conflict-site"] = "pedestrian-conflict-site"
+    conflict_site_stratum_fields: tuple[str, ...] = (
+        "certainty-profile",
+        "grade-risk-profile",
+    )
+    target_conflict_sites_per_corridor: Literal[8] = 8
+    target_negative_pairs_per_corridor: Literal[4] = 4
+    controlled_binding_hard_classes_census: tuple[str, ...] = (
+        "ordinary-program-truly-absent",
+        "program-present-link-invalid",
+    )
+    pedestrian_coverage_gaps_census: Literal[True] = True
+    atomic_witness_machine_census_required: Literal[True] = True
+    rare_hard_ood_machine_census_required: Literal[True] = True
+    unknown_control_population_must_be_retained: Literal[True] = True
+    unknown_control_does_not_force_human_member_census: Literal[True] = True
+    unselected_population_remains_unresolved: Literal[True] = True
+    site_sampling_algorithm: Literal["sha256-stratified-with-minimum-one-per-observed-stratum"] = (
+        "sha256-stratified-with-minimum-one-per-observed-stratum"
+    )
+    negative_sampling_algorithm: Literal["sha256-round-robin-over-existing-negative-strata"] = (
+        "sha256-round-robin-over-existing-negative-strata"
+    )
+    inclusion_probability_required: Literal[True] = True
+    estimator: Literal["horvitz-thompson"] = "horvitz-thompson"
+    automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
+
+    def identity_payload(self) -> dict[str, object]:
+        return self.model_dump(mode="json", by_alias=True, exclude={"policy_id"})
+
+    @model_validator(mode="after")
+    def validate_policy(self) -> ReviewStudySamplingPolicyV2R2:
+        require_stable_id(self.policy_id, kind="policy")
+        if self.automatic_promotion_gate is not GateStatus.BLOCKED:
+            raise ValueError("Study sampling cannot authorize promotion.")
+        if self.policy_id != stable_id("policy", self.identity_payload()):
+            raise ValueError("Study sampling policy ID does not match content.")
+        return self
+
+
+class HeldOutReviewExecutionParentV2R2(ContractModel):
+    schema_id: str = "torii.corridor.held-out-review-execution-parent/v2-r2"
+    parent_id: StableToken
+    base_review_parent_sha256: Sha256
+    base_review_policy_sha256: Sha256
+    effective_corpus_sha256: Sha256
+    replacement_attempt_ledger_sha256: Sha256
+    source_snapshot_protocol_sha256: Sha256
+    snapshot_report_sha256: Sha256
+    snapshot_manifest_sha256: Sha256
+    machine_run_identity_sha256: Sha256
+    machine_report_sha256: Sha256
+    machine_manifest_sha256: Sha256
+    producer: CodeProducerIdentity
+    valid_corridor_package_count: Literal[30] = 30
+    pipeline_pass_count: Literal[30] = 30
+    semantic_replay_pass_count: Literal[30] = 30
+    machine_assessments_frozen: Literal[True] = True
+    human_decisions_present: Literal[False] = False
+    review_ready_is_not_stage1_exit: Literal[True] = True
+    automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
+
+    def identity_payload(self) -> dict[str, object]:
+        return self.model_dump(mode="json", by_alias=True, exclude={"parent_id"})
+
+    @model_validator(mode="after")
+    def validate_parent(self) -> HeldOutReviewExecutionParentV2R2:
+        require_stable_id(self.parent_id, kind="manifest")
+        if self.automatic_promotion_gate is not GateStatus.BLOCKED:
+            raise ValueError("Review execution parents cannot authorize promotion.")
+        if self.parent_id != stable_id("manifest", self.identity_payload()):
+            raise ValueError("Review execution parent ID does not match evidence.")
+        return self
+
+
+class HeldOutReviewTrialInstanceV2R2(ContractModel):
+    schema_id: str = "torii.corridor.held-out-review-trial-instance/v2-r2"
+    trial_id: StableToken
+    base_review_policy_sha256: Sha256
+    execution_parent_sha256: Sha256
+    study_sampling_policy_sha256: Sha256
+    blinding_seed_sha256: Sha256
+    predecessor_trial_id: StableToken
+    successor_reason: Literal["predecessor-seed-preimage-unavailable-and-source-protocol-corrected"]
+    predecessor_trial_executed: Literal[False] = False
+    thresholds_inherited_without_change: Literal[True] = True
+    seed_generated_once_before_sampling: Literal[True] = True
+    sampling_not_executed_before_freeze: Literal[True] = True
+    machine_labels_consulted_for_sampling: Literal[False] = False
+    finding_counts_consulted_for_sampling: Literal[False] = False
+    human_decisions_present: Literal[False] = False
+    stage_1m_machine_milestone_only: Literal[True] = True
+    stage_1_exit_requires_human_validation: Literal[True] = True
+    automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
+
+    def identity_payload(self) -> dict[str, object]:
+        return self.model_dump(mode="json", by_alias=True, exclude={"trial_id"})
+
+    @model_validator(mode="after")
+    def validate_trial(self) -> HeldOutReviewTrialInstanceV2R2:
+        require_stable_id(self.trial_id, kind="review")
+        require_stable_id(self.predecessor_trial_id, kind="review")
+        if self.automatic_promotion_gate is not GateStatus.BLOCKED:
+            raise ValueError("Review trial instances cannot authorize promotion.")
+        if self.trial_id != stable_id("review", self.identity_payload()):
+            raise ValueError("Review trial instance ID does not match content.")
+        return self
+
+
+ReviewUnitKindV2R2 = Literal[
+    "conflict-site",
+    "negative-pair",
+    "controlled-binding",
+    "pedestrian-coverage-gap",
+]
+
+
+class BlindedReviewUnitV2R2(ContractModel):
+    unit_code: str = Field(pattern=r"^unit-[0-9a-f]{12}$")
+    unit_kind: ReviewUnitKindV2R2
+    witness_codes: tuple[str, ...]
+    exact_question: str
+    required_observations: tuple[str, ...]
+    evidence_path: str
+    inclusion_probability: float = Field(gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_unit(self) -> BlindedReviewUnitV2R2:
+        if (
+            not self.witness_codes
+            or len(self.witness_codes) != len(set(self.witness_codes))
+            or any(not code.startswith("witness-") or len(code) != 20 for code in self.witness_codes)
+        ):
+            raise ValueError("Blinded review units require unique witness codes.")
+        if not self.exact_question or not self.required_observations:
+            raise ValueError("Blinded review units require a question and observations.")
+        _require_safe_relative_path(self.evidence_path)
+        return self
+
+
+class BlindedAttentionCaseV2R2(ContractModel):
+    case_code: str = Field(pattern=r"^case-[0-9a-f]{12}$")
+    city_group: str
+    morphology: Morphology
+    traffic_side: TrafficSide
+    mode_features: tuple[str, ...]
+    review_material_path: str
+    units: tuple[BlindedReviewUnitV2R2, ...]
+
+    @model_validator(mode="after")
+    def validate_case(self) -> BlindedAttentionCaseV2R2:
+        if self.traffic_side is TrafficSide.UNKNOWN:
+            raise ValueError("Blinded attention cases require a traffic side.")
+        if not self.city_group or not self.mode_features or not self.units:
+            raise ValueError("Blinded attention cases require strata and units.")
+        codes = [unit.unit_code for unit in self.units]
+        if len(codes) != len(set(codes)):
+            raise ValueError("Blinded unit codes must be unique per case.")
+        _require_safe_relative_path(self.review_material_path)
+        return self
+
+
+class BlindedAttentionDatasetV2R2(ContractModel):
+    schema_id: str = "torii.corridor.blinded-attention-dataset/v2-r2"
+    trial_id: StableToken
+    created_at: datetime
+    machine_labels_hidden: Literal[True] = True
+    peer_decisions_hidden: Literal[True] = True
+    hidden_member_roles_hidden: Literal[True] = True
+    cases: tuple[BlindedAttentionCaseV2R2, ...]
+
+    @model_validator(mode="after")
+    def validate_dataset(self) -> BlindedAttentionDatasetV2R2:
+        require_stable_id(self.trial_id, kind="review")
+        if self.created_at.tzinfo is None:
+            raise ValueError("Blinded datasets require a timezone.")
+        case_codes = [case.case_code for case in self.cases]
+        unit_codes = [unit.unit_code for case in self.cases for unit in case.units]
+        if len(self.cases) != 30 or len(case_codes) != len(set(case_codes)):
+            raise ValueError("V2-R2 datasets require 30 unique corridor packages.")
+        if len(unit_codes) != len(set(unit_codes)):
+            raise ValueError("Blinded unit codes must be globally unique.")
+        return self
+
+
+class ReviewUnitMachineAssessmentV2R2(ContractModel):
+    review_unit_id: StableToken
+    unit_kind: ReviewUnitKindV2R2
+    machine_attention: bool
+    safety_critical: bool
+    inclusion_probability: float = Field(gt=0.0, le=1.0)
+    membership_root: Sha256
+    evidence_artifact_sha256: Sha256
+    finding_categories: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def validate_assessment(self) -> ReviewUnitMachineAssessmentV2R2:
+        require_stable_id(self.review_unit_id, kind="review")
+        if self.machine_attention != (self.unit_kind != "negative-pair"):
+            raise ValueError("Machine attention contradicts the review-unit kind.")
+        return self
+
+
+class ReviewUnitUnblindingKeyV2R2(ContractModel):
+    case_code: str = Field(pattern=r"^case-[0-9a-f]{12}$")
+    unit_code: str = Field(pattern=r"^unit-[0-9a-f]{12}$")
+    review_unit_id: StableToken
+    evidence_id_by_witness_code: dict[str, StableToken]
+    hidden_witness_code: str | None
+    machine_assessment: ReviewUnitMachineAssessmentV2R2
+    machine_assessment_artifact_path: str
+    machine_assessment_artifact_sha256: Sha256
+
+    @model_validator(mode="after")
+    def validate_key(self) -> ReviewUnitUnblindingKeyV2R2:
+        require_stable_id(self.review_unit_id, kind="review")
+        if self.machine_assessment.review_unit_id != self.review_unit_id:
+            raise ValueError("Unit key and machine assessment identities differ.")
+        if not self.evidence_id_by_witness_code:
+            raise ValueError("Unit keys require evidence mappings.")
+        for code in self.evidence_id_by_witness_code:
+            if not code.startswith("witness-") or len(code) != 20:
+                raise ValueError("Invalid witness code in unit key.")
+        if self.hidden_witness_code is not None and self.hidden_witness_code not in self.evidence_id_by_witness_code:
+            raise ValueError("Hidden witness code is absent from the unit key.")
+        _require_safe_relative_path(self.machine_assessment_artifact_path)
+        return self
+
+
+class AttentionEvaluationKeyV2R2(ContractModel):
+    schema_id: str = "torii.corridor.attention-evaluation-key/v2-r2"
+    trial_id: StableToken
+    blinded_dataset_sha256: Sha256
+    blinding_seed: str = Field(min_length=32)
+    units: tuple[ReviewUnitUnblindingKeyV2R2, ...]
+
+    @model_validator(mode="after")
+    def validate_key(self) -> AttentionEvaluationKeyV2R2:
+        require_stable_id(self.trial_id, kind="review")
+        codes = [unit.unit_code for unit in self.units]
+        if not codes or len(codes) != len(set(codes)):
+            raise ValueError("Evaluation unit codes must be unique.")
+        return self
+
+
+class ReviewPackageArtifactV2R2(ContractModel):
+    path: str
+    sha256: Sha256
+    visibility: Literal["reviewer-visible", "restricted"]
+
+    @model_validator(mode="after")
+    def validate_artifact(self) -> ReviewPackageArtifactV2R2:
+        _require_safe_relative_path(self.path)
+        return self
+
+
+class HeldOutReviewPackageManifestV2R2(ContractModel):
+    schema_id: str = "torii.corridor.held-out-review-package-manifest/v2-r2"
+    trial_id: StableToken
+    dataset_path: str
+    dataset_sha256: Sha256
+    evaluation_key_path: str
+    evaluation_key_sha256: Sha256
+    reviewer_visible_machine_label_count: Literal[0] = 0
+    reviewer_visible_hidden_role_count: Literal[0] = 0
+    artifacts: tuple[ReviewPackageArtifactV2R2, ...]
+    automatic_promotion_gate: GateStatus = GateStatus.BLOCKED
+
+    @model_validator(mode="after")
+    def validate_manifest(self) -> HeldOutReviewPackageManifestV2R2:
+        require_stable_id(self.trial_id, kind="review")
+        _require_safe_relative_path(self.dataset_path)
+        _require_safe_relative_path(self.evaluation_key_path)
+        by_path = {item.path: item.sha256 for item in self.artifacts}
+        if len(by_path) != len(self.artifacts):
+            raise ValueError("Review package artifact paths must be unique.")
+        if by_path.get(self.dataset_path) != self.dataset_sha256:
+            raise ValueError("Review package does not bind its dataset.")
+        if by_path.get(self.evaluation_key_path) != self.evaluation_key_sha256:
+            raise ValueError("Review package does not bind its evaluation key.")
+        if self.automatic_promotion_gate is not GateStatus.BLOCKED:
+            raise ValueError("Review packages cannot authorize promotion.")
+        return self
+
+
+def _require_safe_relative_path(value: str) -> None:
+    normalized = value.replace("\\", "/")
+    if not normalized or normalized.startswith("/") or ".." in normalized.split("/"):
+        raise ValueError("Artifact paths must be safe and relative.")
