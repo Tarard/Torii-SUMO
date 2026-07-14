@@ -40,9 +40,12 @@ jobs:
           ruff check \
             plugins/torii-sumo/src/torii_sumo/corridor \
             plugins/torii-sumo/scripts/export_corridor_schema.py \
+            plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
+            plugins/torii-sumo/scripts/run_official_sumo_benchmark.py \
             plugins/torii-sumo/scripts/run_synthetic_fault_benchmark.py \
-            tests/test_corridor_stage0_contracts.py
+            tests/test_corridor_stage0_contracts.py \
+            tests/test_official_sumo_benchmark.py
 
       - name: Verify schema regeneration is deterministic
         run: |
@@ -60,7 +63,19 @@ jobs:
           diff --unified \
             schemas/torii.corridor.synthetic-fault-benchmark-report.v1.schema.json \
             generated.synthetic-benchmark-report.schema.json
+          python plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
+            --spec-output generated.official-sumo-benchmark.schema.json \
+            --report-output generated.official-sumo-benchmark-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.official-sumo-benchmark.v1.schema.json \
+            generated.official-sumo-benchmark.schema.json
+          diff --unified \
+            schemas/torii.corridor.official-sumo-benchmark-report.v1.schema.json \
+            generated.official-sumo-benchmark-report.schema.json
 
       - name: Verify benchmark, toolchain, plan, and fail-closed contracts
         run: |
-          pytest tests/test_corridor_stage0_contracts.py -q
+          pytest \
+            tests/test_corridor_stage0_contracts.py \
+            tests/test_official_sumo_benchmark.py \
+            -q

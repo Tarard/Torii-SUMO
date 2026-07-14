@@ -39,6 +39,7 @@ class MovementConflictGraph(ContractModel):
     movement_ids: tuple[StableToken, ...]
     conflicts: tuple[MovementConflict, ...]
     geometry_missing_movement_ids: tuple[StableToken, ...] = ()
+    geometry_unavailable_by_design_movement_ids: tuple[StableToken, ...] = ()
 
     def conflict_index(self) -> dict[frozenset[str], MovementConflict]:
         return {
@@ -97,10 +98,14 @@ def build_movement_conflict_graph(
     }
     geometries: dict[str, _MovementGeometry] = {}
     missing: list[str] = []
+    unavailable_by_design: list[str] = []
     for movement_id, movement in movement_entities.items():
         geometry = _movement_geometry(movement, entities)
         if geometry is None:
-            missing.append(movement_id)
+            if _movement_path_status(movement, entities) == "no-internal-links":
+                unavailable_by_design.append(movement_id)
+            else:
+                missing.append(movement_id)
         else:
             geometries[movement_id] = geometry
     conflicts: list[MovementConflict] = []
@@ -138,6 +143,9 @@ def build_movement_conflict_graph(
         movement_ids=tuple(sorted(movement_entities)),
         conflicts=tuple(conflicts),
         geometry_missing_movement_ids=tuple(sorted(missing)),
+        geometry_unavailable_by_design_movement_ids=tuple(
+            sorted(unavailable_by_design)
+        ),
     )
 
 
@@ -348,15 +356,11 @@ def audit_independent_movement_safety(
                         potential_signal_conflict_count += 1
                     finding = build_finding(
                         category=(
-                            "permissive_conflict_without_independent_yield_evidence"
+                            "permissive_conflict_requires_independent_yield_review"
                             if confirmed
                             else "permissive_potential_envelope_conflict_requires_review"
                         ),
-                        severity=(
-                            FindingSeverity.SAFETY
-                            if confirmed
-                            else FindingSeverity.REVIEW
-                        ),
+                        severity=FindingSeverity.REVIEW,
                         subject_id=program.stable_entity_id,
                         witness={
                             "phase_index": phase_index,
@@ -378,6 +382,22 @@ def audit_independent_movement_safety(
             ),
             witness={
                 "movement_ids": graph.geometry_missing_movement_ids,
+            },
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
+    if graph.geometry_unavailable_by_design_movement_ids:
+        limitation = "movement_geometry_unavailable_no_internal_links"
+        limitations.append(limitation)
+        finding = build_finding(
+            category=limitation,
+            severity=FindingSeverity.REVIEW,
+            subject_id=stable_id(
+                "manifest",
+                {"canonical_snapshot": snapshot.source_sha256 or "in-memory"},
+            ),
+            witness={
+                "movement_ids": graph.geometry_unavailable_by_design_movement_ids,
             },
             confidence=1.0,
         )
@@ -535,6 +555,21 @@ def _movement_geometry(
             first_variant.get("destination_lane_role_id", "")
         ),
     )
+
+
+def _movement_path_status(
+    movement: CanonicalEntity,
+    entities: dict[tuple[str, str], CanonicalEntity],
+) -> str:
+    path_id = str(movement.payload.get("internal_path_id", ""))
+    path_entity = entities.get(("internal_path", path_id))
+    if path_entity is None:
+        return "missing"
+    statuses = {
+        str(path_variant.get("path", {}).get("status", "missing"))
+        for path_variant in path_entity.payload.get("path_variants", ())
+    }
+    return statuses.pop() if len(statuses) == 1 else "mixed"
 
 
 def _geometry_conflict(

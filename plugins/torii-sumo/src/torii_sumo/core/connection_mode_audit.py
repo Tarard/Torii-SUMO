@@ -131,6 +131,7 @@ def build_connection_mode_catalog(root: ET.Element) -> dict[str, Any]:
     return {
         "edges": edges,
         "connections": connections,
+        "internal_link_mode": _infer_internal_link_mode(edges, connections),
         "junctions": {
             junction.attrib["id"]: junction
             for junction in root.findall("junction")
@@ -697,6 +698,7 @@ def audit_network_connection_mode(
         "claim_status": "verified" if status == "pass" else "diagnostic-demo",
         "automatic_promotion_gate": "pass" if status == "pass" else "blocked",
         "audit_engine": "static_net_xml_connection_graph",
+        "internal_link_mode": catalog["internal_link_mode"],
         "traffic_side": effective_traffic_side,
         "traffic_side_contract": traffic_side_contract,
         "configuration_failures": configuration_failures,
@@ -927,6 +929,7 @@ def audit_standard_connection_mode(
             lane_catalog=lane_catalog,
             lanes_by_edge=lanes_by_edge,
             endpoint_tolerance_m=endpoint_tolerance_m,
+            internal_link_mode=str(prepared["internal_link_mode"]),
         )
         check["internal_path"] = trace
         if trace.get("unusually_long"):
@@ -1311,6 +1314,18 @@ def _audit_network_tls_link_bindings(
             continue
         controlled_connection_count += 1
         controller_connections[controller_id].append(connection_index)
+        logics = logics_by_id.get(controller_id, ())
+        owner_id = connection_owner.get(connection_index, "")
+        owner = catalog["junctions"].get(owner_id)
+        runtime_managed_rail = bool(
+            owner is not None
+            and owner.attrib.get("type", "") in {"rail_crossing", "rail_signal"}
+            and not logics
+        )
+        if runtime_managed_rail:
+            runtime_managed_rail_connection_count += 1
+            runtime_managed_rail_controllers.add(controller_id)
+            continue
         raw_link_index = connection.attrib.get("linkIndex")
         link_index = _as_int(raw_link_index)
         if link_index is None or link_index < 0:
@@ -1335,17 +1350,7 @@ def _audit_network_tls_link_bindings(
                 link_indices.append(link_index2)
                 controller_link_indices[controller_id].add(link_index2)
 
-        logics = logics_by_id.get(controller_id, ())
         if not logics:
-            owner_id = connection_owner.get(connection_index, "")
-            owner = catalog["junctions"].get(owner_id)
-            if owner is not None and owner.attrib.get("type", "") in {
-                "rail_crossing",
-                "rail_signal",
-            }:
-                runtime_managed_rail_connection_count += 1
-                runtime_managed_rail_controllers.add(controller_id)
-                continue
             add_failure(
                 f"controller_logic_missing:{connection_index}:{controller_id}",
                 connection_index=connection_index,
@@ -1831,6 +1836,7 @@ def _trace_internal_path(
     lane_catalog: Mapping[str, Mapping[str, Any]],
     lanes_by_edge: Mapping[str, Mapping[int, Mapping[str, Any]]],
     endpoint_tolerance_m: float,
+    internal_link_mode: str,
 ) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
     via_lane_id = connection.attrib.get("via", "")
@@ -1852,6 +1858,17 @@ def _trace_internal_path(
         target_edge = edges.get(str(target_lane.get("edge_id", ""))) if target_lane else None
         source_function = source_edge.attrib.get("function", "") if source_edge is not None else ""
         target_function = target_edge.attrib.get("function", "") if target_edge is not None else ""
+        if (
+            internal_link_mode == "no-internal-links"
+            and source_edge is not None
+            and target_edge is not None
+            and not source_edge.attrib.get("id", "").startswith(":")
+            and not target_edge.attrib.get("id", "").startswith(":")
+        ):
+            trace["path_kind"] = "direct_no_internal_links"
+            trace["endpoint_gap_policy"] = "not_available_in_network_mode"
+            trace["status"] = "pass"
+            return trace, failures
         if source_function == "walkingarea" and target_function == "crossing":
             source_shape = list(source_lane.get("shape", [])) if source_lane else []
             target_shape = list(target_lane.get("shape", [])) if target_lane else []
@@ -1994,6 +2011,38 @@ def _trace_internal_path(
     trace["unusually_long"] = len(trace["internal_lane_chain"]) > 16
     trace["status"] = "pass" if not failures else "fail"
     return trace, failures
+
+
+def _infer_internal_link_mode(
+    edges: Mapping[str, ET.Element],
+    connections: Sequence[ET.Element],
+) -> str:
+    internal_edge_count = sum(
+        edge_id.startswith(":")
+        or edge.attrib.get("function", "") in {"internal", "crossing", "walkingarea"}
+        for edge_id, edge in edges.items()
+    )
+    external_direct = []
+    for connection in connections:
+        source = edges.get(connection.attrib.get("from", ""))
+        target = edges.get(connection.attrib.get("to", ""))
+        if source is None or target is None:
+            continue
+        if (
+            not source.attrib.get("id", "").startswith(":")
+            and not target.attrib.get("id", "").startswith(":")
+            and source.attrib.get("function", "") not in {"internal", "crossing", "walkingarea"}
+            and target.attrib.get("function", "") not in {"internal", "crossing", "walkingarea"}
+        ):
+            external_direct.append(connection)
+    direct_with_via = sum(bool(connection.attrib.get("via")) for connection in external_direct)
+    if external_direct and not internal_edge_count and not direct_with_via:
+        return "no-internal-links"
+    if external_direct and 0 < direct_with_via < len(external_direct):
+        return "mixed"
+    if internal_edge_count or direct_with_via:
+        return "internal-links"
+    return "undetermined"
 
 
 def _check_shape_gap(

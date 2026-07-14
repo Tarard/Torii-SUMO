@@ -1077,7 +1077,7 @@ def test_network_connection_mode_accepts_runtime_managed_rail_signal_without_tll
   <junction id="rs" type="rail_signal" incLanes="rail_in_0" intLanes=":rs_0_0">
     <request index="0" response="0" foes="0" cont="0"/>
   </junction>
-  <connection from="rail_in" to="rail_out" fromLane="0" toLane="0" via=":rs_0_0" tl="rs" linkIndex="0" dir="s"/>
+  <connection from="rail_in" to="rail_out" fromLane="0" toLane="0" via=":rs_0_0" tl="rs" linkIndex="-1" dir="s"/>
   <connection from=":rs_0" to="rail_out" fromLane="0" toLane="0" dir="s"/>
 </net>"""
     )
@@ -1092,6 +1092,82 @@ def test_network_connection_mode_accepts_runtime_managed_rail_signal_without_tll
     controller = tls["controllers"][0]
     assert controller["control_semantics"] == "sumo_runtime_rail_signal"
     assert controller["programs"] == []
+
+
+def test_no_internal_links_network_is_a_legal_explicit_network_mode() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" shape="0,0 10,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in_0" intLanes="">
+    <request index="0" response="0" foes="0"/>
+  </junction>
+  <junction id="b" type="dead_end" incLanes="out_0" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>"""
+    )
+
+    report = audit_network_connection_mode(root)
+
+    assert report["status"] == "pass"
+    assert report["internal_link_mode"] == "no-internal-links"
+    junction = next(item for item in report["junctions"] if item["junction_id"] == "j")
+    path = junction["connection_mode_audit"]["movement_checks"][0]["internal_path"]
+    assert path["status"] == "pass"
+    assert path["path_kind"] == "direct_no_internal_links"
+    assert path["endpoint_gap_policy"] == "not_available_in_network_mode"
+
+
+def test_missing_via_in_mixed_internal_link_network_remains_a_hard_failure() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in0" from="a" to="j">
+    <lane id="in0_0" index="0" allow="passenger" shape="-10,0 -1,0"/>
+  </edge>
+  <edge id="out0" from="j" to="b">
+    <lane id="out0_0" index="0" allow="passenger" shape="1,0 10,0"/>
+  </edge>
+  <edge id="in1" from="c" to="j">
+    <lane id="in1_0" index="0" allow="passenger" shape="0,-10 0,-1"/>
+  </edge>
+  <edge id="out1" from="j" to="d">
+    <lane id="out1_0" index="0" allow="passenger" shape="0,1 0,10"/>
+  </edge>
+  <edge id=":j_0" function="internal">
+    <lane id=":j_0_0" index="0" allow="passenger" shape="-1,0 1,0"/>
+  </edge>
+  <junction id="a" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="b" type="dead_end" incLanes="out0_0" intLanes=""/>
+  <junction id="c" type="dead_end" incLanes="" intLanes=""/>
+  <junction id="d" type="dead_end" incLanes="out1_0" intLanes=""/>
+  <junction id="j" type="priority" incLanes="in0_0 in1_0" intLanes=":j_0_0">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="0"/>
+  </junction>
+  <connection from="in0" to="out0" fromLane="0" toLane="0" via=":j_0_0" dir="s" state="M"/>
+  <connection from="in1" to="out1" fromLane="0" toLane="0" dir="s" state="M"/>
+  <connection from=":j_0" to="out0" fromLane="0" toLane="0" dir="s" state="M"/>
+</net>"""
+    )
+
+    report = audit_network_connection_mode(root)
+
+    assert report["status"] == "fail"
+    assert report["internal_link_mode"] == "mixed"
+    failures = [
+        failure
+        for junction in report["junctions"]
+        for failure in junction["connection_mode_audit"]["structural_failures"]
+    ]
+    assert any(
+        failure.startswith("connection_mode:missing_direct_via_lane")
+        for failure in failures
+    )
 
 
 def test_walkingarea_to_crossing_direct_link_does_not_require_via() -> None:

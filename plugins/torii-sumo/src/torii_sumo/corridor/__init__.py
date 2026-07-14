@@ -31,6 +31,11 @@ from .ids import (
     stable_id,
 )
 from .manifest import ArtifactManifestV1, CorridorResearchBundle
+from .official_sumo_benchmark_contracts import (
+    OfficialSumoBenchmarkReport,
+    OfficialSumoBenchmarkSpec,
+)
+from .official_sumo_benchmark_runner import run_official_sumo_benchmark
 from .scope import BoundaryPort, ScopeSpec
 from .synthetic_benchmark_contracts import (
     SyntheticFaultBenchmarkReport,
@@ -58,6 +63,8 @@ __all__ = [
     "IndependentSafetyReport",
     "NetworkQualityVectorV1",
     "MovementConflictGraph",
+    "OfficialSumoBenchmarkReport",
+    "OfficialSumoBenchmarkSpec",
     "PatchOperation",
     "ScopeSpec",
     "SemanticDelta",
@@ -88,5 +95,6 @@ __all__ = [
     "make_signal_group_id",
     "compare_canonical_snapshots",
     "run_synthetic_fault_benchmark",
+    "run_official_sumo_benchmark",
     "stable_id",
 ]

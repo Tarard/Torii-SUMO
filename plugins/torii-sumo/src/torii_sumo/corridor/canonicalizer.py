@@ -1060,6 +1060,12 @@ def _trace_internal_semantics(
     network: RawNetwork,
 ) -> dict[str, Any]:
     if not direct.via:
+        if _raw_network_internal_link_mode(network) == "no-internal-links":
+            return {
+                "status": "no-internal-links",
+                "segments": (),
+                "failures": (),
+            }
         return {"status": "missing-via", "segments": (), "failures": ("missing-via",)}
     lane = network.lanes.get(direct.via)
     if lane is None:
@@ -1117,6 +1123,26 @@ def _trace_internal_semantics(
         "segments": segments,
         "failures": tuple(failures),
     }
+
+
+def _raw_network_internal_link_mode(network: RawNetwork) -> str:
+    internal_edge_count = sum(not edge.external for edge in network.edges.values())
+    external_direct = [
+        connection
+        for connection in network.connections
+        if (source := network.edges.get(connection.from_edge)) is not None
+        and (target := network.edges.get(connection.to_edge)) is not None
+        and source.external
+        and target.external
+    ]
+    direct_with_via = sum(bool(connection.via) for connection in external_direct)
+    if external_direct and not internal_edge_count and not direct_with_via:
+        return "no-internal-links"
+    if external_direct and 0 < direct_with_via < len(external_direct):
+        return "mixed"
+    if internal_edge_count or direct_with_via:
+        return "internal-links"
+    return "undetermined"
 
 
 def _rounded_shape(

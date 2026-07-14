@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from .manifest import CorridorResearchBundle
+from .official_sumo_benchmark_contracts import (
+    OfficialSumoBenchmarkReport,
+    OfficialSumoBenchmarkSpec,
+)
 from .synthetic_benchmark_contracts import (
     SyntheticFaultBenchmarkReport,
     SyntheticFaultBenchmarkSpec,
@@ -31,6 +35,22 @@ def build_synthetic_fault_benchmark_report_schema() -> dict[str, object]:
         SyntheticFaultBenchmarkReport,
         "torii.corridor.synthetic-fault-benchmark-report.v1.schema.json",
         status="stage-1-evidence-contract",
+    )
+
+
+def build_official_sumo_benchmark_schema() -> dict[str, object]:
+    return _artifact_schema(
+        OfficialSumoBenchmarkSpec,
+        "torii.corridor.official-sumo-benchmark.v1.schema.json",
+        status="stage-1-normative-contract",
+    )
+
+
+def build_official_sumo_benchmark_report_schema() -> dict[str, object]:
+    return _artifact_schema(
+        OfficialSumoBenchmarkReport,
+        "torii.corridor.official-sumo-benchmark-report.v1.schema.json",
+        status="stage-1-normative-evidence-contract",
     )
 
 

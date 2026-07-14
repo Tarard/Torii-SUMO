@@ -1470,6 +1470,15 @@
           "title": "Geometry Missing Movement Ids",
           "type": "array"
         },
+        "geometry_unavailable_by_design_movement_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Geometry Unavailable By Design Movement Ids",
+          "type": "array"
+        },
         "movement_ids": {
           "items": {
             "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
