@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from torii_sumo.core.artifact_io import write_json_atomic, write_text_atomic
+from torii_sumo.core.artifact_io import (
+    copy_file_atomic,
+    write_json_atomic,
+    write_text_atomic,
+)
 
 
 def test_atomic_text_write_replaces_destination_without_temp_artifacts(tmp_path: Path) -> None:
@@ -24,3 +28,17 @@ def test_json_serialization_failure_preserves_existing_destination(tmp_path: Pat
 
     assert destination.read_text(encoding="utf-8") == '{"status":"old"}'
     assert list(tmp_path.glob(".report.json.*.tmp")) == []
+
+
+def test_atomic_file_copy_replaces_destination_without_temp_artifacts(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    destination = tmp_path / "candidate.net.xml"
+    source.write_bytes(b"new-network\x00content")
+    destination.write_bytes(b"old-network")
+
+    copy_file_atomic(source, destination)
+
+    assert destination.read_bytes() == source.read_bytes()
+    assert list(tmp_path.glob(".candidate.net.xml.*.tmp")) == []

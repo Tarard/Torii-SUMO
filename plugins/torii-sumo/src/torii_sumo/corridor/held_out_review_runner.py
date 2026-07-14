@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import html
 import json
 import statistics
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from xml.etree import ElementTree as ET
 
-from torii_sumo.core.artifact_io import write_json_atomic
+from torii_sumo.core.artifact_io import (
+    copy_file_atomic,
+    write_json_atomic,
+    write_text_atomic,
+)
 from torii_sumo.core.candidate_contracts import file_sha256
 
 from .enums import GateStatus
@@ -20,6 +26,7 @@ from .held_out_review_contracts import (
     HeldOutAdjudication,
     HeldOutCaseStratum,
     HeldOutEvaluationKey,
+    HeldOutReviewMaterial,
     HeldOutReviewMetrics,
     HeldOutReviewPolicy,
     HeldOutReviewReport,
@@ -39,6 +46,9 @@ def build_blinded_review_artifacts(
     blinding_seed: str,
     output_dir: Path,
     prefix: str = "held_out_review",
+    review_materials: Mapping[
+        str, HeldOutReviewMaterial | Mapping[str, Any]
+    ] | None = None,
 ) -> dict[str, Any]:
     """Separate reviewer-visible data from machine labels and true entity IDs."""
 
@@ -51,9 +61,13 @@ def build_blinded_review_artifacts(
         raise ValueError("Machine assessments must exactly cover the review cases.")
     if set(case_strata) != case_ids:
         raise ValueError("Held-out strata must exactly cover the review cases.")
+    provided_materials = dict(review_materials or {})
+    if provided_materials and set(provided_materials) != case_ids:
+        raise ValueError("Review materials must exactly cover the review cases.")
     blind_cases: list[BlindedReviewCase] = []
     key_cases: list[UnblindingCaseKey] = []
     assessment_paths: list[Path] = []
+    reviewer_visible_paths: list[Path] = []
     assessment_dir = destination / "restricted-machine-assessments"
     assessment_dir.mkdir(parents=True, exist_ok=True)
     used_case_codes: set[str] = set()
@@ -80,6 +94,23 @@ def build_blinded_review_artifacts(
             candidate_sha256_by_code[variant_code] = (
                 review_case.candidate_sha256_by_variant[variant_id]
             )
+        material_fields: dict[str, Any] = {}
+        if provided_materials:
+            material_value = provided_materials[review_case.review_case_id]
+            material = (
+                material_value
+                if isinstance(material_value, HeldOutReviewMaterial)
+                else HeldOutReviewMaterial.model_validate(material_value)
+            )
+            material_fields, material_paths = _materialize_reviewer_visible_case(
+                review_case=review_case,
+                material=material,
+                case_code=case_code,
+                variant_id_by_code=variant_id_by_code,
+                candidate_sha256_by_code=candidate_sha256_by_code,
+                destination=destination,
+            )
+            reviewer_visible_paths.extend(material_paths)
         blind_cases.append(
             BlindedReviewCase(
                 case_code=case_code,
@@ -87,6 +118,7 @@ def build_blinded_review_artifacts(
                 candidate_sha256_by_variant_code=candidate_sha256_by_code,
                 exact_question=review_case.machine_question,
                 required_observations=review_case.required_observations,
+                **material_fields,
             )
         )
         assessment_value = machine_assessments[review_case.review_case_id]
@@ -183,6 +215,14 @@ def build_blinded_review_artifacts(
                 }
                 for path in assessment_paths
             ],
+            *[
+                {
+                    "role": "reviewer-visible-case-material",
+                    "path": str(path),
+                    "sha256": file_sha256(path),
+                }
+                for path in reviewer_visible_paths
+            ],
         ],
     }
     write_json_atomic(manifest_path, manifest, sort_keys=True)
@@ -194,6 +234,173 @@ def build_blinded_review_artifacts(
         "evaluation_key_file": str(key_path),
         "manifest_file": str(manifest_path),
     }
+
+
+def _materialize_reviewer_visible_case(
+    *,
+    review_case: ReviewCase,
+    material: HeldOutReviewMaterial,
+    case_code: str,
+    variant_id_by_code: Mapping[str, str],
+    candidate_sha256_by_code: Mapping[str, str],
+    destination: Path,
+) -> tuple[dict[str, Any], list[Path]]:
+    if set(material.candidate_artifact_path_by_variant) != set(
+        review_case.candidate_variant_ids
+    ):
+        raise ValueError("Review material candidate paths do not cover variants.")
+    case_dir = destination / "reviewer-visible" / case_code
+    case_dir.mkdir(parents=True, exist_ok=True)
+    candidate_paths: dict[str, str] = {}
+    config_paths: dict[str, str] = {}
+    written_paths: list[Path] = []
+    code_by_variant = {
+        variant_id: code for code, variant_id in variant_id_by_code.items()
+    }
+    overlay_source = Path(material.review_overlay_path).resolve()
+    _validate_display_only_overlay(overlay_source)
+    overlay_target = case_dir / "review.add.xml"
+    copy_file_atomic(overlay_source, overlay_target)
+    written_paths.append(overlay_target)
+    for variant_id in sorted(review_case.candidate_variant_ids):
+        variant_code = code_by_variant[variant_id]
+        source = Path(
+            material.candidate_artifact_path_by_variant[variant_id]
+        ).resolve()
+        if not source.is_file():
+            raise ValueError(f"Review candidate artifact is missing: {source}")
+        expected_sha256 = review_case.candidate_sha256_by_variant[variant_id]
+        if file_sha256(source) != expected_sha256:
+            raise ValueError("Review candidate artifact hash does not match its variant.")
+        target = case_dir / f"{variant_code}.net.xml"
+        copy_file_atomic(source, target)
+        if file_sha256(target) != expected_sha256:
+            raise RuntimeError("Blinded candidate copy failed its hash check.")
+        config = case_dir / f"{variant_code}.sumocfg"
+        _write_review_config(
+            config,
+            net_filename=target.name,
+            overlay_filename=overlay_target.name,
+        )
+        candidate_paths[variant_code] = target.relative_to(destination).as_posix()
+        config_paths[variant_code] = config.relative_to(destination).as_posix()
+        written_paths.extend((target, config))
+    html_path = case_dir / "review.html"
+    _write_reviewer_html(
+        html_path,
+        case_code=case_code,
+        exact_question=review_case.machine_question,
+        required_observations=review_case.required_observations,
+        candidate_sha256_by_code=candidate_sha256_by_code,
+        candidate_paths=candidate_paths,
+        config_paths=config_paths,
+        overlay_path=overlay_target.relative_to(destination).as_posix(),
+        map_evidence_urls=material.map_evidence_urls,
+        osm_attribution=material.osm_attribution,
+    )
+    written_paths.append(html_path)
+    return (
+        {
+            "candidate_artifact_path_by_variant_code": candidate_paths,
+            "review_config_path_by_variant_code": config_paths,
+            "review_html_path": html_path.relative_to(destination).as_posix(),
+            "review_overlay_path": overlay_target.relative_to(destination).as_posix(),
+            "map_evidence_urls": material.map_evidence_urls,
+            "osm_attribution": material.osm_attribution,
+        },
+        written_paths,
+    )
+
+
+def _validate_display_only_overlay(path: Path) -> None:
+    if not path.is_file():
+        raise ValueError(f"Review overlay is missing: {path}")
+    root = ET.parse(path).getroot()
+    tags = {element.tag for element in root.iter()}
+    unsupported = sorted(tags - {"additional", "poi", "poly", "param"})
+    if root.tag != "additional" or unsupported:
+        raise ValueError(
+            "Review overlay must be display-only additional.xml; unsupported tags: "
+            + ", ".join(unsupported)
+        )
+
+
+def _write_review_config(
+    path: Path,
+    *,
+    net_filename: str,
+    overlay_filename: str,
+) -> None:
+    root = ET.Element("configuration")
+    inputs = ET.SubElement(root, "input")
+    ET.SubElement(inputs, "net-file", {"value": net_filename})
+    ET.SubElement(inputs, "additional-files", {"value": overlay_filename})
+    ET.indent(root, space="  ")
+    write_text_atomic(
+        path,
+        ET.tostring(root, encoding="unicode", xml_declaration=True),
+    )
+
+
+def _write_reviewer_html(
+    path: Path,
+    *,
+    case_code: str,
+    exact_question: str,
+    required_observations: Sequence[str],
+    candidate_sha256_by_code: Mapping[str, str],
+    candidate_paths: Mapping[str, str],
+    config_paths: Mapping[str, str],
+    overlay_path: str,
+    map_evidence_urls: Sequence[str],
+    osm_attribution: str,
+) -> None:
+    variants = "\n".join(
+        "<li><strong>{code}</strong> — SHA-256 <code>{sha}</code>; "
+        "<a href=\"{net}\">network</a>; <a href=\"{config}\">review config</a></li>".format(
+            code=html.escape(code),
+            sha=html.escape(candidate_sha256_by_code[code]),
+            net=html.escape(Path(candidate_paths[code]).name),
+            config=html.escape(Path(config_paths[code]).name),
+        )
+        for code in sorted(candidate_sha256_by_code)
+    )
+    observations = "\n".join(
+        f"<li>{html.escape(value)}</li>" for value in required_observations
+    )
+    map_links = "\n".join(
+        f'<li><a href="{html.escape(url)}" rel="noreferrer">Map evidence {index}</a></li>'
+        for index, url in enumerate(map_evidence_urls, start=1)
+    )
+    document = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blind corridor review {html.escape(case_code)}</title>
+  <style>
+    body {{ font: 16px/1.55 system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #18202a; }}
+    .notice {{ padding: 1rem; background: #fff4d6; border-left: 5px solid #d78b00; }}
+    code {{ overflow-wrap: anywhere; }}
+  </style>
+</head>
+<body>
+  <h1>Blind corridor review {html.escape(case_code)}</h1>
+  <p class="notice">The additional.xml is display-only. It marks review locations and cannot change roads, connections, right-of-way, or TLS behavior. Machine recommendations and peer decisions are hidden.</p>
+  <h2>Question</h2>
+  <p>{html.escape(exact_question)}</p>
+  <h2>Candidate variants</h2>
+  <ul>{variants}</ul>
+  <p><a href="{html.escape(Path(overlay_path).name)}">Display-only review overlay</a></p>
+  <h2>Required observations</h2>
+  <ol>{observations}</ol>
+  <h2>External map aids</h2>
+  <ul>{map_links}</ul>
+  <p>{html.escape(osm_attribution)}. Map links are human-review aids and never approve a candidate automatically.</p>
+</body>
+</html>
+"""
+    write_text_atomic(path, document)
 
 
 def evaluate_held_out_review_trial(

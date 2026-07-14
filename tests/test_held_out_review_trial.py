@@ -11,7 +11,9 @@ from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.corridor.held_out_review_contracts import (
     BlindReviewDecision,
     HeldOutAdjudication,
+    HeldOutCaseStratum,
     HeldOutReviewPolicy,
+    HeldOutReviewMaterial,
     MachineAssessment,
 )
 from torii_sumo.corridor.held_out_review_runner import (
@@ -447,3 +449,147 @@ def test_real_held_out_trial_policy_is_preregistered_and_hash_bound() -> None:
         "tunnel",
     }
     assert policy.maximum_safety_critical_false_negatives == 0
+
+
+def test_blinded_package_materializes_review_html_network_and_display_overlay(
+    tmp_path: Path,
+) -> None:
+    policy = _policy(minimum_case_count=2)
+    base_case = _review_case(0)
+    variant_files: dict[str, Path] = {}
+    candidate_hashes: dict[str, str] = {}
+    for index, variant_id in enumerate(base_case.candidate_variant_ids):
+        path = tmp_path / f"candidate-{index}.net.xml"
+        path.write_text(f'<net version="1.20" id="{index}"/>', encoding="utf-8")
+        variant_files[variant_id] = path
+        candidate_hashes[variant_id] = file_sha256(path)
+    case_payload = base_case.model_dump(mode="json", by_alias=True)
+    case_payload["candidate_sha256_by_variant"] = candidate_hashes
+    review_case = ReviewCase.model_validate(case_payload)
+    overlay = tmp_path / "review.add.xml"
+    overlay.write_text(
+        """<additional>
+  <poi id="review-marker" x="0" y="0" color="255,165,0">
+    <param key="display_only" value="true"/>
+  </poi>
+</additional>
+""",
+        encoding="utf-8",
+    )
+    assessment = MachineAssessment(
+        machine_label="ambiguous",
+        machine_report_sha256=_sha("material-machine-report"),
+        finding_categories=("human-map-review-required",),
+        safety_critical=False,
+    )
+    stratum = HeldOutCaseStratum(
+        city_group="material-city",
+        morphology="multimodal",
+        traffic_side="left",
+        osm_completeness="unassessed",
+        mode_features=("road-motorized", "pedestrian", "bicycle"),
+    )
+    material = HeldOutReviewMaterial(
+        candidate_artifact_path_by_variant={
+            variant_id: str(path) for variant_id, path in variant_files.items()
+        },
+        review_overlay_path=str(overlay),
+        map_evidence_urls=(
+            "https://www.openstreetmap.org/#map=17/0/0",
+            "https://www.google.com/maps/search/?api=1&query=0,0",
+        ),
+    )
+
+    package = build_blinded_review_artifacts(
+        (review_case,),
+        machine_assessments={review_case.review_case_id: assessment},
+        case_strata={review_case.review_case_id: stratum},
+        review_materials={review_case.review_case_id: material},
+        trial_id=policy.trial_id,
+        created_at=datetime(2026, 7, 14, 12, 0, tzinfo=UTC),
+        blinding_seed="material-blinding-seed-000000000001",
+        output_dir=tmp_path / "package",
+    )
+
+    dataset_path = Path(package["blinded_dataset_file"])
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    blind_case = dataset["cases"][0]
+    assert set(blind_case["candidate_artifact_path_by_variant_code"]) == set(
+        blind_case["candidate_sha256_by_variant_code"]
+    )
+    for code, relative_path in blind_case[
+        "candidate_artifact_path_by_variant_code"
+    ].items():
+        assert file_sha256(dataset_path.parent / relative_path) == blind_case[
+            "candidate_sha256_by_variant_code"
+        ][code]
+    html_path = dataset_path.parent / blind_case["review_html_path"]
+    html_text = html_path.read_text(encoding="utf-8")
+    assert "display-only" in html_text
+    assert "Machine recommendations and peer decisions are hidden" in html_text
+    assert "machine_label" not in html_text
+    assert review_case.review_case_id not in html_text
+    for variant_id in review_case.candidate_variant_ids:
+        assert variant_id not in html_text
+    copied_overlay = dataset_path.parent / blind_case["review_overlay_path"]
+    assert "<tlLogic" not in copied_overlay.read_text(encoding="utf-8")
+    package_manifest = json.loads(
+        Path(package["manifest_file"]).read_text(encoding="utf-8")
+    )
+    assert any(
+        artifact["role"] == "reviewer-visible-case-material"
+        for artifact in package_manifest["artifacts"]
+    )
+
+
+def test_blinded_package_rejects_behavioral_additional_xml(tmp_path: Path) -> None:
+    policy = _policy(minimum_case_count=2)
+    base_case = _review_case(0)
+    candidate_files: dict[str, str] = {}
+    candidate_hashes: dict[str, str] = {}
+    for index, variant_id in enumerate(base_case.candidate_variant_ids):
+        path = tmp_path / f"candidate-{index}.net.xml"
+        path.write_text(f'<net version="1.20" id="{index}"/>', encoding="utf-8")
+        candidate_files[variant_id] = str(path)
+        candidate_hashes[variant_id] = file_sha256(path)
+    case_payload = base_case.model_dump(mode="json", by_alias=True)
+    case_payload["candidate_sha256_by_variant"] = candidate_hashes
+    review_case = ReviewCase.model_validate(case_payload)
+    overlay = tmp_path / "behavioral.add.xml"
+    overlay.write_text(
+        """<additional>
+  <tlLogic id="forbidden" type="static" programID="review" offset="0"/>
+</additional>
+""",
+        encoding="utf-8",
+    )
+    assessment = MachineAssessment(
+        machine_label="ambiguous",
+        machine_report_sha256=_sha("behavioral-overlay-machine-report"),
+        finding_categories=("human-map-review-required",),
+        safety_critical=False,
+    )
+    stratum = HeldOutCaseStratum(
+        city_group="material-city",
+        morphology="multimodal",
+        traffic_side="right",
+        osm_completeness="unassessed",
+        mode_features=("road-motorized",),
+    )
+    material = HeldOutReviewMaterial(
+        candidate_artifact_path_by_variant=candidate_files,
+        review_overlay_path=str(overlay),
+        map_evidence_urls=("https://www.openstreetmap.org/#map=17/0/0",),
+    )
+
+    with pytest.raises(ValueError, match="display-only additional.xml"):
+        build_blinded_review_artifacts(
+            (review_case,),
+            machine_assessments={review_case.review_case_id: assessment},
+            case_strata={review_case.review_case_id: stratum},
+            review_materials={review_case.review_case_id: material},
+            trial_id=policy.trial_id,
+            created_at=datetime(2026, 7, 14, 12, 0, tzinfo=UTC),
+            blinding_seed="behavioral-overlay-blinding-seed-0001",
+            output_dir=tmp_path / "package",
+        )

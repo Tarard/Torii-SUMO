@@ -106,6 +106,13 @@
     "BlindedReviewCase": {
       "additionalProperties": false,
       "properties": {
+        "candidate_artifact_path_by_variant_code": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Candidate Artifact Path By Variant Code",
+          "type": "object"
+        },
         "candidate_sha256_by_variant_code": {
           "additionalProperties": {
             "pattern": "^[0-9a-f]{64}$",
@@ -123,12 +130,63 @@
           "title": "Exact Question",
           "type": "string"
         },
+        "map_evidence_urls": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Map Evidence Urls",
+          "type": "array"
+        },
+        "osm_attribution": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Osm Attribution"
+        },
         "required_observations": {
           "items": {
             "type": "string"
           },
           "title": "Required Observations",
           "type": "array"
+        },
+        "review_config_path_by_variant_code": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Review Config Path By Variant Code",
+          "type": "object"
+        },
+        "review_html_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Html Path"
+        },
+        "review_overlay_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Overlay Path"
         },
         "schema": {
           "default": "torii.corridor.contracts/v1",

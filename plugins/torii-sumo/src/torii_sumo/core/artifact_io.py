@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 from contextlib import suppress
 from pathlib import Path
@@ -51,5 +52,32 @@ def write_text_atomic(path: Path, text: str, *, encoding: str = "utf-8") -> None
         if temporary_path is not None:
             # The original exception remains authoritative; a later run can
             # safely ignore a uniquely named temporary artifact.
+            with suppress(OSError):
+                temporary_path.unlink(missing_ok=True)
+
+
+def copy_file_atomic(source: Path, destination: Path) -> None:
+    """Copy a binary artifact before atomically replacing the destination."""
+
+    source_path = source.resolve(strict=True)
+    destination_path = destination.resolve()
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with source_path.open("rb") as source_handle, tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=destination_path.parent,
+            prefix=f".{destination_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as destination_handle:
+            temporary_path = Path(destination_handle.name)
+            shutil.copyfileobj(source_handle, destination_handle)
+            destination_handle.flush()
+            os.fsync(destination_handle.fileno())
+        os.replace(temporary_path, destination_path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
             with suppress(OSError):
                 temporary_path.unlink(missing_ok=True)

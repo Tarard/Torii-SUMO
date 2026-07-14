@@ -31,6 +31,7 @@ from .held_out_corpus_contracts import (
 )
 from .held_out_review_contracts import (
     HeldOutCaseStratum,
+    HeldOutReviewMaterial,
     HeldOutReviewPolicy,
     MachineAssessment,
 )
@@ -111,12 +112,13 @@ def build_held_out_corridor_machine_evidence(
     review_cases: list[ReviewCase] = []
     machine_assessments: dict[str, MachineAssessment] = {}
     case_strata: dict[str, HeldOutCaseStratum] = {}
+    review_materials: dict[str, HeldOutReviewMaterial] = {}
     source_by_id = {source.source_id: source for source in spec.city_extracts}
     for case in selected_cases:
         snapshot = snapshot_by_selection[case.selection_id]
         city_source = source_by_id[case.city_source_id]
         try:
-            result, review_case, assessment, stratum = _build_case_evidence(
+            result, review_case, assessment, stratum, material = _build_case_evidence(
                 spec=spec,
                 case=case,
                 snapshot=snapshot,
@@ -134,6 +136,7 @@ def build_held_out_corridor_machine_evidence(
             review_cases.append(review_case)
             machine_assessments[review_case.review_case_id] = assessment
             case_strata[review_case.review_case_id] = stratum
+            review_materials[review_case.review_case_id] = material
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             source_path = Path(snapshot.path).resolve()
             source_immutable = (
@@ -181,6 +184,7 @@ def build_held_out_corridor_machine_evidence(
             created_at=datetime.now(UTC),
             blinding_seed=blinding_seed or secrets.token_hex(32),
             output_dir=destination / "review-package",
+            review_materials=review_materials,
         )
     if len(review_cases) != len(selected_cases):
         blockers.append(
@@ -279,6 +283,7 @@ def _build_case_evidence(
     ReviewCase,
     MachineAssessment,
     HeldOutCaseStratum,
+    HeldOutReviewMaterial,
 ]:
     destination.mkdir(parents=True, exist_ok=True)
     source_osm = Path(snapshot.path).resolve()
@@ -541,6 +546,11 @@ def _build_case_evidence(
         osm_completeness="unassessed",
         mode_features=observed_modes,
     )
+    material = HeldOutReviewMaterial(
+        candidate_artifact_path_by_variant={candidate_id: str(net_file)},
+        review_overlay_path=str(connection_report["review_overlay_file"]),
+        map_evidence_urls=tuple(map_links.values()),
+    )
     artifact_paths = {
         source_osm,
         net_file,
@@ -582,7 +592,7 @@ def _build_case_evidence(
         finding_categories=categories,
         blockers=(),
     )
-    return result, review_case, assessment, stratum
+    return result, review_case, assessment, stratum, material
 
 
 def _classify_case(
