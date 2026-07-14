@@ -10,12 +10,12 @@
 | 阶段 | 状态 | 当前证据或阻断项 |
 |---|---|---|
 | 0. 规范冻结 | 完成 | schema、稳定语义 ID、工具链、manifest、source/candidate 身份和 CI 已冻结。 |
-| 1. Audit-only | 进行中 | 合成单故障、复合故障、SUMO 官方场景和 OOD 适用域测试已建立；受控 walkingarea→crossing→walkingarea 已纳入独立冲突图；30/30 真实 held-out 走廊已在锁定 Python/SUMO 和 clean producer commit 上复跑，27 个形成完整审核包、3 个因 netconvert 重放不确定性 fail-closed；两名独立人工审核和第三方裁决尚未发生。 |
+| 1. Audit-only | 进行中 | 合成单故障、复合故障、SUMO 官方场景和 OOD 适用域测试已建立；18,313 个 crossing 中 18,311 个已纳入独立冲突图；30/30 真实 held-out 走廊已在锁定 Python/SUMO 和 clean producer commit 上复跑，27 个形成完整审核包、3 个因 netconvert 重放不确定性 fail-closed；剩余 2 个 crossing 尚缺精确 review task，两名独立人工审核和第三方裁决尚未发生。 |
 | 2. 认证 micro-repair | 未完成 | 不得以现有候选契约或旧局部修复代替逐编辑类型的 held-out 认证。 |
 | 3. Physical-cell hypotheses | 未完成 | split/shared-controller、merge、partial 三假设尚未完成统一 held-out 比较。 |
 | 4. Local geometry solver / MGE-1 | 未完成 | 当前 arclength blend 仍仅是消融基线；boundary-port solver 尚未达到预注册退出条件。 |
-| 5A/5B. NEMA 与行人安全 | 未完成 | vehicle-only 严格扫描和受控行人 crossing 独立冲突审核已存在；其余行人设施、自行车、共享 controller、clearance 和实际 timing 均未认证。 |
-| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；provenance v2 全语料机器重跑已结束并保持 blocked，尚无人审，也尚未达到 held-out 退出阈值。 |
+| 5A/5B. NEMA 与行人安全 | 未完成 | vehicle-only 严格扫描、受控和无信号 crossing 独立冲突审核已存在；无信号 right-of-way、自行车、共享 controller、clearance 和实际 timing 均未认证。 |
+| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；provenance v3 全语料机器重跑已结束并保持 blocked，尚无人审，也尚未达到 held-out 退出阈值。 |
 | 7. 城市级运行 | 未开始 | 阶段 6 未退出前不得启动自动语义扩张。 |
 
 ## 已冻结的真实 held-out 语料
@@ -213,6 +213,39 @@ manifest SHA-256 为
 完整静态证据保存在
 `benchmarks/corridor_human_modeling_v1/evidence/held_out_machine_run_pedestrian_provenance_20260714.v2.json`。
 
+## 无信号 crossing 与 provenance v3 全量重跑
+
+在 clean commit
+`be15f6e4a3eb2ecbc08a8826e5a6afb1f6ccac94` 上，冻结语料又完成一次
+30/30 机器运行：
+
+- 新增 `pedestrian_control_binding` 稳定实体，把 crossing movement 的几何语义
+  与 signalized/uncontrolled 控制归属分开；有 `tl` 绑定但没有 signal group/program
+  的 movement 不再被错误降级成无信号 crossing。
+- 18,313 个 crossing edge 中 18,311 个已形成稳定 pedestrian movement：4,529
+  个 signalized、13,782 个 uncontrolled；未建模数由 13,784 降至 2。剩余两例均在
+  Paris Porte Maillot，但当前 coverage 只保存数量，尚未输出精确稳定 review task。
+- 发现 453 个 `controlled_pedestrian_signal_group_missing` hard finding；它们尚未按
+  missing program、非法 link binding、特殊 runtime controller 等根因分类，不能按
+  一个模板自动修复。
+- uncontrolled pedestrian movement 与车辆 movement 形成 34,493 个 confirmed
+  centerline conflict 和 53,930 个 potential envelope conflict。两类均保持
+  right-of-way review；在 request/foes、crossing priority 和让行关系被独立证明前，
+  不得描述为现场缺陷或安全通过。
+- protected-green conflict 仍为 2,500，说明新增 uncontrolled movement 没有被误绑
+  到 TLS phase；所有非 safety case status 与 v2 逐条一致。
+- 30/30 source OSM immutable；27 个完整 review case、3 个相同 replay blocker；
+  顶层 manifest 仍绑定 1,243 个 artifact，缺失、哈希错误和输出漏列均为 0。
+- 完整 case 的 safety status 为 25 blocked、2 review；顶层连同 3 个 pipeline
+  failure 为 28 blocked、2 review。人工 decision 和 adjudication 仍均为 0。
+
+本次 report SHA-256 为
+`71888103870ebdae17471d5f77ea2df12ca8721a2037bc462c77fa1133a1d6bb`，
+manifest SHA-256 为
+`6ecec5b8477ae6298c78b86b15c42767b5f3b2f19b7ea4385b8aa2e5a2393ba4`。
+完整静态证据保存在
+`benchmarks/corridor_human_modeling_v1/evidence/held_out_machine_run_all_pedestrian_provenance_20260714.v3.json`。
+
 ## 真实样本发现并修复的架构缺陷
 
 首轮 Sydney 构建被 canonicalizer 阻断：审核输入声明 left-hand traffic，
@@ -254,9 +287,11 @@ Berlin Alexanderplatz 还暴露了一个审核口径错误：79 个旧
 
 ## 最近的硬阻断项
 
-1. provenance v2 全量重跑已完成，但 354 个机器结构 finding 的真实 precision 尚无人审验证；实验性确定性输入协议也只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且不得改写冻结 v1 结果。
+1. provenance v3 全量重跑已完成，但 354 个机器结构 finding 的真实 precision 尚无人审验证；实验性确定性输入协议也只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且不得改写冻结 v1 结果。
 2. 需要两名真实独立审核者逐案作答；分歧由第三名 adjudicator 裁决。机器不得代填。
 3. Stage 1 的 raw agreement、Cohen's kappa、attention precision/recall、AutoPrecision 和 review time 尚无真实数值。
-4. 受控行人链已进入 independent conflict model，但 13,784 个 crossing edge、27 个 owner ambiguity 及 bicycle/rail/shared-controller/clearance 仍未闭合，因此多模式 TLS 不可自动认证。
+4. Paris Porte Maillot 的 2 个 crossing 尚未生成绑定稳定实体、拒绝原因和地图位置的精确 review task。
+5. 34,493 个 confirmed 与 53,930 个 potential uncontrolled-pedestrian finding 尚未聚类成可承受的人工审核单位；聚类不得删除原始 witness。
+6. 453 个 signalized pedestrian movement 缺失 signal group/program，且 bicycle/rail/shared-controller/clearance 仍未闭合，因此多模式 TLS 不可自动认证。
 
 只有以上项目关闭并满足预注册阈值后，Stage 1 才能退出。
