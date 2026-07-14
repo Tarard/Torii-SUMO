@@ -45,6 +45,10 @@ from .pedestrian_control_census import (
     classify_controlled_pedestrian_bindings,
 )
 from .review import ReviewCase
+from .review_compression import (
+    RWC1_FROZEN_SAMPLING_SEED,
+    build_lossless_review_compression,
+)
 from .run_identity import capture_held_out_machine_run_identity
 
 
@@ -180,6 +184,7 @@ def build_held_out_corridor_machine_evidence(
                 netconvert_binary=netconvert_binary,
                 sumo_binary=sumo_binary,
                 random_trips=random_trips,
+                toolchain_id=run_identity.toolchain_id,
                 timeout_seconds=timeout_seconds,
             )
             results.append(result)
@@ -350,6 +355,7 @@ def _build_case_evidence(
     netconvert_binary: Path,
     sumo_binary: Path,
     random_trips: Path,
+    toolchain_id: str,
     timeout_seconds: float,
 ) -> tuple[
     HeldOutCorridorMachineResult,
@@ -477,6 +483,21 @@ def _build_case_evidence(
         safety.model_dump(mode="json", by_alias=True),
         sort_keys=True,
     )
+    review_compression = build_lossless_review_compression(
+        canonical,
+        safety,
+        source_osm_sha256=source_sha256,
+        candidate_net_sha256=net_sha256,
+        toolchain_id=toolchain_id,
+        sampling_seed=RWC1_FROZEN_SAMPLING_SEED,
+        corridor_morphology=case.morphology,
+    )
+    review_compression_path = destination / "lossless-review-compression.json"
+    write_json_atomic(
+        review_compression_path,
+        review_compression.model_dump(mode="json", by_alias=True),
+        sort_keys=True,
+    )
     applicability = evaluate_certification_applicability(canonical, envelope)
     applicability_path = destination / "certification-applicability.json"
     write_json_atomic(
@@ -509,6 +530,9 @@ def _build_case_evidence(
         safety_categories=tuple(finding.category for finding in safety.findings),
         controlled_pedestrian_binding_classes=tuple(
             pedestrian_binding_census.class_counts
+        ),
+        review_compression_status=(
+            review_compression.machine_review_ready_gate
         ),
         reproducibility_status=replay.status,
         applicability=applicability,
@@ -568,6 +592,10 @@ def _build_case_evidence(
             (
                 "controlled-pedestrian-binding-census",
                 file_sha256(pedestrian_binding_census_path),
+            ),
+            (
+                "lossless-review-compression",
+                file_sha256(review_compression_path),
             ),
             ("routeability", file_sha256(Path(routeability["report_file"]))),
         )
@@ -666,6 +694,9 @@ def _build_case_evidence(
                 "controlled_pedestrian_binding_census": str(
                     pedestrian_binding_census_path
                 ),
+                "lossless_review_compression": str(
+                    review_compression_path
+                ),
                 "applicability": str(applicability_path),
                 "routeability": str(routeability["report_file"]),
             },
@@ -752,10 +783,11 @@ def _classify_case(
     calibration_status: GateStatus,
     safety_status: GateStatus,
     safety_categories: tuple[str, ...],
-    controlled_pedestrian_binding_classes: tuple[str, ...] = (),
     reproducibility_status: GateStatus,
     applicability: Any,
     routeability: dict[str, Any],
+    controlled_pedestrian_binding_classes: tuple[str, ...] = (),
+    review_compression_status: GateStatus = GateStatus.PASS,
 ) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     categories: set[str] = set(safety_categories)
     categories.update(
@@ -769,6 +801,7 @@ def _classify_case(
         "connection_mode": str(connection_report.get("status", "fail")),
         "calibration": calibration_status.value,
         "independent_safety": safety_status.value,
+        "review_compression": review_compression_status.value,
         "reproducibility": reproducibility_status.value,
         "applicability": str(applicability.decision),
     }
@@ -788,6 +821,8 @@ def _classify_case(
         categories.add("routeability_failure")
     if statuses["reproducibility"] != "pass":
         categories.add("normalized_net_replay_mismatch")
+    if statuses["review_compression"] != "pass":
+        categories.add("lossless_review_compression_unresolved")
     definitive_safety_defects = {
         "conflicting_movements_share_signal_group",
         "movement_geometry_missing_for_independent_safety",
@@ -815,6 +850,7 @@ def _classify_case(
         statuses["connection_mode"] != "pass"
         or calibration_status is not GateStatus.PASS
         or safety_status is not GateStatus.PASS
+        or review_compression_status is not GateStatus.PASS
         or statuses["applicability"] != "in-domain"
     )
     label = "defect" if defect else "ambiguous" if ambiguous else "acceptable"

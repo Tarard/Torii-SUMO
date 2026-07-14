@@ -14,8 +14,10 @@ if str(SRC_ROOT) not in sys.path:
 
 from torii_sumo.core.artifact_io import write_json_atomic
 from torii_sumo.corridor.schema import (
+    build_atomic_conflict_ledger_schema,
     build_controlled_pedestrian_binding_census_schema,
     build_effective_tls_program_inventory_schema,
+    build_lossless_review_compression_schema,
 )
 
 
@@ -42,6 +44,22 @@ def main() -> None:
             / "torii.corridor.controlled-pedestrian-binding-census.v1.schema.json"
         ),
     )
+    parser.add_argument(
+        "--atomic-conflict-ledger-output",
+        type=Path,
+        default=(
+            SCHEMA_DIR
+            / "torii.corridor.atomic-conflict-ledger.v1.schema.json"
+        ),
+    )
+    parser.add_argument(
+        "--review-compression-output",
+        type=Path,
+        default=(
+            SCHEMA_DIR
+            / "torii.corridor.lossless-review-compression.v1.schema.json"
+        ),
+    )
     args = parser.parse_args()
     for path, schema in (
         (
@@ -51,6 +69,14 @@ def main() -> None:
         (
             args.binding_census_output,
             build_controlled_pedestrian_binding_census_schema(),
+        ),
+        (
+            args.atomic_conflict_ledger_output,
+            build_atomic_conflict_ledger_schema(),
+        ),
+        (
+            args.review_compression_output,
+            build_lossless_review_compression_schema(),
         ),
     ):
         write_json_atomic(path, schema, sort_keys=True)

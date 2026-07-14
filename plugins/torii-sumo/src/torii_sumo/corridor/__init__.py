@@ -76,6 +76,16 @@ from .review import (
     PedestrianCoverageGap,
     build_pedestrian_coverage_gap,
 )
+from .review_compression import (
+    AtomicConflictLedger,
+    AtomicConflictWitness,
+    ConflictPopulationStratum,
+    ConflictReviewCluster,
+    ConflictSiteReviewCase,
+    LosslessReviewCompressionReport,
+    ReviewCompressionPolicy,
+    build_lossless_review_compression,
+)
 from .ood_benchmark_contracts import OODBenchmarkReport, OODBenchmarkSpec
 from .ood_benchmark_runner import run_ood_benchmark
 from .scope import BoundaryPort, ScopeSpec
@@ -89,6 +99,8 @@ from .workflow import NetworkQualityVectorV1, StageOutcome, WorkflowExecution
 
 __all__ = [
     "ArtifactManifestV1",
+    "AtomicConflictLedger",
+    "AtomicConflictWitness",
     "AutomationAction",
     "BenchmarkLock",
     "BenchmarkSpecV1",
@@ -105,6 +117,9 @@ __all__ = [
     "CompositeFaultBenchmarkSpec",
     "ControlledPedestrianBindingAssessment",
     "ControlledPedestrianBindingCensus",
+    "ConflictPopulationStratum",
+    "ConflictReviewCluster",
+    "ConflictSiteReviewCase",
     "CorridorResearchBundle",
     "GateStatus",
     "BlindReviewDecision",
@@ -117,6 +132,7 @@ __all__ = [
     "IndependentSafetyReport",
     "NetworkQualityVectorV1",
     "MovementConflictGraph",
+    "LosslessReviewCompressionReport",
     "OfficialSumoBenchmarkReport",
     "OfficialSumoBenchmarkSpec",
     "PlainXmlNormalizationReport",
@@ -125,6 +141,7 @@ __all__ = [
     "PatchOperation",
     "PedestrianControlKind",
     "PedestrianCoverageGap",
+    "ReviewCompressionPolicy",
     "ScopeSpec",
     "SemanticDelta",
     "StageOutcome",
@@ -147,6 +164,7 @@ __all__ = [
     "calibrate_connection_mode_audit",
     "audit_independent_movement_safety",
     "build_movement_conflict_graph",
+    "build_lossless_review_compression",
     "canonicalize_net_xml_file",
     "canonical_json_bytes",
     "make_approach_id",

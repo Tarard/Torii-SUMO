@@ -26,6 +26,10 @@ from .pedestrian_control_census import (
     ControlledPedestrianBindingCensus,
     EffectiveTLSProgramInventory,
 )
+from .review_compression import (
+    AtomicConflictLedger,
+    LosslessReviewCompressionReport,
+)
 from .official_sumo_benchmark_contracts import (
     OfficialSumoBenchmarkReport,
     OfficialSumoBenchmarkSpec,
@@ -222,6 +226,22 @@ def build_controlled_pedestrian_binding_census_schema() -> dict[str, object]:
         ControlledPedestrianBindingCensus,
         "torii.corridor.controlled-pedestrian-binding-census.v1.schema.json",
         status="stage-1m-pcb-453-census-contract",
+    )
+
+
+def build_atomic_conflict_ledger_schema() -> dict[str, object]:
+    return _artifact_schema(
+        AtomicConflictLedger,
+        "torii.corridor.atomic-conflict-ledger.v1.schema.json",
+        status="stage-1m-rwc-1-lossless-atomic-witness-contract",
+    )
+
+
+def build_lossless_review_compression_schema() -> dict[str, object]:
+    return _artifact_schema(
+        LosslessReviewCompressionReport,
+        "torii.corridor.lossless-review-compression.v1.schema.json",
+        status="stage-1m-rwc-1-review-compression-contract",
     )
 
 
