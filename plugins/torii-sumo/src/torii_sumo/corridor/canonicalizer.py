@@ -99,6 +99,15 @@ def canonicalize_raw_network(
     for connection in network.connections:
         if connection.from_lane is not None:
             outgoing_connections[(connection.from_edge, connection.from_lane)].append(connection)
+    maximum_internal_hops = max(
+        1,
+        sum(
+            len(edge.lanes)
+            for edge in network.edges.values()
+            if not edge.external
+        )
+        + 1,
+    )
 
     entities: dict[tuple[str, str], CanonicalEntity] = {}
     junction_cell_ids: dict[str, str] = {}
@@ -313,7 +322,12 @@ def canonicalize_raw_network(
             turn_class=turn_class,
         )
         connection_movement_ids[str(connection.connection_index)] = movement_id
-        path = _trace_internal_semantics(connection, network)
+        path = _trace_internal_semantics(
+            connection,
+            network,
+            outgoing_connections=outgoing_connections,
+            maximum_hops=maximum_internal_hops,
+        )
         path_signature = stable_id(
             "signature",
             {"movement_id": movement_id, "path": path},
@@ -1058,6 +1072,9 @@ def _lane_by_ordinal(edge: RawEdge, ordinal: int | None) -> RawLane | None:
 def _trace_internal_semantics(
     direct: RawConnection,
     network: RawNetwork,
+    *,
+    outgoing_connections: dict[tuple[str, int], list[RawConnection]],
+    maximum_hops: int,
 ) -> dict[str, Any]:
     if not direct.via:
         if _raw_network_internal_link_mode(network) == "no-internal-links":
@@ -1070,22 +1087,9 @@ def _trace_internal_semantics(
     lane = network.lanes.get(direct.via)
     if lane is None:
         return {"status": "invalid", "segments": (), "failures": ("via-not-found",)}
-    outgoing: dict[tuple[str, int], list[RawConnection]] = defaultdict(list)
-    for connection in network.connections:
-        if connection.from_lane is not None:
-            outgoing[(connection.from_edge, connection.from_lane)].append(connection)
     segments: list[dict[str, Any]] = []
     failures: list[str] = []
     visited: set[str] = set()
-    maximum_hops = max(
-        1,
-        sum(
-            len(edge.lanes)
-            for edge in network.edges.values()
-            if not edge.external
-        )
-        + 1,
-    )
     current = lane
     for _ in range(maximum_hops):
         if current.lane_id in visited:
@@ -1101,7 +1105,7 @@ def _trace_internal_semantics(
                 "speed_mps": current.speed,
             }
         )
-        candidates = outgoing.get((edge_id, current.ordinal), [])
+        candidates = outgoing_connections.get((edge_id, current.ordinal), [])
         if len(candidates) != 1:
             failures.append(f"outgoing-count:{len(candidates)}")
             break

@@ -116,6 +116,12 @@ def build_connection_mode_catalog(root: ET.Element) -> dict[str, Any]:
     }
     connections = root.findall("connection")
     lane_catalog, lanes_by_edge = _build_lane_catalog(edges)
+    internal_lane_count = sum(
+        len(lanes_by_edge.get(edge_id, {}))
+        for edge_id, edge in edges.items()
+        if edge_id.startswith(":")
+        or edge.attrib.get("function") == "internal"
+    )
     edges_from_junction: dict[str, list[str]] = defaultdict(list)
     for edge_id, edge in edges.items():
         from_junction = edge.attrib.get("from", "")
@@ -139,6 +145,7 @@ def build_connection_mode_catalog(root: ET.Element) -> dict[str, Any]:
         },
         "lane_catalog": lane_catalog,
         "lanes_by_edge": lanes_by_edge,
+        "internal_lane_count": internal_lane_count,
         "edges_from_junction": {
             junction_id: tuple(sorted(edge_ids))
             for junction_id, edge_ids in edges_from_junction.items()
@@ -930,6 +937,7 @@ def audit_standard_connection_mode(
             lanes_by_edge=lanes_by_edge,
             endpoint_tolerance_m=endpoint_tolerance_m,
             internal_link_mode=str(prepared["internal_link_mode"]),
+            internal_lane_count=int(prepared["internal_lane_count"]),
         )
         check["internal_path"] = trace
         if trace.get("unusually_long"):
@@ -1837,6 +1845,7 @@ def _trace_internal_path(
     lanes_by_edge: Mapping[str, Mapping[int, Mapping[str, Any]]],
     endpoint_tolerance_m: float,
     internal_link_mode: str,
+    internal_lane_count: int,
 ) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
     via_lane_id = connection.attrib.get("via", "")
@@ -1915,17 +1924,6 @@ def _trace_internal_path(
     )
     current_lane = via_lane
     visited: set[str] = set()
-    internal_lane_count = sum(
-        1
-        for lane in lane_catalog.values()
-        if (
-            (edge := edges.get(str(lane.get("edge_id", "")))) is not None
-            and (
-                edge.attrib.get("function") == "internal"
-                or str(lane.get("edge_id", "")).startswith(":")
-            )
-        )
-    )
     bounded_hop_limit = max(1, internal_lane_count + 1)
     trace["bounded_hop_limit"] = bounded_hop_limit
     for hop in range(bounded_hop_limit):
