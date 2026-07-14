@@ -10,12 +10,12 @@
 | 阶段 | 状态 | 当前证据或阻断项 |
 |---|---|---|
 | 0. 规范冻结 | 完成 | schema、稳定语义 ID、工具链、manifest、source/candidate 身份和 CI 已冻结。 |
-| 1. Audit-only | 进行中 | 合成单故障、复合故障、SUMO 官方场景和 OOD 适用域测试已建立；30/30 真实 held-out 走廊已完成首次机器尝试，27 个形成完整审核包、3 个因 netconvert 重放不确定性 fail-closed；两名独立人工审核和第三方裁决尚未发生。 |
+| 1. Audit-only | 进行中 | 合成单故障、复合故障、SUMO 官方场景和 OOD 适用域测试已建立；30/30 真实 held-out 走廊已用修正版完成全量机器重跑，27 个形成完整审核包、3 个因 netconvert 重放不确定性 fail-closed；两名独立人工审核和第三方裁决尚未发生。 |
 | 2. 认证 micro-repair | 未完成 | 不得以现有候选契约或旧局部修复代替逐编辑类型的 held-out 认证。 |
 | 3. Physical-cell hypotheses | 未完成 | split/shared-controller、merge、partial 三假设尚未完成统一 held-out 比较。 |
 | 4. Local geometry solver / MGE-1 | 未完成 | 当前 arclength blend 仍仅是消融基线；boundary-port solver 尚未达到预注册退出条件。 |
 | 5A/5B. NEMA 与行人安全 | 未完成 | vehicle-only 严格扫描存在，但行人、自行车、共享 controller 和实际 timing 均未认证。 |
-| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；首次全语料机器运行已结束并保持 blocked，修正后的 Connection Mode 尚待全量重跑，且尚无人审。 |
+| 6. 多城市走廊 | 进行中 | 30 个走廊、6 个城市及左右侧通行快照已全部物化并通过身份/引用闭包；修正后的全语料机器重跑已结束并保持 blocked，尚无人审，也尚未达到 held-out 退出阈值。 |
 | 7. 城市级运行 | 未开始 | 阶段 6 未退出前不得启动自动语义扩张。 |
 
 ## 已冻结的真实 held-out 语料
@@ -135,6 +135,41 @@ Sydney Harbour Bridge 首个机器闭环：
 manifest SHA-256 为
 `7dd11c45dd45090a0fe58e1fa9d4af3b9467fd5fb3320729a87f6da01e8cd794`。
 
+## 修正版 30 走廊机器重跑
+
+在 commit `0348269` 上，冻结的 30 条走廊已使用校准优先、宽度过渡修正和完整
+movement path permission 审核重新运行：
+
+- 30/30 被尝试，27 个形成完整 assessment 和盲化 review case；原来的 London
+  Kings Cross、Melbourne Royal Parade、Sydney Cross City Tunnel 仍在 replay
+  gate 阻断，失败集合没有扩大。
+- 30 个 source OSM 均保持 immutable；顶层 manifest 绑定 497 个 artifact，缺失
+  和 SHA-256 复核失败均为 0。
+- SUMO load 仍为 22 pass、5 fail、3 not-run；routeability 仍为 14 pass、
+  13 fail、3 not-run；因此机器标签变化并非 runtime 口径变化。
+- 25 个完整 case 使用 source-baseline calibration；Amsterdam Amstel Bridge 和
+  Sydney George/Park 因 baseline 最大有效 gap 超过 0.5 m lane-scale cap 而正确
+  阻断校准，仅使用 2 m 诊断 fallback，不能晋级。
+- Connection Mode 变为 26 fail、1 review-required、3 not-run，共 354 个结构
+  failure 和 19,513 个 review finding。结构 failure 精确分为 335 个
+  `path_endpoint_gap`、17 个 `controller_logic_missing` 和 2 个
+  `internal_path_mode_permission_empty`。
+- 两个 permission-empty movement 分别位于 Amsterdam Museumplein 和 London
+  Tower Bridge；source lane、direct connection、完整 internal path 与 target lane
+  的允许模式交集为空。
+- 原先仅因安全覆盖不足而标作 ambiguous 的 Amsterdam A10 Amstel 与 Sydney
+  Harbour Bridge，现在分别因 5 和 3 个校准后 endpoint gap 被机器标为 defect。
+  这仍不是人工真值；必须通过盲审测量该不变量的 precision。
+- independent safety 仍在 30/30 blocked；27 个 review case 的人工 decision 和
+  adjudication 仍均为 0。
+
+本次报告 SHA-256 为
+`4fb50aa5a468bd22fceb2ecfafec9ecf9eb2fd02740f23b78862ef1f100014a5`，
+manifest SHA-256 为
+`cc702516019071e501fe88307f510a30b23d4710f1bd50cb803ca2d878100237`。
+完整静态证据保存在
+`benchmarks/corridor_human_modeling_v1/evidence/held_out_machine_run_corrected_20260714.v1.json`。
+
 ## 真实样本发现并修复的架构缺陷
 
 首轮 Sydney 构建被 canonicalizer 阻断：审核输入声明 left-hand traffic，
@@ -176,7 +211,7 @@ Berlin Alexanderplatz 还暴露了一个审核口径错误：79 个旧
 
 ## 最近的硬阻断项
 
-1. 修正后的 Connection Mode 尚未对 30 个走廊全量重跑；实验性 v2 确定性输入协议只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且该协议不得改写冻结 v1 结果。
+1. 修正版全量重跑已完成，但 354 个机器结构 finding 的真实 precision 尚无人审验证；实验性 v2 确定性输入协议也只在 Melbourne 通过，London/Sydney 因 OSM 环岛证据不闭合而正确阻断，且不得改写冻结 v1 结果。
 2. 需要两名真实独立审核者逐案作答；分歧由第三名 adjudicator 裁决。机器不得代填。
 3. Stage 1 的 raw agreement、Cohen's kappa、attention precision/recall、AutoPrecision 和 review time 尚无真实数值。
 4. pedestrian-aware independent conflict model 尚未完成，因此多模式 TLS 不可自动认证。
