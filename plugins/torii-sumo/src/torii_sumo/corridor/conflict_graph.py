@@ -13,7 +13,16 @@ from .enums import FindingSeverity, GateStatus
 from .evidence import Finding
 from .exact_diff import build_finding
 from .ids import require_stable_id, stable_id
-from .review import PedestrianCrossingReviewSubject
+from .review import PedestrianCoverageGap, PedestrianCrossingReviewSubject
+
+
+_UNSIGNALIZED_PEDESTRIAN_CONTROL_KINDS = frozenset(
+    {
+        "priority-unsignalized",
+        "unprioritized-unsignalized",
+        "unknown-unsignalized",
+    }
+)
 
 
 class MovementConflict(ContractModel):
@@ -57,6 +66,7 @@ class IndependentSafetyCoverage(ContractModel):
     modeled_pedestrian_movement_count: int
     modeled_controlled_pedestrian_movement_count: int
     modeled_uncontrolled_pedestrian_movement_count: int
+    modeled_unsignalized_pedestrian_movement_count: int
     modeled_crossing_edge_count: int
     unmodeled_crossing_edge_count: int
     unmodeled_pedestrian_review_subject_count: int
@@ -64,6 +74,8 @@ class IndependentSafetyCoverage(ContractModel):
         PedestrianCrossingReviewSubject,
         ...,
     ]
+    pedestrian_coverage_gap_count: int
+    pedestrian_coverage_gaps: tuple[PedestrianCoverageGap, ...]
     link_index2_connection_count: int
     unresolved_owner_record_count: int
     movement_mode_class_counts: dict[str, int]
@@ -75,6 +87,20 @@ class IndependentSafetyCoverage(ContractModel):
         ):
             raise ValueError(
                 "Pedestrian review-subject count must match the exact records."
+            )
+        if self.pedestrian_coverage_gap_count != len(
+            self.pedestrian_coverage_gaps
+        ):
+            raise ValueError(
+                "Pedestrian coverage-gap count must match the exact records."
+            )
+        if (
+            self.modeled_uncontrolled_pedestrian_movement_count
+            != self.modeled_unsignalized_pedestrian_movement_count
+        ):
+            raise ValueError(
+                "The deprecated uncontrolled count must equal the "
+                "unsignalized count during the v1 compatibility window."
             )
         return self
 
@@ -225,11 +251,46 @@ def audit_independent_movement_safety(
             review_subject_locations[subject.review_subject_id].append(
                 coverage_entity.stable_entity_id
             )
+    coverage_gaps: dict[str, PedestrianCoverageGap] = {}
+    coverage_gap_subject_ids: dict[str, list[str]] = defaultdict(list)
+    coverage_gap_errors: list[str] = []
+    for entity in snapshot.entities:
+        if entity.kind != "pedestrian_coverage_gap":
+            continue
+        try:
+            coverage_gap = PedestrianCoverageGap.model_validate(
+                entity.payload
+            )
+        except ValidationError as error:
+            details = ",".join(
+                f"{'.'.join(map(str, item['loc']))}:{item['type']}"
+                for item in error.errors(
+                    include_input=False,
+                    include_url=False,
+                )
+            )
+            coverage_gap_errors.append(
+                f"{entity.stable_entity_id}:{details}"
+            )
+            continue
+        if coverage_gap.coverage_gap_id != entity.stable_entity_id:
+            coverage_gap_errors.append(
+                f"{entity.stable_entity_id}:entity_id_mismatch"
+            )
+            continue
+        coverage_gaps[coverage_gap.coverage_gap_id] = coverage_gap
+        coverage_gap_subject_ids[coverage_gap.review_subject_id].append(
+            coverage_gap.coverage_gap_id
+        )
     coverage = _summarize_coverage(
         coverage_entities,
         pedestrian_review_subjects=tuple(
             review_subjects[subject_id]
             for subject_id in sorted(review_subjects)
+        ),
+        pedestrian_coverage_gaps=tuple(
+            coverage_gaps[coverage_gap_id]
+            for coverage_gap_id in sorted(coverage_gaps)
         ),
     )
     limitations: list[str] = []
@@ -275,6 +336,48 @@ def audit_independent_movement_safety(
             severity=FindingSeverity.SAFETY,
             subject_id=review_subject_id,
             witness={"coverage_entity_ids": tuple(sorted(locations))},
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
+    review_subject_id_set = set(review_subjects)
+    coverage_gap_subject_id_set = set(coverage_gap_subject_ids)
+    duplicate_gap_subject_ids = tuple(
+        sorted(
+            subject_id
+            for subject_id, gap_ids in coverage_gap_subject_ids.items()
+            if len(gap_ids) != 1
+        )
+    )
+    if (
+        review_subject_id_set != coverage_gap_subject_id_set
+        or duplicate_gap_subject_ids
+        or coverage_gap_errors
+    ):
+        finding = build_finding(
+            category="pedestrian_coverage_gap_closure_mismatch",
+            severity=FindingSeverity.SAFETY,
+            subject_id=stable_id(
+                "manifest",
+                {"canonical_snapshot": snapshot.source_sha256 or "in-memory"},
+            ),
+            witness={
+                "missing_gap_review_subject_ids": tuple(
+                    sorted(
+                        review_subject_id_set
+                        - coverage_gap_subject_id_set
+                    )
+                ),
+                "orphan_gap_review_subject_ids": tuple(
+                    sorted(
+                        coverage_gap_subject_id_set
+                        - review_subject_id_set
+                    )
+                ),
+                "duplicate_gap_review_subject_ids": (
+                    duplicate_gap_subject_ids
+                ),
+                "invalid_gap_errors": tuple(coverage_gap_errors),
+            },
             confidence=1.0,
         )
         findings[finding.finding_id] = finding
@@ -365,6 +468,14 @@ def audit_independent_movement_safety(
                         subject.model_dump(mode="python")
                         for subject in exact_review_subjects
                     ),
+                    "pedestrian_coverage_gap_ids": tuple(
+                        gap_id
+                        for subject in exact_review_subjects
+                        for gap_id in coverage_gap_subject_ids.get(
+                            subject.review_subject_id,
+                            (),
+                        )
+                    ),
                 },
                 confidence=1.0,
             )
@@ -421,16 +532,20 @@ def audit_independent_movement_safety(
         if _is_pedestrian_crossing_movement(movement)
     }
     signalized_pedestrian_movement_ids: set[str] = set()
-    uncontrolled_pedestrian_movement_ids: set[str] = set()
+    unsignalized_pedestrian_movement_ids: set[str] = set()
     for movement_id in sorted(pedestrian_crossing_movement_ids):
         bindings = pedestrian_control_bindings.get(movement_id, ())
         control_kinds = {
             str(binding.payload.get("control_kind", ""))
             for binding in bindings
         }
-        if len(bindings) != 1 or control_kinds not in (
-            {"signalized"},
-            {"uncontrolled"},
+        if len(bindings) != 1 or (
+            control_kinds != {"signalized"}
+            and not (
+                len(control_kinds) == 1
+                and next(iter(control_kinds), "")
+                in _UNSIGNALIZED_PEDESTRIAN_CONTROL_KINDS
+            )
         ):
             finding = build_finding(
                 category="pedestrian_control_binding_missing_or_ambiguous",
@@ -449,59 +564,91 @@ def audit_independent_movement_safety(
         if control_kinds == {"signalized"}:
             signalized_pedestrian_movement_ids.add(movement_id)
         else:
-            uncontrolled_pedestrian_movement_ids.add(movement_id)
+            unsignalized_pedestrian_movement_ids.add(movement_id)
 
     for movement_id in sorted(
         signalized_pedestrian_movement_ids - signal_group_movement_ids
     ):
         finding = build_finding(
-            category="controlled_pedestrian_signal_group_missing",
+            category="controlled_pedestrian_effective_program_unresolved",
             severity=FindingSeverity.SAFETY,
             subject_id=movement_id,
             witness={
                 "movement_id": movement_id,
                 "control_kind": "signalized",
+                "binding_payloads": tuple(
+                    binding.payload
+                    for binding in pedestrian_control_bindings.get(
+                        movement_id,
+                        (),
+                    )
+                ),
             },
             confidence=1.0,
         )
         findings[finding.finding_id] = finding
     for movement_id in sorted(
-        uncontrolled_pedestrian_movement_ids & signal_group_movement_ids
+        unsignalized_pedestrian_movement_ids & signal_group_movement_ids
     ):
         finding = build_finding(
-            category="uncontrolled_pedestrian_unexpected_signal_group",
+            category="unsignalized_pedestrian_unexpected_signal_group",
             severity=FindingSeverity.SAFETY,
             subject_id=movement_id,
             witness={
                 "movement_id": movement_id,
-                "control_kind": "uncontrolled",
+                "control_kinds": tuple(
+                    sorted(
+                        str(binding.payload.get("control_kind", ""))
+                        for binding in pedestrian_control_bindings.get(
+                            movement_id,
+                            (),
+                        )
+                    )
+                ),
             },
             confidence=1.0,
         )
         findings[finding.finding_id] = finding
     for conflict in graph.conflicts:
         movement_ids = {conflict.movement_a_id, conflict.movement_b_id}
-        uncontrolled_ids = sorted(
-            movement_ids & uncontrolled_pedestrian_movement_ids
+        unsignalized_ids = sorted(
+            movement_ids & unsignalized_pedestrian_movement_ids
         )
-        if not uncontrolled_ids or movement_ids <= pedestrian_crossing_movement_ids:
+        if not unsignalized_ids or movement_ids <= pedestrian_crossing_movement_ids:
             continue
         limitation = (
-            "uncontrolled_pedestrian_right_of_way_not_independently_verified"
+            "pedestrian_unsignalized_right_of_way_not_independently_verified"
         )
         limitations.append(limitation)
         finding = build_finding(
             category=(
-                "uncontrolled_pedestrian_vehicle_conflict_requires_right_of_way_review"
+                "pedestrian_vehicle_conflict_requires_right_of_way_review"
                 if conflict.certainty == "confirmed"
-                else "uncontrolled_pedestrian_vehicle_envelope_requires_review"
+                else "pedestrian_vehicle_envelope_requires_right_of_way_review"
             ),
             severity=FindingSeverity.REVIEW,
             subject_id=conflict.conflict_id,
             witness={
                 "movement_ids": tuple(sorted(movement_ids)),
-                "uncontrolled_pedestrian_movement_ids": tuple(
-                    uncontrolled_ids
+                "unsignalized_pedestrian_movement_ids": tuple(
+                    unsignalized_ids
+                ),
+                "control_kinds": tuple(
+                    sorted(
+                        {
+                            str(
+                                binding.payload.get(
+                                    "control_kind",
+                                    "",
+                                )
+                            )
+                            for movement_id in unsignalized_ids
+                            for binding in pedestrian_control_bindings.get(
+                                movement_id,
+                                (),
+                            )
+                        }
+                    )
                 ),
                 "conflict_id": conflict.conflict_id,
                 "conflict_certainty": conflict.certainty,
@@ -756,6 +903,7 @@ def _summarize_coverage(
         PedestrianCrossingReviewSubject,
         ...,
     ],
+    pedestrian_coverage_gaps: tuple[PedestrianCoverageGap, ...],
 ) -> IndependentSafetyCoverage:
     mode_counts: Counter[str] = Counter()
     for entity in entities:
@@ -811,6 +959,19 @@ def _summarize_coverage(
             )
             for entity in entities
         ),
+        modeled_unsignalized_pedestrian_movement_count=sum(
+            int(
+                entity.payload.get(
+                    "modeled_unsignalized_pedestrian_movement_count",
+                    entity.payload.get(
+                        "modeled_uncontrolled_pedestrian_movement_count",
+                        0,
+                    ),
+                )
+                or 0
+            )
+            for entity in entities
+        ),
         modeled_crossing_edge_count=sum(
             int(entity.payload.get("modeled_crossing_edge_count", 0) or 0) for entity in entities
         ),
@@ -821,6 +982,8 @@ def _summarize_coverage(
             pedestrian_review_subjects
         ),
         unmodeled_pedestrian_crossings=pedestrian_review_subjects,
+        pedestrian_coverage_gap_count=len(pedestrian_coverage_gaps),
+        pedestrian_coverage_gaps=pedestrian_coverage_gaps,
         link_index2_connection_count=sum(
             int(entity.payload.get("link_index2_connection_count", 0) or 0) for entity in entities
         ),

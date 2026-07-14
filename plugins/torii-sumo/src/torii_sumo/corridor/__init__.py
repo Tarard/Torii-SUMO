@@ -63,6 +63,11 @@ from .plainxml_normalization import (
     PlainXmlNormalizationReport,
     normalize_osm_plainxml_bundle,
 )
+from .review import (
+    PedestrianControlKind,
+    PedestrianCoverageGap,
+    build_pedestrian_coverage_gap,
+)
 from .ood_benchmark_contracts import OODBenchmarkReport, OODBenchmarkSpec
 from .ood_benchmark_runner import run_ood_benchmark
 from .scope import BoundaryPort, ScopeSpec
@@ -108,6 +113,8 @@ __all__ = [
     "OODBenchmarkReport",
     "OODBenchmarkSpec",
     "PatchOperation",
+    "PedestrianControlKind",
+    "PedestrianCoverageGap",
     "ScopeSpec",
     "SemanticDelta",
     "StageOutcome",
@@ -120,6 +127,7 @@ __all__ = [
     "WorkflowStage",
     "ExactSemanticDiffReport",
     "build_finding",
+    "build_pedestrian_coverage_gap",
     "build_blinded_review_artifacts",
     "build_exact_semantic_regression_artifacts",
     "build_connection_mode_calibration_artifact",

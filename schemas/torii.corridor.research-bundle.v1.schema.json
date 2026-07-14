@@ -1231,12 +1231,27 @@
           "title": "Modeled Uncontrolled Pedestrian Movement Count",
           "type": "integer"
         },
+        "modeled_unsignalized_pedestrian_movement_count": {
+          "title": "Modeled Unsignalized Pedestrian Movement Count",
+          "type": "integer"
+        },
         "movement_mode_class_counts": {
           "additionalProperties": {
             "type": "integer"
           },
           "title": "Movement Mode Class Counts",
           "type": "object"
+        },
+        "pedestrian_coverage_gap_count": {
+          "title": "Pedestrian Coverage Gap Count",
+          "type": "integer"
+        },
+        "pedestrian_coverage_gaps": {
+          "items": {
+            "$ref": "#/$defs/PedestrianCoverageGap"
+          },
+          "title": "Pedestrian Coverage Gaps",
+          "type": "array"
         },
         "schema": {
           "default": "torii.corridor.contracts/v1",
@@ -1282,10 +1297,13 @@
         "modeled_pedestrian_movement_count",
         "modeled_controlled_pedestrian_movement_count",
         "modeled_uncontrolled_pedestrian_movement_count",
+        "modeled_unsignalized_pedestrian_movement_count",
         "modeled_crossing_edge_count",
         "unmodeled_crossing_edge_count",
         "unmodeled_pedestrian_review_subject_count",
         "unmodeled_pedestrian_crossings",
+        "pedestrian_coverage_gap_count",
+        "pedestrian_coverage_gaps",
         "link_index2_connection_count",
         "unresolved_owner_record_count",
         "movement_mode_class_counts"
@@ -1624,6 +1642,210 @@
       "title": "PatchOperation",
       "type": "object"
     },
+    "PedestrianCoverageGap": {
+      "additionalProperties": false,
+      "description": "Stable review entity for one pedestrian facility outside model coverage.",
+      "properties": {
+        "affected_movement_candidate_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Affected Movement Candidate Ids",
+          "type": "array"
+        },
+        "boundary_port_candidate_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Boundary Port Candidate Ids",
+          "type": "array"
+        },
+        "control_kind": {
+          "enum": [
+            "signalized",
+            "priority-unsignalized",
+            "unprioritized-unsignalized",
+            "unknown-unsignalized",
+            "runtime-special",
+            "shared-space-or-unsupported"
+          ],
+          "title": "Control Kind",
+          "type": "string"
+        },
+        "coverage_gap_id": {
+          "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+          "title": "Coverage Gap Id",
+          "type": "string"
+        },
+        "crossed_edge_signatures": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Crossed Edge Signatures",
+          "type": "array"
+        },
+        "crossing_shape_xy": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Crossing Shape Xy",
+          "type": "array"
+        },
+        "crossing_signature": {
+          "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+          "title": "Crossing Signature",
+          "type": "string"
+        },
+        "crossing_width_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Crossing Width M"
+        },
+        "machine_question": {
+          "title": "Machine Question",
+          "type": "string"
+        },
+        "ood_dimensions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Ood Dimensions",
+          "type": "array"
+        },
+        "owner_candidate_physical_cell_ids": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Owner Candidate Physical Cell Ids",
+          "type": "array"
+        },
+        "permission_contract": {
+          "additionalProperties": true,
+          "title": "Permission Contract",
+          "type": "object"
+        },
+        "position_xy": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Position Xy"
+        },
+        "primary_classification": {
+          "enum": [
+            "safety-coverage-blocker",
+            "structural-blocker",
+            "review-task",
+            "ood-evidence",
+            "evidence-insufficiency"
+          ],
+          "title": "Primary Classification",
+          "type": "string"
+        },
+        "rejection_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rejection Reasons",
+          "type": "array"
+        },
+        "required_observations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Observations",
+          "type": "array"
+        },
+        "review_subject_id": {
+          "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+          "title": "Review Subject Id",
+          "type": "string"
+        },
+        "schema": {
+          "default": "torii.corridor.pedestrian-coverage-gap/v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "secondary_classifications": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Secondary Classifications",
+          "type": "array"
+        },
+        "source_crossing_edge_signature": {
+          "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+          "title": "Source Crossing Edge Signature",
+          "type": "string"
+        },
+        "walkingarea_chain_candidate_signatures": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+            "type": "string"
+          },
+          "title": "Walkingarea Chain Candidate Signatures",
+          "type": "array"
+        }
+      },
+      "required": [
+        "coverage_gap_id",
+        "review_subject_id",
+        "crossing_signature",
+        "source_crossing_edge_signature",
+        "owner_candidate_physical_cell_ids",
+        "walkingarea_chain_candidate_signatures",
+        "crossed_edge_signatures",
+        "boundary_port_candidate_ids",
+        "affected_movement_candidate_ids",
+        "control_kind",
+        "crossing_shape_xy",
+        "crossing_width_m",
+        "position_xy",
+        "permission_contract",
+        "rejection_reasons",
+        "primary_classification",
+        "secondary_classifications",
+        "ood_dimensions",
+        "machine_question",
+        "required_observations"
+      ],
+      "title": "PedestrianCoverageGap",
+      "type": "object"
+    },
     "PedestrianCrossingReviewSubject": {
       "additionalProperties": false,
       "description": "Stable, raw-ID-free subject for one unmodeled pedestrian crossing.",
@@ -1639,7 +1861,11 @@
         "control_kind": {
           "enum": [
             "signalized",
-            "uncontrolled"
+            "priority-unsignalized",
+            "unprioritized-unsignalized",
+            "unknown-unsignalized",
+            "runtime-special",
+            "shared-space-or-unsupported"
           ],
           "title": "Control Kind",
           "type": "string"
