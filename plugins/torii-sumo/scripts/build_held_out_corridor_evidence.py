@@ -44,6 +44,11 @@ def main() -> None:
         type=Path,
         default=BENCHMARK_DIR / "vehicle_x4_certification_envelope.v1.json",
     )
+    parser.add_argument(
+        "--toolchain-lock",
+        type=Path,
+        default=BENCHMARK_DIR / "toolchain.lock.json",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--sumo-home", type=Path, required=True)
     parser.add_argument(
@@ -59,6 +64,7 @@ def main() -> None:
         snapshot_report_file=args.snapshot_report,
         held_out_review_policy_file=args.policy,
         certification_envelope_file=args.certification_envelope,
+        toolchain_lock_file=args.toolchain_lock,
         output_dir=args.output_dir,
         sumo_home=args.sumo_home,
         only_corridor_keys=tuple(args.only_corridor),

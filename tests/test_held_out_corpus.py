@@ -13,7 +13,9 @@ from torii_sumo.corridor.enums import GateStatus, TrafficSide
 from torii_sumo.corridor.held_out_corpus_contracts import (
     GeographicBbox,
     HeldOutCityExtract,
+    HeldOutCorpusMachineManifest,
     HeldOutCorridorSelection,
+    HeldOutMachineArtifactIdentity,
 )
 from torii_sumo.corridor.held_out_corpus_runner import (
     _segment_intersects_bbox,
@@ -31,8 +33,16 @@ from torii_sumo.corridor.held_out_corpus_preregistration import (
 from torii_sumo.corridor.ids import stable_id
 from torii_sumo.corridor.schema import (
     build_held_out_corpus_schema,
+    build_held_out_corpus_machine_manifest_schema,
     build_held_out_corpus_machine_report_schema,
     build_held_out_corpus_snapshot_report_schema,
+    build_held_out_machine_run_identity_schema,
+)
+from torii_sumo.corridor.run_identity import (
+    CodeProducerIdentity,
+    HeldOutMachineRunIdentity,
+    RuntimeExecutableIdentity,
+    RuntimeSupportFileIdentity,
 )
 
 
@@ -176,8 +186,14 @@ def test_held_out_corpus_schemas_are_current() -> None:
         "torii.corridor.held-out-corpus-snapshot-report.v1.schema.json": (
             build_held_out_corpus_snapshot_report_schema()
         ),
-        "torii.corridor.held-out-corpus-machine-report.v1.schema.json": (
+        "torii.corridor.held-out-corpus-machine-report.v2.schema.json": (
             build_held_out_corpus_machine_report_schema()
+        ),
+        "torii.corridor.held-out-machine-run-identity.v1.schema.json": (
+            build_held_out_machine_run_identity_schema()
+        ),
+        "torii.corridor.held-out-corpus-machine-manifest.v2.schema.json": (
+            build_held_out_corpus_machine_manifest_schema()
         ),
     }
     for filename, schema in schemas.items():
@@ -185,6 +201,94 @@ def test_held_out_corpus_schemas_are_current() -> None:
         assert (REPOSITORY_ROOT / "schemas" / filename).read_text(
             encoding="utf-8"
         ) == expected
+
+
+def test_held_out_run_identity_is_content_derived_and_fail_closed() -> None:
+    producer = CodeProducerIdentity(
+        repository_url="https://github.com/Tarard/Torii-SUMO.git",
+        revision="a" * 40,
+        tree_revision="b" * 40,
+        branch="codex/test",
+        working_tree_clean=True,
+    )
+    runtime_tools = (
+        RuntimeExecutableIdentity(
+            name="netconvert",
+            path="C:/SUMO/netconvert.exe",
+            version="1.27.1",
+            sha256="c" * 64,
+        ),
+    )
+    support_files = (
+        RuntimeSupportFileIdentity(
+            name="osmNetconvert.typ.xml",
+            path="C:/SUMO/osmNetconvert.typ.xml",
+            sha256="d" * 64,
+        ),
+    )
+    identity = HeldOutMachineRunIdentity.build(
+        producer=producer,
+        entrypoint="plugins/torii-sumo/scripts/build_held_out_corridor_evidence.py",
+        toolchain_id=stable_id("toolchain", {"fixture": 1}),
+        toolchain_lock_sha256="e" * 64,
+        platform_name="Windows-test",
+        python_version="3.12.10",
+        runtime_dependencies={"torii-sumo": "1.0.2"},
+        runtime_tools=runtime_tools,
+        support_files=support_files,
+        selected_corridor_keys=("alpha", "beta"),
+        timeout_seconds=180.0,
+        blinding_seed_sha256="f" * 64,
+    )
+
+    assert identity.run_identity_id == stable_id(
+        "toolchain",
+        identity.identity_payload(),
+    )
+    tampered = identity.model_dump(mode="json", by_alias=True)
+    tampered["timeout_seconds"] = 181.0
+    with pytest.raises(ValueError, match="run_identity_id"):
+        HeldOutMachineRunIdentity.model_validate(tampered)
+
+
+def test_machine_manifest_requires_provenance_artifact_closure() -> None:
+    producer = CodeProducerIdentity(
+        repository_url="https://github.com/Tarard/Torii-SUMO.git",
+        revision="a" * 40,
+        tree_revision="b" * 40,
+        branch="codex/test",
+        working_tree_clean=True,
+    )
+    toolchain_path = "C:/repo/toolchain.lock.json"
+    identity_path = "C:/output/run-identity.json"
+    artifacts = (
+        HeldOutMachineArtifactIdentity(
+            path=toolchain_path,
+            sha256="c" * 64,
+        ),
+        HeldOutMachineArtifactIdentity(
+            path=identity_path,
+            sha256="d" * 64,
+        ),
+    )
+    payload = {
+        "corpus_id": stable_id("manifest", {"fixture": "corpus"}),
+        "evidence_build_status": GateStatus.BLOCKED,
+        "toolchain_lock_path": toolchain_path,
+        "toolchain_lock_sha256": "c" * 64,
+        "run_identity_id": stable_id("toolchain", {"fixture": "run"}),
+        "run_identity_path": identity_path,
+        "run_identity_sha256": "d" * 64,
+        "producer": producer,
+        "artifacts": artifacts,
+    }
+
+    manifest = HeldOutCorpusMachineManifest(**payload)
+
+    assert len(manifest.artifacts) == 2
+    payload["artifacts"] = artifacts[:1]
+    with pytest.raises(ValueError, match="does not close provenance artifacts"):
+        HeldOutCorpusMachineManifest(**payload)
 
 
 def test_real_held_out_corpus_is_preregistered_and_deterministic() -> None:

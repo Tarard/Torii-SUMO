@@ -147,7 +147,7 @@
       "type": "object"
     }
   },
-  "$id": "https://github.com/Tarard/Torii-SUMO/schemas/torii.corridor.held-out-corpus-machine-report.v1.schema.json",
+  "$id": "https://github.com/Tarard/Torii-SUMO/schemas/torii.corridor.held-out-corpus-machine-report.v2.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -249,14 +249,37 @@
       "title": "Results",
       "type": "array"
     },
+    "run_identity_id": {
+      "pattern": "^[a-z][a-z0-9_]*_[0-9a-f]{24}$",
+      "title": "Run Identity Id",
+      "type": "string"
+    },
+    "run_identity_path": {
+      "title": "Run Identity Path",
+      "type": "string"
+    },
+    "run_identity_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Run Identity Sha256",
+      "type": "string"
+    },
     "schema": {
-      "default": "torii.corridor.held-out-corpus-machine-report/v1",
+      "default": "torii.corridor.held-out-corpus-machine-report/v2",
       "title": "Schema",
       "type": "string"
     },
     "snapshot_report_sha256": {
       "pattern": "^[0-9a-f]{64}$",
       "title": "Snapshot Report Sha256",
+      "type": "string"
+    },
+    "toolchain_lock_path": {
+      "title": "Toolchain Lock Path",
+      "type": "string"
+    },
+    "toolchain_lock_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Toolchain Lock Sha256",
       "type": "string"
     }
   },
@@ -265,6 +288,11 @@
     "corpus_spec_sha256",
     "snapshot_report_sha256",
     "certification_envelope_sha256",
+    "toolchain_lock_path",
+    "toolchain_lock_sha256",
+    "run_identity_id",
+    "run_identity_path",
+    "run_identity_sha256",
     "evidence_build_status",
     "expected_case_count",
     "processed_case_count",
