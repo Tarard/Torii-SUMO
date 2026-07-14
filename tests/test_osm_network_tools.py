@@ -1723,6 +1723,52 @@ def test_build_osm_network_reference_visual_detail_profile_imports_pedestrian_tl
     assert 'disallow="pedestrian' in service_type_text
 
 
+def test_build_osm_network_passes_explicit_left_hand_traffic_to_netconvert(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="-33.85" lon="151.20"/>
+  <node id="2" lat="-33.84" lon="151.21"/>
+  <way id="10"><nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/></way>
+</osm>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_runner(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        timeout_seconds: float = 60.0,
+    ) -> CommandResult:
+        calls.append(command)
+        assert cwd is not None
+        output = cwd / command[command.index("--output-file") + 1]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("<net/>", encoding="utf-8")
+        return CommandResult(
+            command=command,
+            cwd=str(cwd),
+            status="pass",
+            returncode=0,
+        )
+
+    report = build_osm_network(
+        bbox="151.19,-33.86,151.22,-33.83",
+        output_dir=tmp_path / "build",
+        source_osm_path=source,
+        allowed_highways={"primary"},
+        traffic_side="left",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["traffic_side"] == "left"
+    assert "--lefthand" in calls[0]
+
+
 def test_build_osm_network_rejects_tum_named_netconvert_profile(tmp_path: Path) -> None:
     source = tmp_path / "input.osm.xml"
     source.write_text(

@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .command_runner import run_command
+from .artifact_io import write_json_atomic
+from .candidate_contracts import file_sha256
 
 
 class CommandRunner(Protocol):
@@ -39,6 +41,97 @@ def run_sumo_config(
         "diagnostic-demo" if result.status == "pass" else "construction-invalid"
     )
     return payload
+
+
+def run_sumo_load_audit(
+    *,
+    net_file: Path,
+    output_dir: Path,
+    sumo_binary: str = "sumo",
+    timeout_seconds: float = 120.0,
+    command_runner: CommandRunner = run_command,
+) -> dict[str, Any]:
+    """Load one immutable network in SUMO without normalizing or repairing it."""
+
+    source = net_file.resolve()
+    destination = output_dir.resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    report_file = destination / "sumo-load-audit.json"
+    manifest_file = destination / "sumo-load-audit.manifest.json"
+    if not source.is_file():
+        report = {
+            "schema": "torii.sumo-load-audit/v1",
+            "status": "fail",
+            "source_net_file": str(source),
+            "error": "network file does not exist",
+            "source_network_mutation": False,
+        }
+    else:
+        source_sha256 = file_sha256(source)
+        command = [
+            sumo_binary,
+            "-n",
+            str(source),
+            "--no-step-log",
+            "true",
+            "--duration-log.disable",
+            "true",
+            "--begin",
+            "0",
+            "--end",
+            "1",
+        ]
+        try:
+            result = command_runner(
+                command,
+                cwd=destination,
+                timeout_seconds=timeout_seconds,
+            )
+            command_report = (
+                result.to_dict() if hasattr(result, "to_dict") else dict(result)
+            )
+        except (OSError, RuntimeError, TimeoutError, TypeError, ValueError) as exc:
+            command_report = {
+                "status": "fail",
+                "returncode": None,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        source_immutable = file_sha256(source) == source_sha256
+        status = (
+            "pass"
+            if command_report.get("status") == "pass"
+            and command_report.get("returncode") == 0
+            and source_immutable
+            else "fail"
+        )
+        report = {
+            "schema": "torii.sumo-load-audit/v1",
+            "status": status,
+            "source_net_file": str(source),
+            "source_sha256": source_sha256,
+            "source_network_mutation": not source_immutable,
+            "command": command,
+            "command_result": command_report,
+        }
+    write_json_atomic(report_file, report, sort_keys=True)
+    artifacts = [{"path": str(report_file), "sha256": file_sha256(report_file)}]
+    if source.is_file():
+        artifacts.insert(0, {"path": str(source), "sha256": file_sha256(source)})
+    write_json_atomic(
+        manifest_file,
+        {
+            "schema": "torii.sumo-load-audit-manifest/v1",
+            "status": report["status"],
+            "source_network_mutation": report["source_network_mutation"],
+            "artifacts": artifacts,
+        },
+        sort_keys=True,
+    )
+    return {
+        **report,
+        "report_file": str(report_file),
+        "manifest_file": str(manifest_file),
+    }
 
 
 def discover_binaries() -> dict[str, str | None]:

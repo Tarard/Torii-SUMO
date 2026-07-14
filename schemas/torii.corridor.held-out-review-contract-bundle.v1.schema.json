@@ -342,7 +342,8 @@
           "enum": [
             "high",
             "medium",
-            "low"
+            "low",
+            "unassessed"
           ],
           "title": "Osm Completeness",
           "type": "string"

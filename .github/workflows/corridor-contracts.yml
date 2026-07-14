@@ -31,6 +31,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check \
             pydantic==2.13.4 \
+            osmium==4.3.1 \
             pytest==9.1.1 \
             ruff==0.15.21
           python -m pip install --no-deps --editable .
@@ -44,6 +45,9 @@ jobs:
             plugins/torii-sumo/scripts/export_official_sumo_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_ood_benchmark_schema.py \
             plugins/torii-sumo/scripts/export_held_out_review_schema.py \
+            plugins/torii-sumo/scripts/build_held_out_corpus.py \
+            plugins/torii-sumo/scripts/build_held_out_corridor_evidence.py \
+            plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
             plugins/torii-sumo/scripts/export_synthetic_benchmark_schema.py \
             plugins/torii-sumo/scripts/evaluate_held_out_review.py \
             plugins/torii-sumo/scripts/run_official_sumo_benchmark.py \
@@ -53,6 +57,7 @@ jobs:
             tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
+            tests/test_held_out_corpus.py \
             tests/test_official_sumo_benchmark.py \
             tests/test_ood_benchmark.py
 
@@ -110,7 +115,10 @@ jobs:
           python plugins/torii-sumo/scripts/export_held_out_review_schema.py \
             --policy-output generated.held-out-review-policy.schema.json \
             --bundle-output generated.held-out-review-bundle.schema.json \
-            --report-output generated.held-out-review-report.schema.json
+            --report-output generated.held-out-review-report.schema.json \
+            --corpus-output generated.held-out-corpus.schema.json \
+            --corpus-report-output generated.held-out-corpus-report.schema.json \
+            --corpus-machine-report-output generated.held-out-corpus-machine-report.schema.json
           diff --unified \
             schemas/torii.corridor.held-out-review-policy.v1.schema.json \
             generated.held-out-review-policy.schema.json
@@ -120,6 +128,20 @@ jobs:
           diff --unified \
             schemas/torii.corridor.held-out-review-report.v1.schema.json \
             generated.held-out-review-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-corpus.v1.schema.json \
+            generated.held-out-corpus.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-corpus-snapshot-report.v1.schema.json \
+            generated.held-out-corpus-report.schema.json
+          diff --unified \
+            schemas/torii.corridor.held-out-corpus-machine-report.v1.schema.json \
+            generated.held-out-corpus-machine-report.schema.json
+          python plugins/torii-sumo/scripts/freeze_held_out_corpus.py \
+            --output generated.held-out-corpus.json
+          diff --unified \
+            benchmarks/corridor_human_modeling_v1/held_out_corpus.v1.json \
+            generated.held-out-corpus.json
 
       - name: Verify benchmark, toolchain, plan, and fail-closed contracts
         run: |
@@ -127,6 +149,7 @@ jobs:
             tests/test_composite_fault_benchmark.py \
             tests/test_corridor_stage0_contracts.py \
             tests/test_held_out_review_trial.py \
+            tests/test_held_out_corpus.py \
             tests/test_official_sumo_benchmark.py \
             tests/test_ood_benchmark.py \
             tests/test_synthetic_fault_benchmark.py \

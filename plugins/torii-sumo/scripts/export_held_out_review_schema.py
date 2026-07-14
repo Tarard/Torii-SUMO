@@ -14,6 +14,9 @@ if str(SRC_ROOT) not in sys.path:
 
 from torii_sumo.core.artifact_io import write_json_atomic
 from torii_sumo.corridor.schema import (
+    build_held_out_corpus_schema,
+    build_held_out_corpus_machine_report_schema,
+    build_held_out_corpus_snapshot_report_schema,
     build_held_out_review_contract_bundle_schema,
     build_held_out_review_policy_schema,
     build_held_out_review_report_schema,
@@ -33,6 +36,13 @@ def main() -> None:
         default=SCHEMA_DIR / "torii.corridor.held-out-review-policy.v1.schema.json",
     )
     parser.add_argument(
+        "--corpus-machine-report-output",
+        type=Path,
+        default=(
+            SCHEMA_DIR / "torii.corridor.held-out-corpus-machine-report.v1.schema.json"
+        ),
+    )
+    parser.add_argument(
         "--bundle-output",
         type=Path,
         default=(
@@ -45,11 +55,33 @@ def main() -> None:
         type=Path,
         default=SCHEMA_DIR / "torii.corridor.held-out-review-report.v1.schema.json",
     )
+    parser.add_argument(
+        "--corpus-output",
+        type=Path,
+        default=SCHEMA_DIR / "torii.corridor.held-out-corpus.v1.schema.json",
+    )
+    parser.add_argument(
+        "--corpus-report-output",
+        type=Path,
+        default=(
+            SCHEMA_DIR
+            / "torii.corridor.held-out-corpus-snapshot-report.v1.schema.json"
+        ),
+    )
     args = parser.parse_args()
     for path, schema in (
         (args.policy_output, build_held_out_review_policy_schema()),
         (args.bundle_output, build_held_out_review_contract_bundle_schema()),
         (args.report_output, build_held_out_review_report_schema()),
+        (args.corpus_output, build_held_out_corpus_schema()),
+        (
+            args.corpus_report_output,
+            build_held_out_corpus_snapshot_report_schema(),
+        ),
+        (
+            args.corpus_machine_report_output,
+            build_held_out_corpus_machine_report_schema(),
+        ),
     ):
         write_json_atomic(path, schema, sort_keys=True)
 
