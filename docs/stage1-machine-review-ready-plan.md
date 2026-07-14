@@ -324,3 +324,16 @@ v2 必须使用新的 schema、trial ID、parent benchmark hash、replacement-po
 - artifact DAG closure。
 
 本规范采用的研究方法：预注册假设、机器与人工阶段分离、失败可证伪、确定性重复、冻结阈值与不可变证据。当前证据成熟度为 **machine evidence under construction**，不是 human-validated result。
+
+## 11. 开发运行记录（非权威 provenance）
+
+截至 2026-07-14，当前实现已完成 RWC-1 的开发级双运行检查。该检查从旧 v3 运行保留的 27 个候选 `.net.xml` 重新执行当前 canonicalizer 和 independent safety audit；旧 canonical JSON 没有被静默补字段或当作当前证据。结果为：
+
+- 27/27 有效 corridor 的完整压缩报告 SHA-256 在相同冻结种子下完全一致；
+- 34,493 个 confirmed witness 与 53,930 个 potential witness 全部进入 atomic ledger，共 88,423 个；
+- atomic membership coverage 为 100%；lost、duplicate、extraneous 和 mixed-hard-key violation 均为 0；
+- 每个 corridor 的 machine review-compression gate 为 pass；
+- 每个 corridor 的 automatic promotion gate 仍为 blocked；
+- `london-kings-cross`、`melbourne-royal-parade` 和 `sydney-cross-city-tunnel` 仍按 replay-invalid 单列，没有进入上述 27 个模型质量样本。
+
+该结果只证明压缩器在现有候选快照上的机器闭合与确定性，不证明 finding 对应现实缺陷，不证明 cluster 内人工决定可传播，也不构成 Stage 1-M provenance。权威证据仍必须在实现提交后，由 clean producer commit 重新生成并纳入完整 manifest。

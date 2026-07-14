@@ -1517,6 +1517,12 @@
           "title": "Conflicts",
           "type": "array"
         },
+        "envelope_margin_m": {
+          "default": 0.25,
+          "minimum": 0.0,
+          "title": "Envelope Margin M",
+          "type": "number"
+        },
         "geometry_missing_movement_ids": {
           "default": [],
           "items": {

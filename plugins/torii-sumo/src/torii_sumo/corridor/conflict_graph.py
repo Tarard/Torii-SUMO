@@ -5,7 +5,7 @@ import math
 from collections import Counter, defaultdict
 from typing import Literal
 
-from pydantic import ValidationError, model_validator
+from pydantic import Field, ValidationError, model_validator
 
 from .base import ContractModel, StableToken
 from .canonicalizer import CanonicalEntity, CanonicalNetworkSnapshot
@@ -48,6 +48,7 @@ class MovementConflictGraph(ContractModel):
     schema_id: str = "torii.corridor.movement-conflict-graph/v1"
     movement_ids: tuple[StableToken, ...]
     conflicts: tuple[MovementConflict, ...]
+    envelope_margin_m: float = Field(default=0.25, ge=0.0)
     geometry_missing_movement_ids: tuple[StableToken, ...] = ()
     geometry_unavailable_by_design_movement_ids: tuple[StableToken, ...] = ()
 
@@ -195,6 +196,7 @@ def build_movement_conflict_graph(
     return MovementConflictGraph(
         movement_ids=tuple(sorted(movement_entities)),
         conflicts=tuple(conflicts),
+        envelope_margin_m=envelope_margin_m,
         geometry_missing_movement_ids=tuple(sorted(missing)),
         geometry_unavailable_by_design_movement_ids=tuple(sorted(unavailable_by_design)),
     )
