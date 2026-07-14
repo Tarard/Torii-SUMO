@@ -926,7 +926,7 @@ def audit_standard_connection_mode(
                 }
             )
 
-        trace, trace_failures = _trace_internal_path(
+        trace, trace_failures, trace_review_findings = _trace_internal_path(
             connection_index=connection_index,
             connection=connection,
             source_lane=source_lane,
@@ -949,6 +949,8 @@ def audit_standard_connection_mode(
                     f"{trace.get('internal_lane_chain_length', 0)}"
                 ),
             )
+        for finding in trace_review_findings:
+            _flag_review(check, review_findings, finding)
         for failure in trace_failures:
             _fail(check, hard_blockers, failure)
         movement_checks.append(check)
@@ -1846,8 +1848,9 @@ def _trace_internal_path(
     endpoint_tolerance_m: float,
     internal_link_mode: str,
     internal_lane_count: int,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], list[str], list[str]]:
     failures: list[str] = []
+    review_findings: list[str] = []
     via_lane_id = connection.attrib.get("via", "")
     target_edge = connection.attrib.get("to", "")
     target_index = _as_int(connection.attrib.get("toLane"))
@@ -1856,7 +1859,10 @@ def _trace_internal_path(
         "internal_lane_chain": [],
         "internal_connection_indices": [],
         "endpoint_gaps_m": [],
+        "endpoint_effective_gaps_m": [],
+        "endpoint_width_transition_offsets_m": [],
         "max_endpoint_gap_m": None,
+        "max_effective_endpoint_gap_m": None,
         "internal_lane_chain_length": 0,
         "bounded_hop_limit": 0,
         "unusually_long": False,
@@ -1877,7 +1883,7 @@ def _trace_internal_path(
             trace["path_kind"] = "direct_no_internal_links"
             trace["endpoint_gap_policy"] = "not_available_in_network_mode"
             trace["status"] = "pass"
-            return trace, failures
+            return trace, failures, review_findings
         if source_function == "walkingarea" and target_function == "crossing":
             source_shape = list(source_lane.get("shape", [])) if source_lane else []
             target_shape = list(target_lane.get("shape", [])) if target_lane else []
@@ -1896,23 +1902,30 @@ def _trace_internal_path(
             trace["path_kind"] = "direct_walkingarea_to_crossing"
             trace["endpoint_gap_policy"] = "nearest_endpoint_diagnostic_only"
             trace["endpoint_gaps_m"] = [round(value, 6) for value in gaps]
+            trace["endpoint_effective_gaps_m"] = [round(value, 6) for value in gaps]
+            trace["endpoint_width_transition_offsets_m"] = [0.0 for _ in gaps]
             trace["max_endpoint_gap_m"] = round(max(gaps), 6) if gaps else None
+            trace["max_effective_endpoint_gap_m"] = (
+                round(max(gaps), 6) if gaps else None
+            )
             trace["status"] = "pass" if not failures else "fail"
-            return trace, failures
+            return trace, failures, review_findings
         failures.append(f"missing_direct_via_lane:{connection_index}")
-        return trace, failures
+        return trace, failures, review_findings
     via_lane = lane_catalog.get(via_lane_id)
     if via_lane is None:
         failures.append(f"direct_via_lane_not_found:{connection_index}:{via_lane_id}")
-        return trace, failures
+        return trace, failures, review_findings
     via_edge_id = str(via_lane["edge_id"])
     via_edge = edges.get(via_edge_id)
     if via_edge is None or (
         via_edge.attrib.get("function") != "internal" and not via_edge_id.startswith(":")
     ):
         failures.append(f"direct_via_lane_not_internal:{connection_index}:{via_lane_id}")
-        return trace, failures
+        return trace, failures, review_findings
 
+    effective_gaps: list[float] = []
+    width_transition_offsets: list[float] = []
     _check_shape_gap(
         source_lane,
         via_lane,
@@ -1920,7 +1933,10 @@ def _trace_internal_path(
         hop="entry",
         tolerance=endpoint_tolerance_m,
         gaps=gaps,
+        effective_gaps=effective_gaps,
+        width_transition_offsets=width_transition_offsets,
         failures=failures,
+        review_findings=review_findings,
     )
     current_lane = via_lane
     visited: set[str] = set()
@@ -1974,7 +1990,10 @@ def _trace_internal_path(
                 hop=f"internal_{hop}",
                 tolerance=endpoint_tolerance_m,
                 gaps=gaps,
+                effective_gaps=effective_gaps,
+                width_transition_offsets=width_transition_offsets,
                 failures=failures,
+                review_findings=review_findings,
             )
             current_lane = next_lane
             continue
@@ -1993,7 +2012,10 @@ def _trace_internal_path(
             hop="exit",
             tolerance=endpoint_tolerance_m,
             gaps=gaps,
+            effective_gaps=effective_gaps,
+            width_transition_offsets=width_transition_offsets,
             failures=failures,
+            review_findings=review_findings,
         )
         if target_lane is not None and str(final_lane.get("id", "")) != str(target_lane.get("id", "")):
             failures.append(f"internal_path_final_lane_mismatch:{connection_index}")
@@ -2004,11 +2026,20 @@ def _trace_internal_path(
         )
 
     trace["endpoint_gaps_m"] = [round(value, 6) for value in gaps]
+    trace["endpoint_effective_gaps_m"] = [
+        round(value, 6) for value in effective_gaps
+    ]
+    trace["endpoint_width_transition_offsets_m"] = [
+        round(value, 6) for value in width_transition_offsets
+    ]
     trace["max_endpoint_gap_m"] = round(max(gaps), 6) if gaps else None
+    trace["max_effective_endpoint_gap_m"] = (
+        round(max(effective_gaps), 6) if effective_gaps else None
+    )
     trace["internal_lane_chain_length"] = len(trace["internal_lane_chain"])
     trace["unusually_long"] = len(trace["internal_lane_chain"]) > 16
     trace["status"] = "pass" if not failures else "fail"
-    return trace, failures
+    return trace, failures, review_findings
 
 
 def _infer_internal_link_mode(
@@ -2051,17 +2082,95 @@ def _check_shape_gap(
     hop: str,
     tolerance: float,
     gaps: list[float],
+    effective_gaps: list[float],
+    width_transition_offsets: list[float],
     failures: list[str],
+    review_findings: list[str],
 ) -> None:
     current_shape = list(current_lane.get("shape", [])) if current_lane is not None else []
     next_shape = list(next_lane.get("shape", [])) if next_lane is not None else []
     if len(current_shape) < 2 or len(next_shape) < 2:
         failures.append(f"lane_shape_missing_or_short:{connection_index}:{hop}")
         return
-    gap = math.dist(current_shape[-1], next_shape[0])
+    gap, effective_gap, width_transition_offset = _effective_endpoint_gap(
+        current_lane,
+        next_lane,
+        current_shape=current_shape,
+        next_shape=next_shape,
+    )
     gaps.append(gap)
-    if gap > tolerance:
+    effective_gaps.append(effective_gap)
+    width_transition_offsets.append(width_transition_offset)
+    if effective_gap > tolerance:
         failures.append(f"path_endpoint_gap:{connection_index}:{hop}:{gap:.3f}m")
+    elif gap > tolerance and width_transition_offset > 0.0:
+        review_findings.append(
+            f"path_width_transition_centerline_offset:{connection_index}:{hop}:"
+            f"{gap:.3f}m:{effective_gap:.3f}m"
+        )
+
+
+def _effective_endpoint_gap(
+    current_lane: Mapping[str, Any] | None,
+    next_lane: Mapping[str, Any] | None,
+    *,
+    current_shape: Sequence[tuple[float, float]],
+    next_shape: Sequence[tuple[float, float]],
+) -> tuple[float, float, float]:
+    """Separate a real path break from a SUMO lane-width centreline shift.
+
+    Netconvert aligns a narrowing or widening lane ribbon at one border.  The
+    two lane centre lines can therefore differ by half the width change while
+    the traversable ribbons remain continuous.  Only the lateral component of
+    that offset is discounted; a longitudinal break remains fully visible.
+    """
+
+    delta = (
+        next_shape[0][0] - current_shape[-1][0],
+        next_shape[0][1] - current_shape[-1][1],
+    )
+    raw_gap = math.hypot(*delta)
+    current_width = _lane_width_m(current_lane)
+    next_width = _lane_width_m(next_lane)
+    width_transition_offset = abs(current_width - next_width) / 2.0
+    effective_candidates: list[float] = []
+    for first, second in (
+        (current_shape[-2], current_shape[-1]),
+        (next_shape[0], next_shape[1]),
+    ):
+        tangent = _unit_vector(first, second)
+        if tangent is None:
+            continue
+        longitudinal = abs(delta[0] * tangent[0] + delta[1] * tangent[1])
+        lateral = abs(delta[0] * -tangent[1] + delta[1] * tangent[0])
+        effective_candidates.append(
+            math.hypot(
+                longitudinal,
+                max(0.0, lateral - width_transition_offset),
+            )
+        )
+    effective_gap = min(effective_candidates, default=raw_gap)
+    return raw_gap, effective_gap, width_transition_offset
+
+
+def _unit_vector(
+    first: tuple[float, float],
+    second: tuple[float, float],
+) -> tuple[float, float] | None:
+    delta_x = second[0] - first[0]
+    delta_y = second[1] - first[1]
+    length = math.hypot(delta_x, delta_y)
+    if length <= 0.0:
+        return None
+    return delta_x / length, delta_y / length
+
+
+def _lane_width_m(lane: Mapping[str, Any] | None) -> float:
+    element = lane.get("element") if lane is not None else None
+    if not isinstance(element, ET.Element):
+        return 3.2
+    width = _as_float(element.attrib.get("width"), 3.2)
+    return width if width > 0.0 else 3.2
 
 
 def _audit_lane_order(
