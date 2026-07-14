@@ -18,7 +18,7 @@ class PedestrianFacilityOwner:
 
 
 @dataclass(frozen=True)
-class ControlledPedestrianCrossingModel:
+class PedestrianCrossingModel:
     connection_index: int
     physical_cell_id: str
     boundary_port_ids: tuple[str, ...]
@@ -31,12 +31,13 @@ class ControlledPedestrianCrossingModel:
     movement_variant: dict[str, Any]
     crossing_edge_id: str
     walkingarea_edge_ids: tuple[str, ...]
+    controlled: bool
 
 
 @dataclass(frozen=True)
-class ControlledPedestrianCrossingAttempt:
+class PedestrianCrossingAttempt:
     is_candidate: bool
-    model: ControlledPedestrianCrossingModel | None = None
+    model: PedestrianCrossingModel | None = None
     rejection_reasons: tuple[str, ...] = ()
 
 
@@ -100,44 +101,50 @@ def infer_pedestrian_facility_owners(
     return owners
 
 
-def model_controlled_pedestrian_crossing(
+def model_pedestrian_crossing(
     connection: RawConnection,
     *,
     network: RawNetwork,
     facility_owners: Mapping[str, PedestrianFacilityOwner],
     port_ids_by_edge_flow: Mapping[tuple[str, str, str], str],
     outgoing_connections: Mapping[tuple[str, int], Sequence[RawConnection]],
-) -> ControlledPedestrianCrossingAttempt:
+) -> PedestrianCrossingAttempt:
     source_edge = network.edges.get(connection.from_edge)
     crossing_edge = network.edges.get(connection.to_edge)
     is_candidate = bool(
-        connection.controller_id
-        and source_edge is not None
+        source_edge is not None
         and crossing_edge is not None
         and source_edge.function == "walkingarea"
         and crossing_edge.function == "crossing"
     )
     if not is_candidate:
-        return ControlledPedestrianCrossingAttempt(is_candidate=False)
+        return PedestrianCrossingAttempt(is_candidate=False)
 
     rejection_reasons: list[str] = []
-    if connection.link_index is None:
+    controlled = bool(connection.controller_id)
+    if controlled and connection.link_index is None:
         rejection_reasons.append("controlled_pedestrian_link_index_missing")
+    if not controlled and (
+        connection.link_index is not None or connection.link_index2 is not None
+    ):
+        rejection_reasons.append(
+            "uncontrolled_pedestrian_signal_index_without_controller"
+        )
     if connection.via:
-        rejection_reasons.append("controlled_pedestrian_via_not_supported")
+        rejection_reasons.append("pedestrian_via_not_supported")
     source_lane = _lane_by_ordinal(source_edge, connection.from_lane)
     crossing_lane = _lane_by_ordinal(crossing_edge, connection.to_lane)
     if source_lane is None:
-        rejection_reasons.append("controlled_pedestrian_source_lane_missing")
+        rejection_reasons.append("pedestrian_source_lane_missing")
     if crossing_lane is None:
-        rejection_reasons.append("controlled_pedestrian_crossing_lane_missing")
+        rejection_reasons.append("pedestrian_crossing_lane_missing")
 
     source_owner = facility_owners.get(source_edge.edge_id)
     crossing_owner = facility_owners.get(crossing_edge.edge_id)
     if source_owner is None or crossing_owner is None:
-        rejection_reasons.append("controlled_pedestrian_owner_unresolved")
+        rejection_reasons.append("pedestrian_owner_unresolved")
     elif source_owner != crossing_owner:
-        rejection_reasons.append("controlled_pedestrian_owner_mismatch")
+        rejection_reasons.append("pedestrian_owner_mismatch")
 
     continuation: RawConnection | None = None
     destination_edge = None
@@ -150,34 +157,46 @@ def model_controlled_pedestrian_crossing(
             )
         )
         if len(continuations) != 1:
-            rejection_reasons.append(f"controlled_pedestrian_continuation_count:{len(continuations)}")
+            rejection_reasons.append(
+                f"pedestrian_continuation_count:{len(continuations)}"
+            )
         else:
             continuation = continuations[0]
             if continuation.via:
-                rejection_reasons.append("controlled_pedestrian_continuation_via_not_supported")
+                rejection_reasons.append(
+                    "pedestrian_continuation_via_not_supported"
+                )
             destination_edge = network.edges.get(continuation.to_edge)
             if destination_edge is None or destination_edge.function != "walkingarea":
-                rejection_reasons.append("controlled_pedestrian_destination_not_walkingarea")
+                rejection_reasons.append(
+                    "pedestrian_destination_not_walkingarea"
+                )
             else:
                 destination_lane = _lane_by_ordinal(
                     destination_edge,
                     continuation.to_lane,
                 )
                 if destination_lane is None:
-                    rejection_reasons.append("controlled_pedestrian_destination_lane_missing")
+                    rejection_reasons.append(
+                        "pedestrian_destination_lane_missing"
+                    )
                 destination_owner = facility_owners.get(destination_edge.edge_id)
                 if crossing_owner is None or destination_owner is None:
-                    rejection_reasons.append("controlled_pedestrian_destination_owner_unresolved")
+                    rejection_reasons.append(
+                        "pedestrian_destination_owner_unresolved"
+                    )
                 elif destination_owner != crossing_owner:
-                    rejection_reasons.append("controlled_pedestrian_destination_owner_mismatch")
+                    rejection_reasons.append(
+                        "pedestrian_destination_owner_mismatch"
+                    )
 
     if crossing_lane is not None:
         if len(crossing_lane.shape) < 2:
-            rejection_reasons.append("controlled_pedestrian_geometry_missing")
+            rejection_reasons.append("pedestrian_geometry_missing")
         if crossing_lane.width is None or crossing_lane.width <= 0:
-            rejection_reasons.append("controlled_pedestrian_width_missing")
+            rejection_reasons.append("pedestrian_width_missing")
     if not crossing_edge.crossing_edge_ids:
-        rejection_reasons.append("controlled_pedestrian_crossing_edges_missing")
+        rejection_reasons.append("pedestrian_crossing_edges_missing")
 
     crossed_boundary_ports: list[str] = []
     if crossing_owner is not None:
@@ -185,7 +204,9 @@ def model_controlled_pedestrian_crossing(
         for crossed_edge_id in crossing_edge.crossing_edge_ids:
             crossed_edge = network.edges.get(crossed_edge_id)
             if crossed_edge is None or not crossed_edge.external:
-                rejection_reasons.append("controlled_pedestrian_crossed_edge_missing_or_internal")
+                rejection_reasons.append(
+                    "pedestrian_crossed_edge_missing_or_internal"
+                )
                 continue
             candidate_ports: list[str] = []
             if crossed_edge.to_junction == junction_id:
@@ -197,11 +218,13 @@ def model_controlled_pedestrian_crossing(
                 if port_id:
                     candidate_ports.append(port_id)
             if len(candidate_ports) != 1:
-                rejection_reasons.append("controlled_pedestrian_crossed_port_unresolved")
+                rejection_reasons.append(
+                    "pedestrian_crossed_port_unresolved"
+                )
                 continue
             crossed_boundary_ports.append(candidate_ports[0])
     if crossing_edge.crossing_edge_ids and not crossed_boundary_ports:
-        rejection_reasons.append("controlled_pedestrian_crossed_ports_empty")
+        rejection_reasons.append("pedestrian_crossed_ports_empty")
 
     permission_contract = _permission_contract((source_lane, connection, crossing_lane, continuation, destination_lane))
     if (
@@ -209,10 +232,10 @@ def model_controlled_pedestrian_crossing(
         or permission_contract["status"] != "pass"
         or not _contract_allows_pedestrian(permission_contract)
     ):
-        rejection_reasons.append("controlled_pedestrian_permission_incompatible")
+        rejection_reasons.append("pedestrian_permission_incompatible")
 
     if rejection_reasons:
-        return ControlledPedestrianCrossingAttempt(
+        return PedestrianCrossingAttempt(
             is_candidate=True,
             rejection_reasons=tuple(sorted(set(rejection_reasons))),
         )
@@ -287,9 +310,9 @@ def model_controlled_pedestrian_crossing(
             (destination_lane_role_id, "b", endpoints[1]),
         )
     )
-    return ControlledPedestrianCrossingAttempt(
+    return PedestrianCrossingAttempt(
         is_candidate=True,
-        model=ControlledPedestrianCrossingModel(
+        model=PedestrianCrossingModel(
             connection_index=connection.connection_index,
             physical_cell_id=crossing_owner.physical_cell_id,
             boundary_port_ids=boundary_port_ids,
@@ -313,6 +336,7 @@ def model_controlled_pedestrian_crossing(
             },
             crossing_edge_id=crossing_edge.edge_id,
             walkingarea_edge_ids=tuple(sorted({source_edge.edge_id, destination_edge.edge_id})),
+            controlled=controlled,
         ),
     )
 

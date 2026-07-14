@@ -242,6 +242,7 @@ def _pedestrian_tls_snapshot(
     protected_together: bool,
     controlled_crossing: bool = True,
     include_continuation: bool = True,
+    include_tls_program: bool = True,
     link_index2: bool = False,
     facility_prefix: str = ":j",
 ) -> CanonicalNetworkSnapshot:
@@ -259,6 +260,11 @@ def _pedestrian_tls_snapshot(
         phases = (
             '<phase duration="30" state="GG"/>' if protected_together else '<phase duration="30" state="Gr"/>'
         ) + '<phase duration="30" state="rG"/>'
+    tls_logic = (
+        f'<tlLogic id="tls" type="static" programID="0" offset="0">{phases}</tlLogic>'
+        if include_tls_program
+        else ""
+    )
     continuation = (
         f'<connection from="{crossing_id}" '
         f'to="{destination_walkingarea_id}" fromLane="0" toLane="0" '
@@ -299,7 +305,7 @@ def _pedestrian_tls_snapshot(
   {continuation}
   <connection from="{source_walkingarea_id}" to="{crossing_id}"
               fromLane="0" toLane="0" {crossing_control} dir="s" state="M"/>
-  <tlLogic id="tls" type="static" programID="0" offset="0">{phases}</tlLogic>
+  {tls_logic}
 </net>"""
     )
     return canonicalize_raw_network(
@@ -462,13 +468,22 @@ def test_controlled_pedestrian_crossing_is_a_stable_canonical_movement() -> None
     assert coverage.payload["controlled_connection_count"] == 2
     assert coverage.payload["mapped_controlled_movement_count"] == 2
     assert coverage.payload["unsupported_controlled_connection_count"] == 0
+    assert coverage.payload["modeled_pedestrian_movement_count"] == 1
     assert coverage.payload["modeled_controlled_pedestrian_movement_count"] == 1
+    assert coverage.payload["modeled_uncontrolled_pedestrian_movement_count"] == 0
     assert coverage.payload["modeled_crossing_edge_count"] == 1
     assert coverage.payload["unmodeled_crossing_edge_count"] == 0
     assert coverage.payload["movement_mode_class_counts"] == {
         "pedestrian": 1,
         "road-motorized": 1,
     }
+    binding = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "pedestrian_control_binding"
+    )
+    assert binding.payload["control_kind"] == "signalized"
+    assert binding.payload["source_link_indices"] == (1,)
 
 
 def test_protected_vehicle_and_pedestrian_green_is_a_hard_failure() -> None:
@@ -490,6 +505,7 @@ def test_separated_vehicle_and_pedestrian_phases_pass_independent_safety() -> No
     assert report.status is GateStatus.PASS
     assert report.automatic_promotion_gate is GateStatus.PASS
     assert report.coverage.modeled_controlled_pedestrian_movement_count == 1
+    assert report.coverage.modeled_uncontrolled_pedestrian_movement_count == 0
     assert report.coverage.unmodeled_crossing_edge_count == 0
     assert report.conflict_graph.conflicts[0].reason == "centerline-crossing"
     assert report.findings == ()
@@ -505,19 +521,21 @@ def test_malformed_controlled_pedestrian_chain_remains_fail_closed() -> None:
 
     assert report.status is GateStatus.BLOCKED
     assert report.coverage.unsupported_controlled_connection_count == 1
+    assert report.coverage.modeled_pedestrian_movement_count == 0
     assert report.coverage.modeled_controlled_pedestrian_movement_count == 0
+    assert report.coverage.modeled_uncontrolled_pedestrian_movement_count == 0
     controlled_finding = next(
         finding
         for finding in report.findings
         if finding.category == "controlled_link_outside_independent_conflict_model"
     )
     assert controlled_finding.witness["connections"][0]["rejection_reasons"] == (
-        "controlled_pedestrian_continuation_count:0",
-        "controlled_pedestrian_permission_incompatible",
+        "pedestrian_continuation_count:0",
+        "pedestrian_permission_incompatible",
     )
 
 
-def test_uncontrolled_crossing_stays_review_only_and_unmodelled() -> None:
+def test_uncontrolled_crossing_is_modeled_but_right_of_way_stays_review_only() -> None:
     snapshot = _pedestrian_tls_snapshot(
         protected_together=False,
         controlled_crossing=False,
@@ -526,9 +544,64 @@ def test_uncontrolled_crossing_stays_review_only_and_unmodelled() -> None:
     report = audit_independent_movement_safety(snapshot)
 
     assert report.status is GateStatus.REVIEW
-    assert report.coverage.unmodeled_crossing_edge_count == 1
+    assert report.coverage.modeled_pedestrian_movement_count == 1
+    assert report.coverage.modeled_controlled_pedestrian_movement_count == 0
+    assert report.coverage.modeled_uncontrolled_pedestrian_movement_count == 1
+    assert report.coverage.modeled_crossing_edge_count == 1
+    assert report.coverage.unmodeled_crossing_edge_count == 0
     assert report.coverage.unsupported_controlled_connection_count == 0
-    assert "pedestrian_facilities_outside_independent_conflict_model" in (report.limitations)
+    assert report.protected_conflict_count == 0
+    assert len(report.conflict_graph.conflicts) == 1
+    assert (
+        "uncontrolled_pedestrian_right_of_way_not_independently_verified"
+        in report.limitations
+    )
+    assert {finding.category for finding in report.findings} >= {
+        "uncontrolled_pedestrian_vehicle_conflict_requires_right_of_way_review"
+    }
+    pedestrian_id = next(
+        entity.stable_entity_id
+        for entity in snapshot.entities
+        if entity.kind == "movement"
+        and entity.payload["variants"][0].get("movement_kind")
+        == "pedestrian-crossing-occupancy"
+    )
+    controlled_ids = {
+        movement_id
+        for entity in snapshot.entities
+        if entity.kind == "signal_group"
+        for movement_id in entity.payload["movement_ids"]
+    }
+    assert pedestrian_id not in controlled_ids
+    binding = next(
+        entity
+        for entity in snapshot.entities
+        if entity.kind == "pedestrian_control_binding"
+    )
+    assert binding.payload["movement_id"] == pedestrian_id
+    assert binding.payload["control_kind"] == "uncontrolled"
+    assert binding.payload["source_link_indices"] == ()
+
+
+def test_controlled_pedestrian_without_program_is_not_downgraded_to_uncontrolled() -> None:
+    snapshot = _pedestrian_tls_snapshot(
+        protected_together=False,
+        include_tls_program=False,
+    )
+
+    report = audit_independent_movement_safety(snapshot)
+
+    assert report.status is GateStatus.BLOCKED
+    assert report.coverage.modeled_controlled_pedestrian_movement_count == 1
+    assert report.coverage.modeled_uncontrolled_pedestrian_movement_count == 0
+    assert {finding.category for finding in report.findings} >= {
+        "controlled_pedestrian_signal_group_missing"
+    }
+    assert not {
+        finding.category
+        for finding in report.findings
+        if finding.category.startswith("uncontrolled_pedestrian_vehicle")
+    }
 
 
 def test_pedestrian_link_index2_is_still_fail_closed() -> None:
@@ -560,6 +633,30 @@ def test_pedestrian_movement_identity_ignores_internal_facility_ids() -> None:
             for entity in snapshot.entities
             if entity.kind == "movement"
             and entity.payload["variants"][0].get("movement_kind") == "pedestrian-crossing-occupancy"
+        )
+
+    assert pedestrian_movement_id(first) == pedestrian_movement_id(second)
+
+
+def test_uncontrolled_pedestrian_identity_ignores_internal_facility_ids() -> None:
+    first = _pedestrian_tls_snapshot(
+        protected_together=False,
+        controlled_crossing=False,
+        facility_prefix=":first",
+    )
+    second = _pedestrian_tls_snapshot(
+        protected_together=False,
+        controlled_crossing=False,
+        facility_prefix=":renumbered",
+    )
+
+    def pedestrian_movement_id(snapshot: CanonicalNetworkSnapshot) -> str:
+        return next(
+            entity.stable_entity_id
+            for entity in snapshot.entities
+            if entity.kind == "movement"
+            and entity.payload["variants"][0].get("movement_kind")
+            == "pedestrian-crossing-occupancy"
         )
 
     assert pedestrian_movement_id(first) == pedestrian_movement_id(second)

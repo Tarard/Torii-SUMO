@@ -53,7 +53,9 @@ class IndependentSafetyCoverage(ContractModel):
     unsupported_controlled_connection_count: int
     crossing_edge_count: int
     walkingarea_edge_count: int
+    modeled_pedestrian_movement_count: int
     modeled_controlled_pedestrian_movement_count: int
+    modeled_uncontrolled_pedestrian_movement_count: int
     modeled_crossing_edge_count: int
     unmodeled_crossing_edge_count: int
     link_index2_connection_count: int
@@ -167,6 +169,20 @@ def audit_independent_movement_safety(
     )
     conflict_index = graph.conflict_index()
     signal_groups = {entity.stable_entity_id: entity for entity in snapshot.entities if entity.kind == "signal_group"}
+    movement_entities = {
+        entity.stable_entity_id: entity
+        for entity in snapshot.entities
+        if entity.kind == "movement"
+    }
+    pedestrian_control_bindings: dict[str, list[CanonicalEntity]] = defaultdict(
+        list
+    )
+    for entity in snapshot.entities:
+        if entity.kind != "pedestrian_control_binding":
+            continue
+        movement_id = str(entity.payload.get("movement_id", ""))
+        if movement_id:
+            pedestrian_control_bindings[movement_id].append(entity)
     findings: dict[str, Finding] = {}
     protected_conflict_count = 0
     permissive_without_yield_count = 0
@@ -291,6 +307,107 @@ def audit_independent_movement_safety(
                 confidence=1.0,
             )
             findings[finding.finding_id] = finding
+
+    signal_group_movement_ids = {
+        str(movement_id)
+        for signal_group in signal_groups.values()
+        for movement_id in signal_group.payload.get("movement_ids", ())
+    }
+    pedestrian_crossing_movement_ids = {
+        movement_id
+        for movement_id, movement in movement_entities.items()
+        if _is_pedestrian_crossing_movement(movement)
+    }
+    signalized_pedestrian_movement_ids: set[str] = set()
+    uncontrolled_pedestrian_movement_ids: set[str] = set()
+    for movement_id in sorted(pedestrian_crossing_movement_ids):
+        bindings = pedestrian_control_bindings.get(movement_id, ())
+        control_kinds = {
+            str(binding.payload.get("control_kind", ""))
+            for binding in bindings
+        }
+        if len(bindings) != 1 or control_kinds not in (
+            {"signalized"},
+            {"uncontrolled"},
+        ):
+            finding = build_finding(
+                category="pedestrian_control_binding_missing_or_ambiguous",
+                severity=FindingSeverity.SAFETY,
+                subject_id=movement_id,
+                witness={
+                    "binding_entity_ids": tuple(
+                        sorted(binding.stable_entity_id for binding in bindings)
+                    ),
+                    "control_kinds": tuple(sorted(control_kinds)),
+                },
+                confidence=1.0,
+            )
+            findings[finding.finding_id] = finding
+            continue
+        if control_kinds == {"signalized"}:
+            signalized_pedestrian_movement_ids.add(movement_id)
+        else:
+            uncontrolled_pedestrian_movement_ids.add(movement_id)
+
+    for movement_id in sorted(
+        signalized_pedestrian_movement_ids - signal_group_movement_ids
+    ):
+        finding = build_finding(
+            category="controlled_pedestrian_signal_group_missing",
+            severity=FindingSeverity.SAFETY,
+            subject_id=movement_id,
+            witness={
+                "movement_id": movement_id,
+                "control_kind": "signalized",
+            },
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
+    for movement_id in sorted(
+        uncontrolled_pedestrian_movement_ids & signal_group_movement_ids
+    ):
+        finding = build_finding(
+            category="uncontrolled_pedestrian_unexpected_signal_group",
+            severity=FindingSeverity.SAFETY,
+            subject_id=movement_id,
+            witness={
+                "movement_id": movement_id,
+                "control_kind": "uncontrolled",
+            },
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
+    for conflict in graph.conflicts:
+        movement_ids = {conflict.movement_a_id, conflict.movement_b_id}
+        uncontrolled_ids = sorted(
+            movement_ids & uncontrolled_pedestrian_movement_ids
+        )
+        if not uncontrolled_ids or movement_ids <= pedestrian_crossing_movement_ids:
+            continue
+        limitation = (
+            "uncontrolled_pedestrian_right_of_way_not_independently_verified"
+        )
+        limitations.append(limitation)
+        finding = build_finding(
+            category=(
+                "uncontrolled_pedestrian_vehicle_conflict_requires_right_of_way_review"
+                if conflict.certainty == "confirmed"
+                else "uncontrolled_pedestrian_vehicle_envelope_requires_review"
+            ),
+            severity=FindingSeverity.REVIEW,
+            subject_id=conflict.conflict_id,
+            witness={
+                "movement_ids": tuple(sorted(movement_ids)),
+                "uncontrolled_pedestrian_movement_ids": tuple(
+                    uncontrolled_ids
+                ),
+                "conflict_id": conflict.conflict_id,
+                "conflict_certainty": conflict.certainty,
+                "right_of_way_source": "unverified",
+            },
+            confidence=1.0,
+        )
+        findings[finding.finding_id] = finding
 
     for signal_group_id, signal_group in signal_groups.items():
         movement_ids = tuple(sorted(map(str, signal_group.payload.get("movement_ids", ()))))
@@ -488,10 +605,33 @@ def _summarize_coverage(
         ),
         crossing_edge_count=sum(int(entity.payload.get("crossing_edge_count", 0) or 0) for entity in entities),
         walkingarea_edge_count=sum(int(entity.payload.get("walkingarea_edge_count", 0) or 0) for entity in entities),
+        modeled_pedestrian_movement_count=sum(
+            int(
+                entity.payload.get(
+                    "modeled_pedestrian_movement_count",
+                    entity.payload.get(
+                        "modeled_controlled_pedestrian_movement_count",
+                        0,
+                    ),
+                )
+                or 0
+            )
+            for entity in entities
+        ),
         modeled_controlled_pedestrian_movement_count=sum(
             int(
                 entity.payload.get(
                     "modeled_controlled_pedestrian_movement_count",
+                    0,
+                )
+                or 0
+            )
+            for entity in entities
+        ),
+        modeled_uncontrolled_pedestrian_movement_count=sum(
+            int(
+                entity.payload.get(
+                    "modeled_uncontrolled_pedestrian_movement_count",
                     0,
                 )
                 or 0
@@ -662,6 +802,15 @@ def _all_movement_variants_permission_incompatible(
     variants = tuple(movement.payload.get("variants", ()))
     return bool(variants) and all(
         "incompatible" in set(map(str, variant.get("mode_classes", ()))) for variant in variants
+    )
+
+
+def _is_pedestrian_crossing_movement(
+    movement: CanonicalEntity,
+) -> bool:
+    return any(
+        variant.get("movement_kind") == "pedestrian-crossing-occupancy"
+        for variant in movement.payload.get("variants", ())
     )
 
 
