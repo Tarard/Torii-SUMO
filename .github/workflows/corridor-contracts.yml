@@ -32,6 +32,7 @@ jobs:
           python -m pip install --disable-pip-version-check \
             pydantic==2.13.4 \
             osmium==4.3.1 \
+            sumolib==1.27.1 \
             pytest==9.1.1 \
             ruff==0.15.21
           python -m pip install --no-deps --editable .
