@@ -782,6 +782,15 @@ def audit_standard_connection_mode(
             endpoint_tolerance_m=endpoint_tolerance_m,
         )
         check["internal_path"] = trace
+        if trace.get("unusually_long"):
+            _flag_review(
+                check,
+                review_findings,
+                (
+                    f"internal_path_unusually_long:{connection_index}:"
+                    f"{trace.get('internal_lane_chain_length', 0)}"
+                ),
+            )
         for failure in trace_failures:
             _fail(check, hard_blockers, failure)
         movement_checks.append(check)
@@ -1673,6 +1682,9 @@ def _trace_internal_path(
         "internal_connection_indices": [],
         "endpoint_gaps_m": [],
         "max_endpoint_gap_m": None,
+        "internal_lane_chain_length": 0,
+        "bounded_hop_limit": 0,
+        "unusually_long": False,
     }
     gaps: list[float] = []
     if not via_lane_id:
@@ -1726,7 +1738,20 @@ def _trace_internal_path(
     )
     current_lane = via_lane
     visited: set[str] = set()
-    for hop in range(16):
+    internal_lane_count = sum(
+        1
+        for lane in lane_catalog.values()
+        if (
+            (edge := edges.get(str(lane.get("edge_id", "")))) is not None
+            and (
+                edge.attrib.get("function") == "internal"
+                or str(lane.get("edge_id", "")).startswith(":")
+            )
+        )
+    )
+    bounded_hop_limit = max(1, internal_lane_count + 1)
+    trace["bounded_hop_limit"] = bounded_hop_limit
+    for hop in range(bounded_hop_limit):
         current_lane_id = str(current_lane.get("id", ""))
         if current_lane_id in visited:
             failures.append(f"internal_path_cycle:{connection_index}:{current_lane_id}")
@@ -1799,10 +1824,14 @@ def _trace_internal_path(
             failures.append(f"internal_path_final_lane_mismatch:{connection_index}")
         break
     else:
-        failures.append(f"internal_path_hop_limit_exceeded:{connection_index}")
+        failures.append(
+            f"internal_path_bounded_trace_exhausted:{connection_index}:{bounded_hop_limit}"
+        )
 
     trace["endpoint_gaps_m"] = [round(value, 6) for value in gaps]
     trace["max_endpoint_gap_m"] = round(max(gaps), 6) if gaps else None
+    trace["internal_lane_chain_length"] = len(trace["internal_lane_chain"])
+    trace["unusually_long"] = len(trace["internal_lane_chain"]) > 16
     trace["status"] = "pass" if not failures else "fail"
     return trace, failures
 

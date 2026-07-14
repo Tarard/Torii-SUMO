@@ -345,6 +345,7 @@ def test_artifact_manifest_blocks_source_candidate_identity_collision() -> None:
     source = ArtifactIdentity(
         artifact_schema="sumo.net.xml",
         artifact_id=source_id,
+        logical_name="source_net",
         role=ArtifactRole.SOURCE_NET,
         path="source.net.xml",
         sha256=SHA_A,
@@ -354,6 +355,7 @@ def test_artifact_manifest_blocks_source_candidate_identity_collision() -> None:
     candidate = ArtifactIdentity(
         artifact_schema="sumo.net.xml",
         artifact_id=candidate_id,
+        logical_name="candidate_net",
         role=ArtifactRole.CANDIDATE_NET,
         path="candidate.net.xml",
         sha256=SHA_A,
@@ -396,7 +398,7 @@ def test_finding_requires_stable_witness_identity() -> None:
         severity=FindingSeverity.STRUCTURAL,
         subject_id=ids["movement"],
         witness={"declared_target": "lane-role-a", "actual_target": "lane-role-b"},
-        witness_signature=stable_id("invariant", {"witness": "target-mismatch"}),
+        witness_signature=stable_id("signature", {"witness": "target-mismatch"}),
         confidence=1.0,
     )
 

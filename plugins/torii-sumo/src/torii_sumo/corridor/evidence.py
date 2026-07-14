@@ -57,7 +57,7 @@ class Finding(ContractModel):
     def validate_finding(self) -> Finding:
         require_stable_id(self.finding_id, kind="finding")
         require_stable_id(self.subject_id)
-        require_stable_id(self.witness_signature, kind="invariant")
+        require_stable_id(self.witness_signature, kind="signature")
         for evidence_ref in self.evidence_refs:
             require_stable_id(evidence_ref, kind="evidence")
         if not self.witness:

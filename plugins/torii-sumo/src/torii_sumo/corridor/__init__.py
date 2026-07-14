@@ -1,8 +1,17 @@
 """Typed contracts for the Torii corridor human-modeling research pipeline."""
 
 from .benchmark import BenchmarkLock, BenchmarkSpecV1
+from .audit_pipeline import build_exact_semantic_regression_artifacts
+from .canonicalizer import CanonicalEntity, CanonicalNetworkSnapshot, canonicalize_net_xml_file
+from .conflict_graph import (
+    IndependentSafetyReport,
+    MovementConflictGraph,
+    audit_independent_movement_safety,
+    build_movement_conflict_graph,
+)
 from .candidates import CandidateGraph, CandidateVariant, Hypothesis, PatchOperation, SemanticDelta
 from .enums import AutomationAction, GateStatus, TrafficSide, WorkflowStage
+from .exact_diff import ExactSemanticDiffReport, build_finding, compare_canonical_snapshots
 from .ids import (
     canonical_json_bytes,
     make_approach_id,
@@ -28,10 +37,14 @@ __all__ = [
     "BoundaryPort",
     "CandidateGraph",
     "CandidateVariant",
+    "CanonicalEntity",
+    "CanonicalNetworkSnapshot",
     "CorridorResearchBundle",
     "GateStatus",
     "Hypothesis",
+    "IndependentSafetyReport",
     "NetworkQualityVectorV1",
+    "MovementConflictGraph",
     "PatchOperation",
     "ScopeSpec",
     "SemanticDelta",
@@ -41,6 +54,12 @@ __all__ = [
     "TrafficSide",
     "WorkflowExecution",
     "WorkflowStage",
+    "ExactSemanticDiffReport",
+    "build_finding",
+    "build_exact_semantic_regression_artifacts",
+    "audit_independent_movement_safety",
+    "build_movement_conflict_graph",
+    "canonicalize_net_xml_file",
     "canonical_json_bytes",
     "make_approach_id",
     "make_boundary_port_id",
@@ -50,5 +69,6 @@ __all__ = [
     "make_movement_id",
     "make_physical_cell_id",
     "make_signal_group_id",
+    "compare_canonical_snapshots",
     "stable_id",
 ]
