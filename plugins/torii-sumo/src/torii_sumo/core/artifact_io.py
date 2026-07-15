@@ -9,6 +9,17 @@ from pathlib import Path
 from typing import Any
 
 
+def relative_or_absolute_path(path: Path, start: Path) -> str:
+    """Return a portable relative path, falling back across Windows drives."""
+
+    target = path.resolve()
+    base = start.resolve()
+    try:
+        return Path(os.path.relpath(target, start=base)).as_posix()
+    except ValueError:
+        return target.as_posix()
+
+
 def write_json_atomic(
     path: Path,
     payload: Any,
@@ -64,13 +75,16 @@ def copy_file_atomic(source: Path, destination: Path) -> None:
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
     try:
-        with source_path.open("rb") as source_handle, tempfile.NamedTemporaryFile(
-            mode="wb",
-            dir=destination_path.parent,
-            prefix=f".{destination_path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as destination_handle:
+        with (
+            source_path.open("rb") as source_handle,
+            tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=destination_path.parent,
+                prefix=f".{destination_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as destination_handle,
+        ):
             temporary_path = Path(destination_handle.name)
             shutil.copyfileobj(source_handle, destination_handle)
             destination_handle.flush()
