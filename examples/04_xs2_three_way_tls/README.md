@@ -16,6 +16,23 @@ The result is written to `outputs/xs2-three-way/`. Open `review.html` for the co
 
 > **File roles matter:** `xs2-source.net.xml` is the immutable OSM baseline. Visually grade only `xs2-candidate.net.xml`; the `tls_ownership_rebuild` gate proves that the three target TLS nodes become one physical junction/controller and that the old `joinedS_*` controller does not survive.
 
+### Background NetEdit evidence on Windows
+
+The review can be captured without activating NetEdit or sending global keyboard or mouse input:
+
+```powershell
+.\.venv\Scripts\python.exe plugins\torii-sumo\scripts\netedit_background_review.py `
+  --net outputs\xs2-three-way\xs2-candidate.net.xml `
+  --target-junction xs2_t_junction_7009179660 `
+  --out-dir outputs\xs2-three-way\netedit-review\final-background `
+  --view-center 284.2,280.7 --zoom 500 `
+  --additional-file outputs\xs2-three-way\review.add.xml
+```
+
+The script opens a fresh non-activating NetEdit process for each image, switches Inspect/Traffic Light/Connection mode by targeting that window only, highlights the target junction and every incoming lane through selection files, captures the window off-screen, and records the candidate hash and foreground-window samples in `netedit-background-review.json`.
+
+NetEdit's FOX/OpenGL canvas does not accept a source-lane mouse click while its window lacks focus. The script deliberately does not emulate a global click. These screenshots independently check target ownership and geometry; the exact `fromLane → via → toLane`, request/foes, and TLS/linkIndex verdict remains the code-native audit result.
+
 ## What must pass
 
 - The prompt, spec, OSM snapshot, join patch, TLS patch, and toolchain are hash-bound.
