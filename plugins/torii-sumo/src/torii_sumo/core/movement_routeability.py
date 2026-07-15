@@ -28,12 +28,23 @@ def run_all_turn_movement_smoke(
     output_dir: Path,
     sumo_binary: str,
     expected_movement_count: int = 12,
+    expected_incoming_approach_count: int = 4,
+    expected_outgoing_approach_count: int = 4,
+    expected_turn_counts: Mapping[str, int] | None = None,
+    expected_controller_ids: tuple[str, ...] | None = None,
     departure_interval_s: int = 8,
     end_time_s: int = 600,
     timeout_seconds: float = 120.0,
     command_runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
     """Run one vehicle through every direct movement of one physical junction."""
+
+    expected_turn_distribution = dict(
+        expected_turn_counts or {"r": 4, "s": 4, "l": 4}
+    )
+    allowed_controller_ids = set(
+        expected_controller_ids or (target_junction_id,)
+    )
 
     source = net_file.resolve(strict=True)
     destination = output_dir.resolve()
@@ -89,7 +100,7 @@ def run_all_turn_movement_smoke(
     ET.SubElement(
         route_root,
         "vType",
-        id="xs1_passenger",
+        id="junction_smoke_passenger",
         vClass="passenger",
         accel="2.6",
         decel="4.5",
@@ -104,7 +115,7 @@ def run_all_turn_movement_smoke(
             route_root,
             "vehicle",
             id=vehicle_id,
-            type="xs1_passenger",
+            type="junction_smoke_passenger",
             depart=str(index * departure_interval_s),
             departLane=str(movement["from_lane"]),
             arrivalLane=str(movement["to_lane"]),
@@ -168,18 +179,22 @@ def run_all_turn_movement_smoke(
     arrived_ids = _tripinfo_ids(tripinfo_file)
     turn_counts = {
         turn: sum(movement["turn"] == turn for movement in movements)
-        for turn in ("r", "s", "l")
+        for turn in sorted(
+            {item["turn"] for item in movements}
+            | set(expected_turn_distribution)
+        )
     }
+    incoming_approach_ids = tuple(sorted({item["from"] for item in movements}))
+    outgoing_approach_ids = tuple(sorted({item["to"] for item in movements}))
     checks = {
         "movement_count": len(movements) == expected_movement_count,
-        "four_incoming_approaches": len({item["from"] for item in movements})
-        == 4,
-        "four_outgoing_approaches": len({item["to"] for item in movements})
-        == 4,
-        "four_each_right_straight_left": turn_counts
-        == {"r": 4, "s": 4, "l": 4},
+        "incoming_approach_count": len(incoming_approach_ids)
+        == expected_incoming_approach_count,
+        "outgoing_approach_count": len(outgoing_approach_ids)
+        == expected_outgoing_approach_count,
+        "turn_distribution": turn_counts == expected_turn_distribution,
         "all_movements_tls_bound": all(
-            item["controller_id"] == target_junction_id
+            item["controller_id"] in allowed_controller_ids
             and str(item["link_index"]).isdigit()
             for item in movements
         ),
@@ -192,14 +207,20 @@ def run_all_turn_movement_smoke(
     }
     status = "pass" if all(checks.values()) else "fail"
     report = {
-        "schema": "torii.all-turn-movement-smoke/v1",
+        "schema": "torii.all-turn-movement-smoke/v2",
         "status": status,
         "target_junction_id": target_junction_id,
         "net_file": str(source),
         "net_sha256": source_sha256,
         "expected_movement_count": expected_movement_count,
         "movement_count": len(movements),
+        "expected_incoming_approach_count": expected_incoming_approach_count,
+        "incoming_approach_ids": incoming_approach_ids,
+        "expected_outgoing_approach_count": expected_outgoing_approach_count,
+        "outgoing_approach_ids": outgoing_approach_ids,
+        "expected_turn_counts": expected_turn_distribution,
         "turn_counts": turn_counts,
+        "expected_controller_ids": sorted(allowed_controller_ids),
         "movements": movements,
         "expected_vehicle_ids": expected_vehicle_ids,
         "arrived_vehicle_ids": arrived_ids,
