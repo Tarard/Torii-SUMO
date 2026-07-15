@@ -21,3 +21,21 @@ review or abstention boundary.
 
 The complete upstream license and notice are included as `LICENSE` and
 `NOTICE.md` in this directory.
+
+## Torii expectation migration — 2026-07-15
+
+The vendored SUMO inputs and locked toolchain did not change. Torii commit
+`20058d3` refined the independent conflict oracle in two evidence-backed ways:
+adjacent diverging lanes from one source boundary port no longer count as an
+envelope conflict, and a permissive movement with an explicit request/foes
+yield relation no longer produces an unresolved-yield finding. The frozen
+scenario expectations had not been regenerated after that oracle change, so
+five cases failed only on stale conflict/finding counts.
+
+`official_sumo_scenarios.v1.json` now records the deterministic SUMO 1.27.1
+results under the refined oracle: connection examples 20 conflicts each,
+joined-junction 16 conflicts with one remaining potential-envelope review,
+and both NEMA examples 40 conflicts with no unresolved permissive-yield
+finding. This migration does not turn any scenario into an automatic repair:
+all nine cases still require fail-closed abstention, and the benchmark identity
+was recomputed from the changed expectation payload.

@@ -1,6 +1,6 @@
 {
   "schema": "torii.corridor.official-sumo-benchmark/v1",
-  "benchmark_id": "manifest_974df08bc44585a80b0a8bf9",
+  "benchmark_id": "manifest_6bb4634cc4ee5a85494ba537",
   "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
   "toolchain_lock_sha256": "9fd07c42362f70f129d11fe21b85a4b304f22c493366f6cd125ed30424e49c55",
   "upstream_repository": "https://github.com/eclipse-sumo/sumo.git",
@@ -186,7 +186,7 @@
       "expected_independent_safety_status": "pass",
       "expected_safety_category_counts": {},
       "expected_movement_count": 28,
-      "expected_conflict_count": 22,
+      "expected_conflict_count": 20,
       "expected_abstention": true
     },
     {
@@ -221,7 +221,7 @@
       "expected_independent_safety_status": "pass",
       "expected_safety_category_counts": {},
       "expected_movement_count": 28,
-      "expected_conflict_count": 22,
+      "expected_conflict_count": 20,
       "expected_abstention": true
     },
     {
@@ -249,12 +249,10 @@
       },
       "expected_independent_safety_status": "review",
       "expected_safety_category_counts": {
-        "permissive_conflict_requires_independent_yield_review": 4,
-        "permissive_potential_envelope_conflict_requires_review": 5,
-        "protected_green_potential_envelope_conflict": 1
+        "permissive_potential_envelope_conflict_requires_review": 1
       },
       "expected_movement_count": 10,
-      "expected_conflict_count": 18,
+      "expected_conflict_count": 16,
       "expected_abstention": true
     },
     {
@@ -320,12 +318,10 @@
       "expected_connection_category_counts": {
         "outgoing_motorized_lane_without_connection": 4
       },
-      "expected_independent_safety_status": "review",
-      "expected_safety_category_counts": {
-        "permissive_potential_envelope_conflict_requires_review": 8
-      },
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
       "expected_movement_count": 20,
-      "expected_conflict_count": 48,
+      "expected_conflict_count": 40,
       "expected_abstention": true
     },
     {
@@ -353,12 +349,10 @@
       "expected_connection_category_counts": {
         "outgoing_motorized_lane_without_connection": 4
       },
-      "expected_independent_safety_status": "review",
-      "expected_safety_category_counts": {
-        "permissive_potential_envelope_conflict_requires_review": 8
-      },
+      "expected_independent_safety_status": "pass",
+      "expected_safety_category_counts": {},
       "expected_movement_count": 20,
-      "expected_conflict_count": 48,
+      "expected_conflict_count": 40,
       "expected_abstention": true
     },
     {
