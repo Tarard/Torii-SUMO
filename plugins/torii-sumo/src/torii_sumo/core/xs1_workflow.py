@@ -23,7 +23,7 @@ from .movement_routeability import run_all_turn_movement_smoke
 from .sumo_commands import discover_binaries, run_sumo_load_audit
 
 
-def run_xs1_workflow(
+def run_isolated_junction_workflow(
     *,
     example_dir: Path,
     output_dir: Path,
@@ -31,11 +31,29 @@ def run_xs1_workflow(
     binaries: Mapping[str, str | None] | None = None,
     timeout_seconds: float = 120.0,
 ) -> dict[str, Any]:
-    """Run the frozen XS-1 single-intersection evidence pipeline."""
+    """Run one frozen isolated-junction evidence pipeline."""
 
     example = example_dir.resolve(strict=True)
     destination = output_dir.resolve()
     destination.mkdir(parents=True, exist_ok=True)
+    prompt_file = example / "prompt.txt"
+    spec_file = example / "spec.json"
+    registry_file = example / "source-registry.json"
+    spec = json.loads(spec_file.read_text(encoding="utf-8"))
+    registry = json.loads(registry_file.read_text(encoding="utf-8"))
+    prompt = prompt_file.read_text(encoding="utf-8").strip()
+    _validate_spec(prompt=prompt, spec=spec)
+    slice_id = str(spec.get("slice_id", "xs1"))
+    source_net_name = str(
+        spec.get("artifacts", {}).get(
+            "source_net_file", f"{slice_id}-source.net.xml"
+        )
+    )
+    candidate_net_name = str(
+        spec.get("artifacts", {}).get(
+            "candidate_net_file", f"{slice_id}-candidate.net.xml"
+        )
+    )
     for name in (
         "finding-continuity.json",
         "manifest.json",
@@ -47,22 +65,23 @@ def run_xs1_workflow(
         "rollback.public.json",
         "summary.json",
         "summary.public.json",
+        "tls-ownership.json",
+        "tls-ownership.public.json",
         "visual-review.json",
         "visual-review.public.json",
-        "xs1-candidate.net.xml",
-        "xs1-source.net.xml",
+        source_net_name,
+        candidate_net_name,
     ):
         (destination / name).unlink(missing_ok=True)
-    prompt_file = example / "prompt.txt"
-    spec_file = example / "spec.json"
-    registry_file = example / "source-registry.json"
-    spec = json.loads(spec_file.read_text(encoding="utf-8"))
-    registry = json.loads(registry_file.read_text(encoding="utf-8"))
-    prompt = prompt_file.read_text(encoding="utf-8").strip()
-    _validate_spec(prompt=prompt, spec=spec)
 
     frozen_osm = (example / str(spec["source"]["osm_file"])).resolve()
     join_patch = (example / str(spec["candidate"]["join_patch_file"])).resolve()
+    tls_patch_value = spec["candidate"].get("tls_patch_file")
+    tls_patch = (
+        (example / str(tls_patch_value)).resolve()
+        if tls_patch_value
+        else None
+    )
     identity_checks = {
         "prompt_matches_spec": prompt == str(spec["prompt"]),
         "osm_sha256": file_sha256(frozen_osm)
@@ -72,9 +91,14 @@ def run_xs1_workflow(
         "registry_matches_osm": str(registry["frozen_import"]["sha256"])
         == file_sha256(frozen_osm),
     }
+    if tls_patch is not None:
+        identity_checks["tls_patch_sha256"] = file_sha256(tls_patch) == str(
+            spec["candidate"]["tls_patch_sha256"]
+        )
     if not all(identity_checks.values()):
         return _write_blocked_result(
             destination,
+            slice_id=slice_id,
             reason="frozen input identity check failed",
             details=identity_checks,
         )
@@ -84,15 +108,19 @@ def run_xs1_workflow(
     if missing:
         return _write_blocked_result(
             destination,
+            slice_id=slice_id,
             reason="required SUMO binaries are unavailable",
             details={"missing": missing},
         )
     netconvert = str(selected["netconvert"])
     sumo = str(selected["sumo"])
-    source_net = destination / "xs1-source.net.xml"
-    candidate_net = destination / "xs1-candidate.net.xml"
+    source_net = destination / source_net_name
+    candidate_net = destination / candidate_net_name
     relative_osm = os.path.relpath(frozen_osm, destination)
     relative_join_patch = os.path.relpath(join_patch, destination)
+    relative_tls_patch = (
+        os.path.relpath(tls_patch, destination) if tls_patch is not None else None
+    )
     common = [
         "--osm-files",
         relative_osm,
@@ -104,6 +132,15 @@ def run_xs1_workflow(
         str(spec["source"]["tls_join_distance_m"]),
         "--verbose",
     ]
+    source_options = spec["source"].get("netconvert_options", {})
+    geo_boundary = source_options.get("keep_edges_in_geo_boundary")
+    if geo_boundary:
+        common.extend(["--keep-edges.in-geo-boundary", str(geo_boundary)])
+    vehicle_class = source_options.get("keep_edges_by_vclass")
+    if vehicle_class:
+        common.extend(["--keep-edges.by-vclass", str(vehicle_class)])
+    if bool(source_options.get("remove_edges_isolated", False)):
+        common.append("--remove-edges.isolated")
     source_command = [
         netconvert,
         *common,
@@ -115,10 +152,12 @@ def run_xs1_workflow(
         *common[:2],
         "--node-files",
         relative_join_patch,
-        *common[2:],
-        "--output-file",
-        candidate_net.name,
     ]
+    if relative_tls_patch is not None:
+        candidate_command.extend(["--tllogic-files", relative_tls_patch])
+    candidate_command.extend(
+        [*common[2:], "--output-file", candidate_net.name]
+    )
     source_result = run_command(
         source_command,
         cwd=destination,
@@ -130,14 +169,22 @@ def run_xs1_workflow(
         timeout_seconds=timeout_seconds,
     ).to_dict()
     build_report = {
-        "schema": "torii.xs1-netconvert-build/v1",
+        "schema": _slice_schema(slice_id, "netconvert-build"),
         "source": _build_result(source_result, source_net),
         "candidate": _build_result(candidate_result, candidate_net),
         "only_declared_candidate_difference": {
-            "operation_count": 1,
-            "operation": "plainxml_join_patch",
+            "operation_count": 1 + int(tls_patch is not None),
+            "operation": (
+                "plainxml_join_patch" if tls_patch is None else None
+            ),
+            "operations": [
+                "plainxml_join_patch",
+                *(["plainxml_tls_patch"] if tls_patch is not None else []),
+            ],
             "join_patch_file": str(join_patch),
             "join_patch_sha256": file_sha256(join_patch),
+            "tls_patch_file": str(tls_patch) if tls_patch else None,
+            "tls_patch_sha256": file_sha256(tls_patch) if tls_patch else None,
         },
     }
     build_report_file = destination / "netconvert-build.json"
@@ -148,6 +195,7 @@ def run_xs1_workflow(
     ):
         return _write_blocked_result(
             destination,
+            slice_id=slice_id,
             reason="netconvert did not build both source and candidate",
             details=build_report,
         )
@@ -178,6 +226,33 @@ def run_xs1_workflow(
         == expected_candidate_semantic_hash
     )
 
+    expected_controller_ids = tuple(
+        map(
+            str,
+            spec["candidate"].get(
+                "expected_controller_ids",
+                (spec["candidate"]["target_junction_id"],),
+            ),
+        )
+    )
+    tls_ownership = _audit_tls_ownership_rebuild(
+        source_net=source_net,
+        candidate_net=candidate_net,
+        target_source_junction_ids=tuple(
+            map(str, spec["scope"]["target_source_junction_ids"])
+        ),
+        target_candidate_junction_id=str(
+            spec["candidate"]["target_junction_id"]
+        ),
+        expected_controller_ids=expected_controller_ids,
+        expected_controlled_connection_count=int(
+            spec["candidate"]["expected_direct_movement_count"]
+        ),
+        slice_id=slice_id,
+    )
+    tls_ownership_file = destination / "tls-ownership.json"
+    write_json_atomic(tls_ownership_file, tls_ownership, sort_keys=True)
+
     exact = build_exact_semantic_regression_artifacts(
         source_net,
         candidate_net,
@@ -202,7 +277,7 @@ def run_xs1_workflow(
         normalized_lane_rank_tolerance=float(
             spec["audit"]["normalized_lane_rank_tolerance"]
         ),
-        prefix="xs1",
+        prefix=slice_id,
     )
     exact_diff = _read_json(Path(exact["files"]["exact_diff"]))
     safety = _read_json(Path(exact["files"]["candidate_safety"]))
@@ -213,7 +288,7 @@ def run_xs1_workflow(
         connection,
         target_junction_id=str(spec["candidate"]["target_junction_id"]),
     )
-    finding_continuity = _finding_continuity(exact_diff)
+    finding_continuity = _finding_continuity(exact_diff, slice_id=slice_id)
     finding_continuity_file = destination / "finding-continuity.json"
     write_json_atomic(
         finding_continuity_file,
@@ -235,6 +310,19 @@ def run_xs1_workflow(
         expected_movement_count=int(
             spec["candidate"]["expected_direct_movement_count"]
         ),
+        expected_incoming_approach_count=int(
+            spec["candidate"].get("expected_incoming_approach_count", 4)
+        ),
+        expected_outgoing_approach_count=int(
+            spec["candidate"].get("expected_outgoing_approach_count", 4)
+        ),
+        expected_turn_counts={
+            str(key): int(value)
+            for key, value in spec["candidate"].get(
+                "expected_turn_counts", {"r": 4, "s": 4, "l": 4}
+            ).items()
+        },
+        expected_controller_ids=expected_controller_ids,
         departure_interval_s=int(
             spec["runtime"]["departure_interval_s"]
         ),
@@ -243,16 +331,36 @@ def run_xs1_workflow(
     )
 
     rollback = {
-        "schema": "torii.xs1-rollback/v1",
+        "schema": _slice_schema(slice_id, "rollback"),
         "candidate_sha256": file_sha256(candidate_net),
         "source_sha256": file_sha256(source_net),
-        "inverse_operation": "omit the one join patch and rerun source_command",
+        "inverse_operation": (
+            "omit all candidate PlainXML patches and rerun source_command"
+        ),
         "source_command": source_command,
-        "candidate_operation_count": 1,
+        "candidate_operation_count": 1 + int(tls_patch is not None),
         "candidate_operation": {
             "type": "join_physical_tls_cell",
             "node_ids": spec["scope"]["target_source_junction_ids"],
         },
+        "candidate_operations": [
+            {
+                "type": "join_physical_tls_cell",
+                "node_ids": spec["scope"]["target_source_junction_ids"],
+            },
+            *(
+                [
+                    {
+                        "type": "replace_static_tls_program",
+                        "controller_ids": spec["candidate"].get(
+                            "expected_controller_ids", ()
+                        ),
+                    }
+                ]
+                if tls_patch is not None
+                else []
+            ),
+        ],
     }
     rollback_file = destination / "rollback.json"
     write_json_atomic(rollback_file, rollback, sort_keys=True)
@@ -264,6 +372,8 @@ def run_xs1_workflow(
         guard_junction_ids=tuple(
             map(str, spec["scope"]["guard_junction_ids"])
         ),
+        slice_id=slice_id,
+        review_case_id=str(spec.get("review_case_id", spec["spec_id"])),
     )
 
     gates = {
@@ -274,6 +384,7 @@ def run_xs1_workflow(
             bool(semantic_reproduction["source_matches_frozen"])
             and bool(semantic_reproduction["candidate_matches_frozen"])
         ),
+        "tls_ownership_rebuild": str(tls_ownership["status"]),
         "target_connection_mode": target_connection["status"],
         "independent_safety": str(safety["status"]),
         "outside_scope_zero_delta": _gate(
@@ -286,16 +397,29 @@ def run_xs1_workflow(
     }
     machine_ready = all(status == "pass" for status in gates.values())
     summary = {
-        "schema": "torii.xs1-workflow/v1",
+        "schema": _slice_schema(slice_id, "workflow"),
+        "slice_id": slice_id,
+        "topology_label": str(spec.get("topology_label", "four-way")),
         "status": "review_ready" if machine_ready else "blocked",
         "automatic_promotion_gate": "blocked",
         "human_review_status": "pending",
-        "claim_boundary": (
-            "one frozen, vehicle-only, standard four-way OSM intersection; "
-            "no pedestrian, bicycle, rail, ramp, shared-controller, or city-scale claim"
+        "claim_boundary": str(
+            spec.get(
+                "claim_boundary",
+                "one frozen, vehicle-only, standard four-way OSM intersection; "
+                "no pedestrian, bicycle, rail, ramp, shared-controller, "
+                "or city-scale claim",
+            )
         ),
         "prompt": prompt,
         "spec_id": spec["spec_id"],
+        "reproduction_command": str(
+            spec.get(
+                "reproduction_command",
+                ".\\.venv\\Scripts\\python.exe "
+                "plugins\\torii-sumo\\scripts\\run_xs1_four_way.py",
+            )
+        ),
         "bbox": spec["bbox"],
         "source_net_file": str(source_net),
         "source_sha256": file_sha256(source_net),
@@ -303,6 +427,7 @@ def run_xs1_workflow(
         "candidate_sha256": file_sha256(candidate_net),
         "semantic_reproduction": semantic_reproduction,
         "gates": gates,
+        "tls_ownership": tls_ownership,
         "target_connection": target_connection,
         "independent_safety": {
             "status": safety["status"],
@@ -330,6 +455,9 @@ def run_xs1_workflow(
         "all_turn_routeability": {
             "status": all_turns["status"],
             "movement_count": all_turns["movement_count"],
+            "expected_movement_count": all_turns[
+                "expected_movement_count"
+            ],
             "turn_counts": all_turns["turn_counts"],
             "arrived_vehicle_count": len(all_turns["arrived_vehicle_ids"]),
             "inspection": all_turns["inspection"],
@@ -363,6 +491,17 @@ def run_xs1_workflow(
                 f"../input/{join_patch.name}",
                 join_patch,
             ),
+            *(
+                (
+                    _public_input(
+                        "tls_patch",
+                        f"../input/{tls_patch.name}",
+                        tls_patch,
+                    ),
+                )
+                if tls_patch is not None
+                else ()
+            ),
             _public_input(
                 "toolchain_lock",
                 "../../../benchmarks/corridor_human_modeling_v1/toolchain.lock.json",
@@ -381,6 +520,7 @@ def run_xs1_workflow(
         registry_file=registry_file,
         frozen_osm=frozen_osm,
         join_patch=join_patch,
+        tls_patch=tls_patch,
         toolchain_lock_file=toolchain_lock_file,
         netconvert=netconvert,
         sumo=sumo,
@@ -393,7 +533,26 @@ def run_xs1_workflow(
     }
 
 
-def finalize_xs1_visual_review(
+def run_xs1_workflow(
+    *,
+    example_dir: Path,
+    output_dir: Path,
+    toolchain_lock_file: Path,
+    binaries: Mapping[str, str | None] | None = None,
+    timeout_seconds: float = 120.0,
+) -> dict[str, Any]:
+    """Backward-compatible XS-1 entry point."""
+
+    return run_isolated_junction_workflow(
+        example_dir=example_dir,
+        output_dir=output_dir,
+        toolchain_lock_file=toolchain_lock_file,
+        binaries=binaries,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def finalize_isolated_junction_visual_review(
     *,
     output_dir: Path,
     reviewer: str,
@@ -408,7 +567,7 @@ def finalize_xs1_visual_review(
     summary = _read_json(summary_file)
     candidate = Path(summary["candidate_net_file"])
     if decision not in {"pass", "fail"}:
-        raise ValueError("XS-1 visual decision must be 'pass' or 'fail'.")
+        raise ValueError("Visual decision must be 'pass' or 'fail'.")
     screenshots = []
     for source in screenshot_files:
         target = destination / "visual" / source.name
@@ -417,7 +576,9 @@ def finalize_xs1_visual_review(
             {"path": str(target), "sha256": file_sha256(target)}
         )
     review = {
-        "schema": "torii.xs1-visual-review/v1",
+        "schema": _slice_schema(
+            str(summary.get("slice_id", "xs1")), "visual-review"
+        ),
         "reviewer": reviewer,
         "reviewer_kind": "agent_netedit_visual",
         "reviewed_at": datetime.now(timezone.utc).isoformat(),
@@ -455,13 +616,35 @@ def finalize_xs1_visual_review(
     }
 
 
+def finalize_xs1_visual_review(
+    *,
+    output_dir: Path,
+    reviewer: str,
+    decision: str,
+    observations: tuple[str, ...],
+    screenshot_files: tuple[Path, ...] = (),
+) -> dict[str, Any]:
+    """Backward-compatible XS-1 visual-review entry point."""
+
+    return finalize_isolated_junction_visual_review(
+        output_dir=output_dir,
+        reviewer=reviewer,
+        decision=decision,
+        observations=observations,
+        screenshot_files=screenshot_files,
+    )
+
+
 def _validate_spec(*, prompt: str, spec: Mapping[str, Any]) -> None:
-    if spec.get("schema") != "torii.xs1-spec/v1":
-        raise ValueError("Unsupported XS-1 spec schema.")
+    if spec.get("schema") not in {
+        "torii.xs1-spec/v1",
+        "torii.isolated-junction-spec/v1",
+    }:
+        raise ValueError("Unsupported isolated-junction spec schema.")
     if prompt != str(spec.get("prompt", "")):
         raise ValueError("The frozen sentence prompt does not match the spec.")
     if spec.get("traffic_side") not in {"right", "left"}:
-        raise ValueError("XS-1 requires an explicit traffic side.")
+        raise ValueError("The isolated-junction spec requires a traffic side.")
     exclusions = set(map(str, spec.get("excluded_features", ())))
     required = {
         "pedestrian",
@@ -472,7 +655,7 @@ def _validate_spec(*, prompt: str, spec: Mapping[str, Any]) -> None:
         "complex_channelization",
     }
     if not required <= exclusions:
-        raise ValueError("XS-1 exclusions are incomplete.")
+        raise ValueError("The isolated-junction exclusions are incomplete.")
 
 
 def _build_result(command_result: Mapping[str, Any], path: Path) -> dict[str, Any]:
@@ -489,6 +672,223 @@ def _build_result(command_result: Mapping[str, Any], path: Path) -> dict[str, An
         "normalized_net_sha256": (
             normalized_net_sha256(path) if path.is_file() else None
         ),
+    }
+
+
+def _audit_tls_ownership_rebuild(
+    *,
+    source_net: Path,
+    candidate_net: Path,
+    target_source_junction_ids: tuple[str, ...],
+    target_candidate_junction_id: str,
+    expected_controller_ids: tuple[str, ...],
+    expected_controlled_connection_count: int,
+    slice_id: str,
+) -> dict[str, Any]:
+    source = _tls_scope_inventory(
+        source_net,
+        scope_junction_ids=target_source_junction_ids,
+    )
+    candidate = _tls_scope_inventory(
+        candidate_net,
+        scope_junction_ids=(target_candidate_junction_id,),
+    )
+    expected = set(expected_controller_ids)
+    source_scope_ids = set(target_source_junction_ids)
+    candidate_global_controller_ids = set(candidate["all_controller_ids"])
+    candidate_global_junction_ids = set(candidate["all_junction_ids"])
+    old_source_controller_ids = set(source["scope_controller_ids"]) - expected
+    residual_old_controller_ids = sorted(
+        old_source_controller_ids & candidate_global_controller_ids
+    )
+    residual_source_junction_ids = sorted(
+        (source_scope_ids - {target_candidate_junction_id})
+        & candidate_global_junction_ids
+    )
+
+    findings: list[dict[str, Any]] = []
+    if candidate["scope_tls_junction_ids"] != [target_candidate_junction_id]:
+        findings.append(
+            {
+                "category": "candidate_physical_tls_junction_not_unique",
+                "expected": [target_candidate_junction_id],
+                "observed": candidate["scope_tls_junction_ids"],
+            }
+        )
+    if set(candidate["scope_controller_ids"]) != expected:
+        findings.append(
+            {
+                "category": "candidate_target_controller_set_mismatch",
+                "expected": sorted(expected),
+                "observed": candidate["scope_controller_ids"],
+            }
+        )
+    if set(candidate["scope_program_controller_ids"]) != expected:
+        findings.append(
+            {
+                "category": "candidate_target_program_set_mismatch",
+                "expected": sorted(expected),
+                "observed": candidate["scope_program_controller_ids"],
+            }
+        )
+    if (
+        candidate["scope_controlled_connection_count"]
+        != expected_controlled_connection_count
+    ):
+        findings.append(
+            {
+                "category": "candidate_target_controlled_connection_count_mismatch",
+                "expected": expected_controlled_connection_count,
+                "observed": candidate["scope_controlled_connection_count"],
+            }
+        )
+    if residual_old_controller_ids:
+        findings.append(
+            {
+                "category": "old_source_controller_identity_survived",
+                "controller_ids": residual_old_controller_ids,
+            }
+        )
+    if residual_source_junction_ids:
+        findings.append(
+            {
+                "category": "old_source_tls_cell_junction_survived",
+                "junction_ids": residual_source_junction_ids,
+            }
+        )
+
+    return {
+        "schema": _slice_schema(slice_id, "tls-ownership"),
+        "status": "pass" if not findings else "fail",
+        "source_net_file": str(source_net),
+        "candidate_net_file": str(candidate_net),
+        "target_candidate_junction_id": target_candidate_junction_id,
+        "expected_controller_ids": sorted(expected),
+        "expected_controlled_connection_count": (
+            expected_controlled_connection_count
+        ),
+        "source": {
+            "target_scope_junction_count": len(target_source_junction_ids),
+            "target_tls_junction_count": len(
+                source["scope_tls_junction_ids"]
+            ),
+            "target_tls_junction_ids": source["scope_tls_junction_ids"],
+            "target_controller_count": len(source["scope_controller_ids"]),
+            "target_controller_ids": source["scope_controller_ids"],
+            "target_controlled_connection_count": source[
+                "scope_controlled_connection_count"
+            ],
+            "target_signal_group_count": source["scope_signal_group_count"],
+        },
+        "candidate": {
+            "target_tls_junction_count": len(
+                candidate["scope_tls_junction_ids"]
+            ),
+            "target_tls_junction_ids": candidate["scope_tls_junction_ids"],
+            "target_controller_count": len(candidate["scope_controller_ids"]),
+            "target_controller_ids": candidate["scope_controller_ids"],
+            "target_program_controller_ids": candidate[
+                "scope_program_controller_ids"
+            ],
+            "target_controlled_connection_count": candidate[
+                "scope_controlled_connection_count"
+            ],
+            "target_signal_group_count": candidate[
+                "scope_signal_group_count"
+            ],
+        },
+        "removed_source_tls_junction_ids": sorted(
+            set(source["scope_tls_junction_ids"])
+            - candidate_global_junction_ids
+        ),
+        "removed_source_controller_ids": sorted(
+            old_source_controller_ids - candidate_global_controller_ids
+        ),
+        "residual_source_junction_ids": residual_source_junction_ids,
+        "residual_old_controller_ids": residual_old_controller_ids,
+        "findings": findings,
+        "interpretation": (
+            "traffic-light junction/controller counts describe physical TLS "
+            "ownership; signal-group/linkIndex counts describe controlled "
+            "lane movements and must not be interpreted as separate physical "
+            "intersections"
+        ),
+        "review_instruction": (
+            f"Open {candidate_net.name} for the cleaned network. "
+            f"{source_net.name} is the immutable fragmented OSM baseline."
+        ),
+    }
+
+
+def _tls_scope_inventory(
+    net_file: Path,
+    *,
+    scope_junction_ids: tuple[str, ...],
+) -> dict[str, Any]:
+    root = ET.parse(net_file).getroot()
+    scope = set(scope_junction_ids)
+    junctions = {
+        element.attrib.get("id", ""): element
+        for element in root.findall("junction")
+        if element.attrib.get("id")
+    }
+    external_edge_targets = {
+        element.attrib.get("id", ""): element.attrib.get("to", "")
+        for element in root.findall("edge")
+        if element.attrib.get("id")
+        and element.attrib.get("function") != "internal"
+    }
+    all_program_controller_ids = {
+        element.attrib.get("id", "")
+        for element in root.findall("tlLogic")
+        if element.attrib.get("id")
+    }
+    all_controlled_controller_ids: set[str] = set()
+    scoped_connections: list[ET.Element] = []
+    for connection in root.findall("connection"):
+        controller_id = connection.attrib.get("tl", "")
+        if not controller_id:
+            continue
+        all_controlled_controller_ids.add(controller_id)
+        owner_junction_id = external_edge_targets.get(
+            connection.attrib.get("from", ""), ""
+        )
+        if owner_junction_id in scope:
+            scoped_connections.append(connection)
+
+    scope_controller_ids = sorted(
+        {
+            connection.attrib.get("tl", "")
+            for connection in scoped_connections
+            if connection.attrib.get("tl")
+        }
+    )
+    scope_program_controller_ids = sorted(
+        set(scope_controller_ids) & all_program_controller_ids
+    )
+    signal_groups = {
+        (
+            connection.attrib.get("tl", ""),
+            connection.attrib.get("linkIndex", ""),
+        )
+        for connection in scoped_connections
+        if connection.attrib.get("linkIndex") not in (None, "")
+    }
+    return {
+        "all_junction_ids": sorted(junctions),
+        "all_controller_ids": sorted(
+            all_program_controller_ids | all_controlled_controller_ids
+        ),
+        "scope_tls_junction_ids": sorted(
+            junction_id
+            for junction_id, junction in junctions.items()
+            if junction_id in scope
+            and junction.attrib.get("type", "").startswith("traffic_light")
+        ),
+        "scope_controller_ids": scope_controller_ids,
+        "scope_program_controller_ids": scope_program_controller_ids,
+        "scope_controlled_connection_count": len(scoped_connections),
+        "scope_signal_group_count": len(signal_groups),
     }
 
 
@@ -524,7 +924,9 @@ def _target_connection_summary(
     }
 
 
-def _finding_continuity(exact_diff: Mapping[str, Any]) -> dict[str, Any]:
+def _finding_continuity(
+    exact_diff: Mapping[str, Any], *, slice_id: str
+) -> dict[str, Any]:
     finding_delta = exact_diff.get("finding_delta", {})
     added = list(finding_delta.get("added", ()))
     resolved = list(finding_delta.get("resolved", ()))
@@ -551,7 +953,7 @@ def _finding_continuity(exact_diff: Mapping[str, Any]) -> dict[str, Any]:
         else:
             unpaired.append(finding["finding_id"])
     return {
-        "schema": "torii.xs1-finding-continuity/v1",
+        "schema": _slice_schema(slice_id, "finding-continuity"),
         "status": "pass" if not unpaired else "review",
         "pair_count": len(pairs),
         "pairs": pairs,
@@ -579,6 +981,8 @@ def _write_review_overlay(
     candidate_net: Path,
     target_junction_id: str,
     guard_junction_ids: tuple[str, ...],
+    slice_id: str,
+    review_case_id: str,
 ) -> None:
     net_root = ET.parse(candidate_net).getroot()
     junctions = {
@@ -590,13 +994,18 @@ def _write_review_overlay(
     polygon = ET.SubElement(
         root,
         "poly",
-        id="xs1_target_cell",
+        id=f"{slice_id}_target_cell",
         color="0,210,120,120",
         fill="true",
         layer="100",
         shape=target.attrib.get("shape", ""),
     )
-    ET.SubElement(polygon, "param", key="review_case_id", value="XS1-89129156")
+    ET.SubElement(
+        polygon,
+        "param",
+        key="review_case_id",
+        value=review_case_id,
+    )
     ET.SubElement(polygon, "param", key="role", value="target")
     for index, junction_id in enumerate(guard_junction_ids):
         junction = junctions.get(junction_id)
@@ -605,7 +1014,7 @@ def _write_review_overlay(
         poi = ET.SubElement(
             root,
             "poi",
-            id=f"xs1_guard_{index + 1}",
+            id=f"{slice_id}_guard_{index + 1}",
             color="255,180,0,255",
             layer="101",
             x=junction.attrib.get("x", "0"),
@@ -629,22 +1038,36 @@ def _write_review_html(path: Path, summary: Mapping[str, Any]) -> None:
         if visual
         else "pending NetEdit visual check"
     )
+    slice_label = str(summary.get("slice_id", "xs1")).upper()
+    topology_label = str(summary.get("topology_label", "four-way"))
+    tls = summary["tls_ownership"]
+    source_name = Path(str(summary["source_net_file"])).name
+    candidate_name = Path(str(summary["candidate_net_file"])).name
+    expected_movements = int(
+        summary["all_turn_routeability"]["expected_movement_count"]
+    )
     document = f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Torii XS-1 review</title>
+<html lang="en"><head><meta charset="utf-8"><title>Torii {html.escape(slice_label)} review</title>
 <style>
 body{{font:15px/1.5 system-ui,sans-serif;max-width:980px;margin:32px auto;padding:0 20px;color:#17202a}}
-h1{{margin-bottom:4px}} .sub{{color:#52606d}} .cards{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}}
+h1{{margin-bottom:4px}} .sub{{color:#52606d}} .cards{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}
 .card{{border:1px solid #d9e2ec;border-radius:10px;padding:14px;background:#f8fafc}} table{{border-collapse:collapse;width:100%}}
 td,th{{border-bottom:1px solid #e4e7eb;padding:8px;text-align:left}} .pass{{color:#087f5b;font-weight:700}}
 .review,.pending{{color:#b35c00;font-weight:700}} .blocked,.fail{{color:#c92a2a;font-weight:700}}
-code{{overflow-wrap:anywhere}} @media(max-width:700px){{.cards{{grid-template-columns:1fr}}}}
+code{{overflow-wrap:anywhere}} .role-note{{border-left:5px solid #087f5b;background:#e6fcf5;padding:12px 14px;margin:18px 0}}
+@media(max-width:850px){{.cards{{grid-template-columns:repeat(2,1fr)}}}} @media(max-width:700px){{.cards{{grid-template-columns:1fr}}}}
 </style></head><body>
-<h1>XS-1 — one real four-way TLS intersection</h1>
+<h1>{html.escape(slice_label)} — one real {html.escape(topology_label)} TLS intersection</h1>
 <p class="sub">{html.escape(str(summary['prompt']))}</p>
+<div class="role-note"><b>Open the cleaned candidate:</b> <code>{html.escape(candidate_name)}</code>.<br>
+<b>Do not visually grade the immutable source:</b> <code>{html.escape(source_name)}</code>; it intentionally preserves the fragmented OSM TLS baseline.</div>
 <div class="cards"><div class="card"><b>Machine state</b><br>{html.escape(str(summary['status']))}</div>
-<div class="card"><b>Movements</b><br>{summary['target_connection']['direct_movement_count']} / 12 traced</div>
-<div class="card"><b>Runtime</b><br>{summary['all_turn_routeability']['arrived_vehicle_count']} / 12 arrived</div></div>
+<div class="card"><b>Movements</b><br>{summary['target_connection']['direct_movement_count']} / {expected_movements} traced</div>
+<div class="card"><b>TLS ownership</b><br>{tls['source']['target_tls_junction_count']} source nodes → {tls['candidate']['target_tls_junction_count']} candidate node</div>
+<div class="card"><b>Runtime</b><br>{summary['all_turn_routeability']['arrived_vehicle_count']} / {expected_movements} arrived</div></div>
 <h2>Hard evidence</h2><table><thead><tr><th>Gate</th><th>Status</th></tr></thead><tbody>{gates}</tbody></table>
+<h2>TLS rebuild proof</h2><p>The target changed from <b>{tls['source']['target_tls_junction_count']}</b> traffic-light junctions and <b>{tls['source']['target_controller_count']}</b> controllers to <b>{tls['candidate']['target_tls_junction_count']}</b> physical TLS junction and <b>{tls['candidate']['target_controller_count']}</b> controller. Residual old junction IDs: <b>{len(tls['residual_source_junction_ids'])}</b>; residual old controller IDs: <b>{len(tls['residual_old_controller_ids'])}</b>.</p>
+<p>The candidate has {tls['candidate']['target_controlled_connection_count']} controlled lane movements and {tls['candidate']['target_signal_group_count']} linkIndex groups. Those are movement controls inside one controller, not separate physical intersections.</p>
 <h2>Scope</h2><p>Outside-scope deltas: <b>{summary['exact_diff']['outside_scope_delta_count']}</b>. Outside-scope new findings: <b>{summary['exact_diff']['outside_scope_added_finding_count']}</b>.</p>
 <p>Independent safety: <b>{html.escape(str(summary['independent_safety']['status']))}</b>; protected conflicts {summary['independent_safety']['protected_conflict_count']}, missing yield relations {summary['independent_safety']['permissive_without_yield_count']}, potential signal conflicts {summary['independent_safety']['potential_signal_conflict_count']}.</p>
 <h2>Guard finding continuity</h2><p>{continuity['pair_count']} findings are carried forward by exact category + witness tokens; none are silently resolved. Unpaired additions: {len(continuity['unpaired_added_finding_ids'])}.</p>
@@ -665,12 +1088,15 @@ def _write_manifest(
     registry_file: Path,
     frozen_osm: Path,
     join_patch: Path,
+    tls_patch: Path | None,
     toolchain_lock_file: Path,
     netconvert: str,
     sumo: str,
 ) -> None:
     manifest = {
-        "schema": "torii.xs1-artifact-manifest/v1",
+        "schema": _slice_schema(
+            str(summary.get("slice_id", "xs1")), "artifact-manifest"
+        ),
         "status": summary["status"],
         "automatic_promotion_gate": "blocked",
         "source_network_mutation": False,
@@ -686,6 +1112,11 @@ def _write_manifest(
             _artifact("source_registry", registry_file),
             _artifact("frozen_osm", frozen_osm),
             _artifact("join_patch", join_patch),
+            *(
+                [_artifact("tls_patch", tls_patch)]
+                if tls_patch is not None
+                else []
+            ),
             _artifact("toolchain_lock", toolchain_lock_file),
         ],
         "gates": summary["gates"],
@@ -702,7 +1133,11 @@ def _write_public_bundle_metadata(
     toolchain_lock_file: Path | None = None,
 ) -> None:
     public_summary = {
-        "schema": "torii.xs1-public-summary/v1",
+        "schema": _slice_schema(
+            str(summary.get("slice_id", "xs1")), "public-summary"
+        ),
+        "slice_id": summary.get("slice_id", "xs1"),
+        "topology_label": summary.get("topology_label", "four-way"),
         "status": summary["status"],
         "automatic_promotion_gate": "blocked",
         "human_review_status": summary["human_review_status"],
@@ -711,20 +1146,22 @@ def _write_public_bundle_metadata(
         "spec_id": summary["spec_id"],
         "bbox": summary["bbox"],
         "source": {
-            "path": "xs1-source.net.xml",
+            "path": Path(str(summary["source_net_file"])).name,
             "sha256": summary["source_sha256"],
             "normalized_sha256": summary["semantic_reproduction"][
                 "source_normalized_net_sha256"
             ],
         },
         "candidate": {
-            "path": "xs1-candidate.net.xml",
+            "path": Path(str(summary["candidate_net_file"])).name,
             "sha256": summary["candidate_sha256"],
             "normalized_sha256": summary["semantic_reproduction"][
                 "candidate_normalized_net_sha256"
             ],
         },
         "gates": summary["gates"],
+        "tls_ownership": _public_tls_ownership(summary["tls_ownership"]),
+        "tls_ownership_file": "tls-ownership.public.json",
         "target_connection": summary["target_connection"],
         "independent_safety": summary["independent_safety"],
         "exact_diff": summary["exact_diff"],
@@ -742,21 +1179,26 @@ def _write_public_bundle_metadata(
         public_summary,
         sort_keys=True,
     )
+    write_json_atomic(
+        destination / "tls-ownership.public.json",
+        _public_tls_ownership(summary["tls_ownership"]),
+        sort_keys=True,
+    )
 
     rollback = _read_json(destination / "rollback.json")
     write_json_atomic(
         destination / "rollback.public.json",
         {
-            "schema": "torii.xs1-public-rollback/v1",
+            "schema": _slice_schema(
+                str(summary.get("slice_id", "xs1")), "public-rollback"
+            ),
             "candidate_sha256": rollback["candidate_sha256"],
             "source_sha256": rollback["source_sha256"],
             "inverse_operation": rollback["inverse_operation"],
             "candidate_operation_count": rollback["candidate_operation_count"],
             "candidate_operation": rollback["candidate_operation"],
-            "reproduction_command": (
-                ".\\.venv\\Scripts\\python.exe "
-                "plugins\\torii-sumo\\scripts\\run_xs1_four_way.py"
-            ),
+            "candidate_operations": rollback["candidate_operations"],
+            "reproduction_command": summary["reproduction_command"],
         },
         sort_keys=True,
     )
@@ -779,7 +1221,9 @@ def _write_public_bundle_metadata(
             "tools": lock["tools"],
         }
     public_manifest = {
-        "schema": "torii.xs1-public-manifest/v1",
+        "schema": _slice_schema(
+            str(summary.get("slice_id", "xs1")), "public-manifest"
+        ),
         "status": summary["status"],
         "automatic_promotion_gate": "blocked",
         "human_validation": False,
@@ -787,7 +1231,7 @@ def _write_public_bundle_metadata(
         "toolchain": toolchain,
         "inputs": list(inputs or previous.get("inputs", ())),
         "gates": summary["gates"],
-        "artifacts": _public_artifact_inventory(destination),
+        "artifacts": _public_artifact_inventory(destination, summary),
     }
     write_json_atomic(public_manifest_file, public_manifest, sort_keys=True)
 
@@ -798,6 +1242,7 @@ def _public_routeability(report: Mapping[str, Any]) -> dict[str, Any]:
     tripinfo = inspection["tripinfo"]
     return {
         "status": report["status"],
+        "expected_movement_count": report["expected_movement_count"],
         "movement_count": report["movement_count"],
         "turn_counts": report["turn_counts"],
         "arrived_vehicle_count": report["arrived_vehicle_count"],
@@ -812,6 +1257,37 @@ def _public_routeability(report: Mapping[str, Any]) -> dict[str, Any]:
             "completion_ratio": runtime["completion_ratio"],
             "trip_count": tripinfo["trip_count"],
         },
+    }
+
+
+def _public_tls_ownership(report: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "schema": report["schema"],
+        "status": report["status"],
+        "target_candidate_junction_id": report[
+            "target_candidate_junction_id"
+        ],
+        "expected_controller_ids": report["expected_controller_ids"],
+        "expected_controlled_connection_count": report[
+            "expected_controlled_connection_count"
+        ],
+        "source": report["source"],
+        "candidate": report["candidate"],
+        "removed_source_tls_junction_ids": report[
+            "removed_source_tls_junction_ids"
+        ],
+        "removed_source_controller_ids": report[
+            "removed_source_controller_ids"
+        ],
+        "residual_source_junction_ids": report[
+            "residual_source_junction_ids"
+        ],
+        "residual_old_controller_ids": report[
+            "residual_old_controller_ids"
+        ],
+        "findings": report["findings"],
+        "interpretation": report["interpretation"],
+        "review_instruction": report["review_instruction"],
     }
 
 
@@ -839,13 +1315,16 @@ def _public_input(role: str, path: str, source: Path) -> dict[str, Any]:
     return {"role": role, "path": path, "sha256": file_sha256(source)}
 
 
-def _public_artifact_inventory(destination: Path) -> list[dict[str, Any]]:
+def _public_artifact_inventory(
+    destination: Path, summary: Mapping[str, Any]
+) -> list[dict[str, Any]]:
     names = (
-        "xs1-source.net.xml",
-        "xs1-candidate.net.xml",
+        Path(str(summary["source_net_file"])).name,
+        Path(str(summary["candidate_net_file"])).name,
         "review.add.xml",
         "review.html",
         "summary.public.json",
+        "tls-ownership.public.json",
         "rollback.public.json",
         "visual-review.public.json",
     )
@@ -885,14 +1364,21 @@ def _artifact(kind: str, path: Path) -> dict[str, Any]:
     return {"kind": kind, "path": str(path), "sha256": file_sha256(path)}
 
 
+def _slice_schema(slice_id: str, artifact: str) -> str:
+    namespace = "torii.xs1" if slice_id == "xs1" else "torii.isolated-junction"
+    return f"{namespace}-{artifact}/v1"
+
+
 def _write_blocked_result(
     destination: Path,
     *,
+    slice_id: str = "xs1",
     reason: str,
     details: Mapping[str, Any],
 ) -> dict[str, Any]:
     report = {
-        "schema": "torii.xs1-workflow/v1",
+        "schema": _slice_schema(slice_id, "workflow"),
+        "slice_id": slice_id,
         "status": "blocked",
         "automatic_promotion_gate": "blocked",
         "reason": reason,
@@ -903,7 +1389,7 @@ def _write_blocked_result(
     write_json_atomic(
         destination / "manifest.json",
         {
-            "schema": "torii.xs1-artifact-manifest/v1",
+            "schema": _slice_schema(slice_id, "artifact-manifest"),
             "status": "blocked",
             "automatic_promotion_gate": "blocked",
             "artifacts": [_artifact("blocked_report", report_file)],
