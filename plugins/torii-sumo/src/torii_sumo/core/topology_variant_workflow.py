@@ -50,6 +50,7 @@ def run_topology_variant(
     sumo_binary: str,
     traffic_side: str,
     timeout_seconds: float,
+    producer: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Materialize and audit one immutable topology arm."""
 
@@ -94,6 +95,7 @@ def run_topology_variant(
         "candidate_plan_id": candidate_plan["candidate_plan_id"],
         "candidate_dag_node_id": candidate_plan["candidate_dag_node_id"],
         "declared_operation": candidate_plan["declared_operation"],
+        "producer": dict(producer),
         "selection_is_topology_truth_claim": False,
         "source_osm_mutation": file_sha256(source_osm) != source_osm_sha256,
         "command": command,
@@ -117,6 +119,7 @@ def run_topology_variant(
             destination=destination,
             stage="materialization",
             reason="netconvert build or source immutability gate failed",
+            producer=producer,
             artifacts={
                 "node_patch": str(patch_file),
                 "build_report": str(build_file),
@@ -260,8 +263,10 @@ def run_topology_variant(
             "type": "rebuild_without_topology_patch",
             "source_mutation": False,
         },
+        "producer": dict(producer),
         "automatic_topology_selection": False,
         "automatic_promotion_gate": "blocked",
+        "scope_expansion_allowed": False,
     }
     rollback_file = destination / "rollback.json"
     write_json_atomic(rollback_file, rollback, sort_keys=True)
@@ -284,6 +289,8 @@ def run_topology_variant(
         "automatic_topology_selection": False,
         "automatic_promotion_gate": "blocked",
         "field_timing_reconstruction": False,
+        "scope_expansion_allowed": False,
+        "producer": dict(producer),
         "source_mutation": file_sha256(source_osm) != source_osm_sha256,
         "target_junction_ids": list(target_candidate_ids),
         "target_controller_id": candidate_plan["target_controller_id"],
@@ -347,6 +354,7 @@ def run_topology_variant(
         toolchain_lock_file=toolchain_lock_file,
         candidate_plan=candidate_plan,
         gates=gates,
+        producer=producer,
     )
     return {
         **summary,
@@ -409,6 +417,7 @@ def _write_manifest(
     toolchain_lock_file: Path,
     candidate_plan: Mapping[str, Any],
     gates: Mapping[str, str],
+    producer: Mapping[str, Any],
 ) -> None:
     artifacts = []
     for artifact in sorted(destination.rglob("*")):
@@ -431,6 +440,8 @@ def _write_manifest(
             "topology_hypothesis": candidate_plan["topology_hypothesis"],
             "automatic_topology_selection": False,
             "automatic_promotion_gate": "blocked",
+            "scope_expansion_allowed": False,
+            "producer": dict(producer),
             "inputs": [
                 {
                     "role": "frozen_osm_bbox",
@@ -456,6 +467,7 @@ def _blocked_variant(
     destination: Path,
     stage: str,
     reason: str,
+    producer: Mapping[str, Any],
     artifacts: Mapping[str, str],
 ) -> dict[str, Any]:
     summary = {
@@ -469,6 +481,8 @@ def _blocked_variant(
         "automatic_topology_selection": False,
         "automatic_promotion_gate": "blocked",
         "field_timing_reconstruction": False,
+        "scope_expansion_allowed": False,
+        "producer": dict(producer),
         "terminal_stage": stage,
         "reason": reason,
         "artifacts": dict(artifacts),
