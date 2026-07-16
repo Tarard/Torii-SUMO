@@ -134,6 +134,7 @@ def test_xs2_proposal_separates_cell_membership_from_semantic_uncertainty() -> N
     )
 
     signal = proposal["physical_cell_hypotheses"]["signal_anchor_cell"]
+    assert proposal["teacher_free_generation"]["seed_authority"] == ("caller_provided_anchor_only")
     assert signal["membership_comparison"]["status"] == "exact"
     assert signal["geometry_shape_node_ids"] == [
         "11623233262",

@@ -80,14 +80,14 @@ def parse_plain_source_row_bundle(
     else:
         control_kind = "unsignalized"
     observations = [
-        _observation(
+        make_source_row_observation(
             source_kind="plain-node-control",
             source_sha256=file_sha256(node_path),
             subject=f"node/{crossing_node_id}",
             observed_value=node_type or "missing",
             expected_answer_eligible=True,
         ),
-        _observation(
+        make_source_row_observation(
             source_kind="plain-crossing-priority",
             source_sha256=file_sha256(connection_path),
             subject=(
@@ -191,7 +191,14 @@ def infer_source_row_class(
         reasons.append("source_evidence_contradictory")
     elif source_bundle.junction_control_kind == "traffic-light":
         expected_class = "signalized"
-        reasons.append("plain_node_declares_traffic_light")
+        reasons.append(
+            "osm_tag_declares_signalized_crossing"
+            if any(
+                observation.source_kind == "osm-tag"
+                for observation in source_bundle.observations
+            )
+            else "plain_node_declares_traffic_light"
+        )
     elif (
         source_bundle.junction_control_kind
         == "shared-space-or-unsupported"
@@ -482,7 +489,7 @@ def assess_row_static_consistency(
     )
 
 
-def _observation(
+def make_source_row_observation(
     *,
     source_kind: str,
     source_sha256: str,
@@ -490,6 +497,8 @@ def _observation(
     observed_value: str,
     expected_answer_eligible: bool,
 ) -> SourceROWObservation:
+    """Create one hash-bound source observation for the independent ROW oracle."""
+
     payload = {
         "source_kind": source_kind,
         "source_sha256": source_sha256,
