@@ -7,7 +7,7 @@ import json
 import math
 from typing import Any
 
-from torii_sumo.road_semantics import filtered_osm_modes
+from torii_sumo.road_semantics import filtered_osm_modes, is_osm_passenger_way
 
 from .schema import OSMPatch
 
@@ -39,9 +39,9 @@ def infer_signal_anchor_physical_cell(
     if seed_node_id not in patch.nodes:
         raise ValueError(f"OSM seed node is absent from the patch: {seed_node_id}")
 
-    graph, vehicle_way_ids, max_lane_count = _vehicle_graph(patch)
+    graph, vehicle_way_ids, max_lane_count = build_osm_vehicle_graph(patch)
     radius_m = max(30.0, min(50.0, max_lane_count * 3.2 * 4.0))
-    distances, predecessors = _shortest_paths(graph, seed_node_id)
+    distances, predecessors = shortest_paths(graph, seed_node_id)
     seed = patch.nodes[seed_node_id]
     anchor_ids = []
     excluded_anchor_ids = []
@@ -156,14 +156,14 @@ def infer_signal_anchor_physical_cell(
     }
 
 
-def _vehicle_graph(
+def build_osm_vehicle_graph(
     patch: OSMPatch,
 ) -> tuple[dict[str, list[tuple[str, float, str]]], set[str], int]:
     graph: dict[str, list[tuple[str, float, str]]] = defaultdict(list)
     vehicle_way_ids: set[str] = set()
     maximum_lane_count = 1
     for way in patch.ways.values():
-        if not _is_passenger_way(way.tags):
+        if not is_osm_passenger_way(way.tags):
             continue
         vehicle_way_ids.add(way.id)
         maximum_lane_count = max(maximum_lane_count, _lane_count(way.tags))
@@ -183,11 +183,6 @@ def _vehicle_graph(
     return dict(graph), vehicle_way_ids, maximum_lane_count
 
 
-def _is_passenger_way(tags: dict[str, str]) -> bool:
-    highway = tags.get("highway", "")
-    return bool(highway and highway not in _SUPPORT_HIGHWAYS and "passenger" in filtered_osm_modes(tags, {"passenger"}))
-
-
 def _lane_count(tags: dict[str, str]) -> int:
     try:
         return max(1, int(tags.get("lanes", "1")))
@@ -195,7 +190,7 @@ def _lane_count(tags: dict[str, str]) -> int:
         return 1
 
 
-def _shortest_paths(
+def shortest_paths(
     graph: dict[str, list[tuple[str, float, str]]],
     source_id: str,
 ) -> tuple[dict[str, float], dict[str, str]]:
@@ -343,7 +338,15 @@ def _boundary_ports(
                 ),
                 "allowed_modes": sorted(filtered_osm_modes(way.tags, {"passenger"})),
             }
-            payload["boundary_port_id"] = f"port-{_stable_digest(payload)[:16]}"
+            identity_payload = {
+                "inside_node_id": inside_id,
+                "outside_node_id": outside_id,
+                "way_id": way_id,
+                "flow_role": lane_semantics["flow_role"],
+            }
+            payload["boundary_port_id"] = f"port-{_stable_digest(identity_payload)[:16]}"
+            payload["identity_basis"] = identity_payload
+            payload["evidence_signature"] = _stable_digest(payload)
             records[(inside_id, outside_id, way_id)] = payload
     return [records[key] for key in sorted(records)]
 

@@ -43,6 +43,16 @@ Current MCP tools cover the `torii_auto_workflow` router, environment checks, co
 
 Research status (2026-07-14): Stage 1-M is **Machine REVIEW_READY**. Thirty blinded held-out corridor packages, the full machine witness census, deterministic sampling, and provenance are frozen for human validation. This is not Stage 1 exit, an automatic-repair certification, or evidence that arbitrary OSM networks already reach expert NetEdit quality. See the [Stage 1-M evidence](docs/stage1-machine-review-ready-plan.md).
 
+### Teacher-free small-network discovery
+
+The v2 small-network path no longer requires a teacher, reviewed scope, expected topology, or expected movement count. It scans signal anchors in a frozen OSM bbox, conservatively deduplicates physical-cell candidates, selects a graph medoid, and generates boundary ports, movement variants, and a split/merge/partial-repair candidate DAG before a materialized SUMO network may be used as post-hoc evidence. XS1 recovers four approaches and twelve movements; XS2 chooses a canonical node different from the old caller seed, still binds the materialized network, and preserves the 6-versus-7 movement disagreement instead of selecting an answer. See [teacher-free discovery v2](docs/teacher-free-osm-signal-discovery-v2.md) for the design, pedestrian positive/negative controls, and reproducible results.
+
+```powershell
+python plugins/torii-sumo/scripts/run_teacher_free_discovery.py --osm <bbox.osm.xml> --output-dir <review-output>
+```
+
+The workflow emits hash-bound JSON, GeoJSON, HTML, and a manifest; the source OSM remains immutable and automatic promotion stays blocked.
+
 The implementation track is now deliberately smaller than a corridor benchmark. [`XS-1`](examples/03_xs1_four_way_tls/README.md) freezes one real four-way TLS intersection; [`XS-2`](examples/04_xs2_three_way_tls/README.md) reuses the same contract on one real three-way TLS intersection. Both require exact lane movement, internal path, request/foes, TLS binding, independent conflict, SUMO load, all-movement routeability, rollback, and outside-scope zero-delta evidence. Both remain review-only and make no city-scale claim.
 
 The implemented promotion contract is corridor-scale: accepted edits are materialized into a separate candidate, review locations are emitted as SUMO `additional.xml`, protected semantic or TLS deltas require an exact candidate-hash-bound review decision, and promotion remains blocked until identity, netconvert, XML, SUMO load, routeability, topology, and modal-connectivity evidence pass.

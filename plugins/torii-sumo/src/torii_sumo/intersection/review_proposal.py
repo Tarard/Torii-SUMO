@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .clean import build_intersection_ir
-from .movement_hypotheses import build_vehicle_movement_hypotheses
-from .physical_cell import infer_signal_anchor_physical_cell
+from .hypothesis import build_teacher_free_intersection_hypothesis
 from .schema import Approach, Movement, PatchSeed
 
 
@@ -34,15 +33,14 @@ def build_intersection_review_proposal(
         source.parent,
         PatchSeed(osm_node_id=seed_node_id),
     )
-    signal_anchor_cell = infer_signal_anchor_physical_cell(
+    teacher_free_hypothesis = build_teacher_free_intersection_hypothesis(
         ir.osm_patch,
         seed_node_id=seed_node_id,
-    )
-    movement_hypotheses = build_vehicle_movement_hypotheses(
-        ir.osm_patch,
-        signal_anchor_cell,
         traffic_side=traffic_side,
+        seed_authority="caller_provided_anchor_only",
     )
+    signal_anchor_cell = teacher_free_hypothesis["physical_cell"]
+    movement_hypotheses = teacher_free_hypothesis["vehicle_movement_hypotheses"]
 
     approaches, stable_approach_ids = _approach_records(ir.approaches)
     legal_vehicle_movements = [
@@ -173,6 +171,15 @@ def build_intersection_review_proposal(
             "sha256": _file_sha256(source),
         },
         "seed_node_id": seed_node_id,
+        "teacher_free_generation": {
+            "hypothesis_id": teacher_free_hypothesis["hypothesis_id"],
+            "generation_status": teacher_free_hypothesis["generation_status"],
+            "disposition": teacher_free_hypothesis["disposition"],
+            "seed_authority": teacher_free_hypothesis["seed_authority"],
+            "forbidden_generation_inputs": teacher_free_hypothesis["forbidden_generation_inputs"],
+            "candidate_dag": teacher_free_hypothesis["candidate_dag"],
+            "claim_boundary": teacher_free_hypothesis["claim_boundary"],
+        },
         "physical_cell_hypotheses": {
             "fixed_radius_ir": {
                 "method": "connected_core_candidates_within_fixed_radius",

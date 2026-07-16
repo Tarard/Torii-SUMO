@@ -14,9 +14,6 @@ from torii_sumo.corridor.audit_pipeline import (
 )
 from torii_sumo.corridor.enums import TrafficSide
 from torii_sumo.corridor.netxml import normalized_net_sha256
-from torii_sumo.intersection.candidate_dag import (
-    build_candidate_hypothesis_dag,
-)
 from torii_sumo.intersection.candidate_binding import (
     bind_materialized_candidate_to_dag,
 )
@@ -143,10 +140,7 @@ def run_isolated_junction_workflow(
         intersection_proposal,
         sort_keys=True,
     )
-    candidate_dag = build_candidate_hypothesis_dag(
-        intersection_proposal["physical_cell_hypotheses"]["signal_anchor_cell"],
-        intersection_proposal["vehicle_movement_hypotheses"],
-    )
+    candidate_dag = intersection_proposal["teacher_free_generation"]["candidate_dag"]
     candidate_dag_file = destination / "candidate-dag.json"
     write_json_atomic(candidate_dag_file, candidate_dag, sort_keys=True)
     source_net = destination / source_net_name
@@ -716,6 +710,7 @@ def _intersection_proposal_summary(
     signal = hypotheses["signal_anchor_cell"]
     movement_hypotheses = proposal["vehicle_movement_hypotheses"]
     comparison = proposal["reviewed_comparison"]
+    teacher_free = proposal["teacher_free_generation"]
     return {
         "schema": proposal["schema"],
         "proposal_id": proposal["proposal_id"],
@@ -723,6 +718,9 @@ def _intersection_proposal_summary(
         "disposition": proposal["disposition"],
         "automatic_promotion_gate": "blocked",
         "machine_recommendation": proposal["machine_recommendation"],
+        "teacher_free_hypothesis_id": teacher_free["hypothesis_id"],
+        "teacher_free_generation_status": teacher_free["generation_status"],
+        "forbidden_generation_inputs": teacher_free["forbidden_generation_inputs"],
         "fixed_radius_membership": fixed["membership_comparison"],
         "signal_anchor_membership": signal["membership_comparison"],
         "signal_anchor_hypothesis_id": signal["hypothesis_id"],
