@@ -23,6 +23,7 @@ from .artifact_io import (
 )
 from .candidate_contracts import file_sha256
 from .command_runner import run_command
+from .producer_identity import capture_code_producer_state
 from .sumo_commands import discover_binaries
 from .topology_variant_workflow import run_topology_variant
 
@@ -48,6 +49,7 @@ def run_teacher_free_topology_workflow(
         raise ValueError(
             "The frozen source OSM must not be stored inside the generated output directory."
         )
+    producer = capture_code_producer_state(Path(__file__).resolve().parents[5])
     source_osm_sha256 = file_sha256(source_osm)
     _reset_owned_directory(destination)
 
@@ -69,6 +71,7 @@ def run_teacher_free_topology_workflow(
             source_osm=source_osm,
             source_osm_sha256=source_osm_sha256,
             toolchain_lock=toolchain_lock,
+            producer=producer,
             discovery=discovery,
             contract=contract,
             details={
@@ -92,6 +95,7 @@ def run_teacher_free_topology_workflow(
             source_osm=source_osm,
             source_osm_sha256=source_osm_sha256,
             toolchain_lock=toolchain_lock,
+            producer=producer,
             discovery=discovery,
             contract=contract,
             details={
@@ -145,6 +149,7 @@ def run_teacher_free_topology_workflow(
     source_build = {
         "schema": "torii.teacher-free-topology-source-build/v1",
         "status": "pass" if source_build_pass else "fail",
+        "producer": producer,
         "command": source_command,
         "command_result": source_result,
         "source_osm_mutation": file_sha256(source_osm) != source_osm_sha256,
@@ -165,6 +170,7 @@ def run_teacher_free_topology_workflow(
             source_osm=source_osm,
             source_osm_sha256=source_osm_sha256,
             toolchain_lock=toolchain_lock,
+            producer=producer,
             discovery=discovery,
             contract=contract,
             details={
@@ -211,6 +217,7 @@ def run_teacher_free_topology_workflow(
                 sumo_binary=sumo,
                 traffic_side=traffic_side,
                 timeout_seconds=timeout_seconds,
+                producer=producer,
             )
         except Exception as exc:  # noqa: BLE001 - arm isolation is persisted.
             variant_dir.mkdir(parents=True, exist_ok=True)
@@ -224,6 +231,7 @@ def run_teacher_free_topology_workflow(
                 "candidate_dag_node_id": plan["candidate_dag_node_id"],
                 "automatic_topology_selection": False,
                 "automatic_promotion_gate": "blocked",
+                "producer": producer,
                 "terminal_stage": "variant_exception",
                 "reason": f"{type(exc).__name__}: {exc}",
             }
@@ -270,6 +278,7 @@ def run_teacher_free_topology_workflow(
         "automatic_promotion_gate": "blocked",
         "field_timing_reconstruction": False,
         "scope_expansion_allowed": False,
+        "producer": producer,
         "source_mutation": file_sha256(source_osm) != source_osm_sha256,
         "discovery_id": discovery["discovery_id"],
         "contract_id": contract["contract_id"],
@@ -316,6 +325,7 @@ def run_teacher_free_topology_workflow(
         toolchain_lock=toolchain_lock,
         contract=contract,
         decision=decision,
+        producer=producer,
     )
     return {
         **summary,
@@ -442,6 +452,7 @@ def _write_terminal_bundle(
     source_osm: Path,
     source_osm_sha256: str,
     toolchain_lock: Path,
+    producer: Mapping[str, Any],
     discovery: Mapping[str, Any],
     contract: Mapping[str, Any],
     details: Mapping[str, Any],
@@ -455,6 +466,7 @@ def _write_terminal_bundle(
         "automatic_promotion_gate": "blocked",
         "field_timing_reconstruction": False,
         "scope_expansion_allowed": False,
+        "producer": dict(producer),
         "source_mutation": file_sha256(source_osm) != source_osm_sha256,
         "discovery_id": discovery["discovery_id"],
         "contract_id": contract["contract_id"],
@@ -479,6 +491,7 @@ def _write_terminal_bundle(
         toolchain_lock=toolchain_lock,
         contract=contract,
         decision="no_candidate_materialized",
+        producer=producer,
     )
     return {
         **summary,
@@ -537,6 +550,7 @@ def _write_manifest(
     toolchain_lock: Path,
     contract: Mapping[str, Any],
     decision: str,
+    producer: Mapping[str, Any],
 ) -> None:
     artifacts = []
     for artifact in sorted(destination.rglob("*")):
@@ -559,6 +573,7 @@ def _write_manifest(
             "automatic_promotion_gate": "blocked",
             "field_timing_reconstruction": False,
             "scope_expansion_allowed": False,
+            "producer": dict(producer),
             "source_mutation": file_sha256(source_osm) != source_osm_sha256,
             "contract_id": contract["contract_id"],
             "inputs": [
