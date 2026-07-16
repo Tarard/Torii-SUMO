@@ -137,7 +137,7 @@ A frozen offset/paired-intersection OSM fixture must contain multiple nearby sig
 
 The authoritative local verification completed on 2026-07-16 with SUMO
 1.27.1. It ran the same hash-bound workflow twice for XS1, checked every
-manifest hash, executed 1,338 repository tests, and ran Ruff over source,
+manifest hash, executed 1,341 repository tests, and ran Ruff over source,
 scripts, and tests.
 
 - **XS1:** all three preregistered arms were independently materialized. H_M
