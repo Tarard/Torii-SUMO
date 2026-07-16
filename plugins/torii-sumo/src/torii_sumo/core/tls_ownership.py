@@ -135,6 +135,147 @@ def audit_tls_ownership_rebuild(
     }
 
 
+def audit_topology_variant_tls_ownership(
+    *,
+    source_net: Path,
+    candidate_net: Path,
+    target_source_junction_ids: tuple[str, ...],
+    target_candidate_junction_ids: tuple[str, ...],
+    expected_tls_junction_ids: tuple[str, ...],
+    expected_controller_ids: tuple[str, ...],
+    retained_source_junction_ids: tuple[str, ...],
+    removed_source_junction_ids: tuple[str, ...],
+    expected_controlled_connection_count: int | None,
+    report_schema: str = "torii.topology-variant-tls-ownership/v1",
+) -> dict[str, Any]:
+    """Audit TLS ownership for split, merge, and partial-repair variants."""
+
+    source = tls_scope_inventory(
+        source_net,
+        scope_junction_ids=target_source_junction_ids,
+    )
+    candidate = tls_scope_inventory(
+        candidate_net,
+        scope_junction_ids=target_candidate_junction_ids,
+    )
+    expected_tls = sorted(set(expected_tls_junction_ids))
+    expected_controllers = sorted(set(expected_controller_ids))
+    retained = set(retained_source_junction_ids)
+    removed = set(removed_source_junction_ids)
+    all_candidate_junctions = set(candidate["all_junction_ids"])
+    all_candidate_controllers = set(candidate["all_controller_ids"])
+    old_source_controllers = set(source["scope_controller_ids"]) - set(
+        expected_controllers
+    )
+    residual_old_controllers = sorted(
+        old_source_controllers & all_candidate_controllers
+    )
+    missing_retained_junctions = sorted(retained - all_candidate_junctions)
+    residual_removed_junctions = sorted(removed & all_candidate_junctions)
+    findings: list[dict[str, Any]] = []
+
+    if candidate["scope_tls_junction_ids"] != expected_tls:
+        findings.append(
+            {
+                "category": "candidate_tls_junction_set_mismatch",
+                "expected": expected_tls,
+                "observed": candidate["scope_tls_junction_ids"],
+            }
+        )
+    if candidate["scope_controller_ids"] != expected_controllers:
+        findings.append(
+            {
+                "category": "candidate_controller_set_mismatch",
+                "expected": expected_controllers,
+                "observed": candidate["scope_controller_ids"],
+            }
+        )
+    if candidate["scope_program_controller_ids"] != expected_controllers:
+        findings.append(
+            {
+                "category": "candidate_program_set_mismatch",
+                "expected": expected_controllers,
+                "observed": candidate["scope_program_controller_ids"],
+            }
+        )
+    if (
+        expected_controlled_connection_count is not None
+        and candidate["scope_controlled_connection_count"]
+        != expected_controlled_connection_count
+    ):
+        findings.append(
+            {
+                "category": "candidate_controlled_connection_count_mismatch",
+                "expected": expected_controlled_connection_count,
+                "observed": candidate["scope_controlled_connection_count"],
+            }
+        )
+    if candidate["scope_controlled_connection_count"] <= 0:
+        findings.append({"category": "candidate_has_no_controlled_connections"})
+    if residual_old_controllers:
+        findings.append(
+            {
+                "category": "old_source_controller_identity_survived",
+                "controller_ids": residual_old_controllers,
+            }
+        )
+    if missing_retained_junctions:
+        findings.append(
+            {
+                "category": "declared_retained_junction_missing",
+                "junction_ids": missing_retained_junctions,
+            }
+        )
+    if residual_removed_junctions:
+        findings.append(
+            {
+                "category": "declared_removed_junction_survived",
+                "junction_ids": residual_removed_junctions,
+            }
+        )
+
+    return {
+        "schema": report_schema,
+        "status": "pass" if not findings else "fail",
+        "source_net_file": str(source_net),
+        "candidate_net_file": str(candidate_net),
+        "target_source_junction_ids": list(target_source_junction_ids),
+        "target_candidate_junction_ids": list(target_candidate_junction_ids),
+        "expected_tls_junction_ids": expected_tls,
+        "expected_controller_ids": expected_controllers,
+        "expected_controlled_connection_count": expected_controlled_connection_count,
+        "retained_source_junction_ids": sorted(retained),
+        "removed_source_junction_ids": sorted(removed),
+        "source": {
+            "target_tls_junction_ids": source["scope_tls_junction_ids"],
+            "target_controller_ids": source["scope_controller_ids"],
+            "target_controlled_connection_count": source[
+                "scope_controlled_connection_count"
+            ],
+            "target_signal_group_count": source["scope_signal_group_count"],
+        },
+        "candidate": {
+            "target_tls_junction_ids": candidate["scope_tls_junction_ids"],
+            "target_controller_ids": candidate["scope_controller_ids"],
+            "target_program_controller_ids": candidate[
+                "scope_program_controller_ids"
+            ],
+            "target_controlled_connection_count": candidate[
+                "scope_controlled_connection_count"
+            ],
+            "target_signal_group_count": candidate["scope_signal_group_count"],
+        },
+        "residual_old_controller_ids": residual_old_controllers,
+        "missing_retained_junction_ids": missing_retained_junctions,
+        "residual_removed_junction_ids": residual_removed_junctions,
+        "findings": findings,
+        "interpretation": (
+            "Physical TLS junctions, controller identities, controlled local "
+            "links, and boundary-to-boundary movements are distinct counts."
+        ),
+    }
+
+
 def tls_scope_inventory(
     net_file: Path,
     *,

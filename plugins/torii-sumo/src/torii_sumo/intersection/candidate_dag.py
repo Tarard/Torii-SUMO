@@ -203,9 +203,16 @@ def _candidate_node(
         "preconditions": [
             "source artifact path and sha256 are bound",
             "boundary ports and lane cardinality still match this hypothesis",
-            "movement semantic class is selected by review or certified evidence",
+            (
+                "movement semantic class is selected by review, certified evidence, "
+                "or a preregistered experiment that remains promotion-blocked"
+            ),
             "topology hypothesis is selected independently of controller membership",
-            "all affected multimodal and controller owner closures are known",
+            (
+                "affected multimodal and controller owner closures are inventoried; "
+                "unresolved closures block promotion but may be materialized only "
+                "inside a preregistered falsification experiment"
+            ),
         ],
         "expected_postconditions": _postconditions(topology_hypothesis),
         "rollback": {
