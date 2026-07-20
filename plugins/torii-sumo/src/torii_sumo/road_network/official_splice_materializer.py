@@ -24,6 +24,10 @@ from torii_sumo.core.artifact_io import write_json_atomic, write_text_atomic
 from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.core.command_runner import run_command
 from torii_sumo.core.connection_mode_audit import audit_network_connection_mode
+from torii_sumo.core.hamburg_official_corridor_geometry import (
+    _lane_endpoints,
+    _reanchor_connection_shapes,
+)
 from torii_sumo.core.sumo_commands import run_sumo_load_audit
 from torii_sumo.core.surface_overlap_audit import audit_sumo_lane_junction_surface_overlaps
 
@@ -33,6 +37,9 @@ OFFICIAL_SPLICE_MATERIALIZATION_SCHEMA = (
 )
 _MOTOR_VCLASSES = "passenger taxi bus coach delivery truck motorcycle emergency"
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+# ponytail: one deterministic clearance is enough here; derive a polygon-aware
+# value later if a measured SUMO junction footprint requires more precision.
+_AXIS_SPLICE_CLEARANCE_M = 12.0
 
 
 class OfficialSpliceMaterializationError(ValueError):
@@ -151,8 +158,24 @@ def materialize_hamburg_official_splice_candidate(
         "--output-file",
         str(output_net),
     ]
-    raw_result = command_runner(command, cwd=destination, timeout_seconds=timeout_seconds)
-    netconvert = _result_dict(raw_result)
+    netconvert_passes = [
+        _result_dict(command_runner(command, cwd=destination, timeout_seconds=timeout_seconds))
+    ]
+    # netconvert trims external lane shapes at generated junction polygons.
+    # Re-anchor the preserved MAP movement curves to those compiled endpoints,
+    # then compile the same hash-bound evidence until it reaches a fixed point.
+    for _ in range(3):
+        if netconvert_passes[-1].get("status") != "pass" or not output_net.is_file():
+            break
+        compiled_endpoints = _lane_endpoints(ET.parse(output_net).getroot().findall("edge"))
+        if not _reanchor_connection_shapes(connections, compiled_endpoints):
+            break
+        _write_xml(plain["connections"], "connections", connections)
+        netconvert_passes.append(
+            _result_dict(command_runner(command, cwd=destination, timeout_seconds=timeout_seconds))
+        )
+    netconvert = dict(netconvert_passes[-1])
+    netconvert["passes"] = netconvert_passes
     compiled = netconvert.get("status") == "pass" and output_net.is_file()
     load = (
         run_sumo_load_audit(
@@ -193,7 +216,7 @@ def materialize_hamburg_official_splice_candidate(
         "axis_to_map_lane_binding": bridge_status["status"],
         "automatic_promotion": "blocked",
     }
-    status = "review_required" if compiled and not review_reasons else "blocked"
+    status = "review_required" if compiled else "blocked"
     manifest: dict[str, Any] = {
         "schema": OFFICIAL_SPLICE_MATERIALIZATION_SCHEMA,
         "status": status,
@@ -214,6 +237,10 @@ def materialize_hamburg_official_splice_candidate(
             },
         },
         "plainxml": {key: _file_identity(path) for key, path in plain.items()},
+        "materialization_policy": {
+            "axis_splice_clearance_m": _AXIS_SPLICE_CLEARANCE_M,
+            "movement_curve_policy": "compiled_lane_endpoint_reanchoring",
+        },
         "network": {
             "path": str(output_net),
             "sha256": file_sha256(output_net) if output_net.is_file() else None,
@@ -366,16 +393,25 @@ def _forbidden_intervals(
             by_node[str(event["node_id"])].append(event)
         intervals: list[tuple[float, float]] = []
         for node_events in by_node.values():
-            stations = [float(item["axis_station_m"]) for item in node_events]
-            if len(stations) >= 2:
-                intervals.append((min(stations), max(stations)))
-                continue
-            event = node_events[0]
-            junction = event.get("junction_station_m")
-            if junction is None:
-                intervals.append((stations[0], stations[0]))
-            else:
-                intervals.append((min(stations[0], float(junction)), max(stations[0], float(junction))))
+            # Build the clearance on the junction-facing side of *each* event.
+            # A corridor can carry two one-way events for the same physical
+            # junction (one in each direction).  Treating those events as one
+            # min/max interval erases both event boundaries and makes the
+            # bridge unable to bind.  Per-event intervals merge naturally while
+            # preserving the station at either outer boundary.
+            for event in node_events:
+                station = float(event["axis_station_m"])
+                junction = event.get("junction_station_m")
+                if junction is None:
+                    left = right = station
+                else:
+                    junction_station = float(junction)
+                    left, right = min(station, junction_station), max(station, junction_station)
+                    if station < junction_station:
+                        right += _AXIS_SPLICE_CLEARANCE_M
+                    elif station > junction_station:
+                        left -= _AXIS_SPLICE_CLEARANCE_M
+                intervals.append((left, right))
         result[corridor_id] = _merge_intervals(intervals)
     return result
 
@@ -537,13 +573,16 @@ def _axis_node_at_station(
     direction = _params(source).get("torii:station_direction", "")
     station_from = float(_params(source)["torii:station_from_m"])
     station_to = float(_params(source)["torii:station_to_m"])
+    # Event nodes replace source-axis boundary nodes.  Resolve them first so
+    # an event that lands exactly on a source edge endpoint still receives its
+    # splice node and therefore remains bridgeable to the local MAP edge.
+    for event in events:
+        if abs(station - float(event["axis_station_m"])) <= 1e-4:
+            return str(event["splice_node_id"])
     if abs(station - station_from) <= 1e-5:
         return str(source.attrib["from"] if direction == "with_stationing" else source.attrib["to"])
     if abs(station - station_to) <= 1e-5:
         return str(source.attrib["to"] if direction == "with_stationing" else source.attrib["from"])
-    for event in events:
-        if abs(station - float(event["axis_station_m"])) <= 1e-4:
-            return str(event["splice_node_id"])
     token = f"{corridor_id}:{station:.6f}"
     node_id = "hh-axis-cut-" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
     if node_id not in cut_nodes:
