@@ -5,6 +5,7 @@ import hashlib
 import heapq
 import json
 import math
+from types import SimpleNamespace
 from typing import Any
 
 from torii_sumo.road_semantics import filtered_osm_modes, is_osm_passenger_way
@@ -153,6 +154,202 @@ def infer_signal_anchor_physical_cell(
     return {
         **payload,
         "hypothesis_id": f"cell-{_stable_digest(payload)[:20]}",
+    }
+
+
+def infer_roundabout_boundary_approaches(
+    patch: OSMPatch,
+    *,
+    roundabout_way_ids: list[str],
+) -> dict[str, Any]:
+    """Extract semantic entry/exit arms around an explicitly tagged ring.
+
+    A seed node on a roundabout only exposes its two immediate ring neighbors,
+    so node degree cannot recover the roundabout's entry count.  This helper
+    instead treats the tagged ring as a finite cell boundary and extracts
+    every passenger-drivable non-ring way that crosses it.  Directional ways
+    are grouped with the same evidence rules used by the generic physical-cell
+    boundary logic.
+    """
+
+    selected_way_ids = sorted(way_id for way_id in map(str, roundabout_way_ids) if way_id in patch.ways)
+    ring_node_ids = sorted(
+        {
+            str(node_id)
+            for way_id in selected_way_ids
+            for node_id in patch.ways[way_id].node_refs
+            if node_id in patch.nodes
+        }
+    )
+    if not ring_node_ids:
+        payload = {
+            "schema": "torii.roundabout-boundary-approaches/v1",
+            "generation_status": "blocked",
+            "disposition": "review",
+            "roundabout_way_ids": selected_way_ids,
+            "ring_node_ids": [],
+            "ring_validation": {
+                "status": "blocked",
+                "connected": False,
+                "closed": False,
+                "ring_node_count": 0,
+                "degree_by_node": {},
+                "missing_node_ids": [],
+                "risks": ["roundabout_ring_has_no_resolvable_nodes"],
+            },
+            "raw_boundary_ports": [],
+            "physical_approaches": [],
+            "risks": ["roundabout_ring_has_no_resolvable_nodes"],
+        }
+        return {
+            **payload,
+            "hypothesis_id": f"roundabout-boundary-{_stable_digest(payload)[:20]}",
+        }
+
+    center = SimpleNamespace(
+        x=sum((patch.nodes[node_id].x or 0.0) for node_id in ring_node_ids) / len(ring_node_ids),
+        y=sum((patch.nodes[node_id].y or 0.0) for node_id in ring_node_ids) / len(ring_node_ids),
+    )
+    ring_nodes = set(ring_node_ids)
+    ring_ways = set(selected_way_ids)
+    ports: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for way in patch.ways.values():
+        if way.id in ring_ways or not is_osm_passenger_way(way.tags):
+            continue
+        for first_id, second_id in zip(way.node_refs, way.node_refs[1:], strict=False):
+            if first_id in ring_nodes and second_id not in ring_nodes:
+                inside_id, outside_id = first_id, second_id
+            elif second_id in ring_nodes and first_id not in ring_nodes:
+                inside_id, outside_id = second_id, first_id
+            else:
+                continue
+            if outside_id not in patch.nodes:
+                continue
+            lane_semantics = _boundary_lane_semantics(
+                way.tags,
+                way_node_ids=way.node_refs,
+                inside_node_id=inside_id,
+                outside_node_id=outside_id,
+            )
+            identity_payload = {
+                "inside_node_id": inside_id,
+                "outside_node_id": outside_id,
+                "way_id": way.id,
+                "flow_role": lane_semantics["flow_role"],
+                "boundary_kind": "roundabout_gate",
+            }
+            port = {
+                **identity_payload,
+                "road_name": way.tags.get("name"),
+                "road_ref": way.tags.get("ref"),
+                "highway_class": way.tags.get("highway"),
+                "road_identity": _road_identity(way.tags, way.id),
+                "oneway": way.tags.get("oneway", "no"),
+                "incoming_lane_count": lane_semantics["incoming_lane_count"],
+                "outgoing_lane_count": lane_semantics["outgoing_lane_count"],
+                "incoming_osm_direction": lane_semantics["incoming_osm_direction"],
+                "incoming_turn_lanes_raw": lane_semantics["incoming_turn_lanes_raw"],
+                "bearing_from_seed_deg": round(
+                    _bearing_from_to(center, patch.nodes[outside_id]),
+                    3,
+                ),
+                "allowed_modes": sorted(filtered_osm_modes(way.tags, {"passenger"})),
+                "identity_basis": identity_payload,
+            }
+            port["boundary_port_id"] = f"roundabout-port-{_stable_digest(identity_payload)[:16]}"
+            port["evidence_signature"] = _stable_digest(port)
+            ports[(inside_id, outside_id, way.id)] = port
+
+    raw_boundary_ports = [ports[key] for key in sorted(ports)]
+    approaches = _group_boundary_ports(raw_boundary_ports)
+    ring_validation = _validate_roundabout_ring_component(
+        patch,
+        roundabout_way_ids=selected_way_ids,
+    )
+    risks = []
+    if ring_validation["status"] != "pass":
+        risks.extend(ring_validation["risks"])
+    if not approaches:
+        risks.append("roundabout_has_no_passenger_boundary_approaches")
+    if any(item["grouping_status"] != "pass" for item in approaches):
+        risks.append("roundabout_boundary_approach_grouping_unresolved")
+    payload = {
+        "schema": "torii.roundabout-boundary-approaches/v1",
+        "generation_status": "pass",
+        "disposition": "suggest" if approaches and not risks else "review",
+        "roundabout_way_ids": selected_way_ids,
+        "ring_node_ids": ring_node_ids,
+        "ring_validation": ring_validation,
+        "raw_boundary_ports": raw_boundary_ports,
+        "physical_approaches": approaches,
+        "risks": risks,
+        "claim_boundary": (
+            "These are OSM-derived semantic gates around an explicitly tagged "
+            "ring. They do not prove circulating priority, legal lane movements, "
+            "or authorize ring reconstruction."
+        ),
+    }
+    return {
+        **payload,
+        "hypothesis_id": f"roundabout-boundary-{_stable_digest(payload)[:20]}",
+    }
+
+
+def _validate_roundabout_ring_component(
+    patch: OSMPatch,
+    *,
+    roundabout_way_ids: list[str],
+) -> dict[str, Any]:
+    adjacency: dict[str, set[str]] = defaultdict(set)
+    missing_node_ids: set[str] = set()
+    for way_id in roundabout_way_ids:
+        way = patch.ways[way_id]
+        for first_id, second_id in zip(way.node_refs, way.node_refs[1:], strict=False):
+            if first_id not in patch.nodes:
+                missing_node_ids.add(first_id)
+            if second_id not in patch.nodes:
+                missing_node_ids.add(second_id)
+            if first_id not in patch.nodes or second_id not in patch.nodes:
+                continue
+            adjacency[first_id].add(second_id)
+            adjacency[second_id].add(first_id)
+
+    visited: set[str] = set()
+    if adjacency:
+        queue = [next(iter(adjacency))]
+        while queue:
+            node_id = queue.pop()
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+            queue.extend(sorted(adjacency[node_id] - visited))
+    degree_by_node = {node_id: len(neighbors) for node_id, neighbors in sorted(adjacency.items())}
+    connected = bool(adjacency) and len(visited) == len(adjacency)
+    closed = (
+        connected
+        and len(adjacency) >= 3
+        and not missing_node_ids
+        and all(degree == 2 for degree in degree_by_node.values())
+    )
+    risks = []
+    if missing_node_ids:
+        risks.append("roundabout_ring_has_missing_node_references")
+    if adjacency and not connected:
+        risks.append("roundabout_ring_component_disconnected")
+    if not closed:
+        risks.append("roundabout_ring_not_closed")
+    return {
+        "status": "pass" if closed else "review_required",
+        "connected": connected,
+        "closed": closed,
+        "ring_node_count": len(adjacency),
+        "degree_by_node": degree_by_node,
+        "missing_node_ids": sorted(missing_node_ids),
+        "risks": sorted(set(risks)),
+        "claim_boundary": (
+            "Graph closure validates completeness of the tagged ring component. "
+            "It does not validate circulating priority or lane movements."
+        ),
     }
 
 

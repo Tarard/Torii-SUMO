@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +41,7 @@ def test_plugin_manifest_declares_skill_and_mcp_companion() -> None:
     manifest = load_json(PLUGIN / ".codex-plugin" / "plugin.json")
 
     assert manifest["name"] == "torii-sumo"
-    assert manifest["version"] == "1.0.2"
+    assert re.fullmatch(r"1\.1\.0(?:\+codex\.\d{14})?", manifest["version"])
     assert manifest["license"] == "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"

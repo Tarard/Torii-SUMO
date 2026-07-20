@@ -9,6 +9,33 @@ from pathlib import Path
 from typing import Any
 
 
+_ATOMIC_TEMP_PREFIX = ".torii-"
+_ATOMIC_TEMP_SUFFIX = ".tmp"
+
+
+def _open_atomic_temporary_file(
+    parent: Path,
+    *,
+    mode: str,
+    encoding: str | None = None,
+    newline: str | None = None,
+) -> Any:
+    """Open a short, target-independent temporary file beside an artifact."""
+
+    options: dict[str, Any] = {
+        "mode": mode,
+        "dir": parent,
+        "prefix": _ATOMIC_TEMP_PREFIX,
+        "suffix": _ATOMIC_TEMP_SUFFIX,
+        "delete": False,
+    }
+    if encoding is not None:
+        options["encoding"] = encoding
+    if newline is not None:
+        options["newline"] = newline
+    return tempfile.NamedTemporaryFile(**options)
+
+
 def relative_or_absolute_path(path: Path, start: Path) -> str:
     """Return a portable relative path, falling back across Windows drives."""
 
@@ -44,13 +71,10 @@ def write_text_atomic(path: Path, text: str, *, encoding: str = "utf-8") -> None
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(
+        with _open_atomic_temporary_file(
+            destination.parent,
             mode="w",
             encoding=encoding,
-            dir=destination.parent,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
             newline="",
         ) as handle:
             temporary_path = Path(handle.name)
@@ -77,12 +101,9 @@ def copy_file_atomic(source: Path, destination: Path) -> None:
     try:
         with (
             source_path.open("rb") as source_handle,
-            tempfile.NamedTemporaryFile(
+            _open_atomic_temporary_file(
+                destination_path.parent,
                 mode="wb",
-                dir=destination_path.parent,
-                prefix=f".{destination_path.name}.",
-                suffix=".tmp",
-                delete=False,
             ) as destination_handle,
         ):
             temporary_path = Path(destination_handle.name)

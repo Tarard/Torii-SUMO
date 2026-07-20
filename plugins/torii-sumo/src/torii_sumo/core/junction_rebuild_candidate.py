@@ -76,6 +76,29 @@ GEOMETRY_RESTORE_LANE_ATTRS = (
     "outlineShape",
 )
 
+BOUNDARY_EDGE_OPERATIONAL_ATTRS = (
+    "type",
+    "priority",
+    "name",
+    "spreadType",
+    "allow",
+    "disallow",
+    "speed",
+    "width",
+)
+
+BOUNDARY_LANE_OPERATIONAL_ATTRS = (
+    "speed",
+    "width",
+    "allow",
+    "disallow",
+    "endOffset",
+    "acceleration",
+    "changeLeft",
+    "changeRight",
+    "stopOffset",
+)
+
 TURNAROUND_DIR = "t"
 
 
@@ -2940,6 +2963,8 @@ def write_scoped_teacher_tls_cell_replay_net(
     remapped_boundary_edge_count = 0
     replaced_lane_cardinality_edge_ids: list[str] = []
     replayed_boundary_geometry_edge_ids: list[str] = []
+    preserved_mapped_boundary_geometry_edge_ids: list[str] = []
+    boundary_geometry_preservation_failures: list[dict[str, object]] = []
     candidate_edges = {
         edge.attrib["id"]: edge
         for edge in candidate_root.findall("edge")
@@ -2988,6 +3013,24 @@ def write_scoped_teacher_tls_cell_replay_net(
         remove_lane_refs(edge_lane_ids(candidate_edge))
         candidate_edge.set("from", mapped_from)
         candidate_edge.set("to", mapped_to)
+        geometry_source_edge = source_edges.get(candidate_edge_id)
+        if geometry_source_edge is not None:
+            geometry_report = _preserve_mapped_boundary_geometry(
+                candidate_edge,
+                geometry_source_edge,
+                target_junction_ids={junction_id},
+                source_local_junction_ids=collapse_ids,
+            )
+            if geometry_report.get("status") == "pass":
+                preserved_mapped_boundary_geometry_edge_ids.append(candidate_edge_id)
+            elif geometry_report.get("status") == "blocked":
+                boundary_geometry_preservation_failures.append(
+                    {
+                        "teacher_edge_id": teacher_edge_id,
+                        "candidate_edge_id": candidate_edge_id,
+                        **geometry_report,
+                    }
+                )
         append_lane_refs(mapped_to, edge_lane_ids(candidate_edge))
         remapped_boundary_edge_count += 1
 
@@ -3019,6 +3062,17 @@ def write_scoped_teacher_tls_cell_replay_net(
             for edge in candidate_root.findall("edge")
         ):
             candidate_root.remove(junction)
+
+    external_boundary_connection_report = _restore_external_boundary_connections(
+        source_root=source_root,
+        target_root=candidate_root,
+        boundary_edge_ids={
+            effective_edge_map.get(edge_id, edge_id)
+            for edge_id in teacher_boundary_edge_ids
+            if effective_edge_map.get(edge_id, edge_id) in source_edges
+        },
+        source_local_junction_ids=collapse_ids,
+    )
 
     # Clean stale lane references left by removed split fragments and reject
     # dangling connections before netconvert sees the variant.
@@ -3075,7 +3129,7 @@ def write_scoped_teacher_tls_cell_replay_net(
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
     return {
-        "status": "pass",
+        "status": "blocked" if boundary_geometry_preservation_failures else "pass",
         "claim_status": "diagnostic-demo",
         "scoped_replay_status": "pass",
         "net_file": str(output_file),
@@ -3092,6 +3146,29 @@ def write_scoped_teacher_tls_cell_replay_net(
         "remapped_connection_endpoint_count": remapped_connection_count,
         "replaced_lane_cardinality_edge_ids": sorted(replaced_lane_cardinality_edge_ids),
         "replayed_boundary_geometry_edge_ids": sorted(set(replayed_boundary_geometry_edge_ids)),
+        "preserved_mapped_boundary_geometry_edge_ids": sorted(
+            set(preserved_mapped_boundary_geometry_edge_ids)
+        ),
+        "boundary_geometry_preservation_failure_count": len(boundary_geometry_preservation_failures),
+        "boundary_geometry_preservation_failures": boundary_geometry_preservation_failures,
+        "restored_external_boundary_connection_count": external_boundary_connection_report[
+            "restored_connection_count"
+        ],
+        "restored_external_boundary_connections": external_boundary_connection_report[
+            "restored_connections"
+        ],
+        "preserved_existing_external_boundary_connection_count": external_boundary_connection_report[
+            "preserved_existing_connection_count"
+        ],
+        "preserved_existing_external_boundary_connections": external_boundary_connection_report[
+            "preserved_existing_connections"
+        ],
+        "skipped_external_boundary_connection_count": external_boundary_connection_report[
+            "skipped_connection_count"
+        ],
+        "skipped_external_boundary_connections": external_boundary_connection_report[
+            "skipped_connections"
+        ],
         "removed_non_boundary_edge_count": len(removed_non_boundary_edge_ids),
         "removed_non_boundary_edge_ids": sorted(removed_non_boundary_edge_ids),
         "removed_replay_continuation_edge_count": len(removed_non_boundary_edges_added_by_replay),
@@ -3142,6 +3219,7 @@ def write_shared_teacher_tls_controller_replay_net(
     try:
         candidate_tree = ET.parse(candidate_net_file)
         candidate_root = candidate_tree.getroot()
+        candidate_source_root = copy.deepcopy(candidate_root)
         teacher_root = ET.parse(teacher_net_file).getroot()
     except (ET.ParseError, OSError, ValueError) as exc:
         return _failure(f"shared TLS controller replay parse failed: {type(exc).__name__}: {exc}")
@@ -3338,6 +3416,28 @@ def write_shared_teacher_tls_controller_replay_net(
         reverse_edge_map[mapped_edge_id] = teacher_edge_id
         resolved_edge_map[teacher_edge_id] = mapped_edge_id
 
+    unanchored_boundary_edge_ids = sorted(
+        teacher_edge_id
+        for teacher_edge_id, mapped_edge_id in resolved_edge_map.items()
+        if mapped_edge_id not in candidate_edges
+    )
+    if unanchored_boundary_edge_ids:
+        return {
+            **_failure("shared TLS boundary geometry anchor is missing"),
+            "status": "blocked",
+            "shared_controller_replay_status": "blocked",
+            "candidate_controller_id": candidate_controller_id,
+            "teacher_controller_id": teacher_controller_id,
+            "owner_map": dict(sorted(clean_owner_map.items())),
+            "junction_map": dict(sorted(clean_junction_map.items())),
+            "effective_edge_map": dict(sorted(resolved_edge_map.items())),
+            "edge_mapping_sources": dict(sorted(edge_mapping_sources.items())),
+            "generated_boundary_edge_ids": sorted(generated_boundary_edge_ids),
+            "unanchored_boundary_edge_count": len(unanchored_boundary_edge_ids),
+            "unanchored_boundary_edge_ids": unanchored_boundary_edge_ids,
+            "replay_policy": "mapped shared boundaries require existing candidate geometry anchors",
+        }
+
     # Remove only the local candidate cell.  Existing normal edges that are
     # explicitly mapped are replaced below; all other network edges remain.
     candidate_internal_prefixes = tuple(f":{owner_id}_" for owner_id in sorted(collapse_ids, key=len, reverse=True))
@@ -3437,6 +3537,8 @@ def write_shared_teacher_tls_controller_replay_net(
     # a nearest-family guess.
     copied_boundary_edge_ids: list[str] = []
     replaced_boundary_edge_ids: list[str] = []
+    preserved_mapped_boundary_geometry_edge_ids: list[str] = []
+    boundary_geometry_preservation_failures: list[dict[str, object]] = []
     for teacher_edge_id in boundary_edge_ids:
         teacher_edge = teacher_edges[teacher_edge_id]
         mapped_edge_id = resolved_edge_map[teacher_edge_id]
@@ -3453,6 +3555,24 @@ def write_shared_teacher_tls_controller_replay_net(
         clone.set("id", mapped_edge_id)
         clone.set("from", mapped_from)
         clone.set("to", mapped_to)
+        geometry_source_edge = candidate_source_root.find(f"edge[@id='{mapped_edge_id}']")
+        if geometry_source_edge is not None:
+            geometry_report = _preserve_mapped_boundary_geometry(
+                clone,
+                geometry_source_edge,
+                target_junction_ids=candidate_owner_ids,
+                source_local_junction_ids=collapse_ids,
+            )
+            if geometry_report.get("status") == "pass":
+                preserved_mapped_boundary_geometry_edge_ids.append(mapped_edge_id)
+            elif geometry_report.get("status") == "blocked":
+                boundary_geometry_preservation_failures.append(
+                    {
+                        "teacher_edge_id": teacher_edge_id,
+                        "candidate_edge_id": mapped_edge_id,
+                        **geometry_report,
+                    }
+                )
         clone.attrib.pop("tl", None)
         for attr in ("crossingEdges",):
             if attr in clone.attrib:
@@ -3487,7 +3607,14 @@ def write_shared_teacher_tls_controller_replay_net(
         teacher_prefix = f":{teacher_owner_id}_"
         candidate_prefix = f":{candidate_owner_id}_"
         for edge in teacher_root.findall("edge"):
-            if not edge.attrib.get("id", "").startswith(teacher_prefix):
+            # Owner ids may themselves share prefixes (for example ``tls``
+            # and ``tls__owner_01``).  A plain ``startswith`` check would
+            # replay the secondary owner's internal artifacts a second time
+            # under the primary owner, yielding ids such as
+            # ``:candidate__owner_01_0`` whose implicit SUMO junction does
+            # not exist.  Resolve ownership with the same longest-prefix
+            # rule used for connection and ``via`` mapping.
+            if teacher_owner_for(edge.attrib.get("id", "")) != teacher_owner_id:
                 continue
             clone = _clone_transformed_net_element(
                 edge,
@@ -3503,7 +3630,7 @@ def write_shared_teacher_tls_controller_replay_net(
             candidate_edges[clone.attrib.get("id", "")] = clone
             copied_internal_edge_count += 1
         for junction in teacher_root.findall("junction"):
-            if not junction.attrib.get("id", "").startswith(teacher_prefix):
+            if teacher_owner_for(junction.attrib.get("id", "")) != teacher_owner_id:
                 continue
             candidate_root.insert(
                 _first_junction_index(candidate_root),
@@ -3606,6 +3733,13 @@ def write_shared_teacher_tls_controller_replay_net(
             if mapped.get("tl") == candidate_controller_id and mapped.get("linkIndex") is not None:
                 copied_controlled_connection_count += 1
 
+    external_boundary_connection_report = _restore_external_boundary_connections(
+        source_root=candidate_source_root,
+        target_root=candidate_root,
+        boundary_edge_ids=protected_edge_ids,
+        source_local_junction_ids=collapse_ids,
+    )
+
     # Remove member junctions that no longer have an edge endpoint, then clean
     # lane references and invalid connections before the external SUMO gates.
     candidate_edge_ids = {
@@ -3674,6 +3808,7 @@ def write_shared_teacher_tls_controller_replay_net(
         or missing_link_indices
         or unexpected_link_indices
         or copied_controlled_connection_count != len(controlled_connections)
+        or boundary_geometry_preservation_failures
         or not output_file.parent.exists()
     ):
         status = "blocked"
@@ -3695,8 +3830,33 @@ def write_shared_teacher_tls_controller_replay_net(
         "effective_edge_map": dict(sorted(resolved_edge_map.items())),
         "edge_mapping_sources": dict(sorted(edge_mapping_sources.items())),
         "generated_boundary_edge_ids": sorted(generated_boundary_edge_ids),
+        "unanchored_boundary_edge_count": 0,
+        "unanchored_boundary_edge_ids": [],
         "copied_boundary_edge_ids": sorted(copied_boundary_edge_ids),
         "replaced_boundary_edge_ids": sorted(replaced_boundary_edge_ids),
+        "preserved_mapped_boundary_geometry_edge_ids": sorted(
+            set(preserved_mapped_boundary_geometry_edge_ids)
+        ),
+        "boundary_geometry_preservation_failure_count": len(boundary_geometry_preservation_failures),
+        "boundary_geometry_preservation_failures": boundary_geometry_preservation_failures,
+        "restored_external_boundary_connection_count": external_boundary_connection_report[
+            "restored_connection_count"
+        ],
+        "restored_external_boundary_connections": external_boundary_connection_report[
+            "restored_connections"
+        ],
+        "preserved_existing_external_boundary_connection_count": external_boundary_connection_report[
+            "preserved_existing_connection_count"
+        ],
+        "preserved_existing_external_boundary_connections": external_boundary_connection_report[
+            "preserved_existing_connections"
+        ],
+        "skipped_external_boundary_connection_count": external_boundary_connection_report[
+            "skipped_connection_count"
+        ],
+        "skipped_external_boundary_connections": external_boundary_connection_report[
+            "skipped_connections"
+        ],
         "removed_internal_edge_count": len(removed_internal_edge_ids),
         "removed_internal_junction_count": len(removed_internal_junction_ids),
         "removed_member_edge_count": len(removed_member_edge_ids),
@@ -4334,9 +4494,28 @@ def build_shared_teacher_tls_controller_replay_plan(
     target_candidate_ids.update(inferred_owner_map.values())
 
     def compatible_pair(teacher_edge_id: str, candidate_edge_id: str) -> bool:
-        if candidate_edge_id not in candidate_edges:
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        candidate_edge = candidate_edges.get(candidate_edge_id)
+        if teacher_edge is None or candidate_edge is None:
             return False
-        return _signed_edge_family_id(teacher_edge_id) == _signed_edge_family_id(candidate_edge_id)
+        if candidate_edge_id.startswith(":") or candidate_edge.attrib.get("function") in {
+            "internal",
+            "crossing",
+            "walkingarea",
+        }:
+            return False
+        teacher_local_at_start = teacher_edge.attrib.get("from", "") in teacher_owner_ids
+        teacher_local_at_end = teacher_edge.attrib.get("to", "") in teacher_owner_ids
+        candidate_local_at_start = candidate_edge.attrib.get("from", "") in target_candidate_ids
+        candidate_local_at_end = candidate_edge.attrib.get("to", "") in target_candidate_ids
+        # An explicit approach pair is topology evidence and commonly maps a
+        # synthetic teacher id to a differently named OSM way.  Validate its
+        # directed cell side, not an impossible signed-id family equality.
+        return (
+            teacher_local_at_start != teacher_local_at_end
+            and candidate_local_at_start != candidate_local_at_end
+            and teacher_local_at_start == candidate_local_at_start
+        )
 
     def generated_edge_id(teacher_edge_id: str) -> str:
         safe = "".join(
@@ -4377,7 +4556,7 @@ def build_shared_teacher_tls_controller_replay_plan(
                     {
                         "teacher_edge_id": teacher_edge_id,
                         "candidate_edge_id": chosen,
-                        "reason": "explicit_edge_family_or_candidate_missing",
+                        "reason": "explicit_candidate_missing_or_boundary_side_mismatch",
                     }
                 )
             chosen = ""
@@ -4519,7 +4698,7 @@ def build_shared_teacher_tls_controller_replay_plan(
         "mapping_conflicts": mapping_conflicts,
         "mapping_rejections": mapping_rejections,
         "base_plan": base_plan,
-        "mapping_policy": "explicit_owner_closure_then_approach_pair_then_signed_family_owner_side_then_teacher_boundary_copy",
+        "mapping_policy": "explicit_owner_closure_then_topology_checked_approach_pair_then_signed_family_owner_side_then_teacher_boundary_copy",
     }
 
 
@@ -10984,9 +11163,35 @@ def _blend_geometry_anchor_at_target(
     if target_at_end and geometry_source_edge.attrib.get("to") != target_junction_id:
         return False
 
+    return _blend_geometry_anchor_at_endpoint(
+        edge,
+        geometry_source_edge,
+        target_at_start=target_at_start,
+    )
+
+
+def _blend_geometry_anchor_at_endpoint(
+    edge: ET.Element,
+    geometry_source_edge: ET.Element,
+    *,
+    target_at_start: bool,
+) -> bool:
+    """Blend a replayed local endpoint into an existing boundary edge.
+
+    The source boundary may end at an OSM split member while the replayed
+    boundary ends at the newly collapsed owner.  The endpoint ids therefore
+    need not match even though their directed side does.  This lower-level
+    primitive keeps the source's remote endpoint exactly and warps only toward
+    the replayed teacher endpoint.
+    """
+
     blended = False
-    teacher_edge_shape = edge.attrib.get("shape", "")
-    anchor_edge_shape = geometry_source_edge.attrib.get("shape", "")
+    # SUMO nets commonly keep geometry only on lane children.  Falling back
+    # to the first lane is essential here: leaving a translated teacher
+    # centerline on the edge while blending only lane shapes makes netconvert
+    # recreate the same remote-endpoint gap from the stale edge-level shape.
+    teacher_edge_shape = _primary_edge_shape(edge)
+    anchor_edge_shape = _primary_edge_shape(geometry_source_edge)
     if teacher_edge_shape and anchor_edge_shape:
         shape = _warp_anchor_shape_to_teacher_endpoint(
             anchor_edge_shape,
@@ -11019,8 +11224,235 @@ def _blend_geometry_anchor_at_target(
         )
         if shape:
             lane.set("shape", shape)
+            # ``lane.length`` in a SUMO ``.net.xml`` is operational geometry,
+            # not a teacher semantic.  The replayed lane was cloned before its
+            # centre-line was warped and may therefore still carry the
+            # teacher's (often much longer) declared length.  NetEdit renders
+            # the new shape while SUMO positions vehicles using ``length``;
+            # keeping the stale value makes the two views disagree.  Plain XML
+            # conversion normally recomputes this field.  For the native net
+            # replay path, recompute it whenever the cloned lane declared one.
+            if "length" in lane.attrib:
+                rendered_length = _polyline_length(shape)
+                if rendered_length is not None:
+                    lane.set("length", f"{rendered_length:.2f}")
             blended = True
     return blended
+
+
+def _preserve_mapped_boundary_geometry(
+    replayed_edge: ET.Element,
+    geometry_source_edge: ET.Element,
+    *,
+    target_junction_ids: set[str],
+    source_local_junction_ids: set[str],
+) -> dict[str, object]:
+    """Preserve a mapped candidate boundary while moving its local endpoint.
+
+    A teacher boundary is a local intersection model, not evidence for the
+    complete public-road segment outside the rebuilt cell.  Replacing a mapped
+    candidate edge with the complete translated teacher shape can therefore
+    move its remote endpoint by tens of metres.  Require the teacher and source
+    to address the same directed side, keep the source remote endpoint, and
+    blend only toward the replayed local endpoint.
+    """
+
+    source_has_geometry = bool(_primary_edge_shape(geometry_source_edge))
+    replay_has_geometry = bool(_primary_edge_shape(replayed_edge))
+    if not source_has_geometry or not replay_has_geometry:
+        return {
+            "status": "skipped",
+            "reason": "source_or_replay_geometry_missing",
+        }
+
+    target_at_start = replayed_edge.attrib.get("from", "") in target_junction_ids
+    target_at_end = replayed_edge.attrib.get("to", "") in target_junction_ids
+    source_local_at_start = geometry_source_edge.attrib.get("from", "") in source_local_junction_ids
+    source_local_at_end = geometry_source_edge.attrib.get("to", "") in source_local_junction_ids
+    if target_at_start == target_at_end:
+        return {
+            "status": "blocked",
+            "reason": "replayed_boundary_does_not_have_one_local_endpoint",
+        }
+    if source_local_at_start == source_local_at_end:
+        return {
+            "status": "blocked",
+            "reason": "source_boundary_does_not_have_one_local_endpoint",
+        }
+    if target_at_start != source_local_at_start:
+        return {
+            "status": "blocked",
+            "reason": "source_and_replayed_boundary_orientation_mismatch",
+        }
+
+    source_remote_id = geometry_source_edge.attrib.get("to" if source_local_at_start else "from", "")
+    replayed_remote_id = replayed_edge.attrib.get("to" if target_at_start else "from", "")
+    if source_remote_id != replayed_remote_id:
+        return {
+            "status": "blocked",
+            "reason": "source_and_replayed_boundary_remote_endpoint_mismatch",
+            "source_remote_junction_id": source_remote_id,
+            "replayed_remote_junction_id": replayed_remote_id,
+        }
+
+    operational_restore = _preserve_boundary_operational_attributes(
+        replayed_edge,
+        geometry_source_edge,
+    )
+    if not _blend_geometry_anchor_at_endpoint(
+        replayed_edge,
+        geometry_source_edge,
+        target_at_start=target_at_start,
+    ):
+        return {
+            "status": "blocked",
+            "reason": "boundary_geometry_blend_failed",
+        }
+    return {
+        "status": "pass",
+        "target_at_start": target_at_start,
+        "source_remote_junction_id": source_remote_id,
+        **operational_restore,
+    }
+
+
+def _preserve_boundary_operational_attributes(
+    replayed_edge: ET.Element,
+    source_edge: ET.Element,
+) -> dict[str, object]:
+    """Keep OSM road semantics while MAP/teacher owns only local topology.
+
+    Official MAP evidence can authorize a lane-count expansion and the movement
+    matrix, but it does not reclassify the complete boundary segment or restrict
+    its vehicle classes.  Existing lanes retain their source operational fields;
+    a newly added lane clones the nearest source lane's fields.
+    """
+
+    changed_edge_attrs = 0
+    for attr in BOUNDARY_EDGE_OPERATIONAL_ATTRS:
+        before = replayed_edge.attrib.get(attr)
+        if attr in source_edge.attrib:
+            replayed_edge.set(attr, source_edge.attrib[attr])
+        else:
+            replayed_edge.attrib.pop(attr, None)
+        if before != replayed_edge.attrib.get(attr):
+            changed_edge_attrs += 1
+
+    source_lanes = {
+        int(lane.attrib.get("index", "0") or 0): lane
+        for lane in source_edge.findall("lane")
+    }
+    changed_lane_attrs = 0
+    cloned_lane_indices: list[int] = []
+    for replayed_lane in replayed_edge.findall("lane"):
+        replayed_index = int(replayed_lane.attrib.get("index", "0") or 0)
+        source_lane = source_lanes.get(replayed_index)
+        if source_lane is None and source_lanes:
+            source_index = min(source_lanes, key=lambda index: (abs(index - replayed_index), index))
+            source_lane = source_lanes[source_index]
+            cloned_lane_indices.append(replayed_index)
+        if source_lane is None:
+            continue
+        for attr in BOUNDARY_LANE_OPERATIONAL_ATTRS:
+            before = replayed_lane.attrib.get(attr)
+            if attr in source_lane.attrib:
+                replayed_lane.set(attr, source_lane.attrib[attr])
+            else:
+                replayed_lane.attrib.pop(attr, None)
+            if before != replayed_lane.attrib.get(attr):
+                changed_lane_attrs += 1
+    return {
+        "preserved_boundary_edge_operational_attr_count": changed_edge_attrs,
+        "preserved_boundary_lane_operational_attr_count": changed_lane_attrs,
+        "operational_attrs_cloned_to_new_lane_indices": sorted(cloned_lane_indices),
+    }
+
+
+def _restore_external_boundary_connections(
+    *,
+    source_root: ET.Element,
+    target_root: ET.Element,
+    boundary_edge_ids: set[str],
+    source_local_junction_ids: set[str],
+) -> dict[str, object]:
+    """Restore only the source connections on the remote side of boundaries."""
+
+    source_edges = {
+        edge.attrib["id"]: edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    target_edge_ids = {
+        edge.attrib["id"]
+        for edge in target_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    target_lane_counts = _net_lane_counts(target_root)
+    target_lane_ids = {
+        lane.attrib["id"]
+        for edge in target_root.findall("edge")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    existing_keys = {
+        tuple(sorted(connection.attrib.items()))
+        for connection in target_root.findall("connection")
+    }
+    restored: list[dict[str, str]] = []
+    preserved_existing: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+
+    for boundary_edge_id in sorted(boundary_edge_ids):
+        source_edge = source_edges.get(boundary_edge_id)
+        if source_edge is None:
+            continue
+        local_at_start = source_edge.attrib.get("from", "") in source_local_junction_ids
+        local_at_end = source_edge.attrib.get("to", "") in source_local_junction_ids
+        if local_at_start == local_at_end:
+            skipped.append(
+                {
+                    "boundary_edge_id": boundary_edge_id,
+                    "reason": "source_boundary_does_not_have_one_local_endpoint",
+                }
+            )
+            continue
+        # At the remote junction an outgoing boundary is the source of the
+        # continuation; an incoming boundary is its destination.
+        boundary_attr = "from" if local_at_start else "to"
+        for connection in source_root.findall("connection"):
+            if connection.attrib.get(boundary_attr, "") != boundary_edge_id:
+                continue
+            record = dict(connection.attrib)
+            if (
+                connection.attrib.get("from", "") not in target_edge_ids
+                or connection.attrib.get("to", "") not in target_edge_ids
+            ):
+                skipped.append({**record, "reason": "missing_target_edge"})
+                continue
+            if not _connection_lane_indices_valid(connection, target_lane_counts):
+                skipped.append({**record, "reason": "invalid_target_lane_index"})
+                continue
+            via_lane = connection.attrib.get("via", "")
+            if via_lane and via_lane not in target_lane_ids:
+                skipped.append({**record, "reason": "missing_target_via_lane"})
+                continue
+            key = tuple(sorted(connection.attrib.items()))
+            if key in existing_keys:
+                preserved_existing.append(record)
+                continue
+            target_root.append(copy.deepcopy(connection))
+            existing_keys.add(key)
+            restored.append(record)
+
+    return {
+        "status": "pass",
+        "restored_connection_count": len(restored),
+        "restored_connections": restored,
+        "preserved_existing_connection_count": len(preserved_existing),
+        "preserved_existing_connections": preserved_existing,
+        "skipped_connection_count": len(skipped),
+        "skipped_connections": skipped,
+    }
 
 
 def _warp_anchor_shape_to_teacher_endpoint(
@@ -11193,6 +11625,16 @@ def _shape_points(shape: str) -> list[tuple[float, float]]:
         except ValueError:
             continue
     return points
+
+
+def _polyline_length(shape: str) -> float | None:
+    points = _shape_points(shape)
+    if len(points) < 2:
+        return None
+    return sum(
+        math.hypot(right[0] - left[0], right[1] - left[1])
+        for left, right in zip(points, points[1:])
+    )
 
 
 def _convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -11685,6 +12127,178 @@ def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
             "restored_non_target_request_count",
         )
     )
+
+
+def restore_off_scope_netconvert_artifacts(
+    *,
+    source_file: Path,
+    target_file: Path,
+    mutable_junction_ids: set[str],
+    mutable_edge_ids: set[str],
+) -> dict[str, object]:
+    """Restore the network outside one explicitly mutable replay scope.
+
+    ``netconvert --sumo-net-file`` normalizes the complete network even when a
+    replay changes only one junction cell.  This helper preserves the current
+    cell and its boundary edges while restoring every other internal subgraph,
+    traffic-light program, junction shape, and external-lane geometry from the
+    immutable pre-normalization network.  Topology or lane-cardinality drift
+    outside the declared scope is reported as a hard failure rather than being
+    silently repaired.
+    """
+
+    if not source_file.exists():
+        return _failure(f"source net file does not exist: {source_file}")
+    if not target_file.exists():
+        return _failure(f"target net file does not exist: {target_file}")
+
+    source_root = ET.parse(source_file).getroot()
+    target_root = ET.parse(target_file).getroot()
+    source_edges = {
+        edge.attrib["id"]: edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    target_edges = {
+        edge.attrib["id"]: edge
+        for edge in target_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    effective_mutable_junction_ids = {
+        str(value) for value in mutable_junction_ids if str(value)
+    }
+    effective_mutable_edge_ids = {str(value) for value in mutable_edge_ids if str(value)}
+    for edge_id in sorted(effective_mutable_edge_ids):
+        for edge in (source_edges.get(edge_id), target_edges.get(edge_id)):
+            if edge is None:
+                continue
+            effective_mutable_junction_ids.update(
+                value
+                for value in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+                if value
+            )
+
+    internal_report = _restore_non_target_internal_artifacts(
+        source_file=source_file,
+        target_file=target_file,
+        exclude_junction_ids=effective_mutable_junction_ids,
+    )
+    if internal_report.get("status") != "pass":
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "off_scope_internal_artifact_restore_not_pass",
+            "source_file": str(source_file),
+            "target_file": str(target_file),
+            "internal_artifact_restore": internal_report,
+        }
+
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    target_edges = {
+        edge.attrib["id"]: edge
+        for edge in target_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    failures: list[dict[str, object]] = []
+    authorized_absorbed_edge_ids: list[str] = []
+    restored_edge_ids: list[str] = []
+    restored_lane_count = 0
+    for edge_id, source_edge in sorted(source_edges.items()):
+        if edge_id in effective_mutable_edge_ids:
+            continue
+        target_edge = target_edges.get(edge_id)
+        source_endpoints = (
+            source_edge.attrib.get("from", ""),
+            source_edge.attrib.get("to", ""),
+        )
+        if target_edge is None:
+            if all(
+                endpoint and endpoint in effective_mutable_junction_ids
+                for endpoint in source_endpoints
+            ):
+                authorized_absorbed_edge_ids.append(edge_id)
+            else:
+                failures.append({"edge_id": edge_id, "reason": "off_scope_edge_missing"})
+            continue
+        target_endpoints = (
+            target_edge.attrib.get("from", ""),
+            target_edge.attrib.get("to", ""),
+        )
+        if source_endpoints != target_endpoints:
+            failures.append(
+                {
+                    "edge_id": edge_id,
+                    "reason": "off_scope_edge_endpoints_changed",
+                    "source_endpoints": source_endpoints,
+                    "target_endpoints": target_endpoints,
+                }
+            )
+            continue
+        source_lanes = {
+            lane.attrib.get("index", ""): lane for lane in source_edge.findall("lane")
+        }
+        target_lanes = {
+            lane.attrib.get("index", ""): lane for lane in target_edge.findall("lane")
+        }
+        if source_lanes.keys() != target_lanes.keys():
+            failures.append(
+                {
+                    "edge_id": edge_id,
+                    "reason": "off_scope_lane_cardinality_changed",
+                    "source_lane_indices": sorted(source_lanes),
+                    "target_lane_indices": sorted(target_lanes),
+                }
+            )
+            continue
+        edge_changed = False
+        for lane_index, source_lane in source_lanes.items():
+            target_lane = target_lanes[lane_index]
+            before = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
+            for attr in GEOMETRY_RESTORE_LANE_ATTRS:
+                if attr in source_lane.attrib:
+                    target_lane.set(attr, source_lane.attrib[attr])
+                else:
+                    target_lane.attrib.pop(attr, None)
+            after = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
+            if before != after:
+                edge_changed = True
+                restored_lane_count += 1
+        if edge_changed:
+            restored_edge_ids.append(edge_id)
+
+    if restored_lane_count:
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+
+    internal_failures = {
+        key: int(internal_report.get(key, 0) or 0)
+        for key in (
+            "skipped_non_target_internal_edge_missing_junction_count",
+            "skipped_non_target_internal_connection_missing_edge_count",
+            "skipped_non_target_internal_connection_invalid_lane_count",
+            "skipped_non_target_internal_connection_missing_via_lane_count",
+            "missing_non_target_tllogic_count",
+        )
+        if int(internal_report.get(key, 0) or 0)
+    }
+    status = "pass" if not failures and not internal_failures else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "source_file": str(source_file),
+        "target_file": str(target_file),
+        "mutable_junction_ids": sorted(effective_mutable_junction_ids),
+        "mutable_edge_ids": sorted(effective_mutable_edge_ids),
+        "authorized_absorbed_external_edge_ids": authorized_absorbed_edge_ids,
+        "restored_external_edge_count": len(restored_edge_ids),
+        "restored_external_edge_ids": restored_edge_ids,
+        "restored_external_lane_count": restored_lane_count,
+        "failure_count": len(failures) + sum(internal_failures.values()),
+        "failures": failures,
+        "internal_failure_counts": internal_failures,
+        "internal_artifact_restore": internal_report,
+    }
 
 
 def _restore_non_target_internal_artifacts(

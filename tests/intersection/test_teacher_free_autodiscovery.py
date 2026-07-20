@@ -1,5 +1,6 @@
 import hashlib
 import json
+from copy import deepcopy
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -22,6 +23,7 @@ from torii_sumo.intersection.autodiscovery import (
 from torii_sumo.intersection.candidate_binding import (
     bind_materialized_candidate_to_dag,
 )
+from torii_sumo.intersection.candidate_dag import build_candidate_hypothesis_dag
 from torii_sumo.intersection.materialization_experiment import (
     build_preregistered_materialization_contract,
     write_preregistered_join_patch,
@@ -36,17 +38,23 @@ from torii_sumo.intersection.topology_discrimination_experiment import (
 XS1_OSM = Path("examples/03_xs1_four_way_tls/input/xs1-89129156.osm.xml.gz")
 XS2_OSM = Path("examples/04_xs2_three_way_tls/input/xs2-7009179660.osm.xml")
 HELD_OUT_X4 = Path("tests/intersection/fixtures/x4_signalized.osm.xml")
-PAIRED_OFFSET = Path(
-    "tests/intersection/fixtures/paired_offset_shared_tls.osm.xml"
+PAIRED_OFFSET = Path("tests/intersection/fixtures/paired_offset_shared_tls.osm.xml")
+PEDESTRIAN_CROSSING = Path(
+    "tests/intersection/fixtures/clustered_signalized_crossing.osm.xml"
 )
-PEDESTRIAN_CROSSING = Path("tests/intersection/fixtures/clustered_signalized_crossing.osm.xml")
-COMPLETE_PEDESTRIAN_CROSSING = Path("tests/intersection/fixtures/complete_signalized_crossing.osm.xml")
+COMPLETE_PEDESTRIAN_CROSSING = Path(
+    "tests/intersection/fixtures/complete_signalized_crossing.osm.xml"
+)
 XS1_CANDIDATE = Path("examples/03_xs1_four_way_tls/golden/xs1-candidate.net.xml")
 XS2_CANDIDATE = Path("examples/04_xs2_three_way_tls/golden/xs2-candidate.net.xml")
 
 
 def _candidate_with_anchors(report, expected: set[str]):
-    return next(candidate for candidate in report["candidates"] if set(candidate["anchor_node_ids"]) == expected)
+    return next(
+        candidate
+        for candidate in report["candidates"]
+        if set(candidate["anchor_node_ids"]) == expected
+    )
 
 
 def test_xs1_bbox_discovers_reviewed_cell_without_seed_or_scope() -> None:
@@ -93,12 +101,108 @@ def test_xs1_bbox_discovers_reviewed_cell_without_seed_or_scope() -> None:
     assert target["classification"]["kind"] == "vehicle_intersection"
     assert target["disposition"] == "suggest"
     assert target["discovery_blockers"] == []
-    assert [variant["atomic_movement_count"] for variant in hypothesis["vehicle_movement_hypotheses"]["variants"]] == [
+    assert [
+        variant["atomic_movement_count"]
+        for variant in hypothesis["vehicle_movement_hypotheses"]["variants"]
+    ] == [
         12,
         12,
     ]
     assert "reviewed_comparison" not in hypothesis
-    assert hypothesis["forbidden_generation_inputs"] == report["forbidden_generation_inputs"]
+    assert (
+        hypothesis["forbidden_generation_inputs"]
+        == report["forbidden_generation_inputs"]
+    )
+    archetype = hypothesis["intersection_archetype_profile"]
+    dag = hypothesis["candidate_dag"]
+    assert hypothesis["classification_review_reasons"] == archetype["review_reasons"]
+    assert all(
+        not reason.startswith("archetype:type_recognition_")
+        for reason in hypothesis["unresolved_reasons"]
+    )
+    assert archetype["derived_alias"]["value"] == "X4"
+    assert dag["parent_archetype_classification_id"] == archetype["classification_id"]
+    assert any(
+        node["node_kind"] == "intersection_archetype_profile"
+        and node["node_id"] == archetype["classification_id"]
+        for node in dag["nodes"]
+    )
+    assert all(
+        operation["payload"]["archetype_classification_id"]
+        == archetype["classification_id"]
+        for node in dag["nodes"]
+        if node["node_kind"] == "candidate_variant"
+        for operation in node["declared_operations"]
+    )
+    assert any(
+        edge
+        == {
+            "from_node_id": hypothesis["vehicle_movement_hypotheses"][
+                "hypothesis_set_id"
+            ],
+            "to_node_id": node["node_id"],
+            "relation": "movement_semantics_derive_from_movement_hypotheses",
+        }
+        for node in dag["nodes"]
+        if node["node_kind"] == "movement_semantic_class"
+        for edge in dag["edges"]
+    )
+
+
+def test_candidate_dag_rejects_mismatched_or_blocked_archetype_profile() -> None:
+    report = discover_teacher_free_intersections(XS1_OSM, traffic_side="right")
+    hypothesis = _candidate_with_anchors(
+        report,
+        {
+            "321573214",
+            "321573215",
+            "359022505",
+            "4622372941",
+            "7622194981",
+            "9197167804",
+            "9602656749",
+            "9602656750",
+            "9602656751",
+            "9602656752",
+        },
+    )["hypothesis"]
+    physical_cell = hypothesis["physical_cell"]
+    movements = hypothesis["vehicle_movement_hypotheses"]
+    profile = hypothesis["intersection_archetype_profile"]
+
+    for field, value, message in (
+        (
+            "parent_physical_cell_hypothesis_id",
+            "different-cell",
+            "parent_physical_cell_hypothesis_id",
+        ),
+        (
+            "parent_movement_hypothesis_set_id",
+            "different-movements",
+            "parent_movement_hypothesis_set_id",
+        ),
+        ("generation_status", "blocked", "generation_status must be pass"),
+    ):
+        invalid = deepcopy(profile)
+        invalid[field] = value
+        with pytest.raises(ValueError, match=message):
+            build_candidate_hypothesis_dag(
+                physical_cell,
+                movements,
+                archetype_profile=invalid,
+            )
+
+    stale_id_profile = deepcopy(profile)
+    stale_id_profile["canonical_identity"]["arm_count"] = 999
+    with pytest.raises(
+        ValueError,
+        match="classification_id does not match its canonical content",
+    ):
+        build_candidate_hypothesis_dag(
+            physical_cell,
+            movements,
+            archetype_profile=stale_id_profile,
+        )
 
 
 def test_xs2_bbox_recovers_cell_but_preserves_movement_uncertainty() -> None:
@@ -124,10 +228,16 @@ def test_xs2_bbox_recovers_cell_but_preserves_movement_uncertainty() -> None:
         "7290797775",
     }
     assert len(hypothesis["physical_cell"]["physical_approaches"]) == 3
-    assert [variant["atomic_movement_count"] for variant in movements["variants"]] == [6, 7]
+    assert [variant["atomic_movement_count"] for variant in movements["variants"]] == [
+        6,
+        7,
+    ]
     assert movements["variant_comparison"]["status"] == "review_required"
     assert target["disposition"] == "review"
-    assert "teacher_free_hypothesis_has_unresolved_semantics" in target["discovery_blockers"]
+    assert (
+        "teacher_free_hypothesis_has_unresolved_semantics"
+        in target["discovery_blockers"]
+    )
 
 
 def test_xs1_preregistered_materialization_contract_uses_no_benchmark_answers(
@@ -205,10 +315,7 @@ def test_xs1_v4_contract_freezes_three_independent_topology_arms(
     )
 
     contract = build_topology_discrimination_contract(discovery, patch)
-    plans = {
-        plan["topology_hypothesis"]: plan
-        for plan in contract["candidate_plans"]
-    }
+    plans = {plan["topology_hypothesis"]: plan for plan in contract["candidate_plans"]}
 
     assert contract["status"] == "ready", contract["candidate_assessments"]
     assert set(plans) == {
@@ -217,16 +324,10 @@ def test_xs1_v4_contract_freezes_three_independent_topology_arms(
         "partial_internal_repair",
     }
     assert all(
-        plan["selection_is_topology_truth_claim"] is False
-        for plan in plans.values()
+        plan["selection_is_topology_truth_claim"] is False for plan in plans.values()
     )
-    assert all(
-        plan["automatic_promotion_gate"] == "blocked"
-        for plan in plans.values()
-    )
-    assert plans["partial_internal_repair"]["conflict_center_node_id"] == (
-        "89129156"
-    )
+    assert all(plan["automatic_promotion_gate"] == "blocked" for plan in plans.values())
+    assert plans["partial_internal_repair"]["conflict_center_node_id"] == ("89129156")
 
     for topology, plan in plans.items():
         patch_file = tmp_path / f"{topology}.nod.xml"
@@ -239,17 +340,15 @@ def test_xs1_v4_contract_freezes_three_independent_topology_arms(
         if topology == "merge_physical_cell":
             join = root.find("join")
             assert join is not None
-            assert set(join.attrib["nodes"].split()) == set(
-                plan["source_junction_ids"]
-            )
+            assert set(join.attrib["nodes"].split()) == set(plan["source_junction_ids"])
         elif topology == "preserve_split_shared_controller":
             assert root.find("join") is None
-            assert {
-                node.attrib["tl"] for node in root.findall("node")
-            } == {plan["target_controller_id"]}
-            assert {
-                node.attrib["id"] for node in root.findall("node")
-            } == set(plan["signal_anchor_node_ids"])
+            assert {node.attrib["tl"] for node in root.findall("node")} == {
+                plan["target_controller_id"]
+            }
+            assert {node.attrib["id"] for node in root.findall("node")} == set(
+                plan["signal_anchor_node_ids"]
+            )
         else:
             assert root.find("join") is None
             center = root.find("node[@id='89129156']")
@@ -280,8 +379,7 @@ def test_xs2_v4_contract_blocks_all_topology_arms_before_candidate_write(
     assert contract["status"] == "blocked"
     assert contract["candidate_plans"] == []
     assert all(
-        "movement_semantic_variants_disagree"
-        in arm["pre_materialization_blockers"]
+        "movement_semantic_variants_disagree" in arm["pre_materialization_blockers"]
         for assessment in contract["candidate_assessments"]
         for arm in assessment["topology_arms"]
     )
@@ -319,12 +417,14 @@ def test_paired_offset_negative_falsifies_merge_without_using_signal_count() -> 
     assert evidence["branch_node_count"] == 2
     assert evidence["storage_capable_connectors"]
     assert merge["pre_materialization_status"] == "blocked"
-    assert "merge_requires_exactly_one_vehicle_conflict_center" in merge[
-        "pre_materialization_blockers"
-    ]
-    assert "storage_capable_connector_falsifies_single_cell_merge" in merge[
-        "pre_materialization_blockers"
-    ]
+    assert (
+        "merge_requires_exactly_one_vehicle_conflict_center"
+        in merge["pre_materialization_blockers"]
+    )
+    assert (
+        "storage_capable_connector_falsifies_single_cell_merge"
+        in merge["pre_materialization_blockers"]
+    )
     assert all(
         plan["topology_hypothesis"] != "merge_physical_cell"
         for plan in contract["candidate_plans"]
@@ -351,8 +451,7 @@ def test_xs2_v4_workflow_blocks_before_tool_lookup_or_candidate_write(
     assert report["details"]["terminal_stage"] == "pre_materialization"
     assert report["candidate_written"] is False
     assert any(
-        "movement_semantic_variants_disagree"
-        in arm["pre_materialization_blockers"]
+        "movement_semantic_variants_disagree" in arm["pre_materialization_blockers"]
         for assessment in report["candidate_assessments"]
         for arm in assessment["topology_arms"]
     )
@@ -570,7 +669,9 @@ def test_bbox_discovery_binds_materialized_network_only_as_posthoc_evidence(
     assert binding["semantic_disposition"] == expected_disposition
     assert binding["mapped_connection_count"] == expected_movement_count
     assert {
-        item["method"] for item in binding["variant_matches"] if item["status"] == "exact"
+        item["method"]
+        for item in binding["variant_matches"]
+        if item["status"] == "exact"
     } == expected_exact_methods
     assert hypothesis["automatic_promotion_gate"] == "blocked"
 
@@ -598,7 +699,10 @@ def test_held_out_x4_is_discovered_and_order_invariant() -> None:
     assert candidate["canonical_seed_selection"]["selected_node_id"] == "1"
     assert candidate["classification"]["kind"] == "vehicle_intersection"
     assert candidate["disposition"] == "suggest"
-    assert [variant["atomic_movement_count"] for variant in movements["variants"]] == [12, 12]
+    assert [variant["atomic_movement_count"] for variant in movements["variants"]] == [
+        12,
+        12,
+    ]
 
 
 def test_site_port_and_movement_ids_survive_small_coordinate_perturbation() -> None:
@@ -641,7 +745,9 @@ def test_site_port_and_movement_ids_survive_small_coordinate_perturbation() -> N
     assert {port["boundary_port_id"] for port in first_cell["raw_boundary_ports"]} == {
         port["boundary_port_id"] for port in second_cell["raw_boundary_ports"]
     }
-    assert {audit["facility_id"] for audit in first_candidate["pedestrian_facility_audits"]} == {
+    assert {
+        audit["facility_id"] for audit in first_candidate["pedestrian_facility_audits"]
+    } == {
         audit["facility_id"] for audit in second_candidate["pedestrian_facility_audits"]
     }
     for first_variant, second_variant in zip(
@@ -649,8 +755,12 @@ def test_site_port_and_movement_ids_survive_small_coordinate_perturbation() -> N
         second_candidate["hypothesis"]["vehicle_movement_hypotheses"]["variants"],
         strict=True,
     ):
-        assert {movement["stable_movement_id"] for movement in first_variant["atomic_movements"]} == {
-            movement["stable_movement_id"] for movement in second_variant["atomic_movements"]
+        assert {
+            movement["stable_movement_id"]
+            for movement in first_variant["atomic_movements"]
+        } == {
+            movement["stable_movement_id"]
+            for movement in second_variant["atomic_movements"]
         }
 
 
@@ -670,7 +780,9 @@ def test_signalized_crossing_routes_to_pedestrian_audit_not_vehicle_merge() -> N
         "physical_approach_count": 2,
         "has_vehicle_signal_anchor": False,
         "has_signalized_crossing_anchor": True,
-        "physical_cell_risks": ["physical_approach_count_outside_standard_t3_x4_domain"],
+        "physical_cell_risks": [
+            "physical_approach_count_outside_standard_t3_x4_domain"
+        ],
     }
     assert candidate["disposition"] == "review"
     assert candidate["automatic_promotion_gate"] == "blocked"
@@ -706,7 +818,9 @@ def test_complete_signalized_crossing_reaches_audit_only_positive_gate() -> None
     assert audit["audit_status"] == "review_ready"
     assert audit["blockers"] == []
     assert audit["source_row_decision"]["expected_class"] == "signalized"
-    assert audit["source_row_decision"]["reasons"] == ["osm_tag_declares_signalized_crossing"]
+    assert audit["source_row_decision"]["reasons"] == [
+        "osm_tag_declares_signalized_crossing"
+    ]
     assert audit["source_row_decision"]["model_claim_fields_read"] == []
     assert audit["topology_evidence"]["support_arm_count"] == 2
     assert audit["topology_evidence"]["vehicle_arm_count"] == 2
@@ -716,7 +830,9 @@ def test_complete_signalized_crossing_reaches_audit_only_positive_gate() -> None
     assert audit["topology_evidence"]["geometry_infers_right_of_way"] is False
     assert audit["topology_evidence"]["request_foes_fields_read"] == []
     assert audit["automatic_promotion_gate"] == "blocked"
-    assert audit["next_required_gate"] == ("materialized_model_claim_geometry_and_runtime_audit")
+    assert audit["next_required_gate"] == (
+        "materialized_model_claim_geometry_and_runtime_audit"
+    )
 
 
 def test_bicycle_only_cycleway_does_not_masquerade_as_pedestrian_support() -> None:

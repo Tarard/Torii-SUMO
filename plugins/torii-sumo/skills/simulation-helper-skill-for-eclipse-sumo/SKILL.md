@@ -1,6 +1,6 @@
 ---
 name: simulation-helper-skill-for-eclipse-sumo
-description: Use when planning, coding, debugging, auditing, comparing, or writing claims for Eclipse SUMO/TraCI traffic-signal experiments, including OSM/netconvert networks, TLS/NEMA, controllers, routes, demand, detectors, outputs, baselines, metrics, reproducibility, TDD changes, and reusable field lessons.
+description: Use when planning, coding, debugging, auditing, comparing, or writing claims for Eclipse SUMO/TraCI traffic-signal experiments, including OSM/netconvert networks, TLS/NEMA, controllers, routes, demand, detectors, outputs, baselines, metrics, reproducibility, TDD changes, reusable field lessons, Hamburg SensorThings traffic data, or the Am Sandtorkai three-intersection digital twin.
 ---
 
 # Torii SUMO Expert Skill
@@ -22,9 +22,12 @@ request -> classify scenario -> load minimal references -> ask or act -> verify 
 | SUMO environment, executable toolchain, or runnable smoke proof is missing | `references/preflight-sumo-environment.md` | `Environment Preflight` record and pass/fail route |
 | Torii MCP execution, installable plugin use, MCP tool output, or feedback from a SUMO run | `references/mcp-tool-routing.md` | `MCP Tool Use Record`, feedback diagnosis, and claim boundary |
 | OSM-to-SUMO network construction, imported-network cleanup, road-detail planning, reference-matched network building, or Netedit/HTML review artifacts | `references/osm-to-sumo-workflow.md` | OSM cleanup workflow contract, planning gate, reality/TLS gates, connectivity, routeability, HTML review, Netedit launch, and claim boundary |
+| Intersection-type recognition before joining nodes, channelization reconstruction, owner selection, or signal binding; especially compound, staggered, or multi-owner junctions | `references/composable-intersection-classification.md` plus `references/osm-to-sumo-workflow.md` | finite composable archetype, MAP movement/stop-line evidence, separated raw-node/join/core/owner/controller counts, and review-only execution hint |
+| Signal-device recognition before lane/movement/group binding or controller design; especially German or European OCIT-C evidence | `references/composable-signal-device-classification.md` plus `references/mcp-tool-routing.md` | Germany-first finite device composition, physical-head/group separation, visual/acoustic/tactile modality, source hash, and blocked automatic binding/control gates |
 | Region-specific map/TLS reality checks, detector lane mapping, field-data sensor alignment, or background visualization | `references/model-osm-detectors.md` | map baseline record, TLS review evidence, detector alignment gates, and diagnostic background visualization boundary |
 | Public OSM import libraries, Overpass robustness, offline PBF import, SUMO OSM scripts, OpenDRIVE conversion, or source-code reuse decisions | `references/osm-source-patterns.md` | source-pattern map, integration ladder, no-vendoring boundary, and region-aware temporal baseline |
 | Detector-constrained SUMO demand reconstruction from real count sensors, route priors, route-incidence matrices, routeSampler residual correction, or month-long count-matched validation | `references/detector-constrained-demand-reconstruction.md` | workflow contract, detector/route/time-bin gates, public-data boundary, residual-correction ladder, and completion-first validation record |
+| Hamburg official count/signal APIs, the fixed Am Sandtorkai three-intersection corridor, busiest complete Saturday two-hour selection, or digital-twin replay | `references/hamburg-sandtorkai-digital-twin.md` plus `references/detector-constrained-demand-reconstruction.md` | official-source manifest, fixed-scope/window record, MAP-to-SUMO bindings, routeSampler demand, E1/E2/TLS replay evidence, and non-identifiability boundary |
 | Ongoing project, unclear progress, repo/logs/outputs provided, or "what next?" | `references/route-project-workflow.md` | `Project Control Screen` and next-step plan |
 | New, vague, or assumption-heavy experiment | `references/interactive-experiment-intake.md` | one-question-at-a-time intake, recommended answers, and readiness route |
 | Confirmed experiment intake ready for planning | `references/plan-experiment.md` | `Experiment Readiness Record`, then `SUMO Experiment Plan` |
@@ -66,9 +69,12 @@ Load these only when the scenario requires them:
 - Confirmed experiment intake and planning: `references/plan-experiment.md`.
 - Code implementation, TDD, and completion evidence: `references/develop-and-verify-code.md`.
 - OSM-to-SUMO construction, imported-network cleanup, road-detail planning, reference-matched construction, routeability, topology/TLS cleanup, HTML review, and Netedit launch: `references/osm-to-sumo-workflow.md`.
+- Intersection-type recognition before node joining, channelization, owner reconstruction, or TLS binding: `references/composable-intersection-classification.md`; keep the archetype separate from every materialization strategy.
+- German/European signal-device recognition before lane, movement, signal-group, or controller binding: `references/composable-signal-device-classification.md`; keep physical heads, display outputs, logical groups, runtime state, and control methods separate.
 - Region-specific map/TLS reality checks, detector lane repair, field-data sensor alignment, and background visualization: `references/model-osm-detectors.md`.
 - Public OSM source patterns from OSMnx, OSMNet, pyrosm, SUMO osmGet/osmBuild, or osm-to-xodr: `references/osm-source-patterns.md`.
 - Detector-constrained SUMO demand reconstruction from real sensor counts, routeSampler residual correction, detector-route incidence matrices, anti-replay route priors, workflow gates, public-data boundaries, and month-long validation: `references/detector-constrained-demand-reconstruction.md`.
+- Hamburg SensorThings counts/signals, the fixed Am Sandtorkai three-intersection preset, complete Saturday two-hour selection, MAP/MAPEM lane binding, routeSampler demand, TLS event replay, and non-identifiability: `references/hamburg-sandtorkai-digital-twin.md`.
 - SUMO semantics, official/forum lessons, and public-code patterns: `references/learn-sumo-knowledge.md`.
 - NEMA/TLS/TraCI controller identity and API-boundary checks: `references/audit-sumo-controllers.md`.
 - Controller-family application patterns inspired by sumolights, without copying GPL source: `references/sumolights-controller-patterns.md`.

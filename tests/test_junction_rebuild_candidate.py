@@ -30,12 +30,15 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _teacher_guided_candidate_sort_key,
     build_rebuild_candidate,
     build_scoped_teacher_tls_cell_replay_plan,
+    build_shared_teacher_tls_controller_replay_plan,
     build_teacher_guided_repair_queue,
     build_teacher_guided_junction_variant,
     build_tls_connection_repair_variant,
+    write_shared_teacher_tls_controller_replay_net,
     run_teacher_guided_repair_matrix,
     run_teacher_guided_repair_queue,
     restore_teacher_tls_connection_semantics_after_normalize,
+    restore_off_scope_netconvert_artifacts,
     restore_scoped_pedestrian_internal_semantics_after_normalize,
     write_expanded_scope_plain_inputs,
     write_scoped_teacher_tls_cell_replay_net,
@@ -11483,6 +11486,83 @@ def test_write_scoped_teacher_tls_cell_replay_collapses_split_member_and_preserv
     assert len([connection for connection in root.findall("connection") if connection.attrib.get("tl") == "candidate"]) == 2
 
 
+def test_scoped_tls_replay_preserves_osm_boundary_geometry_and_remote_connections(
+    tmp_path: Path,
+) -> None:
+    teacher_net = tmp_path / "teacher_boundary.net.xml"
+    teacher_net.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="teacher" type="highway.primary" priority="-1"><lane id="teacher_in_0" index="0" speed="9" width="3.5" allow="passenger" length="100" shape="0,0 100,0"/></edge>
+  <edge id="teacher_out" from="teacher" to="b" type="highway.primary" priority="-1"><lane id="teacher_out_0" index="0" speed="9" width="3.5" allow="passenger" length="100" shape="100,0 200,0"/></edge>
+  <edge id=":teacher_0" function="internal"><lane id=":teacher_0_0" index="0" shape="100,0 101,0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="teacher" type="traffic_light" x="100" y="0" incLanes="teacher_in_0" intLanes=":teacher_0_0"/>
+  <junction id="b" type="priority" x="200" y="0"/>
+  <junction id=":teacher_0_0" type="internal" x="100" y="0"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":teacher_0_0" tl="teacher" linkIndex="0"/>
+  <tlLogic id="teacher" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate_boundary.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="before" from="p" to="a"><lane id="before_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="candidate_in" from="a" to="member" type="highway.residential" priority="3"><lane id="candidate_in_0" index="0" speed="13.9" width="3.2" disallow="pedestrian" shape="0,0 9,0"/></edge>
+  <edge id="candidate_out" from="member" to="b" type="highway.residential" priority="3"><lane id="candidate_out_0" index="0" speed="13.9" width="3.2" disallow="pedestrian" shape="9,0 20,0"/></edge>
+  <edge id="after" from="b" to="q"><lane id="after_0" index="0" shape="20,0 30,0"/></edge>
+  <edge id=":member_0" function="internal"><lane id=":member_0_0" index="0" shape="9,0 10,0"/></edge>
+  <junction id="p" type="dead_end" x="-10" y="0"/>
+  <junction id="a" type="priority" x="0" y="0" incLanes="before_0" intLanes=""/>
+  <junction id="member" type="traffic_light" x="9" y="0" incLanes="candidate_in_0" intLanes=":member_0_0"/>
+  <junction id="candidate" type="traffic_light" x="10" y="0" incLanes="" intLanes=""/>
+  <junction id="b" type="priority" x="20" y="0" incLanes="candidate_out_0" intLanes=""/>
+  <junction id="q" type="dead_end" x="30" y="0" incLanes="after_0" intLanes=""/>
+  <junction id=":member_0_0" type="internal" x="9" y="0"/>
+  <connection from="before" to="candidate_in" fromLane="0" toLane="0"/>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" via=":member_0_0"/>
+  <connection from="candidate_out" to="after" fromLane="0" toLane="0"/>
+  <tlLogic id="candidate" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_scoped_teacher_tls_cell_replay_net(
+        candidate_net_file=candidate_net,
+        teacher_net_file=teacher_net,
+        output_file=tmp_path / "scoped_boundary.net.xml",
+        junction_id="candidate",
+        teacher_junction_id="teacher",
+        edge_map={"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+        collapse_junction_ids={"candidate", "member"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["preserved_mapped_boundary_geometry_edge_ids"] == ["candidate_in", "candidate_out"]
+    assert (
+        report["restored_external_boundary_connection_count"]
+        + report["preserved_existing_external_boundary_connection_count"]
+        == 2
+    )
+    root = ET.parse(report["net_file"]).getroot()
+    candidate_in = root.find("edge[@id='candidate_in']")
+    assert candidate_in.attrib["to"] == "candidate"
+    assert candidate_in.attrib["type"] == "highway.residential"
+    assert candidate_in.attrib["priority"] == "3"
+    candidate_in_lane = candidate_in.find("lane")
+    assert candidate_in_lane.attrib["shape"] == "0.00,0.00 10.00,0.00"
+    assert candidate_in_lane.attrib["length"] == "10.00"
+    assert candidate_in_lane.attrib["speed"] == "13.9"
+    assert candidate_in_lane.attrib["width"] == "3.2"
+    assert candidate_in_lane.attrib["disallow"] == "pedestrian"
+    assert "allow" not in candidate_in_lane.attrib
+    candidate_out_lane = root.find("edge[@id='candidate_out']/lane")
+    assert candidate_out_lane.attrib["shape"] == "10.00,0.00 20.00,0.00"
+    assert candidate_out_lane.attrib["length"] == "10.00"
+    assert root.find("connection[@from='before'][@to='candidate_in']") is not None
+    assert root.find("connection[@from='candidate_out'][@to='after']") is not None
+
+
 def test_scoped_tls_plan_reports_shared_controller_owner_closure(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher_shared_tls.net.xml"
     candidate = tmp_path / "candidate_shared_tls.net.xml"
@@ -11527,6 +11607,222 @@ def test_scoped_tls_plan_reports_shared_controller_owner_closure(tmp_path: Path)
     assert shared["extra_teacher_internal_owner_ids"] == ["x"]
     assert shared["candidate_owner_map"]["x"] == "x_candidate"
     assert shared["teacher_internal_owner_connection_counts"]["x"] == 1
+
+    shared_plan = build_shared_teacher_tls_controller_replay_plan(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        teacher_controller_id="j",
+        candidate_controller_id="c",
+        candidate_junction_ids={"c", "x_candidate"},
+        collapse_junction_ids={"c", "x_candidate"},
+        candidate_owner_map={"j": "c", "x": "x_candidate"},
+        approach_pairs=[
+            {"reference_edge_id": "teacher_in", "candidate_edge_id": "candidate_in"},
+            {"reference_edge_id": "teacher_out", "candidate_edge_id": "candidate_out"},
+            {"reference_edge_id": "extra_in", "candidate_edge_id": "extra_in"},
+            {"reference_edge_id": "extra_out", "candidate_edge_id": "extra_out"},
+        ],
+    )
+
+    assert shared_plan["status"] == "pass"
+    assert shared_plan["generated_boundary_edge_ids"] == []
+    assert shared_plan["edge_map"] == {
+        "extra_in": "extra_in",
+        "extra_out": "extra_out",
+        "teacher_in": "candidate_in",
+        "teacher_out": "candidate_out",
+    }
+    assert set(shared_plan["edge_mapping_sources"].values()) == {"explicit_approach_pair"}
+
+
+def test_shared_tls_writer_assigns_overlapping_internal_owner_prefixes_once(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher_shared_tls.net.xml"
+    candidate = tmp_path / "candidate_shared_tls.net.xml"
+    output = tmp_path / "replayed_shared_tls.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="teacher"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out" from="teacher" to="b"><lane id="teacher_out_0" index="0"/></edge>
+  <edge id="side_in" from="c" to="teacher__owner_01"><lane id="side_in_0" index="0"/></edge>
+  <edge id="side_out" from="teacher__owner_01" to="d"><lane id="side_out_0" index="0"/></edge>
+  <edge id=":teacher_0" function="internal"><lane id=":teacher_0_0" index="0"/></edge>
+  <edge id=":teacher__owner_01_0" function="internal"><lane id=":teacher__owner_01_0_0" index="0"/></edge>
+  <junction id="a" type="dead_end" x="0" y="0"/>
+  <junction id="teacher" type="traffic_light" x="10" y="0" incLanes="teacher_in_0" intLanes=":teacher_0_0"/>
+  <junction id="b" type="dead_end" x="20" y="0"/>
+  <junction id="c" type="dead_end" x="0" y="10"/>
+  <junction id="teacher__owner_01" type="traffic_light" x="10" y="10" incLanes="side_in_0" intLanes=":teacher__owner_01_0_0"/>
+  <junction id="d" type="dead_end" x="20" y="10"/>
+  <junction id=":teacher_0_0" type="internal" x="10" y="0"/>
+  <junction id=":teacher__owner_01_0_0" type="internal" x="10" y="10"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":teacher_0_0" tl="teacher" linkIndex="0"/>
+  <connection from="side_in" to="side_out" fromLane="0" toLane="0" via=":teacher__owner_01_0_0" tl="teacher" linkIndex="1"/>
+  <tlLogic id="teacher" type="static" programID="0" offset="0"><phase duration="30" state="GG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="candidate_in" from="a" to="candidate"><lane id="candidate_in_0" index="0"/></edge>
+  <edge id="candidate_out" from="candidate" to="b"><lane id="candidate_out_0" index="0"/></edge>
+  <edge id="candidate_side_in" from="c" to="candidate_side"><lane id="candidate_side_in_0" index="0"/></edge>
+  <edge id="candidate_side_out" from="candidate_side" to="d"><lane id="candidate_side_out_0" index="0"/></edge>
+  <junction id="a" type="dead_end" x="0" y="0"/>
+  <junction id="candidate" type="traffic_light" x="10" y="0"/>
+  <junction id="b" type="dead_end" x="20" y="0"/>
+  <junction id="c" type="dead_end" x="0" y="10"/>
+  <junction id="candidate_side" type="traffic_light" x="10" y="10"/>
+  <junction id="d" type="dead_end" x="20" y="10"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_shared_teacher_tls_controller_replay_net(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        output_file=output,
+        candidate_controller_id="candidate",
+        teacher_controller_id="teacher",
+        owner_map={
+            "teacher": "candidate",
+            "teacher__owner_01": "candidate_side",
+        },
+        edge_map={
+            "teacher_in": "candidate_in",
+            "teacher_out": "candidate_out",
+            "side_in": "candidate_side_in",
+            "side_out": "candidate_side_out",
+        },
+    )
+
+    assert report["status"] == "pass"
+    assert report["copied_internal_edge_count"] == 2
+    assert report["copied_internal_junction_count"] == 2
+    root = ET.parse(output).getroot()
+    internal_edge_ids = {
+        edge.attrib["id"]
+        for edge in root.findall("edge")
+        if edge.attrib.get("id", "").startswith(":")
+    }
+    assert internal_edge_ids == {":candidate_0", ":candidate_side_0"}
+    assert root.find("edge[@id=':candidate__owner_01_0']") is None
+    junction_ids = {
+        junction.attrib["id"]
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    assert {
+        edge_id[1:].rsplit("_", 1)[0]
+        for edge_id in internal_edge_ids
+    } <= junction_ids
+    assert root.find("junction[@id=':candidate_0_0']") is not None
+    assert root.find("junction[@id=':candidate_side_0_0']") is not None
+    assert root.find("junction[@id=':candidate__owner_01_0_0']") is None
+
+
+def test_shared_tls_writer_preserves_mapped_boundary_geometry_and_remote_connections(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher_shared_boundary.net.xml"
+    candidate = tmp_path / "candidate_shared_boundary.net.xml"
+    output = tmp_path / "shared_boundary.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="teacher"><lane id="teacher_in_0" index="0" shape="0,0 100,0"/></edge>
+  <edge id="teacher_out" from="teacher" to="b"><lane id="teacher_out_0" index="0" shape="100,0 200,0"/></edge>
+  <edge id=":teacher_0" function="internal"><lane id=":teacher_0_0" index="0" shape="100,0 101,0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="teacher" type="traffic_light" x="100" y="0" incLanes="teacher_in_0" intLanes=":teacher_0_0"/>
+  <junction id="b" type="priority" x="200" y="0"/>
+  <junction id=":teacher_0_0" type="internal" x="100" y="0"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":teacher_0_0" tl="teacher" linkIndex="0"/>
+  <tlLogic id="teacher" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="before" from="p" to="a"><lane id="before_0" index="0" shape="-10,0 0,0"/></edge>
+  <edge id="candidate_in" from="a" to="member"><lane id="candidate_in_0" index="0" shape="0,0 9,0"/></edge>
+  <edge id="candidate_out" from="member" to="b"><lane id="candidate_out_0" index="0" shape="9,0 20,0"/></edge>
+  <edge id="after" from="b" to="q"><lane id="after_0" index="0" shape="20,0 30,0"/></edge>
+  <edge id=":member_0" function="internal"><lane id=":member_0_0" index="0" shape="9,0 10,0"/></edge>
+  <junction id="p" type="dead_end" x="-10" y="0"/>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="member" type="traffic_light" x="9" y="0" incLanes="candidate_in_0" intLanes=":member_0_0"/>
+  <junction id="candidate" type="traffic_light" x="10" y="0"/>
+  <junction id="b" type="priority" x="20" y="0"/>
+  <junction id="q" type="dead_end" x="30" y="0"/>
+  <junction id=":member_0_0" type="internal" x="9" y="0"/>
+  <connection from="before" to="candidate_in" fromLane="0" toLane="0"/>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" via=":member_0_0"/>
+  <connection from="candidate_out" to="after" fromLane="0" toLane="0"/>
+  <tlLogic id="candidate" type="static" programID="0" offset="0"><phase duration="1" state="r"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_shared_teacher_tls_controller_replay_net(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        output_file=output,
+        candidate_controller_id="candidate",
+        teacher_controller_id="teacher",
+        owner_map={"teacher": "candidate"},
+        edge_map={"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+        collapse_junction_ids={"candidate", "member"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["preserved_mapped_boundary_geometry_edge_ids"] == ["candidate_in", "candidate_out"]
+    assert (
+        report["restored_external_boundary_connection_count"]
+        + report["preserved_existing_external_boundary_connection_count"]
+        == 2
+    )
+    root = ET.parse(output).getroot()
+    assert root.find("edge[@id='candidate_in']/lane").attrib["shape"] == "0.00,0.00 10.00,0.00"
+    assert root.find("edge[@id='candidate_out']/lane").attrib["shape"] == "10.00,0.00 20.00,0.00"
+    assert root.find("connection[@from='before'][@to='candidate_in']") is not None
+    assert root.find("connection[@from='candidate_out'][@to='after']") is not None
+
+
+def test_shared_tls_writer_blocks_generated_boundary_without_candidate_geometry_anchor(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher_unanchored.net.xml"
+    candidate = tmp_path / "candidate_unanchored.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="teacher"><lane id="teacher_in_0" index="0" shape="0,0 10,0"/></edge>
+  <edge id="teacher_out" from="teacher" to="b"><lane id="teacher_out_0" index="0" shape="10,0 20,0"/></edge>
+  <edge id=":teacher_0" function="internal"><lane id=":teacher_0_0" index="0" shape="10,0 11,0"/></edge>
+  <junction id="teacher" type="traffic_light" x="10" y="0"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" via=":teacher_0_0" tl="teacher" linkIndex="0"/>
+  <tlLogic id="teacher" type="static" programID="0" offset="0"><phase duration="30" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        '<net><junction id="candidate" type="traffic_light" x="10" y="0"/></net>',
+        encoding="utf-8",
+    )
+
+    report = write_shared_teacher_tls_controller_replay_net(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        output_file=tmp_path / "must_not_exist.net.xml",
+        candidate_controller_id="candidate",
+        teacher_controller_id="teacher",
+        owner_map={"teacher": "candidate"},
+        edge_map={},
+    )
+
+    assert report["status"] == "blocked"
+    assert report["unanchored_boundary_edge_ids"] == ["teacher_in", "teacher_out"]
+    assert report["generated_boundary_edge_ids"] == ["teacher_in", "teacher_out"]
 
 
 def test_restore_teacher_tls_connection_semantics_after_normalize_by_link_index(
@@ -12221,6 +12517,52 @@ def test_restore_replayed_geometry_attrs_keeps_normalized_topology_geometry_loca
     assert root.find("junction[@id='j']/request").attrib["response"] == "101"
     assert report["restored_junction_attr_count"] == 1
     assert report["restored_request_count"] == 1
+
+
+def test_restore_off_scope_netconvert_artifacts_preserves_only_declared_replay_scope(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="current" from="a" to="j"><lane id="current_0" index="0" speed="8.17" shape="0,0 10,0" length="10.00"/></edge>
+  <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" speed="13.89" shape="50,0 60,0" length="10.00"/></edge>
+  <junction id="a" type="priority" x="0" y="0" shape="0,-1 0,1" incLanes="" intLanes=""/>
+  <junction id="j" type="traffic_light" x="10" y="0" shape="9,-1 11,-1 11,1 9,1" incLanes="current_0" intLanes=""/>
+  <junction id="x" type="priority" x="50" y="0" shape="50,-1 50,1" incLanes="" intLanes=""/>
+  <junction id="y" type="priority" x="60" y="0" shape="60,-1 60,1" incLanes="remote_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    normalized = tmp_path / "normalized.net.xml"
+    normalized.write_text(
+        """<net>
+  <edge id="current" from="a" to="j"><lane id="current_0" index="0" speed="8.17" shape="0,1 12,1" length="12.00"/></edge>
+  <edge id="remote" from="x" to="y"><lane id="remote_0" index="0" speed="13.89" shape="55,2 55.2,2" length="0.20"/></edge>
+  <junction id="a" type="priority" x="0" y="0" shape="0,-2 0,2" incLanes="" intLanes=""/>
+  <junction id="j" type="traffic_light" x="12" y="1" shape="11,-2 13,-2 13,2 11,2" incLanes="current_0" intLanes=""/>
+  <junction id="x" type="priority" x="50" y="0" shape="50,-2 50,2" incLanes="" intLanes=""/>
+  <junction id="y" type="priority" x="60" y="0" shape="bad" incLanes="remote_0" intLanes=""/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=normalized,
+        mutable_junction_ids={"j"},
+        mutable_edge_ids={"current"},
+    )
+
+    root = ET.parse(normalized).getroot()
+    assert report["status"] == "pass"
+    assert report["restored_external_edge_ids"] == ["remote"]
+    assert root.find("edge[@id='remote']/lane").attrib["shape"] == "50,0 60,0"
+    assert root.find("junction[@id='y']").attrib["shape"] == "60,-1 60,1"
+    assert root.find("edge[@id='current']/lane").attrib["shape"] == "0,1 12,1"
+    assert root.find("junction[@id='j']").attrib["shape"] == "11,-2 13,-2 13,2 11,2"
 
 
 def test_restore_replayed_geometry_attrs_restores_missing_internal_subgraph_after_normalize(tmp_path: Path) -> None:

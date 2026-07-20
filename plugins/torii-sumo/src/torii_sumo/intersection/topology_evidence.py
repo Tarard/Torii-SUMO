@@ -14,6 +14,26 @@ _GRADE_SEPARATION_TAGS = {"bridge", "tunnel", "layer", "level"}
 _SUPPORT_HIGHWAYS = {"footway", "cycleway", "pedestrian", "path", "steps"}
 
 
+def build_protected_topology_features(
+    patch: OSMPatch,
+    *,
+    path_node_ids: set[str],
+) -> dict[str, Any]:
+    """Extract mode, grade, and access evidence over an explicit node closure."""
+
+    normalized_path_node_ids = set(map(str, path_node_ids))
+    incident_way_ids = sorted(
+        way.id for way in patch.ways.values() if normalized_path_node_ids.intersection(map(str, way.node_refs))
+    )
+    _, vehicle_way_ids, _ = build_osm_vehicle_graph(patch)
+    return _protected_features(
+        patch,
+        incident_way_ids=incident_way_ids,
+        path_node_ids=normalized_path_node_ids,
+        vehicle_way_ids=vehicle_way_ids,
+    )
+
+
 def build_topology_evidence(
     patch: OSMPatch,
     physical_cell: Mapping[str, Any],
@@ -27,27 +47,16 @@ def build_topology_evidence(
 
     graph, vehicle_way_ids, _ = build_osm_vehicle_graph(patch)
     path_node_ids = set(map(str, physical_cell.get("path_closure_node_ids", ())))
-    source_junction_ids = set(
-        map(str, physical_cell.get("proposed_source_junction_ids", ()))
-    )
-    signal_anchor_ids = set(
-        map(str, physical_cell.get("signal_anchor_node_ids", ()))
-    )
+    source_junction_ids = set(map(str, physical_cell.get("proposed_source_junction_ids", ())))
+    signal_anchor_ids = set(map(str, physical_cell.get("signal_anchor_node_ids", ())))
 
     vehicle_degrees = {
-        node_id: len({str(neighbor) for neighbor, _, _ in graph.get(node_id, ())})
-        for node_id in sorted(path_node_ids)
+        node_id: len({str(neighbor) for neighbor, _, _ in graph.get(node_id, ())}) for node_id in sorted(path_node_ids)
     }
     branch_node_ids = sorted(
-        node_id
-        for node_id, degree in vehicle_degrees.items()
-        if degree >= 3 and node_id in source_junction_ids
+        node_id for node_id, degree in vehicle_degrees.items() if degree >= 3 and node_id in source_junction_ids
     )
-    inline_signal_anchor_ids = sorted(
-        node_id
-        for node_id in signal_anchor_ids
-        if vehicle_degrees.get(node_id, 0) <= 2
-    )
+    inline_signal_anchor_ids = sorted(node_id for node_id in signal_anchor_ids if vehicle_degrees.get(node_id, 0) <= 2)
     branch_signal_anchor_ids = sorted(signal_anchor_ids & set(branch_node_ids))
 
     branch_connectors = []
@@ -61,15 +70,11 @@ def build_topology_evidence(
                 "from_branch_node_id": first_id,
                 "to_branch_node_id": second_id,
                 "graph_distance_m": round(float(distance_m), 3),
-                "storage_capable": (
-                    float(distance_m) >= _STORAGE_CAPABLE_CONNECTOR_MIN_M
-                ),
+                "storage_capable": (float(distance_m) >= _STORAGE_CAPABLE_CONNECTOR_MIN_M),
             }
         )
 
-    unique_conflict_center_id = (
-        branch_node_ids[0] if len(branch_node_ids) == 1 else None
-    )
+    unique_conflict_center_id = branch_node_ids[0] if len(branch_node_ids) == 1 else None
     anchor_distances = []
     if unique_conflict_center_id is not None:
         distances, _ = shortest_paths(graph, unique_conflict_center_id)
@@ -86,20 +91,14 @@ def build_topology_evidence(
             if anchor_id in distances
         ]
 
-    incident_way_ids = sorted(
-        way.id
-        for way in patch.ways.values()
-        if path_node_ids.intersection(way.node_refs)
-    )
+    incident_way_ids = sorted(way.id for way in patch.ways.values() if path_node_ids.intersection(way.node_refs))
     protected_features = _protected_features(
         patch,
         incident_way_ids=incident_way_ids,
         path_node_ids=path_node_ids,
         vehicle_way_ids=vehicle_way_ids,
     )
-    storage_connectors = [
-        item for item in branch_connectors if item["storage_capable"]
-    ]
+    storage_connectors = [item for item in branch_connectors if item["storage_capable"]]
     if len(branch_node_ids) == 1:
         morphology = "single_conflict_center"
     elif len(branch_node_ids) > 1:
@@ -178,11 +177,7 @@ def assess_topology_hypothesis(
             blockers.append("grade_separation_evidence_blocks_planar_merge")
         if branch_count == 1:
             supporting.append("unique_vehicle_conflict_center_supports_merge_hypothesis")
-        if (
-            signal_count > 1
-            and len(topology_evidence.get("inline_signal_anchor_ids", ()))
-            == signal_count
-        ):
+        if signal_count > 1 and len(topology_evidence.get("inline_signal_anchor_ids", ())) == signal_count:
             supporting.append("all_signal_anchors_are_inline_degree_two_candidates")
     elif topology_hypothesis == "partial_internal_repair":
         if branch_count != 1:
@@ -234,6 +229,8 @@ def _protected_features(
 ) -> dict[str, Any]:
     rail_way_ids: list[str] = []
     grade_way_ids: list[str] = []
+    pedestrian_way_ids: list[str] = []
+    bicycle_way_ids: list[str] = []
     support_way_ids: list[str] = []
     access_way_ids: list[str] = []
     for way_id in incident_way_ids:
@@ -241,35 +238,54 @@ def _protected_features(
         tags = way.tags
         if tags.get("railway") not in (None, "", "abandoned", "disused"):
             rail_way_ids.append(way_id)
-        if any(
-            key in tags
-            and tags.get(key) not in (None, "", "no", "0", "false")
-            for key in _GRADE_SEPARATION_TAGS
-        ):
+        if any(key in tags and tags.get(key) not in (None, "", "no", "0", "false") for key in _GRADE_SEPARATION_TAGS):
             grade_way_ids.append(way_id)
-        if tags.get("highway") in _SUPPORT_HIGHWAYS:
+        highway = tags.get("highway")
+        if highway in _SUPPORT_HIGHWAYS:
             support_way_ids.append(way_id)
-        if (
-            way_id not in vehicle_way_ids
-            and tags.get("highway") in {"service", "living_street"}
-        ) or tags.get("service") in {"driveway", "parking_aisle"}:
+            if (highway in {"footway", "pedestrian", "steps"} and tags.get("foot") != "no") or tags.get("foot") in {
+                "yes",
+                "designated",
+                "permissive",
+            }:
+                pedestrian_way_ids.append(way_id)
+            if (highway == "cycleway" and tags.get("bicycle") != "no") or tags.get("bicycle") in {
+                "yes",
+                "designated",
+                "permissive",
+            }:
+                bicycle_way_ids.append(way_id)
+        if (way_id not in vehicle_way_ids and tags.get("highway") in {"service", "living_street"}) or tags.get(
+            "service"
+        ) in {"driveway", "parking_aisle"}:
             access_way_ids.append(way_id)
 
-    crossing_node_ids = sorted(
+    crossing_candidate_ids = sorted(
         node_id
         for node_id in path_node_ids
         if node_id in patch.nodes
         and (
             patch.nodes[node_id].tags.get("highway") == "crossing"
-            or "crossing" in patch.nodes[node_id].tags
+            or patch.nodes[node_id].tags.get("crossing") not in {None, "", "no", "none"}
         )
+    )
+    crossing_node_ids = sorted(
+        node_id for node_id in crossing_candidate_ids if patch.nodes[node_id].tags.get("foot") != "no"
+    )
+    bicycle_crossing_node_ids = sorted(
+        node_id
+        for node_id in crossing_candidate_ids
+        if patch.nodes[node_id].tags.get("bicycle") in {"yes", "designated", "permissive"}
     )
     return {
         "rail_way_ids": sorted(set(rail_way_ids)),
         "grade_separation_way_ids": sorted(set(grade_way_ids)),
+        "pedestrian_way_ids": sorted(set(pedestrian_way_ids)),
+        "bicycle_way_ids": sorted(set(bicycle_way_ids)),
         "pedestrian_or_bicycle_way_ids": sorted(set(support_way_ids)),
         "access_way_ids": sorted(set(access_way_ids)),
         "crossing_node_ids": crossing_node_ids,
+        "bicycle_crossing_node_ids": bicycle_crossing_node_ids,
     }
 
 
