@@ -40,6 +40,10 @@ _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 # ponytail: one deterministic clearance is enough here; derive a polygon-aware
 # value later if a measured SUMO junction footprint requires more precision.
 _AXIS_SPLICE_CLEARANCE_M = 12.0
+_CORE_AXIS_CLEARANCE_M = 4.0
+# ponytail: boundary splice owners are represented as near-zero-area SUMO
+# nodes; the local MAP core remains the only physical junction footprint.
+_SPLICE_NODE_HALF_SIZE_M = 0.01
 
 
 class OfficialSpliceMaterializationError(ValueError):
@@ -85,11 +89,16 @@ def materialize_hamburg_official_splice_candidate(
         )
 
     local = _load_local_sources(intersection_sources)
+    local_core_shapes = _load_local_core_shapes(local)
     events = _index_events(plan)
     axis_root = ET.parse(axis_edges).getroot()
     axis_nodes_root = ET.parse(axis_nodes).getroot()
     axis_types_root = ET.parse(axis_types).getroot()
-    fragments, event_links, axis_cut_nodes = _build_axis_fragments(axis_root, events)
+    fragments, event_links, axis_cut_nodes = _build_axis_fragments(
+        axis_root,
+        events,
+        core_shapes=local_core_shapes,
+    )
     local_nodes, local_edges, local_connections, local_tllogics, local_types, local_bridge_evidence = (
         _build_local_components(local, events)
     )
@@ -102,10 +111,10 @@ def materialize_hamburg_official_splice_candidate(
                 "node",
                 {
                     "id": str(event["splice_node_id"]),
-                    "x": f"{float(event['axis_xy'][0]):.3f}",
-                    "y": f"{float(event['axis_xy'][1]):.3f}",
-                    "type": "priority",
-                    "fringe": "outer",
+                    "x": f"{float(_splice_xy(event)[0]):.3f}",
+                    "y": f"{float(_splice_xy(event)[1]):.3f}",
+                    "type": "dead_end",
+                    "shape": _small_node_shape(_splice_xy(event)),
                 },
             )
             for event in events
@@ -239,6 +248,9 @@ def materialize_hamburg_official_splice_candidate(
         "plainxml": {key: _file_identity(path) for key, path in plain.items()},
         "materialization_policy": {
             "axis_splice_clearance_m": _AXIS_SPLICE_CLEARANCE_M,
+            "core_axis_clearance_m": _CORE_AXIS_CLEARANCE_M,
+            "splice_node_half_size_m": _SPLICE_NODE_HALF_SIZE_M,
+            "splice_anchor_policy": "map_event_coordinate",
             "movement_curve_policy": "compiled_lane_endpoint_reanchoring",
         },
         "network": {
@@ -307,14 +319,31 @@ def _index_events(plan: Mapping[str, Any]) -> list[dict[str, Any]]:
     return sorted(result, key=lambda item: (_identifier_key(item["node_id"]), item["map_role"], _identifier_key(item["approach_id"])))
 
 
+def _load_local_core_shapes(local: Mapping[str, Mapping[str, Path]]) -> dict[str, list[tuple[float, float]]]:
+    result: dict[str, list[tuple[float, float]]] = {}
+    for node_id, files in local.items():
+        root = ET.parse(files["nod"]).getroot()
+        for node in root.findall("node"):
+            if not str(node.attrib.get("id", "")).endswith("-core"):
+                continue
+            shape = _parse_shape(node.attrib.get("shape", ""))
+            if len(shape) >= 3:
+                result[str(node_id)] = shape
+            break
+    return result
+
+
 def _build_axis_fragments(
     root: ET.Element,
     events: Sequence[Mapping[str, Any]],
+    *,
+    core_shapes: Mapping[str, Sequence[tuple[float, float]]],
 ) -> tuple[list[ET.Element], dict[str, dict[str, Any]], list[ET.Element]]:
     by_corridor: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for event in events:
         by_corridor[str(event["axis_corridor_id"])].append(event)
     forbidden = _forbidden_intervals(by_corridor)
+    _add_core_clearance_intervals(root, by_corridor, core_shapes, forbidden)
     fragments: list[ET.Element] = []
     event_links: dict[str, dict[str, Any]] = {}
     cut_nodes: dict[str, ET.Element] = {}
@@ -367,7 +396,16 @@ def _build_axis_fragments(
             item.set("id", f"{edge_id}#splice-{index}")
             item.set("from", from_node)
             item.set("to", to_node)
-            item.set("shape", _shape(_clip_shape(_parse_shape(source.attrib.get("shape", "")), source, from_station, to_station)))
+            shape = _clip_shape(
+                _parse_shape(source.attrib.get("shape", "")), source, from_station, to_station
+            )
+            for event in by_corridor[corridor_id]:
+                event_node = str(event["splice_node_id"])
+                if from_node == event_node:
+                    shape[0] = _splice_xy(event)
+                if to_node == event_node:
+                    shape[-1] = _splice_xy(event)
+            item.set("shape", _shape(shape))
             _set_param(item, "torii:station_from_m", str(_rounded(left)))
             _set_param(item, "torii:station_to_m", str(_rounded(right)))
             _set_param(item, "torii:splice_source_edge", edge_id)
@@ -381,6 +419,58 @@ def _build_axis_fragments(
                     event_links.setdefault(event_node, {})["outgoing_axis_edge_id"] = str(item.attrib["id"])
                     event_links[event_node]["axis_lane_count"] = int(item.attrib.get("numLanes", "0"))
     return fragments, event_links, list(cut_nodes.values())
+
+
+def _add_core_clearance_intervals(
+    root: ET.Element,
+    by_corridor: Mapping[str, Sequence[Mapping[str, Any]]],
+    core_shapes: Mapping[str, Sequence[tuple[float, float]]],
+    forbidden: dict[str, list[tuple[float, float]]],
+) -> None:
+    for source in root.findall("edge"):
+        params = _params(source)
+        corridor_id = _corridor_id(
+            str(params.get("origId", "")), str(params.get("torii:station_direction", ""))
+        )
+        members = by_corridor.get(corridor_id)
+        if not members:
+            continue
+        for event in members:
+            polygon = core_shapes.get(str(event["node_id"]))
+            if not polygon:
+                continue
+            interval = _source_polygon_station_interval(source, polygon)
+            if interval is None:
+                continue
+            left, right = interval
+            forbidden.setdefault(corridor_id, []).append(
+                (left - _CORE_AXIS_CLEARANCE_M, right + _CORE_AXIS_CLEARANCE_M)
+            )
+    for corridor_id, intervals in list(forbidden.items()):
+        forbidden[corridor_id] = _merge_intervals(intervals)
+
+
+def _source_polygon_station_interval(
+    source: ET.Element,
+    polygon: Sequence[tuple[float, float]],
+) -> tuple[float, float] | None:
+    shape = _parse_shape(source.attrib.get("shape", ""))
+    if len(shape) < 2 or len(polygon) < 3:
+        return None
+    points: list[tuple[float, float]] = [
+        point
+        for point in shape
+        if _point_in_polygon(point, polygon)
+    ]
+    for first, second in zip(shape, shape[1:]):
+        for left, right in zip(polygon, [*polygon[1:], polygon[0]]):
+            point = _segment_intersection(first, second, left, right)
+            if point is not None:
+                points.append(point)
+    if not points:
+        return None
+    stations = [_station_at_source_point(source, point) for point in points]
+    return (min(stations), max(stations))
 
 
 def _forbidden_intervals(
@@ -475,21 +565,8 @@ def _clip_local_edge_lanes(edge: ET.Element, event: Mapping[str, Any]) -> None:
         cuts.append((lane, clipped, projection["point"]))
     if not cuts:
         return
-    target = (float(axis_xy[0]), float(axis_xy[1]))
-    if str(event["map_role"]) == "ingress":
-        mean = (
-            sum(points[0][0] for _lane, points, _cut in cuts) / len(cuts),
-            sum(points[0][1] for _lane, points, _cut in cuts) / len(cuts),
-        )
-    else:
-        mean = (
-            sum(points[-1][0] for _lane, points, _cut in cuts) / len(cuts),
-            sum(points[-1][1] for _lane, points, _cut in cuts) / len(cuts),
-        )
-    correction = (target[0] - mean[0], target[1] - mean[1])
     for lane, points, _cut in cuts:
-        adjusted = [(x + correction[0], y + correction[1]) for x, y in points]
-        lane.set("shape", _shape(adjusted))
+        lane.set("shape", _shape(points))
 
 
 def _build_bridge_connections(
@@ -594,10 +671,73 @@ def _axis_node_at_station(
     return node_id
 
 
+def _splice_xy(event: Mapping[str, Any]) -> tuple[float, float]:
+    value = event.get("map_event_xy")
+    if _valid_point(value):
+        return (float(value[0]), float(value[1]))
+    axis = event["axis_xy"]
+    return (float(axis[0]), float(axis[1]))
+
+
+def _small_node_shape(point: Sequence[float]) -> str:
+    x, y = float(point[0]), float(point[1])
+    half = _SPLICE_NODE_HALF_SIZE_M
+    return _shape([(x - half, y - half), (x + half, y - half), (x + half, y + half), (x - half, y + half)])
+
+
 def _point_at_source_station(source: ET.Element, station: float) -> tuple[float, float]:
     points = _parse_shape(source.attrib.get("shape", ""))
     fraction = _station_fraction(source, station)
     return _polyline_fraction_point(points, fraction)
+
+
+def _station_at_source_point(source: ET.Element, point: Sequence[float]) -> float:
+    points = _parse_shape(source.attrib.get("shape", ""))
+    projection = _project_polyline((float(point[0]), float(point[1])), points)
+    params = _params(source)
+    start = float(params["torii:station_from_m"])
+    end = float(params["torii:station_to_m"])
+    raw = projection["fraction"] if params.get("torii:station_direction") == "with_stationing" else 1.0 - projection["fraction"]
+    return start + raw * (end - start)
+
+
+def _point_in_polygon(
+    point: Sequence[float],
+    polygon: Sequence[Sequence[float]],
+) -> bool:
+    x, y = float(point[0]), float(point[1])
+    inside = False
+    for first, second in zip(polygon, [*polygon[1:], polygon[0]]):
+        if (float(first[1]) > y) != (float(second[1]) > y):
+            crossing = (float(second[0]) - float(first[0])) * (y - float(first[1])) / (
+                float(second[1]) - float(first[1])
+            ) + float(first[0])
+            if x < crossing:
+                inside = not inside
+    return inside
+
+
+def _segment_intersection(
+    first: Sequence[float],
+    second: Sequence[float],
+    third: Sequence[float],
+    fourth: Sequence[float],
+) -> tuple[float, float] | None:
+    ax, ay = float(first[0]), float(first[1])
+    bx, by = float(second[0]), float(second[1])
+    cx, cy = float(third[0]), float(third[1])
+    dx, dy = float(fourth[0]), float(fourth[1])
+    abx, aby = bx - ax, by - ay
+    cdx, cdy = dx - cx, dy - cy
+    denominator = abx * cdy - aby * cdx
+    if abs(denominator) <= 1e-9:
+        return None
+    acx, acy = cx - ax, cy - ay
+    along_first = (acx * cdy - acy * cdx) / denominator
+    along_second = (acx * aby - acy * abx) / denominator
+    if -1e-9 <= along_first <= 1.0 + 1e-9 and -1e-9 <= along_second <= 1.0 + 1e-9:
+        return (ax + along_first * abx, ay + along_first * aby)
+    return None
 
 
 def _clip_shape(points: Sequence[tuple[float, float]], source: ET.Element, start_station: float, end_station: float) -> list[tuple[float, float]]:
