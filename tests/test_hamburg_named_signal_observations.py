@@ -133,6 +133,35 @@ def test_incomplete_or_missing_preceding_state_blocks_execution(tmp_path: Path) 
     assert report["incomplete_stream_ids"] == [201]
 
 
+def test_signal_group_projection_recovers_silent_sibling_without_guessing_phase(tmp_path: Path) -> None:
+    begin = datetime(2026, 7, 18, 14, 30, tzinfo=UTC)
+    end = begin + timedelta(hours=2)
+    report = materialize_hamburg_named_signal_observations(
+        binding_manifest=_binding_fixture(tmp_path, streams=(211, 212)),
+        output_dir=tmp_path / "projected-out",
+        begin_utc=begin,
+        end_utc=end,
+        client=_Client(
+            {
+                211: [
+                    _observation(1, "2026-07-18T14:29:00Z", "1"),
+                    _observation(2, "2026-07-18T14:45:00Z", "3"),
+                ],
+                212: [],
+            }
+        ),  # type: ignore[arg-type]
+        allow_signal_group_projection=True,
+        max_workers=1,
+    )
+
+    assert report["status"] == "partial"
+    assert report["execution_gate"] == "pass"
+    assert report["incomplete_stream_ids"] == []
+    assert report["projected_complete_stream_count"] == 1
+    assert report["signal_group_projection"]["derived_streams"][0]["source_stream_id"] == 211
+    assert report["signal_group_projection"]["derived_streams"][0]["signal_group"] == "K1"
+
+
 def test_window_requires_explicit_zero_utc_offset(tmp_path: Path) -> None:
     with pytest.raises(HamburgSignalObservationError, match="zero UTC offset"):
         materialize_hamburg_named_signal_observations(

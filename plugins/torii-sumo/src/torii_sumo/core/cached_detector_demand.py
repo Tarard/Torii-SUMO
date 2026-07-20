@@ -437,6 +437,9 @@ def prepare_cached_detector_demand_package(
         "complete_edge_section_count": sum(row.constraint_status == "active" for row in edge_audits),
         "candidate_route_support": route_support.get("status"),
         "route_sampler_status": route_sampler.get("status"),
+        "route_sampler_constraint_structure": route_sampler.get("constraint_structure", {}).get("status", "not_evaluated")
+        if isinstance(route_sampler.get("constraint_structure"), Mapping)
+        else "not_evaluated",
         "route_sampler_constraint_match_fraction": route_sampler.get("constraint_match_fraction"),
         "excluded_route_edges": sorted(excluded),
         "excluded_route_edge_hits_in_candidates": candidate_excluded_hits,
@@ -446,6 +449,10 @@ def prepare_cached_detector_demand_package(
         "pass"
         if route_sampler.get("status") == "pass"
         and route_sampler.get("constraint_match_fraction") == 1.0
+        and (
+            not isinstance(route_sampler.get("constraint_structure"), Mapping)
+            or route_sampler.get("constraint_structure", {}).get("status") == "pass"
+        )
         and not candidate_excluded_hits
         and not demand_excluded_hits
         else "fail"

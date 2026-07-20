@@ -1080,6 +1080,7 @@ def sumo_hamburg_sandtorkai_signal_observations(
     max_workers: int = 1,
     timeout_seconds: float = 60.0,
     retry_incomplete_cache: bool = True,
+    allow_signal_group_projection: bool = False,
 ) -> dict[str, Any]:
     """Fetch official Saturday signal history and materialize auditable TLS events."""
 
@@ -1099,6 +1100,7 @@ def sumo_hamburg_sandtorkai_signal_observations(
             max_workers=max_workers,
             timeout_seconds=timeout_seconds,
             retry_incomplete_cache=retry_incomplete_cache,
+            allow_signal_group_projection=allow_signal_group_projection,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return {

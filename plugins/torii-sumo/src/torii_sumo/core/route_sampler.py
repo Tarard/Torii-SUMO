@@ -77,6 +77,147 @@ def validate_route_sampler_edge_counts(
     return {"interval_count": len(intervals), "edge_row_count": edge_rows, "total_count": total_count}
 
 
+def audit_route_constraint_structure(
+    candidate_manifest_csv: Path,
+    edge_data_file: Path,
+    *,
+    begin: int,
+    end: int,
+    interval: int,
+    max_conflicts: int = 100,
+) -> dict[str, object]:
+    """Check necessary flow constraints before invoking SUMO routeSampler.
+
+    Candidate routes are non-negative route variables.  Therefore, if two
+    measured edges have the same candidate-route incidence, their observed
+    counts must be equal; if the candidate routes that can use edge A are a
+    subset of those for edge B, A cannot have a larger count than B.  These
+    are cheap, deterministic necessary conditions.  They do not replace
+    routeSampler's optimization, but they expose a malformed or under-scoped
+    corridor immediately and preserve the exact conflicting interval/edges.
+    """
+
+    if max_conflicts <= 0:
+        raise ValueError("max_conflicts must be positive")
+    with candidate_manifest_csv.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    route_ids_by_edge: dict[str, set[str]] = {}
+    route_count = 0
+    for row in rows:
+        route_id = str(row.get("route_id", "")).strip()
+        edges = tuple(str(row.get("edges", "")).split())
+        if not route_id or not edges:
+            continue
+        route_count += 1
+        for edge_id in set(edges):
+            route_ids_by_edge.setdefault(edge_id, set()).add(route_id)
+
+    root = ET.parse(edge_data_file).getroot()
+    expected_bins = list(range(begin, end, interval))
+    conflicts: list[dict[str, object]] = []
+    checked_intervals = 0
+    for interval_element in root.findall("interval"):
+        row_begin = int(float(interval_element.attrib.get("begin", "nan")))
+        if row_begin not in expected_bins:
+            continue
+        checked_intervals += 1
+        values = {
+            str(edge.attrib.get("id", "")).strip(): int(float(edge.attrib.get("count", "nan")))
+            for edge in interval_element.findall("edge")
+        }
+        constrained_edges = sorted(values)
+        for edge_id in constrained_edges:
+            if values[edge_id] > 0 and not route_ids_by_edge.get(edge_id):
+                _append_constraint_conflict(
+                    conflicts,
+                    max_conflicts,
+                    {
+                        "kind": "positive_count_without_candidate_route",
+                        "interval_begin": row_begin,
+                        "edge": edge_id,
+                        "count": values[edge_id],
+                    },
+                )
+        for index, edge_a in enumerate(constrained_edges):
+            incidence_a = route_ids_by_edge.get(edge_a, set())
+            if not incidence_a:
+                continue
+            for edge_b in constrained_edges[index + 1 :]:
+                incidence_b = route_ids_by_edge.get(edge_b, set())
+                if not incidence_b:
+                    continue
+                if incidence_a == incidence_b and values[edge_a] != values[edge_b]:
+                    _append_constraint_conflict(
+                        conflicts,
+                        max_conflicts,
+                        {
+                            "kind": "identical_route_incidence_count_conflict",
+                            "interval_begin": row_begin,
+                            "edge_a": edge_a,
+                            "edge_b": edge_b,
+                            "count_a": values[edge_a],
+                            "count_b": values[edge_b],
+                            "candidate_route_count": len(incidence_a),
+                        },
+                    )
+                elif incidence_a < incidence_b and values[edge_a] > values[edge_b]:
+                    _append_constraint_conflict(
+                        conflicts,
+                        max_conflicts,
+                        {
+                            "kind": "subset_route_incidence_count_conflict",
+                            "interval_begin": row_begin,
+                            "edge_a": edge_a,
+                            "edge_b": edge_b,
+                            "count_a": values[edge_a],
+                            "count_b": values[edge_b],
+                            "candidate_route_count_a": len(incidence_a),
+                            "candidate_route_count_b": len(incidence_b),
+                        },
+                    )
+                elif incidence_b < incidence_a and values[edge_b] > values[edge_a]:
+                    _append_constraint_conflict(
+                        conflicts,
+                        max_conflicts,
+                        {
+                            "kind": "subset_route_incidence_count_conflict",
+                            "interval_begin": row_begin,
+                            "edge_a": edge_b,
+                            "edge_b": edge_a,
+                            "count_a": values[edge_b],
+                            "count_b": values[edge_a],
+                            "candidate_route_count_a": len(incidence_b),
+                            "candidate_route_count_b": len(incidence_a),
+                        },
+                    )
+    return {
+        "status": "pass" if not conflicts else "fail",
+        "claim_status": (
+            "route-constraint-structure-consistent"
+            if not conflicts
+            else "construction-inconsistent"
+        ),
+        "candidate_route_count": route_count,
+        "constrained_edge_count": len(route_ids_by_edge),
+        "interval_count_checked": checked_intervals,
+        "conflict_count": len(conflicts),
+        "conflicts": conflicts,
+        "claim_boundary": (
+            "Necessary route-incidence conditions only; a pass does not prove that routeSampler will find a full "
+            "demand solution or that the route set is a uniquely identified OD matrix."
+        ),
+    }
+
+
+def _append_constraint_conflict(
+    conflicts: list[dict[str, object]],
+    max_conflicts: int,
+    conflict: dict[str, object],
+) -> None:
+    if len(conflicts) < max_conflicts:
+        conflicts.append(conflict)
+
+
 def resolve_route_sampler_script(explicit: Path | None = None) -> Path | None:
     candidates: list[Path] = []
     if explicit is not None:
@@ -119,6 +260,13 @@ def run_route_sampler(
     command_file = output_dir / f"{prefix}_route_sampler_command.json"
     route_count = write_candidate_routes(candidate_manifest_csv, candidate_routes)
     edge_stats = validate_route_sampler_edge_counts(edge_data_file, begin=begin, end=end, interval=interval)
+    constraint_structure = audit_route_constraint_structure(
+        candidate_manifest_csv,
+        edge_data_file,
+        begin=begin,
+        end=end,
+        interval=interval,
+    )
     script = resolve_route_sampler_script(route_sampler_script)
     if script is None:
         report = {
@@ -128,6 +276,7 @@ def run_route_sampler(
             "candidate_route_file": str(candidate_routes),
             "candidate_route_count": route_count,
             "edge_data_file": str(edge_data_file),
+            "constraint_structure": constraint_structure,
             **edge_stats,
         }
         command_file.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -178,6 +327,7 @@ def run_route_sampler(
             "edge_data": str(edge_data_file),
             "edge_data_sha256": sha256_file(edge_data_file),
         },
+        "constraint_structure": constraint_structure,
         "parameters": {
             "begin": begin,
             "end": end,
@@ -196,6 +346,7 @@ def run_route_sampler(
             "command_result": result_dict,
             "candidate_route_file": str(candidate_routes),
             "edge_data_file": str(edge_data_file),
+            "constraint_structure": constraint_structure,
         }
     mismatch = parse_route_sampler_mismatch(mismatch_file) if mismatch_file.is_file() else {
         "row_count": 0,
@@ -222,6 +373,7 @@ def run_route_sampler(
         "mismatch_file": str(mismatch_file) if mismatch_file.is_file() else "",
         "mismatch": mismatch,
         "constraint_match_fraction": matched_fraction,
+        "constraint_structure": constraint_structure,
         "command_manifest": str(command_file),
         **edge_stats,
     }
