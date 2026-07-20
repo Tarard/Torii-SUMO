@@ -11,6 +11,8 @@ from torii_sumo.road_network.official_lane_stitch import (
 from torii_sumo.road_network.official_splice_plan import (
     OFFICIAL_SPLICE_PLAN_SCHEMA,
     OfficialSplicePlanError,
+    _merge_through_lane_proof,
+    _movement_destination_groups,
     build_hamburg_official_splice_plan,
 )
 
@@ -106,3 +108,41 @@ def test_edited_stitch_plan_is_rejected(tmp_path: Path) -> None:
         assert "does not exactly match" in str(exc)
     else:
         raise AssertionError("edited stitch plan was accepted")
+
+
+def test_merge_planner_proves_added_lane_from_destination_group() -> None:
+    groups = _movement_destination_groups(
+        [
+            {
+                "node_id": "2363",
+                "lanes": [
+                    {"lane_id": "6", "egress_approach": "1"},
+                    {"lane_id": "7", "egress_approach": "1"},
+                    {"lane_id": "1", "egress_approach": "4"},
+                ],
+                "connections": [
+                    {"ingress_lane_id": "8", "egress_lane_id": "6"},
+                    {"ingress_lane_id": "10", "egress_lane_id": "7"},
+                    {"ingress_lane_id": "11", "egress_lane_id": "1"},
+                ],
+            }
+        ]
+    )
+
+    assert _merge_through_lane_proof(
+        map_lane_ids=["8", "10", "11"],
+        axis_count=2,
+        merge_lane_ids_starting_at_event=["10", "11"],
+        destination_groups=groups["2363"],
+    ) == ["8", "10"]
+
+    assert _merge_through_lane_proof(
+        map_lane_ids=["8", "10", "11"],
+        axis_count=2,
+        merge_lane_ids_starting_at_event=["10", "11"],
+        destination_groups={
+            "8": frozenset({"1", "4"}),
+            "10": frozenset({"1", "4"}),
+            "11": frozenset({"4"}),
+        },
+    ) == []
