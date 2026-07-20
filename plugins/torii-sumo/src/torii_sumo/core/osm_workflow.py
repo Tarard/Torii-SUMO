@@ -26,6 +26,7 @@ from .junction_rebuild_candidate import (
     build_tls_connection_repair_variant,
     _restore_false_traffic_light_junction_types,
     _restore_replayed_geometry_attrs,
+    restore_off_scope_netconvert_artifacts,
     run_teacher_guided_repair_matrix,
     restore_teacher_tls_connection_semantics_after_normalize,
     restore_scoped_pedestrian_internal_semantics_after_normalize,
@@ -2128,16 +2129,43 @@ def _run_direct_local_teacher_replay(
                 ).items()
                 if str(key) and str(value)
             }
+            restore_owner_ids = [junction_id]
+            if shared_controller_candidate and shared_controller_plan is not None:
+                restore_owner_ids = sorted(
+                    {
+                        str(value)
+                        for value in (shared_controller_plan.get("owner_map", {}) or {}).values()
+                        if str(value)
+                    }
+                )
+            off_scope_restore_report = restore_off_scope_netconvert_artifacts(
+                source_file=tllogic_file,
+                target_file=normalized_file,
+                mutable_junction_ids={
+                    *restore_owner_ids,
+                    *(
+                        str(value)
+                        for value in (
+                            replay_report.get("collapse_junction_ids", ())
+                            if isinstance(replay_report, Mapping)
+                            else ()
+                        )
+                        if str(value)
+                    ),
+                },
+                mutable_edge_ids=set(effective_replay_edge_map.values()),
+            )
+            normalize_report["off_scope_netconvert_restore"] = off_scope_restore_report
+            if off_scope_restore_report.get("status") != "pass":
+                variant_report.update(
+                    {
+                        "status": "blocked",
+                        "reason": "off_scope_netconvert_restore_not_pass",
+                    }
+                )
+                variant_reports.append(variant_report)
+                continue
             if scoped_candidate:
-                restore_owner_ids = [junction_id]
-                if shared_controller_candidate and shared_controller_plan is not None:
-                    restore_owner_ids = sorted(
-                        {
-                            str(value)
-                            for value in (shared_controller_plan.get("owner_map", {}) or {}).values()
-                            if str(value)
-                        }
-                    )
                 pedestrian_semantic_restore_reports: dict[str, Any] = {}
                 pedestrian_restore_failed = False
                 for restore_owner_id in restore_owner_ids:

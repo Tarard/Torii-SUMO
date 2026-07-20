@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -20,6 +22,12 @@ from torii_sumo.core.tls_ownership import audit_tls_ownership_rebuild
 
 PW_RENDERFULLCONTENT = 2
 SW_SHOWNOACTIVATE = 4
+SW_MAXIMIZE = 3
+HAMBURG_OFFICIAL_WORKFLOW_SCHEMA_ID = "torii.hamburg-official-tls-workflow.v1"
+HAMBURG_OFFICIAL_PRESET_ID = "hamburg-sandtorkai-0228-2421-2394"
+HAMBURG_OFFICIAL_NODE_IDS = ("0228", "2421", "2394")
+HAMBURG_OFFICIAL_MOVEMENT_COUNTS = {"0228": 16, "2421": 9, "2394": 8}
+_DPI_AWARENESS: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +60,26 @@ class CandidateReviewIdentity:
     candidate_sha256: str
     target_junction_id: str
     tls_ownership_recheck: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class HamburgOfficialReviewTarget:
+    official_node_id: str
+    junction_id: str
+    controller_id: str
+
+
+@dataclass(frozen=True)
+class HamburgOfficialReviewIdentity:
+    manifest_file: Path
+    source_file: Path
+    candidate_file: Path
+    source_sha256: str
+    candidate_sha256: str
+    targets: tuple[HamburgOfficialReviewTarget, ...]
+    artifact_hash_recheck: tuple[dict[str, Any], ...]
+    official_asset_hash_recheck: tuple[dict[str, Any], ...]
+    candidate_tls_recheck: dict[str, Any]
 
 
 def _read_json_object(path: Path, label: str) -> dict[str, Any]:
@@ -121,6 +149,335 @@ def _require_manifest_binding(
         raise ValueError(f"Manifest does not bind the {label}: {artifact_path}")
     if expected_hash not in matching_hashes:
         raise ValueError(f"Manifest hash mismatch for {label}: expected {expected_hash}, recorded {matching_hashes}.")
+
+
+def _verified_hamburg_artifacts(
+    *,
+    manifest: dict[str, Any],
+    manifest_dir: Path,
+) -> tuple[dict[str, Any], ...]:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        raise ValueError("Hamburg manifest artifacts must be a non-empty JSON array.")
+    verified: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            raise ValueError(f"Hamburg manifest artifact {index} must be a JSON object.")
+        role = artifact.get("role")
+        if not isinstance(role, str) or not role.strip():
+            raise ValueError(f"Hamburg manifest artifact {index} lacks a role.")
+        path = _recorded_path(
+            artifact.get("path"),
+            base_dir=manifest_dir,
+            label=f"Hamburg artifact {role}",
+        )
+        key = _path_key(path)
+        if key in seen_paths:
+            raise ValueError(f"Hamburg manifest repeats artifact path: {path}")
+        seen_paths.add(key)
+        observed_hash = _require_recorded_hash(
+            path=path,
+            expected_hash=artifact.get("sha256"),
+            label=f"Hamburg artifact {role}",
+        )
+        verified.append(
+            {
+                "role": role,
+                "path": str(path),
+                "sha256": observed_hash,
+            }
+        )
+    return tuple(verified)
+
+
+def _verified_hamburg_official_assets(
+    *,
+    manifest: dict[str, Any],
+    manifest_dir: Path,
+) -> tuple[dict[str, Any], ...]:
+    inventory = manifest.get("official_asset_inventory")
+    if not isinstance(inventory, list):
+        raise ValueError("Hamburg manifest lacks the official MAP/OCIT asset inventory.")
+    expected_keys = {
+        (node_id, kind)
+        for node_id in HAMBURG_OFFICIAL_NODE_IDS
+        for kind in ("map_xml", "ocit_xml")
+    }
+    observed_keys: set[tuple[str, str]] = set()
+    verified: list[dict[str, Any]] = []
+    for index, artifact in enumerate(inventory):
+        if not isinstance(artifact, dict):
+            raise ValueError(f"Hamburg official asset {index} must be a JSON object.")
+        key = (str(artifact.get("node_id", "")), str(artifact.get("kind", "")))
+        if key in observed_keys:
+            raise ValueError(f"Hamburg official asset inventory repeats {key[0]}/{key[1]}.")
+        observed_keys.add(key)
+        path = _recorded_path(
+            artifact.get("path"),
+            base_dir=manifest_dir,
+            label=f"Hamburg official asset {key[0]}/{key[1]}",
+        )
+        observed_hash = _require_recorded_hash(
+            path=path,
+            expected_hash=artifact.get("sha256"),
+            label=f"Hamburg official asset {key[0]}/{key[1]}",
+        )
+        verified.append(
+            {
+                "node_id": key[0],
+                "kind": key[1],
+                "path": str(path),
+                "sha256": observed_hash,
+            }
+        )
+    if observed_keys != expected_keys:
+        raise ValueError(
+            "Hamburg official asset inventory must contain exactly one MAP and OCIT asset "
+            f"for every corridor node; observed {sorted(observed_keys)}."
+        )
+    return tuple(verified)
+
+
+def _hamburg_stage_targets(manifest: dict[str, Any]) -> tuple[HamburgOfficialReviewTarget, ...]:
+    rebuild = manifest.get("network_rebuild")
+    if not isinstance(rebuild, dict) or rebuild.get("status") != "pass":
+        raise ValueError("Hamburg network rebuild gate is not pass.")
+    if rebuild.get("controller_count") != 3:
+        raise ValueError("Hamburg network rebuild must contain exactly three official controllers.")
+    stages = rebuild.get("stage_reports")
+    if not isinstance(stages, list) or len(stages) != 3:
+        raise ValueError("Hamburg network rebuild must contain exactly three replay stages.")
+    by_node: dict[str, HamburgOfficialReviewTarget] = {}
+    for stage in stages:
+        if not isinstance(stage, dict) or stage.get("status") != "pass":
+            raise ValueError("Every Hamburg native replay stage must be pass.")
+        teacher_controller = str(stage.get("controller_id", ""))
+        if not teacher_controller.startswith("HH_"):
+            raise ValueError(f"Unexpected Hamburg teacher controller id: {teacher_controller!r}")
+        official_node_id = teacher_controller.removeprefix("HH_").zfill(4)
+        replay = stage.get("native_teacher_replay")
+        if not isinstance(replay, dict) or replay.get("status") != "pass":
+            raise ValueError(f"Hamburg native replay for {official_node_id} is not pass.")
+        junction_id = str(replay.get("junction_id", "")).strip()
+        if not junction_id:
+            raise ValueError(f"Hamburg native replay for {official_node_id} lacks a junction id.")
+        if official_node_id in by_node:
+            raise ValueError(f"Hamburg replay repeats official node {official_node_id}.")
+        by_node[official_node_id] = HamburgOfficialReviewTarget(
+            official_node_id=official_node_id,
+            junction_id=junction_id,
+            controller_id=junction_id,
+        )
+    if set(by_node) != set(HAMBURG_OFFICIAL_NODE_IDS):
+        raise ValueError(
+            "Hamburg replay stages do not cover exactly the three corridor nodes: "
+            f"{sorted(by_node)}."
+        )
+    return tuple(by_node[node_id] for node_id in HAMBURG_OFFICIAL_NODE_IDS)
+
+
+def _audit_hamburg_candidate_tls(
+    candidate_file: Path,
+    targets: tuple[HamburgOfficialReviewTarget, ...],
+) -> dict[str, Any]:
+    root = ET.parse(candidate_file).getroot()
+    logic_by_id = {
+        str(logic.get("id", "")): logic
+        for logic in root.findall("tlLogic")
+        if logic.get("id")
+    }
+    expected_controller_ids = {target.controller_id for target in targets}
+    junction_by_id = {
+        str(junction.get("id", "")): junction
+        for junction in root.findall("junction")
+        if junction.get("id")
+    }
+    controlled_connections = [
+        connection
+        for connection in root.findall("connection")
+        if connection.get("tl")
+    ]
+    counts_by_controller: dict[str, int] = {
+        controller_id: 0 for controller_id in expected_controller_ids
+    }
+    errors: list[str] = []
+    for connection in controlled_connections:
+        controller_id = str(connection.get("tl", ""))
+        if controller_id in counts_by_controller:
+            counts_by_controller[controller_id] += 1
+        link_index = connection.get("linkIndex")
+        if link_index is None or not link_index.isdigit():
+            errors.append(f"controlled connection for {controller_id} lacks a valid linkIndex")
+            continue
+        logic = logic_by_id.get(controller_id)
+        if logic is None:
+            errors.append(f"controlled connection references missing tlLogic {controller_id}")
+            continue
+        phase_lengths = {
+            len(str(phase.get("state", ""))) for phase in logic.findall("phase")
+        }
+        if not phase_lengths or len(phase_lengths) != 1:
+            errors.append(f"tlLogic {controller_id} has no phases or inconsistent state lengths")
+        elif int(link_index) >= next(iter(phase_lengths)):
+            errors.append(f"tlLogic {controller_id} linkIndex {link_index} exceeds phase state length")
+    if set(logic_by_id) != expected_controller_ids:
+        errors.append(
+            "candidate tlLogic ids are not exactly the three official controllers: "
+            f"{sorted(logic_by_id)}"
+        )
+    for target in targets:
+        junction = junction_by_id.get(target.junction_id)
+        if junction is None:
+            errors.append(f"official target junction {target.junction_id} is missing")
+        elif junction.get("type") != "traffic_light":
+            errors.append(f"official target junction {target.junction_id} is not traffic_light")
+        expected_count = HAMBURG_OFFICIAL_MOVEMENT_COUNTS[target.official_node_id]
+        observed_count = counts_by_controller[target.controller_id]
+        if observed_count != expected_count:
+            errors.append(
+                f"official node {target.official_node_id} controls {observed_count} connections; "
+                f"expected {expected_count}"
+            )
+    if len(controlled_connections) != sum(HAMBURG_OFFICIAL_MOVEMENT_COUNTS.values()):
+        errors.append(
+            f"candidate has {len(controlled_connections)} controlled connections; expected 33"
+        )
+    return {
+        "status": "pass" if not errors else "fail",
+        "controller_ids": sorted(logic_by_id),
+        "expected_controller_ids": sorted(expected_controller_ids),
+        "controlled_connection_count": len(controlled_connections),
+        "controlled_connection_counts_by_controller": dict(sorted(counts_by_controller.items())),
+        "errors": errors,
+    }
+
+
+def load_bound_hamburg_official_identity(
+    *,
+    manifest_file: Path,
+) -> HamburgOfficialReviewIdentity:
+    """Resolve the three-junction Hamburg candidate from its fail-closed official manifest."""
+
+    manifest_path = manifest_file.resolve(strict=True)
+    manifest = _read_json_object(manifest_path, "Hamburg official TLS manifest")
+    required_values = {
+        "schema_id": HAMBURG_OFFICIAL_WORKFLOW_SCHEMA_ID,
+        "preset_id": HAMBURG_OFFICIAL_PRESET_ID,
+        "status": "pass",
+        "claim_status": "official-tls-topology-ready",
+        "stage": "complete",
+        "automatic_promotion_gate": "blocked",
+    }
+    for key, expected in required_values.items():
+        if manifest.get(key) != expected:
+            raise ValueError(
+                f"Hamburg manifest {key} must be {expected!r}; observed {manifest.get(key)!r}."
+            )
+    required_pass_gates = (
+        "native_teacher_derivation",
+        "network_rebuild",
+        "native_geometry_continuity_audit",
+        "post_retirement_sumo_load_audit",
+        "effective_map_lane_binding_audit",
+        "official_movement_physical_endpoint_audit",
+        "primary_stream_tls_binding_audit",
+        "vehicle_topology_inventory_audit",
+        "ocit_group_validation",
+        "tld_observed_group_subset_audit",
+    )
+    for key in required_pass_gates:
+        gate = manifest.get(key)
+        if not isinstance(gate, dict) or gate.get("status") != "pass":
+            raise ValueError(f"Hamburg hard gate {key} is not pass.")
+    rebuild_gate = manifest["network_rebuild"]
+    if rebuild_gate.get("post_replay_compact_scope_tls_retirement_status") != "pass":
+        raise ValueError("Hamburg compact-scope source TLS retirement gate is not pass.")
+    if manifest.get("source_net_unchanged") is not True:
+        raise ValueError("Hamburg manifest does not prove the frozen source network remained unchanged.")
+    if manifest.get("expected_vehicle_topology_movement_count") != 33:
+        raise ValueError("Hamburg manifest does not declare the complete 33-movement topology.")
+    if manifest.get("expected_primary_stream_count") != 27:
+        raise ValueError("Hamburg manifest does not declare the complete 27-stream observation inventory.")
+    movement_gate = manifest["official_movement_physical_endpoint_audit"]
+    movement_gate_expected = {
+        "movement_count": 33,
+        "validated_movement_count": 33,
+        "unique_physical_endpoint_count": 33,
+    }
+    for key, expected in movement_gate_expected.items():
+        if movement_gate.get(key) != expected:
+            raise ValueError(
+                f"Hamburg movement endpoint gate {key} must be {expected}; "
+                f"observed {movement_gate.get(key)!r}."
+            )
+    replay_evidence = movement_gate.get("replay_control_evidence")
+    if not isinstance(replay_evidence, dict) or replay_evidence.get("status") != "pass":
+        raise ValueError("Hamburg movement endpoint replay-control evidence is not pass.")
+
+    source = _recorded_path(
+        manifest.get("source_net_file"),
+        base_dir=manifest_path.parent,
+        label="Hamburg source network",
+    )
+    source_before = manifest.get("source_net_sha256_before")
+    source_after = manifest.get("source_net_sha256_after")
+    if source_before != source_after:
+        raise ValueError("Hamburg source network before/after hashes disagree.")
+    source_hash = _require_recorded_hash(
+        path=source,
+        expected_hash=source_before,
+        label="Hamburg source network",
+    )
+    candidate = _recorded_path(
+        manifest.get("rebuilt_net_file"),
+        base_dir=manifest_path.parent,
+        label="Hamburg rebuilt network",
+    )
+    if _path_key(source) == _path_key(candidate):
+        raise ValueError("Hamburg review refused: rebuilt network points at the frozen source baseline.")
+    artifact_recheck = _verified_hamburg_artifacts(
+        manifest=manifest,
+        manifest_dir=manifest_path.parent,
+    )
+    candidate_hash = file_sha256(candidate)
+    _require_manifest_binding(
+        manifest=manifest,
+        manifest_dir=manifest_path.parent,
+        artifact_path=candidate,
+        expected_hash=candidate_hash,
+        label="Hamburg rebuilt network",
+    )
+    rebuild = manifest["network_rebuild"]
+    rebuild_final = _recorded_path(
+        rebuild.get("final_net_file"),
+        base_dir=manifest_path.parent,
+        label="Hamburg native replay final network",
+    )
+    if _path_key(rebuild_final) != _path_key(candidate):
+        raise ValueError("Hamburg top-level rebuilt network disagrees with native replay final network.")
+    targets = _hamburg_stage_targets(manifest)
+    candidate_tls_recheck = _audit_hamburg_candidate_tls(candidate, targets)
+    if candidate_tls_recheck["status"] != "pass":
+        raise ValueError(
+            "Hamburg candidate TLS recheck failed: "
+            + json.dumps(candidate_tls_recheck["errors"], sort_keys=True)
+        )
+    official_asset_recheck = _verified_hamburg_official_assets(
+        manifest=manifest,
+        manifest_dir=manifest_path.parent,
+    )
+    return HamburgOfficialReviewIdentity(
+        manifest_file=manifest_path,
+        source_file=source,
+        candidate_file=candidate,
+        source_sha256=source_hash,
+        candidate_sha256=candidate_hash,
+        targets=targets,
+        artifact_hash_recheck=artifact_recheck,
+        official_asset_hash_recheck=official_asset_recheck,
+        candidate_tls_recheck=candidate_tls_recheck,
+    )
 
 
 def load_bound_candidate_identity(
@@ -347,6 +704,8 @@ def viewsettings_text(center: tuple[float, float], *, zoom: float) -> str:
 
 
 def selection_text(selection_type: str, selection_id: str) -> str:
+    if selection_type == "none":
+        return ""
     if selection_type not in {"junction", "lane"}:
         raise ValueError(f"Unsupported NetEdit selection type: {selection_type!r}")
     return f"{selection_type}:{selection_id}\n"
@@ -356,12 +715,23 @@ def mode_key(mode: str) -> str | None:
     return {"inspect": None, "connection": "C", "tls": "T"}[mode]
 
 
-def capture_requests(target: TargetJunction) -> list[CaptureRequest]:
-    return [
-        CaptureRequest("target-inspect", "inspect", "junction", target.junction_id),
-        CaptureRequest("target-tls", "tls", "junction", target.junction_id),
-        CaptureRequest("target-connection", "connection", "junction", target.junction_id),
+def capture_requests(
+    target: TargetJunction,
+    *,
+    name_prefix: str = "target",
+    include_neutral_overview: bool = False,
+) -> list[CaptureRequest]:
+    requests = [
+        CaptureRequest(f"{name_prefix}-inspect", "inspect", "junction", target.junction_id),
+        CaptureRequest(f"{name_prefix}-tls", "tls", "junction", target.junction_id),
+        CaptureRequest(f"{name_prefix}-connection", "connection", "junction", target.junction_id),
     ]
+    if include_neutral_overview:
+        requests.insert(
+            0,
+            CaptureRequest(f"{name_prefix}-overview", "inspect", "none", ""),
+        )
+    return requests
 
 
 def build_netedit_command(
@@ -403,6 +773,38 @@ def _windows_modules() -> tuple[Any, Any, Any, Any]:
     except ImportError as exc:  # pragma: no cover - Windows runtime guard
         raise SystemExit("pywin32 is required for background NetEdit capture on Windows.") from exc
     return win32con, win32gui, win32process, win32ui
+
+
+def _enable_dpi_awareness() -> dict[str, Any]:
+    """Keep Win32 window geometry and PrintWindow bitmaps in physical pixels."""
+
+    global _DPI_AWARENESS
+    if _DPI_AWARENESS is not None:
+        return _DPI_AWARENESS
+    if sys.platform != "win32":
+        raise RuntimeError("DPI awareness is only available on Windows.")
+    user32 = ctypes.windll.user32
+    desired = ctypes.c_void_p(-4)  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    get_context = user32.GetThreadDpiAwarenessContext
+    get_context.restype = ctypes.c_void_p
+    contexts_equal = user32.AreDpiAwarenessContextsEqual
+    contexts_equal.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
+    contexts_equal.restype = ctypes.c_bool
+    already_enabled = bool(contexts_equal(get_context(), desired))
+    if not already_enabled:
+        setter = user32.SetProcessDpiAwarenessContext
+        setter.argtypes = (ctypes.c_void_p,)
+        setter.restype = ctypes.c_bool
+        if not setter(desired):
+            raise RuntimeError(
+                "Unable to enable Per-Monitor-V2 DPI awareness before NetEdit capture."
+            )
+    _DPI_AWARENESS = {
+        "status": "pass",
+        "context": "per-monitor-v2",
+        "already_enabled": already_enabled,
+    }
+    return _DPI_AWARENESS
 
 
 def _windows_for_pid(pid: int) -> list[int]:
@@ -566,6 +968,51 @@ def _foreground_context() -> dict[str, int]:
     return {"hwnd": hwnd, "process_id": int(process_id)}
 
 
+def _keyboard_layout_context() -> dict[str, Any]:
+    """Record the foreground keyboard layout before any NetEdit key delivery."""
+
+    if sys.platform != "win32":
+        return {
+            "status": "not_applicable",
+            "is_chinese": False,
+            "reason": "windows_only",
+        }
+    _, win32gui, _, _ = _windows_modules()
+    user32 = ctypes.windll.user32
+    foreground_hwnd = int(win32gui.GetForegroundWindow())
+    thread_id = 0
+    if foreground_hwnd:
+        thread_id = int(user32.GetWindowThreadProcessId(foreground_hwnd, None))
+    if not thread_id:
+        return {
+            "status": "unknown",
+            "is_chinese": None,
+            "foreground_hwnd": foreground_hwnd,
+            "thread_id": thread_id,
+            "reason": "no_foreground_input_thread",
+        }
+    hkl = int(user32.GetKeyboardLayout(thread_id))
+    lang_id = hkl & 0xFFFF
+    primary_language_id = lang_id & 0x3FF
+    layout_name = ""
+    get_layout_name = getattr(user32, "GetKeyboardLayoutNameW", None)
+    if get_layout_name is not None:
+        buffer = ctypes.create_unicode_buffer(9)
+        if get_layout_name(buffer):
+            layout_name = buffer.value
+    is_chinese = primary_language_id == 0x04
+    return {
+        "status": "blocked" if is_chinese else "pass",
+        "is_chinese": is_chinese,
+        "foreground_hwnd": foreground_hwnd,
+        "thread_id": thread_id,
+        "hkl": f"0x{hkl:X}",
+        "lang_id": f"0x{lang_id:04X}",
+        "primary_language_id": primary_language_id,
+        "layout_name": layout_name,
+    }
+
+
 def _force_foreground_window(hwnd: int) -> bool:
     """Restore a foreground window across process input-thread boundaries."""
 
@@ -611,6 +1058,27 @@ def _observe_and_restore_foreground(
     }
 
 
+def _maximize_review_window(hwnd: int, win32con: Any, win32gui: Any) -> dict[str, Any]:
+    """Maximize the review window without taking the user's foreground focus."""
+
+    win32gui.ShowWindow(hwnd, SW_MAXIMIZE)
+    win32gui.SetWindowPos(
+        hwnd,
+        win32con.HWND_BOTTOM,
+        0,
+        0,
+        0,
+        0,
+        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE,
+    )
+    is_zoomed = getattr(win32gui, "IsZoomed", None)
+    if is_zoomed is None:
+        is_zoomed = ctypes.windll.user32.IsZoomed
+    if not is_zoomed(hwnd):
+        raise RuntimeError("NetEdit review window did not enter maximized mode.")
+    return {"status": "pass", "window_state": "maximized"}
+
+
 def _capture_request(
     *,
     request: CaptureRequest,
@@ -624,6 +1092,13 @@ def _capture_request(
     settle_seconds: float,
     additional_file: Path | None,
 ) -> dict[str, Any]:
+    dpi_awareness = _enable_dpi_awareness()
+    keyboard_layout = _keyboard_layout_context()
+    if keyboard_layout["status"] == "blocked":
+        raise RuntimeError(
+            "NetEdit review requires a non-Chinese foreground keyboard layout; "
+            f"observed {keyboard_layout.get('lang_id', 'unknown')}."
+        )
     win32con, win32gui, _, _ = _windows_modules()
     view_file = output_dir / f"{request.name}.view.xml"
     selection_file = output_dir / f"{request.name}.selection.txt"
@@ -652,17 +1127,9 @@ def _capture_request(
         hwnd = _wait_for_window(process.pid, timeout_seconds=20.0)
         foreground_restore_events.append(_observe_and_restore_foreground(foreground_context_before))
         foreground_samples.append(int(win32gui.GetForegroundWindow()))
-        width, height = parse_size(window_size)
-        x, y = (int(value) for value in parse_point(window_pos))
-        win32gui.SetWindowPos(
-            hwnd,
-            win32con.HWND_BOTTOM,
-            x,
-            y,
-            width,
-            height,
-            win32con.SWP_NOACTIVATE,
-        )
+        window_presentation = _maximize_review_window(hwnd, win32con, win32gui)
+        foreground_restore_events.append(_observe_and_restore_foreground(foreground_context_before))
+        foreground_samples.append(int(win32gui.GetForegroundWindow()))
         foreground_restore_events.append(_observe_and_restore_foreground(foreground_context_before))
         foreground_samples.append(int(win32gui.GetForegroundWindow()))
         time.sleep(settle_seconds)
@@ -730,6 +1197,9 @@ def _capture_request(
         "foreground_samples": foreground_samples,
         "foreground_unchanged": all(sample == foreground_before for sample in foreground_samples),
         "capture_attempts": capture_attempts,
+        "window_presentation": window_presentation,
+        "dpi_awareness": dpi_awareness,
+        "keyboard_layout": keyboard_layout,
         **capture,
     }
 
@@ -787,6 +1257,7 @@ def run_background_review(
                 and item["foreground_unchanged"]
                 and item["foreground_context_restored"]
                 and item["mode_delivery"]["foreground_context_unchanged"]
+                and item.get("keyboard_layout", {}).get("status") != "blocked"
                 for item in captures
             )
             and mode_images_distinct
@@ -825,6 +1296,7 @@ def run_background_review(
         "capture_session_count": len(captures),
         "global_keyboard_or_mouse_input_used": False,
         "foreground_context_restored": all(item["foreground_context_restored"] for item in captures),
+        "keyboard_layout_context": captures[0].get("keyboard_layout", {}) if captures else {},
         "mode_images_distinct": mode_images_distinct,
         "captures": captures,
         "claim_boundary": (
@@ -839,6 +1311,260 @@ def run_background_review(
     return {**report, "report_file": str(report_file)}
 
 
+def run_direct_background_review(
+    *,
+    net_file: Path,
+    expected_net_sha256: str,
+    target_junction_id: str,
+    output_dir: Path,
+    netedit_binary: str,
+    center: tuple[float, float] | None,
+    zoom: float,
+    window_size: str,
+    window_pos: str,
+    settle_seconds: float,
+    neutral_overview: bool = False,
+) -> dict[str, Any]:
+    """Capture a hash-bound, non-promoting review of one candidate junction.
+
+    This entry point is intentionally narrower than the workflow-bound runners: it
+    accepts one immutable candidate and one exact junction owner so intermediate
+    geometry can be inspected before official TLS materialisation is complete.
+    """
+
+    candidate = net_file.resolve(strict=True)
+    candidate_hash_before = _require_recorded_hash(
+        path=candidate,
+        expected_hash=expected_net_sha256,
+        label="direct-review candidate network",
+    )
+    if not target_junction_id.strip():
+        raise ValueError("Direct review requires a non-empty target junction id.")
+    if sys.platform != "win32":
+        raise SystemExit("Background NetEdit capture is currently Windows-only.")
+
+    destination = output_dir.resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    target = read_target_junction(candidate, target_junction_id)
+    view_center = center or (target.x, target.y)
+    executable = shutil.which(netedit_binary) or netedit_binary
+    safe_target = re.sub(r"[^A-Za-z0-9_.-]+", "_", target.junction_id).strip("._-")
+    if not safe_target:
+        raise ValueError("Target junction id cannot be represented as a safe artifact name.")
+    target_digest = hashlib.sha256(target.junction_id.encode("utf-8")).hexdigest()[:10]
+    # ponytail: keep Windows MAX_PATH headroom; the full junction id remains in
+    # the report, while filenames use the digest for collision resistance.
+    artifact_token = f"{safe_target[:10]}-{target_digest}"
+    captures = [
+        _capture_request(
+            request=request,
+            net_file=candidate,
+            netedit_binary=executable,
+            output_dir=destination,
+            center=view_center,
+            zoom=zoom,
+            window_size=window_size,
+            window_pos=window_pos,
+            settle_seconds=settle_seconds,
+            additional_file=None,
+        )
+        for request in capture_requests(
+            target,
+            name_prefix=f"direct-{artifact_token}",
+            include_neutral_overview=neutral_overview,
+        )
+    ]
+    candidate_hash_after = file_sha256(candidate)
+    candidate_unchanged = candidate_hash_after == candidate_hash_before
+    mode_capture_hashes = [
+        item["sha256"] for item in captures if item["selection_type"] != "none"
+    ]
+    mode_images_distinct = (
+        len(mode_capture_hashes) == 3 and len(set(mode_capture_hashes)) == 3
+    )
+    capture_gates_pass = all(
+        item["print_window_result"] == 1
+        and item["render_quality"] == "pass"
+        and item["foreground_unchanged"]
+        and item["foreground_context_restored"]
+        and item["mode_delivery"]["foreground_context_unchanged"]
+        and item.get("keyboard_layout", {}).get("status") != "blocked"
+        for item in captures
+    )
+    report = {
+        "schema": "torii.netedit-background-review.direct/v1",
+        "status": (
+            "review_material_ready"
+            if capture_gates_pass and mode_images_distinct and candidate_unchanged
+            else "blocked"
+        ),
+        "review_scope": "single-hash-bound-candidate-junction",
+        "candidate_file": str(candidate),
+        "candidate_sha256_before": candidate_hash_before,
+        "candidate_sha256_after": candidate_hash_after,
+        "candidate_unchanged": candidate_unchanged,
+        "netedit_binary": executable,
+        "target_junction": {
+            "id": target.junction_id,
+            "type": target.junction_type,
+            "x": target.x,
+            "y": target.y,
+            "incoming_lanes": list(target.incoming_lanes),
+        },
+        "view_center": list(view_center),
+        "zoom": zoom,
+        "window_size": window_size,
+        "mode_delivery": "target-window WM_KEYDOWN/WM_KEYUP",
+        "capture_delivery": "target-window PrintWindow(PW_RENDERFULLCONTENT)",
+        "selection_delivery": (
+            "NetEdit --selection-file; empty selection for neutral overview"
+            if neutral_overview
+            else "NetEdit --selection-file"
+        ),
+        "capture_session_count": len(captures),
+        "expected_capture_session_count": 4 if neutral_overview else 3,
+        "global_keyboard_or_mouse_input_used": False,
+        "foreground_context_restored": all(
+            item["foreground_context_restored"] for item in captures
+        ),
+        "keyboard_layout_context": captures[0].get("keyboard_layout", {}) if captures else {},
+        "mode_images_distinct": mode_images_distinct,
+        "captures": captures,
+        "claim_boundary": (
+            "These images provide background NetEdit context for one immutable candidate "
+            "junction owner. They do not prove official TLS correctness, do not constitute "
+            "human validation, and do not authorize promotion."
+        ),
+        "automatic_promotion_gate": "blocked",
+    }
+    report_file = destination / f"review-{target_digest}.json"
+    write_json_atomic(report_file, report)
+    return {**report, "report_file": str(report_file)}
+
+
+def run_hamburg_background_review(
+    *,
+    manifest_file: Path,
+    output_dir: Path,
+    netedit_binary: str,
+    center: tuple[float, float] | None,
+    zoom: float,
+    window_size: str,
+    window_pos: str,
+    settle_seconds: float,
+) -> dict[str, Any]:
+    """Capture three modes for each hash-bound Hamburg corridor junction."""
+
+    identity = load_bound_hamburg_official_identity(manifest_file=manifest_file)
+    if sys.platform != "win32":
+        raise SystemExit("Background NetEdit capture is currently Windows-only.")
+    destination = output_dir.resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    executable = shutil.which(netedit_binary) or netedit_binary
+    target_rows: list[dict[str, Any]] = []
+    captures: list[dict[str, Any]] = []
+    for target_identity in identity.targets:
+        target = read_target_junction(
+            identity.candidate_file,
+            target_identity.junction_id,
+        )
+        view_center = center or (target.x, target.y)
+        target_rows.append(
+            {
+                "official_node_id": target_identity.official_node_id,
+                "junction_id": target.junction_id,
+                "controller_id": target_identity.controller_id,
+                "type": target.junction_type,
+                "x": target.x,
+                "y": target.y,
+                "incoming_lanes": list(target.incoming_lanes),
+                "view_center": list(view_center),
+            }
+        )
+        captures.extend(
+            _capture_request(
+                request=request,
+                net_file=identity.candidate_file,
+                netedit_binary=executable,
+                output_dir=destination,
+                center=view_center,
+                zoom=zoom,
+                window_size=window_size,
+                window_pos=window_pos,
+                settle_seconds=settle_seconds,
+                additional_file=None,
+            )
+            for request in capture_requests(
+                target,
+                name_prefix=f"hamburg-{target_identity.official_node_id}",
+            )
+        )
+    capture_hashes_by_node = {
+        node_id: [
+            item["sha256"]
+            for item in captures
+            if item["name"].startswith(f"hamburg-{node_id}-")
+        ]
+        for node_id in HAMBURG_OFFICIAL_NODE_IDS
+    }
+    distinct_modes_by_node = {
+        node_id: len(hashes) == 3 and len(set(hashes)) == 3
+        for node_id, hashes in capture_hashes_by_node.items()
+    }
+    capture_gates_pass = all(
+        item["print_window_result"] == 1
+        and item["render_quality"] == "pass"
+        and item["foreground_unchanged"]
+        and item["foreground_context_restored"]
+        and item["mode_delivery"]["foreground_context_unchanged"]
+        and item.get("keyboard_layout", {}).get("status") != "blocked"
+        for item in captures
+    )
+    report = {
+        "schema": "torii.netedit-background-review.hamburg-official/v1",
+        "status": (
+            "review_material_ready"
+            if capture_gates_pass and all(distinct_modes_by_node.values())
+            else "blocked"
+        ),
+        "review_scope": "hamburg-sandtorkai-three-official-junctions",
+        "manifest_file": str(identity.manifest_file),
+        "manifest_sha256": file_sha256(identity.manifest_file),
+        "source_file": str(identity.source_file),
+        "source_sha256": identity.source_sha256,
+        "candidate_file": str(identity.candidate_file),
+        "candidate_sha256": identity.candidate_sha256,
+        "artifact_hash_recheck": list(identity.artifact_hash_recheck),
+        "official_asset_hash_recheck": list(identity.official_asset_hash_recheck),
+        "candidate_tls_recheck": identity.candidate_tls_recheck,
+        "netedit_binary": executable,
+        "target_junctions": target_rows,
+        "zoom": zoom,
+        "window_size": window_size,
+        "mode_delivery": "target-window WM_KEYDOWN/WM_KEYUP",
+        "capture_delivery": "target-window PrintWindow(PW_RENDERFULLCONTENT)",
+        "selection_delivery": "NetEdit --selection-file",
+        "capture_session_count": len(captures),
+        "expected_capture_session_count": 9,
+        "global_keyboard_or_mouse_input_used": False,
+        "foreground_context_restored": all(
+            item["foreground_context_restored"] for item in captures
+        ),
+        "keyboard_layout_context": captures[0].get("keyboard_layout", {}) if captures else {},
+        "distinct_modes_by_official_node": distinct_modes_by_node,
+        "captures": captures,
+        "claim_boundary": (
+            "These nine images provide background NetEdit context for the three official "
+            "Hamburg junctions. They do not replace exact MAP/OCIT lane, movement, request, "
+            "and TLS audits, do not constitute human validation, and do not authorize promotion."
+        ),
+        "automatic_promotion_gate": "blocked",
+    }
+    report_file = destination / "hamburg-netedit-background-review.json"
+    write_json_atomic(report_file, report)
+    return {**report, "report_file": str(report_file)}
+
+
 def _args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -846,8 +1572,13 @@ def _args() -> argparse.Namespace:
             "a background NetEdit window without global keyboard or mouse input."
         )
     )
-    parser.add_argument("--summary", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--summary")
+    source.add_argument("--hamburg-manifest")
+    source.add_argument("--net-file")
     parser.add_argument("--manifest")
+    parser.add_argument("--expected-net-sha256")
+    parser.add_argument("--target-junction-id")
     parser.add_argument(
         "--candidate-role",
         choices=("primary", "nema-topology"),
@@ -860,23 +1591,74 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--window-size", default="1400,1000")
     parser.add_argument("--window-pos", default="20,20")
     parser.add_argument("--settle-seconds", type=float, default=1.5)
+    parser.add_argument(
+        "--neutral-overview",
+        action="store_true",
+        help="Also capture an unselected Inspect-mode overview for direct reviews.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = _args()
-    report = run_background_review(
-        summary_file=Path(args.summary),
-        manifest_file=Path(args.manifest) if args.manifest else None,
-        output_dir=Path(args.out_dir),
-        netedit_binary=args.netedit_binary,
-        center=parse_point(args.view_center) if args.view_center else None,
-        zoom=args.zoom,
-        window_size=args.window_size,
-        window_pos=args.window_pos,
-        settle_seconds=args.settle_seconds,
-        candidate_role=args.candidate_role,
-    )
+    if args.net_file:
+        if args.manifest:
+            raise SystemExit("--manifest is only valid with the isolated --summary workflow.")
+        if args.candidate_role != "primary":
+            raise SystemExit("--candidate-role is only valid with the isolated --summary workflow.")
+        if not args.expected_net_sha256:
+            raise SystemExit("--expected-net-sha256 is required with --net-file.")
+        if not args.target_junction_id:
+            raise SystemExit("--target-junction-id is required with --net-file.")
+        report = run_direct_background_review(
+            net_file=Path(args.net_file),
+            expected_net_sha256=args.expected_net_sha256,
+            target_junction_id=args.target_junction_id,
+            output_dir=Path(args.out_dir),
+            netedit_binary=args.netedit_binary,
+            center=parse_point(args.view_center) if args.view_center else None,
+            zoom=args.zoom,
+            window_size=args.window_size,
+            window_pos=args.window_pos,
+            settle_seconds=args.settle_seconds,
+            neutral_overview=args.neutral_overview,
+        )
+    elif args.hamburg_manifest:
+        if args.neutral_overview:
+            raise SystemExit("--neutral-overview is only valid with --net-file.")
+        if args.manifest:
+            raise SystemExit("--manifest is only valid with the isolated --summary workflow.")
+        if args.candidate_role != "primary":
+            raise SystemExit("--candidate-role is only valid with the isolated --summary workflow.")
+        report = run_hamburg_background_review(
+            manifest_file=Path(args.hamburg_manifest),
+            output_dir=Path(args.out_dir),
+            netedit_binary=args.netedit_binary,
+            center=parse_point(args.view_center) if args.view_center else None,
+            zoom=args.zoom,
+            window_size=args.window_size,
+            window_pos=args.window_pos,
+            settle_seconds=args.settle_seconds,
+        )
+    else:
+        if args.neutral_overview:
+            raise SystemExit("--neutral-overview is only valid with --net-file.")
+        if args.expected_net_sha256:
+            raise SystemExit("--expected-net-sha256 is only valid with --net-file.")
+        if args.target_junction_id:
+            raise SystemExit("--target-junction-id is only valid with --net-file.")
+        report = run_background_review(
+            summary_file=Path(args.summary),
+            manifest_file=Path(args.manifest) if args.manifest else None,
+            output_dir=Path(args.out_dir),
+            netedit_binary=args.netedit_binary,
+            center=parse_point(args.view_center) if args.view_center else None,
+            zoom=args.zoom,
+            window_size=args.window_size,
+            window_pos=args.window_pos,
+            settle_seconds=args.settle_seconds,
+            candidate_role=args.candidate_role,
+        )
     print(json.dumps(report, indent=2))
     return 0 if report["status"] == "review_material_ready" else 1
 

@@ -592,6 +592,59 @@ def test_connection_mode_marks_unconnected_motor_lanes_for_review() -> None:
     }
 
 
+def test_connection_mode_accepts_only_exact_official_map_lane_fanout() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger" shape="-10,0 0,0"/></edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" shape="1,0 10,0"/>
+    <lane id="out_1" index="1" allow="passenger" shape="1,3 10,3"/>
+  </edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="passenger" shape="0,0 1,0"/></edge>
+  <edge id=":j_1" function="internal"><lane id=":j_1_0" index="0" allow="passenger" shape="0,0 1,3"/></edge>
+  <junction id="j" type="traffic_light" incLanes="in_0" intLanes=":j_0_0 :j_1_0">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="0"/>
+  </junction>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from="in" to="out" fromLane="0" toLane="1" via=":j_1_0" dir="s"/>
+  <connection from=":j_0" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from=":j_1" to="out" fromLane="0" toLane="1" dir="s"/>
+</net>"""
+    )
+
+    evidence = {
+        "in|0|out": {
+            "basis": "official_map_connection_curve",
+            "source_cell": "2349",
+            "target_lanes": ["0", "1"],
+        }
+    }
+    audit = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        evidence_justified_target_fanouts=evidence,
+    )
+
+    assert audit["status"] == "pass"
+    assert not any("ambiguous_target_lane_fanout" in item for item in audit["review_findings"])
+    assert audit["evidence_justified_target_fanouts"][0]["target_lanes"] == ["0", "1"]
+
+    mismatch = dict(evidence)
+    mismatch["in|0|out"] = {**evidence["in|0|out"], "target_lanes": ["0"]}
+    rejected = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        evidence_justified_target_fanouts=mismatch,
+    )
+    assert rejected["status"] == "review_required"
+    assert any("ambiguous_target_lane_fanout" in item for item in rejected["review_findings"])
+
+
 def test_network_connection_mode_audit_replaces_gui_as_automatic_gate(
     tmp_path: Path,
 ) -> None:

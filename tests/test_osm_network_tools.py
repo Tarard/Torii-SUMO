@@ -1588,6 +1588,235 @@ def test_filter_osm_by_highways_limits_to_reference_way_scope(tmp_path: Path) ->
     assert stats["dropped_ways_outside_reference_scope"] == 1
 
 
+def test_filter_osm_by_highways_forced_ways_bypass_categories_but_not_bbox(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.osm.xml"
+    target = tmp_path / "filtered.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lon="10.0" lat="50.0"/>
+  <node id="2" lon="10.1" lat="50.1"/>
+  <node id="3" lon="10.2" lat="50.2"/>
+  <node id="4" lon="10.3" lat="50.3"/>
+  <node id="5" lon="12.0" lat="52.0"/>
+  <node id="6" lon="12.1" lat="52.1"/>
+  <way id="101">
+    <nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/>
+  </way>
+  <way id="202">
+    <nd ref="2"/><nd ref="3"/><tag k="highway" v="construction"/>
+  </way>
+  <way id="203">
+    <nd ref="3"/><nd ref="4"/><tag k="highway" v="construction"/>
+  </way>
+  <way id="303">
+    <nd ref="5"/><nd ref="6"/><tag k="highway" v="residential"/>
+  </way>
+  <way id="404">
+    <nd ref="3"/><nd ref="4"/><tag k="highway" v="residential"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+
+    stats = filter_osm_by_highways(
+        source,
+        target,
+        {"primary", "construction"},
+        bbox=parse_bbox("9.9,49.9,10.5,50.5"),
+        allowed_way_ids={"101"},
+        forced_way_ids={"202", "303", "404", "999"},
+    )
+
+    root = ET.parse(target).getroot()
+    assert [way.attrib["id"] for way in root.findall("way")] == [
+        "101",
+        "202",
+        "404",
+    ]
+    assert stats["forced_way_ids_requested"] == ["202", "303", "404", "999"]
+    assert stats["forced_way_ids_kept"] == ["202", "404"]
+    assert stats["forced_way_ids_missing"] == ["303", "999"]
+    assert stats["forced_construction_way_ids_kept"] == ["202"]
+    assert stats["dropped_ways_outside_bbox"] == 1
+
+
+def test_build_osm_network_fails_closed_when_forced_way_is_missing(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="51.0" lon="13.70"/>
+  <node id="2" lat="51.0" lon="13.71"/>
+  <node id="3" lat="53.0" lon="15.70"/>
+  <node id="4" lat="53.0" lon="15.71"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/>
+  </way>
+  <way id="999">
+    <nd ref="3"/><nd ref="4"/><tag k="highway" v="residential"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    report = build_osm_network(
+        bbox="13.6000,50.9800,13.9000,51.1500",
+        output_dir=tmp_path / "build",
+        source_osm_path=source,
+        allowed_highways={"primary"},
+        forced_way_ids={"999"},
+        clip_source_ways_to_bbox=False,
+        command_runner=lambda command, **_kwargs: calls.append(command),
+    )
+
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert report["forced_way_ids_requested"] == ["999"]
+    assert report["forced_way_ids_kept"] == []
+    assert report["forced_way_ids_missing"] == ["999"]
+    assert report["filter_stats"]["forced_way_ids_missing"] == ["999"]
+    assert "not kept inside the requested bbox" in report["error"]
+    assert calls == []
+
+
+def test_build_osm_network_forced_construction_uses_official_typemap_overlay(
+    tmp_path: Path,
+) -> None:
+    typemap_dir = tmp_path / "sumo_home" / "data" / "typemap"
+    typemap_dir.mkdir(parents=True)
+    base_typemap = typemap_dir / "osmNetconvert.typ.xml"
+    base_typemap.write_text(
+        """<types>
+  <type id="highway.primary" numLanes="2" speed="27.78"/>
+  <type id="highway.construction" numLanes="1" speed="13.89"
+        priority="4" oneway="false" discard="true"/>
+</types>""",
+        encoding="utf-8",
+    )
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="51.0" lon="13.70"/>
+  <node id="2" lat="51.0" lon="13.71"/>
+  <node id="3" lat="51.0" lon="13.72"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/><tag k="highway" v="construction"/>
+  </way>
+  <way id="11">
+    <nd ref="2"/><nd ref="3"/><tag k="highway" v="construction"/>
+  </way>
+  <way id="12">
+    <nd ref="1"/><nd ref="3"/><tag k="highway" v="primary"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def fake_runner(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        timeout_seconds: float = 60.0,
+    ) -> CommandResult:
+        calls.append(command)
+        assert cwd is not None
+        output = cwd / command[command.index("--output-file") + 1]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("<net/>", encoding="utf-8")
+        return CommandResult(
+            command=command,
+            cwd=str(cwd),
+            status="pass",
+            returncode=0,
+        )
+
+    report = build_osm_network(
+        bbox="13.6000,50.9800,13.9000,51.1500",
+        output_dir=tmp_path / "build",
+        prefix="demo",
+        source_osm_path=source,
+        allowed_highways={"primary", "construction"},
+        allowed_way_ids={"12"},
+        forced_way_ids={"10"},
+        sumo_home=tmp_path / "sumo_home",
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["forced_way_ids_requested"] == ["10"]
+    assert report["forced_way_ids_kept"] == ["10"]
+    assert report["forced_way_ids_missing"] == []
+    assert report["forced_construction_way_ids_kept"] == ["10"]
+    filtered_root = ET.fromstring(
+        gzip.decompress(Path(report["filtered_osm_file"]).read_bytes())
+    )
+    assert [way.attrib["id"] for way in filtered_root.findall("way")] == [
+        "10",
+        "12",
+    ]
+    command = calls[0]
+    type_files = command[command.index("--type-files") + 1].split(",")
+    assert type_files == [
+        str(base_typemap),
+        "logs/demo_forced_construction.typ.xml",
+    ]
+    overlay_file = Path(report["forced_construction_type_overlay_file"])
+    overlay_type = ET.parse(overlay_file).getroot().find("type")
+    assert overlay_type is not None
+    assert overlay_type.attrib == {
+        "id": "highway.construction",
+        "numLanes": "1",
+        "speed": "13.89",
+        "priority": "4",
+        "oneway": "false",
+        "discard": "false",
+    }
+
+
+def test_build_osm_network_forced_construction_rejects_unparseable_typemap(
+    tmp_path: Path,
+) -> None:
+    typemap_dir = tmp_path / "sumo_home" / "data" / "typemap"
+    typemap_dir.mkdir(parents=True)
+    (typemap_dir / "osmNetconvert.typ.xml").write_text(
+        "<types>",
+        encoding="utf-8",
+    )
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="51.0" lon="13.70"/>
+  <node id="2" lat="51.0" lon="13.71"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/><tag k="highway" v="construction"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    report = build_osm_network(
+        bbox="13.6000,50.9800,13.9000,51.1500",
+        output_dir=tmp_path / "build",
+        source_osm_path=source,
+        allowed_highways={"primary"},
+        forced_way_ids={"10"},
+        sumo_home=tmp_path / "sumo_home",
+        command_runner=lambda command, **_kwargs: calls.append(command),
+    )
+
+    assert report["status"] == "fail"
+    assert report["claim_status"] == "construction-invalid"
+    assert "not parseable" in report["error"]
+    assert report["forced_way_ids_kept"] == ["10"]
+    assert calls == []
+
+
 def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifacts(tmp_path: Path) -> None:
     source = tmp_path / "input.osm.xml"
     source.write_text(
@@ -1627,6 +1856,25 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
     assert Path(report["filtered_osm_file"]).is_file()
     assert Path(report["net_file"]).is_file()
     assert Path(report["command_record"]).is_file()
+    assert Path(report["build_manifest_file"]).is_file()
+    assert report["netconvert_output_original_names"]["requested"] is True
+    assert report["netconvert_output_original_names"]["netconvert_option"] == "--output.original-names"
+    manifest = json.loads(Path(report["build_manifest_file"]).read_text(encoding="utf-8"))
+    assert manifest["netconvert"]["output_original_names"]["requested"] is True
+    assert manifest["netconvert"]["output_original_names"]["expected_parameter_keys"] == [
+        "origId",
+        "origID",
+    ]
+    assert manifest["sumo_road_snapshot_import_contract"] == report[
+        "sumo_road_snapshot_import_contract"
+    ]
+    assert (
+        manifest["sumo_road_snapshot_import_contract"]["imported_source_sha256"]
+        == manifest["netconvert_input_osm_snapshot"]["sha256"]
+    )
+    command_log = Path(report["command_record"]).read_text(encoding="utf-8")
+    assert "netconvert_output_original_names_requested=true" in command_log
+    assert "netconvert_output_original_names_option=--output.original-names" in command_log
     assert calls == [
         [
             "netconvert",
@@ -1637,6 +1885,7 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
             "--proj.utm",
             "--no-turnarounds",
             "--osm.all-attributes",
+            "--output.original-names",
             "--tls.join",
             "--tls.join-dist",
             "35",
@@ -2283,7 +2532,7 @@ def test_launch_netedit_starts_non_blocking_process(tmp_path: Path) -> None:
     assert report["netedit_status"] == "opened"
     assert report["netedit_binary"] == "C:/SUMO/bin/netedit.exe"
     assert report["netedit_process_id"] == 12345
-    assert calls == [["C:/SUMO/bin/netedit.exe", "-s", str(net_file)]]
+    assert calls == [["C:/SUMO/bin/netedit.exe", "--sumo-net-file", str(net_file)]]
 
 
 def test_launch_netedit_opens_sumo_config_with_additional_files(tmp_path: Path) -> None:

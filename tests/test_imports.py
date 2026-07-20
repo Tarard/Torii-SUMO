@@ -13,6 +13,32 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_detector_count_audit",
         "sumo_detector_count_constraints",
         "sumo_detector_route_support",
+        "sumo_detector_route_sampler_calibrate",
+        "sumo_digital_twin_replay_validate",
+        "sumo_hamburg_2394_archetype_classify",
+        "sumo_hamburg_2394_compound_geometry_first_pass",
+        "sumo_hamburg_2394_tls_topology_materialize",
+        "sumo_hamburg_sandtorkai_corridor_geometry_materialize",
+        "sumo_hamburg_sandtorkai_mainline_scope_materialize",
+        "sumo_hamburg_sandtorkai_corridor_tls_materialize",
+        "sumo_hamburg_cached_detector_demand",
+        "sumo_hamburg_corridor_candidate_detector_demand",
+        "sumo_hamburg_corridor_candidate_map_bindings",
+        "sumo_hamburg_corridor_candidate_signal_bindings",
+        "sumo_hamburg_sandtorkai_corridor_candidate_package",
+        "sumo_hamburg_sandtorkai_geometry_safe_digital_twin",
+        "sumo_hamburg_official_tls_rebuild",
+        "sumo_hamburg_sandtorkai_digital_twin",
+        "sumo_hamburg_named_count_scope",
+        "sumo_hamburg_sandtorkai_signal_observations",
+        "sumo_hamburg_sandtorkai_named_replay",
+        "sumo_hamburg_sandtorkai_execution_plan",
+        "sumo_network_surface_overlap_audit",
+        "sumo_network_surface_overlap_comparison",
+        "sumo_intersection_archetype_classify",
+        "sumo_intersection_road_sumo_bind",
+        "sumo_road_semantic_bridge",
+        "sumo_signal_device_profile_classify",
         "sumo_intersection_clean",
         "sumo_intersection_model",
         "sumo_intersection_scene_workflow",
@@ -57,7 +83,7 @@ EXPECTED_TOOL_NAMES = sorted(
 def test_package_imports() -> None:
     import torii_sumo
 
-    assert torii_sumo.__version__ == "1.0.0"
+    assert torii_sumo.__version__ == "1.1.0"
 
 
 def test_server_factory_imports() -> None:

@@ -14,6 +14,7 @@
 
 <a href="https://tarard.github.io/Torii-SUMO/"><strong>Website</strong></a> |
 <a href="docs/codex-plugin-install.md"><strong>Install</strong></a> |
+<a href="docs/README.md"><strong>Documentation</strong></a> |
 <a href="examples/01_signal_control_audit/task.md"><strong>Signal-Control Audit</strong></a> |
 <a href="examples/02_one_prompt_osm_network/README.md"><strong>One-Prompt Demo</strong></a> |
 <a href="LICENSE"><strong>License</strong></a>
@@ -35,7 +36,7 @@ Torii has two layers:
 | Reasoning layer | SUMO expert skills that ask the right questions, choose a workflow, and bound claims. |
 | Execution layer | Local safe stdio MCP tools that run bounded SUMO checks and return structured observations. |
 
-The architecture is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md): router, planner, executor, and reviewer.
+The architecture is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md): router, planner, executor, and reviewer. The [repository guide](docs/repository-guide.md) explains where new work belongs, and the [MCP tool catalog](docs/mcp-tool-catalog.md) groups the public execution surface by capability.
 
 Current MCP tools cover the `torii_auto_workflow` router, environment checks, config preflight, smoke runs, evidence bundles, OSM network construction, TLS candidates, multi-source TLS review tables, TLS aggregation review variants, code-native whole-network and source-to-candidate Connection Mode audits, strict standard three/four-way NEMA phase-binding candidates, connectivity checks, connected-core extraction, routeability probes, completion-aware routeability audits, overlapping top-level junction audits, reference join audits, junction aggregation review variants, and optional NetEdit launch evidence.
 

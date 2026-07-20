@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -28,6 +29,16 @@ class RawLane:
     allow: tuple[str, ...]
     disallow: tuple[str, ...]
     shape: tuple[tuple[float, float], ...]
+    params: dict[str, str]
+
+
+@dataclass(frozen=True)
+class RawLocation:
+    net_offset: tuple[float, float] | None
+    conv_boundary: str
+    orig_boundary: str
+    proj_parameter: str
+    attributes: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -107,6 +118,7 @@ class RawTLSProgram:
 class RawNetwork:
     lefthand: bool
     lefthand_attribute: str | None
+    location: RawLocation | None
     edges: dict[str, RawEdge]
     lanes: dict[str, RawLane]
     lane_edge_ids: dict[str, str]
@@ -122,6 +134,18 @@ def parse_net_xml_file(path: Path) -> RawNetwork:
 def parse_net_xml(root: ET.Element) -> RawNetwork:
     lefthand_attribute = root.attrib.get("lefthand")
     lefthand = _boolean(lefthand_attribute, default=False)
+    location_element = root.find("location")
+    location = (
+        RawLocation(
+            net_offset=_pair(location_element.attrib.get("netOffset")),
+            conv_boundary=location_element.attrib.get("convBoundary", ""),
+            orig_boundary=location_element.attrib.get("origBoundary", ""),
+            proj_parameter=location_element.attrib.get("projParameter", ""),
+            attributes=dict(location_element.attrib),
+        )
+        if location_element is not None
+        else None
+    )
     edges: dict[str, RawEdge] = {}
     lanes: dict[str, RawLane] = {}
     lane_edge_ids: dict[str, str] = {}
@@ -148,15 +172,12 @@ def parse_net_xml(root: ET.Element) -> RawNetwork:
                 allow=_tokens(lane_element.attrib.get("allow")),
                 disallow=_tokens(lane_element.attrib.get("disallow")),
                 shape=_shape(lane_element.attrib.get("shape", "")),
+                params=_params(lane_element),
             )
             lanes[lane_id] = lane
             lane_edge_ids[lane_id] = edge_id
             raw_lanes.append(lane)
-        params = {
-            element.attrib.get("key", ""): element.attrib.get("value", "")
-            for element in edge_element.findall("param")
-            if element.attrib.get("key")
-        }
+        params = _params(edge_element)
         edges[edge_id] = RawEdge(
             edge_id=edge_id,
             from_junction=edge_element.attrib.get("from", ""),
@@ -246,6 +267,7 @@ def parse_net_xml(root: ET.Element) -> RawNetwork:
     return RawNetwork(
         lefthand=lefthand,
         lefthand_attribute=lefthand_attribute,
+        location=location,
         edges=edges,
         lanes=lanes,
         lane_edge_ids=lane_edge_ids,
@@ -261,6 +283,25 @@ def _tokens(value: str | None) -> tuple[str, ...]:
     return tuple(token for token in str(value or "").replace(",", " ").split() if token)
 
 
+def _params(element: ET.Element) -> dict[str, str]:
+    return {
+        child.attrib.get("key", ""): child.attrib.get("value", "")
+        for child in element.findall("param")
+        if child.attrib.get("key")
+    }
+
+
+def _pair(value: str | None) -> tuple[float, float] | None:
+    parts = str(value or "").split(",")
+    if len(parts) != 2:
+        return None
+    try:
+        pair = float(parts[0]), float(parts[1])
+    except ValueError:
+        return None
+    return pair if all(math.isfinite(item) for item in pair) else None
+
+
 def _integer(value: str | None) -> int | None:
     try:
         return int(str(value))
@@ -270,9 +311,10 @@ def _integer(value: str | None) -> int | None:
 
 def _number(value: str | None) -> float | None:
     try:
-        return float(str(value))
+        parsed = float(str(value))
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _boolean(value: str | None, *, default: bool) -> bool:
@@ -293,7 +335,10 @@ def _shape(value: str) -> tuple[tuple[float, float], ...]:
         if len(coordinates) < 2:
             raise ValueError(f"Invalid SUMO shape point: {token!r}")
         try:
-            points.append((float(coordinates[0]), float(coordinates[1])))
+            point = float(coordinates[0]), float(coordinates[1])
         except ValueError as exc:
             raise ValueError(f"Invalid SUMO shape point: {token!r}") from exc
+        if not all(math.isfinite(item) for item in point):
+            raise ValueError(f"Non-finite SUMO shape point: {token!r}")
+        points.append(point)
     return tuple(points)

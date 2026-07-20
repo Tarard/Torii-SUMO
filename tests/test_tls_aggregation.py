@@ -6,12 +6,44 @@ from torii_sumo.core.tls_aggregation import (
     build_tls_low_vehicle_control_variant,
     build_tls_non_controller_junction_demotion_variant,
     build_tls_signal_grouping_variant,
+    demote_tls_ids,
 )
 
 
 def _command_path(command: list[str], option: str, cwd: Path) -> Path:
     path = Path(command[command.index(option) + 1])
     return path if path.is_absolute() else cwd / path
+
+
+def test_demote_tls_ids_preserves_other_controller_on_shared_junction(tmp_path: Path) -> None:
+    net_file = tmp_path / "shared.net.xml"
+    net_file.write_text(
+        "<net>"
+        '<junction id="junction" type="traffic_light"/>'
+        '<tlLogic id="official"/><tlLogic id="osm"/>'
+        '<connection from="a" to="b" via=":junction_0_0" '
+        'tl="official" linkIndex="0"/>'
+        '<connection from="c" to="d" via=":junction_1_0" '
+        'tl="osm" linkIndex="0" linkIndex2="1"/>'
+        "</net>",
+        encoding="utf-8",
+    )
+
+    report = demote_tls_ids(net_file, ["osm"])
+
+    root = ET.parse(net_file).getroot()
+    logics = {logic.attrib["id"] for logic in root.findall("tlLogic")}
+    connections = root.findall("connection")
+    assert logics == {"official"}
+    assert connections[0].attrib["tl"] == "official"
+    assert "tl" not in connections[1].attrib
+    assert "linkIndex" not in connections[1].attrib
+    assert "linkIndex2" not in connections[1].attrib
+    assert root.find("junction").attrib["type"] == "traffic_light"
+    assert report["tls_demotion_selected_controller_ids"] == ["osm"]
+    assert report["tls_demotion_removed_connection_count"] == 1
+    assert report["tls_demotion_removed_tllogic_ids"] == ["osm"]
+    assert report["tls_low_vehicle_control_removed_connection_count"] == 1
 
 
 def test_build_tls_aggregation_variant_sets_one_real_junction_per_tls_cluster(tmp_path: Path) -> None:
@@ -438,6 +470,75 @@ def test_build_tls_signal_grouping_variant_limits_identical_signal_column_merges
     assert report["tls_signal_grouping_merged_group_count"] == 1
     assert report["tls_signal_grouping_remapped_connection_count"] == 3
     assert report["tls_aggregated_controlled_connection_count"] == 4
+
+
+def test_signal_grouping_keeps_foe_requests_separate_and_persists_multilink_control_key(
+    tmp_path: Path,
+) -> None:
+    source_net_file = tmp_path / "foe_source.net.xml"
+    source_net_file.write_text(
+        """<net>
+  <edge id="in_a" from="a" to="j"><lane id="in_a_0" index="0" allow="passenger"/></edge>
+  <edge id="in_b" from="b" to="j"><lane id="in_b_0" index="0" allow="passenger"/></edge>
+  <edge id="in_c" from="c" to="j"><lane id="in_c_0" index="0" allow="passenger"/></edge>
+  <edge id="out_a" from="j" to="d"><lane id="out_a_0" index="0" allow="passenger"/></edge>
+  <edge id="out_b" from="j" to="e"><lane id="out_b_0" index="0" allow="passenger"/></edge>
+  <edge id="out_c" from="j" to="f"><lane id="out_c_0" index="0" allow="passenger"/></edge>
+  <junction id="a" type="dead_end"/><junction id="b" type="dead_end"/>
+  <junction id="c" type="dead_end"/>
+  <junction id="j" type="traffic_light" incLanes="in_a_0 in_b_0 in_c_0">
+    <request index="0" response="000" foes="010" cont="0"/>
+    <request index="1" response="000" foes="001" cont="0"/>
+    <request index="2" response="000" foes="000" cont="0"/>
+  </junction>
+  <junction id="d" type="dead_end"/><junction id="e" type="dead_end"/>
+  <junction id="f" type="dead_end"/>
+  <tlLogic id="j" type="static" programID="0">
+    <phase duration="1" state="ggg"/>
+    <phase duration="1" state="rrr"/>
+  </tlLogic>
+  <connection from="in_a" to="out_a" fromLane="0" toLane="0" tl="j" linkIndex="0"/>
+  <connection from="in_b" to="out_b" fromLane="0" toLane="0" tl="j" linkIndex="1"/>
+  <connection from="in_c" to="out_c" fromLane="0" toLane="0" tl="j" linkIndex="2"/>
+</net>""",
+        encoding="utf-8",
+    )
+    control_keys = {
+        ("j", "in_a", "out_a", "0", "0"): "expression-A",
+        ("j", "in_b", "out_b", "0", "0"): "expression-A",
+        ("j", "in_c", "out_c", "0", "0"): "expression-A",
+    }
+
+    report = build_tls_signal_grouping_variant(
+        source_net_file=source_net_file,
+        output_dir=tmp_path / "foe_grouping",
+        max_shared_linkindex_groups=1,
+        control_key_by_connection=control_keys,
+    )
+
+    grouped_root = ET.parse(report["tls_signal_grouping_variant_file"]).getroot()
+    assert [
+        connection.attrib["linkIndex"] for connection in grouped_root.findall("connection")
+    ] == ["0", "1", "0"]
+    assert [
+        phase.attrib["state"] for phase in grouped_root.findall("tlLogic[@id='j']/phase")
+    ] == ["gg", "rr"]
+    assert report["tls_signal_grouping_request_foe_evidence_status"] == "available"
+    assert report["tls_signal_grouping_blocked_foe_pair_count"] == 1
+    assert report["tls_signal_grouping_control_key_to_link_indices"] == {
+        "j": {"expression-A": [0, 1]}
+    }
+    assert report["tls_signal_grouping_control_bindings"] == [
+        {
+            "controller_id": "j",
+            "control_key": "expression-A",
+            "phase_signature": ["g", "r"],
+            "source_link_indices": [0, 1, 2],
+            "sumo_link_indices": [0, 1],
+            "physical_connection_count": 3,
+            "foe_separated": True,
+        }
+    ]
 
 
 def test_build_tls_aggregation_variant_reports_controlled_connection_regression(tmp_path: Path) -> None:

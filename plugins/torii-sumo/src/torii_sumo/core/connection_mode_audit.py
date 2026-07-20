@@ -601,6 +601,7 @@ def audit_network_connection_mode(
     traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
+    evidence_justified_target_fanouts: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Reconstruct and audit Connection Mode for every relevant junction."""
 
@@ -628,6 +629,7 @@ def audit_network_connection_mode(
             traffic_side=effective_traffic_side,
             endpoint_tolerance_m=endpoint_tolerance_m,
             normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
+            evidence_justified_target_fanouts=evidence_justified_target_fanouts,
             catalog=catalog,
         )
         controller_ids = sorted(
@@ -736,6 +738,10 @@ def audit_network_connection_mode(
             for record in junction_records
         )
         + len(tls_audit.get("review_findings", [])),
+        "evidence_justified_target_fanout_count": sum(
+            len(record["connection_mode_audit"].get("evidence_justified_target_fanouts", []))
+            for record in junction_records
+        ),
         "finding_category_counts": dict(sorted(connection_findings.items())),
         "tls_link_binding_audit": tls_audit,
         "junctions": junction_records,
@@ -754,6 +760,7 @@ def audit_standard_connection_mode(
     traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
+    evidence_justified_target_fanouts: Mapping[str, Mapping[str, Any]] | None = None,
     catalog: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fail closed on lane-to-lane bindings that only look routeable.
@@ -819,6 +826,7 @@ def audit_standard_connection_mode(
     via_counts: Counter[str] = Counter()
     target_fanout: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     destination_merges: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    justified_target_fanouts: list[dict[str, Any]] = []
 
     for row in rows:
         connection_index = _as_int(row.get("connection_index"))
@@ -966,10 +974,32 @@ def audit_standard_connection_mode(
             _block(hard_blockers, f"duplicate_direct_via_lane:{via_lane_id}:{count}")
     for key, target_lanes in sorted(target_fanout.items()):
         if len(target_lanes) > 1:
-            _review(
-                review_findings,
-                f"ambiguous_target_lane_fanout:{'|'.join(key)}:{','.join(sorted(target_lanes))}",
+            finding = (
+                f"ambiguous_target_lane_fanout:{'|'.join(key)}:"
+                f"{','.join(sorted(target_lanes))}"
             )
+            evidence = (evidence_justified_target_fanouts or {}).get("|".join(key))
+            expected_lanes = (
+                sorted(str(value) for value in evidence.get("target_lanes", ()))
+                if isinstance(evidence, Mapping)
+                else []
+            )
+            if (
+                isinstance(evidence, Mapping)
+                and evidence.get("basis") == "official_map_connection_curve"
+                and expected_lanes == sorted(target_lanes)
+                and str(evidence.get("source_cell", ""))
+            ):
+                justified_target_fanouts.append(
+                    {
+                        "finding": finding,
+                        "key": "|".join(key),
+                        "target_lanes": sorted(target_lanes),
+                        "evidence": dict(evidence),
+                    }
+                )
+            else:
+                _review(review_findings, finding)
     for key, source_lanes in sorted(destination_merges.items()):
         if len(source_lanes) > 1:
             _review(
@@ -1042,6 +1072,7 @@ def audit_standard_connection_mode(
         "request_foe_audit": request_audit,
         "structural_failures": unique_hard_blockers,
         "review_findings": unique_review_findings,
+        "evidence_justified_target_fanouts": justified_target_fanouts,
         "blockers": unique_blockers,
         "warnings": warnings,
         "human_review_requirement": (

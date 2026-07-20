@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import hashlib
 import math
 import os
 import time
@@ -12,6 +13,7 @@ from urllib import error, parse, request
 import unicodedata
 import xml.etree.ElementTree as ET
 
+from .artifact_io import write_json_atomic
 from .command_runner import run_command
 
 
@@ -315,15 +317,24 @@ def filter_osm_by_highways(
     *,
     bbox: Bbox | None = None,
     allowed_way_ids: set[str] | None = None,
+    forced_way_ids: set[str] | None = None,
     include_railway: bool = False,
     allowed_railways: set[str] | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     with _open_xml(source, "rt") as handle:
         root = ET.parse(handle).getroot()
 
     bbox_node_refs = None
     if bbox is not None:
         bbox_node_refs = {node.attrib["id"] for node in root.findall("node") if _node_in_bbox(node, bbox)}
+
+    requested_forced_way_ids = set(forced_way_ids or ())
+    forced_construction_way_ids = {
+        way.attrib.get("id", "")
+        for way in root.findall("way")
+        if way.attrib.get("id", "") in requested_forced_way_ids
+        and _highway_value(way) == "construction"
+    }
 
     kept_ways = []
     kept_way_ids = set()
@@ -335,13 +346,29 @@ def filter_osm_by_highways(
     trimmed_ways = 0
     kept_railway_ways = 0
     for way in root.findall("way"):
+        way_id = way.attrib.get("id", "")
         highway = _highway_value(way)
         railway = _tag_value(way, "railway")
+        force_way = way_id in requested_forced_way_ids
         keep_railway = include_railway and (
             allowed_railways is None or railway in allowed_railways
         )
-        if highway in allowed_highways or keep_railway:
-            if allowed_way_ids is not None and way.attrib.get("id", "") not in allowed_way_ids:
+        keep_by_category = highway in allowed_highways or keep_railway
+        if (
+            forced_construction_way_ids
+            and highway == "construction"
+            and not force_way
+        ):
+            # A discard=false overlay applies to every construction way in the
+            # filtered OSM.  Keep that scope evidence-exact even when a caller
+            # also supplied construction in allowed_highways.
+            keep_by_category = False
+        if force_way or keep_by_category:
+            if (
+                not force_way
+                and allowed_way_ids is not None
+                and way_id not in allowed_way_ids
+            ):
                 dropped_ways_outside_reference_scope += 1
                 continue
             refs = _way_node_refs(way)
@@ -406,6 +433,20 @@ def filter_osm_by_highways(
         )
     if allowed_way_ids is not None:
         stats["dropped_ways_outside_reference_scope"] = dropped_ways_outside_reference_scope
+    if forced_way_ids is not None:
+        kept_forced_way_ids = requested_forced_way_ids & kept_way_ids
+        stats.update(
+            {
+                "forced_way_ids_requested": sorted(requested_forced_way_ids),
+                "forced_way_ids_kept": sorted(kept_forced_way_ids),
+                "forced_way_ids_missing": sorted(
+                    requested_forced_way_ids - kept_forced_way_ids
+                ),
+                "forced_construction_way_ids_kept": sorted(
+                    forced_construction_way_ids & kept_way_ids
+                ),
+            }
+        )
     if include_railway:
         stats["kept_railway_ways"] = kept_railway_ways
     return stats
@@ -441,6 +482,82 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _origin_name_output_summary(net_file: Path) -> dict[str, Any]:
+    """Inspect only explicit output metadata; never infer an OSM edge lineage."""
+
+    summary: dict[str, Any] = {
+        "requested": True,
+        "netconvert_option": OSM_ORIGINAL_NAME_OUTPUT_OPTION,
+        "expected_parameter_keys": list(OSM_ORIGINAL_NAME_OUTPUT_PARAMETER_KEYS),
+        "status": "blocked",
+        "road_edge_count": 0,
+        "road_edge_with_observed_orig_id_count": 0,
+        "observed_orig_id_parameter_count": 0,
+        "observed_orig_id_token_count": 0,
+        "claim_boundary": (
+            "An origId/origID parameter is observed output metadata only. It does not prove "
+            "direction, lane, legal-turn, or traffic-light correspondence."
+        ),
+    }
+    if not net_file.is_file():
+        summary["reason"] = "sumo_net_not_created"
+        return summary
+    try:
+        root = ET.parse(net_file).getroot()
+    except (OSError, ET.ParseError) as exc:
+        summary["reason"] = f"sumo_net_not_parseable:{type(exc).__name__}"
+        return summary
+
+    observed_tokens: set[str] = set()
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        function = edge.attrib.get("function", "").strip().casefold()
+        if edge_id.startswith(":") or function not in {"", "normal"}:
+            continue
+        summary["road_edge_count"] += 1
+        edge_has_observed_origin = False
+        for container in (edge, *edge.findall("lane")):
+            for parameter in container.findall("param"):
+                if parameter.attrib.get("key", "").casefold() != "origid":
+                    continue
+                raw_value = parameter.attrib.get("value", "").strip()
+                if not raw_value:
+                    continue
+                edge_has_observed_origin = True
+                summary["observed_orig_id_parameter_count"] += 1
+                observed_tokens.update(
+                    token
+                    for token in raw_value.replace(",", " ").replace(";", " ").split()
+                    if token
+                )
+        if edge_has_observed_origin:
+            summary["road_edge_with_observed_orig_id_count"] += 1
+    summary["observed_orig_id_token_count"] = len(observed_tokens)
+    road_edge_count = int(summary["road_edge_count"])
+    observed_edge_count = int(summary["road_edge_with_observed_orig_id_count"])
+    if road_edge_count == 0:
+        summary["status"] = "not_applicable"
+        summary["reason"] = "no_external_road_edges"
+    elif observed_edge_count == 0:
+        summary["status"] = "review_required"
+        summary["reason"] = "no_observed_orig_id_parameters"
+    elif observed_edge_count < road_edge_count:
+        summary["status"] = "review_required"
+        summary["reason"] = "partial_observed_orig_id_coverage"
+    else:
+        summary["status"] = "pass"
+        summary["reason"] = "all_external_road_edges_have_observed_orig_id"
+    return summary
+
+
 def _failure(error_message: str, *, artifacts: dict[str, Any] | None = None) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "status": "fail",
@@ -458,6 +575,11 @@ REFERENCE_VISUAL_SUMO_TYPEMAPS = (
     "osmNetconvertBicycle.typ.xml",
     "osmNetconvertPedestrians.typ.xml",
 )
+OSM_BASE_SUMO_TYPEMAP = "osmNetconvert.typ.xml"
+OSM_CONSTRUCTION_TYPE_ID = "highway.construction"
+OSM_ORIGINAL_NAME_OUTPUT_OPTION = "--output.original-names"
+OSM_ORIGINAL_NAME_OUTPUT_PARAMETER_KEYS = ("origId", "origID")
+OSM_BUILD_PROVENANCE_SCHEMA = "torii.osm-sumo-build-provenance/v1"
 REFERENCE_VISUAL_SERVICE_TYPE_XML = """<types xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/types_file.xsd">
     <type id="highway.service" numLanes="1" speed="5.56" priority="1" oneway="false" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship cable_car subway"/>
     <type id="highway.service|psv" numLanes="1" speed="13.89" priority="1" oneway="false" allow="bus coach"/>
@@ -489,6 +611,84 @@ def _reference_visual_type_options(
     _write_text(service_type_file, REFERENCE_VISUAL_SERVICE_TYPE_XML)
     type_files = [*base_type_files, service_type_file]
     return ["--type-files", ",".join(_command_path(path, root) for path in type_files)], []
+
+
+def _forced_construction_type_options(
+    root: Path,
+    logs_dir: Path,
+    prefix: str,
+    *,
+    explicit_sumo_home: Path | None = None,
+) -> tuple[list[str], Path]:
+    sumo_home_value = (
+        str(explicit_sumo_home.resolve())
+        if explicit_sumo_home is not None
+        else os.environ.get("SUMO_HOME", "").strip()
+    )
+    if not sumo_home_value:
+        raise ValueError(
+            "SUMO_HOME is not set; forced highway=construction import requires "
+            "the official SUMO OSM typemap"
+        )
+
+    base_type_file = (
+        Path(sumo_home_value) / "data" / "typemap" / OSM_BASE_SUMO_TYPEMAP
+    )
+    if not base_type_file.is_file():
+        raise ValueError(
+            "SUMO official OSM typemap is missing for forced "
+            f"highway=construction import: {base_type_file}"
+        )
+    try:
+        base_root = ET.parse(base_type_file).getroot()
+    except (OSError, ET.ParseError) as exc:
+        raise ValueError(
+            "SUMO official OSM typemap is not parseable for forced "
+            f"highway=construction import: {base_type_file}: {exc}"
+        ) from exc
+
+    construction_types = [
+        element
+        for element in base_root.findall(".//type")
+        if element.attrib.get("id") == OSM_CONSTRUCTION_TYPE_ID
+    ]
+    if len(construction_types) != 1:
+        raise ValueError(
+            "SUMO official OSM typemap must define exactly one "
+            f"{OSM_CONSTRUCTION_TYPE_ID!r} type: {base_type_file}"
+        )
+
+    construction_attributes = dict(construction_types[0].attrib)
+    construction_attributes["discard"] = "false"
+    overlay_root = ET.Element("types")
+    ET.SubElement(overlay_root, "type", construction_attributes)
+    overlay_file = logs_dir / f"{prefix}_forced_construction.typ.xml"
+    overlay_payload = ET.tostring(
+        overlay_root,
+        encoding="unicode",
+        xml_declaration=True,
+    )
+    _write_text(overlay_file, overlay_payload)
+    type_files = [base_type_file, overlay_file]
+    return [
+        "--type-files",
+        ",".join(_command_path(path, root) for path in type_files),
+    ], overlay_file
+
+
+def _merge_type_file_options(*options: list[str]) -> list[str]:
+    type_files: list[str] = []
+    for option in options:
+        if not option:
+            continue
+        if len(option) != 2 or option[0] != "--type-files":
+            raise ValueError(f"unexpected netconvert type options: {option}")
+        for type_file in option[1].split(","):
+            if type_file not in type_files:
+                type_files.append(type_file)
+    if not type_files:
+        return []
+    return ["--type-files", ",".join(type_files)]
 
 
 def _netconvert_profile_options(profile: str | None) -> list[str]:
@@ -547,6 +747,7 @@ def build_osm_network(
     download_func: Callable[..., bytes] = download_osm,
     netconvert_profile: str | None = "vehicle_core",
     allowed_way_ids: set[str] | None = None,
+    forced_way_ids: set[str] | None = None,
     include_railway: bool = False,
     allowed_railways: set[str] | None = None,
     netconvert_binary: str = "netconvert",
@@ -581,6 +782,7 @@ def build_osm_network(
     query_file = logs_dir / f"{prefix}_overpass_query.ql"
     command_record = logs_dir / f"{prefix}_commands.txt"
     netconvert_log = logs_dir / f"{prefix}_netconvert.log"
+    build_manifest_file = logs_dir / f"{prefix}_build_manifest.json"
     root.mkdir(parents=True, exist_ok=True)
     sumo_dir.mkdir(parents=True, exist_ok=True)
     _write_text(query_file, query)
@@ -614,11 +816,47 @@ def build_osm_network(
             source_osm,
             filtered_osm,
             allowed,
-            bbox=parsed_bbox if clip_source_ways_to_bbox else None,
+            bbox=(
+                parsed_bbox
+                if clip_source_ways_to_bbox or forced_way_ids is not None
+                else None
+            ),
             allowed_way_ids=allowed_way_ids,
+            forced_way_ids=forced_way_ids,
             include_railway=include_railway,
             allowed_railways=allowed_railways,
         )
+        source_osm_sha256 = _file_sha256(source_osm)
+        filtered_osm_sha256 = _file_sha256(filtered_osm)
+        forced_way_report = (
+            {
+                key: filter_stats[key]
+                for key in (
+                    "forced_way_ids_requested",
+                    "forced_way_ids_kept",
+                    "forced_way_ids_missing",
+                    "forced_construction_way_ids_kept",
+                )
+            }
+            if forced_way_ids is not None
+            else {}
+        )
+        missing_forced_way_ids = forced_way_report.get(
+            "forced_way_ids_missing", []
+        )
+        if missing_forced_way_ids:
+            return _failure(
+                "forced OSM way ids were not kept inside the requested bbox: "
+                + ", ".join(missing_forced_way_ids),
+                artifacts={
+                    "source_osm_file": str(source_osm),
+                    "filtered_osm_file": str(filtered_osm),
+                    "query_file": str(query_file),
+                    "command_record": str(command_record),
+                    "filter_stats": filter_stats,
+                    **forced_way_report,
+                },
+            )
         turnaround_options = (
             []
             if normalized_profile in REFERENCE_VISUAL_PROFILES
@@ -634,6 +872,33 @@ def build_osm_network(
             if normalized_profile in REFERENCE_VISUAL_PROFILES
             else ([], [])
         )
+        forced_construction_overlay_file: Path | None = None
+        if forced_way_report.get("forced_construction_way_ids_kept"):
+            try:
+                construction_type_options, forced_construction_overlay_file = (
+                    _forced_construction_type_options(
+                        root,
+                        logs_dir,
+                        prefix,
+                        explicit_sumo_home=sumo_home,
+                    )
+                )
+            except ValueError as exc:
+                return _failure(
+                    str(exc),
+                    artifacts={
+                        "source_osm_file": str(source_osm),
+                        "filtered_osm_file": str(filtered_osm),
+                        "query_file": str(query_file),
+                        "command_record": str(command_record),
+                        "filter_stats": filter_stats,
+                        **forced_way_report,
+                    },
+                )
+            type_options = _merge_type_file_options(
+                type_options,
+                construction_type_options,
+            )
         command = [
             netconvert_binary,
             "--osm-files",
@@ -644,6 +909,7 @@ def build_osm_network(
             *traffic_side_options,
             *turnaround_options,
             "--osm.all-attributes",
+            OSM_ORIGINAL_NAME_OUTPUT_OPTION,
             "--tls.join",
             "--tls.join-dist",
             "35",
@@ -657,11 +923,35 @@ def build_osm_network(
                 [
                     f"bbox={bbox}",
                     f"source_osm={source_osm}",
+                    f"source_osm_sha256={source_osm_sha256}",
                     f"filtered_osm={filtered_osm}",
+                    f"filtered_osm_sha256={filtered_osm_sha256}",
                     f"net_file={net_file}",
                     "allowed_highways=" + ",".join(sorted(allowed)),
                     "allowed_way_ids_count="
                     + ("not_applied" if allowed_way_ids is None else str(len(allowed_way_ids))),
+                    *(
+                        [
+                            "forced_way_ids_requested="
+                            + ",".join(
+                                forced_way_report["forced_way_ids_requested"]
+                            ),
+                            "forced_way_ids_kept="
+                            + ",".join(forced_way_report["forced_way_ids_kept"]),
+                            "forced_way_ids_missing="
+                            + ",".join(
+                                forced_way_report["forced_way_ids_missing"]
+                            ),
+                            "forced_construction_way_ids_kept="
+                            + ",".join(
+                                forced_way_report[
+                                    "forced_construction_way_ids_kept"
+                                ]
+                            ),
+                        ]
+                        if forced_way_ids is not None
+                        else []
+                    ),
                     f"include_railway={include_railway}",
                     f"clip_source_ways_to_bbox={clip_source_ways_to_bbox}",
                     f"traffic_side={normalized_traffic_side}",
@@ -673,6 +963,11 @@ def build_osm_network(
                     f"netconvert_profile={normalized_profile}",
                     "netconvert_profile_options=" + " ".join(profile_options),
                     "netconvert_type_options=" + " ".join(type_options),
+                    "netconvert_output_original_names_requested=true",
+                    "netconvert_output_original_names_option="
+                    + OSM_ORIGINAL_NAME_OUTPUT_OPTION,
+                    "netconvert_output_original_names_expected_parameters="
+                    + ",".join(OSM_ORIGINAL_NAME_OUTPUT_PARAMETER_KEYS),
                     "netconvert_command=" + " ".join(command),
                     "",
                 ]
@@ -701,12 +996,73 @@ def build_osm_network(
     warnings = list(type_warnings)
     if not net_file.exists():
         warnings.append(f"net file was not created: {net_file}")
+    origin_name_output = _origin_name_output_summary(net_file)
+    build_manifest = {
+        "schema": OSM_BUILD_PROVENANCE_SCHEMA,
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "source_osm_snapshot": {
+            "path": str(source_osm.resolve()),
+            "sha256": source_osm_sha256,
+        },
+        "netconvert_input_osm_snapshot": {
+            "path": str(filtered_osm.resolve()),
+            "sha256": filtered_osm_sha256,
+            "derivation": "filtered_from_source_osm_by_declared_build_scope",
+        },
+        "sumo_road_snapshot_import_contract": {
+            "imported_from": "osm",
+            "imported_source_sha256": filtered_osm_sha256,
+            "source_snapshot_path": str(filtered_osm.resolve()),
+            "status": "pass",
+            "claim_boundary": (
+                "This declares the exact filtered OSM bytes consumed by netconvert. "
+                "It must be combined with parsed origId/origID output evidence before "
+                "a specific SUMO edge is treated as observed OSM lineage."
+            ),
+        },
+        "sumo_net_snapshot": {
+            "path": str(net_file.resolve()),
+            "sha256": _file_sha256(net_file) if net_file.is_file() else None,
+        },
+        "netconvert": {
+            "command": command,
+            "result": result,
+            "profile": normalized_profile,
+            "profile_options": profile_options,
+            "type_options": type_options,
+            "output_original_names": origin_name_output,
+        },
+        "artifacts": {
+            "command_record": str(command_record.resolve()),
+            "netconvert_log": str(netconvert_log.resolve()),
+        },
+        "claim_boundary": (
+            "The original-name option requests explicit source-ID metadata in SUMO output. "
+            "It does not establish complete OSM-to-SUMO conflation or authorize topology, "
+            "lane, movement, or signal changes."
+        ),
+    }
+    try:
+        write_json_atomic(build_manifest_file, build_manifest, sort_keys=True)
+    except OSError as exc:
+        return _failure(
+            f"could not write OSM-to-SUMO build provenance manifest: {exc}",
+            artifacts={
+                "source_osm_file": str(source_osm),
+                "filtered_osm_file": str(filtered_osm),
+                "net_file": str(net_file),
+                "command_record": str(command_record),
+                "netconvert_log": str(netconvert_log),
+            },
+        )
     return {
         "status": status,
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
         "bbox": bbox,
         "road_classes": sorted(allowed),
         "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
+        **forced_way_report,
         "include_railway": include_railway,
         "clip_source_ways_to_bbox": clip_source_ways_to_bbox,
         "traffic_side": normalized_traffic_side,
@@ -717,10 +1073,25 @@ def build_osm_network(
         "query_file": str(query_file),
         "command_record": str(command_record),
         "netconvert_log": str(netconvert_log),
+        "build_manifest_file": str(build_manifest_file),
+        "build_manifest_sha256": _file_sha256(build_manifest_file),
+        "sumo_road_snapshot_import_contract": build_manifest[
+            "sumo_road_snapshot_import_contract"
+        ],
         "filter_stats": filter_stats,
         "overpass": overpass_report,
         "netconvert_profile": normalized_profile,
         "netconvert_profile_options": profile_options,
+        "netconvert_output_original_names": origin_name_output,
+        **(
+            {
+                "forced_construction_type_overlay_file": str(
+                    forced_construction_overlay_file
+                )
+            }
+            if forced_construction_overlay_file is not None
+            else {}
+        ),
         "netconvert": result,
         "warnings": warnings,
     }

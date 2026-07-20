@@ -9,18 +9,48 @@ from .tools.demand_tools import (
     sumo_detector_count_constraints,
     sumo_detector_route_support,
 )
+from .tools.digital_twin_tools import (
+    sumo_detector_route_sampler_calibrate,
+    sumo_digital_twin_replay_validate,
+    sumo_hamburg_2394_archetype_classify,
+    sumo_hamburg_2394_compound_geometry_first_pass,
+    sumo_hamburg_2394_tls_topology_materialize,
+    sumo_hamburg_sandtorkai_corridor_geometry_materialize,
+    sumo_hamburg_sandtorkai_mainline_scope_materialize,
+    sumo_hamburg_sandtorkai_corridor_tls_materialize,
+    sumo_hamburg_cached_detector_demand,
+    sumo_hamburg_corridor_candidate_map_bindings,
+    sumo_hamburg_corridor_candidate_signal_bindings,
+    sumo_hamburg_sandtorkai_corridor_candidate_package,
+    sumo_hamburg_sandtorkai_geometry_safe_digital_twin,
+    sumo_hamburg_corridor_candidate_detector_demand,
+    sumo_hamburg_official_tls_rebuild,
+    sumo_hamburg_sandtorkai_digital_twin,
+    sumo_hamburg_named_count_scope,
+    sumo_hamburg_sandtorkai_signal_observations,
+    sumo_hamburg_sandtorkai_named_replay,
+    sumo_hamburg_sandtorkai_execution_plan,
+    sumo_network_surface_overlap_audit,
+    sumo_network_surface_overlap_comparison,
+)
 from .tools.evidence_tools import (
     sumo_collect_evidence,
     sumo_compare_outputs,
     sumo_config_pair_preflight,
 )
 from .tools.intersection_tools import (
-    sumo_nema_four_way_reference_workflow,
+    sumo_intersection_archetype_classify,
     sumo_intersection_clean,
     sumo_intersection_model,
     sumo_intersection_scene_workflow,
     sumo_intersection_validate,
+    sumo_nema_four_way_reference_workflow,
 )
+from .tools.road_network_tools import (
+    sumo_intersection_road_sumo_bind,
+    sumo_road_semantic_bridge,
+)
+from .tools.signal_tools import sumo_signal_device_profile_classify
 from .tools.osm_tools import (
     sumo_network_connection_mode_audit,
     sumo_network_connection_mode_calibration,
@@ -84,6 +114,18 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Run the OSM cleanup hard-gate workflow from a place name, bbox, or OSM map URL: area inference/confirmation, traffic-layer or reference-artifact planning, OSM build, TLS map audit, connectivity, code-native Connection Mode, routeability, review HTML, and optional SUMO-GUI/NetEdit launch.")(
         sumo_osm_cleanup_workflow
+    )
+    server.tool(description="Read-only classification of one local OSM intersection into a hash-bound finite composable archetype; preserve physical-cell, topology, and movement evidence without joining nodes, rebuilding channelization, or binding traffic lights.")(
+        sumo_intersection_archetype_classify
+    )
+    server.tool(description="Read-only road semantic bridge for frozen local OSM, SUMO, and Hamburg HH-SIB snapshots: generate auditable conflation/lineage evidence and pass-only reviewed road-network properties without downloading data, changing a network, generating SUMO files, or authorizing geometry, lane, TLS, demand, or simulation changes.")(
+        sumo_road_semantic_bridge
+    )
+    server.tool(description="Read-only binding of a hash-bound intersection road-detail profile to the exact OSM-to-SUMO lineage in a frozen road-semantic bridge report; return review-only road-arm/edge and connection-intent evidence without generating or authorizing lane connections, geometry edits, traffic-light bindings, demand, or simulation changes.")(
+        sumo_intersection_road_sumo_bind
+    )
+    server.tool(description="Read-only classification of one German OCIT-C supply snapshot into a source-hash-bound composable inventory of logical signal groups, physical heads, visual displays, and audible/tactile outputs; preserve unknowns and keep automatic lane, movement, controller, phase, and control binding blocked.")(
+        sumo_signal_device_profile_classify
     )
     server.tool(description="Build a structured IntersectionIR from a local OSM intersection patch without compiling SUMO artifacts.")(
         sumo_intersection_model
@@ -195,6 +237,72 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Compare expected detector counts against SUMO E1 detector output and report detector-fit metrics.")(
         sumo_detector_count_audit
+    )
+    server.tool(description="Build the reusable Am Sandtorkai three-intersection vehicle digital-twin package: Torii OSM cleanup, official Hamburg count and traffic-light API snapshots, same-location SUMO E1/E2 sensors, 15-minute edge constraints, routeSampler demand, and auditable TLS link events.")(
+        sumo_hamburg_sandtorkai_digital_twin
+    )
+    server.tool(description="Fetch a declared official Hamburg detector scope for the named Am Sandtorkai corridor, select a complete warm-up plus Saturday two-hour window, and write auditable 15-minute SUMO count inputs; missing detectors and unknown directions remain explicit and block promotion.")(
+        sumo_hamburg_named_count_scope
+    )
+    server.tool(description="Record and resume the hash-bound Am Sandtorkai W0-W5 execution plan; merge optional diagnostic feedback manifests, reuse unchanged stage manifests, invalidate downstream stages after upstream changes, and fail closed on missing official evidence.")(
+        sumo_hamburg_sandtorkai_execution_plan
+    )
+    server.tool(description="Build the reusable W4 Am Sandtorkai detector-constrained SUMO replay from the exact road, signal-binding, and official count manifests; generate same-location E1/E2 sensors and routes, compare every warm-up-excluded bin, and block automatically on teleports or collisions.")(
+        sumo_hamburg_sandtorkai_named_replay
+    )
+    server.tool(description="Fetch official Hamburg primary-signal history for a fixed UTC window from the bound Am Sandtorkai streams, write time-zero/in-window SUMO TLS link events, and fail closed on missing or partial observations.")(
+        sumo_hamburg_sandtorkai_signal_observations
+    )
+    server.tool(description="Classify Hamburg junction 2394 as a finite composable archetype from hash-bound official MAP lane/stop-line/movement evidence, official OCIT controller/Teilknoten evidence, and frozen SUMO owner geometry; emit only review-gated local join hints and never mutate the source network.")(
+        sumo_hamburg_2394_archetype_classify
+    )
+    server.tool(description="Materialize only the explicitly accepted Hamburg 2394 compound-geometry first pass from a frozen source network and classification file; require both exact SHA-256 values and the accepted classification id, retire only the bounded legacy OSM TLS bindings, leave official TLS restoration not run, and keep automatic promotion blocked.")(
+        sumo_hamburg_2394_compound_geometry_first_pass
+    )
+    server.tool(description="Materialize the hash-bound Hamburg 2394 static topology candidate: apply the proven five-connection removal and three-connection repair, bind one all-red HH_2394 placeholder across exactly three official signal-bearing owners, preserve two passive priority owners, run netconvert/SUMO/surface audits, and keep historical Saturday timing blocked.")(
+        sumo_hamburg_2394_tls_topology_materialize
+    )
+    server.tool(description="Materialize the geometry-preserving Am Sandtorkai three-controller TLS candidate from official movement paths only after a hash-bound road-arm/SUMO connection-intent artifact for the exact source network covers every lane transition; add only missing MAP/OCIT transitions and keep historical timing blocked.")(
+        sumo_hamburg_sandtorkai_corridor_tls_materialize
+    )
+    server.tool(description="Materialize the topology-aware Am Sandtorkai geometry-safe candidate: join only confirmed sub-groups, protect the official 0228 branch, trim inherited oversized junction faces, run SUMO/surface audits, and never overwrite the source network.")(
+        sumo_hamburg_sandtorkai_corridor_geometry_materialize
+    )
+    server.tool(description="Materialize the bounded Am Sandtorkai mainline scope: keep the explicit 0228-2421-2394 backbone and short signal approaches, remove the upper-left 0228 branch, join the proven 2394 micro-junction pair, and emit a hash-bound NetEdit review candidate.")(
+        sumo_hamburg_sandtorkai_mainline_scope_materialize
+    )
+    server.tool(description="Read-only complement to SUMO edge-overlap warnings: audit non-internal junction polygon overlaps and reconstructed external lane faces entering non-owner junctions; exclude expected owner endpoint contact and internal lanes, hash the source, and fail closed on findings or invalid geometry.")(
+        sumo_network_surface_overlap_audit
+    )
+    server.tool(description="Compare baseline and candidate lane/junction surface-overlap audits for an explicit bounded junction focus; pass only with zero introduced and zero focus findings while preserving inherited out-of-scope defects and both global audit statuses.")(
+        sumo_network_surface_overlap_comparison
+    )
+    server.tool(description="Resume Am Sandtorkai detector-demand construction from hash-pinned official TLS/MAP evidence and cached Hamburg count files; reuse the audited MAP-to-SUMO lane contract without downloading OSM or repeating nearest-lane matching.")(
+        sumo_hamburg_cached_detector_demand
+    )
+    server.tool(description="Generate same-location E1/E2 sensors and routeSampler demand for the hash-bound geometry-preserving Am Sandtorkai TLS candidate; reuse frozen official MAP/count evidence while keeping the candidate's topology/surface review gate explicit.")(
+        sumo_hamburg_corridor_candidate_detector_demand
+    )
+    server.tool(description="Recompute the hash-bound official MAP-to-SUMO lane binding contract on the exact geometry-preserving Am Sandtorkai corridor candidate before generating sensors or demand; never reuse pre-materialization nearest-edge assignments silently.")(
+        sumo_hamburg_corridor_candidate_map_bindings
+    )
+    server.tool(description="Bind frozen official primary-signal metadata to the exact candidate controller links after MAP reprojection; preserve active/redundant status and keep historical signal replay blocked when observations are unavailable.")(
+        sumo_hamburg_corridor_candidate_signal_bindings
+    )
+    server.tool(description="Run the geometry-preserving Am Sandtorkai candidate MAP reprojection, primary-signal binding, and detector-demand/routeSampler stages as one hash-bound review package; keep the blocked topology and historical-signal gates explicit.")(
+        sumo_hamburg_sandtorkai_corridor_candidate_package
+    )
+    server.tool(description="Run the staged Am Sandtorkai geometry-safe digital-twin package: without an exact-candidate road-arm/SUMO binding it stops after the geometry review candidate; with the binding it may proceed to TLS, MAP/E1/E2, signal, and demand stages while retaining warm-up/history gates.")(
+        sumo_hamburg_sandtorkai_geometry_safe_digital_twin
+    )
+    server.tool(description="Rebuild the Am Sandtorkai three-node SUMO traffic-light topology from a frozen network and cached official Hamburg MAP/OCIT assets; fail closed unless the TLD groups equal the complete OCIT motor-group inventory and all 27 primary signal streams bind as active or same-group redundant.")(
+        sumo_hamburg_official_tls_rebuild
+    )
+    server.tool(description="Run Eclipse SUMO routeSampler against explicit candidate routes and multi-interval edge count constraints; report the resulting plausible detector-constrained route file and mismatch evidence, not a uniquely identified true OD matrix.")(
+        sumo_detector_route_sampler_calibrate
+    )
+    server.tool(description="Run a passenger-link-complete official TLS event replay with SUMO E1/E2 sensors, then compare real counts to virtual nVehContrib bins and collect completion evidence.")(
+        sumo_digital_twin_replay_validate
     )
 
     return server
