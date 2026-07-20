@@ -162,6 +162,11 @@ def materialize_hamburg_official_splice_candidate(
         "--no-turnarounds",
         "--junctions.endpoint-shape",
         "true",
+        # Use the authoritative MAP core face as the minimal physical
+        # junction footprint; otherwise long curved lane endpoints can make
+        # netconvert expand the core over adjacent HH-SIB junctions.
+        "--junctions.minimal-shape",
+        "true",
         "--offset.disable-normalization",
         "true",
         "--output-file",
@@ -522,7 +527,8 @@ def _build_local_components(
         for node in nod_root.findall("node"):
             if node.attrib.get("type") == "traffic_light" or node.attrib.get("id", "").endswith("-core"):
                 item = ET.fromstring(ET.tostring(node))
-                item.attrib.pop("shape", None)
+                if not str(item.attrib.get("id", "")).endswith("-core"):
+                    item.attrib.pop("shape", None)
                 nodes.append(item)
         edg_root = ET.parse(files["edg"]).getroot()
         for source in edg_root.findall("edge"):
