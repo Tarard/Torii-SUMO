@@ -87,6 +87,7 @@ def build_hamburg_official_splice_plan(
     reports.sort(key=lambda item: _identifier_key(str(item[0].get("node_id", ""))))
     report_payloads = [item[0] for item in reports]
     _validate_reports(report_payloads)
+    movement_destinations = _movement_destination_groups(report_payloads)
 
     supplied_plan, supplied_identity = _load_json_like(
         lane_axis_stitch_plan, "lane-axis stitch plan"
@@ -153,6 +154,7 @@ def build_hamburg_official_splice_plan(
             transformer=transformer,
             maximum_merge_axis_distance_m=maximum_merge_axis_distance_m,
             merge_point_tolerance_m=merge_point_tolerance_m,
+            movement_destinations=movement_destinations,
         )
         approaches.append(entry)
         event = entry.get("splice_event")
@@ -300,6 +302,7 @@ def _build_approach_splice(
     transformer: Transformer,
     maximum_merge_axis_distance_m: float,
     merge_point_tolerance_m: float,
+    movement_destinations: Mapping[str, Mapping[str, frozenset[str]]],
 ) -> dict[str, Any]:
     axis_counts = [int(value) for value in conflict.get("hh_sib_axis_lane_counts_at_boundary", [])]
     map_count = int(conflict.get("map_lane_count", len(members)))
@@ -421,6 +424,20 @@ def _build_approach_splice(
         base["reasons"].append("official_merge_event_has_no_boundary_lane_start_identity")
         return base
 
+    proven_through_lane_ids = (
+        _merge_through_lane_proof(
+            map_lane_ids=map_lane_ids,
+            axis_count=axis_count,
+            merge_lane_ids_starting_at_event=merge_lane_ids_starting_at_event,
+            destination_groups=movement_destinations.get(node_id, {}),
+        )
+        if event_kind == "official_merge_event"
+        else []
+    )
+    if proven_through_lane_ids:
+        status = "pass"
+        decision = "split_at_official_merge_point_then_use_destination_provenance"
+
     axis_point = _axis_point_at_station(axis, event_station)
     junction_stations = [
         float(item["binding"]["junction_station_m"])
@@ -466,10 +483,74 @@ def _build_approach_splice(
                     else map_lane_ids
                 ),
                 "official_merge_lane_ids": base["official_merge_lane_ids"],
+                "map_lane_ids_proven_through": proven_through_lane_ids,
+                "merge_lane_provenance": (
+                    {
+                        "status": "pass",
+                        "basis": "unique_destination_approach_group",
+                        "destination_approach_ids": sorted(
+                            movement_destinations[node_id][proven_through_lane_ids[0]]
+                        ),
+                    }
+                    if proven_through_lane_ids
+                    else {"status": "not_proven"}
+                ),
             },
         }
     )
     return base
+
+
+def _movement_destination_groups(
+    reports: Sequence[Mapping[str, Any]],
+) -> dict[str, dict[str, frozenset[str]]]:
+    result: dict[str, dict[str, frozenset[str]]] = {}
+    for report in reports:
+        node_id = str(report.get("node_id", ""))
+        egress_approaches = {
+            str(lane.get("lane_id", "")): str(lane.get("egress_approach", ""))
+            for lane in report.get("lanes", [])
+            if isinstance(lane, Mapping)
+            and str(lane.get("lane_id", ""))
+            and str(lane.get("egress_approach", ""))
+        }
+        destinations: dict[str, set[str]] = defaultdict(set)
+        for connection in report.get("connections", []):
+            if not isinstance(connection, Mapping):
+                continue
+            ingress = str(connection.get("ingress_lane_id", ""))
+            egress = str(connection.get("egress_lane_id", ""))
+            destination = egress_approaches.get(egress)
+            if ingress and destination:
+                destinations[ingress].add(destination)
+        result[node_id] = {
+            lane_id: frozenset(values)
+            for lane_id, values in destinations.items()
+        }
+    return result
+
+
+def _merge_through_lane_proof(
+    *,
+    map_lane_ids: Sequence[str],
+    axis_count: int,
+    merge_lane_ids_starting_at_event: Sequence[str],
+    destination_groups: Mapping[str, frozenset[str]],
+) -> list[str]:
+    known = [
+        lane_id
+        for lane_id in map_lane_ids
+        if lane_id not in set(merge_lane_ids_starting_at_event)
+    ]
+    if not known or len(known) >= axis_count:
+        return []
+    signature = destination_groups.get(known[0], frozenset())
+    if len(signature) != 1 or any(
+        destination_groups.get(lane_id, frozenset()) != signature for lane_id in known
+    ):
+        return []
+    candidates = [lane_id for lane_id in map_lane_ids if destination_groups.get(lane_id, frozenset()) == signature]
+    return candidates if len(candidates) == axis_count else []
 
 
 def _unique_merge_points(
