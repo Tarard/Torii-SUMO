@@ -1753,10 +1753,16 @@ def write_tls_link_events(
                 item.sumo_to_lane,
             )
         )
-    rows: list[dict[str, object]] = []
+    event_rows: dict[tuple[float, str, int], dict[str, object]] = {}
+    event_order: dict[tuple[float, str, int], tuple[datetime, str, int]] = {}
+    collapsed_event_count = 0
+    conflict_event_count = 0
     initialized: set[tuple[int, str, int]] = set()
     for stream_id, stream_bindings in sorted(bindings_by_stream.items()):
-        candidates = sorted(observations.get(stream_id, ()), key=lambda item: item.phenomenon_time_utc)
+        candidates = sorted(
+            observations.get(stream_id, ()),
+            key=lambda item: (item.phenomenon_time_utc, item.result_time, item.observation_id or -1),
+        )
         preceding = [item for item in candidates if item.phenomenon_time_utc <= begin_utc]
         in_window = [item for item in candidates if begin_utc < item.phenomenon_time_utc < end_utc]
         selected = ([preceding[-1]] if preceding else []) + in_window
@@ -1771,24 +1777,34 @@ def write_tls_link_events(
                 observation.phenomenon_time_utc - begin_utc
             ).total_seconds()
             for binding in stream_bindings:
-                rows.append(
-                    {
-                        "simulation_time": f"{simulation_time:.3f}",
-                        "phenomenon_time_utc": observation.phenomenon_time_utc.isoformat().replace("+00:00", "Z"),
-                        "node_id": binding.node_id,
-                        "stream_id": stream_id,
-                        "connection_id": binding.connection_id,
-                        "signal_group": binding.signal_group,
-                        "sumo_tls_id": binding.sumo_tls_id,
-                        "sumo_link_index": binding.sumo_link_index,
-                        "source_state": observation.result,
-                        "sumo_state": map_signal_state_to_sumo(observation.result),
-                        "conversion_exact": (
-                            "true" if observation.result in {"0", "1", "2", "3", "4"} else "false"
-                        ),
-                        "source_layer": stream_index[stream_id].layer_name,
-                    }
-                )
+                row = {
+                    "simulation_time": f"{simulation_time:.3f}",
+                    "phenomenon_time_utc": observation.phenomenon_time_utc.isoformat().replace("+00:00", "Z"),
+                    "node_id": binding.node_id,
+                    "stream_id": stream_id,
+                    "connection_id": binding.connection_id,
+                    "signal_group": binding.signal_group,
+                    "sumo_tls_id": binding.sumo_tls_id,
+                    "sumo_link_index": binding.sumo_link_index,
+                    "source_state": observation.result,
+                    "sumo_state": map_signal_state_to_sumo(observation.result),
+                    "conversion_exact": (
+                        "true" if observation.result in {"0", "1", "2", "3", "4"} else "false"
+                    ),
+                    "source_layer": stream_index[stream_id].layer_name,
+                }
+                key = (simulation_time, binding.sumo_tls_id, int(binding.sumo_link_index))
+                order = (observation.phenomenon_time_utc, observation.result_time, observation.observation_id or -1)
+                previous = event_rows.get(key)
+                if previous is not None:
+                    collapsed_event_count += 1
+                    if previous["sumo_state"] != row["sumo_state"]:
+                        conflict_event_count += 1
+                    if order <= event_order[key]:
+                        continue
+                event_rows[key] = row
+                event_order[key] = order
+    rows = list(event_rows.values())
     rows.sort(key=lambda row: (float(row["simulation_time"]), str(row["sumo_tls_id"]), int(row["sumo_link_index"])))
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
@@ -1813,6 +1829,8 @@ def write_tls_link_events(
         "active_binding_count": sum(len(items) for items in bindings_by_stream.values()),
         "initialized_binding_count": len(initialized),
         "event_count": len(rows),
+        "collapsed_event_count": collapsed_event_count,
+        "conflict_event_count": conflict_event_count,
     }
 
 

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from torii_sumo.core.hamburg_named_replay import _read_sumo_quality, _summarize_e1
+from torii_sumo.core.hamburg_named_replay import (
+    _audit_signal_history_scope,
+    _read_sumo_quality,
+    _summarize_e1,
+)
 
 
 def test_sumo_quality_gate_blocks_teleports_and_collisions(tmp_path: Path) -> None:
@@ -60,3 +64,15 @@ def test_e1_summary_exposes_missing_bins() -> None:
     assert report["total"] == 2
     assert report["expected"] == 10
     assert report["measured"] == 8
+
+
+def test_signal_history_scope_blocks_short_official_window() -> None:
+    report = _audit_signal_history_scope(
+        {"window": {"begin_utc": "2026-07-18T06:00:00Z", "end_utc": "2026-07-18T08:00:00Z"}},
+        simulation_begin=0,
+        simulation_end=9000,
+    )
+
+    assert report["status"] == "review_required"
+    assert report["history_window_seconds"] == 7200
+    assert report["replay_window_seconds"] == 9000
