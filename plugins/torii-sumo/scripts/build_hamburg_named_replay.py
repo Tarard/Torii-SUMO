@@ -21,6 +21,14 @@ def main() -> int:
     parser.add_argument("--route-sampler-script", type=Path)
     parser.add_argument("--sumo-binary", default="sumo")
     parser.add_argument("--timeout-seconds", type=float, default=300.0)
+    parser.add_argument(
+        "--allow-detector-cross-section-boundaries",
+        action="store_true",
+        help=(
+            "Use official detector edges as explicit open source/sink ports; this reproduces "
+            "the measured local cut but does not claim upstream OD demand."
+        ),
+    )
     args = parser.parse_args()
     try:
         report = materialize_hamburg_named_replay(
@@ -33,6 +41,7 @@ def main() -> int:
             route_sampler_script=args.route_sampler_script,
             sumo_binary=args.sumo_binary,
             timeout_seconds=args.timeout_seconds,
+            allow_detector_cross_section_boundaries=args.allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError, HamburgNamedReplayError) as exc:
         print(json.dumps({"status": "error", "automatic_promotion_gate": "blocked", "error": str(exc)}))

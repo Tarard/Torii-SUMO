@@ -33,7 +33,7 @@ from .digital_twin_mapping import (
     write_virtual_e2_additional,
     write_virtual_expected_counts,
 )
-from .route_sampler import run_route_sampler
+from .route_sampler import apply_departure_lane_targets, run_route_sampler
 from .tls_replay import run_tls_detector_replay
 
 
@@ -61,6 +61,7 @@ def materialize_hamburg_named_replay(
     interval: int = 900,
     max_snap_distance_m: float = 50.0,
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
     command_runner: Callable[..., object] = run_command,
 ) -> dict[str, Any]:
     """Write detector, route, SUMO and comparison artifacts without changing inputs."""
@@ -157,6 +158,7 @@ def materialize_hamburg_named_replay(
         demand_dir,
         prefix="hamburg_sandtorkai",
         excluded_edges=frozenset(),
+        allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
     )
     route_sampler = (
         run_route_sampler(
@@ -176,6 +178,28 @@ def materialize_hamburg_named_replay(
         if route_support.get("status") == "pass"
         else {"status": "blocked", "reason": "route candidate coverage failed"}
     )
+    lane_balance: dict[str, Any] = {"status": "not_requested"}
+    if allow_detector_cross_section_boundaries and route_sampler.get("status") == "pass":
+        lane_targets: dict[tuple[str, int], dict[str, int]] = {}
+        lane_positions = {
+            (group.sumo_edge, group.sumo_lane): group.lane_position
+            for group in aggregation.groups
+        }
+        for expected in aggregation.expected_counts:
+            lane_counts = lane_targets.setdefault((expected.sumo_edge, expected.begin), {})
+            lane_counts[expected.sumo_lane] = lane_counts.get(expected.sumo_lane, 0) + expected.expected_total
+        lane_balance = apply_departure_lane_targets(
+            Path(str(route_sampler["demand_route_file"])),
+            lane_targets,
+            interval=interval,
+            lane_positions=lane_positions,
+        )
+        route_sampler["lane_balance"] = lane_balance
+        if lane_balance.get("status") == "pass":
+            route_sampler["demand_route_sha256"] = file_sha256(Path(str(route_sampler["demand_route_file"])))
+        else:
+            route_sampler["status"] = "partial"
+            route_sampler["claim_status"] = "construction-incomplete"
     if route_sampler.get("status") != "pass":
         simulation = {"status": "blocked", "reason": "routeSampler did not produce demand"}
     elif signal_observation_manifest is not None and signal_history is None:
@@ -238,6 +262,16 @@ def materialize_hamburg_named_replay(
     if comparison_status != "pass":
         gate_reasons.append("E1 comparison is missing one or more expected bins")
     execution_gate = "pass" if not gate_reasons else "blocked"
+    claim_does_not_prove = [
+        "a unique OD matrix or observed trajectories",
+        "official lane identity where the point snap is low confidence",
+        "historical signal replay while official observations are unavailable",
+    ]
+    if allow_detector_cross_section_boundaries:
+        claim_does_not_prove.insert(
+            1,
+            "upstream or downstream demand outside the measured detector cross-sections",
+        )
     manifest: dict[str, Any] = {
         "schema": NAMED_REPLAY_SCHEMA,
         "status": "partial" if execution_gate == "pass" else "blocked",
@@ -277,6 +311,11 @@ def materialize_hamburg_named_replay(
             "evidence": mapping_evidence,
         },
         "route_support": route_support,
+        "boundary_policy": (
+            "official_detector_cross_sections_as_open_source_sink_ports"
+            if allow_detector_cross_section_boundaries
+            else "network_boundaries_only"
+        ),
         "route_sampler": route_sampler,
         "simulation": simulation,
         "comparison": {"status": comparison_status, "summary": comparison_summary, "file": str(comparison_file)},
@@ -284,6 +323,7 @@ def materialize_hamburg_named_replay(
             "signal_binding_execution": "pass" if binding.get("execution_gate") == "pass" else "blocked",
             "detector_mapping": "pass" if len(active) == len(streams) else "blocked",
             "route_sampler": route_sampler.get("status", "blocked"),
+            "lane_balance": lane_balance.get("status", "not_requested"),
             "sumo_run": simulation.get("status", "blocked"),
             "sumo_quality": simulation.get("quality_gate", "blocked"),
             "e1_comparison": comparison_status,
@@ -310,11 +350,7 @@ def materialize_hamburg_named_replay(
                 "routeSampler produced a detector-constrained plausible route realization when its gate passes",
                 "SUMO E1 output was compared with the virtual expected bins",
             ],
-            "does_not_prove": [
-                "a unique OD matrix or observed trajectories",
-                "official lane identity where the point snap is low confidence",
-                "historical signal replay while official observations are unavailable",
-            ],
+            "does_not_prove": claim_does_not_prove,
         },
     }
     write_json_atomic(manifest_file, manifest, sort_keys=True)

@@ -408,6 +408,7 @@ def test_cached_detector_demand_tool_reuses_frozen_evidence(
         output_dir=str(tmp_path / "output"),
         excluded_route_edges=["158068424"],
         route_sampler_script=str(tmp_path / "routeSampler.py"),
+        allow_detector_cross_section_boundaries=True,
     )
 
     assert report["demand_generation_status"] == "pass"
@@ -419,6 +420,7 @@ def test_cached_detector_demand_tool_reuses_frozen_evidence(
     assert captured["route_sampler_script"] == tmp_path / "routeSampler.py"
     assert captured["comparison_begin"] == 1800
     assert captured["comparison_end"] == 9000
+    assert captured["allow_detector_cross_section_boundaries"] is True
 
 
 def test_corridor_candidate_detector_demand_tool_reuses_hash_bound_inputs(
@@ -702,6 +704,7 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
         canonical_count_file=str(files["counts.csv"]),
         output_dir=str(tmp_path / "replay"),
         route_sampler_script=str(files["routeSampler.py"]),
+        allow_detector_cross_section_boundaries=True,
     )
 
     assert report["execution_gate"] == "blocked"
@@ -711,6 +714,7 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
     assert captured["canonical_count_file"] == files["counts.csv"]
     assert captured["route_sampler_script"] == files["routeSampler.py"]
     assert captured["output_dir"] == tmp_path / "replay"
+    assert captured["allow_detector_cross_section_boundaries"] is True
 
 
 def test_signal_observation_tool_forwards_utc_window_and_fetch_options(tmp_path: Path, monkeypatch) -> None:

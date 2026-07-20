@@ -28,6 +28,14 @@ def main() -> int:
     parser.add_argument("--route-sampler-optimize", default="full")
     parser.add_argument("--route-sampler-script", type=Path)
     parser.add_argument("--timeout-seconds", type=float, default=300.0)
+    parser.add_argument(
+        "--allow-detector-cross-section-boundaries",
+        action="store_true",
+        help=(
+            "Use official detector edges as explicit open source/sink ports; this reproduces "
+            "the measured local cut but does not claim upstream OD demand."
+        ),
+    )
     args = parser.parse_args()
 
     report = prepare_cached_detector_demand_package(
@@ -45,6 +53,7 @@ def main() -> int:
         route_sampler_optimize=args.route_sampler_optimize,
         route_sampler_script=args.route_sampler_script,
         timeout_seconds=args.timeout_seconds,
+        allow_detector_cross_section_boundaries=args.allow_detector_cross_section_boundaries,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report.get("demand_generation_status") == "pass" else 1

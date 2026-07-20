@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
+import re
 import shutil
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Mapping
 
 import sumolib
 
@@ -41,6 +43,132 @@ def write_candidate_routes(candidate_manifest_csv: Path, output_file: Path) -> i
     ET.indent(tree, space="    ")
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
     return count
+
+
+def apply_departure_lane_targets(
+    demand_route_file: Path,
+    lane_targets: Mapping[tuple[str, int], Mapping[str, int]],
+    *,
+    interval: int,
+    lane_positions: Mapping[tuple[str, str], float] | None = None,
+    depart_offset_m: float = 1.0,
+    output_file: Path | None = None,
+) -> dict[str, object]:
+    """Assign deterministic SUMO departure lanes from official lane counts.
+
+    ``routeSampler`` constrains edge totals and intentionally does not solve the
+    lane split.  A local detector-cross-section replay has stronger evidence:
+    each source edge is measured lane by lane.  When the generated vehicles in
+    an edge/bin equal that lane total, this function writes ``departLane`` in a
+    stable lane-count order.  Optional detector positions place vehicles just
+    upstream of the measured cut, which is the correct boundary semantics for
+    a local cross-section twin.  Any unmatched bin is reported instead of
+    silently fabricating a lane split.
+    """
+
+    if interval <= 0:
+        raise ValueError("interval must be positive")
+    if not math.isfinite(depart_offset_m) or depart_offset_m < 0:
+        raise ValueError("depart_offset_m must be finite and non-negative")
+    source = Path(demand_route_file).resolve(strict=True)
+    destination = Path(output_file).resolve() if output_file is not None else source
+    root = ET.parse(source).getroot()
+    vehicles_by_bin: dict[tuple[str, int], list[ET.Element]] = {}
+    unsupported_vehicle_count = 0
+    for vehicle in root.findall("vehicle"):
+        route = vehicle.find("route")
+        depart_text = vehicle.attrib.get("depart")
+        if route is None or not route.attrib.get("edges") or depart_text is None:
+            unsupported_vehicle_count += 1
+            continue
+        first_edge = route.attrib["edges"].split()[0]
+        depart = float(depart_text)
+        begin = math.floor(depart / interval) * interval
+        vehicles_by_bin.setdefault((first_edge, begin), []).append(vehicle)
+
+    changed = 0
+    assigned = 0
+    target_total = 0
+    mismatches: list[dict[str, object]] = []
+    unresolved_lanes: list[dict[str, object]] = []
+    unresolved_positions: list[dict[str, object]] = []
+    positioned = 0
+    for key, targets in sorted(lane_targets.items()):
+        edge_id, begin = key
+        lane_counts = {str(lane): int(count) for lane, count in targets.items() if int(count) > 0}
+        if any(count < 0 for count in targets.values()):
+            raise ValueError(f"lane target counts must be non-negative for {key!r}")
+        target_count = sum(lane_counts.values())
+        target_total += target_count
+        vehicles = vehicles_by_bin.get(key, [])
+        if len(vehicles) != target_count:
+            mismatches.append(
+                {
+                    "edge_id": edge_id,
+                    "begin": begin,
+                    "target_count": target_count,
+                    "vehicle_count": len(vehicles),
+                }
+            )
+            continue
+        lane_queue: list[str] = []
+        for lane_id, count in sorted(lane_counts.items()):
+            match = re.search(r"_(\d+)$", lane_id)
+            if match is None:
+                unresolved_lanes.append({"edge_id": edge_id, "begin": begin, "lane_id": lane_id})
+                lane_queue = []
+                break
+            lane_queue.extend([match.group(1)] * count)
+        if not lane_queue:
+            continue
+        for vehicle, lane_index in zip(vehicles, lane_queue, strict=True):
+            if vehicle.attrib.get("departLane") != lane_index:
+                vehicle.set("departLane", lane_index)
+                changed += 1
+            lane_id = next(
+                lane_id
+                for lane_id in lane_counts
+                if lane_id.rsplit("_", 1)[-1] == lane_index
+            )
+            if lane_positions is not None:
+                position = lane_positions.get((edge_id, lane_id))
+                if position is None or not math.isfinite(float(position)):
+                    unresolved_positions.append(
+                        {"edge_id": edge_id, "begin": begin, "lane_id": lane_id}
+                    )
+                else:
+                    vehicle.set("departPos", f"{max(0.1, float(position) - depart_offset_m):g}")
+                    positioned += 1
+            assigned += 1
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.lane-balance.tmp")
+    ET.indent(root, space="    ")
+    ET.ElementTree(root).write(temporary, encoding="utf-8", xml_declaration=True)
+    temporary.replace(destination)
+    return {
+        "status": (
+            "pass"
+            if not mismatches
+            and not unresolved_lanes
+            and not unresolved_positions
+            and unsupported_vehicle_count == 0
+            else "fail"
+        ),
+        "interval": interval,
+        "target_bin_count": len(lane_targets),
+        "vehicle_bin_count": len(vehicles_by_bin),
+        "target_vehicle_count": target_total,
+        "assigned_vehicle_count": assigned,
+        "changed_vehicle_count": changed,
+        "positioned_vehicle_count": positioned,
+        "depart_offset_m": depart_offset_m,
+        "unmatched_bins": mismatches,
+        "unresolved_lanes": unresolved_lanes,
+        "unresolved_positions": unresolved_positions,
+        "unsupported_vehicle_count": unsupported_vehicle_count,
+        "demand_route_file": str(destination),
+    }
 
 
 def validate_route_sampler_edge_counts(

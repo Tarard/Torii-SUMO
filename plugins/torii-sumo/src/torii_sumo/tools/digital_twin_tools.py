@@ -477,6 +477,7 @@ def sumo_hamburg_cached_detector_demand(
     route_sampler_optimize: str | None = "full",
     route_sampler_script: str | None = None,
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Resume detector-demand construction from hash-pinned official evidence.
 
@@ -501,6 +502,7 @@ def sumo_hamburg_cached_detector_demand(
             route_sampler_optimize=route_sampler_optimize,
             route_sampler_script=Path(route_sampler_script) if route_sampler_script else None,
             timeout_seconds=timeout_seconds,
+            allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError) as exc:
         return {
@@ -593,6 +595,7 @@ def sumo_hamburg_sandtorkai_corridor_candidate_package(
     route_sampler_optimize: str | None = "full",
     route_sampler_script: str | None = None,
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Run candidate MAP, signal, and detector-demand stages as one package."""
 
@@ -622,6 +625,7 @@ def sumo_hamburg_sandtorkai_corridor_candidate_package(
             route_sampler_optimize=route_sampler_optimize,
             route_sampler_script=Path(route_sampler_script) if route_sampler_script else None,
             timeout_seconds=timeout_seconds,
+            allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError, json.JSONDecodeError, ET.ParseError) as exc:
         return {
@@ -657,6 +661,7 @@ def sumo_hamburg_sandtorkai_geometry_safe_digital_twin(
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Run the staged geometry-safe corridor twin workflow.
 
@@ -701,6 +706,7 @@ def sumo_hamburg_sandtorkai_geometry_safe_digital_twin(
             netconvert_binary=netconvert_binary,
             sumo_binary=sumo_binary,
             timeout_seconds=timeout_seconds,
+            allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError, json.JSONDecodeError, ET.ParseError) as exc:
         return {
@@ -731,6 +737,7 @@ def sumo_hamburg_corridor_candidate_detector_demand(
     route_sampler_optimize: str | None = "full",
     route_sampler_script: str | None = None,
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Generate sensors and detector-constrained routes for a blocked TLS candidate.
 
@@ -760,6 +767,7 @@ def sumo_hamburg_corridor_candidate_detector_demand(
             route_sampler_optimize=route_sampler_optimize,
             route_sampler_script=Path(route_sampler_script) if route_sampler_script else None,
             timeout_seconds=timeout_seconds,
+            allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return {
@@ -1035,6 +1043,7 @@ def sumo_hamburg_sandtorkai_named_replay(
     route_sampler_script: str | None = None,
     sumo_binary: str = "sumo",
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Build and quality-gate the reusable W4 detector-constrained replay."""
 
@@ -1057,6 +1066,7 @@ def sumo_hamburg_sandtorkai_named_replay(
             ),
             sumo_binary=sumo_binary,
             timeout_seconds=timeout_seconds,
+            allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return {
