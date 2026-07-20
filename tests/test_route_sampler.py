@@ -211,3 +211,55 @@ def test_departure_lane_targets_are_written_per_edge_and_bin(tmp_path: Path) -> 
     root = ET.parse(demand).getroot()
     assert [vehicle.attrib["departLane"] for vehicle in root.findall("vehicle")] == ["0", "1", "1"]
     assert [vehicle.attrib["departPos"] for vehicle in root.findall("vehicle")] == ["19", "20", "20"]
+
+
+def test_departure_lane_targets_skip_internal_detector_edges(tmp_path: Path) -> None:
+    demand = tmp_path / "demand.rou.xml"
+    demand.write_text(
+        "<routes>"
+        "<vehicle id='v0' depart='2'><route edges='source internal'/></vehicle>"
+        "</routes>",
+        encoding="utf-8",
+    )
+
+    report = apply_departure_lane_targets(
+        demand,
+        {
+            ("source", 0): {"source_0": 1},
+            ("internal", 0): {"internal_0": 1},
+        },
+        interval=900,
+        source_edges={"source"},
+    )
+
+    assert report["status"] == "review_required"
+    assert report["skipped_non_source_bin_count"] == 1
+    assert report["skipped_non_source_edges"] == ["internal"]
+    assert report["controlled_target_vehicle_count"] == 1
+    root = ET.parse(demand).getroot()
+    vehicle = root.find("vehicle")
+    assert vehicle is not None
+    assert vehicle.attrib["departLane"] == "0"
+
+
+def test_departure_lane_targets_mark_partial_source_coverage_for_review(tmp_path: Path) -> None:
+    demand = tmp_path / "demand.rou.xml"
+    demand.write_text(
+        "<routes>"
+        "<vehicle id='v0' depart='2'><route edges='source'/></vehicle>"
+        "<vehicle id='v1' depart='3'><route edges='source'/></vehicle>"
+        "</routes>",
+        encoding="utf-8",
+    )
+
+    report = apply_departure_lane_targets(
+        demand,
+        {("source", 0): {"source_0": 1}},
+        interval=900,
+        source_edges={"source"},
+    )
+
+    assert report["status"] == "review_required"
+    assert report["unmatched_bins"] == [
+        {"edge_id": "source", "begin": 0, "target_count": 1, "vehicle_count": 2}
+    ]

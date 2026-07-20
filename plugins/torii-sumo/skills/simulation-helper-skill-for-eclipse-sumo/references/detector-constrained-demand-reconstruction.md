@@ -74,6 +74,10 @@ For lane-level sources such as Hamburg, first collapse multiple official fields 
 `(physical node, SUMO lane)` and retain source membership. Use that virtual expected-count file for E1/E2 replay.
 Build routeSampler edgeData only from audited complete passenger-lane cross-sections; a partial-lane observation
 is not the total flow of a multi-lane SUMO edge. Keep the complete-section audit beside the edgeData file.
+When detector cross-sections are deliberately opened as local source/sink ports, departure-lane assignment may
+control only the first edge of each generated route. A detector edge that occurs later in a route is an internal
+observation, not a second departure point; leave that lane split as `review_required` unless an explicit segment or
+turn-flow model controls it. Never turn the internal-bin mismatch into fabricated `departLane` attributes.
 
 ## Workflow Contract
 
