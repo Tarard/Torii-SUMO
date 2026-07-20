@@ -253,6 +253,7 @@ def materialize_hamburg_named_signal_observations(
     max_workers: int = 1,
     timeout_seconds: float = 60.0,
     retry_incomplete_cache: bool = False,
+    allow_signal_group_projection: bool = False,
     client: SensorThingsClient | None = None,
     client_factory: Callable[[str, float], SensorThingsClient] | None = None,
 ) -> dict[str, Any]:
@@ -297,6 +298,20 @@ def materialize_hamburg_named_signal_observations(
     )
 
     stream_audit = _audit_streams(streams, observations, raw, begin_utc, end_utc)
+    projection = _project_signal_group_observations(
+        streams,
+        observations,
+        stream_audit,
+        begin_utc=begin_utc,
+        end_utc=end_utc,
+        enabled=allow_signal_group_projection,
+    )
+    stream_audit = _audit_streams(streams, observations, raw, begin_utc, end_utc)
+    for row in stream_audit:
+        derived = projection["by_stream_id"].get(str(row["stream_id"]))
+        if derived is not None:
+            row["source_status"] = "derived_from_signal_group"
+            row["derived_from_stream_id"] = derived["source_stream_id"]
     complete = [row for row in stream_audit if row["status"] == "complete"]
     incomplete = [row for row in stream_audit if row["status"] != "complete"]
     event_path = destination / "tls-link-events.csv"
@@ -320,6 +335,7 @@ def materialize_hamburg_named_signal_observations(
             str(stream_id): [_serialize_observation(item) for item in values]
             for stream_id, values in sorted(observations.items())
         },
+        "signal_group_projection": projection["derived_streams"],
     }
     write_json_atomic(normalized_path, normalized, sort_keys=True)
 
@@ -362,7 +378,19 @@ def materialize_hamburg_named_signal_observations(
         "cache_policy": {
             "retry_incomplete_cache": retry_incomplete_cache,
         },
+        "signal_group_projection": {
+            "enabled": allow_signal_group_projection,
+            "derived_stream_count": len(projection["derived_streams"]),
+            "derived_streams": projection["derived_streams"],
+            "blocked_streams": projection["blocked_streams"],
+        },
         "stream_count": len(streams),
+        "direct_complete_stream_count": sum(
+            1
+            for row in stream_audit
+            if row["status"] == "complete" and str(row["stream_id"]) not in projection["by_stream_id"]
+        ),
+        "projected_complete_stream_count": len(projection["derived_streams"]),
         "complete_stream_count": len(complete),
         "incomplete_stream_ids": [row["stream_id"] for row in incomplete],
         "stream_audit": stream_audit,
@@ -376,6 +404,15 @@ def materialize_hamburg_named_signal_observations(
         "gates": {
             "official_observation_completeness": execution_gate,
             "time_zero_state_coverage": "pass" if all(row["preceding_count"] > 0 for row in stream_audit) else "blocked",
+            "signal_group_projection": (
+                "pass"
+                if projection["derived_streams"] and not projection["blocked_streams"]
+                else "not_used"
+                if not allow_signal_group_projection
+                else "blocked"
+                if projection["blocked_streams"]
+                else "pass"
+            ),
             "required_node_scope": "pass" if not missing_required_nodes else "blocked",
             "automatic_promotion": promotion_gate,
         },
@@ -389,10 +426,21 @@ def materialize_hamburg_named_signal_observations(
                 "which official primary streams answered for the UTC window",
                 "which state initializes each active SUMO link at simulation time zero",
                 "that failed or partial streams remain visible in the manifest",
+                *(
+                    [
+                        "that a missing connection stream was projected only from a direct sibling with the same official node and signalGroupID"
+                    ]
+                    if projection["derived_streams"]
+                    else []
+                ),
             ],
             "does_not_prove": [
                 "a complete three-node signal stage while a required node is missing",
-                "signal timing for streams with an incomplete upstream response",
+                *(
+                    ["a direct per-connection TLD observation for a projected stream"]
+                    if projection["derived_streams"]
+                    else ["signal timing for streams with an incomplete upstream response"]
+                ),
             ],
         },
     }
@@ -443,6 +491,129 @@ def _load_official_lsa_identity_evidence(
         "decision": payload["decision"],
         "selected_node_ids": sorted(selected_ids),
     }
+
+
+def _project_signal_group_observations(
+    streams: Sequence[SignalStream],
+    observations: dict[int, list[SignalObservation]],
+    stream_audit: Sequence[Mapping[str, Any]],
+    *,
+    begin_utc: datetime,
+    end_utc: datetime,
+    enabled: bool,
+) -> dict[str, Any]:
+    """Project a direct signal-group state onto a silent sibling movement.
+
+    A TLD ``signalGroupID`` is the controller identity for the signal state,
+    while a stream is only one MAP movement in that group.  Projection is
+    therefore allowed only when a sibling in the same official node/group has
+    a complete response and an unambiguous preceding state.  No phase or time
+    is synthesized; the source observations are copied with a new stream id
+    and are recorded as derived evidence.
+    """
+
+    result: dict[str, Any] = {"derived_streams": [], "blocked_streams": [], "by_stream_id": {}}
+    if not enabled:
+        return result
+
+    audit_by_id = {int(row["stream_id"]): row for row in stream_audit}
+    streams_by_group: dict[tuple[str, str], list[SignalStream]] = {}
+    for stream in streams:
+        streams_by_group.setdefault((stream.node_id, stream.signal_group), []).append(stream)
+
+    for target in streams:
+        target_audit = audit_by_id.get(target.stream_id, {})
+        if target_audit.get("status") == "complete":
+            continue
+        siblings = [
+            sibling
+            for sibling in streams_by_group.get((target.node_id, target.signal_group), [])
+            if sibling.stream_id != target.stream_id
+            and audit_by_id.get(sibling.stream_id, {}).get("status") == "complete"
+        ]
+        if not siblings:
+            result["blocked_streams"].append(
+                {
+                    "stream_id": target.stream_id,
+                    "node_id": target.node_id,
+                    "signal_group": target.signal_group,
+                    "reason": "no_complete_sibling_in_same_official_signal_group",
+                }
+            )
+            continue
+        preceding_states = {
+            str(audit_by_id[sibling.stream_id].get("preceding_state", ""))
+            for sibling in siblings
+        }
+        if len(preceding_states) != 1 or "" in preceding_states:
+            result["blocked_streams"].append(
+                {
+                    "stream_id": target.stream_id,
+                    "node_id": target.node_id,
+                    "signal_group": target.signal_group,
+                    "sibling_stream_ids": sorted(sibling.stream_id for sibling in siblings),
+                    "reason": "same_signal_group_siblings_have_conflicting_or_missing_t0_state",
+                }
+            )
+            continue
+        source = max(
+            siblings,
+            key=lambda sibling: (
+                int(audit_by_id[sibling.stream_id].get("window_count", 0)),
+                -sibling.stream_id,
+            ),
+        )
+        source_values = list(observations.get(source.stream_id, ()))
+        if not source_values:
+            result["blocked_streams"].append(
+                {
+                    "stream_id": target.stream_id,
+                    "node_id": target.node_id,
+                    "signal_group": target.signal_group,
+                    "source_stream_id": source.stream_id,
+                    "reason": "complete_sibling_has_no_observation_values",
+                }
+            )
+            continue
+        source_preceding = [value for value in source_values if value.phenomenon_time_utc <= begin_utc]
+        source_window = [
+            value for value in source_values if begin_utc < value.phenomenon_time_utc < end_utc
+        ]
+        projected_values = [
+            SignalObservation(
+                stream_id=target.stream_id,
+                observation_id=None,
+                phenomenon_time_utc=value.phenomenon_time_utc,
+                result=value.result,
+                result_time=value.result_time,
+            )
+            for value in ([source_preceding[-1]] if source_preceding else []) + source_window
+        ]
+        if not projected_values:
+            result["blocked_streams"].append(
+                {
+                    "stream_id": target.stream_id,
+                    "node_id": target.node_id,
+                    "signal_group": target.signal_group,
+                    "source_stream_id": source.stream_id,
+                    "reason": "complete_sibling_has_no_values_in_requested_window",
+                }
+            )
+            continue
+        observations[target.stream_id] = projected_values
+        evidence = {
+            "stream_id": target.stream_id,
+            "source_stream_id": source.stream_id,
+            "node_id": target.node_id,
+            "signal_group": target.signal_group,
+            "projection_rule": "same_official_node_and_signalGroupID",
+            "source_sibling_stream_ids": sorted(sibling.stream_id for sibling in siblings),
+            "projected_observation_count": len(projected_values),
+            "source_preceding_state": next(iter(preceding_states)),
+        }
+        result["derived_streams"].append(evidence)
+        result["by_stream_id"][str(target.stream_id)] = evidence
+    return result
 
 
 def _active_binding_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:

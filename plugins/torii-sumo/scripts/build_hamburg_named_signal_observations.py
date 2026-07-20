@@ -32,6 +32,11 @@ def main() -> int:
         action="store_true",
         help="retry cached partial/error streams or primary streams without a t=0 state",
     )
+    parser.add_argument(
+        "--allow-signal-group-projection",
+        action="store_true",
+        help="derive a silent connection from a complete sibling with the same official node and signalGroupID",
+    )
     args = parser.parse_args()
     try:
         report = materialize_hamburg_named_signal_observations(
@@ -47,6 +52,7 @@ def main() -> int:
             max_workers=args.max_workers,
             timeout_seconds=args.timeout_seconds,
             retry_incomplete_cache=args.retry_incomplete_cache,
+            allow_signal_group_projection=args.allow_signal_group_projection,
         )
     except (OSError, ValueError, HamburgSignalObservationError) as exc:
         print(json.dumps({"status": "error", "execution_gate": "blocked", "automatic_promotion_gate": "blocked", "error": str(exc)}))

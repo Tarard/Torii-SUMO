@@ -5,7 +5,11 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from torii_sumo.core.command_runner import CommandResult
-from torii_sumo.core.route_sampler import run_route_sampler, validate_route_sampler_edge_counts
+from torii_sumo.core.route_sampler import (
+    audit_route_constraint_structure,
+    run_route_sampler,
+    validate_route_sampler_edge_counts,
+)
 
 
 def test_route_sampler_wrapper_writes_candidates_executes_and_hashes(tmp_path: Path) -> None:
@@ -52,6 +56,7 @@ def test_route_sampler_wrapper_writes_candidates_executes_and_hashes(tmp_path: P
     assert Path(str(report["demand_route_file"])).is_file()
     assert report["mismatch"]["absolute_deficit"] == 0
     assert Path(str(report["command_manifest"])).is_file()
+    assert report["constraint_structure"]["status"] == "pass"
 
 
 def test_route_sampler_edge_data_rejects_missing_bin(tmp_path: Path) -> None:
@@ -98,3 +103,62 @@ def test_route_sampler_reports_nonzero_mismatch_as_partial(tmp_path: Path) -> No
 
     assert report["status"] == "partial"
     assert report["constraint_match_fraction"] == 0.8
+
+
+def test_route_constraint_structure_reports_identical_path_incidence_conflict(tmp_path: Path) -> None:
+    manifest = tmp_path / "routes.csv"
+    manifest.write_text(
+        "route_id,edges\n"
+        "r0,\"a b c\"\n"
+        "r1,\"a b d\"\n",
+        encoding="utf-8",
+    )
+    edge_data = tmp_path / "counts.xml"
+    edge_data.write_text(
+        "<data><interval begin='0' end='900'>"
+        "<edge id='a' count='10'/><edge id='b' count='9'/>"
+        "</interval></data>",
+        encoding="utf-8",
+    )
+
+    report = audit_route_constraint_structure(
+        manifest,
+        edge_data,
+        begin=0,
+        end=900,
+        interval=900,
+    )
+
+    assert report["status"] == "fail"
+    assert report["conflict_count"] == 1
+    assert report["conflicts"][0]["kind"] == "identical_route_incidence_count_conflict"
+
+
+def test_route_constraint_structure_reports_positive_uncovered_edge(tmp_path: Path) -> None:
+    manifest = tmp_path / "routes.csv"
+    manifest.write_text("route_id,edges\nr0,a,b\n", encoding="utf-8")
+    edge_data = tmp_path / "counts.xml"
+    edge_data.write_text(
+        "<data><interval begin='0' end='900'>"
+        "<edge id='a' count='0'/><edge id='missing' count='2'/>"
+        "</interval></data>",
+        encoding="utf-8",
+    )
+
+    report = audit_route_constraint_structure(
+        manifest,
+        edge_data,
+        begin=0,
+        end=900,
+        interval=900,
+    )
+
+    assert report["status"] == "fail"
+    assert report["conflicts"] == [
+        {
+            "kind": "positive_count_without_candidate_route",
+            "interval_begin": 0,
+            "edge": "missing",
+            "count": 2,
+        }
+    ]
