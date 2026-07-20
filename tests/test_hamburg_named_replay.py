@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from torii_sumo.core.hamburg_named_replay import (
     _audit_signal_history_scope,
@@ -76,3 +78,22 @@ def test_signal_history_scope_blocks_short_official_window() -> None:
     assert report["status"] == "review_required"
     assert report["history_window_seconds"] == 7200
     assert report["replay_window_seconds"] == 9000
+
+
+def test_signal_history_scope_blocks_shifted_utc_window() -> None:
+    report = _audit_signal_history_scope(
+        {"window": {"begin_utc": "2026-07-18T06:00:00Z", "end_utc": "2026-07-18T08:00:00Z"}},
+        counts=[
+            SimpleNamespace(
+                begin=0,
+                end=900,
+                source_begin_utc=datetime(2026, 7, 18, 8, tzinfo=timezone.utc),
+                source_end_utc=datetime(2026, 7, 18, 8, 15, tzinfo=timezone.utc),
+            )
+        ],
+        simulation_begin=0,
+        simulation_end=7200,
+    )
+
+    assert report["status"] == "review_required"
+    assert report["reason"] == "official signal history does not cover the replay count UTC window"
