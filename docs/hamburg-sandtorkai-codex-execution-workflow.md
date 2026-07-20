@@ -189,6 +189,19 @@ all three owners are stored under
 non-Chinese keyboard layout, DPI-aware capture, and an unchanged candidate
 hash.
 
+The follow-up geometry run is
+`workflow/w1_official_corridor_geometry_v20_lsa_boundary_evidence/`. It passes
+the same surface, SUMO-load, and structural Connection Mode gates, and adds a
+hash-bound comparison with the official `lsa_knotengrunddaten` identity
+snapshot. The 2403 LSA point projects to `(566119.50, 5933262.50)` in
+EPSG:25832, while the HH-SIB road boundary node
+`hh_sib.n.242500071` is `(566117.41, 5933264.86)`, a 3.152 m offset. Torii
+records this as evidence and keeps the road node in place; it does not snap a
+signal point into the road graph or invent 2403 movements. The reusable CLI
+accepts this evidence with `--lsa-identity-manifest`, and the signal-asset
+promotion gate remains blocked until a machine-bindable 2403 MAP/OCIT/TLD
+package is published.
+
 The existing composable intersection classifier was also rerun read-only on
 the frozen 2403 OSM cell (seed `5241629952`) into
 `workflow/w1_road_detail_2403_diagnostic_v1/`. It recognizes four physical

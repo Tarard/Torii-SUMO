@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from torii_sumo.core.hamburg_official_corridor_geometry import (
     _anchor_local_junction_edge_shapes,
     _convex_hull,
     _ensure_network_projection_metadata,
+    _official_lsa_control_boundary_evidence,
     _shape,
     _synthesize_signal_node_shapes,
     materialize_hamburg_official_corridor_geometry,
@@ -166,6 +168,63 @@ def test_compiled_metric_network_declares_hamburg_projection(tmp_path: Path) -> 
     assert report["status"] == "pass"
     assert report["projection"] == "EPSG:25832"
     assert "+zone=32" in ET.parse(network).getroot().find("location").attrib["projParameter"]
+
+
+def test_official_lsa_point_is_compared_without_snapping_hh_sib_boundary(tmp_path: Path) -> None:
+    nodes = [
+        ET.Element(
+            "node",
+            {"id": "hh_sib.n.242500071", "x": "566117.41", "y": "5933264.86"},
+        )
+    ]
+    identity = tmp_path / "lsa-identity.json"
+    identity.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-lsa-node-identity-evidence/v1",
+                "decision": "pass",
+                "selections": [
+                    {
+                        "expected_node_id": "2403",
+                        "selected_node": {
+                            "node_id": "2403",
+                            "official_name": "Am Sandtorkai/Osakaallee",
+                            "point_geometry": {
+                                "type": "Point",
+                                "coordinates": [9.997839159986002, 53.54409500839008],
+                            },
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = _official_lsa_control_boundary_evidence(nodes, lsa_identity_manifest=identity)
+
+    assert evidence["status"] == "pass"
+    assert evidence["geometry_action"] == "retain_hh_sib_road_boundary_without_signal_point_snap"
+    assert evidence["official_lsa_point_projected"]["x"] == pytest.approx(566119.5)
+    assert evidence["official_lsa_point_projected"]["y"] == pytest.approx(5933262.5)
+    assert evidence["distance_m"] == pytest.approx(3.152411775, rel=1e-8)
+
+
+def test_official_lsa_boundary_evidence_is_explicit_when_identity_is_not_supplied() -> None:
+    evidence = _official_lsa_control_boundary_evidence(
+        [ET.Element("node", {"id": "hh_sib.n.242500071", "x": "1", "y": "2"})],
+        lsa_identity_manifest=None,
+    )
+
+    assert evidence == {
+        "status": "not_provided",
+        "node_id": "2403",
+        "official_name": "Am Sandtorkai/Osakaallee",
+        "hh_sib_boundary_node_id": "hh_sib.n.242500071",
+        "hh_sib_boundary_point": {"crs": "EPSG:25832", "x": 1.0, "y": 2.0},
+        "geometry_action": "retain_hh_sib_road_boundary_without_signal_point_snap",
+        "reason": "official_lsa_identity_manifest_not_supplied",
+    }
 
 
 def test_source_resolution_requires_exact_local_cells(tmp_path: Path) -> None:
