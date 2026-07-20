@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 import xml.etree.ElementTree as ET
+
+from pyproj import Transformer
 
 from .artifact_io import write_json_atomic, write_text_atomic
 from .candidate_contracts import file_sha256
@@ -31,6 +34,7 @@ def materialize_hamburg_official_corridor_geometry(
     hh_sib_types_file: Path,
     intersection_sources: Mapping[str, Path],
     output_dir: Path,
+    lsa_identity_manifest: Path | None = None,
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
@@ -63,6 +67,10 @@ def materialize_hamburg_official_corridor_geometry(
     }
 
     nodes = _build_nodes(hh_nodes, hh_edges, local)
+    official_lsa_control_boundary = _official_lsa_control_boundary_evidence(
+        nodes,
+        lsa_identity_manifest=lsa_identity_manifest,
+    )
     edges = _build_edges(hh_edges, local)
     _synthesize_signal_node_shapes(nodes, edges)
     # Re-anchor each official MAP movement curve to the lane endpoints of the
@@ -163,6 +171,16 @@ def materialize_hamburg_official_corridor_geometry(
         and connection_mode.get("structural_failure_count", 1) == 0
     )
     source_hashes = {key: file_sha256(path) for key, path in sources.items()}
+    source_manifest = {
+        key: {"path": str(path), "sha256": source_hashes[key]}
+        for key, path in sources.items()
+    }
+    if lsa_identity_manifest is not None:
+        identity_path = Path(lsa_identity_manifest).resolve(strict=True)
+        source_manifest["lsa_identity_manifest"] = {
+            "path": str(identity_path),
+            "sha256": file_sha256(identity_path),
+        }
     status = "review_ready" if compiled and overlap.get("status") == "pass" and load.get("status") == "pass" else "blocked"
     manifest_file = destination / "hamburg_official_corridor_geometry.manifest.json"
     manifest: dict[str, Any] = {
@@ -177,7 +195,8 @@ def materialize_hamburg_official_corridor_geometry(
         ),
         "claim_status": "official-road-and-local-map-geometry-review-candidate",
         "automatic_promotion_gate": "blocked",
-        "source": {key: {"path": str(path), "sha256": source_hashes[key]} for key, path in sources.items()},
+        "source": source_manifest,
+        "official_lsa_control_boundary": official_lsa_control_boundary,
         "stitch_policy": {
             "removed_hh_sib_names": ["Am Sandtorkai", "Großer Grasbrook"],
             "local_cells": ["2349", "2394"],
@@ -216,6 +235,7 @@ def materialize_hamburg_official_corridor_geometry(
             "sumo_load": load.get("status", "blocked"),
             "connection_mode": connection_mode.get("status", "blocked"),
             "connection_mode_structural_failures": connection_mode.get("structural_failure_count", 0),
+            "official_2403_lsa_identity": official_lsa_control_boundary.get("status", "blocked"),
             "2403_signal_assets": "blocked_pending_official_map_ocit",
             "automatic_promotion": "blocked",
         },
@@ -224,6 +244,7 @@ def materialize_hamburg_official_corridor_geometry(
             "proves": [
                 "the two available official MAP cells are structurally stitched to the official road axis",
                 "the 2403 road/control boundary is retained without invented signal topology",
+                "the official 2403 LSA point is compared with, but not used to move, the HH-SIB road boundary node",
                 "compiled network loading and surface-overlap evidence for this candidate",
             ],
             "does_not_prove": [
@@ -256,6 +277,153 @@ def _resolve_sources(
 def _load_local(node_id: str, sources: Mapping[str, Path]) -> dict[str, ET.Element]:
     del node_id
     return {key: ET.parse(sources[key]).getroot() for key in ("nod", "edg", "con", "tll", "typ")}
+
+
+def _official_lsa_control_boundary_evidence(
+    nodes: Sequence[ET.Element],
+    *,
+    lsa_identity_manifest: Path | None,
+) -> dict[str, Any]:
+    """Compare the official 2403 signal point with the HH-SIB road node.
+
+    Hamburg's LSA location dataset identifies a signal controller by a point,
+    while HH-SIB identifies the road-network junction by the endpoint of its
+    road links.  These are related but are not interchangeable coordinates.
+    The comparison is therefore evidence-only: it records the offset and
+    deliberately never moves the road node or creates a signal movement.
+    """
+
+    boundary_node_id = "hh_sib.n.242500071"
+    boundary_node = next(
+        (node for node in nodes if node.attrib.get("id") == boundary_node_id),
+        None,
+    )
+    if boundary_node is None:
+        return {
+            "status": "blocked",
+            "node_id": "2403",
+            "reason": f"official HH-SIB 2403 boundary node {boundary_node_id!r} is missing",
+            "geometry_action": "no_boundary_evidence_available",
+        }
+    try:
+        boundary_x = float(boundary_node.attrib["x"])
+        boundary_y = float(boundary_node.attrib["y"])
+    except (KeyError, TypeError, ValueError):
+        return {
+            "status": "blocked",
+            "node_id": "2403",
+            "reason": f"official HH-SIB 2403 boundary node {boundary_node_id!r} has invalid coordinates",
+            "geometry_action": "no_boundary_evidence_available",
+        }
+
+    base: dict[str, Any] = {
+        "node_id": "2403",
+        "official_name": "Am Sandtorkai/Osakaallee",
+        "hh_sib_boundary_node_id": boundary_node_id,
+        "hh_sib_boundary_point": {
+            "crs": "EPSG:25832",
+            "x": boundary_x,
+            "y": boundary_y,
+        },
+        "geometry_action": "retain_hh_sib_road_boundary_without_signal_point_snap",
+    }
+    if lsa_identity_manifest is None:
+        return {
+            **base,
+            "status": "not_provided",
+            "reason": "official_lsa_identity_manifest_not_supplied",
+        }
+
+    identity_path = Path(lsa_identity_manifest).expanduser().resolve(strict=True)
+    try:
+        payload = json.loads(identity_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HamburgOfficialCorridorGeometryError(
+            f"official LSA identity manifest is not valid JSON: {identity_path}"
+        ) from exc
+    if not isinstance(payload, Mapping) or payload.get("schema") != "torii.hamburg-lsa-node-identity-evidence/v1":
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest has an unsupported schema"
+        )
+    if payload.get("decision") != "pass":
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest must have decision=pass"
+        )
+    selections = payload.get("selections")
+    if not isinstance(selections, list):
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest selections must be a list"
+        )
+    matches = [
+        item
+        for item in selections
+        if isinstance(item, Mapping) and item.get("expected_node_id") == "2403"
+    ]
+    if len(matches) != 1:
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest must contain exactly one 2403 selection"
+        )
+    selection = matches[0]
+    selected = selection.get("selected_node")
+    if not isinstance(selected, Mapping) or selected.get("node_id") != "2403":
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest 2403 selection is not uniquely selected"
+        )
+    official_name = selected.get("official_name")
+    point = selected.get("point_geometry")
+    coordinates = point.get("coordinates") if isinstance(point, Mapping) else None
+    if (
+        not isinstance(official_name, str)
+        or not isinstance(coordinates, list)
+        or len(coordinates) != 2
+    ):
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest 2403 point geometry is incomplete"
+        )
+    try:
+        longitude, latitude = (float(coordinates[0]), float(coordinates[1]))
+    except (TypeError, ValueError) as exc:
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest 2403 point coordinates are not numeric"
+        ) from exc
+    if not (
+        math.isfinite(longitude)
+        and math.isfinite(latitude)
+        and -180.0 <= longitude <= 180.0
+        and -90.0 <= latitude <= 90.0
+    ):
+        raise HamburgOfficialCorridorGeometryError(
+            "official LSA identity manifest 2403 point coordinates are invalid"
+        )
+    try:
+        transformer = Transformer.from_crs("EPSG:4326", "EPSG:25832", always_xy=True)
+        official_x, official_y = transformer.transform(longitude, latitude)
+    except Exception as exc:  # noqa: BLE001 - pyproj exposes CRS-specific exceptions.
+        raise HamburgOfficialCorridorGeometryError(
+            "could not project official LSA 2403 point to EPSG:25832"
+        ) from exc
+    distance_m = math.hypot(official_x - boundary_x, official_y - boundary_y)
+    return {
+        **base,
+        "status": "pass",
+        "reason": "official_lsa_identity_compared_without_topology_snap",
+        "official_name": official_name,
+        "official_lsa_point": {
+            "crs": "OGC:CRS84",
+            "longitude": longitude,
+            "latitude": latitude,
+        },
+        "official_lsa_point_projected": {
+            "crs": "EPSG:25832",
+            "x": official_x,
+            "y": official_y,
+        },
+        "distance_m": distance_m,
+        "source_manifest": {
+            "path": str(identity_path),
+            "sha256": file_sha256(identity_path),
+        },
+    }
 
 
 def _build_nodes(hh_nodes: ET.Element, hh_edges: ET.Element, local: Mapping[str, Mapping[str, ET.Element]]) -> list[ET.Element]:

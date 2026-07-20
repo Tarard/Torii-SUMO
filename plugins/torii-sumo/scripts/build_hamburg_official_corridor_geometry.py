@@ -17,6 +17,14 @@ def main() -> int:
     parser.add_argument("--hh-sib-types", required=True, type=Path)
     parser.add_argument("--intersection-2349", required=True, type=Path)
     parser.add_argument("--intersection-2394", required=True, type=Path)
+    parser.add_argument(
+        "--lsa-identity-manifest",
+        type=Path,
+        help=(
+            "optional frozen official Hamburg LSA identity manifest; when supplied, "
+            "2403 is compared with the HH-SIB boundary without snapping the road node"
+        ),
+    )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--netconvert-binary", default="netconvert")
     parser.add_argument("--sumo-binary", default="sumo")
@@ -29,6 +37,7 @@ def main() -> int:
             hh_sib_types_file=args.hh_sib_types,
             intersection_sources={"2349": args.intersection_2349, "2394": args.intersection_2394},
             output_dir=args.output_dir,
+            lsa_identity_manifest=args.lsa_identity_manifest,
             netconvert_binary=args.netconvert_binary,
             sumo_binary=args.sumo_binary,
             timeout_seconds=args.timeout_seconds,
