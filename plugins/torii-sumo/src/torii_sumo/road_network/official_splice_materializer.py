@@ -126,6 +126,7 @@ def materialize_hamburg_official_splice_candidate(
         events,
         event_links=event_links,
         local_edges=local_edges,
+        local_connections=local_connections,
     )
     connections = _unique_connections(local_connections + bridge_connections)
     tllogics = _unique_elements(local_tllogics)
@@ -580,6 +581,7 @@ def _build_bridge_connections(
     *,
     event_links: Mapping[str, Mapping[str, Any]],
     local_edges: Sequence[ET.Element],
+    local_connections: Sequence[ET.Element],
 ) -> tuple[list[ET.Element], dict[str, Any]]:
     edge_lanes: dict[str, list[str]] = {}
     for edge in local_edges:
@@ -602,6 +604,14 @@ def _build_bridge_connections(
         elif event["kind"] == "official_merge_event":
             through = [str(value) for value in event.get("map_lane_ids_not_marked_as_starting_at_event", [])]
             through_indices = sorted(index for index, lane_id in enumerate(map_lanes) if lane_id in through)
+            if len(through_indices) != axis_count:
+                through_indices = _derive_merge_through_indices(
+                    event,
+                    map_lanes,
+                    local_connections,
+                    axis_count,
+                    through_indices,
+                )
             if len(through_indices) == axis_count and axis_count > 0:
                 pairs = [(axis_index, through_indices[axis_index]) for axis_index in range(axis_count)]
         direction = str(event["map_role"])
@@ -643,6 +653,45 @@ def _build_bridge_connections(
             )
         status["resolved_count"] += 1
     return result, status
+
+
+def _derive_merge_through_indices(
+    event: Mapping[str, Any],
+    map_lanes: Sequence[str],
+    local_connections: Sequence[ET.Element],
+    axis_count: int,
+    known_indices: Sequence[int],
+) -> list[int]:
+    """Recover a unique through-lane group from MAP movement provenance.
+
+    A lane may be tagged as starting at a merge point even when it continues
+    through the junction.  Only accept the recovery when the known through
+    lanes and exactly ``axis_count`` MAP lanes share the same destination-edge
+    signature; otherwise the original fail-closed result is retained.
+    """
+    if not known_indices or axis_count <= 0:
+        return list(known_indices)
+    edge_id = str(event["map_edge_id"])
+    destinations: dict[int, set[str]] = defaultdict(set)
+    for connection in local_connections:
+        if str(connection.attrib.get("from", "")) != edge_id:
+            continue
+        try:
+            lane = int(connection.attrib.get("fromLane", ""))
+        except (TypeError, ValueError):
+            continue
+        destination = str(connection.attrib.get("to", ""))
+        if destination:
+            destinations.setdefault(lane, set()).add(destination)
+    signatures = {
+        index: frozenset(destinations.get(index, set()))
+        for index in range(len(map_lanes))
+    }
+    known_signature = signatures.get(known_indices[0], frozenset())
+    if not known_signature or any(signatures.get(index) != known_signature for index in known_indices):
+        return list(known_indices)
+    candidates = [index for index, signature in signatures.items() if signature == known_signature]
+    return candidates if len(candidates) == axis_count else list(known_indices)
 
 
 def _axis_node_at_station(
