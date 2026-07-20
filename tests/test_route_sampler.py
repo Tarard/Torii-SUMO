@@ -5,7 +5,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from torii_sumo.core.command_runner import CommandResult
+from torii_sumo.core.detector_demand import EdgeInfo, source_sink_rows
 from torii_sumo.core.route_sampler import (
+    apply_departure_lane_targets,
     audit_route_constraint_structure,
     run_route_sampler,
     validate_route_sampler_edge_counts,
@@ -162,3 +164,50 @@ def test_route_constraint_structure_reports_positive_uncovered_edge(tmp_path: Pa
             "count": 2,
         }
     ]
+
+
+def test_source_sink_rows_labels_detector_cross_section_boundaries() -> None:
+    edges = {
+        "network": EdgeInfo("network", "n0", "n1", True, 20.0),
+        "detector": EdgeInfo("detector", "n1", "n2", True, 30.0),
+    }
+
+    rows = source_sink_rows(
+        edges,
+        ["network", "detector"],
+        ["detector"],
+        measured_edge_ids=["detector"],
+    )
+
+    assert [row["reason"] for row in rows] == [
+        "network_boundary",
+        "official_detector_cross_section",
+        "official_detector_cross_section",
+    ]
+
+
+def test_departure_lane_targets_are_written_per_edge_and_bin(tmp_path: Path) -> None:
+    demand = tmp_path / "demand.rou.xml"
+    demand.write_text(
+        "<routes>"
+        "<vehicle id='v0' depart='2'><route edges='edge'/></vehicle>"
+        "<vehicle id='v1' depart='3'><route edges='edge'/></vehicle>"
+        "<vehicle id='v2' depart='901'><route edges='edge'/></vehicle>"
+        "</routes>",
+        encoding="utf-8",
+    )
+
+    report = apply_departure_lane_targets(
+        demand,
+        {
+            ("edge", 0): {"edge_0": 1, "edge_1": 1},
+            ("edge", 900): {"edge_1": 1},
+        },
+        interval=900,
+        lane_positions={("edge", "edge_0"): 20.0, ("edge", "edge_1"): 21.0},
+    )
+
+    assert report["status"] == "pass"
+    root = ET.parse(demand).getroot()
+    assert [vehicle.attrib["departLane"] for vehicle in root.findall("vehicle")] == ["0", "1", "1"]
+    assert [vehicle.attrib["departPos"] for vehicle in root.findall("vehicle")] == ["19", "20", "20"]

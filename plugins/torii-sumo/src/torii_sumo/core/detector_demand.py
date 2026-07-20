@@ -521,7 +521,22 @@ def merge_routes(primary: list[CandidateRoute], secondary: list[CandidateRoute],
     return routes
 
 
-def source_sink_rows(edges: dict[str, EdgeInfo], sources: list[str], sinks: list[str]) -> list[dict[str, object]]:
+def source_sink_rows(
+    edges: dict[str, EdgeInfo],
+    sources: list[str],
+    sinks: list[str],
+    *,
+    measured_edge_ids: Iterable[str] = (),
+) -> list[dict[str, object]]:
+    """Serialize route boundary edges with an explicit provenance reason.
+
+    The default remains the graph's physical boundary.  An opt-in replay can
+    add official detector cross-sections as open boundaries; those rows are
+    deliberately labelled so downstream manifests cannot mistake a local
+    measured cut for a closed corridor/OD boundary.
+    """
+
+    measured = set(measured_edge_ids)
     rows: list[dict[str, object]] = []
     for role, edge_ids in (("source", sources), ("sink", sinks)):
         for edge_id in edge_ids:
@@ -533,7 +548,11 @@ def source_sink_rows(edges: dict[str, EdgeInfo], sources: list[str], sinks: list
                     "from_node": edge.from_node,
                     "to_node": edge.to_node,
                     "length": f"{edge.length:.2f}",
-                    "reason": "network_boundary",
+                    "reason": (
+                        "official_detector_cross_section"
+                        if edge_id in measured
+                        else "network_boundary"
+                    ),
                 }
             )
     return rows

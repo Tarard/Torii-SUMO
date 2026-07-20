@@ -45,7 +45,7 @@ from .digital_twin_mapping import (
     write_virtual_expected_counts,
 )
 from .hamburg_official import parse_hamburg_count_streams, sha256_file, write_json
-from .route_sampler import run_route_sampler
+from .route_sampler import apply_departure_lane_targets, run_route_sampler
 
 
 def read_hamburg_count_stream_snapshot(path: Path) -> list[CountStream]:
@@ -256,6 +256,7 @@ def prepare_cached_detector_demand_package(
     route_sampler_optimize: str | None = "full",
     route_sampler_script: Path | None = None,
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
     _candidate_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build SUMO detector and route inputs from frozen Torii/Hamburg evidence.
@@ -401,6 +402,7 @@ def prepare_cached_detector_demand_package(
         demand_dir,
         prefix=prefix,
         excluded_edges=excluded,
+        allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
     )
     if route_support["status"] != "pass":
         raise ValueError(f"candidate route support failed: {route_support}")
@@ -417,6 +419,28 @@ def prepare_cached_detector_demand_package(
         route_sampler_script=route_sampler_script,
         timeout_seconds=timeout_seconds,
     )
+    lane_balance: dict[str, Any] = {"status": "not_requested"}
+    if allow_detector_cross_section_boundaries and route_sampler.get("status") == "pass":
+        lane_targets: dict[tuple[str, int], dict[str, int]] = {}
+        lane_positions = {
+            (group.sumo_edge, group.sumo_lane): group.lane_position
+            for group in aggregation.groups
+        }
+        for expected in aggregation.expected_counts:
+            lane_counts = lane_targets.setdefault((expected.sumo_edge, expected.begin), {})
+            lane_counts[expected.sumo_lane] = lane_counts.get(expected.sumo_lane, 0) + expected.expected_total
+        lane_balance = apply_departure_lane_targets(
+            Path(str(route_sampler["demand_route_file"])),
+            lane_targets,
+            interval=interval,
+            lane_positions=lane_positions,
+        )
+        route_sampler["lane_balance"] = lane_balance
+        if lane_balance.get("status") == "pass":
+            route_sampler["demand_route_sha256"] = sha256_file(Path(str(route_sampler["demand_route_file"])))
+        else:
+            route_sampler["status"] = "partial"
+            route_sampler["claim_status"] = "construction-incomplete"
 
     demand_path_text = str(route_sampler.get("demand_route_file", ""))
     demand_path = Path(demand_path_text) if demand_path_text else None
@@ -441,6 +465,7 @@ def prepare_cached_detector_demand_package(
         if isinstance(route_sampler.get("constraint_structure"), Mapping)
         else "not_evaluated",
         "route_sampler_constraint_match_fraction": route_sampler.get("constraint_match_fraction"),
+        "lane_balance": lane_balance.get("status", "not_requested"),
         "excluded_route_edges": sorted(excluded),
         "excluded_route_edge_hits_in_candidates": candidate_excluded_hits,
         "excluded_route_edge_hits_in_demand": demand_excluded_hits,
@@ -505,6 +530,11 @@ def prepare_cached_detector_demand_package(
         },
         "gates": gates,
         "route_support": route_support,
+        "boundary_policy": (
+            "official_detector_cross_sections_as_open_source_sink_ports"
+            if allow_detector_cross_section_boundaries
+            else "network_boundaries_only"
+        ),
         "route_sampler": route_sampler,
         "artifacts": [
             {"path": str(path), "sha256": sha256_file(path), "bytes": path.stat().st_size}
@@ -513,9 +543,16 @@ def prepare_cached_detector_demand_package(
         "identifiability": {
             "od_matrix_directly_observed": False,
             "turn_flows_directly_observed": False,
+            "open_detector_cross_section_boundaries": allow_detector_cross_section_boundaries,
             "policy": (
                 "routeSampler produces one detector-constrained plausible realization; "
-                "it is not a uniquely identified OD matrix or trajectory reconstruction"
+                "it is not a uniquely identified OD matrix or trajectory reconstruction. "
+                + (
+                    "When detector cross-sections are enabled, measured edges are explicit "
+                    "local entry/exit ports; this reproduces the observed cut, not upstream demand."
+                    if allow_detector_cross_section_boundaries
+                    else ""
+                )
             ),
         },
         "next_gate": (
@@ -712,6 +749,7 @@ def prepare_hamburg_corridor_candidate_package(
     route_sampler_optimize: str | None = "full",
     route_sampler_script: Path | None = None,
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Run candidate MAP, signal-binding, and demand stages as one Torii package."""
 
@@ -755,6 +793,7 @@ def prepare_hamburg_corridor_candidate_package(
         route_sampler_optimize=route_sampler_optimize,
         route_sampler_script=route_sampler_script,
         timeout_seconds=timeout_seconds,
+        allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
     )
     status = (
         "partial"
@@ -812,6 +851,7 @@ def prepare_corridor_candidate_detector_demand_package(
     route_sampler_optimize: str | None = "full",
     route_sampler_script: Path | None = None,
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Build detector/E1/E2/route inputs for a review-pending corridor net.
 
@@ -871,6 +911,7 @@ def prepare_corridor_candidate_detector_demand_package(
         route_sampler_optimize=route_sampler_optimize,
         route_sampler_script=route_sampler_script,
         timeout_seconds=timeout_seconds,
+        allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
         _candidate_contract=contract,
     )
 
@@ -887,6 +928,7 @@ def _write_route_support(
     *,
     prefix: str,
     excluded_edges: frozenset[str],
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     edges, connections = read_net(net_file)
     usable_edges = {edge_id: edge for edge_id, edge in edges.items() if edge_id not in excluded_edges}
@@ -895,8 +937,23 @@ def _write_route_support(
         for edge_id, targets in connections.items()
         if edge_id not in excluded_edges
     }
-    sources, sinks = boundary_edges(usable_edges, usable_connections)
     active = active_detectors(list(detectors))
+    network_sources, network_sinks = boundary_edges(usable_edges, usable_connections)
+    measured_edges = (
+        sorted({detector.edge_id for detector in active if detector.edge_id in usable_edges})
+        if allow_detector_cross_section_boundaries
+        else []
+    )
+    # In the opt-in local-twin mode, the measured cross-sections are the
+    # declared boundary of the model.  Do not silently mix them with the
+    # network's distant fringe: that would re-introduce unobserved feeder
+    # demand and make lane-level sensor calibration underdetermined.
+    if allow_detector_cross_section_boundaries and measured_edges:
+        sources = measured_edges
+        sinks = measured_edges
+    else:
+        sources = sorted(network_sources)
+        sinks = sorted(network_sinks)
     anchored = build_detector_anchored_routes(active, sources, sinks, usable_connections, max_hops=80)
     boundary = build_boundary_routes(
         sources,
@@ -904,7 +961,7 @@ def _write_route_support(
         usable_connections,
         max_routes=500,
         max_hops=80,
-        min_edges=2,
+        min_edges=1 if allow_detector_cross_section_boundaries else 2,
     )
     routes = [
         route
@@ -918,7 +975,7 @@ def _write_route_support(
     incidence_file = output_dir / f"{prefix}_route_detector_incidence.csv"
     write_csv(
         source_sink_file,
-        source_sink_rows(usable_edges, sources, sinks),
+        source_sink_rows(usable_edges, sources, sinks, measured_edge_ids=measured_edges),
         ["role", "edge_id", "from_node", "to_node", "length", "reason"],
     )
     write_csv(
@@ -943,6 +1000,15 @@ def _write_route_support(
         "status": "pass" if routes and len(covered) == len(active) else "fail",
         "source_count": len(sources),
         "sink_count": len(sinks),
+        "network_source_count": len(network_sources),
+        "network_sink_count": len(network_sinks),
+        "measured_detector_edge_count": len(measured_edges),
+        "measured_detector_edges": measured_edges,
+        "boundary_policy": (
+            "official_detector_cross_sections_as_open_source_sink_ports"
+            if allow_detector_cross_section_boundaries
+            else "network_boundaries_only"
+        ),
         "route_count": len(routes),
         "active_detector_count": len(active),
         "covered_detector_count": len(covered),

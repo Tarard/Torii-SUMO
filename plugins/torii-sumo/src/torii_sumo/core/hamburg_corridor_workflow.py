@@ -47,6 +47,7 @@ def prepare_hamburg_sandtorkai_geometry_safe_corridor_package(
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 300.0,
+    allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Run the staged geometry, TLS, mapping, and demand candidate package.
 
@@ -158,6 +159,7 @@ def prepare_hamburg_sandtorkai_geometry_safe_corridor_package(
         route_sampler_optimize=route_sampler_optimize,
         route_sampler_script=route_sampler_script,
         timeout_seconds=timeout_seconds,
+        allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
     )
     map_stage = candidate.get("stages", {}).get("map_binding", {})
     signal_stage = candidate.get("stages", {}).get("signal_binding", {})
@@ -203,6 +205,8 @@ def prepare_hamburg_sandtorkai_geometry_safe_corridor_package(
             "complete_edge_section_count": demand_gates.get("complete_edge_section_count", 0),
             "route_candidate_count": route_sampler.get("candidate_route_count", 0),
             "route_sampler_constraint_match_fraction": route_sampler.get("constraint_match_fraction"),
+            "lane_balance": demand_gates.get("lane_balance", "not_requested"),
+            "boundary_policy": demand_stage.get("boundary_policy", "network_boundaries_only"),
             "edge_row_count": route_sampler.get("edge_row_count", 0),
             "total_count": route_sampler.get("total_count", 0),
             "historical_signal_replay": "blocked_pending_official_observations",

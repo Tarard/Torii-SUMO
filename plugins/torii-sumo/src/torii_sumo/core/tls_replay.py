@@ -216,20 +216,25 @@ def run_tls_detector_replay(
         e1_output,
         count_attribute="nVehContrib",
     )
+    comparison_fields = [
+        "detector_id",
+        "edge_id",
+        "begin",
+        "end",
+        "expected_total",
+        "measurement_attribute",
+        "measured_nVehContrib",
+        "diff_nVehContrib_minus_expected",
+        "measurement_status",
+    ]
+    # Keep test doubles and older integrations readable while using the
+    # canonical strict-comparison field emitted by ``audit_expected_to_e1_strict``.
+    if any("diff_contrib_minus_expected" in row for row in comparison_rows):
+        comparison_fields.insert(-1, "diff_contrib_minus_expected")
     write_csv(
         comparison_file,
         comparison_rows,
-        [
-            "detector_id",
-            "edge_id",
-            "begin",
-            "end",
-            "expected_total",
-            "measurement_attribute",
-            "measured_nVehContrib",
-            "diff_contrib_minus_expected",
-            "measurement_status",
-        ],
+        comparison_fields,
     )
     comparable_rows = [
         {
