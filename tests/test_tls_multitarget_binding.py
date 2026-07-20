@@ -213,6 +213,8 @@ def test_tls_event_writer_fans_one_stream_out_to_every_active_target(tmp_path: P
         "active_binding_count": 2,
         "initialized_binding_count": 2,
         "event_count": 4,
+        "collapsed_event_count": 0,
+        "conflict_event_count": 0,
     }
     assert [
         (row["simulation_time"], row["sumo_link_index"], row["sumo_state"])
@@ -223,3 +225,48 @@ def test_tls_event_writer_fans_one_stream_out_to_every_active_target(tmp_path: P
         ("300.000", "2", "G"),
         ("300.000", "3", "G"),
     ]
+
+
+def test_tls_event_writer_keeps_last_state_within_one_sumo_step(tmp_path: Path) -> None:
+    begin = datetime(2026, 7, 4, 8, 0, tzinfo=UTC)
+    end = datetime(2026, 7, 4, 10, 0, tzinfo=UTC)
+    events_file = tmp_path / "tls_link_events.csv"
+    observations = {
+        71221: [
+            SignalObservation(
+                stream_id=71221,
+                observation_id=1,
+                phenomenon_time_utc=datetime(2026, 7, 4, 7, 59, tzinfo=UTC),
+                result="1",
+            ),
+            SignalObservation(
+                stream_id=71221,
+                observation_id=2,
+                phenomenon_time_utc=datetime(2026, 7, 4, 8, 0, 1, tzinfo=UTC),
+                result="4",
+                result_time="2026-07-04T08:00:01.100Z",
+            ),
+            SignalObservation(
+                stream_id=71221,
+                observation_id=3,
+                phenomenon_time_utc=datetime(2026, 7, 4, 8, 0, 1, tzinfo=UTC),
+                result="3",
+                result_time="2026-07-04T08:00:01.900Z",
+            ),
+        ]
+    }
+
+    stats = write_tls_link_events(
+        events_file,
+        [_stream()],
+        observations,
+        [_target_binding(tls_id="HH_228", link_index=2)],
+        begin_utc=begin,
+        end_utc=end,
+    )
+
+    assert stats["collapsed_event_count"] == 1
+    assert stats["conflict_event_count"] == 1
+    with events_file.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [(row["simulation_time"], row["sumo_state"]) for row in rows] == [("0.000", "r"), ("1.000", "G")]

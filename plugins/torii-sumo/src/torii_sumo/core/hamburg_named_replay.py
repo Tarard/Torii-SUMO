@@ -6,6 +6,7 @@ import csv
 import json
 import math
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -86,6 +87,11 @@ def materialize_hamburg_named_replay(
         _load_signal_observation_manifest(Path(signal_observation_manifest).expanduser().resolve(strict=True))
         if signal_observation_manifest is not None
         else None
+    )
+    signal_history_scope = _audit_signal_history_scope(
+        signal_history,
+        simulation_begin=simulation_begin,
+        simulation_end=simulation_end,
     )
     streams = read_hamburg_count_stream_snapshot(stream_path)
     counts = read_canonical_count_file(count_path)
@@ -268,6 +274,8 @@ def materialize_hamburg_named_replay(
         gate_reasons.append("SUMO quality gate detected teleportation or collisions")
     if comparison_status != "pass":
         gate_reasons.append("E1 comparison is missing one or more expected bins")
+    if signal_history is not None and signal_history_scope["status"] != "pass":
+        gate_reasons.append(str(signal_history_scope["reason"]))
     execution_gate = "pass" if not gate_reasons else "blocked"
     claim_does_not_prove = [
         "a unique OD matrix or observed trajectories",
@@ -318,6 +326,7 @@ def materialize_hamburg_named_replay(
             "evidence": mapping_evidence,
         },
         "route_support": route_support,
+        "signal_history_scope": signal_history_scope,
         "boundary_policy": (
             "official_detector_cross_sections_as_open_source_sink_ports"
             if allow_detector_cross_section_boundaries
@@ -336,6 +345,12 @@ def materialize_hamburg_named_replay(
             "e1_comparison": comparison_status,
             "historical_signal_replay": (
                 "pass"
+                if signal_history is not None and signal_history_scope["status"] == "pass"
+                and not signal_history.get("missing_required_node_ids")
+                else "partial_missing_required_node"
+                if signal_history is not None and signal_history_scope["status"] == "pass"
+                and signal_history.get("missing_required_node_ids")
+                else "partial_history_window"
                 if signal_history is not None
                 else "blocked_signal_observation_manifest"
                 if signal_observation_manifest is not None
@@ -382,6 +397,55 @@ def _load_signal_observation_manifest(path: Path) -> dict[str, Any] | None:
     if not event_path or not Path(str(event_path)).is_file():
         raise HamburgNamedReplayError("execution-ready signal observation manifest has no TLS event file")
     return payload
+
+
+def _audit_signal_history_scope(
+    manifest: dict[str, Any] | None,
+    *,
+    simulation_begin: int,
+    simulation_end: int,
+) -> dict[str, Any]:
+    """Fail closed when official history is shorter than the replay window."""
+
+    replay_window_seconds = simulation_end - simulation_begin
+    if manifest is None:
+        return {
+            "status": "blocked",
+            "reason": "official signal history is unavailable",
+            "history_window_seconds": None,
+            "replay_window_seconds": replay_window_seconds,
+        }
+    window = manifest.get("window")
+    begin_text = window.get("begin_utc") if isinstance(window, dict) else None
+    end_text = window.get("end_utc") if isinstance(window, dict) else None
+    try:
+        history_window_seconds = (
+            datetime.fromisoformat(str(end_text).replace("Z", "+00:00"))
+            - datetime.fromisoformat(str(begin_text).replace("Z", "+00:00"))
+        ).total_seconds()
+    except (TypeError, ValueError):
+        return {
+            "status": "blocked",
+            "reason": "official signal history manifest has no valid UTC window",
+            "history_window_seconds": None,
+            "replay_window_seconds": replay_window_seconds,
+        }
+    if history_window_seconds < replay_window_seconds:
+        return {
+            "status": "review_required",
+            "reason": (
+                "official signal history window is shorter than the replay window "
+                f"({history_window_seconds:g}s < {replay_window_seconds:g}s)"
+            ),
+            "history_window_seconds": history_window_seconds,
+            "replay_window_seconds": replay_window_seconds,
+        }
+    return {
+        "status": "pass",
+        "reason": "official signal history window covers the replay window",
+        "history_window_seconds": history_window_seconds,
+        "replay_window_seconds": replay_window_seconds,
+    }
 
 
 def _snap_count_streams(streams: list[Any], network_lanes: list[Any], *, max_distance_m: float) -> tuple[list[DetectorMapping], list[dict[str, Any]]]:
