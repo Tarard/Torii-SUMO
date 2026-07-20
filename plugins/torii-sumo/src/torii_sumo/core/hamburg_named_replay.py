@@ -88,13 +88,14 @@ def materialize_hamburg_named_replay(
         if signal_observation_manifest is not None
         else None
     )
+    streams = read_hamburg_count_stream_snapshot(stream_path)
+    counts = read_canonical_count_file(count_path)
     signal_history_scope = _audit_signal_history_scope(
         signal_history,
+        counts=counts,
         simulation_begin=simulation_begin,
         simulation_end=simulation_end,
     )
-    streams = read_hamburg_count_stream_snapshot(stream_path)
-    counts = read_canonical_count_file(count_path)
     _, network_lanes = read_network_lanes(net_path)
     mappings, mapping_evidence = _snap_count_streams(
         streams,
@@ -402,10 +403,11 @@ def _load_signal_observation_manifest(path: Path) -> dict[str, Any] | None:
 def _audit_signal_history_scope(
     manifest: dict[str, Any] | None,
     *,
+    counts: list[Any] | None = None,
     simulation_begin: int,
     simulation_end: int,
 ) -> dict[str, Any]:
-    """Fail closed when official history is shorter than the replay window."""
+    """Fail closed unless official history covers the replay's UTC count window."""
 
     replay_window_seconds = simulation_end - simulation_begin
     if manifest is None:
@@ -428,6 +430,28 @@ def _audit_signal_history_scope(
             "status": "blocked",
             "reason": "official signal history manifest has no valid UTC window",
             "history_window_seconds": None,
+            "replay_window_seconds": replay_window_seconds,
+        }
+    required_counts = [
+        row
+        for row in counts or []
+        if simulation_begin <= row.begin and row.end <= simulation_end
+    ]
+    required_begin = min((row.source_begin_utc for row in required_counts), default=None)
+    required_end = max((row.source_end_utc for row in required_counts), default=None)
+    history_begin = datetime.fromisoformat(str(begin_text).replace("Z", "+00:00"))
+    history_end = datetime.fromisoformat(str(end_text).replace("Z", "+00:00"))
+    if required_begin is not None and required_end is not None and not (
+        history_begin <= required_begin and history_end >= required_end
+    ):
+        return {
+            "status": "review_required",
+            "reason": "official signal history does not cover the replay count UTC window",
+            "history_begin_utc": history_begin.isoformat(),
+            "history_end_utc": history_end.isoformat(),
+            "required_begin_utc": required_begin.isoformat(),
+            "required_end_utc": required_end.isoformat(),
+            "history_window_seconds": history_window_seconds,
             "replay_window_seconds": replay_window_seconds,
         }
     if history_window_seconds < replay_window_seconds:
