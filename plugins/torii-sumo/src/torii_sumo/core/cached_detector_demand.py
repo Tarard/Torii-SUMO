@@ -45,7 +45,7 @@ from .digital_twin_mapping import (
     write_virtual_expected_counts,
 )
 from .hamburg_official import parse_hamburg_count_streams, sha256_file, write_json
-from .route_sampler import apply_departure_lane_targets, run_route_sampler
+from .route_sampler import apply_departure_lane_targets, route_source_edges, run_route_sampler
 
 
 def read_hamburg_count_stream_snapshot(path: Path) -> list[CountStream]:
@@ -433,11 +433,14 @@ def prepare_cached_detector_demand_package(
             Path(str(route_sampler["demand_route_file"])),
             lane_targets,
             interval=interval,
+            source_edges=route_source_edges(Path(str(route_sampler["demand_route_file"]))),
             lane_positions=lane_positions,
         )
         route_sampler["lane_balance"] = lane_balance
-        if lane_balance.get("status") == "pass":
+        if lane_balance.get("status") in {"pass", "review_required"}:
             route_sampler["demand_route_sha256"] = sha256_file(Path(str(route_sampler["demand_route_file"])))
+            if lane_balance.get("status") == "review_required":
+                route_sampler["claim_status"] = "lane-level-review-required"
         else:
             route_sampler["status"] = "partial"
             route_sampler["claim_status"] = "construction-incomplete"
@@ -471,7 +474,9 @@ def prepare_cached_detector_demand_package(
         "excluded_route_edge_hits_in_demand": demand_excluded_hits,
     }
     demand_generation_status = (
-        "pass"
+        "review_required"
+        if lane_balance.get("status") == "review_required"
+        else "pass"
         if route_sampler.get("status") == "pass"
         and route_sampler.get("constraint_match_fraction") == 1.0
         and (
@@ -510,9 +515,11 @@ def prepare_cached_detector_demand_package(
     unique_artifact_paths = list(dict.fromkeys(path.resolve() for path in artifact_paths if path.is_file()))
     manifest = {
         "schema_id": "torii.cached-detector-demand.v1",
-        "status": "partial" if demand_generation_status == "pass" else "fail",
+        "status": "partial" if demand_generation_status in {"pass", "review_required"} else "fail",
         "claim_status": (
-            "detector-demand-inputs-ready-topology-review-pending"
+            "detector-demand-inputs-ready-lane-review-pending"
+            if demand_generation_status == "review_required"
+            else "detector-demand-inputs-ready-topology-review-pending"
             if demand_generation_status == "pass"
             else "construction-invalid"
         ),

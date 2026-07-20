@@ -9,7 +9,7 @@ import shutil
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Collection, Mapping
 
 import sumolib
 
@@ -45,11 +45,25 @@ def write_candidate_routes(candidate_manifest_csv: Path, output_file: Path) -> i
     return count
 
 
+def route_source_edges(demand_route_file: Path) -> set[str]:
+    """Return the first edge of every vehicle route in a routeSampler output."""
+
+    root = ET.parse(Path(demand_route_file).resolve(strict=True)).getroot()
+    source_edges: set[str] = set()
+    for vehicle in root.findall("vehicle"):
+        route = vehicle.find("route")
+        edges = "" if route is None else str(route.attrib.get("edges", "")).strip()
+        if edges:
+            source_edges.add(edges.split()[0])
+    return source_edges
+
+
 def apply_departure_lane_targets(
     demand_route_file: Path,
     lane_targets: Mapping[tuple[str, int], Mapping[str, int]],
     *,
     interval: int,
+    source_edges: Collection[str] | None = None,
     lane_positions: Mapping[tuple[str, str], float] | None = None,
     depart_offset_m: float = 1.0,
     output_file: Path | None = None,
@@ -62,8 +76,11 @@ def apply_departure_lane_targets(
     an edge/bin equal that lane total, this function writes ``departLane`` in a
     stable lane-count order.  Optional detector positions place vehicles just
     upstream of the measured cut, which is the correct boundary semantics for
-    a local cross-section twin.  Any unmatched bin is reported instead of
-    silently fabricating a lane split.
+    a local cross-section twin.  A routeSampler vehicle is counted only at its
+    first edge, so an internal detector edge cannot be satisfied by assigning
+    departure lanes.  Callers may pass ``source_edges`` to control only those
+    boundary edges; skipped internal bins are reported as ``review_required``
+    rather than being mistaken for a lane-balance failure.
     """
 
     if interval <= 0:
@@ -73,6 +90,7 @@ def apply_departure_lane_targets(
     source = Path(demand_route_file).resolve(strict=True)
     destination = Path(output_file).resolve() if output_file is not None else source
     root = ET.parse(source).getroot()
+    allowed_source_edges = None if source_edges is None else {str(edge) for edge in source_edges}
     vehicles_by_bin: dict[tuple[str, int], list[ET.Element]] = {}
     unsupported_vehicle_count = 0
     for vehicle in root.findall("vehicle"):
@@ -89,16 +107,29 @@ def apply_departure_lane_targets(
     changed = 0
     assigned = 0
     target_total = 0
+    all_target_total = 0
     mismatches: list[dict[str, object]] = []
     unresolved_lanes: list[dict[str, object]] = []
     unresolved_positions: list[dict[str, object]] = []
+    skipped_non_source_bins: list[dict[str, object]] = []
     positioned = 0
     for key, targets in sorted(lane_targets.items()):
         edge_id, begin = key
-        lane_counts = {str(lane): int(count) for lane, count in targets.items() if int(count) > 0}
-        if any(count < 0 for count in targets.values()):
+        if any(int(count) < 0 for count in targets.values()):
             raise ValueError(f"lane target counts must be non-negative for {key!r}")
+        lane_counts = {str(lane): int(count) for lane, count in targets.items() if int(count) > 0}
         target_count = sum(lane_counts.values())
+        all_target_total += target_count
+        if allowed_source_edges is not None and edge_id not in allowed_source_edges:
+            skipped_non_source_bins.append(
+                {
+                    "edge_id": edge_id,
+                    "begin": begin,
+                    "target_count": target_count,
+                    "reason": "detector edge is internal to generated route; departure lanes apply only to first edge",
+                }
+            )
+            continue
         target_total += target_count
         vehicles = vehicles_by_bin.get(key, [])
         if len(vehicles) != target_count:
@@ -146,19 +177,19 @@ def apply_departure_lane_targets(
     ET.indent(root, space="    ")
     ET.ElementTree(root).write(temporary, encoding="utf-8", xml_declaration=True)
     temporary.replace(destination)
+    hard_failure = bool(unresolved_lanes or unresolved_positions or unsupported_vehicle_count)
+    review_required = bool(skipped_non_source_bins or (allowed_source_edges is not None and mismatches))
     return {
-        "status": (
-            "pass"
-            if not mismatches
-            and not unresolved_lanes
-            and not unresolved_positions
-            and unsupported_vehicle_count == 0
-            else "fail"
-        ),
+        "status": "fail" if hard_failure else "review_required" if review_required else "pass",
         "interval": interval,
         "target_bin_count": len(lane_targets),
+        "controlled_target_bin_count": len(lane_targets) - len(skipped_non_source_bins),
+        "skipped_non_source_bin_count": len(skipped_non_source_bins),
+        "skipped_non_source_edges": sorted({str(item["edge_id"]) for item in skipped_non_source_bins}),
         "vehicle_bin_count": len(vehicles_by_bin),
-        "target_vehicle_count": target_total,
+        "target_vehicle_count": all_target_total,
+        "controlled_target_vehicle_count": target_total,
+        "skipped_non_source_target_vehicle_count": all_target_total - target_total,
         "assigned_vehicle_count": assigned,
         "changed_vehicle_count": changed,
         "positioned_vehicle_count": positioned,
@@ -166,6 +197,7 @@ def apply_departure_lane_targets(
         "unmatched_bins": mismatches,
         "unresolved_lanes": unresolved_lanes,
         "unresolved_positions": unresolved_positions,
+        "skipped_non_source_bins": skipped_non_source_bins,
         "unsupported_vehicle_count": unsupported_vehicle_count,
         "demand_route_file": str(destination),
     }

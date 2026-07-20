@@ -33,7 +33,7 @@ from .digital_twin_mapping import (
     write_virtual_e2_additional,
     write_virtual_expected_counts,
 )
-from .route_sampler import apply_departure_lane_targets, run_route_sampler
+from .route_sampler import apply_departure_lane_targets, route_source_edges, run_route_sampler
 from .tls_replay import run_tls_detector_replay
 
 
@@ -192,11 +192,14 @@ def materialize_hamburg_named_replay(
             Path(str(route_sampler["demand_route_file"])),
             lane_targets,
             interval=interval,
+            source_edges=route_source_edges(Path(str(route_sampler["demand_route_file"]))),
             lane_positions=lane_positions,
         )
         route_sampler["lane_balance"] = lane_balance
-        if lane_balance.get("status") == "pass":
+        if lane_balance.get("status") in {"pass", "review_required"}:
             route_sampler["demand_route_sha256"] = file_sha256(Path(str(route_sampler["demand_route_file"])))
+            if lane_balance.get("status") == "review_required":
+                route_sampler["claim_status"] = "lane-level-review-required"
         else:
             route_sampler["status"] = "partial"
             route_sampler["claim_status"] = "construction-incomplete"
@@ -255,6 +258,10 @@ def materialize_hamburg_named_replay(
     gate_reasons: list[str] = []
     if route_sampler.get("status") != "pass":
         gate_reasons.append("routeSampler did not complete")
+    if lane_balance.get("status") == "review_required":
+        gate_reasons.append("detector lane evidence does not control every generated source vehicle")
+    elif lane_balance.get("status") == "fail":
+        gate_reasons.append("departure-lane assignment did not satisfy measured source bins")
     if simulation.get("status") != "pass":
         gate_reasons.append("SUMO process did not complete")
     if simulation.get("quality_gate") != "pass":
