@@ -29,6 +29,8 @@ from .hamburg_named_scope import (
     HamburgNamedScopeError,
     validate_hamburg_named_scope_manifest,
 )
+from .hamburg_2394_tls_materializer import _patch_connections
+from .hamburg_2394_tls_topology import PhysicalLink, ROUTING_REMOVALS
 from .ocit_c import (
     OcitCConfig,
     build_vehicle_topology_inventory,
@@ -150,6 +152,16 @@ PLAN_CONNECTION_EVIDENCE = (
         "2394", "381540198#1", 0, "193847534#0", 1,
         reason="official MAP movement 6->5",
     ),
+)
+
+# OCIT-C is the complete motor-vehicle movement inventory for these two
+# hash-bound official cells.  Reuse the already audited 2394 removals and add
+# the single equivalent 2349 OSM legacy turn.  These are routing removals, not
+# merely retired signal links: leaving them uncontrolled would still permit
+# movements that the official inventory excludes.
+COMPOUND_ROUTING_REMOVALS = (
+    *ROUTING_REMOVALS,
+    PhysicalLink("554713078#2", 1, "554713075#0", 1),
 )
 
 
@@ -518,6 +530,15 @@ def _build_compiled_source_patch_variant(
         output_tllogic_file=official_tllogic,
         plan=plan,
     )
+    routing_prune = _patch_connections(
+        official_connections,
+        repairs=(),
+        removals=COMPOUND_ROUTING_REMOVALS,
+    )
+    routing_delete_patch = _append_connection_delete_directives(
+        official_connections,
+        removals=COMPOUND_ROUTING_REMOVALS,
+    )
     node_patch = destination / "official_tls_owner_patch.nod.xml"
     owner_application = _write_compiled_source_owner_patch(
         source_net_file,
@@ -584,6 +605,16 @@ def _build_compiled_source_patch_variant(
         )
         for row in connection_delta["added"]
     }
+    expected_removed = {link.key for link in COMPOUND_ROUTING_REMOVALS}
+    actual_removed = {
+        (
+            str(row["from_edge"]),
+            int(row["from_lane"]),
+            str(row["to_edge"]),
+            int(row["to_lane"]),
+        )
+        for row in connection_delta["removed"]
+    }
     phase_capacity = audit_phase_capacity(
         rebuilt,
         set(CONTROLLER_BY_NODE.values()),
@@ -595,7 +626,7 @@ def _build_compiled_source_patch_variant(
         if source_unchanged
         and source_signature["sha256"] == rebuilt_signature["sha256"]
         and geometry["status"] == "pass"
-        and not connection_delta["removed"]
+        and actual_removed == expected_removed
         and actual_added == expected_added
         and phase_capacity["status"] == "pass"
         and retired_absence["status"] == "pass"
@@ -612,6 +643,10 @@ def _build_compiled_source_patch_variant(
         "plan": asdict(plan),
         "plain_export": {"command": export_command, "result": export_result},
         "plain_application": application,
+        "official_inventory_routing_prune": {
+            "plain_removal": routing_prune,
+            "compiled_net_delete_patch": routing_delete_patch,
+        },
         "owner_application": owner_application,
         "rebuild": {"command": rebuild_command, "result": rebuild_result},
         "edge_lane_signature_match": source_signature["sha256"] == rebuilt_signature["sha256"],
@@ -626,6 +661,15 @@ def _build_compiled_source_patch_variant(
             }
             for key in sorted(expected_added)
         ],
+        "expected_removed_connections": [
+            {
+                "from_edge": key[0],
+                "from_lane": key[1],
+                "to_edge": key[2],
+                "to_lane": key[3],
+            }
+            for key in sorted(expected_removed)
+        ],
         "phase_capacity_audit": phase_capacity,
         "retired_tls_absence_audit": retired_absence,
     }
@@ -638,6 +682,58 @@ def _build_compiled_source_patch_variant(
             "compiled-source patch failed an exact geometry/connection/TLS gate"
         )
     return report
+
+
+def _append_connection_delete_directives(
+    path: Path,
+    *,
+    removals: Sequence[PhysicalLink],
+) -> dict[str, Any]:
+    """Write SUMO's explicit patch form for removing compiled-net connections."""
+
+    tree = ET.parse(path)
+    root = tree.getroot()
+    existing_delete_keys = {
+        (
+            element.attrib.get("from", ""),
+            int(element.attrib.get("fromLane", "-1")),
+            element.attrib.get("to", ""),
+            int(element.attrib.get("toLane", "-1")),
+        )
+        for element in root.findall("delete")
+    }
+    removal_keys = {item.key for item in removals}
+    if existing_delete_keys & removal_keys:
+        raise HamburgCompoundOfficialTlsError(
+            "official routing delete patch already contains a declared removal"
+        )
+    for item in sorted(removals, key=lambda value: value.key):
+        root.append(
+            ET.Element(
+                "delete",
+                {
+                    "from": item.from_edge,
+                    "to": item.to_edge,
+                    "fromLane": str(item.from_lane),
+                    "toLane": str(item.to_lane),
+                },
+            )
+        )
+    ET.indent(tree, space="    ")
+    write_text_atomic(path, ET.tostring(root, encoding="unicode") + "\n")
+    return {
+        "status": "pass",
+        "delete_directive_count": len(removal_keys),
+        "delete_directives": [
+            {
+                "from_edge": key[0],
+                "from_lane": key[1],
+                "to_edge": key[2],
+                "to_lane": key[3],
+            }
+            for key in sorted(removal_keys)
+        ],
+    }
 
 
 def _write_compiled_source_owner_patch(
