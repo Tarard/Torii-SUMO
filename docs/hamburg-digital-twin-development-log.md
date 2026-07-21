@@ -184,6 +184,7 @@ evidence is never replaced with a guessed connection or signal program.
 | 2026-07-21 | Shared-lane detector semantics gate | Re-ran the detector binder on iteration 024 with the 2394 MAP and the 2403 four-lane constellation evidence. The official MAP and LSBG plan retain the existing 2394 motor-lane counts, so duplicate Z fields do not authorize another road lane. | All 19 fields have lane hypotheses, but only 17 `(node, lane)` identities exist: 2394 Z.1/Z.2 share MAP lane 2 and Z.5/Z.6 share MAP lane 7 while their counts differ. The v7 manifest now keeps the mappings active but blocks E1/E2 materialization and automatic promotion instead of silently summing them. | Lane identity and aggregation semantics are separate evidence layers. Multiple official fields on one lane may be serial, redundant, or otherwise non-additive; Torii requires explicit official aggregation evidence before constructing one virtual sensor. |
 | 2026-07-21 | 2403 two-conflict-core closure and W1 handoff | Rejected the single-core/hull probes and the first two-core variant because they distorted surfaces or added two SUMO-guessed movements absent from the accepted parent. Iteration 027 keeps separate north/south conflict cores and deletes only those two guessed movements. | Preservation parity is 23/23 boundary movements with no loss/addition; surface, SUMO load and Connection Mode gates pass; 23/23 smoke vehicles arrive with zero teleport/collision; both owners have immutable background NetEdit reviews. The SHA-bound W1 handoff is `review_ready` with execution gate `pass`. | Join authorization is per physical conflict core. W1 promotion consumes one candidate SHA plus preservation, geometry, connection, runtime and NetEdit evidence; it still cannot prove official signal control. |
 | 2026-07-21 | Final-OSM signal binding | Reused the existing iteration-009 compound TLS derivation instead of re-running path inference or comparing final OSM edges with `hh-map-*` teacher IDs. The W2 binder now accepts the hash-bound compound plan and checks every selected physical connection against iteration 027. | 2349 binds 8/8 streams to 9/9 controlled OSM connections; 2394 binds 8/8 to 13/13. The two-hour official weekday history has 16/16 initialized streams and 3,671 exported events. W2 remains non-promoting because 2403 has no published MAP/OCIT/TLD control asset. | Preserve official movement-to-OSM evidence as a reusable contract. One movement may own multiple physical SUMO connections; exact set parity replaces edge-name equality. |
+| 2026-07-21 | W3 official count-station truth correction | Audited Hamburg's `Anzahl_Kfz_Zaehlstelle_15-Min` SensorThings layer before materializing detectors. Kept the 5-minute `Zählfeld` streams only as lane/location diagnostics and switched the intended demand/validation truth to the processed directional station streams. | The selected Saturday window contains 10/10 bins for all nine station streams. Six direction-1/2 streams represent real directional cross-sections; three direction-0 streams are totals used only for QA, never additional route constraints. Four directional cross-sections can be uniquely materialized on W1; the two 2403 arm-2 sections remain `review_required` because their geometry is unique but their movement semantics cannot be promoted without the missing 2403 MAP/OCIT evidence. Node 2349 has no published station stream. | A detector field is not a traffic-total contract. Bind one official station to one directed SUMO edge cross-section, place E1 on all passenger lanes, compare the lane sum with the single station observation, and keep direction-0 totals and raw fields outside routeSampler constraints. |
 
 ## Current topology state
 
@@ -214,10 +215,11 @@ evidence is never replaced with a guessed connection or signal program.
   `aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33`;
   2403 controller ownership and historical timing remain unknown because no
   current machine-bindable MAP/OCIT/TLD package is published.
-- Detector-to-lane binding is structurally complete but sensor materialization is
-  not: two 2394 lane identities each contain two official Z fields with unresolved
-  additive/redundant semantics. This does not authorize a topology mutation and
-  it blocks E1/E2 generation until the official detector contract is resolved.
+- The earlier 19-field/17-lane result is retained only as diagnostic evidence;
+  it is not the W3 traffic truth. The official station audit identifies six real
+  directional cross-sections: four are ready for hash-bound E1/E2 materialization,
+  while the two 2403 arm-2 sections remain semantic reviews. Node 2349 has no
+  published station stream, so corridor-wide promotion remains blocked.
 
 ### 2403 topology status split
 
@@ -245,8 +247,10 @@ evidence is never replaced with a guessed connection or signal program.
 2. Preserve the completed 2349/2394 static and two-hour historical signal
    bindings; keep 2403 signal ownership/timing explicitly blocked until a
    machine-bindable official asset is available.
-3. Place co-located E1/E2 detectors on the frozen lanes and preserve the official
-   detector-to-lane evidence and ambiguity status.
+3. Freeze the official 15-minute station inventory, then place co-located E1/E2
+   detectors for the four uniquely proven directional cross-sections. Keep the
+   two 2403 arm-2 sections diagnostic until official movement evidence closes
+   their semantics, and keep raw detector fields out of demand totals.
 4. Rebuild the selected Saturday two-hour demand with warm-up, then compare
    official and SUMO detector bins, teleports, collisions and queues.
 5. Productize only the reusable estimator/controller/audit steps; Ingolstadt
