@@ -146,6 +146,7 @@ def test_fastmcp_schema_constrains_netedit_operation_action_and_object_type() ->
     properties = anyio.run(schema)["properties"]
 
     assert set(properties["operation"]["enum"]) == {"open", "observe", "act", "finalize", "abort"}
+    assert "netedit_binary" not in properties
     assert set(properties["action"]["anyOf"][0]["enum"]) == {"click", "drag", *tools._SHORTCUTS}
     assert set(properties["object_type"]["anyOf"][0]["enum"]) == {
         "junction",
@@ -481,6 +482,171 @@ def test_scope_preservation_gate_rejects_outside_geometry_change(tmp_path: Path)
 
     assert report["status"] == "fail"
     assert report["changed_parts"] == ["junctions"]
+
+
+def test_scope_preservation_gate_cannot_expand_scope_from_candidate_incidence(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    source.write_text(
+        "<net>"
+        '<junction id="old"/><junction id="keep"/><junction id="outside"/>'
+        '<edge id="target" from="old" to="keep"><lane id="target_0"/></edge>'
+        '<edge id="unrelated" from="keep" to="outside"><lane id="unrelated_0"/></edge>'
+        "</net>",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        "<net>"
+        '<junction id="cluster"/><junction id="keep"/><junction id="outside"/>'
+        '<edge id="target" from="cluster" to="keep"><lane id="target_0"/></edge>'
+        '<edge id="unrelated" from="cluster" to="outside"><lane id="unrelated_0"/></edge>'
+        "</net>",
+        encoding="utf-8",
+    )
+    session = type(
+        "Session",
+        (),
+        {
+            "source": source,
+            "candidate": candidate,
+            "target_source_junction_ids": ("old",),
+            "target_candidate_junction_ids": ("cluster",),
+        },
+    )()
+
+    report = tools._scope_preservation_gate(session)
+
+    assert report["status"] == "fail"
+    assert "edges" in report["changed_parts"]
+    assert report["source_incident_external_edge_ids"] == ["target"]
+
+
+def test_scope_preservation_gate_checks_unrelated_internal_edges_without_substring_scope(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    source.write_text(
+        "<net>"
+        '<junction id="12" intLanes=":12_0_0"/><junction id="keep" intLanes=":keep_0_0"/>'
+        '<edge id=":12_0" function="internal"><lane id=":12_0_0" speed="1"/></edge>'
+        '<edge id=":keep_0" function="internal"><lane id=":keep_0_0" speed="1"/></edge>'
+        '<connection from="road-123" to="outside" fromLane="0" toLane="0"/>'
+        "</net>",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        "<net>"
+        '<junction id="cluster" intLanes=":cluster_0_0"/>'
+        '<junction id="keep" intLanes=":keep_0_0"/>'
+        '<edge id=":cluster_0" function="internal"><lane id=":cluster_0_0" speed="1"/></edge>'
+        '<edge id=":keep_0" function="internal"><lane id=":keep_0_0" speed="9"/></edge>'
+        '<connection from="road-123" to="changed" fromLane="0" toLane="0"/>'
+        "</net>",
+        encoding="utf-8",
+    )
+    session = type(
+        "Session",
+        (),
+        {
+            "source": source,
+            "candidate": candidate,
+            "target_source_junction_ids": ("12",),
+            "target_candidate_junction_ids": ("cluster",),
+        },
+    )()
+
+    report = tools._scope_preservation_gate(session)
+
+    assert report["status"] == "fail"
+    assert {"edges", "connections"}.issubset(report["changed_parts"])
+    assert report["source_target_internal_edge_ids"] == [":12_0"]
+    assert report["candidate_target_internal_edge_ids"] == [":cluster_0"]
+
+
+def test_scope_preservation_gate_rejects_candidate_intlanes_scope_expansion(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    source.write_text(
+        "<net>"
+        '<junction id="old" intLanes=":old_0_0"/><junction id="keep" intLanes=":keep_0_0"/>'
+        '<edge id=":old_0" function="internal"><lane id=":old_0_0" speed="1"/></edge>'
+        '<edge id=":keep_0" function="internal"><lane id=":keep_0_0" speed="1"/></edge>'
+        "</net>",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        "<net>"
+        '<junction id="cluster" intLanes=":keep_0_0"/>'
+        '<junction id="keep" intLanes=":keep_0_0"/>'
+        '<edge id=":keep_0" function="internal"><lane id=":keep_0_0" speed="9"/></edge>'
+        "</net>",
+        encoding="utf-8",
+    )
+    session = type(
+        "Session",
+        (),
+        {
+            "source": source,
+            "candidate": candidate,
+            "target_source_junction_ids": ("old",),
+            "target_candidate_junction_ids": ("cluster",),
+        },
+    )()
+
+    report = tools._scope_preservation_gate(session)
+
+    assert report["status"] == "fail"
+    assert "edges" in report["changed_parts"]
+    assert report["candidate_target_internal_edge_ids"] == []
+
+
+def test_finalize_audits_fail_closed_on_unknown_gate_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    source.write_text('<net><junction id="keep"/></net>', encoding="utf-8")
+    candidate.write_bytes(source.read_bytes())
+    session = type(
+        "Session",
+        (),
+        {
+            "source": source,
+            "candidate": candidate,
+            "output_dir": tmp_path / "session",
+            "target_source_junction_ids": (),
+            "target_candidate_junction_ids": (),
+            "steps": [],
+        },
+    )()
+    monkeypatch.setattr(tools, "run_sumo_load_audit", lambda **_kwargs: {"status": "mystery"})
+    monkeypatch.setattr(
+        tools,
+        "audit_sumo_lane_junction_surface_overlaps",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
+    monkeypatch.setattr(
+        tools,
+        "compare_sumo_surface_overlap_reports",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
+    monkeypatch.setattr(
+        tools,
+        "build_connection_mode_regression_audit",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
+
+    report = _REAL_FINALIZE_AUDITS(session)
+
+    assert report["status"] == "fail"
+    assert report["machine_gate_status"] == "fail"
+    assert report["gate_statuses"]["sumo_load"] == "mystery"
 
 
 @pytest.mark.parametrize("mutated", ["source", "candidate"])
