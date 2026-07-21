@@ -31,12 +31,15 @@
   },
   "sources": {
     "osm_bbox_wgs84": [9.9880, 53.5405, 10.0030, 53.5450],
+    "osm_rendered_tile_layer": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "osm_rendered_zoom": 17,
     "official_map_service": "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
     "official_map_layer": "geobasiskarten_farbig",
     "official_map_bbox_epsg25832": [565650, 5932950, 566220, 5933350]
   },
   "files": [
     {"path": "hamburg_official_geobasemap.png", "size": 498424, "sha256": "c5ed769521ad7df4982364ca2f618d8c85db5a76a7475f2707899ebfe5366f4e"},
+    {"path": "hamburg_osm_original_map.png", "size": 757401, "sha256": "1090fb60ced2e6b2dec9569611c6825c69916a73dbfa89288d86c4b4ac767965"},
     {"path": "hamburg_sandtorkai_source_bbox.osm.xml.gz", "size": 68252, "sha256": "0b2a2e94357a8e539af2938566418939371cd69fa7312e8850e1f30a92b3cc9c"},
     {"path": "hamburg_sandtorkai_w1.net.xml", "size": 199224, "sha256": "aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33"},
     {"path": "netedit_w1_north_core.png", "size": 61960, "sha256": "9a495174e214fcc0aa7128f584d1d831582819668a879c4e6038fa5c211f9e99"},
