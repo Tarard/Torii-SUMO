@@ -108,6 +108,309 @@ class HamburgExecutionWorkflowError(ValueError):
     """Raised when a workflow plan cannot be made hash-safe."""
 
 
+def materialize_hamburg_w1_topology_handoff(
+    *,
+    output_dir: Path,
+    candidate_net_file: Path,
+    topology_audit_file: Path,
+    surface_comparison_file: Path,
+    connection_mode_manifest_file: Path,
+    sumo_load_report_file: Path,
+    movement_smoke_file: Path,
+    netedit_review_files: Sequence[Path],
+    expected_review_junction_ids: Sequence[str],
+) -> dict[str, Any]:
+    """Adopt an audited OSM-derived topology as W1 without rebuilding it."""
+
+    candidate = Path(candidate_net_file).expanduser().resolve(strict=True)
+    candidate_hash = file_sha256(candidate)
+    evidence_paths = {
+        "topology_feedback": Path(topology_audit_file).expanduser().resolve(strict=True),
+        "surface_comparison": Path(surface_comparison_file).expanduser().resolve(strict=True),
+        "connection_mode": Path(connection_mode_manifest_file).expanduser().resolve(strict=True),
+        "sumo_load": Path(sumo_load_report_file).expanduser().resolve(strict=True),
+        "movement_smoke": Path(movement_smoke_file).expanduser().resolve(strict=True),
+    }
+    evidence = {name: _read_json_mapping(path) for name, path in evidence_paths.items()}
+    errors: list[str] = []
+
+    topology = evidence["topology_feedback"]
+    if topology.get("schema") != "torii.junction-aggregation-preservation/v1" or topology.get("status") != "pass":
+        errors.append("topology preservation is not pass")
+    _check_candidate_binding(topology, candidate, candidate_hash, errors, prefix="variant")
+    try:
+        topology_source = Path(str(topology.get("source_net_file", ""))).resolve(strict=True)
+    except (OSError, RuntimeError):
+        errors.append("topology preservation source path is invalid")
+    else:
+        if topology.get("source_sha256") != file_sha256(topology_source):
+            errors.append("topology preservation source hash mismatch")
+    for key in (
+        "unexpected_removed_normal_edge_count",
+        "lost_shared_connection_count",
+        "new_dangling_shared_normal_edge_count",
+    ):
+        if topology.get(key) != 0:
+            errors.append(f"topology preservation {key} is not zero")
+    boundary = topology.get("boundary_movement_preservation")
+    expected_movement_keys: list[str] = []
+    if (
+        not isinstance(boundary, Mapping)
+        or boundary.get("status") != "pass"
+        or boundary.get("lost_boundary_movement_count") != 0
+        or boundary.get("added_boundary_movement_count") != 0
+    ):
+        errors.append("topology boundary-movement preservation is not pass")
+    else:
+        groups = boundary.get("groups")
+        if not isinstance(groups, list) or not groups:
+            errors.append("topology boundary-movement groups are empty")
+        else:
+            for group in groups:
+                if not isinstance(group, Mapping):
+                    errors.append("topology boundary-movement group is invalid")
+                    continue
+                movements = group.get("variant_boundary_movements")
+                if not isinstance(movements, list) or len(movements) != group.get("variant_boundary_movement_count"):
+                    errors.append("topology boundary-movement group count mismatch")
+                    continue
+                expected_movement_keys.extend(map(str, movements))
+    if not expected_movement_keys or len(set(expected_movement_keys)) != len(expected_movement_keys):
+        errors.append("topology boundary-movement keys are empty or duplicated")
+
+    surface = evidence["surface_comparison"]
+    if (
+        surface.get("schema") != "torii.sumo-surface-overlap-audit/v1"
+        or surface.get("audit_engine") != "torii.bevel-strip-and-junction-polygon-area/v2"
+        or surface.get("status") != "pass"
+    ):
+        errors.append("surface audit is not pass")
+    _check_candidate_binding(surface, candidate, candidate_hash, errors, prefix="source")
+    if surface.get("source_network_mutation") is not False:
+        errors.append("surface audit did not preserve the candidate")
+    for key in (
+        "geometry_error_count",
+        "junction_junction_overlap_count",
+        "external_lane_non_owner_junction_overlap_count",
+    ):
+        if surface.get(key) != 0:
+            errors.append(f"surface audit {key} is not zero")
+
+    connection = evidence["connection_mode"]
+    if (
+        connection.get("schema") != "torii.connection_mode_regression_manifest.v1"
+        or connection.get("status") != "pass"
+        or connection.get("gate_status") != "pass"
+        or connection.get("automatic_promotion_gate") != "pass"
+    ):
+        errors.append("connection-mode regression is not pass")
+    _check_candidate_binding(connection, candidate, candidate_hash, errors, prefix="candidate")
+    if connection.get("source_network_mutation") is not False:
+        errors.append("connection-mode regression did not preserve the source")
+
+    load = evidence["sumo_load"]
+    if load.get("schema") != "torii.sumo-load-audit/v1" or load.get("status") != "pass":
+        errors.append("SUMO load audit is not pass")
+    _check_candidate_binding(load, candidate, candidate_hash, errors, prefix="source")
+    if load.get("source_network_mutation") is not False:
+        errors.append("SUMO load audit did not preserve the candidate")
+
+    smoke = evidence["movement_smoke"]
+    movement_keys = smoke.get("movement_keys")
+    smoke_inputs = smoke.get("inputs")
+    smoke_outputs = smoke.get("outputs")
+    if (
+        smoke.get("schema") != "torii.hamburg-2403-movement-smoke/v1"
+        or smoke.get("status") != "pass"
+        or smoke.get("vehicle_count") != len(expected_movement_keys)
+        or smoke.get("movement_count") != len(expected_movement_keys)
+        or smoke.get("vehicle_count") != smoke.get("ended")
+        or smoke.get("vehicle_count") != smoke.get("inserted")
+        or smoke.get("vehicle_count") != smoke.get("loaded")
+        or smoke.get("running") != 0
+        or smoke.get("waiting") != 0
+        or smoke.get("teleports") != 0
+        or smoke.get("collisions") != 0
+        or smoke.get("movement_keys_unique") is not True
+        or smoke.get("movement_keys_match_preservation") is not True
+        or not isinstance(movement_keys, list)
+        or set(map(str, movement_keys or ())) != set(expected_movement_keys)
+    ):
+        errors.append("movement smoke is not a complete zero-error preservation run")
+    _check_candidate_binding(smoke, candidate, candidate_hash, errors, prefix="candidate")
+    inspection = smoke.get("inspection")
+    if not isinstance(inspection, Mapping) or inspection.get("status") != "pass":
+        errors.append("movement smoke output inspection is not pass")
+    else:
+        inspected_summary = inspection.get("summary")
+        inspected_tripinfo = inspection.get("tripinfo")
+        if (
+            not isinstance(inspected_summary, Mapping)
+            or not isinstance(inspected_tripinfo, Mapping)
+            or inspected_summary.get("loaded") != smoke.get("vehicle_count")
+            or inspected_summary.get("inserted") != smoke.get("vehicle_count")
+            or inspected_summary.get("arrived") != smoke.get("vehicle_count")
+            or inspected_summary.get("running") != 0
+            or inspected_summary.get("waiting") != 0
+            or inspected_summary.get("teleports") != 0
+            or inspected_summary.get("collisions") != 0
+            or inspected_tripinfo.get("trip_count") != smoke.get("vehicle_count")
+        ):
+            errors.append("movement smoke inspection counts do not match the declared run")
+    if not isinstance(smoke_inputs, Mapping) or not isinstance(smoke_outputs, Mapping):
+        errors.append("movement smoke artifacts are missing")
+    else:
+        smoke_artifacts = {
+            "route": smoke_inputs.get("route"),
+            "preservation_audit": smoke_inputs.get("preservation_audit"),
+            "summary": smoke_outputs.get("summary"),
+            "tripinfo": smoke_outputs.get("tripinfo"),
+        }
+        for name, artifact in smoke_artifacts.items():
+            if not isinstance(artifact, Mapping):
+                errors.append(f"movement smoke artifact is missing: {name}")
+                continue
+            try:
+                artifact_path = Path(str(artifact.get("path", ""))).resolve(strict=True)
+            except (OSError, RuntimeError):
+                errors.append(f"movement smoke artifact path is invalid: {name}")
+                continue
+            if artifact.get("sha256") != file_sha256(artifact_path):
+                errors.append(f"movement smoke artifact hash mismatch: {name}")
+        preservation_artifact = smoke_artifacts["preservation_audit"]
+        if isinstance(preservation_artifact, Mapping):
+            try:
+                preservation_path = Path(str(preservation_artifact.get("path", ""))).resolve(strict=True)
+            except (OSError, RuntimeError):
+                preservation_path = Path()
+            if (
+                preservation_path != evidence_paths["topology_feedback"]
+                or preservation_artifact.get("sha256") != file_sha256(evidence_paths["topology_feedback"])
+            ):
+                errors.append("movement smoke is not bound to the topology preservation audit")
+
+    review_paths = tuple(Path(path).expanduser().resolve(strict=True) for path in netedit_review_files)
+    expected_ids = {str(value) for value in expected_review_junction_ids if str(value)}
+    if not review_paths or not expected_ids:
+        errors.append("NetEdit review owners are empty")
+    actual_review_ids: list[str] = []
+    for path in review_paths:
+        review = _read_json_mapping(path)
+        target = review.get("target_junction")
+        target_id = str(target.get("id", "")) if isinstance(target, Mapping) else ""
+        actual_review_ids.append(target_id)
+        if (
+            review.get("schema") != "torii.netedit-background-review.direct/v1"
+            or review.get("status") != "review_material_ready"
+            or review.get("automatic_promotion_gate") != "blocked"
+            or review.get("candidate_unchanged") is not True
+            or review.get("candidate_sha256_before") != candidate_hash
+            or review.get("candidate_sha256_after") != candidate_hash
+            or review.get("mode_images_distinct") is not True
+            or review.get("global_keyboard_or_mouse_input_used") is not False
+            or review.get("foreground_context_restored") is not True
+        ):
+            errors.append(f"NetEdit review is not current and non-mutating: {path}")
+        try:
+            if Path(str(review.get("candidate_file", ""))).resolve() != candidate:
+                errors.append(f"NetEdit review candidate path mismatch: {path}")
+        except OSError:
+            errors.append(f"NetEdit review candidate path invalid: {path}")
+    if len(review_paths) != len(expected_ids) or set(actual_review_ids) != expected_ids:
+        errors.append(
+            f"NetEdit owner coverage mismatch: expected={sorted(expected_ids)}, actual={sorted(set(actual_review_ids))}"
+        )
+    if file_sha256(candidate) != candidate_hash:
+        errors.append("candidate changed while W1 handoff evidence was checked")
+    if errors:
+        raise HamburgExecutionWorkflowError("W1 topology handoff rejected: " + "; ".join(errors))
+
+    output = Path(output_dir).expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    manifest_file = output / "hamburg_official_corridor_geometry.manifest.json"
+    if manifest_file.exists():
+        raise HamburgExecutionWorkflowError(f"W1 topology handoff already exists: {manifest_file}")
+    manifest: dict[str, Any] = {
+        "schema": "torii.hamburg-official-corridor-geometry/v1",
+        "status": "review_ready",
+        "execution_gate": "pass",
+        "execution_gate_reason": "hash-bound topology, SUMO, surface, connection, movement-smoke, and NetEdit-material checks pass",
+        "claim_status": "osm-continuous-official-evidence-road-topology-review-candidate",
+        "automatic_promotion_gate": "blocked",
+        "network": {"path": str(candidate), "sha256": candidate_hash},
+        "evidence": {
+            name: {"path": str(path), "sha256": file_sha256(path)}
+            for name, path in evidence_paths.items()
+        },
+        "netedit_review": {
+            "status": "review_material_ready",
+            "junction_ids": sorted(expected_ids),
+            "report_count": len(review_paths),
+            "reports": [{"path": str(path), "sha256": file_sha256(path)} for path in review_paths],
+            "automatic_promotion_gate": "blocked",
+        },
+        "gates": {
+            "topology_feedback": "pass",
+            "surface_overlap": "pass",
+            "connection_mode": "pass",
+            "sumo_load": "pass",
+            "movement_smoke": "pass",
+            "netedit_review_material": "pass",
+            "official_2403_signal_assets": "blocked",
+            "automatic_promotion": "blocked",
+        },
+        "routeability": {
+            "status": "pass",
+            "scope": f"{len(expected_movement_keys)} source-authorized 2403 lane-level boundary movements only",
+            "movement_count": len(expected_movement_keys),
+            "teleports": 0,
+            "collisions": 0,
+        },
+        "artifacts": {"network": str(candidate), "manifest": str(manifest_file)},
+        "claim_boundary": {
+            "proves": [
+                "the exact candidate passes the recorded road-topology machine gates",
+                "all declared physical review owners have current non-mutating NetEdit review material",
+                "the candidate may feed fail-closed signal and detector diagnostics",
+            ],
+            "does_not_prove": [
+                "official 2403 signal topology or historical signal timing",
+                "that detector streams sharing a SUMO lane are additive or redundant",
+                "full corridor demand calibration or final digital-twin promotion",
+                "human approval from NetEdit screenshots alone",
+            ],
+        },
+    }
+    write_json_atomic(manifest_file, manifest, ensure_ascii=False, sort_keys=True)
+    return {**manifest, "manifest_file": str(manifest_file)}
+
+
+def _read_json_mapping(path: Path) -> Mapping[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HamburgExecutionWorkflowError(f"cannot read W1 evidence: {path}") from exc
+    if not isinstance(payload, Mapping):
+        raise HamburgExecutionWorkflowError(f"W1 evidence is not an object: {path}")
+    return payload
+
+
+def _check_candidate_binding(
+    payload: Mapping[str, Any],
+    candidate: Path,
+    candidate_hash: str,
+    errors: list[str],
+    *,
+    prefix: str,
+) -> None:
+    try:
+        bound_path = Path(str(payload.get(f"{prefix}_net_file", ""))).resolve()
+    except OSError:
+        bound_path = Path()
+    if bound_path != candidate or payload.get(f"{prefix}_sha256") != candidate_hash:
+        errors.append(f"{prefix} candidate binding mismatch")
+
+
 def materialize_hamburg_execution_plan(
     *,
     output_dir: Path,
@@ -649,5 +952,6 @@ __all__ = [
     "HAMBURG_EXECUTION_WORKFLOW_ID",
     "HAMBURG_EXECUTION_WORKFLOW_SCHEMA",
     "HamburgExecutionWorkflowError",
+    "materialize_hamburg_w1_topology_handoff",
     "materialize_hamburg_execution_plan",
 ]

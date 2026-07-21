@@ -1,0 +1,284 @@
+{
+  "artifacts": {
+    "normalized_observations": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_observations_iteration027_weekday_v3\\signal-observations.normalized.json",
+    "raw_observations": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_observations_iteration027_weekday_v3\\signal-observations.raw.json",
+    "tls_link_events": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_observations_iteration027_weekday_v3\\tls-link-events.csv"
+  },
+  "automatic_promotion_gate": "blocked",
+  "cache_policy": {
+    "retry_incomplete_cache": false
+  },
+  "claim_boundary": {
+    "does_not_prove": [
+      "a complete three-node signal stage while a required node is missing",
+      "signal timing for streams with an incomplete upstream response"
+    ],
+    "proves": [
+      "which official primary streams answered for the UTC window",
+      "which state initializes each active SUMO link at simulation time zero",
+      "that failed or partial streams remain visible in the manifest"
+    ]
+  },
+  "claim_status": "official-primary-signal-history-bound-for-available-nodes",
+  "complete_stream_count": 16,
+  "direct_complete_stream_count": 16,
+  "event_stats": {
+    "active_binding_count": 16,
+    "collapsed_event_count": 1254,
+    "conflict_event_count": 23,
+    "event_count": 3671,
+    "initialized_binding_count": 16
+  },
+  "execution_gate": "pass",
+  "execution_gate_reason": "every active binding has an official response and a preceding state for t=0",
+  "gates": {
+    "automatic_promotion": "blocked",
+    "official_observation_completeness": "pass",
+    "required_node_scope": "blocked",
+    "signal_group_projection": "not_used",
+    "time_zero_state_coverage": "pass"
+  },
+  "incomplete_stream_ids": [],
+  "missing_required_node_ids": [
+    "2403"
+  ],
+  "projected_complete_stream_count": 0,
+  "schema": "torii.hamburg-named-signal-observations/v1",
+  "signal_group_projection": {
+    "blocked_streams": [],
+    "derived_stream_count": 0,
+    "derived_streams": [],
+    "enabled": false
+  },
+  "source": {
+    "api_base_url": "https://tld.iot.hamburg.de/v1.0/",
+    "binding_manifest": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_binding_v5_iteration027_compound\\official-primary-signal-binding.manifest.json",
+      "sha256": "86dedaa40e23bd100b11ec95e80a631f4d47278a5f584a9295a520bbd7c63c7a"
+    },
+    "observation_cache": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_observations_weekday_diagnostic_v1\\observation_cache"
+  },
+  "status": "partial",
+  "stream_audit": [
+    {
+      "connection_id": "2",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "3",
+      "preceding_time_utc": "2026-06-24T05:59:35Z",
+      "signal_group": "K1",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 72940,
+      "window_count": 316
+    },
+    {
+      "connection_id": "3",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "3",
+      "preceding_time_utc": "2026-06-24T05:59:35Z",
+      "signal_group": "K1",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 72946,
+      "window_count": 316
+    },
+    {
+      "connection_id": "6",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "3",
+      "preceding_time_utc": "2026-06-24T05:59:35Z",
+      "signal_group": "K4",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 72961,
+      "window_count": 316
+    },
+    {
+      "connection_id": "4",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "3",
+      "preceding_time_utc": "2026-06-24T05:59:35Z",
+      "signal_group": "K4",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 72962,
+      "window_count": 316
+    },
+    {
+      "connection_id": "9",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:32Z",
+      "signal_group": "K2",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 72971,
+      "window_count": 316
+    },
+    {
+      "connection_id": "7",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:32Z",
+      "signal_group": "K2",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 72983,
+      "window_count": 316
+    },
+    {
+      "connection_id": "8",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:32Z",
+      "signal_group": "K2",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 73039,
+      "window_count": 316
+    },
+    {
+      "connection_id": "5",
+      "node_id": "2349",
+      "preceding_count": 1,
+      "preceding_state": "3",
+      "preceding_time_utc": "2026-06-24T05:59:35Z",
+      "signal_group": "K4",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 81474,
+      "window_count": 316
+    },
+    {
+      "connection_id": "5",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "3",
+      "preceding_time_utc": "2026-06-24T05:59:52Z",
+      "signal_group": "K1",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 67952,
+      "window_count": 286
+    },
+    {
+      "connection_id": "7",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:46Z",
+      "signal_group": "K4",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 68005,
+      "window_count": 287
+    },
+    {
+      "connection_id": "2",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:18Z",
+      "signal_group": "K7",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 68006,
+      "window_count": 316
+    },
+    {
+      "connection_id": "9",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:46Z",
+      "signal_group": "K5",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 68841,
+      "window_count": 287
+    },
+    {
+      "connection_id": "8",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:46Z",
+      "signal_group": "K4",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 68904,
+      "window_count": 287
+    },
+    {
+      "connection_id": "3",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:18Z",
+      "signal_group": "K7",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 69184,
+      "window_count": 316
+    },
+    {
+      "connection_id": "1",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "1",
+      "preceding_time_utc": "2026-06-24T05:59:18Z",
+      "signal_group": "K7",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 71446,
+      "window_count": 316
+    },
+    {
+      "connection_id": "6",
+      "node_id": "2394",
+      "preceding_count": 1,
+      "preceding_state": "3",
+      "preceding_time_utc": "2026-06-24T05:59:49Z",
+      "signal_group": "K2",
+      "source_errors": [],
+      "source_status": "ok",
+      "status": "complete",
+      "stream_id": 71448,
+      "window_count": 286
+    }
+  ],
+  "stream_count": 16,
+  "upstream_fetch": {
+    "failed_stream_ids": [],
+    "partial_stream_ids": [],
+    "request_count": 32
+  },
+  "window": {
+    "begin_utc": "2026-06-24T06:00:00Z",
+    "chunk_duration_seconds": 600,
+    "end_utc": "2026-06-24T08:00:00Z",
+    "preceding_lookback_seconds": 604800
+  }
+}

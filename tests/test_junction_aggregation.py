@@ -4,6 +4,7 @@ from pathlib import Path
 from torii_sumo.core.junction_aggregation import (
     _aggregation_candidates,
     audit_join_collapse_residuals,
+    audit_junction_aggregation_preservation,
     build_junction_aggregation_variant,
 )
 from torii_sumo.core.junction_join_definition import (
@@ -537,6 +538,75 @@ def test_junction_aggregation_variant_reports_normal_edge_and_connection_loss(tm
     assert Path(report["junction_aggregation_preservation_audit_file"]).is_file()
 
 
+def test_junction_aggregation_preservation_accepts_join_absorption_and_via_renumbering(tmp_path) -> None:
+    source = tmp_path / "source.net.xml"
+    variant = tmp_path / "variant.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="outside" to="a"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="seam" from="a" to="b"><lane id="seam_0" index="0" length="0.2"/></edge>
+  <edge id="out" from="b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":a_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    variant.write_text(
+        """<net>
+  <edge id="in" from="outside" to="cluster_a_b"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="out" from="cluster_a_b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":cluster_a_b_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_junction_aggregation_preservation(source, variant, join_groups=(("a", "b"),))
+
+    assert report["schema"] == "torii.junction-aggregation-preservation/v1"
+    assert report["status"] == "pass"
+    assert report["source_net_file"] == str(source.resolve())
+    assert report["variant_net_file"] == str(variant.resolve())
+    assert report["source_sha256"]
+    assert report["variant_sha256"]
+    assert report["absorbed_join_edge_ids"] == ["seam"]
+    assert report["unexpected_removed_normal_edge_count"] == 0
+    assert report["lost_shared_connection_count"] == 0
+    assert report["boundary_movement_preservation"]["status"] == "pass"
+
+
+def test_junction_aggregation_preservation_flags_new_join_boundary_movement(tmp_path) -> None:
+    source = tmp_path / "source.net.xml"
+    variant = tmp_path / "variant.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="outside" to="a"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="seam" from="a" to="b"><lane id="seam_0" index="0" length="0.2"/></edge>
+  <edge id="out" from="b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <edge id="extra" from="b" to="outside3"><lane id="extra_0" index="0" length="20"/></edge>
+  <connection from="in" to="seam" fromLane="0" toLane="0"/>
+  <connection from="seam" to="out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    variant.write_text(
+        """<net>
+  <edge id="in" from="outside" to="cluster_a_b"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="out" from="cluster_a_b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <edge id="extra" from="cluster_a_b" to="outside3"><lane id="extra_0" index="0" length="20"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0"/>
+  <connection from="in" to="extra" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_junction_aggregation_preservation(source, variant, join_groups=(("a", "b"),))
+
+    assert report["status"] == "review"
+    boundary = report["boundary_movement_preservation"]
+    assert boundary["lost_boundary_movement_count"] == 0
+    assert boundary["added_boundary_movement_count"] == 1
+    assert boundary["groups"][0]["added_boundary_movements"] == ["in|0|extra|0"]
+
+
 def test_join_collapse_audit_flags_residual_nodes_edges_and_connections(tmp_path) -> None:
     net_file = tmp_path / "not_collapsed.net.xml"
     net_file.write_text(
@@ -606,6 +676,27 @@ def test_unconfirmed_topology_join_candidate_stays_in_map_review(tmp_path) -> No
     assert report["explicit_join_count"] == 0
     assert report["join_exclude_count"] == 1
     assert report["needs_map_review_count"] == 1
+    assert report["records"][0]["decision"] == "needs_map_review"
+
+
+def test_unconfirmed_text_cannot_be_misread_as_a_confirmed_join(tmp_path) -> None:
+    report = build_junction_join_definition(
+        [
+            {
+                "source": "teacher_probe",
+                "candidate_id": "C-unconfirmed",
+                "decision": "join",
+                "confidence": "unconfirmed_reference_match",
+                "review_status": "not_confirmed",
+                "node_ids": ["n1", "n2"],
+            }
+        ],
+        output_dir=tmp_path,
+        prefix="strict",
+    )
+
+    assert report["explicit_join_count"] == 0
+    assert report["join_exclude_count"] == 1
     assert report["records"][0]["decision"] == "needs_map_review"
 
 

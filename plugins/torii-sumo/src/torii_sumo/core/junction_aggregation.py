@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
+from .candidate_contracts import file_sha256
 from .command_runner import run_command
 from .junction_join_definition import build_junction_join_definition
 from .modal_aggregation_policy import classify_edge_modal_role
@@ -102,7 +103,12 @@ def audit_join_output_presence(net_file: Path, join_groups: Sequence[Sequence[st
     }
 
 
-def audit_junction_aggregation_preservation(source_net_file: Path, variant_net_file: Path) -> dict[str, Any]:
+def audit_junction_aggregation_preservation(
+    source_net_file: Path,
+    variant_net_file: Path,
+    *,
+    join_groups: Sequence[Sequence[str]] = (),
+) -> dict[str, Any]:
     if not source_net_file.exists():
         return {**_failure(f"source net file does not exist: {source_net_file}"), "removed_normal_edge_count": 0}
     if not variant_net_file.exists():
@@ -113,31 +119,60 @@ def audit_junction_aggregation_preservation(source_net_file: Path, variant_net_f
     except ET.ParseError as exc:
         return {**_failure(f"invalid SUMO net XML: {exc}"), "removed_normal_edge_count": 0}
 
+    source_net_file = source_net_file.resolve()
+    variant_net_file = variant_net_file.resolve()
     source_edges = _plain_edges_by_id(source_root)
     variant_edges = _plain_edges_by_id(variant_root)
     removed_edge_ids = sorted(set(source_edges) - set(variant_edges))
     removed_edges = [source_edges[edge_id] for edge_id in removed_edge_ids]
+    joined_node_sets = [{str(node_id) for node_id in group} for group in join_groups]
+    absorbed_join_edge_ids = sorted(
+        edge_id
+        for edge_id in removed_edge_ids
+        if any(
+            source_edges[edge_id].attrib.get("from", "") in node_ids
+            and source_edges[edge_id].attrib.get("to", "") in node_ids
+            for node_ids in joined_node_sets
+        )
+    )
+    unexpected_removed_edge_ids = sorted(set(removed_edge_ids) - set(absorbed_join_edge_ids))
     shared_edge_ids = set(source_edges) & set(variant_edges)
     source_connection_signatures = _shared_connection_signatures(source_root, shared_edge_ids)
     variant_connection_signatures = _shared_connection_signatures(variant_root, shared_edge_ids)
     lost_shared_connections = sorted(source_connection_signatures - variant_connection_signatures)
+    boundary_movements = _audit_join_boundary_movements(source_root, variant_root, join_groups)
     source_dangling = _dangling_plain_edge_ids(source_root, shared_edge_ids)
     variant_dangling = _dangling_plain_edge_ids(variant_root, shared_edge_ids)
     new_dangling = sorted(variant_dangling - source_dangling)
 
     return {
-        "status": "review" if removed_edge_ids or lost_shared_connections or new_dangling else "pass",
+        "schema": "torii.junction-aggregation-preservation/v1",
+        "status": (
+            "review"
+            if unexpected_removed_edge_ids
+            or lost_shared_connections
+            or new_dangling
+            or boundary_movements["status"] not in {"pass", "not_applicable"}
+            else "pass"
+        ),
         "claim_status": "diagnostic-demo",
         "source_net_file": str(source_net_file),
+        "source_sha256": file_sha256(source_net_file),
         "variant_net_file": str(variant_net_file),
+        "variant_sha256": file_sha256(variant_net_file),
         "removed_normal_edge_count": len(removed_edge_ids),
         "removed_normal_edge_ids": removed_edge_ids,
+        "absorbed_join_edge_count": len(absorbed_join_edge_ids),
+        "absorbed_join_edge_ids": absorbed_join_edge_ids,
+        "unexpected_removed_normal_edge_count": len(unexpected_removed_edge_ids),
+        "unexpected_removed_normal_edge_ids": unexpected_removed_edge_ids,
         "removed_normal_edge_type_counts": dict(sorted(Counter(_edge_type(edge) for edge in removed_edges).items())),
         "removed_normal_edge_mode_counts": dict(
             sorted(Counter(mode for edge in removed_edges for mode in _edge_modes(edge)).items())
         ),
         "lost_shared_connection_count": len(lost_shared_connections),
         "lost_shared_connections": lost_shared_connections,
+        "boundary_movement_preservation": boundary_movements,
         "new_dangling_shared_normal_edge_count": len(new_dangling),
         "new_dangling_shared_normal_edge_ids": new_dangling,
     }
@@ -282,7 +317,11 @@ def build_junction_aggregation_variant(
     join_groups = _explicit_join_groups(join_definition)
     collapse_audit = audit_join_collapse_residuals(variant_file, join_groups) if netconvert_ok else {}
     join_output_audit = audit_join_output_presence(variant_file, join_groups) if netconvert_ok else {}
-    preservation_audit = audit_junction_aggregation_preservation(net_file, variant_file) if netconvert_ok else {}
+    preservation_audit = (
+        audit_junction_aggregation_preservation(net_file, variant_file, join_groups=join_groups)
+        if netconvert_ok
+        else {}
+    )
     if collapse_audit:
         collapse_audit_file.write_text(json.dumps(collapse_audit, indent=2, ensure_ascii=False), encoding="utf-8")
     if join_output_audit:
@@ -576,13 +615,124 @@ def _shared_connection_signatures(root: ET.Element, shared_edge_ids: set[str]) -
                         target,
                         connection.attrib.get("fromLane", ""),
                         connection.attrib.get("toLane", ""),
-                        connection.attrib.get("via", ""),
                         connection.attrib.get("tl", ""),
                         connection.attrib.get("linkIndex", ""),
                     ]
                 )
             )
     return signatures
+
+
+def _audit_join_boundary_movements(
+    source_root: ET.Element,
+    variant_root: ET.Element,
+    join_groups: Sequence[Sequence[str]],
+) -> dict[str, Any]:
+    groups = []
+    for raw_group in join_groups:
+        node_ids = {str(node_id) for node_id in raw_group if str(node_id)}
+        if len(node_ids) < 2:
+            continue
+        source_edges = _plain_edges_by_id(source_root)
+        internal = {
+            edge_id
+            for edge_id, edge in source_edges.items()
+            if edge.attrib.get("from", "") in node_ids and edge.attrib.get("to", "") in node_ids
+        }
+        incoming = {
+            edge_id
+            for edge_id, edge in source_edges.items()
+            if edge.attrib.get("to", "") in node_ids and edge.attrib.get("from", "") not in node_ids
+        }
+        outgoing = {
+            edge_id
+            for edge_id, edge in source_edges.items()
+            if edge.attrib.get("from", "") in node_ids and edge.attrib.get("to", "") not in node_ids
+        }
+        source_movements = _reachable_boundary_movement_keys(source_root, incoming, internal, outgoing)
+        variant_movements = {
+            _movement_key(connection)
+            for connection in variant_root.findall("connection")
+            if connection.attrib.get("from", "") in incoming and connection.attrib.get("to", "") in outgoing
+        }
+        lost = sorted(source_movements - variant_movements)
+        added = sorted(variant_movements - source_movements)
+        groups.append(
+            {
+                "node_ids": sorted(node_ids),
+                "joined_junction_id": _sumo_joined_cluster_id(sorted(node_ids)),
+                "internal_edge_ids": sorted(internal),
+                "incoming_edge_ids": sorted(incoming),
+                "outgoing_edge_ids": sorted(outgoing),
+                "source_boundary_movement_count": len(source_movements),
+                "source_boundary_movements": sorted(source_movements),
+                "variant_boundary_movement_count": len(variant_movements),
+                "variant_boundary_movements": sorted(variant_movements),
+                "lost_boundary_movement_count": len(lost),
+                "lost_boundary_movements": lost,
+                "added_boundary_movement_count": len(added),
+                "added_boundary_movements": added,
+            }
+        )
+    if not groups:
+        return {
+            "status": "not_applicable",
+            "lost_boundary_movement_count": 0,
+            "added_boundary_movement_count": 0,
+            "groups": [],
+        }
+    lost_count = sum(group["lost_boundary_movement_count"] for group in groups)
+    added_count = sum(group["added_boundary_movement_count"] for group in groups)
+    return {
+        "status": "pass" if not lost_count and not added_count else "review",
+        "lost_boundary_movement_count": lost_count,
+        "added_boundary_movement_count": added_count,
+        "groups": groups,
+    }
+
+
+def _reachable_boundary_movement_keys(
+    root: ET.Element,
+    incoming_edge_ids: set[str],
+    internal_edge_ids: set[str],
+    outgoing_edge_ids: set[str],
+) -> set[str]:
+    adjacency: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    for connection in root.findall("connection"):
+        source = connection.attrib.get("from", "")
+        target = connection.attrib.get("to", "")
+        if source not in incoming_edge_ids | internal_edge_ids or target not in internal_edge_ids | outgoing_edge_ids:
+            continue
+        adjacency.setdefault((source, connection.attrib.get("fromLane", "")), set()).add(
+            (target, connection.attrib.get("toLane", ""))
+        )
+
+    movements = set()
+    for start in sorted(state for state in adjacency if state[0] in incoming_edge_ids):
+        stack = [start]
+        visited = set()
+        while stack:
+            state = stack.pop()
+            if state in visited:
+                continue
+            visited.add(state)
+            for target in adjacency.get(state, set()):
+                if target[0] in outgoing_edge_ids:
+                    movements.add("|".join((start[0], start[1], target[0], target[1])))
+                elif target[0] in internal_edge_ids:
+                    stack.append(target)
+    return movements
+
+
+def _movement_key(connection: ET.Element) -> str:
+    return "|".join(
+        (
+            connection.attrib.get("from", ""),
+            connection.attrib.get("fromLane", ""),
+            connection.attrib.get("to", ""),
+            connection.attrib.get("toLane", ""),
+        )
+    )
 
 
 def _dangling_plain_edge_ids(root: ET.Element, edge_ids: set[str]) -> set[str]:
