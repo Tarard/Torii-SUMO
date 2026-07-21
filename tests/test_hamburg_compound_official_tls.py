@@ -9,11 +9,14 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from torii_sumo.core.hamburg_compound_official_tls import (
+    COMPOUND_ROUTING_REMOVALS,
     HamburgCompoundOfficialTlsError,
+    _append_connection_delete_directives,
     materialize_hamburg_compound_official_tls_candidate,
     _validate_compound_topology,
     _write_compiled_source_owner_patch,
 )
+from torii_sumo.core.hamburg_2394_tls_topology import ROUTING_REMOVALS
 from torii_sumo.core.official_tls_rebuild import (
     OfficialTlsGroup,
     OfficialTlsPlan,
@@ -22,6 +25,36 @@ from torii_sumo.core.official_tls_rebuild import (
 
 
 SCRIPT = Path("plugins/torii-sumo/scripts/build_hamburg_compound_official_tls.py")
+
+
+def test_compound_routing_prune_reuses_2394_inventory_and_adds_2349() -> None:
+    expected = {
+        item.key for item in ROUTING_REMOVALS
+    } | {("554713078#2", 1, "554713075#0", 1)}
+
+    assert {item.key for item in COMPOUND_ROUTING_REMOVALS} == expected
+
+
+def test_compound_routing_prune_writes_explicit_compiled_net_deletes(tmp_path: Path) -> None:
+    patch = tmp_path / "connections.con.xml"
+    patch.write_text("<connections/>\n", encoding="utf-8")
+
+    report = _append_connection_delete_directives(
+        patch,
+        removals=COMPOUND_ROUTING_REMOVALS,
+    )
+    delete_keys = {
+        (
+            element.attrib["from"],
+            int(element.attrib["fromLane"]),
+            element.attrib["to"],
+            int(element.attrib["toLane"]),
+        )
+        for element in ET.parse(patch).getroot().findall("delete")
+    }
+
+    assert report["delete_directive_count"] == 6
+    assert delete_keys == {item.key for item in COMPOUND_ROUTING_REMOVALS}
 
 
 def _load_script():
