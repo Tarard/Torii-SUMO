@@ -11,7 +11,7 @@ intermediate runs remain outside version control.
 |---|---|---|
 | W1 road topology | `review_ready`; execution gate `pass` | The exact network preserves all 23 source-authorized boundary movements, has zero recorded surface/Connection Mode failures, loads in SUMO, and passes 23/23 movement smoke routes with zero teleport/collision. This does not prove 2403 signal control. |
 | W2 signal binding/history | 2349 and 2394 `pass`; corridor promotion `blocked` | 16/16 published primary-signal streams bind to 22 physical SUMO controlled connections. The frozen two-hour weekday history contains 3,671 exported link events. Node 2403 has no current machine-bindable MAP/OCIT/TLD control asset. |
-| W3 detector binding | `review_required` | All 19 official fields have lane hypotheses, but they reduce to 17 lane identities. At 2394, Z.1/Z.2 share one MAP lane and Z.5/Z.6 share another while their counts differ. E1/E2 materialization is withheld until official aggregation semantics resolve the two groups. |
+| W3 station cross-sections | `in_progress`; automatic promotion `blocked` | The official 15-minute station layer provides nine streams in the selected Saturday window: six directional cross-sections are constraints and three direction-0 totals are QA only. Four directional sections are ready for hash-bound E1/E2 materialization; two 2403 arm-2 sections remain semantic reviews, and 2349 has no published station stream. The earlier 19 field-to-lane hypotheses remain diagnostics only. |
 
 The W1 candidate SHA-256 is
 `aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33`.
