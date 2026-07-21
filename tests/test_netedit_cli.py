@@ -365,6 +365,77 @@ def test_target_session_rechecks_live_viewport_before_real_input(
     assert report["automatic_promotion_gate"] == "blocked"
 
 
+def test_target_session_aborts_when_post_input_evidence_cannot_be_recorded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text("<net/>", encoding="utf-8")
+    candidate = tmp_path / "candidate.net.xml"
+    deliveries, _owned_pids = _patch_target_session_runtime(monkeypatch, candidate)
+    session = NeteditTargetSession(
+        source,
+        candidate,
+        tmp_path / "session",
+        expected_source_sha256=netedit._file_sha256(source),
+        platform_name="win32",
+        which_func=lambda _name: "C:/SUMO/bin/netedit.exe",
+        popen_func=lambda _command, **_kwargs: _SessionProcess(),
+        settle_seconds=0,
+    )
+    opened = session.open()
+
+    def fail_record(*_args, **_kwargs):
+        raise RuntimeError("capture failed")
+
+    monkeypatch.setattr(session, "_record_step", fail_record)
+    with pytest.raises(RuntimeError, match="post-input evidence capture failed"):
+        session.act(
+            {
+                "type": "click",
+                "x": 120,
+                "y": 240,
+                "expected_screenshot_sha256": opened["screenshot_sha256"],
+            }
+        )
+
+    assert any(item[0] == "click" for item in deliveries)
+    assert any(item[0] == "close" for item in deliveries)
+    assert session.state == "aborted"
+
+
+def test_target_session_aborts_when_post_save_evidence_cannot_be_recorded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text("<net/>", encoding="utf-8")
+    candidate = tmp_path / "candidate.net.xml"
+    deliveries, _owned_pids = _patch_target_session_runtime(monkeypatch, candidate)
+    session = NeteditTargetSession(
+        source,
+        candidate,
+        tmp_path / "session",
+        expected_source_sha256=netedit._file_sha256(source),
+        platform_name="win32",
+        which_func=lambda _name: "C:/SUMO/bin/netedit.exe",
+        popen_func=lambda _command, **_kwargs: _SessionProcess(),
+        settle_seconds=0,
+    )
+    opened = session.open()
+
+    def fail_record(*_args, **_kwargs):
+        raise RuntimeError("capture failed")
+
+    monkeypatch.setattr(session, "_record_step", fail_record)
+    with pytest.raises(RuntimeError, match="post-save validation or evidence capture failed"):
+        session.finalize(expected_screenshot_sha256=opened["screenshot_sha256"])
+
+    assert any(item[0] == "key" and item[3]["virtual_key"] == ord("S") for item in deliveries)
+    assert any(item[0] == "close" for item in deliveries)
+    assert session.state == "aborted"
+
+
 def test_target_session_rejects_undeclared_source_junction_scope(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

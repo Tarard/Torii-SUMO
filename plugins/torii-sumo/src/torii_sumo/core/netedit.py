@@ -986,15 +986,23 @@ class NeteditTargetSession:
             raise
         self.global_input_used = True
         time.sleep(self.settle_seconds)
-        return self._record_step(
-            "act",
-            {
-                **normalized,
-                "selection_lock": selection_lock,
-                "preflight_observation": preflight,
-                "delivery": delivery,
-            },
-        )
+        try:
+            return self._record_step(
+                "act",
+                {
+                    **normalized,
+                    "selection_lock": selection_lock,
+                    "preflight_observation": preflight,
+                    "delivery": delivery,
+                },
+            )
+        except Exception as exc:
+            self._stop_process()
+            self.state = "aborted"
+            self._persist_report()
+            raise RuntimeError(
+                "post-input evidence capture failed; NetEdit session was aborted"
+            ) from exc
 
     def finalize(self, *, expected_screenshot_sha256: str) -> dict[str, Any]:
         self._require_open()
@@ -1039,7 +1047,9 @@ class NeteditTargetSession:
             self._stop_process()
             self.state = "aborted"
             self._persist_report()
-            raise
+            raise RuntimeError(
+                "post-save validation or evidence capture failed; NetEdit session was aborted"
+            ) from exc
         self._stop_process()
         self.state = "finalized"
         return self._persist_report()

@@ -241,26 +241,62 @@ def _scope_preservation_gate(session: NeteditTargetSession) -> dict[str, Any]:
     source_targets = set(session.target_source_junction_ids)
     candidate_targets = set(session.target_candidate_junction_ids)
 
-    def external_edges(root: ET.Element) -> dict[str, ET.Element]:
+    def network_edges(root: ET.Element) -> dict[str, ET.Element]:
         return {
             str(edge.get("id")): edge
             for edge in root.findall("edge")
-            if edge.get("id") and not str(edge.get("id")).startswith(":")
+            if edge.get("id")
         }
 
-    source_edges = external_edges(source_root)
-    candidate_edges = external_edges(candidate_root)
+    source_edges = network_edges(source_root)
+    candidate_edges = network_edges(candidate_root)
     source_incident = {
         edge_id
         for edge_id, edge in source_edges.items()
-        if edge.get("from") in source_targets or edge.get("to") in source_targets
+        if not edge_id.startswith(":")
+        and (edge.get("from") in source_targets or edge.get("to") in source_targets)
     }
-    candidate_incident = {
-        edge_id
-        for edge_id, edge in candidate_edges.items()
-        if edge.get("from") in candidate_targets or edge.get("to") in candidate_targets
-    }
-    allowed_edge_ids = source_incident | candidate_incident
+
+    def target_internal_edges(
+        root: ET.Element,
+        edges: dict[str, ET.Element],
+        targets: set[str],
+    ) -> set[str]:
+        lane_to_edge = {
+            str(lane.get("id")): edge_id
+            for edge_id, edge in edges.items()
+            if edge_id.startswith(":")
+            for lane in edge.findall("lane")
+            if lane.get("id")
+        }
+        target_edges: set[str] = set()
+        for junction in root.findall("junction"):
+            junction_id = str(junction.get("id", ""))
+            if junction_id not in targets:
+                continue
+            for lane_id in str(junction.get("intLanes", "")).split():
+                edge_id = lane_to_edge.get(lane_id)
+                if edge_id is None or "_" not in edge_id:
+                    continue
+                # SUMO internal edge ids are :<junction-id>_<link-index>.
+                # Parse from the right so junction ids containing underscores
+                # remain exact, and never trust candidate intLanes alone to
+                # expand the predeclared target scope.
+                owner_id = edge_id[1:].rsplit("_", 1)[0]
+                if owner_id == junction_id:
+                    target_edges.add(edge_id)
+        return target_edges
+
+    source_internal = target_internal_edges(source_root, source_edges, source_targets)
+    candidate_internal = target_internal_edges(
+        candidate_root,
+        candidate_edges,
+        candidate_targets,
+    )
+    # External scope is frozen exclusively from the source network.  Candidate
+    # topology may replace target-owned internal edges, but it may never make a
+    # previously unrelated external edge "incident" and thereby exempt it.
+    allowed_edge_ids = source_incident | source_internal | candidate_internal
 
     def outside_junctions(root: ET.Element, targets: set[str]) -> dict[str, tuple[Any, ...]]:
         return {
@@ -278,13 +314,9 @@ def _scope_preservation_gate(session: NeteditTargetSession) -> dict[str, Any]:
             if edge_id not in allowed_edge_ids
         }
 
-    all_targets = source_targets | candidate_targets
-
     def connection_is_in_scope(connection: ET.Element) -> bool:
         edge_ids = (str(connection.get("from", "")), str(connection.get("to", "")))
-        return any(edge_id in allowed_edge_ids for edge_id in edge_ids) or any(
-            target and any(target in edge_id for edge_id in edge_ids) for target in all_targets
-        )
+        return any(edge_id in allowed_edge_ids for edge_id in edge_ids)
 
     def outside_connections(root: ET.Element) -> Counter[tuple[Any, ...]]:
         return Counter(
@@ -293,13 +325,12 @@ def _scope_preservation_gate(session: NeteditTargetSession) -> dict[str, Any]:
             if not connection_is_in_scope(connection)
         )
 
-    affected_tls_ids = set(all_targets)
-    for root in (source_root, candidate_root):
-        affected_tls_ids.update(
-            str(connection.get("tl"))
-            for connection in root.findall("connection")
-            if connection.get("tl") and connection_is_in_scope(connection)
-        )
+    affected_tls_ids = source_targets | candidate_targets
+    affected_tls_ids.update(
+        str(connection.get("tl"))
+        for connection in source_root.findall("connection")
+        if connection.get("tl") and connection_is_in_scope(connection)
+    )
 
     def outside_tls(root: ET.Element) -> Counter[tuple[Any, ...]]:
         return Counter(
@@ -345,6 +376,9 @@ def _scope_preservation_gate(session: NeteditTargetSession) -> dict[str, Any]:
         "source_target_junction_ids": sorted(source_targets),
         "candidate_target_junction_ids": sorted(candidate_targets),
         "allowed_incident_edge_ids": sorted(allowed_edge_ids),
+        "source_incident_external_edge_ids": sorted(source_incident),
+        "source_target_internal_edge_ids": sorted(source_internal),
+        "candidate_target_internal_edge_ids": sorted(candidate_internal),
         "source_outside_counts": {name: len(value) for name, value in source_parts.items()},
         "candidate_outside_counts": {name: len(value) for name, value in candidate_parts.items()},
     }
@@ -535,7 +569,8 @@ def _finalize_audits(session: NeteditTargetSession) -> dict[str, Any]:
         "scope_preservation": str(scope_preservation.get("status", "fail")),
         "audit_integrity": str(audit_integrity.get("status", "fail")),
     }
-    if "fail" in statuses.values() or "blocked" in statuses.values():
+    accepted_statuses = {"pass", "not_applicable", "not_run", "review_required"}
+    if any(value not in accepted_statuses for value in statuses.values()):
         machine_gate_status = "fail"
     elif "not_run" in statuses.values() or "review_required" in statuses.values():
         machine_gate_status = "review_required"
@@ -615,7 +650,6 @@ def sumo_netedit_session(
     selection_file: str | None = None,
     target_source_junction_ids: list[str] | None = None,
     target_candidate_junction_ids: list[str] | None = None,
-    netedit_binary: str = "netedit",
     window_size: str = "1400,1000",
     window_pos: str = "20,20",
     action: NeteditAction | None = None,
@@ -666,7 +700,6 @@ def sumo_netedit_session(
                     selection_file=Path(selection_file).resolve() if selection_file else None,
                     target_source_junction_ids=target_source_junction_ids or (),
                     target_candidate_junction_ids=target_candidate_junction_ids or (),
-                    netedit_binary=netedit_binary,
                     window_size=window_size,
                     window_pos=window_pos,
                 )
