@@ -3,9 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.core.hamburg_execution_workflow import (
     HAMBURG_EXECUTION_WORKFLOW_SCHEMA,
+    HamburgExecutionWorkflowError,
     materialize_hamburg_execution_plan,
+    materialize_hamburg_w1_topology_handoff,
 )
 
 
@@ -20,6 +25,196 @@ def _write_manifest(path: Path, *, status: str = "pass", gate: str = "pass") -> 
         ),
         encoding="utf-8",
     )
+
+
+def test_w1_topology_handoff_is_hash_bound_and_non_promoting(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    candidate.write_text("<net/>", encoding="utf-8")
+    candidate_hash = file_sha256(candidate)
+    source = tmp_path / "source.net.xml"
+    source.write_text("<net/>", encoding="utf-8")
+
+    def write(name: str, payload: dict[str, object]) -> Path:
+        path = tmp_path / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    topology = write(
+        "topology.json",
+        {
+            "schema": "torii.junction-aggregation-preservation/v1",
+            "status": "pass",
+            "source_net_file": str(source.resolve()),
+            "source_sha256": file_sha256(source),
+            "variant_net_file": str(candidate.resolve()),
+            "variant_sha256": candidate_hash,
+            "unexpected_removed_normal_edge_count": 0,
+            "lost_shared_connection_count": 0,
+            "new_dangling_shared_normal_edge_count": 0,
+            "boundary_movement_preservation": {
+                "status": "pass",
+                "lost_boundary_movement_count": 0,
+                "added_boundary_movement_count": 0,
+                "groups": [
+                    {
+                        "variant_boundary_movement_count": 2,
+                        "variant_boundary_movements": ["in|0|out|0", "in|1|out|1"],
+                    }
+                ],
+            },
+        },
+    )
+    surface = write(
+        "surface.json",
+        {
+            "schema": "torii.sumo-surface-overlap-audit/v1",
+            "audit_engine": "torii.bevel-strip-and-junction-polygon-area/v2",
+            "status": "pass",
+            "source_net_file": str(candidate.resolve()),
+            "source_sha256": candidate_hash,
+            "source_network_mutation": False,
+            "geometry_error_count": 0,
+            "junction_junction_overlap_count": 0,
+            "external_lane_non_owner_junction_overlap_count": 0,
+        },
+    )
+    connection = write(
+        "connection.json",
+        {
+            "schema": "torii.connection_mode_regression_manifest.v1",
+            "status": "pass",
+            "gate_status": "pass",
+            "automatic_promotion_gate": "pass",
+            "candidate_net_file": str(candidate.resolve()),
+            "candidate_sha256": candidate_hash,
+            "source_network_mutation": False,
+        },
+    )
+    load = write(
+        "load.json",
+        {
+            "schema": "torii.sumo-load-audit/v1",
+            "status": "pass",
+            "source_net_file": str(candidate.resolve()),
+            "source_sha256": candidate_hash,
+            "source_network_mutation": False,
+        },
+    )
+    route = tmp_path / "smoke.rou.xml"
+    summary = tmp_path / "summary.xml"
+    tripinfo = tmp_path / "tripinfo.xml"
+    for path in (route, summary, tripinfo):
+        path.write_text("evidence", encoding="utf-8")
+    smoke = write(
+        "smoke.json",
+        {
+            "schema": "torii.hamburg-2403-movement-smoke/v1",
+            "status": "pass",
+            "candidate_net_file": str(candidate.resolve()),
+            "candidate_sha256": candidate_hash,
+            "inputs": {
+                "route": {"path": str(route), "sha256": file_sha256(route)},
+                "preservation_audit": {"path": str(topology), "sha256": file_sha256(topology)},
+            },
+            "outputs": {
+                "summary": {"path": str(summary), "sha256": file_sha256(summary)},
+                "tripinfo": {"path": str(tripinfo), "sha256": file_sha256(tripinfo)},
+            },
+            "vehicle_count": 2,
+            "movement_count": 2,
+            "movement_keys": ["in|0|out|0", "in|1|out|1"],
+            "movement_keys_unique": True,
+            "movement_keys_match_preservation": True,
+            "loaded": 2,
+            "inserted": 2,
+            "ended": 2,
+            "running": 0,
+            "waiting": 0,
+            "teleports": 0,
+            "collisions": 0,
+            "inspection": {
+                "status": "pass",
+                "summary": {
+                    "loaded": 2,
+                    "inserted": 2,
+                    "arrived": 2,
+                    "running": 0,
+                    "waiting": 0,
+                    "teleports": 0,
+                    "collisions": 0,
+                },
+                "tripinfo": {"trip_count": 2},
+            },
+        },
+    )
+    review_files = []
+    for junction_id in ("a", "b"):
+        review_files.append(
+            write(
+                f"review-{junction_id}.json",
+                {
+                    "schema": "torii.netedit-background-review.direct/v1",
+                    "status": "review_material_ready",
+                    "automatic_promotion_gate": "blocked",
+                    "candidate_file": str(candidate.resolve()),
+                    "candidate_sha256_before": candidate_hash,
+                    "candidate_sha256_after": candidate_hash,
+                    "candidate_unchanged": True,
+                    "target_junction": {"id": junction_id},
+                    "mode_images_distinct": True,
+                    "global_keyboard_or_mouse_input_used": False,
+                    "foreground_context_restored": True,
+                },
+            )
+        )
+
+    bad = json.loads(review_files[0].read_text(encoding="utf-8"))
+    bad["candidate_sha256_after"] = "wrong"
+    review_files[0].write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(HamburgExecutionWorkflowError, match="W1 topology handoff rejected"):
+        materialize_hamburg_w1_topology_handoff(
+            output_dir=tmp_path / "bad",
+            candidate_net_file=candidate,
+            topology_audit_file=topology,
+            surface_comparison_file=surface,
+            connection_mode_manifest_file=connection,
+            sumo_load_report_file=load,
+            movement_smoke_file=smoke,
+            netedit_review_files=review_files,
+            expected_review_junction_ids=("a", "b"),
+        )
+
+    bad["candidate_sha256_after"] = candidate_hash
+    review_files[0].write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(HamburgExecutionWorkflowError, match="NetEdit review owners are empty"):
+        materialize_hamburg_w1_topology_handoff(
+            output_dir=tmp_path / "empty-review",
+            candidate_net_file=candidate,
+            topology_audit_file=topology,
+            surface_comparison_file=surface,
+            connection_mode_manifest_file=connection,
+            sumo_load_report_file=load,
+            movement_smoke_file=smoke,
+            netedit_review_files=(),
+            expected_review_junction_ids=(),
+        )
+    report = materialize_hamburg_w1_topology_handoff(
+        output_dir=tmp_path / "good",
+        candidate_net_file=candidate,
+        topology_audit_file=topology,
+        surface_comparison_file=surface,
+        connection_mode_manifest_file=connection,
+        sumo_load_report_file=load,
+        movement_smoke_file=smoke,
+        netedit_review_files=review_files,
+        expected_review_junction_ids=("a", "b"),
+    )
+
+    assert report["status"] == "review_ready"
+    assert report["execution_gate"] == "pass"
+    assert report["automatic_promotion_gate"] == "blocked"
+    assert report["netedit_review"]["junction_ids"] == ["a", "b"]
+    assert report["routeability"]["movement_count"] == 2
 
 
 def test_execution_plan_records_independent_counts_and_blocks_replay(tmp_path: Path) -> None:

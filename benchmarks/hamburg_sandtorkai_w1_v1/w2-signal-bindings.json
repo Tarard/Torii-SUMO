@@ -1,0 +1,484 @@
+{
+  "bindings": [
+    {
+      "candidate_connections": [
+        {
+          "from": "554713076#1",
+          "fromLane": 0,
+          "linkIndex": 0,
+          "to": "554713076#2",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_K1__S_NONE",
+      "connection_id": "2",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "11",
+      "ingress_lane_id": "2",
+      "link_index": 0,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [
+          "K1"
+        ],
+        "secondary": []
+      },
+      "signal_group": "K1",
+      "stream_id": 72940
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "554713076#1",
+          "fromLane": 1,
+          "linkIndex": 3,
+          "to": "554713076#2",
+          "toLane": 1
+        }
+      ],
+      "compound_signal_group": "P_K5Z__S_K1",
+      "connection_id": "3",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "8",
+      "ingress_lane_id": "3",
+      "link_index": 3,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [
+          "K5Z"
+        ],
+        "secondary": [
+          "K1"
+        ]
+      },
+      "signal_group": "K1",
+      "stream_id": 72946
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "61649647#1",
+          "fromLane": 1,
+          "linkIndex": 2,
+          "to": "61649647#2",
+          "toLane": 1
+        }
+      ],
+      "compound_signal_group": "P_K4__S_NONE",
+      "connection_id": "4",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "9",
+      "link_index": 2,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [
+          "K4"
+        ],
+        "secondary": []
+      },
+      "signal_group": "K4",
+      "stream_id": 72962
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "61649647#2",
+          "fromLane": 0,
+          "linkIndex": 2,
+          "to": "59990286",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_K4__S_NONE",
+      "connection_id": "5",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "10",
+      "link_index": 2,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [
+          "K4"
+        ],
+        "secondary": []
+      },
+      "signal_group": "K4",
+      "stream_id": 81474
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "61649647#2",
+          "fromLane": 0,
+          "linkIndex": 5,
+          "to": "61649649#0",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_NONE__S_K4",
+      "connection_id": "6",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "8",
+      "ingress_lane_id": "10",
+      "link_index": 5,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [],
+        "secondary": [
+          "K4"
+        ]
+      },
+      "signal_group": "K4",
+      "stream_id": 72961
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "554713078#1",
+          "fromLane": 0,
+          "linkIndex": 1,
+          "to": "554713078#2",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_K3__S_K2",
+      "connection_id": "7",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "7",
+      "link_index": 1,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [
+          "K3"
+        ],
+        "secondary": [
+          "K2"
+        ]
+      },
+      "signal_group": "K2",
+      "stream_id": 72983
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "554713078#1",
+          "fromLane": 0,
+          "linkIndex": 1,
+          "to": "554713078#2",
+          "toLane": 0
+        },
+        {
+          "from": "554713078#2",
+          "fromLane": 0,
+          "linkIndex": 1,
+          "to": "554713075#0",
+          "toLane": 1
+        }
+      ],
+      "compound_signal_group": "P_K3__S_K2",
+      "connection_id": "8",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "7",
+      "link_index": 1,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [
+          "K3"
+        ],
+        "secondary": [
+          "K2"
+        ]
+      },
+      "signal_group": "K2",
+      "stream_id": 73039
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "194672083",
+          "fromLane": 1,
+          "linkIndex": 4,
+          "to": "127716467#0",
+          "toLane": 0
+        },
+        {
+          "from": "554713078#1",
+          "fromLane": 1,
+          "linkIndex": 4,
+          "to": "554713078#2",
+          "toLane": 1
+        }
+      ],
+      "compound_signal_group": "P_K6Z__S_K2",
+      "connection_id": "9",
+      "controller_id": "HH_2349",
+      "egress_lane_id": "11",
+      "ingress_lane_id": "6",
+      "link_index": 4,
+      "node_id": "2349",
+      "official_map_signal_groups": {
+        "primary": [
+          "K6Z"
+        ],
+        "secondary": [
+          "K2"
+        ]
+      },
+      "signal_group": "K2",
+      "stream_id": 72971
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "47854310#2",
+          "fromLane": 0,
+          "linkIndex": 2,
+          "to": "60578519",
+          "toLane": 0
+        },
+        {
+          "from": "60578519",
+          "fromLane": 0,
+          "linkIndex": 2,
+          "to": "-381540198#1",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_K6__S_K7",
+      "connection_id": "1",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "9",
+      "ingress_lane_id": "10",
+      "link_index": 2,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [
+          "K6"
+        ],
+        "secondary": [
+          "K7"
+        ]
+      },
+      "signal_group": "K7",
+      "stream_id": 71446
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "47854310#2",
+          "fromLane": 1,
+          "linkIndex": 3,
+          "to": "60578519",
+          "toLane": 1
+        },
+        {
+          "from": "60578519",
+          "fromLane": 1,
+          "linkIndex": 3,
+          "to": "193847534#0",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_K7__S_NONE",
+      "connection_id": "2",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "11",
+      "link_index": 3,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [
+          "K7"
+        ],
+        "secondary": []
+      },
+      "signal_group": "K7",
+      "stream_id": 68006
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "47854310#2",
+          "fromLane": 2,
+          "linkIndex": 3,
+          "to": "60578519",
+          "toLane": 2
+        },
+        {
+          "from": "60578519",
+          "fromLane": 2,
+          "linkIndex": 3,
+          "to": "193847534#0",
+          "toLane": 1
+        }
+      ],
+      "compound_signal_group": "P_K7__S_NONE",
+      "connection_id": "3",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "12",
+      "link_index": 3,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [
+          "K7"
+        ],
+        "secondary": []
+      },
+      "signal_group": "K7",
+      "stream_id": 69184
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "9702432#0",
+          "fromLane": 0,
+          "linkIndex": 0,
+          "to": "9702432#2",
+          "toLane": 0
+        },
+        {
+          "from": "9702432#2",
+          "fromLane": 0,
+          "linkIndex": 0,
+          "to": "554713077",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_K1__S_NONE",
+      "connection_id": "5",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "14",
+      "ingress_lane_id": "2",
+      "link_index": 0,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [
+          "K1"
+        ],
+        "secondary": []
+      },
+      "signal_group": "K1",
+      "stream_id": 67952
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "9702432#0",
+          "fromLane": 1,
+          "linkIndex": 4,
+          "to": "9702432#2",
+          "toLane": 1
+        },
+        {
+          "from": "9702432#2",
+          "fromLane": 1,
+          "linkIndex": 4,
+          "to": "-381540198#1",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_NONE__S_K2",
+      "connection_id": "6",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "9",
+      "ingress_lane_id": "3",
+      "link_index": 4,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [],
+        "secondary": [
+          "K2"
+        ]
+      },
+      "signal_group": "K2",
+      "stream_id": 71448
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "381540198#1",
+          "fromLane": 0,
+          "linkIndex": 1,
+          "to": "193847534#0",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_K3__S_K4",
+      "connection_id": "7",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "6",
+      "link_index": 1,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [
+          "K3"
+        ],
+        "secondary": [
+          "K4"
+        ]
+      },
+      "signal_group": "K4",
+      "stream_id": 68005
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "381540198#1",
+          "fromLane": 0,
+          "linkIndex": 1,
+          "to": "193847534#0",
+          "toLane": 1
+        }
+      ],
+      "compound_signal_group": "P_K3__S_K4",
+      "connection_id": "8",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "6",
+      "link_index": 1,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [
+          "K3"
+        ],
+        "secondary": [
+          "K4"
+        ]
+      },
+      "signal_group": "K4",
+      "stream_id": 68904
+    },
+    {
+      "candidate_connections": [
+        {
+          "from": "381540198#1",
+          "fromLane": 1,
+          "linkIndex": 5,
+          "to": "554713077",
+          "toLane": 0
+        }
+      ],
+      "compound_signal_group": "P_NONE__S_K5",
+      "connection_id": "9",
+      "controller_id": "HH_2394",
+      "egress_lane_id": "14",
+      "ingress_lane_id": "7",
+      "link_index": 5,
+      "node_id": "2394",
+      "official_map_signal_groups": {
+        "primary": [],
+        "secondary": [
+          "K5"
+        ]
+      },
+      "signal_group": "K5",
+      "stream_id": 68841
+    }
+  ],
+  "schema": "torii.hamburg-named-signal-binding/v1"
+}

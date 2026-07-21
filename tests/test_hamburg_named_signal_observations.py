@@ -13,6 +13,7 @@ from torii_sumo.core.hamburg_named_signal_observations import (
     materialize_hamburg_named_signal_observations,
     screen_hamburg_named_signal_windows,
 )
+from torii_sumo.core.candidate_contracts import file_sha256
 
 
 UTC = timezone.utc
@@ -57,20 +58,52 @@ def _binding_fixture(tmp_path: Path, *, streams: tuple[int, ...] = (101, 102)) -
             }
         )
     artifact = tmp_path / "bindings.json"
-    artifact.write_text(json.dumps({"bindings": bindings}), encoding="utf-8")
+    artifact.write_text(
+        json.dumps({"schema": "torii.hamburg-named-signal-binding/v1", "bindings": bindings}),
+        encoding="utf-8",
+    )
     manifest = tmp_path / "binding.manifest.json"
     manifest.write_text(
         json.dumps(
             {
                 "schema": "torii.hamburg-named-signal-binding/v1",
+                "execution_gate": "pass",
                 "automatic_promotion_gate": "blocked",
                 "missing_official_signal_node_ids": ["2403"],
-                "binding_artifact": {"path": str(artifact)},
+                "binding_artifact": {"path": str(artifact), "sha256": file_sha256(artifact)},
             }
         ),
         encoding="utf-8",
     )
     return manifest
+
+
+def test_signal_history_rejects_non_executable_or_mutated_binding_evidence(tmp_path: Path) -> None:
+    begin = datetime(2026, 7, 18, 14, 30, tzinfo=UTC)
+    manifest = _binding_fixture(tmp_path, streams=(91,))
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["execution_gate"] = "blocked"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(HamburgSignalObservationError, match="not execution-ready"):
+        materialize_hamburg_named_signal_observations(
+            binding_manifest=manifest,
+            output_dir=tmp_path / "blocked-out",
+            begin_utc=begin,
+            end_utc=begin + timedelta(hours=2),
+            client=_Client({}),  # type: ignore[arg-type]
+        )
+
+    payload["execution_gate"] = "pass"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    Path(payload["binding_artifact"]["path"]).write_text("{}", encoding="utf-8")
+    with pytest.raises(HamburgSignalObservationError, match="SHA-256 mismatch"):
+        materialize_hamburg_named_signal_observations(
+            binding_manifest=manifest,
+            output_dir=tmp_path / "mutated-out",
+            begin_utc=begin,
+            end_utc=begin + timedelta(hours=2),
+            client=_Client({}),  # type: ignore[arg-type]
+        )
 
 
 def _observation(observation_id: int, timestamp: str, result: str) -> dict[str, Any]:

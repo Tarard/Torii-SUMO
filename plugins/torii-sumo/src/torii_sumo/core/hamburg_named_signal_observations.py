@@ -455,6 +455,8 @@ def _load_binding_manifest(path: Path) -> dict[str, Any]:
         raise HamburgSignalObservationError(f"cannot parse binding manifest: {path}") from exc
     if not isinstance(payload, Mapping) or payload.get("schema") != _BINDING_SCHEMA:
         raise HamburgSignalObservationError("signal binding manifest schema mismatch")
+    if payload.get("execution_gate") != "pass":
+        raise HamburgSignalObservationError("signal binding manifest is not execution-ready")
     return dict(payload)
 
 
@@ -618,17 +620,21 @@ def _project_signal_group_observations(
 
 def _active_binding_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     artifact = payload.get("binding_artifact")
-    if isinstance(artifact, Mapping):
-        path = Path(str(artifact.get("path", ""))).expanduser().resolve()
-    else:
-        path = Path(str(payload.get("artifacts", {}).get("bindings", ""))).expanduser().resolve()
+    if not isinstance(artifact, Mapping):
+        raise HamburgSignalObservationError("binding manifest lacks a hash-bound binding artifact")
+    path = Path(str(artifact.get("path", ""))).expanduser().resolve()
     if not path.is_file():
         raise HamburgSignalObservationError(f"binding artifact is missing: {path}")
+    expected_sha256 = str(artifact.get("sha256", "")).strip()
+    if not expected_sha256 or file_sha256(path) != expected_sha256:
+        raise HamburgSignalObservationError("binding artifact SHA-256 mismatch")
     try:
         content = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise HamburgSignalObservationError(f"cannot parse binding artifact: {path}") from exc
-    rows = content.get("bindings") if isinstance(content, Mapping) else None
+    if not isinstance(content, Mapping) or content.get("schema") != _BINDING_SCHEMA:
+        raise HamburgSignalObservationError("binding artifact schema mismatch")
+    rows = content.get("bindings")
     if not isinstance(rows, list):
         raise HamburgSignalObservationError("binding artifact does not contain a bindings list")
     active: list[dict[str, Any]] = []
