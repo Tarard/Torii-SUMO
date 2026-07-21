@@ -1,6 +1,6 @@
 # Torii MCP Tool Catalog
 
-Torii currently registers 73 MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
+Torii currently registers 74 MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
 
 The implementation boundary is consistent across groups:
 
@@ -23,6 +23,33 @@ server.py registration -> tools/* adapter -> core/* implementation -> structured
 - `sumo_collect_evidence`
 
 Use these for environment discovery, controlled execution, baseline/variant checks, and portable evidence bundles. They do not establish network or controller correctness by themselves.
+
+## NetEdit GUI Candidate Session
+
+- `sumo_netedit_session`
+
+This is one grouped session tool, inspired by the recurring scene/document/
+object/viewport/edit lifecycle in [Blender MCP](https://github.com/ahujasid/blender-mcp),
+[FreeCAD MCP](https://github.com/neka-nat/freecad-mcp), and
+[Unity MCP](https://github.com/CoplayDev/unity-mcp). These are design references,
+not Torii runtime dependencies or identical APIs. Torii therefore keeps one
+grouped tool rather than registering a separate MCP tool for every button. The
+lifecycle maps to NetEdit as `open -> observe -> act -> observe -> finalize/abort`.
+`open` creates one source-hash-bound candidate session per Torii server;
+`observe` returns a local client-coordinate screenshot path/hash plus an explicitly
+on-disk candidate summary; `act` checks the caller's exact last recorded screenshot
+SHA, then captures the live viewport again. Bounded global editor animation is
+allowed, while click/drag target pixels must remain exact. `finalize` saves,
+closes, then runs existing SUMO-load, bounded surface-overlap, and Connection
+Mode audits. F7 joins must also match the source/candidate junction identities
+declared before the GUI edit, use the frozen selection containing exactly those
+source junctions and be the first edit action. Every semantic shortcut and save
+requires an exact live viewport match immediately before delivery. Unsaved GUI state is visible only in the screenshot, never
+misreported as persisted XML. The source network is immutable and every result
+keeps automatic promotion blocked. Torii deliberately omits arbitrary Python,
+C#, shell, or caller-exposed raw Win32 execution surfaces. The current local Codex
+integration renders the screenshot artifact with its local image viewer; the tool
+does not yet embed pixels as generic MCP `ImageContent`.
 
 ## OSM Construction and User-Facing Review
 

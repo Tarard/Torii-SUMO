@@ -85,6 +85,7 @@ from .tools.osm_tools import (
     sumo_tls_multisource_review,
 )
 from .tools.run_tools import sumo_run_config, sumo_run_minimal_smoke
+from .tools.netedit_tools import sumo_netedit_session
 from .tools.workflow_tools import torii_auto_workflow
 
 
@@ -105,6 +106,9 @@ def create_server() -> FastMCP:
     )
     server.tool(description="Write a JSON and Markdown evidence bundle.")(
         sumo_collect_evidence
+    )
+    server.tool(description="Control the single hash-bound NetEdit diagnostic session with open, observe, act, finalize, or abort. Open requires immutable source/candidate/output paths and source SHA; F7 additionally requires a frozen selection and declared junction identities. Observe returns viewport evidence and persisted XML state. Act accepts one whitelisted mouse or shortcut action plus the last screenshot SHA. Finalize saves and runs SUMO-load, surface, Connection Mode, identity, and evidence-integrity audits; abort closes the session. The source stays immutable and promotion is always blocked.")(
+        sumo_netedit_session
     )
     server.tool(description="Conditionally route one natural-language SUMO request to the narrow Phase-1 synthetic four-way scene workflow or existing OSM, TLS/network review, routeability, debugging, and experiment paths.")(
         torii_auto_workflow
