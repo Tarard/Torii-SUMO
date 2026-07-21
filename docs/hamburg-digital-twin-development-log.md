@@ -229,6 +229,15 @@ evidence is never replaced with a guessed connection or signal program.
 | Official legal-movement parity | `pass` | Two hash-bound LSBG engineering plans prove the four Kfz lanes and the one missing lane-0 straight movement; iteration 024 adds exactly that movement. |
 | Signal controller ownership | `blocked` | Official signal groups and controlled movements are unavailable; existing TLS data cannot be promoted. |
 
+### 2026-07-21 evidence publication
+
+- Published a compact GitHub evidence bundle for W1/W2 containing the frozen
+  SUMO network, its raw OSM bbox source, an attributed OSM rendering, the
+  official Hamburg geobasemap, two hash-bound NetEdit review captures, W1/W2
+  manifests, signal events, and acquisition provenance.
+- Kept generated caches and experimental candidates outside version control;
+  the bundle does not change the W1 topology or relax the W2/W3 gates.
+
 ## Next steps
 
 1. Treat iteration 027 SHA `aa1676df…49a33` as the immutable W1 topology;

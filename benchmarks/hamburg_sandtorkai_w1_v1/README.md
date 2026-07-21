@@ -19,6 +19,8 @@ The W1 candidate SHA-256 is
 ## Included files
 
 - `hamburg_sandtorkai_source_bbox.osm.xml.gz`: immutable raw OSM bbox acquisition.
+- `hamburg_osm_original_map.png`: rendered OpenStreetMap context for the same
+  bbox, including the required contributor attribution.
 - `osm-source-overpass-query.ql` and `osm-source-commands.txt`: acquisition and
   import provenance.
 - `hamburg_sandtorkai_w1.net.xml`: reviewed SUMO/NetEdit W1 network.
@@ -33,6 +35,10 @@ The W1 candidate SHA-256 is
 - `bundle.manifest.json`: portable file hashes and source/claim metadata.
 
 ## Visual cross-checks
+
+OpenStreetMap source context:
+
+![OpenStreetMap source context](hamburg_osm_original_map.png)
 
 Official Hamburg geobasemap:
 
@@ -50,7 +56,8 @@ Final NetEdit south conflict core:
 
 The OSM snapshot covers `9.9880,53.5405,10.0030,53.5450` and was acquired with
 the included Overpass query. OpenStreetMap data is available under the ODbL;
-attribution: (c) OpenStreetMap contributors.
+attribution: (c) OpenStreetMap contributors. The rendered context uses the
+standard OpenStreetMap tile layer at zoom 17 and carries attribution in-image.
 
 The official map image was fetched from Hamburg's
 `HH_WMS_Geobasiskarten` service using layer `geobasiskarten_farbig`, EPSG:25832,
