@@ -8,6 +8,204 @@ from torii_sumo.core import reference_join_audit as reference_join_audit_module
 from torii_sumo.core.reference_join_audit import _reference_join_cases, audit_reference_join_patterns
 
 
+def test_tls_controller_alignment_pairs_by_geography_not_id() -> None:
+    reference = {
+        "tl_logic_control_records": [
+            {
+                "tl_id": "manual_cluster_a",
+                "controlled_connection_count": 20,
+                "junction_ids": ["manual_a"],
+                "controlled_junction_centroid_lat": 48.76,
+                "controlled_junction_centroid_lon": 11.42,
+                "controlled_junction_centroid_status": "wgs84_from_sumo_projection",
+                "passenger_approaches": [
+                    {
+                        "edge_id": "manual_a_in",
+                        "split_root_edge_id": "road_a",
+                        "bearing_deg": 10.0,
+                        "controlled_connection_count": 2,
+                        "movement_signature_counts": {"dir=s|fromLane=0|toLane=0": 2},
+                    }
+                ],
+            },
+            {
+                "tl_id": "manual_cluster_b",
+                "controlled_connection_count": 12,
+                "junction_ids": ["manual_b"],
+                "controlled_junction_centroid_lat": 48.761,
+                "controlled_junction_centroid_lon": 11.421,
+                "controlled_junction_centroid_status": "wgs84_from_sumo_projection",
+                "passenger_approaches": [
+                    {
+                        "edge_id": "manual_b_in",
+                        "split_root_edge_id": "road_b",
+                        "bearing_deg": 100.0,
+                        "controlled_connection_count": 1,
+                        "movement_signature_counts": {"dir=l|fromLane=0|toLane=0": 1},
+                    }
+                ],
+            },
+        ]
+    }
+    candidate = {
+        "tl_logic_control_records": [
+            {
+                "tl_id": "osm_node_900",
+                "controlled_connection_count": 17,
+                "junction_ids": ["osm_a1", "osm_a2"],
+                "controlled_junction_centroid_lat": 48.76001,
+                "controlled_junction_centroid_lon": 11.42001,
+                "controlled_junction_centroid_status": "wgs84_from_sumo_projection",
+                "passenger_approaches": [
+                    {
+                        "edge_id": "osm_a_in",
+                        "split_root_edge_id": "road_a",
+                        "bearing_deg": 12.0,
+                        "controlled_connection_count": 1,
+                        "movement_signature_counts": {"dir=s|fromLane=0|toLane=0": 1},
+                    }
+                ],
+            },
+            {
+                "tl_id": "osm_node_901",
+                "controlled_connection_count": 15,
+                "junction_ids": ["osm_b"],
+                "controlled_junction_centroid_lat": 48.76101,
+                "controlled_junction_centroid_lon": 11.42101,
+                "controlled_junction_centroid_status": "wgs84_from_sumo_projection",
+                "passenger_approaches": [
+                    {
+                        "edge_id": "osm_b_in",
+                        "split_root_edge_id": "road_b",
+                        "bearing_deg": 98.0,
+                        "controlled_connection_count": 1,
+                        "movement_signature_counts": {"dir=l|fromLane=0|toLane=0": 1},
+                    }
+                ],
+            },
+        ]
+    }
+
+    alignment = reference_join_audit_module._tls_controller_alignment(reference, candidate)
+
+    assert alignment["status"] == "diagnostic"
+    assert alignment["pair_count"] == 2
+    assert alignment["boundary_approach_pair_count"] == 2
+    assert alignment["split_root_approach_pair_count"] == 2
+    assert alignment["bearing_fallback_approach_pair_count"] == 0
+    assert alignment["high_confidence_movement_gap_candidate_count"] == 1
+    assert alignment["high_confidence_missing_direction_instance_count"] == 1
+    assert alignment["unpaired_reference_boundary_approach_count"] == 0
+    assert alignment["unpaired_candidate_boundary_approach_count"] == 0
+    assert alignment["missing_movement_signature_instance_count"] == 1
+    assert alignment["extra_movement_signature_instance_count"] == 0
+    assert alignment["exact_direction_approach_pair_count"] == 1
+    assert alignment["missing_direction_instance_count"] == 1
+    assert alignment["extra_direction_instance_count"] == 0
+    assert alignment["paired_reference_controlled_connection_count"] == 32
+    assert alignment["paired_candidate_controlled_connection_count"] == 32
+    assert alignment["paired_controlled_connection_delta"] == 0
+    assert alignment["possible_candidate_split_reference_count"] == 0
+    assert alignment["possible_candidate_merge_controller_count"] == 0
+    assert alignment["controller_group_count"] == 2
+    assert alignment["split_controller_group_count"] == 0
+    assert alignment["merge_controller_group_count"] == 0
+    assert alignment["many_to_many_controller_group_count"] == 0
+    assert all(group["approach_pair_count"] == 1 for group in alignment["controller_groups"])
+    assert alignment["repair_safe"] is False
+    assert all(pair["approach_alignment_status"] == "diagnostic" for pair in alignment["pairs"])
+    assert all(pair["approach_pair_count"] == 1 for pair in alignment["pairs"])
+    first_pair = next(pair for pair in alignment["pairs"] if pair["reference_tl_id"] == "manual_cluster_a")
+    assert first_pair["approach_pairs"][0]["missing_movement_signature_counts"] == {
+        "dir=s|fromLane=0|toLane=0": 1
+    }
+    assert first_pair["approach_pairs"][0]["missing_direction_counts"] == {"s": 1}
+    assert {
+        (pair["reference_tl_id"], pair["candidate_tl_id"], pair["controlled_connection_delta"])
+        for pair in alignment["pairs"]
+    } == {
+        ("manual_cluster_a", "osm_node_900", -3),
+        ("manual_cluster_b", "osm_node_901", 3),
+    }
+
+
+def test_tls_controller_alignment_groups_candidate_split_controllers() -> None:
+    def record(tl_id: str, count: int, lon_offset: float) -> dict:
+        return {
+            "tl_id": tl_id,
+            "controlled_connection_count": count,
+            "junction_ids": [tl_id],
+            "controlled_junction_centroid_lat": 48.76,
+            "controlled_junction_centroid_lon": 11.42 + lon_offset,
+            "controlled_junction_centroid_status": "wgs84_from_sumo_projection",
+            "passenger_approaches": [],
+        }
+
+    alignment = reference_join_audit_module._tls_controller_alignment(
+        {"tl_logic_control_records": [record("manual", 10, 0.0)]},
+        {
+            "tl_logic_control_records": [
+                record("candidate_a", 4, -0.00005),
+                record("candidate_b", 6, 0.00005),
+            ]
+        },
+    )
+
+    assert alignment["controller_group_count"] == 1
+    assert alignment["split_controller_group_count"] == 1
+    group = alignment["controller_groups"][0]
+    assert group["reference_tl_ids"] == ["manual"]
+    assert group["candidate_tl_ids"] == ["candidate_a", "candidate_b"]
+    assert group["controlled_connection_delta"] == 0
+
+
+def test_tls_approach_alignment_prefers_same_split_root_over_closer_parallel_edge() -> None:
+    movement = {"dir=s|fromPassengerLaneRank=0|toPassengerLaneRank=0": 1}
+    alignment = reference_join_audit_module._tls_approach_alignment(
+        {
+            "passenger_approaches": [
+                {"edge_id": "road#0", "bearing_deg": 0.0, "movement_signature_counts": movement}
+            ]
+        },
+        {
+            "passenger_approaches": [
+                {"edge_id": "parallel", "bearing_deg": 1.0, "movement_signature_counts": movement},
+                {"edge_id": "road#3", "bearing_deg": 10.0, "movement_signature_counts": movement},
+            ]
+        },
+    )
+
+    assert alignment["approach_pairs"][0]["candidate_edge_id"] == "road#3"
+    assert alignment["approach_pairs"][0]["split_root_match"] is True
+
+
+def test_tls_semantic_summary_excludes_controller_internal_edges_from_approaches(tmp_path: Path) -> None:
+    net_file = tmp_path / "multi_junction_tls.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="external" from="a" to="j1"><lane id="external_0" index="0" allow="passenger" shape="0,0 10,0"/></edge>
+  <edge id="internal_road" from="j1" to="j2"><lane id="internal_road_0" index="0" allow="passenger" shape="10,0 20,0"/></edge>
+  <edge id="out" from="j2" to="b"><lane id="out_0" index="0" allow="passenger" shape="20,0 30,0"/></edge>
+  <edge id=":j1_0" function="internal"><lane id=":j1_0_0" index="0"/></edge>
+  <edge id=":j2_0" function="internal"><lane id=":j2_0_0" index="0"/></edge>
+  <junction id="a" type="priority" x="0" y="0"/>
+  <junction id="j1" type="traffic_light" x="10" y="0"/>
+  <junction id="j2" type="traffic_light" x="20" y="0"/>
+  <junction id="b" type="priority" x="30" y="0"/>
+  <connection from="external" to="internal_road" fromLane="0" toLane="0" tl="tls" linkIndex="0" via=":j1_0_0"/>
+  <connection from="internal_road" to="out" fromLane="0" toLane="0" tl="tls" linkIndex="1" via=":j2_0_0"/>
+  <tlLogic id="tls" type="static" programID="0"><phase duration="30" state="GG"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    record = reference_join_audit_module._net_structural_summary(net_file)["tl_logic_control_records"][0]
+
+    assert record["passenger_from_edge_ids"] == ["external", "internal_road"]
+    assert record["controller_internal_passenger_from_edge_ids"] == ["internal_road"]
+    assert [approach["edge_id"] for approach in record["passenger_approaches"]] == ["external"]
+
+
 def test_reference_join_audit_matches_tum_cluster_to_torii_fragment(tmp_path: Path) -> None:
     reference_net = tmp_path / "tum_reference.net.xml"
     reference_net.write_text(
@@ -389,14 +587,37 @@ def test_reference_join_audit_compares_same_id_junction_patterns(tmp_path: Path)
                 "controlled_junction_count": 1,
                 "junction_ids": ["cluster_a_b"],
                 "controlled_known_from_edge_count": 1,
-                "controlled_passenger_from_edge_count": 1,
-                "passenger_from_edge_ids": ["west_in"],
+                    "controlled_passenger_from_edge_count": 1,
+                    "passenger_from_edge_ids": ["west_in"],
+                    "controller_internal_passenger_from_edge_ids": [],
+                    "passenger_approaches": [
+                        {
+                            "edge_id": "west_in",
+                            "split_root_edge_id": "west_in",
+                            "bearing_deg": 0.0,
+                            "controlled_connection_count": 1,
+                            "movement_signature_counts": {
+                                "dir=s|fromPassengerLaneRank=0|toPassengerLaneRank=0": 1,
+                            },
+                        }
+                    ],
                 "linkindexes": [0],
                 "controlled_linkindex_count": 1,
                 "phase_state_length": 1,
-                "shared_linkindex_group_count": 0,
-                "sparse_linkindex": False,
-            }
+                    "shared_linkindex_group_count": 0,
+                    "sparse_linkindex": False,
+                    "controlled_junction_centroid_lat": 0.0,
+                    "controlled_junction_centroid_lon": 0.0,
+                    "controlled_junction_centroid_status": "xy_fallback_no_geo_projection",
+                    "controlled_junction_points": [
+                        {
+                            "junction_id": "cluster_a_b",
+                            "lat": 0.0,
+                            "lon": 0.0,
+                            "status": "xy_fallback_no_geo_projection",
+                        }
+                    ],
+                }
         ],
         "junction_type_counts": {"traffic_light": 1},
         "edge_function_counts": {"crossing": 1, "internal": 1, "plain": 6, "walkingarea": 1},
@@ -883,6 +1104,34 @@ def test_reference_join_audit_structural_only_skips_case_matching(monkeypatch, t
     assert summary["audit_mode"] == "structural_only"
     assert summary["junction_pattern_comparison_status"] == "fail"
     assert any("structural-only mode" in warning for warning in report["warnings"])
+
+
+def test_reference_join_audit_shortens_long_artifact_names_portably(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.net.xml"
+    candidate = tmp_path / "candidate.net.xml"
+    reference.write_text("<net/>", encoding="utf-8")
+    candidate.write_text("<net/>", encoding="utf-8")
+    output_dir = tmp_path / "nested_reference_delta"
+    long_prefix = "reference_visual_detail_tls_connection_repair_reference_delta_" * 4
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference,
+        candidate_net_file=candidate,
+        output_dir=output_dir,
+        prefix=long_prefix,
+        structural_only=True,
+    )
+
+    assert report["status"] == "pass"
+    artifact_paths = [
+        Path(report["junction_teacher_delta_file"]),
+        Path(report["junction_pattern_comparisons_file"]),
+        Path(report["junction_pattern_templates_file"]),
+        Path(report["summary_file"]),
+    ]
+    assert all(path.is_file() for path in artifact_paths)
+    assert all(len(str(path.resolve())) <= 240 for path in artifact_paths)
+    assert all("_" in path.stem for path in artifact_paths)
 
 
 def test_reference_join_audit_reports_pedestrian_lane_counts_by_edge_type(tmp_path: Path) -> None:

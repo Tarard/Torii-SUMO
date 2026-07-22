@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<routes>
+  <vType id="car" accel="2.0" decel="4.5" sigma="0.5" length="5" minGap="2.5" />
+  <route id="W_E_through" edges="W_in E_out" />
+  <flow id="W_E_through_flow" type="car" route="W_E_through" begin="0" end="300" period="30" />
+  <route id="E_W_through" edges="E_in W_out" />
+  <flow id="E_W_through_flow" type="car" route="E_W_through" begin="5" end="300" period="30" />
+  <route id="S_N_through" edges="S_in N_out" />
+  <flow id="S_N_through_flow" type="car" route="S_N_through" begin="10" end="300" period="30" />
+  <route id="N_S_through" edges="N_in S_out" />
+  <flow id="N_S_through_flow" type="car" route="N_S_through" begin="15" end="300" period="30" />
+  <route id="W_N_left" edges="W_in N_out" />
+  <flow id="W_N_left_flow" type="car" route="W_N_left" begin="20" end="300" period="30" />
+  <route id="E_S_left" edges="E_in S_out" />
+  <flow id="E_S_left_flow" type="car" route="E_S_left" begin="25" end="300" period="30" />
+  <route id="S_W_left" edges="S_in W_out" />
+  <flow id="S_W_left_flow" type="car" route="S_W_left" begin="30" end="300" period="30" />
+  <route id="N_E_left" edges="N_in E_out" />
+  <flow id="N_E_left_flow" type="car" route="N_E_left" begin="35" end="300" period="30" />
+</routes>

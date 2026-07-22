@@ -1,0 +1,9 @@
+{
+  "schema": "torii.corridor.contracts/v1",
+  "benchmark_path": "benchmarks/corridor_human_modeling_v1/benchmark.v1.json",
+  "benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "toolchain_lock_path": "benchmarks/corridor_human_modeling_v1/toolchain.lock.json",
+  "toolchain_lock_sha256": "9fd07c42362f70f129d11fe21b85a4b304f22c493366f6cd125ed30424e49c55",
+  "research_plan_path": "docs/torii-corridor-human-modeling-research-plan.md",
+  "research_plan_sha256": "8a3a011ffdaed3b4a0419e9a3519f2e299be70687bfd3c2de3d7781eeb898b57"
+}

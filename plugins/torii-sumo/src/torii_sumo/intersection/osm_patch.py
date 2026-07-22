@@ -9,8 +9,29 @@ from .schema import BBox, OSMNode, OSMPatch, OSMRelation, OSMWay
 
 
 def parse_osm_xml(path: Path) -> OSMPatch:
-    with _open_osm(path) as handle:
-        root = ET.parse(handle).getroot()
+    return parse_osm_xml_bytes(
+        path.read_bytes(),
+        gzip_compressed=path.suffix.lower() == ".gz",
+    )
+
+
+def parse_osm_xml_bytes(
+    source_bytes: bytes,
+    *,
+    gzip_compressed: bool = False,
+) -> OSMPatch:
+    """Parse the exact byte snapshot supplied by a caller.
+
+    Byte-oriented parsing lets hash-bound adapters derive evidence from the
+    same immutable snapshot whose digest they publish.
+    """
+
+    xml_bytes = gzip.decompress(source_bytes) if gzip_compressed else source_bytes
+    root = ET.fromstring(xml_bytes)
+    return _parse_osm_root(root)
+
+
+def _parse_osm_root(root: ET.Element) -> OSMPatch:
     bbox = _parse_bbox(root)
     center_lat = (bbox.min_lat + bbox.max_lat) / 2
     center_lon = (bbox.min_lon + bbox.max_lon) / 2
@@ -51,12 +72,6 @@ def parse_osm_xml(path: Path) -> OSMPatch:
         for element in root.findall("relation")
     }
     return OSMPatch(nodes=nodes, ways=ways, relations=relations, bbox=bbox)
-
-
-def _open_osm(path: Path):
-    if path.suffix.lower() == ".gz":
-        return gzip.open(path, "rb")
-    return path.open("rb")
 
 
 def _tags(element: ET.Element) -> dict[str, str]:

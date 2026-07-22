@@ -1,0 +1,27 @@
+{
+  "atomic_witness_machine_census_required": true,
+  "automatic_promotion_gate": "blocked",
+  "conflict_site_stratum_fields": [
+    "certainty-profile",
+    "grade-risk-profile"
+  ],
+  "controlled_binding_hard_classes_census": [
+    "ordinary-program-truly-absent",
+    "program-present-link-invalid"
+  ],
+  "estimator": "horvitz-thompson",
+  "inclusion_probability_required": true,
+  "negative_sampling_algorithm": "sha256-round-robin-over-existing-negative-strata",
+  "parent_sampling_policy_sha256": "aa733c926a1b3edf53a29903c36e090b8e5e85111b5c9956a28c6cf1d5d80d99",
+  "pedestrian_coverage_gaps_census": true,
+  "policy_id": "policy_b8d470ed55e9c874512f680c",
+  "rare_hard_ood_machine_census_required": true,
+  "review_unit": "pedestrian-conflict-site",
+  "schema": "torii.corridor.review-study-sampling-policy/v2-r2",
+  "site_sampling_algorithm": "sha256-stratified-with-minimum-one-per-observed-stratum",
+  "target_conflict_sites_per_corridor": 8,
+  "target_negative_pairs_per_corridor": 4,
+  "unknown_control_does_not_force_human_member_census": true,
+  "unknown_control_population_must_be_retained": true,
+  "unselected_population_remains_unresolved": true
+}

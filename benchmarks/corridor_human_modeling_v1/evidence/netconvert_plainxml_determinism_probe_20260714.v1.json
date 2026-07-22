@@ -1,0 +1,111 @@
+{
+  "schema": "torii.corridor.netconvert-plainxml-determinism-evidence/v1",
+  "recorded_at": "2026-07-14",
+  "status": "experimental",
+  "sumo": {
+    "version": "1.27.1",
+    "source_commit": "7717f2379d9e314a0c81c5cec748444de06a2a91",
+    "source_tag": "v1_27_1",
+    "plainxml_documentation": "https://sumo.dlr.de/docs/Networks/PlainXML.html",
+    "source_reference": "https://github.com/eclipse-sumo/sumo/blob/7717f2379d9e314a0c81c5cec748444de06a2a91/src/netbuild/NBEdgeCont.cpp#L1457-L1495"
+  },
+  "root_cause": {
+    "status": "source-supported inference",
+    "observation": "NIImporter_OpenStreetMap calls NBEdgeCont::extractRoundabouts after materializing OSM edges. The implementation iterates a std::set<NBEdge*> and chooses the first matching outgoing roundabout edge. Pointer ordering and first-match traversal can partition the same tagged directed graph differently between processes.",
+    "semantic_consequence": "NBEdgeCont::markRoundabouts later uses each EdgeSet to assign roundabout priority and to decide which incoming connections are outside that roundabout. EdgeSet partition changes are therefore not formatting-only.",
+    "explicit_seed_sufficient": false
+  },
+  "locked_first_stage_options": {
+    "seed": 42,
+    "no_turnarounds": true,
+    "roundabout_guessing": false,
+    "plain_output_lanes": true,
+    "traffic_side_explicit": true
+  },
+  "normalization_policy": {
+    "policy_id": "torii.plainxml.osm-roundabout-normalization/v1",
+    "source_is_immutable": true,
+    "stale_candidate_outputs_removed_on_block": true,
+    "accepted_component_classes": [
+      "single directed cycle",
+      "complete partition into directed cycles by exact edge and lane permission contract"
+    ],
+    "blocked_component_classes": [
+      "open or incomplete tagged component",
+      "permission partition that does not produce complete directed cycles",
+      "missing node",
+      "node type outside priority or right_before_left",
+      "roundabout record containing an edge without OSM junction=roundabout evidence",
+      "unlocked upstream generation options"
+    ],
+    "turnaround_policy": "Observed turnaround connections are preserved and recorded. Their legality is audited downstream; normalization does not delete them."
+  },
+  "case_results": [
+    {
+      "corridor_key": "london-kings-cross",
+      "filtered_osm_sha256": "d779b9377cc87b361c6f416ed435bdc0c8cb73cfae5b5a270ecb1ac5c5baf649",
+      "first_raw_net_normalized_sha256": "15f7ee04f751a9ae3742348c5c3d8eb5ebd226eabb3714378067d4a779da7d91",
+      "second_raw_net_normalized_sha256": "16ec582040db32a6ec7b7e007f38c2fc9a6454eaf1d657c176a24abe3ccd93d2",
+      "normalization_status": "blocked",
+      "blockers": [
+        "roundabout_component_not_directed_simple_cycle",
+        "roundabout_component_protected_node_type"
+      ],
+      "exact_witness": "Percy Circus has six tagged edges over seven nodes, with two dead_end nodes, so the OSM roundabout evidence does not form a closed directed cycle.",
+      "recorded_turnaround_connection_count": 41,
+      "source_mutated": false
+    },
+    {
+      "corridor_key": "melbourne-royal-parade",
+      "filtered_osm_sha256": "9d2e86063fc726ce4aaf8ef2edc27c0857ef43cbc30c68c4e0ee28f09a2e04b0",
+      "first_raw_net_normalized_sha256": "0ca69408a2ed263ab436407cbaab0bb9691fd8cb6499be5562ad0f02af23e931",
+      "second_raw_net_normalized_sha256": "86b3b8321198f04fc03aaa985e4a71d56f4e020eaa2ac17dcdfcc68cf82b5a28",
+      "normalization_status": "pass",
+      "physical_roundabout_component_count": 7,
+      "single_directed_cycle_component_count": 6,
+      "permission_partitioned_component_count": 1,
+      "canonical_cycle_count": 8,
+      "first_normalized_plainxml_bundle_sha256": "01e36eaed20927d696287ce4f11345074a28790b256789eb8c27be79e5f2b406",
+      "second_normalized_plainxml_bundle_sha256": "01e36eaed20927d696287ce4f11345074a28790b256789eb8c27be79e5f2b406",
+      "first_rebuilt_net_normalized_sha256": "ceb8d397c23b936f553f3b04885654f04405633e47c053a0378615aaae44adba",
+      "second_rebuilt_net_normalized_sha256": "ceb8d397c23b936f553f3b04885654f04405633e47c053a0378615aaae44adba",
+      "rebuilt_net_replay_status": "pass",
+      "sumo_load_status": "pass",
+      "source_mutated": false
+    },
+    {
+      "corridor_key": "sydney-cross-city-tunnel",
+      "filtered_osm_sha256": "ba5dcafe94ad225d3eaa5e0d4a0d64a1a65ab2330634827934790ee97bc92531",
+      "first_raw_net_normalized_sha256": "e2a9d95c76d388bc89fd9bf917573822fed8e514a559700300c73c3a484bec18",
+      "second_raw_net_normalized_sha256": "08bc46b11527c18137a0295380b8cb29df7d03b4b3ff5e99ee9453a6e5f28a20",
+      "normalization_status": "blocked",
+      "blockers": [
+        "roundabout_component_not_directed_simple_cycle"
+      ],
+      "single_directed_cycle_component_count": 4,
+      "permission_partitioned_component_count": 2,
+      "unresolved_component_count": 1,
+      "exact_witness": "One OSM-tagged roundabout component contains a single directed edge over two nodes and cannot be completed from the available evidence.",
+      "recorded_turnaround_connection_count": 64,
+      "source_mutated": false
+    }
+  ],
+  "legacy_network_comparison": {
+    "corridor_key": "melbourne-royal-parade",
+    "legacy_one_stage_entity_count": 67873,
+    "deterministic_two_stage_entity_count": 76034,
+    "exact_stable_entity_delta_count": 141141,
+    "exact_diff_artifact_sha256": "560c8985573e6df71694841e909383ee3d2c3107d13befa3af93afccf78934ae",
+    "interpretation": "The two-stage result is reproducible but is not a local candidate repair. Full-network PlainXML reconstruction changes generated semantics throughout the network and may only be evaluated as a versioned initial-source protocol. It is forbidden in the current v1 promotion path."
+  },
+  "authoritative_ingolstadt_source_sha256_after_probe": "52114063a325b26f1b50ca08d4686697cc03ea1767dce1dc3815f4a5ae362f57",
+  "promotion_decision": "blocked_for_v1_integration",
+  "next_required_experiment": "Define a separate deterministic-ingest v2 corpus, run source identity, SUMO load, routeability, Connection Mode, independent safety and held-out review from the two-stage source, while retaining the v1 corpus unchanged.",
+  "claims_not_supported": [
+    "The deterministic ingest protocol repairs road-network semantics",
+    "London or Sydney can be normalized without additional evidence",
+    "A full-network PlainXML round-trip is safe for local candidate edits",
+    "The experimental v2 protocol may replace the frozen v1 held-out source",
+    "Stage 1 exit conditions are complete"
+  ]
+}

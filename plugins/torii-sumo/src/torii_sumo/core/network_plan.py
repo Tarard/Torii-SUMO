@@ -33,7 +33,7 @@ REFERENCE_MATCHED_VALIDATION_GATES = (
     "connection_semantics_parity",
     "tls_semantics_parity",
     "internal_junction_parity",
-    "netedit_connection_mode_review",
+    "connection_mode_audit",
     "teacher_guided_junction_parity",
 )
 
@@ -122,6 +122,8 @@ def _blocked_plan() -> dict[str, Any]:
         "recommended_network_detail": "arterial_core",
         "movement_layers": [],
         "highway_classes": [],
+        "reference_visual_detail_modal_way_tags": {},
+        "reference_visual_detail_modal_edge_type_counts": {},
         "service_passenger_policy": "sumo_default",
         "validation_gates": [],
     }
@@ -211,6 +213,12 @@ def _reference_policy_plan(
         "vehicle_core_highway_classes": vehicle_core_highways,
         "reference_visual_detail_highway_classes": visual_detail_highways,
         "reference_visual_detail_only_highway_classes": visual_detail_only_highways,
+        "reference_visual_detail_modal_way_tags": dict(
+            reference_policy.get("visual_detail_modal_way_tags", {})
+        ),
+        "reference_visual_detail_modal_edge_type_counts": dict(
+            reference_policy.get("visual_detail_modal_edge_type_counts", {})
+        ),
         "reference_source_way_ids": reference_source_way_ids,
         "reference_source_way_id_count": len(reference_source_way_ids),
         "service_passenger_policy": service_passenger_policy
@@ -220,12 +228,14 @@ def _reference_policy_plan(
             "build a separate reference visual-detail layer for full-reference Netedit comparison",
             "limit OSM ways to reference source ids when the reference exposes OSM-derived edge ids",
             "record bicycle, pedestrian, and bus layers as auxiliary modal layers",
+            "retain reference-observed railway modal ways in the visual-detail layer",
             "apply reference service-road passenger permissions only when the reference uses them",
         ],
         "validation_gates": [
             "passenger_connectivity",
             "routeability_audit",
             "topology_audit",
+            "standard_nema_scan",
             "scope_matched_reference_comparison",
             *REFERENCE_MATCHED_VALIDATION_GATES,
             "netedit_launch",
@@ -273,7 +283,13 @@ def derive_network_plan(
             "highway_classes": sorted(selected_highways),
             "service_passenger_policy": service_passenger_policy or "sumo_default",
             "cleanup_policy": ["use user-selected road classes"],
-            "validation_gates": ["passenger_connectivity", "routeability_audit", "topology_audit", "netedit_launch"],
+            "validation_gates": [
+                "passenger_connectivity",
+                "routeability_audit",
+                "topology_audit",
+                "standard_nema_scan",
+                "netedit_launch",
+            ],
         }
     if requested_layers:
         inferred_highways = _highways_for_layers(requested_layers)
@@ -289,6 +305,12 @@ def derive_network_plan(
             "service_passenger_policy": service_passenger_policy
             or ("allow_vehicle_service" if requested_layers & {"service", "access", "passenger_plus_service"} else "sumo_default"),
             "cleanup_policy": ["derive OSM highway classes from requested traffic layers"],
-            "validation_gates": ["passenger_connectivity", "routeability_audit", "topology_audit", "netedit_launch"],
+            "validation_gates": [
+                "passenger_connectivity",
+                "routeability_audit",
+                "topology_audit",
+                "standard_nema_scan",
+                "netedit_launch",
+            ],
         }
     return _blocked_plan()

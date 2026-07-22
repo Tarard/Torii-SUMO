@@ -1,0 +1,33 @@
+{
+  "schema": "torii.corridor.held-out-review-policy/v1",
+  "trial_id": "review_6e242d0f665a7fbe53f7664d",
+  "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "reviewer_ids": [
+    "review_224fc9a6f84c0d273bdc9e2e",
+    "review_c4bbec48e24ebf6fa83af425"
+  ],
+  "adjudicator_id": "review_8d19ae49612a2740f33eb408",
+  "minimum_case_count": 30,
+  "minimum_city_group_count": 3,
+  "minimum_morphology_count": 6,
+  "minimum_cases_per_city_group": 5,
+  "required_traffic_sides": [
+    "right",
+    "left"
+  ],
+  "required_mode_features": [
+    "pedestrian",
+    "bicycle",
+    "ramp",
+    "rail",
+    "bridge",
+    "tunnel"
+  ],
+  "minimum_raw_agreement": 0.8,
+  "minimum_cohen_kappa": 0.6,
+  "minimum_attention_precision": 0.9,
+  "minimum_attention_recall": 0.95,
+  "minimum_auto_precision": 0.99,
+  "maximum_median_review_seconds": 300.0,
+  "maximum_safety_critical_false_negatives": 0
+}

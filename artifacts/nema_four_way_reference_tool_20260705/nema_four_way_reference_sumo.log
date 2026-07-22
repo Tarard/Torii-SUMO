@@ -1,0 +1,21 @@
+Loading net-file from 'C:\Users\huqio\Documents\Torii-SUMO\artifacts\nema_four_way_reference_tool_20260705\nema_four_way_reference.net.xml' ... done (11ms).
+Loading route-files incrementally from 'C:\Users\huqio\Documents\Torii-SUMO\artifacts\nema_four_way_reference_tool_20260705\nema_four_way_reference.rou.xml'
+Loading done.
+Simulation version 1.26.0 started with time: 0.00.
+Simulation ended at time: 600.00.
+Reason: The final simulation step has been reached.
+Performance:
+ Duration: 0.18s
+ Real time factor: 3314.92
+ UPS: 22204.419890
+Vehicles:
+ Inserted: 78
+ Running: 0
+ Waiting: 0
+Statistics (avg of 78):
+ RouteLength: 380.79
+ Speed: 7.78
+ Duration: 51.52
+ WaitingTime: 12.53
+ TimeLoss: 23.10
+ DepartDelay: 0.00

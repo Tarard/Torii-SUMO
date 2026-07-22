@@ -5,6 +5,7 @@ import json
 import re
 from pathlib import Path
 
+from torii_sumo.core.detector_demand import Detector, build_detector_anchored_routes
 from torii_sumo.tools.demand_tools import (
     sumo_detector_count_audit,
     sumo_detector_count_constraints,
@@ -13,6 +14,35 @@ from torii_sumo.tools.demand_tools import (
 
 
 PRIVATE_MARKERS = ["private_project_name", "private_sensor_vendor", "closed_bridge_name"]
+
+
+def test_detector_anchored_routes_include_reachable_turning_exits() -> None:
+    detector = Detector(
+        detector_id="approach",
+        source_system="test",
+        direction="inbound",
+        edge_id="measured",
+        lane_id="measured_0",
+        lane_position=10.0,
+        period="900",
+        mapping_confidence="high",
+        mapping_status="active",
+    )
+    routes = build_detector_anchored_routes(
+        [detector],
+        sources=["source"],
+        sinks=["left_sink", "right_sink"],
+        connections={
+            "source": {"measured"},
+            "measured": {"left_sink", "right_sink"},
+        },
+        max_hops=8,
+    )
+
+    assert {route.edges for route in routes} == {
+        ("source", "measured", "left_sink"),
+        ("source", "measured", "right_sink"),
+    }
 
 
 def _write_synthetic_net(path: Path) -> None:

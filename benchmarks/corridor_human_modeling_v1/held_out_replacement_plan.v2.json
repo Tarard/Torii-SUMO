@@ -1,0 +1,95 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "human_decisions_consulted": false,
+  "machine_labels_consulted": false,
+  "replacement_plan_id": "manifest_f383fd7fef8fc4c4a68bdc47",
+  "replacement_policy_sha256": "26685fb3bfd9074e21d63c8e0afa7b4717f48b78803d98ea743965f112abb1d5",
+  "reserve_corpus_sha256": "be9b3f30ef4ac4aae3f5350d8b415edb89a31724add8c018a6b494798f9b26b5",
+  "schema": "torii.corridor.held-out-replacement-plan/v2",
+  "slots": [
+    {
+      "invalid_corridor_key": "london-kings-cross",
+      "invalid_selection_id": "scope_a51954f45045f6c56b6fdc45",
+      "ordered_candidates": [
+        {
+          "corridor_key": "london-liverpool-street",
+          "rank": 1,
+          "ranking_digest": "9e1a55584b4ee49f58ba1caa8c0d264878eea3e3817fca44104c9c73f8b77945",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_dc76fac5446ea7fc1e1d3003"
+        },
+        {
+          "corridor_key": "london-victoria-station",
+          "rank": 2,
+          "ranking_digest": "d80bafb2a762257b4f18cda7d23f44001d4b81f8bdfca890b574c0e557edfd12",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_7a4b149cf43ade659f5ae7f7"
+        },
+        {
+          "corridor_key": "london-euston",
+          "rank": 3,
+          "ranking_digest": "fe4a11bbfb3017a352f9a247357293541037350c9ac5c218187cd6ed9d98ed1d",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_4a4462010fc9d8307e59153c"
+        }
+      ],
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "invalid_corridor_key": "melbourne-royal-parade",
+      "invalid_selection_id": "scope_78cfe45f3f16203803dd879c",
+      "ordered_candidates": [
+        {
+          "corridor_key": "melbourne-st-kilda-domain",
+          "rank": 1,
+          "ranking_digest": "007502a5880892dee2a804d311304042f1ece862d490179f501f3095c9e644a4",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_f88f31f3d09ba6162b5a1d3e"
+        },
+        {
+          "corridor_key": "melbourne-dandenong-orrong",
+          "rank": 2,
+          "ranking_digest": "444f26721b1de2369834062330d8cf03c12838413aaf3a2021104d867e8fe3f8",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_c6c5e1e65a9a552589d51319"
+        },
+        {
+          "corridor_key": "melbourne-flemington-elliott",
+          "rank": 3,
+          "ranking_digest": "c4388af4de0232ee3c4cd1d4022b2d4b7a5e0c3bfc85485813fa816a1cfbe8ba",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_daea99e184fa5ea023a0c0a4"
+        }
+      ],
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "invalid_corridor_key": "sydney-cross-city-tunnel",
+      "invalid_selection_id": "scope_f6c3767dbd66180090580eeb",
+      "ordered_candidates": [
+        {
+          "corridor_key": "sydney-eastern-distributor-surry-hills",
+          "rank": 1,
+          "ranking_digest": "a46e3e2fefd606dadd89dcd322602c31a316503111501c1493053d7f74d64c67",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_fe7a0a420e826c470ef01f1d"
+        },
+        {
+          "corridor_key": "sydney-lane-cove-tunnel",
+          "rank": 2,
+          "ranking_digest": "dd7217fb2d3e78ecd6a864772e8650edcad0a5f1e46c40089d89c93d60116d0b",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_4fc379c495073f7625f237cd"
+        },
+        {
+          "corridor_key": "sydney-m5-east-kingsgrove",
+          "rank": 3,
+          "ranking_digest": "e078b26219b4017714047865e4b5abe561bdfc5b5f42249243200b8bdafa85c7",
+          "schema": "torii.corridor.contracts/v1",
+          "selection_id": "scope_703379cba90731b448de2716"
+        }
+      ],
+      "schema": "torii.corridor.contracts/v1"
+    }
+  ]
+}

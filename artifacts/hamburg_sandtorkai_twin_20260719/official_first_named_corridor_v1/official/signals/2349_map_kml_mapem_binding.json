@@ -1,0 +1,2026 @@
+{
+  "claim_boundary": "This report binds official KML geometry to official MAPEM lane types and connections by exact ids. It does not yet bind those lanes to HH-SIB station segments or SUMO edges.",
+  "connections": [
+    {
+      "connection_coordinates": [
+        [
+          9.9936055,
+          53.5433842,
+          0.0
+        ],
+        [
+          9.9926997,
+          53.5433192,
+          0.0
+        ]
+      ],
+      "connection_id": "1",
+      "drive_line_coordinates": [
+        [
+          9.9942311,
+          53.5434406,
+          0.0
+        ],
+        [
+          9.9932759,
+          53.5433542,
+          0.0
+        ],
+        [
+          9.9932759,
+          53.5433542,
+          0.0
+        ],
+        [
+          9.9925582,
+          53.5433105,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "12",
+      "ingress_lane_id": "1",
+      "maneuver_bits": "100000000000",
+      "node_id": "2349",
+      "signal_group": "1"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9936114,
+          53.5433544,
+          0.0
+        ],
+        [
+          9.9927054,
+          53.5432861,
+          0.0
+        ]
+      ],
+      "connection_id": "2",
+      "drive_line_coordinates": [
+        [
+          9.9942682,
+          53.5434179,
+          0.0
+        ],
+        [
+          9.993341,
+          53.543328,
+          0.0
+        ],
+        [
+          9.993341,
+          53.543328,
+          0.0
+        ],
+        [
+          9.9925164,
+          53.5432735,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "11",
+      "ingress_lane_id": "2",
+      "maneuver_bits": "100000000000",
+      "node_id": "2349",
+      "signal_group": "1"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9936179,
+          53.543324,
+          0.0
+        ],
+        [
+          9.993193,
+          53.5431168,
+          0.0
+        ]
+      ],
+      "connection_id": "3",
+      "drive_line_coordinates": [
+        [
+          9.9940392,
+          53.5433623,
+          0.0
+        ],
+        [
+          9.9931671,
+          53.5432828,
+          0.0
+        ],
+        [
+          9.9931671,
+          53.5432828,
+          0.0
+        ],
+        [
+          9.9932023,
+          53.5430673,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "8",
+      "ingress_lane_id": "3",
+      "maneuver_bits": "010000000000",
+      "node_id": "2349",
+      "signal_group": "2"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9928692,
+          53.5432381,
+          0.0
+        ],
+        [
+          9.9937172,
+          53.5433043,
+          0.0
+        ]
+      ],
+      "connection_id": "4",
+      "drive_line_coordinates": [
+        [
+          9.9927876,
+          53.5432326,
+          0.0
+        ],
+        [
+          9.9930376,
+          53.5432491,
+          0.0
+        ],
+        [
+          9.9930376,
+          53.5432491,
+          0.0
+        ],
+        [
+          9.9938698,
+          53.5433166,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "4",
+      "ingress_lane_id": "9",
+      "maneuver_bits": "100000000000",
+      "node_id": "2349",
+      "signal_group": "3"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.992876,
+          53.5432092,
+          0.0
+        ],
+        [
+          9.9937257,
+          53.543274,
+          0.0
+        ]
+      ],
+      "connection_id": "5",
+      "drive_line_coordinates": [
+        [
+          9.9927944,
+          53.5432038,
+          0.0
+        ],
+        [
+          9.993317,
+          53.5432383,
+          0.0
+        ],
+        [
+          9.993317,
+          53.5432383,
+          0.0
+        ],
+        [
+          9.9938187,
+          53.5432821,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "5",
+      "ingress_lane_id": "10",
+      "maneuver_bits": "100000000000",
+      "node_id": "2349",
+      "signal_group": "3"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.992876,
+          53.5432092,
+          0.0
+        ],
+        [
+          9.993193,
+          53.5431168,
+          0.0
+        ]
+      ],
+      "connection_id": "6",
+      "drive_line_coordinates": [
+        [
+          9.9927944,
+          53.5432038,
+          0.0
+        ],
+        [
+          9.9931759,
+          53.543229,
+          0.0
+        ],
+        [
+          9.9931759,
+          53.543229,
+          0.0
+        ],
+        [
+          9.9932023,
+          53.5430673,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "8",
+      "ingress_lane_id": "10",
+      "maneuver_bits": "001000000000",
+      "node_id": "2349",
+      "signal_group": "6"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9934065,
+          53.5431356,
+          0.0
+        ],
+        [
+          9.9937257,
+          53.543274,
+          0.0
+        ]
+      ],
+      "connection_id": "7",
+      "drive_line_coordinates": [
+        [
+          9.9934542,
+          53.5429213,
+          0.0
+        ],
+        [
+          9.9933838,
+          53.5432441,
+          0.0
+        ],
+        [
+          9.9933838,
+          53.5432441,
+          0.0
+        ],
+        [
+          9.9938187,
+          53.5432821,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "5",
+      "ingress_lane_id": "7",
+      "maneuver_bits": "001000000000",
+      "node_id": "2349",
+      "signal_group": "4"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9934065,
+          53.5431356,
+          0.0
+        ],
+        [
+          9.9937172,
+          53.5433043,
+          0.0
+        ]
+      ],
+      "connection_id": "8",
+      "drive_line_coordinates": [
+        [
+          9.9934542,
+          53.5429213,
+          0.0
+        ],
+        [
+          9.9933768,
+          53.5432766,
+          0.0
+        ],
+        [
+          9.9933768,
+          53.5432766,
+          0.0
+        ],
+        [
+          9.9938698,
+          53.5433166,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "4",
+      "ingress_lane_id": "7",
+      "maneuver_bits": "001000000000",
+      "node_id": "2349",
+      "signal_group": "4"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9933578,
+          53.5431309,
+          0.0
+        ],
+        [
+          9.9927054,
+          53.5432861,
+          0.0
+        ]
+      ],
+      "connection_id": "9",
+      "drive_line_coordinates": [
+        [
+          9.9934801,
+          53.542531,
+          0.0
+        ],
+        [
+          9.9933193,
+          53.5433266,
+          0.0
+        ],
+        [
+          9.9933193,
+          53.5433266,
+          0.0
+        ],
+        [
+          9.9925164,
+          53.5432735,
+          0.0
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "11",
+      "ingress_lane_id": "6",
+      "maneuver_bits": "010000000000",
+      "node_id": "2349",
+      "signal_group": "7"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9935457,
+          53.5433933,
+          0.0
+        ],
+        [
+          9.9935711,
+          53.5432437,
+          0.0
+        ]
+      ],
+      "connection_id": "10",
+      "drive_line_coordinates": [
+        [
+          9.9935464,
+          53.5433932,
+          0.0
+        ],
+        [
+          9.9935719,
+          53.5432437,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "14",
+      "ingress_lane_id": "13",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "5"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9935711,
+          53.5432437,
+          0.0
+        ],
+        [
+          9.9935457,
+          53.5433933,
+          0.0
+        ]
+      ],
+      "connection_id": "11",
+      "drive_line_coordinates": [
+        [
+          9.9935719,
+          53.5432437,
+          0.0
+        ],
+        [
+          9.9935464,
+          53.5433932,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "B",
+      "egress_lane_id": "13",
+      "ingress_lane_id": "14",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "5"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9929009,
+          53.5433525,
+          0.0
+        ],
+        [
+          9.9929141,
+          53.5432836,
+          0.0
+        ]
+      ],
+      "connection_id": "12",
+      "drive_line_coordinates": [
+        [
+          9.9929024,
+          53.5433524,
+          0.0
+        ],
+        [
+          9.9929156,
+          53.5432836,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "16",
+      "ingress_lane_id": "15",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "13"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9933263,
+          53.5431572,
+          0.0
+        ],
+        [
+          9.9934287,
+          53.5431639,
+          0.0
+        ]
+      ],
+      "connection_id": "13",
+      "drive_line_coordinates": [
+        [
+          9.9933273,
+          53.5431573,
+          0.0
+        ],
+        [
+          9.9934297,
+          53.543164,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "18",
+      "ingress_lane_id": "17",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "8"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9931303,
+          53.5431465,
+          0.0
+        ],
+        [
+          9.9932324,
+          53.5431485,
+          0.0
+        ]
+      ],
+      "connection_id": "14",
+      "drive_line_coordinates": [
+        [
+          9.9931315,
+          53.5431466,
+          0.0
+        ],
+        [
+          9.9932335,
+          53.5431486,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "20",
+      "ingress_lane_id": "19",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "9"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9931065,
+          53.5431699,
+          0.0
+        ],
+        [
+          9.9932298,
+          53.5431723,
+          0.0
+        ]
+      ],
+      "connection_id": "15",
+      "drive_line_coordinates": [
+        [
+          9.9931078,
+          53.54317,
+          0.0
+        ],
+        [
+          9.9932309,
+          53.5431724,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "22",
+      "ingress_lane_id": "21",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "10"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9933213,
+          53.5431768,
+          0.0
+        ],
+        [
+          9.9934371,
+          53.5431875,
+          0.0
+        ]
+      ],
+      "connection_id": "16",
+      "drive_line_coordinates": [
+        [
+          9.9933224,
+          53.5431769,
+          0.0
+        ],
+        [
+          9.993438,
+          53.5431876,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "24",
+      "ingress_lane_id": "23",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "11"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9932313,
+          53.5431487,
+          0.0
+        ],
+        [
+          9.9931309,
+          53.5431451,
+          0.0
+        ]
+      ],
+      "connection_id": "17",
+      "drive_line_coordinates": [
+        [
+          9.9932324,
+          53.5431488,
+          0.0
+        ],
+        [
+          9.9931322,
+          53.5431452,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "26",
+      "ingress_lane_id": "25",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "12"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9934293,
+          53.5431615,
+          0.0
+        ],
+        [
+          9.9933275,
+          53.543154,
+          0.0
+        ]
+      ],
+      "connection_id": "18",
+      "drive_line_coordinates": [
+        [
+          9.9934303,
+          53.5431616,
+          0.0
+        ],
+        [
+          9.9933286,
+          53.5431541,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "28",
+      "ingress_lane_id": "27",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "9"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9929127,
+          53.543284,
+          0.0
+        ],
+        [
+          9.9928994,
+          53.543352,
+          0.0
+        ]
+      ],
+      "connection_id": "19",
+      "drive_line_coordinates": [
+        [
+          9.9929141,
+          53.543284,
+          0.0
+        ],
+        [
+          9.9929009,
+          53.5433519,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "30",
+      "ingress_lane_id": "29",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "14"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9929194,
+          53.5432576,
+          0.0
+        ],
+        [
+          9.9929313,
+          53.5431953,
+          0.0
+        ]
+      ],
+      "connection_id": "20",
+      "drive_line_coordinates": [
+        [
+          9.9929209,
+          53.5432575,
+          0.0
+        ],
+        [
+          9.9929328,
+          53.5431954,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "32",
+      "ingress_lane_id": "31",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "15"
+    },
+    {
+      "connection_coordinates": [
+        [
+          9.9929307,
+          53.5431967,
+          0.0
+        ],
+        [
+          9.992921,
+          53.5432598,
+          0.0
+        ]
+      ],
+      "connection_id": "21",
+      "drive_line_coordinates": [
+        [
+          9.9929321,
+          53.5431968,
+          0.0
+        ],
+        [
+          9.9929225,
+          53.5432598,
+          0.0
+        ]
+      ],
+      "drive_line_variant": "A",
+      "egress_lane_id": "34",
+      "ingress_lane_id": "33",
+      "maneuver_bits": "",
+      "node_id": "2349",
+      "signal_group": "13"
+    }
+  ],
+  "counts": {
+    "connection_count": 21,
+    "lane_count": 34,
+    "lane_types": {
+      "bikeLane": 6,
+      "crosswalk": 18,
+      "vehicle": 10
+    }
+  },
+  "gates": {
+    "drive_line_geometry": "pass",
+    "exact_connection_identity": "pass",
+    "exact_lane_identity": "pass",
+    "single_mapem_node": "pass"
+  },
+  "lanes": [
+    {
+      "coordinates": [
+        [
+          9.9936055,
+          53.5433842,
+          0.0
+        ],
+        [
+          9.9942311,
+          53.5434408,
+          0.0
+        ],
+        [
+          9.9945677,
+          53.5434869,
+          0.0
+        ],
+        [
+          9.9946944,
+          53.543508,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9946944,
+        53.543508,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9936055,
+        53.5433842,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "1",
+      "kml_direction_role": "ingress",
+      "lane_id": "1",
+      "lane_type": "bikeLane",
+      "merge_point": [
+        9.9946944,
+        53.543508,
+        0.0
+      ],
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9936114,
+          53.5433544,
+          0.0
+        ],
+        [
+          9.9942682,
+          53.543418,
+          0.0
+        ],
+        [
+          9.9945523,
+          53.5434547,
+          0.0
+        ],
+        [
+          9.9947089,
+          53.5434785,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9947089,
+        53.5434785,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9936114,
+        53.5433544,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "1",
+      "kml_direction_role": "ingress",
+      "lane_id": "2",
+      "lane_type": "vehicle",
+      "merge_point": [
+        9.9947089,
+        53.5434785,
+        0.0
+      ],
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9936179,
+          53.543324,
+          0.0
+        ],
+        [
+          9.994039,
+          53.5433624,
+          0.0
+        ],
+        [
+          9.9946038,
+          53.5434311,
+          0.0
+        ],
+        [
+          9.9946361,
+          53.543435,
+          0.0
+        ],
+        [
+          9.9946768,
+          53.5434737,
+          0.0
+        ],
+        [
+          9.9947088,
+          53.5434786,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9947088,
+        53.5434786,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9936179,
+        53.543324,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "1",
+      "kml_direction_role": "ingress",
+      "lane_id": "3",
+      "lane_type": "vehicle",
+      "merge_point": [
+        9.9947088,
+        53.5434786,
+        0.0
+      ],
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9937172,
+          53.5433043,
+          0.0
+        ],
+        [
+          9.9938693,
+          53.5433166,
+          0.0
+        ],
+        [
+          9.9940387,
+          53.543332,
+          0.0
+        ]
+      ],
+      "egress_approach": "1",
+      "endpoint_a": [
+        9.9940387,
+        53.543332,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9937172,
+        53.5433043,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "",
+      "kml_direction_role": "egress",
+      "lane_id": "4",
+      "lane_type": "vehicle",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9937257,
+          53.543274,
+          0.0
+        ],
+        [
+          9.9938182,
+          53.5432821,
+          0.0
+        ],
+        [
+          9.9940535,
+          53.5433034,
+          0.0
+        ]
+      ],
+      "egress_approach": "1",
+      "endpoint_a": [
+        9.9940535,
+        53.5433034,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9937257,
+        53.543274,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "",
+      "kml_direction_role": "egress",
+      "lane_id": "5",
+      "lane_type": "vehicle",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9933578,
+          53.5431309,
+          0.0
+        ],
+        [
+          9.9934792,
+          53.5425303,
+          0.0
+        ],
+        [
+          9.9935207,
+          53.5422577,
+          0.0
+        ],
+        [
+          9.9937999,
+          53.5405972,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9937999,
+        53.5405972,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9933578,
+        53.5431309,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "2",
+      "kml_direction_role": "ingress",
+      "lane_id": "6",
+      "lane_type": "vehicle",
+      "merge_point": [
+        9.9934792,
+        53.5425303,
+        0.0
+      ],
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9934065,
+          53.5431356,
+          0.0
+        ],
+        [
+          9.9934533,
+          53.542921,
+          0.0
+        ],
+        [
+          9.9934831,
+          53.5427447,
+          0.0
+        ],
+        [
+          9.9934922,
+          53.5426913,
+          0.0
+        ],
+        [
+          9.9934684,
+          53.5425835,
+          0.0
+        ],
+        [
+          9.9934792,
+          53.5425303,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9934792,
+        53.5425303,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9934065,
+        53.5431356,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "2",
+      "kml_direction_role": "ingress",
+      "lane_id": "7",
+      "lane_type": "vehicle",
+      "merge_point": [
+        9.9934792,
+        53.5425303,
+        0.0
+      ],
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.993193,
+          53.5431168,
+          0.0
+        ],
+        [
+          9.9932012,
+          53.5430671,
+          0.0
+        ],
+        [
+          9.993216,
+          53.5429696,
+          0.0
+        ]
+      ],
+      "egress_approach": "2",
+      "endpoint_a": [
+        9.993216,
+        53.5429696,
+        0.0
+      ],
+      "endpoint_b": [
+        9.993193,
+        53.5431168,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "",
+      "kml_direction_role": "egress",
+      "lane_id": "8",
+      "lane_type": "vehicle",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9928692,
+          53.5432381,
+          0.0
+        ],
+        [
+          9.9927859,
+          53.5432326,
+          0.0
+        ],
+        [
+          9.9909082,
+          53.5431041,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9909082,
+        53.5431041,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9928692,
+        53.5432381,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "3",
+      "kml_direction_role": "ingress",
+      "lane_id": "9",
+      "lane_type": "vehicle",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.992876,
+          53.5432092,
+          0.0
+        ],
+        [
+          9.9927927,
+          53.5432037,
+          0.0
+        ],
+        [
+          9.9909142,
+          53.543078,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9909142,
+        53.543078,
+        0.0
+      ],
+      "endpoint_b": [
+        9.992876,
+        53.5432092,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "3",
+      "kml_direction_role": "ingress",
+      "lane_id": "10",
+      "lane_type": "vehicle",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9927054,
+          53.5432861,
+          0.0
+        ],
+        [
+          9.9925145,
+          53.5432735,
+          0.0
+        ],
+        [
+          9.9923179,
+          53.5432599,
+          0.0
+        ]
+      ],
+      "egress_approach": "3",
+      "endpoint_a": [
+        9.9923179,
+        53.5432599,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9927054,
+        53.5432861,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "",
+      "kml_direction_role": "egress",
+      "lane_id": "11",
+      "lane_type": "vehicle",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9926997,
+          53.5433192,
+          0.0
+        ],
+        [
+          9.9925564,
+          53.5433105,
+          0.0
+        ],
+        [
+          9.9923121,
+          53.5432946,
+          0.0
+        ]
+      ],
+      "egress_approach": "3",
+      "endpoint_a": [
+        9.9923121,
+        53.5432946,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9926997,
+        53.5433192,
+        0.0
+      ],
+      "geometry_folder": "Lanes",
+      "ingress_approach": "",
+      "kml_direction_role": "egress",
+      "lane_id": "12",
+      "lane_type": "bikeLane",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9935457,
+          53.5433933,
+          0.0
+        ],
+        [
+          9.9935442,
+          53.5434022,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9935442,
+        53.5434022,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9935457,
+        53.5433933,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "13",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9935711,
+          53.5432437,
+          0.0
+        ],
+        [
+          9.9935726,
+          53.5432348,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9935726,
+        53.5432348,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9935711,
+        53.5432437,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "14",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9929009,
+          53.5433525,
+          0.0
+        ],
+        [
+          9.9928992,
+          53.5433614,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9928992,
+        53.5433614,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9929009,
+        53.5433525,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "15",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9929141,
+          53.5432836,
+          0.0
+        ],
+        [
+          9.9929157,
+          53.5432747,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9929157,
+        53.5432747,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9929141,
+        53.5432836,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "16",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9933263,
+          53.5431572,
+          0.0
+        ],
+        [
+          9.9933113,
+          53.5431562,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9933113,
+        53.5431562,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9933263,
+        53.5431572,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "17",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9934287,
+          53.5431639,
+          0.0
+        ],
+        [
+          9.9934437,
+          53.5431649,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9934437,
+        53.5431649,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9934287,
+        53.5431639,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "18",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9931303,
+          53.5431465,
+          0.0
+        ],
+        [
+          9.9931151,
+          53.5431462,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9931151,
+        53.5431462,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9931303,
+        53.5431465,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "19",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9932324,
+          53.5431485,
+          0.0
+        ],
+        [
+          9.9932475,
+          53.5431487,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9932475,
+        53.5431487,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9932324,
+        53.5431485,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "20",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9931065,
+          53.5431699,
+          0.0
+        ],
+        [
+          9.9930913,
+          53.5431696,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9930913,
+        53.5431696,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9931065,
+        53.5431699,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "21",
+      "lane_type": "bikeLane",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9932298,
+          53.5431723,
+          0.0
+        ],
+        [
+          9.9932449,
+          53.5431726,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9932449,
+        53.5431726,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9932298,
+        53.5431723,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "22",
+      "lane_type": "bikeLane",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9933213,
+          53.5431768,
+          0.0
+        ],
+        [
+          9.9933063,
+          53.5431755,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9933063,
+        53.5431755,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9933213,
+        53.5431768,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "23",
+      "lane_type": "bikeLane",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9934371,
+          53.5431875,
+          0.0
+        ],
+        [
+          9.9934521,
+          53.5431889,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9934521,
+        53.5431889,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9934371,
+        53.5431875,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "24",
+      "lane_type": "bikeLane",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9932313,
+          53.5431487,
+          0.0
+        ],
+        [
+          9.9932465,
+          53.5431493,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9932465,
+        53.5431493,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9932313,
+        53.5431487,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "25",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9931309,
+          53.5431451,
+          0.0
+        ],
+        [
+          9.9931157,
+          53.5431446,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9931157,
+        53.5431446,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9931309,
+        53.5431451,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "26",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9934293,
+          53.5431615,
+          0.0
+        ],
+        [
+          9.9934443,
+          53.5431626,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9934443,
+        53.5431626,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9934293,
+        53.5431615,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "27",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9933275,
+          53.543154,
+          0.0
+        ],
+        [
+          9.9933125,
+          53.5431529,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9933125,
+        53.5431529,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9933275,
+        53.543154,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "28",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9929127,
+          53.543284,
+          0.0
+        ],
+        [
+          9.9929144,
+          53.5432751,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9929144,
+        53.5432751,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9929127,
+        53.543284,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "29",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9928994,
+          53.543352,
+          0.0
+        ],
+        [
+          9.9928977,
+          53.5433609,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9928977,
+        53.5433609,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9928994,
+        53.543352,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "30",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9929194,
+          53.5432576,
+          0.0
+        ],
+        [
+          9.9929177,
+          53.5432665,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9929177,
+        53.5432665,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9929194,
+        53.5432576,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "31",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9929313,
+          53.5431953,
+          0.0
+        ],
+        [
+          9.992933,
+          53.5431864,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.992933,
+        53.5431864,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9929313,
+        53.5431953,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "32",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.9929307,
+          53.5431967,
+          0.0
+        ],
+        [
+          9.9929321,
+          53.5431877,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9929321,
+        53.5431877,
+        0.0
+      ],
+      "endpoint_b": [
+        9.9929307,
+        53.5431967,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "33",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    },
+    {
+      "coordinates": [
+        [
+          9.992921,
+          53.5432598,
+          0.0
+        ],
+        [
+          9.9929197,
+          53.5432688,
+          0.0
+        ]
+      ],
+      "egress_approach": "",
+      "endpoint_a": [
+        9.9929197,
+        53.5432688,
+        0.0
+      ],
+      "endpoint_b": [
+        9.992921,
+        53.5432598,
+        0.0
+      ],
+      "geometry_folder": "Crosswalks",
+      "ingress_approach": "",
+      "kml_direction_role": "crosswalk",
+      "lane_id": "34",
+      "lane_type": "crosswalk",
+      "merge_point": null,
+      "node_id": "2349"
+    }
+  ],
+  "node_id": "2349",
+  "schema": "torii.hamburg-map-kml-mapem-binding/v1",
+  "source": {
+    "bytes": 139899,
+    "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\official\\signals\\assets\\2349_map_kml.kml",
+    "sha256": "8f2b47656ebf3295f86448b1d3bd9faacc41f75e40446ae099c9a6de6c82c7f6"
+  },
+  "status": "pass"
+}

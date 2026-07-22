@@ -1,6 +1,71 @@
 from pathlib import Path
 
-from torii_sumo.core.topology_audit import audit_topology_fragmentation
+from torii_sumo.core.topology_audit import audit_topology_fragmentation, compare_topology_canonical_cells
+
+
+def _canonical_report(cells: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "topology_osm_context_sha256": "same-osm-context",
+        "topology_canonical_cell_records": cells,
+    }
+
+
+def _canonical_cell(
+    cluster_id: str,
+    *,
+    nodes: list[str],
+    lat: float = 48.0,
+    lon: float = 11.0,
+    role: str = "vehicle_core",
+) -> dict[str, object]:
+    return {
+        "cluster_id": cluster_id,
+        "identity_node_ids": nodes,
+        "corridor_signatures": ["way:main|way:side"],
+        "centroid_lat": lat,
+        "centroid_lon": lon,
+        "physical_intersection_shape": "cross",
+        "approach_count": 4,
+        "modal_primary_role": role,
+        "traffic_light_node_count": 0,
+    }
+
+
+def test_canonical_topology_allows_extra_sumocut_subdivision_inside_one_cell() -> None:
+    candidate = _canonical_report([_canonical_cell("C001", nodes=["1", "2", "3"])])
+    reference = _canonical_report([_canonical_cell("R001", nodes=["1", "2"])])
+
+    result = compare_topology_canonical_cells(candidate, reference)
+
+    assert result["status"] == "pass"
+    assert result["matched_cell_count"] == 1
+
+
+def test_canonical_topology_blocks_unmatched_physical_cell() -> None:
+    candidate = _canonical_report(
+        [
+            _canonical_cell("C001", nodes=["1", "2"]),
+            _canonical_cell("C002", nodes=["9", "10"], lat=48.001),
+        ]
+    )
+    reference = _canonical_report([_canonical_cell("R001", nodes=["1", "2"])])
+
+    result = compare_topology_canonical_cells(candidate, reference)
+
+    assert result["status"] == "blocked"
+    assert result["unmatched_candidate_cells"] == ["C002"]
+
+
+def test_canonical_topology_blocks_modal_role_mismatch() -> None:
+    candidate = _canonical_report([_canonical_cell("C001", nodes=["1", "2"])])
+    reference = _canonical_report(
+        [_canonical_cell("R001", nodes=["1", "2"], role="rail_or_modal")]
+    )
+
+    result = compare_topology_canonical_cells(candidate, reference)
+
+    assert result["status"] == "blocked"
+    assert result["modal_mismatches"]
 
 
 def test_topology_audit_flags_compact_connection_cell(tmp_path: Path) -> None:
@@ -63,3 +128,22 @@ def test_topology_audit_rejects_long_connector_between_close_intersections(tmp_p
     )
 
     assert report["topology_connection_cell_candidate_count"] == 0
+
+
+def test_topology_audit_shortens_long_artifact_paths(tmp_path: Path) -> None:
+    net_file = tmp_path / "single.net.xml"
+    net_file.write_text(
+        "<net><junction id=\"j\" x=\"0\" y=\"0\" type=\"priority\"/></net>",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / ("output_" + "x" * 100)
+    report = audit_topology_fragmentation(
+        net_file=net_file,
+        output_dir=output_dir,
+        prefix="p" * 140,
+    )
+
+    assert Path(report["clusters_file"]).is_file()
+    assert Path(report["topology_connection_cell_candidates_file"]).is_file()
+    assert Path(report["report_file"]).is_file()
+    assert Path(report["clusters_file"]).name.startswith("p_")

@@ -1,0 +1,6 @@
+<connections>
+  <crossing node="C" edges="WC CW" width="4"/>
+  <crossing node="C" edges="CE EC" width="4"/>
+  <crossing node="C" edges="NC CN" width="4"/>
+  <crossing node="C" edges="CS SC" width="4"/>
+</connections>

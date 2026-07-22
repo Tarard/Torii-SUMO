@@ -1,0 +1,17 @@
+bbox=9.9880,53.5405,10.0030,53.5450
+source_osm=artifacts\hamburg_sandtorkai_twin_20260719\named_corridor_groser_grasbrook_osakaallee_v1\source_build\osm\hamburg_named_corridor_source_bbox.osm.xml.gz
+filtered_osm=artifacts\hamburg_sandtorkai_twin_20260719\named_corridor_groser_grasbrook_osakaallee_v1\source_build\osm\hamburg_named_corridor_source_filtered.osm.xml.gz
+net_file=artifacts\hamburg_sandtorkai_twin_20260719\named_corridor_groser_grasbrook_osakaallee_v1\source_build\sumo\hamburg_named_corridor_source.net.xml
+allowed_highways=living_street,motorway,motorway_link,primary,primary_link,residential,road,secondary,secondary_link,service,tertiary,tertiary_link,trunk,trunk_link,unclassified
+allowed_way_ids_count=not_applied
+include_railway=False
+clip_source_ways_to_bbox=True
+traffic_side=right
+allowed_railways=all
+overpass_strategy=tiled-retry-merge
+overpass_tile_count=1
+overpass_retry_count=0
+netconvert_profile=vehicle_core
+netconvert_profile_options=
+netconvert_type_options=
+netconvert_command=netconvert --osm-files osm/hamburg_named_corridor_source_filtered.osm.xml.gz --output-file sumo/hamburg_named_corridor_source.net.xml --proj.utm --no-turnarounds --osm.all-attributes --tls.join --tls.join-dist 35 --verbose
