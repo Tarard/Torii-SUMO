@@ -62,7 +62,7 @@ Torii 有两层：
 
 ### 信号灯、传感器和 route 复原
 
-<p><img src="docs/assets/hamburg-digital-twin/official-tls-binding-2394.png" alt="2394 官方信号绑定" width="100%"></p>
+<p><img src="docs/assets/hamburg-digital-twin/torii-2403-junction-connection.png" alt="NetEdit Connection Mode 中的 2403 局部路口" width="100%"></p>
 
 | 层 | 已实现证据 | 当前边界 |
 |---|---|---|

@@ -63,7 +63,7 @@ The lower-right image is a new background capture of the **complete repaired net
 
 ### Signals, detectors, and reconstructed routes
 
-<p><img src="docs/assets/hamburg-digital-twin/official-tls-binding-2394.png" alt="Official signal binding at Hamburg node 2394" width="100%"></p>
+<p><img src="docs/assets/hamburg-digital-twin/torii-2403-junction-connection.png" alt="Hamburg node 2403 local junction in NetEdit Connection Mode" width="100%"></p>
 
 | Layer | Implemented evidence | Current claim boundary |
 |---|---|---|
