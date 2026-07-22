@@ -78,6 +78,26 @@ The final image is a background capture of the **complete repaired network in Co
 | Exact matrix diagnostic | With TLS disabled, 60/60 station bins and 5,928 vehicles match exactly. | This proves the inverse-demand machinery, not field signal replay. |
 | Strict official-history replay | 15 candidate routes, seven measured edges, eight 15-minute bins, route constraint match 100%, zero collision and zero teleport over the 7,200-second official history window. | Sensor MAE is 26.47 and 2403/lane-evidence gates remain blocked; status is `detector-constrained-diagnostic-replay`. |
 
+#### Official Hamburg counts vs SUMO E1 readings
+
+Counts below are sums over the stated station × 15-minute comparison bins. They come from the frozen W3/W4 evidence referenced in [`hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json).
+
+| Replay case | Comparison bins | Hamburg official count | SUMO E1 count | Difference | MAE per bin | Maximum bin error | Interpretation |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Matrix diagnostic, TLS disabled, full 150 minutes | 60/60 | 5,928 | 5,928 | 0 | 0.00 | 0 | Exact inverse-demand diagnostic |
+| Matrix diagnostic, TLS disabled, formal two hours | 48/48 | 4,809 | 4,809 | 0 | 0.00 | 0 | Exact formal-window diagnostic |
+| Strict replay with available official signal history, 7,200 seconds | 78/78 | 3,936 | 2,501 | −1,435 | 26.47 | 84 | Not yet an accepted digital twin |
+
+This route reconstruction is deliberately described as **non-unique**. Torii enumerates 58 plausible corridor/branch routes and empirically builds a sensor-response matrix `H` by running one probe vehicle on each route and aggregating the physical SUMO E1 responses with Hamburg's official station-composition rules. For each 15-minute interval it solves
+
+```text
+minimize  ||x_t - x_t_prior||_1
+subject to H x_t = y_t
+           x_t >= 0 and integer
+```
+
+where `y_t` is the official Hamburg count vector and `x_t_prior` is a feasible `routeSampler` realization. The matrix is 6×58 with rank 6 and nullity 52, so many different route vectors produce the same sensor readings. Torii therefore returns one prior-preserving feasible solution, schedules it in SUMO, and uses the resulting E1 residuals as feedback; it does not claim unique OD flows or individual vehicle trajectories. The exact TLS-off rows validate the estimator/controller loop, while the strict-history row is the current field-facing acceptance result and remains blocked.
+
 ### What is shown vs what belongs in the repository
 
 | Suitable for the project page | Kept in the repository for reproduction |
