@@ -704,6 +704,11 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
         canonical_count_file=str(files["counts.csv"]),
         output_dir=str(tmp_path / "replay"),
         route_sampler_script=str(files["routeSampler.py"]),
+        simulation_begin=0,
+        simulation_end=7200,
+        comparison_begin=0,
+        comparison_end=7200,
+        interval=900,
         allow_detector_cross_section_boundaries=True,
     )
 
@@ -714,6 +719,11 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
     assert captured["canonical_count_file"] == files["counts.csv"]
     assert captured["route_sampler_script"] == files["routeSampler.py"]
     assert captured["output_dir"] == tmp_path / "replay"
+    assert captured["simulation_begin"] == 0
+    assert captured["simulation_end"] == 7200
+    assert captured["comparison_begin"] == 0
+    assert captured["comparison_end"] == 7200
+    assert captured["interval"] == 900
     assert captured["allow_detector_cross_section_boundaries"] is True
 
 

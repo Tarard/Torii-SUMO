@@ -93,6 +93,7 @@ class _DerivationArc:
     link_index: int | None
     to_lane_length_m: float
     is_declared_repair: bool
+    repair_evidence: str = ""
 
 
 @dataclass(frozen=True)
@@ -217,10 +218,12 @@ def derive_official_tls_plan(
     """Derive a joined-TLS plan from primary movements and MAP-confirmed lane bindings.
 
     The source network is read only. Declared repairs are inserted into the in-memory lane graph
-    before path search. A physical arc is selected only when it is already TLS-controlled, is an
-    explicitly declared repair, or the caller explicitly enables the first-arc visual-review policy.
-    When ``retired_tls_ids`` is omitted, old source controller ids are discovered from the selected
-    controlled arcs; an explicitly supplied sequence preserves strict caller-owned retirement.
+    before path search, but ordinary repairs prove connectivity only. A unique
+    ``official_map_stopline`` repair is authoritative; otherwise the first source-TLS arc in the
+    private movement core is selected. The caller's first-arc visual-review policy is the only
+    fallback when neither exists. Any other source TLS arcs are demoted as duplicate controls. When
+    ``retired_tls_ids`` is omitted, old source controller ids are discovered from selected and
+    demoted source arcs; an explicitly supplied sequence preserves strict caller-owned retirement.
     """
 
     if uncontrolled_path_policy not in {"fail", "first_arc_visual_review"}:
@@ -385,33 +388,75 @@ def derive_official_tls_plan(
         for arc in boundary_path:
             if arc.physical_link.key not in cross_group_keys:
                 continue
+            if arc.repair_evidence == "official_map_stopline":
+                raise OfficialTlsPlanError(
+                    "official stop-line connection is shared by different control groups: "
+                    + _format_connection_key(arc.physical_link.key)
+                )
             if arc.tls_id and arc.link_index is not None:
                 demoted_links[arc.physical_link.key] = arc.physical_link
                 if arc.tls_id not in target_tls_ids:
                     discovered_source_tls_ids.add(arc.tls_id)
 
-        selected_arcs = [
-            arc
-            for arc in core_path
-            if arc.is_declared_repair or (arc.tls_id and arc.link_index is not None)
+        stopline_arcs = [
+            arc for arc in core_path if arc.repair_evidence == "official_map_stopline"
         ]
-        selection_policy = "private_core_source_tls_and_declared_repair_arcs"
+        if len(stopline_arcs) > 1:
+            raise OfficialTlsPlanError(
+                f"stream {stream.stream_id} has multiple official stop-line control arcs"
+            )
+        source_control_arcs = [
+            arc for arc in core_path if arc.tls_id and arc.link_index is not None
+        ]
+        if stopline_arcs:
+            selected_arcs = stopline_arcs
+            selection_policy = "explicit_official_stopline_control_arc"
+        else:
+            selected_arcs = source_control_arcs[:1]
+            selection_policy = "first_private_core_source_tls_arc"
         review_required = False
+        visual_review_reasons: list[str] = []
         if not selected_arcs:
-            if uncontrolled_path_policy != "first_arc_visual_review":
-                raise OfficialTlsPlanError(
-                    f"stream {stream.stream_id} private movement core has no controlled or "
-                    "declared-repair arc; "
-                    "explicit first_arc_visual_review policy is required"
-                )
             if not core_path:
                 raise OfficialTlsPlanError(
-                    f"stream {stream.stream_id} has no cross-group-unshared movement-core arc"
+                    f"stream {stream.stream_id} has no cross-group-unshared private movement core"
+                )
+            if uncontrolled_path_policy != "first_arc_visual_review":
+                raise OfficialTlsPlanError(
+                    f"stream {stream.stream_id} first private movement-core arc has no source "
+                    "TLS or official stop-line authority; "
+                    "explicit first_arc_visual_review policy is required"
                 )
             selected_arcs = [core_path[0]]
             selection_policy = "first_private_core_arc_visual_review"
             review_required = True
+            visual_review_reasons.append("first_arc_without_control_authority")
+
+        selected_key = selected_arcs[0].physical_link.key
+        selected_index = next(
+            index for index, arc in enumerate(path) if arc.physical_link.key == selected_key
+        )
+        selected_core_index = next(
+            index for index, arc in enumerate(core_path) if arc.physical_link.key == selected_key
+        )
+        if selected_index > 0:
+            review_required = True
+            visual_review_reasons.append("selected_control_arc_not_on_bound_ingress")
+        if review_required:
             visual_review_count += 1
+        for arc in path:
+            if arc.is_declared_repair:
+                hit_repairs.add(arc.physical_link.key)
+        duplicate_control_arcs = [
+            arc
+            for arc in source_control_arcs
+            if arc.physical_link.key != selected_key
+        ]
+        for arc in duplicate_control_arcs:
+            if arc.tls_id and arc.link_index is not None:
+                demoted_links[arc.physical_link.key] = arc.physical_link
+                if arc.tls_id not in target_tls_ids:
+                    discovered_source_tls_ids.add(arc.tls_id)
 
         owner = (normalized_node_id, signal_group)
         bucket = group_links.setdefault(owner, {})
@@ -431,11 +476,10 @@ def derive_official_tls_plan(
                 evidence.append("source_tls")
                 if arc.tls_id != declared["tls_id"]:
                     discovered_source_tls_ids.add(arc.tls_id)
-            if arc.is_declared_repair:
+            if arc.repair_evidence == "official_map_stopline":
                 evidence.append("declared_repair")
-                hit_repairs.add(key)
-            if review_required:
-                evidence.append("first_arc_visual_review")
+                evidence.append("official_map_stopline")
+            evidence.extend(visual_review_reasons)
             selected_rows.append(
                 {
                     **_connection_key_dict(key),
@@ -458,6 +502,8 @@ def derive_official_tls_plan(
                 "path_lane_ids": [ingress.sumo_lane, *(arc.to_lane_id for arc in path)],
                 "path_hops": len(path),
                 "path_span_m": sum(arc.to_lane_length_m for arc in path[:-1]),
+                "selected_control_arc_path_index": selected_index,
+                "selected_control_arc_core_index": selected_core_index,
                 "movement_core_physical_links": [
                     _connection_key_dict(arc.physical_link.key) for arc in core_path
                 ],
@@ -468,7 +514,12 @@ def derive_official_tls_plan(
                 ],
                 "selection_policy": selection_policy,
                 "visual_review_required": review_required,
+                "visual_review_reasons": visual_review_reasons,
                 "selected_physical_links": selected_rows,
+                "demoted_duplicate_control_links": [
+                    _connection_key_dict(arc.physical_link.key)
+                    for arc in duplicate_control_arcs
+                ],
             }
         )
 
@@ -699,7 +750,11 @@ def apply_official_tls_plan_to_plain(
         connection.set("uncontrolled", "true")
     for key in assignments:
         connection = original_connections[key]
-        connection.attrib.pop("uncontrolled", None)
+        # Explicitly force control.  Merely removing ``uncontrolled=true`` is
+        # insufficient when a formerly-priority straight continuation is
+        # converted into a multi-node TLS owner: netconvert may infer it as
+        # uncontrolled again and silently discard the .tll binding.
+        connection.set("uncontrolled", "false")
 
     output_connections_file.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(connection_tree, space="    ")
@@ -1408,6 +1463,7 @@ def _build_derivation_lane_graph(
                 lane_by_edge_index,
                 lane_lengths,
                 is_declared_repair=key in repair_by_key,
+                repair_evidence=(repair_by_key[key].evidence if key in repair_by_key else ""),
             )
         )
     for key in sorted(set(repair_by_key) - set(source_connection_index)):
@@ -1419,6 +1475,7 @@ def _build_derivation_lane_graph(
                 lane_by_edge_index,
                 lane_lengths,
                 is_declared_repair=True,
+                repair_evidence=repair_by_key[key].evidence,
             )
         )
     for arcs in graph.values():
@@ -1441,6 +1498,7 @@ def _derivation_arc(
     lane_lengths: Mapping[str, float],
     *,
     is_declared_repair: bool,
+    repair_evidence: str,
 ) -> _DerivationArc:
     from_lane_id = _lane_id_for_connection_key(key, lane_by_edge_index, "from")
     to_lane_id = _lane_id_for_connection_key(key, lane_by_edge_index, "to")
@@ -1460,6 +1518,7 @@ def _derivation_arc(
         link_index=link_index,
         to_lane_length_m=lane_lengths[to_lane_id],
         is_declared_repair=is_declared_repair,
+        repair_evidence=repair_evidence,
     )
 
 

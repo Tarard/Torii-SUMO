@@ -178,7 +178,12 @@ def _write_compound_topology(path: Path) -> None:
             "3847369287 757036909 76463166"
         ),
     }
-    passive = ("3847369285", "3847369288", "759714726")
+    passive = (
+        "3847369285",
+        "3847369288",
+        "759714726",
+        "cluster_2761334249_610506352_cluster_739654528_759714704",
+    )
     root = ET.Element("net")
     for junction_id, origin_ids in origins.items():
         junction = ET.SubElement(root, "junction", {"id": junction_id})

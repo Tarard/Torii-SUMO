@@ -1001,6 +1001,14 @@ def build_osm_network(
         "schema": OSM_BUILD_PROVENANCE_SCHEMA,
         "status": status,
         "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "build_scope": {
+            "bbox": bbox,
+            "clip_source_ways_to_bbox": clip_source_ways_to_bbox,
+            "road_classes": sorted(allowed),
+            "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
+            "include_railway": include_railway,
+            "traffic_side": normalized_traffic_side,
+        },
         "source_osm_snapshot": {
             "path": str(source_osm.resolve()),
             "sha256": source_osm_sha256,

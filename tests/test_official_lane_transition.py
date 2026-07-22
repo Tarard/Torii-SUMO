@@ -154,7 +154,7 @@ def test_graph_is_deterministic_when_report_order_is_reversed() -> None:
     reversed_result = build_hamburg_official_lane_transition_graph(**inputs)
 
     assert repeated == reversed_result
-    assert repeated["graph_id"] == "official-lane-transition-5b5079de4906750903a6d1ed"
+    assert repeated["graph_id"] == "official-lane-transition-959b437fd5a487690fbfa0b5"
 
 
 def test_tight_uniqueness_gate_abstains_instead_of_selecting_best_guess() -> None:

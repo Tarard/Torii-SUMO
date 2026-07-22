@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import csv
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,11 +10,13 @@ from torii_sumo.core.digital_twin import CountStream
 from torii_sumo.core.digital_twin import CanonicalCount
 from torii_sumo.core.hamburg_named_count_scope import (
     OfficialSignalNodeReference,
+    audit_hamburg_count_station_compositions,
     build_hamburg_count_scope_evidence,
     infer_hamburg_count_directions,
     load_lsa_node_references,
     write_corridor_aggregate_counts,
 )
+from torii_sumo.core.hamburg_official import HAMBURG_COUNT_STATION_LAYER
 
 
 def _stream(stream_id: int, node_id: str, longitude: float, latitude: float, direction: str = "Richtung 1") -> CountStream:
@@ -27,6 +30,55 @@ def _stream(stream_id: int, node_id: str, longitude: float, latitude: float, dir
         longitude=longitude,
         latitude=latitude,
     )
+
+
+def _station_stream(stream_id: int, direction_code: str, composition: tuple[str, ...]) -> CountStream:
+    return CountStream(
+        stream_id=stream_id,
+        thing_id=stream_id + 100,
+        node_id="2394",
+        asset_id=f"040897{direction_code}",
+        direction=f"Richtung {direction_code}",
+        lane_use="",
+        longitude=9.9974,
+        latitude=53.544,
+        layer_name=HAMBURG_COUNT_STATION_LAYER,
+        direction_code=direction_code,
+        station_arm="7",
+        composition=composition,
+    )
+
+
+def test_station_composition_audit_keeps_direction_zero_out_of_constraints() -> None:
+    report = audit_hamburg_count_station_compositions(
+        [
+            _station_stream(1, "1", ("2394-Z.2", "2394-Z.3")),
+            _station_stream(2, "2", ("2394-Z.4", "2394-Z.8", "2394-Z.9")),
+            _station_stream(3, "0", ("2394-Z.2", "2394-Z.3", "2394-Z.4", "2394-Z.8", "2394-Z.9")),
+        ],
+        requested_node_ids=["2349", "2394"],
+    )
+
+    assert report["status"] == "partial"
+    assert report["execution_gate"] == "pass"
+    assert report["directional_station_stream_ids"] == [1, 2]
+    assert report["total_validation_stream_ids"] == [3]
+    assert report["missing_node_ids"] == ["2349"]
+
+
+def test_station_composition_audit_blocks_mismatched_total() -> None:
+    report = audit_hamburg_count_station_compositions(
+        [
+            _station_stream(1, "1", ("2394-Z.2",)),
+            _station_stream(2, "2", ("2394-Z.4",)),
+            _station_stream(3, "0", ("2394-Z.2",)),
+        ],
+        requested_node_ids=["2394"],
+    )
+
+    assert report["status"] == "blocked"
+    assert report["execution_gate"] == "blocked"
+    assert report["blocking_reasons"] == ["station_total_composition_mismatch:2394:7"]
 
 
 def test_scope_evidence_keeps_missing_node_and_unknown_direction_explicit() -> None:
@@ -52,10 +104,17 @@ def test_scope_evidence_keeps_missing_node_and_unknown_direction_explicit() -> N
 
 
 def test_direction_inference_uses_clear_same_node_geometry_and_records_provenance() -> None:
+    unknown = replace(
+        _stream(2, "2403", 9.997695, 53.544321, direction="unbekannt"),
+        layer_name=HAMBURG_COUNT_STATION_LAYER,
+        direction_code="1",
+        station_arm="3",
+        composition=("2403-Z.1",),
+    )
     inferred, evidence = infer_hamburg_count_directions(
         [
             _stream(1, "2403", 9.997650, 53.544313, direction="Richtung 1"),
-            _stream(2, "2403", 9.997695, 53.544321, direction="unbekannt"),
+            unknown,
             _stream(3, "2403", 9.998159, 53.544172, direction="Richtung 2"),
         ]
     )
@@ -64,6 +123,7 @@ def test_direction_inference_uses_clear_same_node_geometry_and_records_provenanc
     assert evidence[0]["status"] == "inferred"
     assert evidence[0]["reference_stream_id"] == 1
     assert evidence[0]["method"] == "nearest_same_node_declared_direction"
+    assert inferred[1].composition == ("2403-Z.1",)
 
 
 def test_lsa_identity_loader_requires_requested_points(tmp_path: Path) -> None:

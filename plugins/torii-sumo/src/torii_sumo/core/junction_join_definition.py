@@ -111,15 +111,25 @@ def _record_from_candidate(candidate: Mapping[str, Any]) -> JunctionJoinRecord:
 
 def _join_is_confirmed(*, source: str, confidence: str, candidate: Mapping[str, Any]) -> bool:
     tokens = {
-        source.lower(),
-        confidence.lower(),
-        str(candidate.get("map_review_status", "")).lower(),
-        str(candidate.get("manual_correction_status", "")).lower(),
-        str(candidate.get("review_status", "")).lower(),
+        value.strip().lower()
+        for value in (
+            source,
+            confidence,
+            str(candidate.get("map_review_status", "")),
+            str(candidate.get("manual_correction_status", "")),
+            str(candidate.get("review_status", "")),
+        )
+        if value.strip()
     }
-    if any("reference_matched" in token for token in tokens):
-        return True
-    return any("confirmed" in token or "map_confirmed" in token for token in tokens)
+    return bool(
+        tokens
+        & {
+            "confirmed",
+            "map_confirmed",
+            "confirmed_join",
+            "target_evidence_confirmed",
+        }
+    )
 
 
 def _normalize_node_ids(value: Any) -> tuple[str, ...]:

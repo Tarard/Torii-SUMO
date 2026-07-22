@@ -25,6 +25,10 @@ class CountStream:
     longitude: float
     latitude: float
     operation_start: str = ""
+    layer_name: str = ""
+    direction_code: str = ""
+    station_arm: str = ""
+    composition: tuple[str, ...] = ()
 
     @property
     def detector_id(self) -> str:

@@ -249,7 +249,8 @@ def test_reads_target_and_builds_capture_requests(tmp_path: Path) -> None:
     script = _load_script()
     net_file = tmp_path / "candidate.net.xml"
     net_file.write_text(
-        '<net><junction id="j0" type="traffic_light" x="12.5" y="34.25" incLanes="e0_0 e1_0 e1_1"/></net>',
+        '<net><junction id="j0" type="traffic_light" x="12.5" y="34.25" '
+        'incLanes="e0_0 e1_0 e1_1" shape="11,33 13,33 13,35 11,35"/></net>',
         encoding="utf-8",
     )
 
@@ -259,6 +260,7 @@ def test_reads_target_and_builds_capture_requests(tmp_path: Path) -> None:
     assert target.x == 12.5
     assert target.y == 34.25
     assert target.incoming_lanes == ("e0_0", "e1_0", "e1_1")
+    assert target.junction_shape == "11,33 13,33 13,35 11,35"
     assert [request.mode for request in requests[:3]] == [
         "inspect",
         "tls",
@@ -282,6 +284,7 @@ def test_viewsettings_selection_and_mode_are_deterministic() -> None:
 
     assert script.viewsettings_text((12.5, 34.25), zoom=500) == (
         "<viewsettings>\n"
+        '  <scheme name="standard"/>\n'
         '  <viewport zoom="500" x="12.5" y="34.25" angle="0"/>\n'
         '  <delay value="100"/>\n'
         "</viewsettings>\n"
@@ -360,6 +363,73 @@ def test_keyboard_layout_context_detects_chinese_input(
     assert result["status"] == expected_status
     assert result["is_chinese"] is expected_chinese
     assert result["thread_id"] == 77
+
+
+def test_keyboard_layout_context_checks_target_window_not_foreground(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = _load_script()
+    observed_hwnds = []
+
+    class FakeUser32:
+        def GetWindowThreadProcessId(self, hwnd, _):
+            observed_hwnds.append(hwnd)
+            return 77
+
+        def GetKeyboardLayout(self, _thread_id):
+            return 0x04090409
+
+        def GetKeyboardLayoutNameW(self, buffer):
+            buffer.value = "00000409"
+            return True
+
+    class FakeGui:
+        def GetForegroundWindow(self):
+            return 42
+
+    monkeypatch.setattr(script.sys, "platform", "win32")
+    monkeypatch.setattr(script, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(script.ctypes, "windll", type("Windll", (), {"user32": FakeUser32()})())
+
+    result = script._keyboard_layout_context(99)
+
+    assert result["status"] == "pass"
+    assert result["target_hwnd"] == 99
+    assert observed_hwnds == [99]
+
+
+def test_background_review_switches_only_its_netedit_window_to_english(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = _load_script()
+    contexts = iter(
+        [
+            {"status": "blocked", "lang_id": "0x0804"},
+            {"status": "pass", "lang_id": "0x0409"},
+        ]
+    )
+    messages = []
+
+    class FakeFunction:
+        def __call__(self, *_args):
+            return 0x04090409
+
+    class FakeGui:
+        def SendMessage(self, *args):
+            messages.append(args)
+
+    class FakeUser32:
+        LoadKeyboardLayoutW = FakeFunction()
+
+    monkeypatch.setattr(script, "_keyboard_layout_context", lambda _hwnd: next(contexts))
+    monkeypatch.setattr(script, "_windows_modules", lambda: (None, FakeGui(), None, None))
+    monkeypatch.setattr(script.ctypes, "windll", type("Windll", (), {"user32": FakeUser32()})())
+
+    result = script._ensure_english_window_layout(99)
+
+    assert result["status"] == "pass"
+    assert result["changed_by_torii"] is True
+    assert messages == [(99, 0x0050, 0, 0x04090409)]
 
 
 def test_review_window_is_maximized_without_resize() -> None:
@@ -571,6 +641,7 @@ def test_hamburg_runner_plans_three_modes_for_each_junction_without_gui(
             "foreground_unchanged": True,
             "foreground_context_restored": True,
             "mode_delivery": {"foreground_context_unchanged": True},
+            "inspect_delivery": {"foreground_context_unchanged": True},
         }
 
     monkeypatch.setattr(script.sys, "platform", "win32")
@@ -605,15 +676,17 @@ def test_direct_runner_is_hash_bound_and_non_promoting_without_gui(
     candidate = tmp_path / "candidate.net.xml"
     candidate.write_text(
         '<net><junction id="owner:2394" type="priority" x="12" y="34" '
-        'incLanes="in_0 in_1"/></net>',
+        'incLanes="in_0 in_1" shape="10,32 14,32 14,36 10,36"/></net>',
         encoding="utf-8",
     )
     expected_hash = script.file_sha256(candidate)
     calls = []
+    captured_call_kwargs = []
 
     def fake_capture_request(**kwargs):
         request = kwargs["request"]
         calls.append(request)
+        captured_call_kwargs.append(kwargs)
         return {
             "name": request.name,
             "mode": request.mode,
@@ -649,6 +722,9 @@ def test_direct_runner_is_hash_bound_and_non_promoting_without_gui(
     assert report["capture_session_count"] == 3
     assert report["automatic_promotion_gate"] == "blocked"
     assert report["global_keyboard_or_mouse_input_used"] is False
+    assert report["inspect_object_delivery"].startswith("junction selection only")
+    assert all(call.selection_id == "owner:2394" for call in calls)
+    assert all(call_kwargs["additional_file"] is None for call_kwargs in captured_call_kwargs)
     assert Path(report["report_file"]).name.startswith("review-")
     assert max(len(request.name) for request in calls) < 60
     assert [request.mode for request in calls] == ["inspect", "tls", "connection"]

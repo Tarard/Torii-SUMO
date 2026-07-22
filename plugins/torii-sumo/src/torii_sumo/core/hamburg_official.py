@@ -28,6 +28,7 @@ from .digital_twin import (
 
 HAMBURG_COUNT_SERVICE = "HH_STA_Verkehrsdaten_Kfz_Infrarotdetektoren"
 HAMBURG_COUNT_LAYER = "Anzahl_Kfz_Zaehlfeld_5-Min"
+HAMBURG_COUNT_STATION_LAYER = "Anzahl_Kfz_Zaehlstelle_15-Min"
 HAMBURG_SIGNAL_SERVICE = "HH_STA_traffic_lights"
 HAMBURG_SANDTORKAI_SIGNAL_SNAPSHOT_DATE = "2026-07-18"
 OFFICIAL_COUNT_METADATA_URL = (
@@ -710,6 +711,73 @@ def fetch_hamburg_count_streams(
     }
 
 
+def fetch_hamburg_count_station_streams(
+    client: SensorThingsClient,
+    node_ids: Sequence[str],
+) -> tuple[list[CountStream], dict[str, Any]]:
+    """Fetch official 15-minute cross-section streams for declared signal nodes."""
+
+    requested = tuple(dict.fromkeys(str(node_id).strip() for node_id in node_ids))
+    if not requested or any(not node_id for node_id in requested):
+        raise ValueError("Hamburg count station node_ids must be non-empty")
+    values, pages, request_urls = client.collection(
+        "Datastreams",
+        params={
+            "$top": 1000,
+            "$expand": "Thing($expand=Locations)",
+            "$filter": (
+                f"properties/serviceName eq '{HAMBURG_COUNT_SERVICE}' and "
+                f"properties/layerName eq '{HAMBURG_COUNT_STATION_LAYER}'"
+            ),
+        },
+    )
+    requested_set = set(requested)
+    selected_values = []
+    excluded_off_scope_unsupported_streams = []
+    for value in values:
+        properties = _mapping(value.get("properties"))
+        composition = str(properties.get("zusammensetzung", ""))
+        composition_nodes = {
+            member.partition("-")[0].strip()
+            for member in composition.split(",")
+            if "-" in member
+        }
+        if not composition_nodes or composition_nodes & requested_set:
+            selected_values.append(value)
+            continue
+        try:
+            parse_hamburg_count_streams([value])
+        except ValueError as exc:
+            excluded_off_scope_unsupported_streams.append(
+                {
+                    "stream_id": int(value["@iot.id"]),
+                    "composition": composition,
+                    "composition_node_hints": sorted(composition_nodes),
+                    "reason": str(exc),
+                }
+            )
+    parsed = parse_hamburg_count_streams(selected_values)
+    selected = [stream for stream in parsed if stream.node_id in requested]
+    unique = {stream.stream_id: stream for stream in selected}
+    if len(unique) != len(selected):
+        raise ValueError("Hamburg count station metadata returned duplicate datastream ids")
+    selected_ids = set(unique)
+    raw_by_id = {int(value["@iot.id"]): value for value in selected_values}
+    pages_by_node = {
+        node_id: [{"value": [raw_by_id[stream.stream_id] for stream in selected if stream.node_id == node_id]}]
+        for node_id in requested
+    }
+    return sorted(unique.values(), key=lambda item: (item.node_id, item.station_arm, item.direction_code)), {
+        "request_urls": request_urls,
+        "inventory_pages": pages,
+        "pages_by_node": pages_by_node,
+        "selected_stream_ids": sorted(selected_ids),
+        "excluded_off_scope_unsupported_streams": excluded_off_scope_unsupported_streams,
+        "requested_node_ids": list(requested),
+        "layer": HAMBURG_COUNT_STATION_LAYER,
+    }
+
+
 def parse_hamburg_count_streams(values: Iterable[Mapping[str, Any]]) -> list[CountStream]:
     streams: list[CountStream] = []
     for value in values:
@@ -721,20 +789,65 @@ def parse_hamburg_count_streams(values: Iterable[Mapping[str, Any]]) -> list[Cou
         if point is None:
             raise ValueError(f"count datastream {value.get('@iot.id')} has no point location")
         stream_id = int(value["@iot.id"])
+        composition, composition_node = _parse_count_station_composition(properties, stream_id=stream_id)
+        declared_node = str(properties.get("knotenName", "")).strip()
+        if declared_node and composition_node and declared_node != composition_node:
+            raise ValueError(
+                f"count datastream {stream_id} node {declared_node!r} conflicts with composition node "
+                f"{composition_node!r}"
+            )
+        node_id = declared_node or composition_node
+        if not node_id:
+            raise ValueError(f"count datastream {stream_id} has no node identity")
+        station_arm = str(properties.get("knotenarm", "")).strip()
+        direction_code = str(properties.get("direction", "")).strip()
+        if composition and (not station_arm or direction_code not in {"0", "1", "2"}):
+            raise ValueError(f"count station datastream {stream_id} has invalid arm or direction metadata")
+        asset_id = str(
+            (thing_properties.get("assetID") or "")
+            if composition
+            else properties.get("assetID") or thing_properties.get("assetID") or ""
+        ).strip()
+        if not asset_id:
+            raise ValueError(f"count datastream {stream_id} has no asset identity")
         streams.append(
             CountStream(
                 stream_id=stream_id,
                 thing_id=_optional_int(thing.get("@iot.id")),
-                node_id=str(properties.get("knotenName", "")),
-                asset_id=str(properties.get("assetID") or thing_properties.get("assetID") or ""),
+                node_id=node_id,
+                asset_id=asset_id,
                 direction=str(thing_properties.get("richtung", "")),
                 lane_use=str(properties.get("fahrspur", "")),
                 longitude=point[0],
                 latitude=point[1],
                 operation_start=str(thing_properties.get("operationStart", "")),
+                layer_name=str(properties.get("layerName", "")),
+                direction_code=direction_code,
+                station_arm=station_arm,
+                composition=composition,
             )
         )
     return streams
+
+
+def _parse_count_station_composition(
+    properties: Mapping[str, Any],
+    *,
+    stream_id: int,
+) -> tuple[tuple[str, ...], str]:
+    raw = str(properties.get("zusammensetzung", "")).strip()
+    if not raw:
+        return (), ""
+    members = tuple(part.strip() for part in raw.split(",") if part.strip())
+    if len(members) != len(set(members)):
+        raise ValueError(f"count station datastream {stream_id} repeats a composition member")
+    matches = [re.fullmatch(r"([0-9]+)-(Z\.[0-9]+(?:_[0-9]+)*)", member) for member in members]
+    if not members or any(match is None for match in matches):
+        raise ValueError(f"count station datastream {stream_id} has an invalid composition")
+    nodes = {match.group(1) for match in matches if match is not None}
+    if len(nodes) != 1:
+        raise ValueError(f"count station datastream {stream_id} spans multiple official nodes")
+    return members, next(iter(nodes))
 
 
 def fetch_hamburg_count_observations(

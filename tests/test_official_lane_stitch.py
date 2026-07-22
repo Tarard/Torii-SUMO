@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from pyproj import Transformer
 
+import torii_sumo.road_network.official_lane_stitch as official_lane_stitch
 from torii_sumo.road_network.official_lane_stitch import (
     OfficialLaneAxisStitchError,
     plan_hamburg_official_map_lane_axis_stitch,
@@ -165,6 +166,139 @@ def test_equal_geometry_official_axes_abstain_by_score_margin(tmp_path: Path) ->
     assert all(item["reason"] == "ambiguous_directed_corridor_score_margin" for item in result["lanes"])
     assert all(item["binding"] is None for item in result["lanes"])
     assert all(item["decision"] == "automatic_abstention_no_materialization" for item in result["lanes"])
+
+
+def test_official_approach_siblings_can_resolve_one_ambiguous_lane(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lanes = [
+        {
+            "node_id": "2363",
+            "lane_id": lane_id,
+            "map_role": "ingress",
+            "approach_id": "1",
+            "status": "pass",
+            "binding": {"corridor_id": "karolinen-axis"},
+        }
+        for lane_id in ("3", "5")
+    ]
+    lanes.append(
+        {
+            "node_id": "2363",
+            "lane_id": "4",
+            "map_role": "ingress",
+            "approach_id": "1",
+            "status": "review_required",
+            "reason": "ambiguous_directed_corridor_score_margin",
+            "alternatives": [
+                {"corridor_id": "karolinen-axis", "compatible": True},
+                {"corridor_id": "messeplatz-axis", "compatible": True},
+            ],
+            "binding": None,
+        }
+    )
+    monkeypatch.setattr(
+        official_lane_stitch,
+        "_prepare_map_lane",
+        lambda *args, **kwargs: {"status": "pass"},
+    )
+    monkeypatch.setattr(
+        official_lane_stitch,
+        "_build_lane_corridor_binding",
+        lambda **kwargs: {"corridor_id": kwargs["selected"]["corridor_id"]},
+    )
+
+    official_lane_stitch._resolve_ambiguous_lanes_by_approach_coherence(
+        lanes,
+        raw_lanes=[{"lane_id": "4"}],
+        connections=[],
+        corridors={"karolinen-axis": {}},
+        transformer=object(),
+        thresholds=official_lane_stitch.OfficialLaneAxisStitchThresholds(),
+    )
+
+    resolved = lanes[-1]
+    assert resolved["status"] == "pass"
+    assert resolved["binding"]["corridor_id"] == "karolinen-axis"
+    assert resolved["approach_coherence_evidence"]["supporting_lane_ids"] == ["3", "5"]
+
+
+def test_one_official_sibling_is_not_enough_to_resolve_ambiguity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lanes = [
+        {
+            "node_id": "test",
+            "lane_id": "1",
+            "map_role": "ingress",
+            "approach_id": "1",
+            "status": "pass",
+            "binding": {"corridor_id": "axis-a"},
+        },
+        {
+            "node_id": "test",
+            "lane_id": "2",
+            "map_role": "ingress",
+            "approach_id": "1",
+            "status": "review_required",
+            "reason": "ambiguous_directed_corridor_score_margin",
+            "alternatives": [
+                {"corridor_id": "axis-a", "compatible": True},
+                {"corridor_id": "axis-b", "compatible": True},
+            ],
+            "binding": None,
+        },
+    ]
+
+    official_lane_stitch._resolve_ambiguous_lanes_by_approach_coherence(
+        lanes,
+        raw_lanes=[{"lane_id": "2"}],
+        connections=[],
+        corridors={"axis-a": {}},
+        transformer=object(),
+        thresholds=official_lane_stitch.OfficialLaneAxisStitchThresholds(),
+    )
+
+    assert lanes[-1]["status"] == "review_required"
+    assert lanes[-1]["binding"] is None
+
+
+def test_missing_official_approach_id_does_not_resolve_ambiguity() -> None:
+    lanes = [
+        {
+            "node_id": "test",
+            "lane_id": lane_id,
+            "map_role": "ingress",
+            "approach_id": "",
+            "status": "pass",
+            "binding": {"corridor_id": "axis-a"},
+        }
+        for lane_id in ("1", "2")
+    ]
+    lanes.append(
+        {
+            "node_id": "test",
+            "lane_id": "3",
+            "map_role": "ingress",
+            "approach_id": "",
+            "status": "review_required",
+            "reason": "ambiguous_directed_corridor_score_margin",
+            "alternatives": [{"corridor_id": "axis-a", "compatible": True}],
+            "binding": None,
+        }
+    )
+
+    official_lane_stitch._resolve_ambiguous_lanes_by_approach_coherence(
+        lanes,
+        raw_lanes=[{"lane_id": "3"}],
+        connections=[],
+        corridors={"axis-a": {}},
+        transformer=object(),
+        thresholds=official_lane_stitch.OfficialLaneAxisStitchThresholds(),
+    )
+
+    assert lanes[-1]["status"] == "review_required"
+    assert lanes[-1]["binding"] is None
 
 
 def test_plainxml_artifact_hash_mismatch_blocks_before_matching(tmp_path: Path) -> None:

@@ -29,6 +29,7 @@ def run_bound_cell_movement_smoke(
     sumo_binary: str,
     departure_interval_s: int = 8,
     end_time_s: int = 900,
+    disable_traffic_lights: bool = False,
     timeout_seconds: float = 120.0,
     command_runner: CommandRunner = run_command,
 ) -> dict[str, Any]:
@@ -113,6 +114,8 @@ def run_bound_cell_movement_smoke(
         "--duration-log.statistics",
         "--quit-on-end",
     ]
+    if disable_traffic_lights:
+        command.extend(["--tls.all-off", "true"])
     if cleanup_errors or route_construction_findings:
         command_result: Mapping[str, Any] = {
             "status": "fail",
@@ -167,6 +170,11 @@ def run_bound_cell_movement_smoke(
         "checks": checks,
         "command": command,
         "command_result": command_result,
+        "traffic_light_policy": (
+            "all_off_topology_smoke"
+            if disable_traffic_lights
+            else "candidate_program"
+        ),
         "inspection": inspection,
         "route_construction_findings": route_construction_findings,
         "cleanup_errors": cleanup_errors,

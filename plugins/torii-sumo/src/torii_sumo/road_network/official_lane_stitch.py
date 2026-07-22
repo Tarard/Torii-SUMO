@@ -202,6 +202,7 @@ def plan_hamburg_official_map_lane_axis_stitch(
                 "projected_endpoint_to_directed_HH_SIB_axis_distance",
                 "MAP_boundary_travel_tangent_to_HH_SIB_directed_axis_heading",
                 "unique_normalized_score_margin",
+                "official_MAP_approach_sibling_corridor_coherence",
             ],
             "features_excluded": [
                 "road_name",
@@ -211,7 +212,10 @@ def plan_hamburg_official_map_lane_axis_stitch(
                 "guessed_SUMO_lane_index",
             ],
             "score": "endpoint_distance/max_endpoint_distance + heading_delta/max_heading_delta",
-            "ambiguity_action": "automatic_abstention_no_materialization",
+            "ambiguity_action": (
+                "automatic_abstention_no_materialization_unless_all_other_official_MAP_"
+                "approach_lanes_prove_one_compatible_directed_corridor"
+            ),
         },
         "lanes": lane_results,
         "approaches": approaches,
@@ -564,27 +568,15 @@ def _plan_report_lanes(
                 reason = "ambiguous_directed_corridor_score_margin"
                 selected = None
 
-        binding = None
-        if selected is not None:
-            geometry_projection = _project_lane_geometry(
-                preparation["geometry_xy"], corridors[selected["corridor_id"]]
+        binding = (
+            _build_lane_corridor_binding(
+                preparation=preparation,
+                selected=selected,
+                corridor=corridors[str(selected["corridor_id"])],
             )
-            junction_projection = _project_point_to_corridor(
-                preparation["junction_xy"], corridors[selected["corridor_id"]]
-            )
-            binding = {
-                "corridor_id": selected["corridor_id"],
-                "official_link_id": selected["official_link_id"],
-                "station_direction": selected["station_direction"],
-                "corridor_edge_ids": selected["corridor_edge_ids"],
-                "nearest_edge_id": selected["nearest_edge_id"],
-                "axis_lane_count_at_boundary": selected["axis_lane_count_at_projection"],
-                "boundary_station_m": selected["projected_station_m"],
-                "junction_station_m": junction_projection["projected_station_m"],
-                "geometry_station_range_m": geometry_projection["station_range_m"],
-                "geometry_max_axis_distance_m": geometry_projection["max_axis_distance_m"],
-                "sumo_lane_index": None,
-            }
+            if selected is not None
+            else None
+        )
         result.append(
             {
                 **base,
@@ -602,7 +594,110 @@ def _plan_report_lanes(
                 "binding": binding,
             }
         )
+    _resolve_ambiguous_lanes_by_approach_coherence(
+        result,
+        raw_lanes=report["lanes"],
+        connections=connections,
+        corridors=corridors,
+        transformer=transformer,
+        thresholds=thresholds,
+    )
     return result
+
+
+def _resolve_ambiguous_lanes_by_approach_coherence(
+    lanes: list[dict[str, Any]],
+    *,
+    raw_lanes: Sequence[Mapping[str, Any]],
+    connections: Sequence[Mapping[str, Any]],
+    corridors: Mapping[str, Mapping[str, Any]],
+    transformer: Transformer,
+    thresholds: OfficialLaneAxisStitchThresholds,
+) -> None:
+    """Resolve one ambiguous lane when every official sibling proves one axis.
+
+    This is deliberately narrower than a nearest-road fallback: the official
+    MAP approach must contain exactly one unresolved lane, at least two other
+    lanes must already bind to the same directed HH-SIB corridor, and that
+    corridor must remain a compatible alternative for the unresolved lane.
+    """
+
+    raw_by_id_candidates: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for item in raw_lanes:
+        if isinstance(item, Mapping) and str(item.get("lane_id", "")):
+            raw_by_id_candidates[str(item["lane_id"])].append(item)
+    raw_by_id = {
+        lane_id: members[0]
+        for lane_id, members in raw_by_id_candidates.items()
+        if len(members) == 1
+    }
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for lane in lanes:
+        grouped[
+            (str(lane["node_id"]), str(lane["map_role"]), str(lane["approach_id"]))
+        ].append(lane)
+
+    for (_node_id, _map_role, approach_id), members in grouped.items():
+        if not approach_id.strip():
+            continue
+        unresolved = [
+            lane
+            for lane in members
+            if lane["status"] != "pass"
+            and lane.get("reason") == "ambiguous_directed_corridor_score_margin"
+        ]
+        passed = [lane for lane in members if lane["status"] == "pass"]
+        if len(unresolved) != 1 or len(passed) < 2 or len(passed) + 1 != len(members):
+            continue
+        sibling_corridors = {
+            str(lane["binding"]["corridor_id"])
+            for lane in passed
+            if isinstance(lane.get("binding"), Mapping)
+        }
+        if len(sibling_corridors) != 1:
+            continue
+        corridor_id = next(iter(sibling_corridors))
+        target = unresolved[0]
+        alternatives = [
+            item
+            for item in target.get("alternatives", [])
+            if isinstance(item, Mapping)
+            and item.get("compatible") is True
+            and str(item.get("corridor_id", "")) == corridor_id
+        ]
+        raw_lane = raw_by_id.get(str(target["lane_id"]))
+        corridor = corridors.get(corridor_id)
+        if len(alternatives) != 1 or raw_lane is None or corridor is None:
+            continue
+        preparation = _prepare_map_lane(
+            raw_lane,
+            connections=connections,
+            transformer=transformer,
+            tolerance_m=thresholds.endpoint_identity_tolerance_m,
+        )
+        if preparation["status"] != "pass":
+            continue
+        target.update(
+            {
+                "status": "pass",
+                "decision": "bind_at_approach_directional_corridor_level",
+                "reason": "official_MAP_approach_sibling_corridor_coherence",
+                "binding": _build_lane_corridor_binding(
+                    preparation=preparation,
+                    selected=alternatives[0],
+                    corridor=corridor,
+                ),
+                "approach_coherence_evidence": {
+                    "status": "pass",
+                    "basis": "all_other_official_MAP_approach_lanes_bind_same_directed_corridor",
+                    "corridor_id": corridor_id,
+                    "supporting_lane_ids": sorted(
+                        (str(lane["lane_id"]) for lane in passed),
+                        key=_identifier_sort_key,
+                    ),
+                },
+            }
+        )
 
 
 def _prepare_map_lane(
@@ -722,6 +817,29 @@ def _evaluate_corridor(
         "score": _rounded(best["score"]),
         "compatible": not rejections,
         "rejection_reasons": rejections,
+    }
+
+
+def _build_lane_corridor_binding(
+    *,
+    preparation: Mapping[str, Any],
+    selected: Mapping[str, Any],
+    corridor: Mapping[str, Any],
+) -> dict[str, Any]:
+    geometry_projection = _project_lane_geometry(preparation["geometry_xy"], corridor)
+    junction_projection = _project_point_to_corridor(preparation["junction_xy"], corridor)
+    return {
+        "corridor_id": selected["corridor_id"],
+        "official_link_id": selected["official_link_id"],
+        "station_direction": selected["station_direction"],
+        "corridor_edge_ids": selected["corridor_edge_ids"],
+        "nearest_edge_id": selected["nearest_edge_id"],
+        "axis_lane_count_at_boundary": selected["axis_lane_count_at_projection"],
+        "boundary_station_m": selected["projected_station_m"],
+        "junction_station_m": junction_projection["projected_station_m"],
+        "geometry_station_range_m": geometry_projection["station_range_m"],
+        "geometry_max_axis_distance_m": geometry_projection["max_axis_distance_m"],
+        "sumo_lane_index": None,
     }
 
 

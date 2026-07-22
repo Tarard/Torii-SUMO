@@ -43,6 +43,68 @@ Torii 有两层：
 
 研究状态（2026-07-14）：Stage 1-M 已达到 **Machine REVIEW_READY**。30 个盲化 held-out 走廊包、完整机器 witness census、确定性抽样和 provenance 已冻结，可以进入真实人工验证。这不等于 Stage 1 退出、自动修复获得认证，也不证明任意 OSM 路网已经达到专家 NetEdit 质量。详见 [Stage 1-M 机器证据](docs/stage1-machine-review-ready-plan.md)。
 
+## 汉堡走廊数字孪生：证据报告
+
+产品目标是 **Am Sandtorkai 2349 → 2394 → 2403** 三节点带支路走廊。OSM 负责连续道路骨架，Torii 只在有证据的范围内清洗；Hamburg MAP/OCIT-C/TLD 和官方道路数据决定 movement、信号与传感器身份；SUMO 在同一断面放置 E1/E2，并求解一种能解释官方观测的可行 route 组合。该 route 是非唯一逆问题的一种解，不是唯一 OD 或车辆轨迹真值。
+
+<table>
+<tr>
+<td width="50%"><strong>汉堡官方 2024 航拍</strong><br><img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Am Sandtorkai 官方航拍"></td>
+<td width="50%"><strong>LSBG 2022 官方施工图</strong><br><img src="docs/assets/hamburg-digital-twin/official-construction-plan-2022.png" alt="Am Sandtorkai 与 Brooktorkai 官方施工图"></td>
+</tr>
+<tr>
+<td><strong>OSM 导入拓扑</strong><br><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="清洗前 OSM 派生拓扑"></td>
+<td><strong>Torii 清洗走廊——完整 Connection Mode</strong><br><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="NetEdit Connection Mode 中完整的汉堡修复走廊"></td>
+</tr>
+</table>
+
+右下图是刚重新生成的**完整修正版路网 Connection Mode**，不是局部截图，绑定网络 SHA-256 `2da03214…f5c559`。另外的 `NeteditTargetSession` 已真实点击 2403 网络对象并确认左侧显示 `Net: junction`、不是 polygon；该局部证明保留为仓库证据，但不作为报告主图。该 2403 单核心探针保留 18/18 条边界 movement，表面重叠为 0，可被 SUMO 加载，18/18 条 movement smoke 全部到达，碰撞和 teleport 均为 0；但由于官方尚未发布可绑定的 2403 MAP/OCIT，它仍是审核候选，不是最终官方信号模型。
+
+### 信号灯、传感器和 route 复原
+
+<p><img src="docs/assets/hamburg-digital-twin/official-tls-binding-2394.png" alt="2394 官方信号绑定" width="100%"></p>
+
+| 层 | 已实现证据 | 当前边界 |
+|---|---|---|
+| 信号灯 | 2349、2394 的 TLD 主信号流已绑定到官方 MAP movement 和实际 SUMO controller `linkIndex`。 | 2403 只有官方 LSA 身份，没有公开 MAP/OCIT 包；Torii 不猜控制器。 |
+| 传感器 | 方向站点已通过 composition 绑定到物理 field；E1 用于计数，E2 只用于排队/占有率诊断。 | 19 条映射流中 11 条车道身份为低置信度，因此自动晋级继续阻断。 |
+| 路线逆问题 | 使用非负整数约束 `H x_t = y_t`；诊断矩阵为 6×58、rank 6、nullity 52。 | 多条 route 对传感器不可区分，只能得到一个可行解。 |
+| 精确矩阵诊断 | 关闭 TLS 时，60/60 个站点时间桶、5,928 辆计数完全一致。 | 只证明需求反演器，不证明现场信号回放。 |
+| 官方历史严格窗口 | 15 条候选路线、7 条受测道路、8 个 15 分钟片；route 约束匹配 100%，7,200 秒内零碰撞、零 teleport。 | E1 MAE 仍为 26.47，且 2403/车道证据门禁未过；状态为 `detector-constrained-diagnostic-replay`。 |
+
+### 展示内容与仓库内容分层
+
+| 适合在 README/项目页展示 | 直接放入仓库、用于复现 |
+|---|---|
+| 精选航拍、施工图、OSM 输入、Connection Mode 清洗结果、TLS 截图和核心指标。 | W0–W5 编排代码、官方数据 adapter、测试、简要开发日志、schema、来源与 SHA-256 证据摘要。 |
+| 人能读懂的结论和明确限制。 | 完整生成网络、API 缓存、E1/E2 XML、route ensemble 和 NetEdit 会话仍放在可重建的 `artifacts/`/`outputs/`，不把数 GB/上百 GB 运行缓存塞进 Git。 |
+
+图片来源与许可见[图片证据说明](docs/assets/hamburg-digital-twin/README.md)，核心机器证据见 [`docs/hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json)，每轮做过什么见[持续开发日志](docs/hamburg-digital-twin-development-log.md)。官方来源包括 [Hamburg LGV DOP](https://metaver.de/trefferanzeige?docuuid=cc0eaed8-cb36-44a0-9bda-153f28d9e7ba) 和 [LSBG 施工图](https://lsbg.hamburg.de/resource/blob/784084/6a06328b36b0de140d75baac9165f8f7/am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-abgestimmte-planung-plan-data.pdf)。
+
+### 可复用 W0–W5 工作流
+
+```text
+W0 冻结范围/证据
+ ↓
+W1 OSM 骨架 → estimator/controller/feedback → 审计后的 SUMO 候选
+ ├───────────────┐
+ ↓               ↓
+W2 MAP/OCIT/TLD  W3 传感器 + route incidence/整数需求
+ └───────┬───────┘
+         ↓
+W4 SUMO 回放 + 现实/虚拟 E1 对比
+         ↓
+W5 哈希绑定报告、下游失效传播与产品包
+```
+
+Torii 复用现有模块，不另造第二套路网算法。复制[配置模板](docs/hamburg-digital-twin-workflow.example.json)，把 `<run>` 替换为真实 stage manifest 路径，然后运行：
+
+```powershell
+python plugins/torii-sumo/scripts/run_hamburg_execution_plan.py --config hamburg-workflow.json
+```
+
+配置内路径相对配置文件解析；任一上游 manifest/feedback 哈希变化会自动使依赖阶段失效。源路网不被覆盖，缺失官方资产只会形成 blocked gate，不会被模型猜测补齐。
+
 ### 无 teacher 的小路网自动发现
 
 新的 v2 小路网路径不再要求 teacher、人工 reviewed scope、预填 topology 或 movement 数量。它会直接扫描冻结 OSM bbox 的信号锚点，保守去重 physical-cell 候选，机器选择图 medoid，生成 boundary ports、movement variants 和 split/merge/partial-repair 候选 DAG，之后才允许把 materialized SUMO 网络作为后验验证输入。XS1 自动恢复 4 个 approach 和 12 条 movement；XS2 自动选择了不同于旧手工 seed 的 canonical node，但仍正确绑定 materialized 网络，并保留 6/7 movement 歧义而不自动选择。完整设计、正反 pedestrian crossing 和可复现实验见 [teacher-free discovery v2](docs/teacher-free-osm-signal-discovery-v2.md)。
@@ -94,6 +156,19 @@ phase/ring 契约遵循 SUMO 官方 [NEMA controller 文档](https://sumo.dlr.de
 ```powershell
 python plugins/torii-sumo/scripts/run_ingolstadt_corridor_teacher.py
 ```
+
+默认行为仍是单路口的边界切片。若要对同 bbox 原始 OSM 与完整人工清洗参考网执行
+reference-cluster 匹配、聚合候选估计和差分门禁，可继续使用同一个 runner：
+
+```powershell
+python plugins/torii-sumo/scripts/run_ingolstadt_corridor_teacher.py --workflow-mode reference-matched
+```
+
+该模式直接委托 Torii 已有的 `reference_matched` OSM 清洗工作流，不另造第二套聚类
+算法；原始 OSM、聚合候选、teacher replay 候选和人工参考网会分别保存并绑定哈希。
+默认只运行 estimator；teacher replay 和昂贵的候选物化必须显式传入
+`--materialize-teacher-candidates`。该 estimator 路径会关闭全网 TLS 聚合，避免在单个
+冲突核通过保真与几何门禁前污染 OSM 比较基线。
 
 它会下载当前 OSM bbox，构建 raw visual-detail 路网，只应用边界严格、证据充分的结构修复，然后运行 SUMO load、completion-aware routeability，并把 junction `267517510` 与 TUM 人工清洗单元对照。结构修复始终写入独立候选：本次只从一条已经是无控制状态的人行内部连接删除了 1 个陈旧 TLS identity，58 个内嵌 `tlLogic` 和 12 个铁路隐式控制器保持不变，源文件哈希确认未变，同时生成逐项回滚计划和仅用于显示的 review `additional.xml`。
 

@@ -12,6 +12,7 @@ from torii_sumo.core.connection_mode_audit import (
     _expand_scope_by_tls_controller,
     audit_network_connection_mode,
     audit_standard_connection_mode,
+    build_official_teacher_connection_mode_evidence,
     build_connection_mode_regression_audit,
     build_connection_mode_catalog,
     build_network_connection_mode_audit,
@@ -643,6 +644,241 @@ def test_connection_mode_accepts_only_exact_official_map_lane_fanout() -> None:
     )
     assert rejected["status"] == "review_required"
     assert any("ambiguous_target_lane_fanout" in item for item in rejected["review_findings"])
+
+
+def test_connection_mode_accepts_only_exact_official_map_destination_merge() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" shape="-10,-1 0,-1"/>
+    <lane id="in_1" index="1" allow="passenger" shape="-10,1 0,1"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" shape="1,0 10,0"/>
+  </edge>
+  <junction id="j" type="priority" incLanes="in_0 in_1" intLanes="">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="0"/>
+  </junction>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="out" fromLane="1" toLane="0" dir="s"/>
+</net>"""
+    )
+    evidence = {
+        "in|out|0": {
+            "basis": "official_map_connection_curve",
+            "source_cell": "2349",
+            "source_lanes": ["0", "1"],
+        }
+    }
+
+    audit = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        evidence_justified_destination_merges=evidence,
+    )
+
+    assert audit["status"] == "pass"
+    assert not any("destination_lane_merge" in item for item in audit["review_findings"])
+    assert audit["evidence_justified_destination_merges"][0]["source_lanes"] == ["0", "1"]
+
+    rejected = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        evidence_justified_destination_merges={
+            "in|out|0": {**evidence["in|out|0"], "source_lanes": ["0"]}
+        },
+    )
+    assert rejected["status"] == "review_required"
+    assert any("destination_lane_merge" in item for item in rejected["review_findings"])
+
+
+def test_connection_mode_accepts_only_hash_bound_engineering_plan_lane_arrow_merge() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" shape="-10,-1 0,-1"/>
+    <lane id="in_1" index="1" allow="passenger" shape="-10,1 0,1"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" shape="1,0 10,0"/>
+  </edge>
+  <junction id="j" type="priority" incLanes="in_0 in_1" intLanes="">
+    <request index="0" response="00" foes="00" cont="0"/>
+    <request index="1" response="00" foes="00" cont="0"/>
+  </junction>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="out" fromLane="1" toLane="0" dir="s"/>
+</net>"""
+    )
+    exact = {
+        "basis": "official_engineering_plan_lane_arrows",
+        "source_cell": "2403",
+        "source_lanes": ["0", "1"],
+        "official_source_url": "https://lsbg.hamburg.de/example-plan.pdf",
+        "official_source_sha256": "a" * 64,
+    }
+
+    accepted = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        evidence_justified_destination_merges={"in|out|0": exact},
+    )
+    assert accepted["status"] == "pass"
+    assert accepted["evidence_justified_destination_merges"][0]["evidence"] == exact
+
+    invalid_variants = (
+        {**exact, "source_lanes": ["0"]},
+        {**exact, "source_lanes": ["0", "0", "1"]},
+        {**exact, "source_lanes": "01"},
+        {**exact, "source_cell": ""},
+        {**exact, "official_source_url": "http://lsbg.hamburg.de/example-plan.pdf"},
+        {**exact, "official_source_sha256": "not-a-sha256"},
+        {**exact, "basis": "manual_lane_arrows"},
+    )
+    for evidence in invalid_variants:
+        rejected = audit_standard_connection_mode(
+            root,
+            junction_id="j",
+            movement_rows=[],
+            layout_type="unknown",
+            evidence_justified_destination_merges={"in|out|0": evidence},
+        )
+        assert rejected["status"] == "review_required"
+        assert any("destination_lane_merge" in item for item in rejected["review_findings"])
+
+
+def test_connection_mode_uses_stable_official_lane_binding_for_rank_review() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger" shape="-10,-1 0,-1"/>
+    <lane id="in_1" index="1" allow="passenger" shape="-10,1 0,1"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="passenger" shape="1,-1 10,-1"/>
+    <lane id="out_1" index="1" allow="passenger" shape="1,1 10,1"/>
+  </edge>
+  <junction id="j" type="priority" incLanes="in_0 in_1" intLanes=""/>
+  <connection from="in" to="out" fromLane="0" toLane="1" dir="s"/>
+  <connection from="in" to="out" fromLane="1" toLane="0" dir="s"/>
+</net>"""
+    )
+    raw = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        normalized_lane_rank_tolerance=0.4,
+    )
+    assert any("lane_rank_jump:0:0.500" in item for item in raw["review_findings"])
+
+    evidence = {
+        "in|0|out|1": {
+            "basis": "official_map_connection_curve",
+            "source_cell": "node-5",
+            "official_connection_id": "curve-15",
+        }
+    }
+    justified = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        normalized_lane_rank_tolerance=0.4,
+        evidence_justified_lane_bindings=evidence,
+    )
+
+    assert not any("lane_rank_jump:0:0.500" in item for item in justified["review_findings"])
+    assert justified["evidence_justified_lane_bindings"][0]["key"] == "in|0|out|1"
+    assert justified["movement_checks"][0]["evidence_justified_findings"][0]["evidence"] == evidence[
+        "in|0|out|1"
+    ]
+
+    rejected = audit_standard_connection_mode(
+        root,
+        junction_id="j",
+        movement_rows=[],
+        layout_type="unknown",
+        normalized_lane_rank_tolerance=0.4,
+        evidence_justified_lane_bindings={
+            "in|0|out|1": {"basis": "visual_guess", "source_cell": "node-5"}
+        },
+    )
+    assert any("lane_rank_jump:0:0.500" in item for item in rejected["review_findings"])
+
+
+def test_official_teacher_connection_evidence_uses_mapped_physical_lane_keys(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in" from="a" to="teacher_core">
+    <lane id="teacher_in_0" index="0" allow="passenger"/>
+    <lane id="teacher_in_1" index="1" allow="passenger"/>
+  </edge>
+  <edge id="teacher_out" from="teacher_core" to="b">
+    <lane id="teacher_out_0" index="0" allow="passenger"/>
+    <lane id="teacher_out_1" index="1" allow="passenger"/>
+  </edge>
+  <edge id="remote" from="b" to="c"><lane id="remote_0" index="0" allow="passenger"/></edge>
+  <junction id="teacher_core" type="traffic_light"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" shape="0,0 1,1"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="1" shape="0,0 1,2"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="1" toLane="0" shape="0,1 1,1"/>
+  <connection from="teacher_out" to="remote" fromLane="0" toLane="0" shape="1,1 2,1"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    evidence = build_official_teacher_connection_mode_evidence(
+        teacher,
+        teacher_junction_id="teacher_core",
+        edge_map={"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+        source_cell="hamburg-node-5",
+    )
+
+    assert evidence["status"] == "pass"
+    assert evidence["exact_connection_count"] == 3
+    assert evidence["target_fanout_count"] == 1
+    assert evidence["destination_merge_count"] == 1
+    assert set(evidence["lane_bindings"]) == {
+        "candidate_in|0|candidate_out|0",
+        "candidate_in|0|candidate_out|1",
+        "candidate_in|1|candidate_out|0",
+    }
+    fanout = evidence["target_fanouts"]["candidate_in|0|candidate_out"]
+    assert fanout["target_lanes"] == ["0", "1"]
+    assert fanout["basis"] == "official_map_connection_curve"
+    assert fanout["source_cell"] == "hamburg-node-5"
+    merge = evidence["destination_merges"]["candidate_in|candidate_out|0"]
+    assert merge["source_lanes"] == ["0", "1"]
+    assert merge["basis"] == "official_map_connection_curve"
+    assert merge["source_cell"] == "hamburg-node-5"
+
+
+def test_official_teacher_connection_evidence_fails_closed_without_bijective_edge_map(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    teacher.write_text('<net><junction id="teacher_core"/></net>', encoding="utf-8")
+
+    evidence = build_official_teacher_connection_mode_evidence(
+        teacher,
+        teacher_junction_id="teacher_core",
+        edge_map={"teacher_in": "candidate", "teacher_out": "candidate"},
+        source_cell="hamburg-node-5",
+    )
+
+    assert evidence["status"] == "fail"
+    assert evidence["failures"] == ["edge_map_not_bijective"]
 
 
 def test_network_connection_mode_audit_replaces_gui_as_automatic_gate(

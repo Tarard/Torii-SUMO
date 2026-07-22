@@ -530,7 +530,12 @@ def _load_compound_tls_manifest(path: Path) -> dict[str, Any]:
             raise HamburgSignalBindingError("compound TLS movement identity is invalid") from exc
         movement_key = (node_id, connection_id)
         group = groups.get((node_id, signal_group))
-        if movement_key in movements or group is None or not selected or not selected <= group["physical_keys"]:
+        if len(selected) != 1:
+            raise HamburgSignalBindingError(
+                "compound TLS movement must identify exactly one physical stop-line connection "
+                f"unless explicit multi-stop-line evidence is added: {movement_key}"
+            )
+        if movement_key in movements or group is None or not selected <= group["physical_keys"]:
             raise HamburgSignalBindingError(f"compound TLS movement is duplicate or unresolved: {movement_key}")
         movements[movement_key] = {
             **group,

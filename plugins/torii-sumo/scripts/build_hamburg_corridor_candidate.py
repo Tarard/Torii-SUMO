@@ -37,6 +37,13 @@ def main() -> int:
     parser.add_argument("--axis-path-json", type=Path)
     parser.add_argument("--signal-fetch-manifest", type=Path)
     parser.add_argument("--map-lane-axis-stitch-plan", type=Path)
+    parser.add_argument(
+        "--required-signal-type",
+        action="append",
+        default=[],
+        dest="required_signal_types",
+        help="Allow-listed official LSA type; repeat for multiple accepted types.",
+    )
     parser.add_argument("--output-file", required=True, type=Path)
     args = parser.parse_args()
 
@@ -62,6 +69,7 @@ def main() -> int:
             axis_paths=axis_paths,
             signal_fetch_manifest=args.signal_fetch_manifest,
             map_lane_axis_stitch_plan=args.map_lane_axis_stitch_plan,
+            required_signal_types=args.required_signal_types,
             output_file=args.output_file,
         )
     except (HamburgCorridorCandidateError, OSError, ValueError) as exc:

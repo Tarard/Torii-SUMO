@@ -44,6 +44,70 @@ Current MCP tools cover the `torii_auto_workflow` router, environment checks, co
 
 Research status (2026-07-14): Stage 1-M is **Machine REVIEW_READY**. Thirty blinded held-out corridor packages, the full machine witness census, deterministic sampling, and provenance are frozen for human validation. This is not Stage 1 exit, an automatic-repair certification, or evidence that arbitrary OSM networks already reach expert NetEdit quality. See the [Stage 1-M evidence](docs/stage1-machine-review-ready-plan.md).
 
+## Hamburg corridor digital twin: evidence report
+
+The product target is the three-node **Am Sandtorkai 2349 → 2394 → 2403** corridor. The model starts with OSM for continuous road geometry, applies bounded Torii cleanup, uses Hamburg MAP/OCIT-C/TLD and road datasets as authority for movements and signals, places SUMO detectors at official detector cross-sections, and solves for one plausible route realization whose virtual counts can be compared with the official observations. A route solution is not claimed to be a unique OD matrix.
+
+<table>
+<tr>
+<td width="50%"><strong>Official Hamburg aerial, 2024</strong><br><img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Official Hamburg aerial of the Am Sandtorkai corridor"></td>
+<td width="50%"><strong>Official LSBG construction plan, 2022</strong><br><img src="docs/assets/hamburg-digital-twin/official-construction-plan-2022.png" alt="Official construction plan for Am Sandtorkai and Brooktorkai"></td>
+</tr>
+<tr>
+<td><strong>OSM-derived input topology</strong><br><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="OSM-derived Hamburg topology before corridor cleanup"></td>
+<td><strong>Torii cleaned corridor — full Connection Mode</strong><br><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Complete repaired Hamburg corridor in NetEdit Connection Mode"></td>
+</tr>
+</table>
+
+The lower-right image is a new background capture of the **complete repaired network in Connection Mode**, not a local crop. It binds to network SHA-256 `2da03214…f5c559`. A separate `NeteditTargetSession` check clicked the real 2403 network object and verified that the left pane says `Net: junction`, not polygon; that local proof is retained as repository evidence but is not used as the report's main image. The bounded 2403 single-core probe preserves all 18 boundary movements, has zero surface overlaps, loads in SUMO, and completes 18/18 movement smoke trips without collision or teleport. It remains review-only because Hamburg has not published a bindable 2403 MAP/OCIT package.
+
+### Signals, detectors, and reconstructed routes
+
+<p><img src="docs/assets/hamburg-digital-twin/official-tls-binding-2394.png" alt="Official signal binding at Hamburg node 2394" width="100%"></p>
+
+| Layer | Implemented evidence | Current claim boundary |
+|---|---|---|
+| Traffic signals | Nodes 2349 and 2394 bind official TLD primary-signal streams to official MAP movements and concrete SUMO controller `linkIndex` values. | Node 2403 has an official LSA identity but no published MAP/OCIT bundle; its controller is not guessed. |
+| Sensors | Processed directional stations are joined to their component physical fields; SUMO E1 is used for counts and E2 only for queue/occupancy diagnostics. | 19 mapped streams include 11 low-confidence lane identities, so automatic promotion remains blocked. |
+| Route inverse problem | `H x_t = y_t`, with non-negative integer route allocations. The diagnostic matrix is 6×58, rank 6, nullity 52: many routes are observationally equivalent. | The solution is one plausible realization, not unique trajectories or a unique OD matrix. |
+| Exact matrix diagnostic | With TLS disabled, 60/60 station bins and 5,928 vehicles match exactly. | This proves the inverse-demand machinery, not field signal replay. |
+| Strict official-history replay | 15 candidate routes, seven measured edges, eight 15-minute bins, route constraint match 100%, zero collision and zero teleport over the 7,200-second official history window. | Sensor MAE is 26.47 and 2403/lane-evidence gates remain blocked; status is `detector-constrained-diagnostic-replay`. |
+
+### What is shown vs what belongs in the repository
+
+| Suitable for the project page | Kept in the repository for reproduction |
+|---|---|
+| Curated aerial, construction-plan excerpt, OSM input, Connection Mode cleanup, TLS view, headline detector/route metrics. | W0–W5 orchestration code, source adapters, tests, concise development log, provenance, hashes, schemas, and a compact evidence summary. |
+| Human-readable conclusions and explicit limitations. | Full generated networks, raw API caches, E1/E2 XML, route ensembles, NetEdit sessions, and repeated experiments stay rebuild-only under `artifacts/` or `outputs/`; they are too large and machine-specific for Git. |
+
+Sources and attribution are recorded in the [image provenance](docs/assets/hamburg-digital-twin/README.md). The official sources are the [Hamburg LGV DOP service](https://metaver.de/trefferanzeige?docuuid=cc0eaed8-cb36-44a0-9bda-153f28d9e7ba) and the [LSBG construction plan](https://lsbg.hamburg.de/resource/blob/784084/6a06328b36b0de140d75baac9165f8f7/am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-abgestimmte-planung-plan-data.pdf). Machine-readable headline evidence is frozen in [`docs/hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json); the iteration history is in the [development log](docs/hamburg-digital-twin-development-log.md).
+
+### Reusable W0–W5 workflow
+
+Torii reuses the focused Hamburg modules rather than implementing a second network builder:
+
+```text
+W0 freeze scope/evidence
+ ↓
+W1 OSM skeleton → estimator/controller/feedback → audited SUMO candidate
+ ├───────────────┐
+ ↓               ↓
+W2 MAP/OCIT/TLD  W3 detectors + route incidence/integer demand
+ └───────┬───────┘
+         ↓
+W4 SUMO replay + real/virtual E1 comparison
+         ↓
+W5 hash-bound report, downstream invalidation, and reusable product package
+```
+
+One portable JSON config now drives the existing resumable ledger. Copy [the example](docs/hamburg-digital-twin-workflow.example.json), replace the `<run>` paths with stage manifests, then run:
+
+```powershell
+python plugins/torii-sumo/scripts/run_hamburg_execution_plan.py --config hamburg-workflow.json
+```
+
+Every path is resolved relative to the config file. A changed upstream manifest or feedback hash invalidates dependent stages; no source network is overwritten, and a missing official asset remains a blocked gate rather than an inferred fact.
+
 ### Teacher-free small-network discovery
 
 The v2 small-network path no longer requires a teacher, reviewed scope, expected topology, or expected movement count. It scans signal anchors in a frozen OSM bbox, conservatively deduplicates physical-cell candidates, selects a graph medoid, and generates boundary ports, movement variants, and a split/merge/partial-repair candidate DAG before a materialized SUMO network may be used as post-hoc evidence. XS1 recovers four approaches and twelve movements; XS2 chooses a canonical node different from the old caller seed, still binds the materialized network, and preserves the 6-versus-7 movement disagreement instead of selecting an answer. See [teacher-free discovery v2](docs/teacher-free-osm-signal-discovery-v2.md) for the design, pedestrian positive/negative controls, and reproducible results.
@@ -103,6 +167,24 @@ The first same-bbox teacher slice is now executable end to end:
 ```powershell
 python plugins/torii-sumo/scripts/run_ingolstadt_corridor_teacher.py
 ```
+
+The default remains the bounded one-junction slice. To compare raw same-bbox
+OSM against the full human-cleaned reference, including reference-cluster
+matching, aggregation-candidate estimation, and differential gates, use the
+same runner in full reference mode:
+
+```powershell
+python plugins/torii-sumo/scripts/run_ingolstadt_corridor_teacher.py --workflow-mode reference-matched
+```
+
+This mode delegates to Torii's existing `reference_matched` OSM cleanup
+workflow; it does not introduce a second cluster-matching algorithm. It keeps
+raw OSM, aggregation candidates, teacher replay candidates, and the human
+reference as separate hash-bound artifacts. It defaults to estimator-only;
+teacher replay and expensive candidate materialization are an explicit
+`--materialize-teacher-candidates` opt-in. Whole-network TLS aggregation is
+disabled in this estimator path so it cannot alter the OSM baseline before a
+single conflict-core candidate passes preservation and geometry gates.
 
 It downloads the current OSM bbox, builds a raw visual-detail network, applies only a narrowly proven structural repair, runs SUMO load and completion-aware routeability, and compares junction `267517510` with the manually cleaned TUM cell. The structural repair is a separate candidate: it removed one stale TLS identity from an already-uncontrolled pedestrian-internal connection, left 58 embedded `tlLogic` programs and 12 implicit railway controllers intact, verified the source hash was unchanged, and emitted a rollback plan plus display-only review `additional.xml`.
 

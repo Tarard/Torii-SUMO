@@ -82,6 +82,7 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
         road_connectivity_probe_edge_ids=["road#0"],
         teacher_guided_probe_matrix_junction_ids=["j1", "j2"],
         run_corridor_edit_ledger_after_build=True,
+        clip_source_ways_to_bbox=False,
     )
 
     assert report["status"] == "pass"
@@ -91,6 +92,7 @@ def test_sumo_osm_cleanup_tool_runs_full_reference_join_audit_for_reference_matc
     assert captured["road_connectivity_probe_edge_ids"] == ["road#0"]
     assert captured["teacher_guided_probe_matrix_junction_ids"] == ["j1", "j2"]
     assert captured["run_corridor_edit_ledger_after_build"] is True
+    assert captured["clip_source_ways_to_bbox"] is False
 
 
 def test_road_connectivity_owner_ids_include_seed_geometry_mismatch_endpoints(tmp_path: Path) -> None:
@@ -1860,6 +1862,14 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
     assert report["netconvert_output_original_names"]["requested"] is True
     assert report["netconvert_output_original_names"]["netconvert_option"] == "--output.original-names"
     manifest = json.loads(Path(report["build_manifest_file"]).read_text(encoding="utf-8"))
+    assert manifest["build_scope"] == {
+        "allowed_way_ids_count": None,
+        "bbox": "13.6000,50.9800,13.9000,51.1500",
+        "clip_source_ways_to_bbox": True,
+        "include_railway": False,
+        "road_classes": ["primary"],
+        "traffic_side": "right",
+    }
     assert manifest["netconvert"]["output_original_names"]["requested"] is True
     assert manifest["netconvert"]["output_original_names"]["expected_parameter_keys"] == [
         "origId",
@@ -2758,6 +2768,7 @@ def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_pat
 
     def fake_build(**kwargs):
         captured["bbox"] = kwargs["bbox"]
+        captured["clip_source_ways_to_bbox"] = kwargs["clip_source_ways_to_bbox"]
         net_file.parent.mkdir(parents=True, exist_ok=True)
         filtered_osm.parent.mkdir(parents=True, exist_ok=True)
         net_file.write_text("<net/>", encoding="utf-8")
@@ -2779,6 +2790,7 @@ def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_pat
         output_dir=tmp_path,
         prefix="resolved",
         highway_classes={"primary"},
+        clip_source_ways_to_bbox=False,
         run_routeability_audit_after_build=False,
         place_resolver=lambda _place_name: candidate,
         build_func=fake_build,
@@ -2811,6 +2823,7 @@ def test_osm_cleanup_workflow_uses_resolved_bbox_after_area_confirmation(tmp_pat
     )
 
     assert captured["bbox"] == "13.6864402,51.0280799,13.7872926,51.0766681"
+    assert captured["clip_source_ways_to_bbox"] is False
     assert report["status"] == "pass"
     assert report["area_resolution_status"] == "confirmed_by_user"
     assert report["candidate_display_name"] == "Altstadt, Dresden, Sachsen, Deutschland"

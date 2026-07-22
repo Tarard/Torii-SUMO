@@ -1043,6 +1043,11 @@ def sumo_hamburg_sandtorkai_named_replay(
     route_sampler_script: str | None = None,
     sumo_binary: str = "sumo",
     timeout_seconds: float = 300.0,
+    simulation_begin: int = 0,
+    simulation_end: int = 9000,
+    comparison_begin: int = 1800,
+    comparison_end: int = 9000,
+    interval: int = 900,
     allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
     """Build and quality-gate the reusable W4 detector-constrained replay."""
@@ -1066,6 +1071,11 @@ def sumo_hamburg_sandtorkai_named_replay(
             ),
             sumo_binary=sumo_binary,
             timeout_seconds=timeout_seconds,
+            simulation_begin=simulation_begin,
+            simulation_end=simulation_end,
+            comparison_begin=comparison_begin,
+            comparison_end=comparison_end,
+            interval=interval,
             allow_detector_cross_section_boundaries=allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:

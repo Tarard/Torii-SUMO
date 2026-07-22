@@ -29,6 +29,10 @@ from .hamburg_named_scope import (
     HamburgNamedScopeError,
     validate_hamburg_named_scope_manifest,
 )
+from .hamburg_stopline_binding import (
+    StoplineBindingEstimate,
+    estimate_ingress_stopline_bindings,
+)
 from .hamburg_2394_tls_materializer import _patch_connections
 from .hamburg_2394_tls_topology import PhysicalLink, ROUTING_REMOVALS
 from .ocit_c import (
@@ -68,20 +72,19 @@ JOIN_GROUPS = (
 )
 CONFLICT_CORE_2349 = (
     "cluster_25737304_759714733",
-    "cluster_739654528_759714704",
+    "cluster_2761334249_610506352_cluster_739654528_759714704",
 )
 CONTROLLER_OWNERS_2349 = (
-    "610506352",
-    "610506357",
-    "759714737",
-    *CONFLICT_CORE_2349,
+    "2761334245",
+    "2761334257",
+    "cluster_2761334249_610506352_cluster_739654528_759714704",
 )
 SIGNAL_OWNERS_2394 = (
     "759714726",
     "cluster_2761334279_757036795",
-    "cluster_3847369287_757036909_76463166",
+    "3847369288",
 )
-PASSIVE_OWNERS_2394 = ("3847369285", "3847369288")
+PASSIVE_OWNERS_2394 = ("cluster_3847369287_757036909_76463166",)
 
 # Exactly five missing post-join lane connections.  They are connectivity
 # evidence only and carry no TLS/link-index authority.
@@ -118,9 +121,11 @@ POST_JOIN_CONNECTION_EVIDENCE = (
     ),
 )
 
-# The five ``official_map`` rows above are the only connections that may be
-# added.  The two ``official_map_stopline`` rows already exist; declaring them
-# lets the generic derivation choose a control arc without its review fallback.
+# The five ``official_map`` rows above are the only connectivity repairs that
+# may be added.  The three 2349 C4/C5/C6 rows already exist after the bounded
+# channelized-geometry pass and are authoritative stop-line controls.  Further
+# stop-line rows are derived from the official KML ingress anchor and a unique
+# SUMO predecessor connection at runtime.
 PLAN_CONNECTION_EVIDENCE = (
     ConnectionRepair(
         "2349", "554713078#2", 0, "554713075#0", 1,
@@ -131,14 +136,19 @@ PLAN_CONNECTION_EVIDENCE = (
         reason="official MAP movement 6->11",
     ),
     ConnectionRepair(
-        "2349", "61649647#2", 0, "61649649#0", 0,
+        "2349", "61649647#0", 1, "59990286", 1,
         evidence="official_map_stopline",
-        reason="existing official MAP movement 10->8 control arc",
+        reason="official MAP movement 9->4 at the channelized 2349 stop line",
     ),
     ConnectionRepair(
-        "2349", "61649647#2", 0, "59990286", 0,
+        "2349", "61649647#0", 0, "59990286", 0,
         evidence="official_map_stopline",
-        reason="existing official MAP movement 10->5 control arc",
+        reason="official MAP movement 10->5 at the channelized 2349 stop line",
+    ),
+    ConnectionRepair(
+        "2349", "61649647#0", 0, "61649649#0", 0,
+        evidence="official_map_stopline",
+        reason="official MAP movement 10->8 at the channelized 2349 stop line",
     ),
     ConnectionRepair(
         "2394", "60578519", 1, "193847534#0", 0,
@@ -153,6 +163,34 @@ PLAN_CONNECTION_EVIDENCE = (
         reason="official MAP movement 6->5",
     ),
 )
+
+EXPECTED_ESTIMATED_STOPLINE_REPAIR_KEYS = {
+    ("554713076#0", 0, "554713076#1", 0),
+    ("554713076#0", 1, "554713076#1", 1),
+    ("554713078#0", 0, "554713078#1", 0),
+    ("554713078#0", 1, "554713078#1", 1),
+    ("381540198#0", 0, "381540198#1", 0),
+    ("381540198#0", 1, "381540198#1", 1),
+}
+
+EXPECTED_STOPLINE_LINK_BY_MOVEMENT = {
+    ("2349", "2"): ("554713076#0", 0, "554713076#1", 0),
+    ("2349", "3"): ("554713076#0", 1, "554713076#1", 1),
+    ("2349", "4"): ("61649647#0", 1, "59990286", 1),
+    ("2349", "5"): ("61649647#0", 0, "59990286", 0),
+    ("2349", "6"): ("61649647#0", 0, "61649649#0", 0),
+    ("2349", "7"): ("554713078#0", 0, "554713078#1", 0),
+    ("2349", "8"): ("554713078#0", 0, "554713078#1", 0),
+    ("2349", "9"): ("554713078#0", 1, "554713078#1", 1),
+    ("2394", "1"): ("47854310#2", 0, "60578519", 0),
+    ("2394", "2"): ("47854310#2", 1, "60578519", 1),
+    ("2394", "3"): ("47854310#2", 2, "60578519", 2),
+    ("2394", "5"): ("9702432#0", 0, "9702432#2", 0),
+    ("2394", "6"): ("9702432#0", 1, "9702432#2", 1),
+    ("2394", "7"): ("381540198#0", 0, "381540198#1", 0),
+    ("2394", "8"): ("381540198#0", 0, "381540198#1", 0),
+    ("2394", "9"): ("381540198#0", 1, "381540198#1", 1),
+}
 
 # OCIT-C is the complete motor-vehicle movement inventory for these two
 # hash-bound official cells.  Reuse the already audited 2394 removals and add
@@ -257,8 +295,19 @@ def materialize_hamburg_compound_official_tls_candidate(
             "expected six official control expressions at both 2349 and 2394"
         )
 
-    lane_bindings = bind_map_lanes_to_network(source, map_lanes)
-    _validate_lane_bindings(lane_bindings)
+    raw_lane_bindings = bind_map_lanes_to_network(source, map_lanes)
+    _validate_lane_bindings(raw_lane_bindings)
+    stopline_estimate = estimate_ingress_stopline_bindings(
+        source,
+        raw_lane_bindings,
+    )
+    _validate_stopline_estimate(stopline_estimate)
+    lane_bindings = stopline_estimate.bindings
+    stopline_repairs = _connection_repairs_from_stopline_estimate(stopline_estimate)
+    plan_repairs = _merge_connection_repairs(
+        PLAN_CONNECTION_EVIDENCE,
+        stopline_repairs,
+    )
     movement_paths = derive_hamburg_official_movement_paths(
         candidate_net_file=source,
         official_movements=inventory.movements,
@@ -276,7 +325,7 @@ def materialize_hamburg_compound_official_tls_candidate(
         signal_streams=inventory.topology_streams,
         lane_bindings=lane_bindings,
         source_net_file=source,
-        repairs=PLAN_CONNECTION_EVIDENCE,
+        repairs=plan_repairs,
         group_index_by_node=control_indices,
         plan_id="hamburg-sandtorkai-2349-2394-compound-v1",
         version="2026-07-19.v9",
@@ -289,23 +338,41 @@ def materialize_hamburg_compound_official_tls_candidate(
     if (
         derivation.get("status") != "pass"
         or derivation.get("visual_review_required_count") != 0
-        or derivation.get("hit_repair_count") != len(PLAN_CONNECTION_EVIDENCE)
+        or derivation.get("hit_repair_count") != len(plan_repairs)
         or derivation.get("unused_repairs")
     ):
         raise HamburgCompoundOfficialTlsError(
             "generic official TLS derivation did not close without guessing"
         )
+    _validate_compound_stopline_plan(plan, derivation)
     plan, passive_demotions = _demote_declared_passive_owners(source, plan)
 
     destination.mkdir(parents=True)
     evidence_dir = destination / "evidence"
     evidence_dir.mkdir()
     lane_binding_file = evidence_dir / "map_lane_bindings.json"
+    raw_lane_binding_file = evidence_dir / "map_lane_bindings.raw.json"
+    stopline_binding_file = evidence_dir / "official_stopline_bindings.json"
     movement_path_file = evidence_dir / "official_movement_paths.json"
     derivation_file = evidence_dir / "official_tls_derivation.json"
     write_json_atomic(
         lane_binding_file,
         [asdict(row) for row in lane_bindings],
+        sort_keys=True,
+    )
+    write_json_atomic(
+        raw_lane_binding_file,
+        [asdict(row) for row in raw_lane_bindings],
+        sort_keys=True,
+    )
+    write_json_atomic(
+        stopline_binding_file,
+        {
+            "status": stopline_estimate.status,
+            "source_net_sha256": stopline_estimate.source_net_sha256,
+            "evidence": [asdict(row) for row in stopline_estimate.evidence],
+            "derived_repairs": [asdict(row) for row in stopline_repairs],
+        },
         sort_keys=True,
     )
     write_json_atomic(
@@ -329,8 +396,15 @@ def materialize_hamburg_compound_official_tls_candidate(
         )
     rebuilt = Path(str(rebuild["rebuilt_net_file"])).resolve(strict=True)
 
-    final_bindings = bind_map_lanes_to_network(rebuilt, map_lanes)
-    _validate_lane_bindings(final_bindings)
+    final_raw_bindings = bind_map_lanes_to_network(rebuilt, map_lanes)
+    _validate_lane_bindings(final_raw_bindings)
+    final_stopline_estimate = estimate_ingress_stopline_bindings(
+        rebuilt,
+        final_raw_bindings,
+    )
+    _validate_stopline_estimate(final_stopline_estimate)
+    _validate_stopline_binding_parity(stopline_estimate, final_stopline_estimate)
+    final_bindings = final_stopline_estimate.bindings
     final_paths = derive_hamburg_official_movement_paths(
         candidate_net_file=rebuilt,
         official_movements=inventory.movements,
@@ -424,14 +498,28 @@ def materialize_hamburg_compound_official_tls_candidate(
             "control_expression_count_by_node": {
                 node: len(control_indices[node]) for node in OFFICIAL_NODE_IDS
             },
-            "map_lane_binding_count": len(lane_bindings),
+            "raw_map_lane_binding_count": len(raw_lane_bindings),
+            "stopline_aligned_map_lane_binding_count": len(lane_bindings),
+            "stopline_adjusted_ingress_count": len(stopline_estimate.evidence),
             "movement_path_count": len(movement_paths),
+        },
+        "official_stopline_alignment": {
+            "status": stopline_estimate.status,
+            "source_net_sha256": stopline_estimate.source_net_sha256,
+            "adjusted_ingress_count": len(stopline_estimate.evidence),
+            "derived_repair_count": len(stopline_repairs),
+            "expected_physical_control_count": 14,
+            "movement_count": 16,
         },
         "connection_evidence": {
             "missing_connection_count": len(POST_JOIN_CONNECTION_EVIDENCE),
             "missing_connections": [asdict(row) for row in POST_JOIN_CONNECTION_EVIDENCE],
-            "existing_control_arc_count": 2,
-            "declared_plan_connection_count": len(PLAN_CONNECTION_EVIDENCE),
+            "static_stopline_control_count": sum(
+                row.evidence == "official_map_stopline"
+                for row in PLAN_CONNECTION_EVIDENCE
+            ),
+            "estimated_stopline_control_count": len(stopline_repairs),
+            "declared_plan_connection_count": len(plan_repairs),
             "rebuild_added_connection_count": rebuild["plain_application"]["repair_added_count"],
             "rebuild_existing_connection_count": rebuild["plain_application"]["repair_existing_count"],
         },
@@ -440,7 +528,10 @@ def materialize_hamburg_compound_official_tls_candidate(
                 "conflict_core_owner_count": 2,
                 "conflict_core_owner_ids": list(CONFLICT_CORE_2349),
                 "shared_controller_owner_ids": list(CONTROLLER_OWNERS_2349),
-                "merge_policy": "join_each_overlapping_opposing_pair; never join_all_four",
+                "merge_policy": (
+                    "preserve_two_upstream_stopline_owners; join_only_the_bounded_"
+                    "C4_C5_C6_channelized_core"
+                ),
                 "join_evidence": {
                     "consumed_connector_edge_ids": ["59626578", "61649650"],
                     "connector_usable_lane_length_m": 0.2,
@@ -466,6 +557,14 @@ def materialize_hamburg_compound_official_tls_candidate(
             "lane_bindings": {
                 "path": str(lane_binding_file),
                 "sha256": file_sha256(lane_binding_file),
+            },
+            "raw_lane_bindings": {
+                "path": str(raw_lane_binding_file),
+                "sha256": file_sha256(raw_lane_binding_file),
+            },
+            "official_stopline_bindings": {
+                "path": str(stopline_binding_file),
+                "sha256": file_sha256(stopline_binding_file),
             },
             "movement_paths": {
                 "path": str(movement_path_file),
@@ -530,15 +629,32 @@ def _build_compiled_source_patch_variant(
         output_tllogic_file=official_tllogic,
         plan=plan,
     )
-    routing_prune = _patch_connections(
-        official_connections,
-        repairs=(),
-        removals=COMPOUND_ROUTING_REMOVALS,
+    source_connection_keys = _external_connection_keys(source_net_file)
+    effective_routing_removals = tuple(
+        link for link in COMPOUND_ROUTING_REMOVALS
+        if link.key in source_connection_keys
     )
-    routing_delete_patch = _append_connection_delete_directives(
-        official_connections,
-        removals=COMPOUND_ROUTING_REMOVALS,
-    )
+    if effective_routing_removals:
+        routing_prune = _patch_connections(
+            official_connections,
+            repairs=(),
+            removals=effective_routing_removals,
+        )
+        routing_delete_patch = _append_connection_delete_directives(
+            official_connections,
+            removals=effective_routing_removals,
+        )
+    else:
+        routing_prune = {
+            "status": "pass",
+            "removed_count": 0,
+            "reason": "all declared non-official movements were already absent",
+        }
+        routing_delete_patch = {
+            "status": "pass",
+            "delete_directive_count": 0,
+            "delete_directives": [],
+        }
     node_patch = destination / "official_tls_owner_patch.nod.xml"
     owner_application = _write_compiled_source_owner_patch(
         source_net_file,
@@ -595,6 +711,7 @@ def _build_compiled_source_patch_variant(
         repair.key
         for repair in plan.repairs
         if repair.evidence == "official_map"
+        and repair.key not in source_connection_keys
     }
     actual_added = {
         (
@@ -605,7 +722,7 @@ def _build_compiled_source_patch_variant(
         )
         for row in connection_delta["added"]
     }
-    expected_removed = {link.key for link in COMPOUND_ROUTING_REMOVALS}
+    expected_removed = {link.key for link in effective_routing_removals}
     actual_removed = {
         (
             str(row["from_edge"]),
@@ -615,6 +732,12 @@ def _build_compiled_source_patch_variant(
         )
         for row in connection_delta["removed"]
     }
+    rebuilt_connection_keys = _external_connection_keys(rebuilt)
+    forbidden_routing_links_present = sorted(
+        link.key
+        for link in COMPOUND_ROUTING_REMOVALS
+        if link.key in rebuilt_connection_keys
+    )
     phase_capacity = audit_phase_capacity(
         rebuilt,
         set(CONTROLLER_BY_NODE.values()),
@@ -628,6 +751,7 @@ def _build_compiled_source_patch_variant(
         and geometry["status"] == "pass"
         and actual_removed == expected_removed
         and actual_added == expected_added
+        and not forbidden_routing_links_present
         and phase_capacity["status"] == "pass"
         and retired_absence["status"] == "pass"
         else "blocked"
@@ -646,6 +770,17 @@ def _build_compiled_source_patch_variant(
         "official_inventory_routing_prune": {
             "plain_removal": routing_prune,
             "compiled_net_delete_patch": routing_delete_patch,
+            "declared_forbidden_connection_count": len(COMPOUND_ROUTING_REMOVALS),
+            "effective_removal_count": len(effective_routing_removals),
+            "forbidden_connections_present_after_rebuild": [
+                {
+                    "from_edge": key[0],
+                    "from_lane": key[1],
+                    "to_edge": key[2],
+                    "to_lane": key[3],
+                }
+                for key in forbidden_routing_links_present
+            ],
         },
         "owner_application": owner_application,
         "rebuild": {"command": rebuild_command, "result": rebuild_result},
@@ -736,6 +871,29 @@ def _append_connection_delete_directives(
     }
 
 
+def _external_connection_keys(
+    net_file: Path,
+) -> set[tuple[str, int, str, int]]:
+    result = set()
+    for element in ET.parse(net_file).getroot().findall("connection"):
+        from_edge = element.attrib.get("from", "")
+        to_edge = element.attrib.get("to", "")
+        if not from_edge or not to_edge or from_edge.startswith(":") or to_edge.startswith(":"):
+            continue
+        try:
+            result.add(
+                (
+                    from_edge,
+                    int(element.attrib["fromLane"]),
+                    to_edge,
+                    int(element.attrib["toLane"]),
+                )
+            )
+        except (KeyError, ValueError):
+            continue
+    return result
+
+
 def _write_compiled_source_owner_patch(
     source_net_file: Path,
     plan: OfficialTlsPlan,
@@ -783,6 +941,21 @@ def _write_compiled_source_owner_patch(
             continue
         owner = edges[from_edge][1]
         if owner and owner == edges[to_edge][0] and owner not in owner_controller:
+            retired_owners.add(owner)
+
+    # A controller id may be reused by the new official program while one of
+    # its former physical owners becomes routing-only.  Such an owner is not
+    # discoverable from ``retired_tls_ids`` because the logical controller is
+    # intentionally retained.  Explicitly demoted links therefore also
+    # contribute passive owners, unless the owner carries another selected
+    # official stop-line link.
+    for link in plan.demoted_links:
+        if link.from_edge not in edges or link.to_edge not in edges:
+            raise HamburgCompoundOfficialTlsError(
+                f"demoted physical link references missing edge: {link.key}"
+            )
+        owner = edges[link.from_edge][1]
+        if owner and owner == edges[link.to_edge][0] and owner not in owner_controller:
             retired_owners.add(owner)
 
     junction_ids = {
@@ -889,6 +1062,150 @@ def _validate_lane_bindings(bindings: Sequence[MapLaneBinding]) -> None:
     if failures:
         raise HamburgCompoundOfficialTlsError(
             "official MAP lanes are not all active/high: " + ", ".join(failures)
+        )
+
+
+def _validate_stopline_estimate(estimate: StoplineBindingEstimate) -> None:
+    if estimate.status != "pass":
+        reasons = [
+            f"{row.node_id}/{row.map_lane_id}:{row.status}:{row.reason}"
+            for row in estimate.evidence
+            if row.status != "pass"
+        ]
+        raise HamburgCompoundOfficialTlsError(
+            "official KML stop-line alignment did not close: " + "; ".join(reasons)
+        )
+    observed = {
+        row.connection_repair_key
+        for row in estimate.evidence
+        if row.connection_repair_key is not None
+    }
+    if observed != EXPECTED_ESTIMATED_STOPLINE_REPAIR_KEYS:
+        raise HamburgCompoundOfficialTlsError(
+            "official KML stop-line predecessor inventory changed: "
+            f"expected {sorted(EXPECTED_ESTIMATED_STOPLINE_REPAIR_KEYS)}, "
+            f"got {sorted(observed)}"
+        )
+
+
+def _connection_repairs_from_stopline_estimate(
+    estimate: StoplineBindingEstimate,
+) -> tuple[ConnectionRepair, ...]:
+    repairs = []
+    for row in estimate.evidence:
+        if row.status != "pass" or row.connection_repair_key is None:
+            continue
+        from_edge, from_lane, to_edge, to_lane = row.connection_repair_key
+        repairs.append(
+            ConnectionRepair(
+                _normalize_node(row.node_id),
+                from_edge,
+                from_lane,
+                to_edge,
+                to_lane,
+                evidence="official_map_stopline",
+                reason=(
+                    f"official KML ingress lane {row.map_lane_id} stop line; "
+                    f"anchor {row.anchor_to_lane_start_m:.3f}m from mapped lane start"
+                ),
+            )
+        )
+    return tuple(sorted(repairs))
+
+
+def _merge_connection_repairs(
+    *repair_groups: Sequence[ConnectionRepair],
+) -> tuple[ConnectionRepair, ...]:
+    by_key: dict[tuple[str, int, str, int], ConnectionRepair] = {}
+    for repair in (item for group in repair_groups for item in group):
+        existing = by_key.get(repair.key)
+        if existing is not None and existing != repair:
+            raise HamburgCompoundOfficialTlsError(
+                "conflicting official connection evidence for " + str(repair.key)
+            )
+        by_key[repair.key] = repair
+    return tuple(by_key[key] for key in sorted(by_key))
+
+
+def _validate_stopline_binding_parity(
+    before: StoplineBindingEstimate,
+    after: StoplineBindingEstimate,
+) -> None:
+    before_bindings = {
+        (_normalize_node(row.node_id), row.map_lane_id): (
+            row.sumo_edge,
+            row.sumo_lane,
+            round(row.lane_position, 6),
+        )
+        for row in before.bindings
+    }
+    after_bindings = {
+        (_normalize_node(row.node_id), row.map_lane_id): (
+            row.sumo_edge,
+            row.sumo_lane,
+            round(row.lane_position, 6),
+        )
+        for row in after.bindings
+    }
+    if before_bindings != after_bindings:
+        raise HamburgCompoundOfficialTlsError(
+            "official stop-line bindings drifted during TLS materialization"
+        )
+
+
+def _validate_compound_stopline_plan(
+    plan: OfficialTlsPlan,
+    derivation: Mapping[str, Any],
+) -> None:
+    movements = derivation.get("movements")
+    if not isinstance(movements, list) or len(movements) != 16:
+        raise HamburgCompoundOfficialTlsError(
+            "official TLS derivation must audit exactly 16 motor movements"
+        )
+    observed: dict[tuple[str, str], tuple[str, int, str, int]] = {}
+    for movement in movements:
+        if not isinstance(movement, Mapping):
+            raise HamburgCompoundOfficialTlsError("invalid official movement audit row")
+        links = movement.get("selected_physical_links")
+        if not isinstance(links, list) or len(links) != 1:
+            raise HamburgCompoundOfficialTlsError(
+                "every official movement must select exactly one physical stop-line link"
+            )
+        link = links[0]
+        if not isinstance(link, Mapping):
+            raise HamburgCompoundOfficialTlsError("invalid selected stop-line link row")
+        key = (
+            str(link.get("from_edge", "")),
+            int(link.get("from_lane", -1)),
+            str(link.get("to_edge", "")),
+            int(link.get("to_lane", -1)),
+        )
+        movement_key = (
+            _normalize_node(str(movement.get("official_node_id", ""))),
+            str(movement.get("connection_id", "")),
+        )
+        observed[movement_key] = key
+        if movement.get("selected_control_arc_path_index") != 0:
+            raise HamburgCompoundOfficialTlsError(
+                f"official movement {movement_key} is not controlled at its bound stop line"
+            )
+        if movement.get("visual_review_required"):
+            raise HamburgCompoundOfficialTlsError(
+                f"official movement {movement_key} still requires visual control selection"
+            )
+    if observed != EXPECTED_STOPLINE_LINK_BY_MOVEMENT:
+        raise HamburgCompoundOfficialTlsError(
+            "official movement-to-stop-line inventory changed: "
+            f"expected {EXPECTED_STOPLINE_LINK_BY_MOVEMENT}, got {observed}"
+        )
+    physical_links = {
+        link.key
+        for group in plan.groups
+        for link in group.physical_links
+    }
+    if len(physical_links) != 14 or derivation.get("derived_physical_link_count") != 14:
+        raise HamburgCompoundOfficialTlsError(
+            "expected 14 unique physical stop-line links for 16 official movements"
         )
 
 
@@ -1019,7 +1336,8 @@ def _demote_declared_passive_owners(
                 )
             controlled.append((link, tls_id))
             demoted[link.key] = link
-            retired.add(tls_id)
+            if tls_id not in CONTROLLER_BY_NODE.values():
+                retired.add(tls_id)
         if not controlled:
             raise HamburgCompoundOfficialTlsError(
                 f"passive 2394 owner {owner_id} has no inherited TLS evidence to demote"
@@ -1041,7 +1359,7 @@ def _demote_declared_passive_owners(
     )
     return augmented, {
         "status": "pass",
-        "policy": "2394 classification declares two passive owner components",
+        "policy": "2394 classification demotes the downstream routing-only TLS owner",
         "owners": owner_rows,
     }
 

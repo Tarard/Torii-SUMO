@@ -70,6 +70,20 @@ def test_junction_polygon_area_overlap_fails_with_exact_area(tmp_path: Path) -> 
     }
 
 
+def test_self_intersecting_junction_polygon_is_a_geometry_error(tmp_path: Path) -> None:
+    net_file = _write_net(
+        tmp_path / "self-intersection.net.xml",
+        '<junction id="bowtie" type="priority" shape="0,0 2,2 0,2 2,0"/>',
+    )
+
+    report = audit_sumo_lane_junction_surface_overlaps(net_file)
+
+    assert report["status"] == "fail"
+    assert report["geometry_error_count"] == 1
+    assert report["geometry_errors"][0]["junction_id"] == "bowtie"
+    assert "self-intersecting" in report["geometry_errors"][0]["error"]
+
+
 def test_internal_lane_and_internal_junction_are_excluded(tmp_path: Path) -> None:
     net_file = _write_net(
         tmp_path / "internal.net.xml",

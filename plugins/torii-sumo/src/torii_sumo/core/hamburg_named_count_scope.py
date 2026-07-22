@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -14,8 +14,11 @@ from .digital_twin_timeline import (
     select_comparison_count_rows,
 )
 from .hamburg_official import (
+    HAMBURG_COUNT_SERVICE,
+    HAMBURG_COUNT_STATION_LAYER,
     SensorThingsClient,
     fetch_hamburg_count_observations,
+    fetch_hamburg_count_station_streams,
     fetch_hamburg_count_streams,
     sha256_file,
     write_json,
@@ -23,6 +26,7 @@ from .hamburg_official import (
 
 
 NAMED_COUNT_SCOPE_SCHEMA = "torii.hamburg-named-corridor-count-scope/v1"
+COUNT_STATION_INVENTORY_SCHEMA = "torii.hamburg-count-station-inventory/v1"
 
 
 @dataclass(frozen=True)
@@ -85,17 +89,7 @@ def infer_hamburg_count_directions(
         if not separated:
             evidence.append({"stream_id": stream.stream_id, "status": "unresolved", "reason": "neighbor_directions_ambiguous"})
             continue
-        result[index] = CountStream(
-            stream_id=stream.stream_id,
-            thing_id=stream.thing_id,
-            node_id=stream.node_id,
-            asset_id=stream.asset_id,
-            direction=nearest[1].direction,
-            lane_use=stream.lane_use,
-            longitude=stream.longitude,
-            latitude=stream.latitude,
-            operation_start=stream.operation_start,
-        )
+        result[index] = replace(stream, direction=nearest[1].direction)
         evidence.append(
             {
                 "stream_id": stream.stream_id,
@@ -274,10 +268,185 @@ def _normalized_stream_rows(streams: Sequence[CountStream]) -> list[dict[str, An
             "longitude": stream.longitude,
             "latitude": stream.latitude,
             "operation_start": stream.operation_start,
+            "layer_name": stream.layer_name,
+            "direction_code": stream.direction_code,
+            "station_arm": stream.station_arm,
+            "composition": list(stream.composition),
             "detector_id": stream.detector_id,
         }
         for stream in streams
     ]
+
+
+def audit_hamburg_count_station_compositions(
+    streams: Sequence[CountStream],
+    *,
+    requested_node_ids: Sequence[str],
+) -> dict[str, Any]:
+    """Verify that official directional station streams reconcile with their total stream."""
+
+    requested = tuple(dict.fromkeys(str(node_id).strip() for node_id in requested_node_ids))
+    if not requested or any(not node_id for node_id in requested):
+        raise HamburgNamedCountScopeError("requested station node ids must be non-empty")
+    unexpected = sorted({stream.node_id for stream in streams} - set(requested))
+    if unexpected:
+        raise HamburgNamedCountScopeError(
+            "official station inventory returned undeclared nodes: " + ", ".join(unexpected)
+        )
+
+    blocking_reasons: list[str] = []
+    review_reasons: list[str] = []
+    group_rows: list[dict[str, Any]] = []
+    canonical_stream_ids: list[int] = []
+    total_validation_stream_ids: list[int] = []
+    grouped: dict[tuple[str, str], list[CountStream]] = {}
+    for stream in streams:
+        if (
+            stream.layer_name != HAMBURG_COUNT_STATION_LAYER
+            or not stream.station_arm
+            or not stream.composition
+            or stream.direction_code not in {"0", "1", "2"}
+        ):
+            blocking_reasons.append(f"invalid_station_stream_metadata:{stream.stream_id}")
+            continue
+        grouped.setdefault((stream.node_id, stream.station_arm), []).append(stream)
+
+    for (node_id, station_arm), group in sorted(grouped.items()):
+        by_direction: dict[str, CountStream] = {}
+        group_blockers: list[str] = []
+        group_reviews: list[str] = []
+        for stream in group:
+            if stream.direction_code in by_direction:
+                group_blockers.append(
+                    f"duplicate_station_direction:{node_id}:{station_arm}:{stream.direction_code}"
+                )
+            by_direction[stream.direction_code] = stream
+        directional = [by_direction[code] for code in ("1", "2") if code in by_direction]
+        if not directional:
+            group_blockers.append(f"directional_station_stream_missing:{node_id}:{station_arm}")
+        directional_members = [set(stream.composition) for stream in directional]
+        if len(directional_members) == 2 and directional_members[0] & directional_members[1]:
+            group_blockers.append(f"directional_station_composition_overlap:{node_id}:{station_arm}")
+        canonical_stream_ids.extend(stream.stream_id for stream in directional)
+
+        total = by_direction.get("0")
+        if total is None:
+            group_reviews.append(f"station_total_stream_missing:{node_id}:{station_arm}")
+        else:
+            total_validation_stream_ids.append(total.stream_id)
+            expected_total = set().union(*directional_members) if directional_members else set()
+            if set(total.composition) != expected_total:
+                group_blockers.append(f"station_total_composition_mismatch:{node_id}:{station_arm}")
+        if len(directional) != 2:
+            group_reviews.append(f"station_direction_pair_incomplete:{node_id}:{station_arm}")
+
+        blocking_reasons.extend(group_blockers)
+        review_reasons.extend(group_reviews)
+        group_rows.append(
+            {
+                "node_id": node_id,
+                "station_arm": station_arm,
+                "status": "blocked" if group_blockers else "review_required" if group_reviews else "pass",
+                "directional_streams": [
+                    {
+                        "stream_id": stream.stream_id,
+                        "station_id": stream.asset_id,
+                        "direction_code": stream.direction_code,
+                        "direction": stream.direction,
+                        "composition": list(stream.composition),
+                        "longitude": stream.longitude,
+                        "latitude": stream.latitude,
+                    }
+                    for stream in directional
+                ],
+                "total_validation_stream": (
+                    {
+                        "stream_id": total.stream_id,
+                        "station_id": total.asset_id,
+                        "composition": list(total.composition),
+                    }
+                    if total is not None
+                    else None
+                ),
+                "blocking_reasons": group_blockers,
+                "review_reasons": group_reviews,
+            }
+        )
+
+    available_nodes = sorted({stream.node_id for stream in streams})
+    missing_nodes = sorted(set(requested) - set(available_nodes))
+    status = "blocked" if blocking_reasons else "partial" if missing_nodes or review_reasons else "pass"
+    return {
+        "schema": COUNT_STATION_INVENTORY_SCHEMA,
+        "status": status,
+        "execution_gate": "blocked" if blocking_reasons else "pass",
+        "automatic_promotion_gate": "blocked",
+        "requested_node_ids": list(requested),
+        "available_node_ids": available_nodes,
+        "missing_node_ids": missing_nodes,
+        "station_group_count": len(group_rows),
+        "directional_station_stream_ids": sorted(canonical_stream_ids),
+        "total_validation_stream_ids": sorted(total_validation_stream_ids),
+        "groups": group_rows,
+        "blocking_reasons": sorted(set(blocking_reasons)),
+        "review_reasons": sorted(set(review_reasons)),
+        "claim_boundary": (
+            "Direction-1/2 Zählstelle streams are the official cross-section count truth. Direction-0 streams "
+            "only validate their composition union. This inventory does not bind a station to a SUMO edge or lane."
+        ),
+    }
+
+
+def materialize_hamburg_count_station_inventory(
+    *,
+    output_dir: Path,
+    client: SensorThingsClient,
+    requested_node_ids: Sequence[str],
+) -> dict[str, Any]:
+    """Freeze and audit official station aggregation metadata before SUMO binding."""
+
+    output_dir = Path(output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if any(output_dir.iterdir()):
+        raise HamburgNamedCountScopeError("output_dir must be empty; choose a new versioned run directory")
+    streams, raw = fetch_hamburg_count_station_streams(client, requested_node_ids)
+    raw_path = output_dir / "count_station_streams.raw.json"
+    normalized_path = output_dir / "count_station_streams.normalized.json"
+    audit_path = output_dir / "station-composition.audit.json"
+    write_json(raw_path, raw)
+    write_json(normalized_path, _normalized_stream_rows(streams))
+    audit = audit_hamburg_count_station_compositions(streams, requested_node_ids=requested_node_ids)
+    write_json(audit_path, audit)
+    manifest = {
+        "schema": COUNT_STATION_INVENTORY_SCHEMA,
+        "status": audit["status"],
+        "execution_gate": audit["execution_gate"],
+        "automatic_promotion_gate": "blocked",
+        "source": {
+            "system": "Hamburg OGC SensorThings count service",
+            "api_base": client.base_url,
+            "service": HAMBURG_COUNT_SERVICE,
+            "layer": HAMBURG_COUNT_STATION_LAYER,
+        },
+        "requested_node_ids": list(dict.fromkeys(str(node_id) for node_id in requested_node_ids)),
+        "station_stream_count": len(streams),
+        "directional_station_stream_ids": audit["directional_station_stream_ids"],
+        "total_validation_stream_ids": audit["total_validation_stream_ids"],
+        "missing_node_ids": audit["missing_node_ids"],
+        "artifacts": {
+            "count_station_streams_raw": {"path": str(raw_path), "sha256": sha256_file(raw_path)},
+            "count_station_streams_normalized": {
+                "path": str(normalized_path),
+                "sha256": sha256_file(normalized_path),
+            },
+            "station_composition_audit": {"path": str(audit_path), "sha256": sha256_file(audit_path)},
+        },
+        "next_action": "bind_official_station_cross_sections_to_frozen_w1",
+        "claim_boundary": audit["claim_boundary"],
+    }
+    manifest_path = output_dir / "count-station-inventory.manifest.json"
+    write_json(manifest_path, manifest)
+    return {**manifest, "manifest_path": str(manifest_path)}
 
 
 def write_corridor_aggregate_counts(

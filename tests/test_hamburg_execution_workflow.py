@@ -7,9 +7,11 @@ import pytest
 
 from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.core.hamburg_execution_workflow import (
+    HAMBURG_EXECUTION_CONFIG_SCHEMA,
     HAMBURG_EXECUTION_WORKFLOW_SCHEMA,
     HamburgExecutionWorkflowError,
     materialize_hamburg_execution_plan,
+    materialize_hamburg_execution_plan_from_config,
     materialize_hamburg_w1_topology_handoff,
 )
 
@@ -523,3 +525,48 @@ def test_declared_execution_gate_can_expose_structural_candidate_to_diagnostics(
     assert plan["stages"]["W1"]["execution_gate"] == "pass"
     assert plan["stages"]["W2"]["readiness"] == "ready"
     assert plan["promotion"]["decision"] == "blocked"
+
+
+def test_portable_workflow_config_resolves_stage_paths_relative_to_itself(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    _write_manifest(evidence_dir / "W0.json")
+    _write_manifest(evidence_dir / "W1.json")
+    config = tmp_path / "hamburg-workflow.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema": HAMBURG_EXECUTION_CONFIG_SCHEMA,
+                "output_dir": "run",
+                "resume": False,
+                "stages": {
+                    "W0": {"manifest": "evidence/W0.json"},
+                    "W1": {"manifest": "evidence/W1.json", "feedback": []},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    plan = materialize_hamburg_execution_plan_from_config(config)
+
+    assert plan["stages"]["W0"]["decision"] == "pass"
+    assert plan["stages"]["W1"]["decision"] == "pass"
+    assert (tmp_path / "run" / "execution-plan.manifest.json").is_file()
+
+
+def test_portable_workflow_config_rejects_unknown_stage(tmp_path: Path) -> None:
+    config = tmp_path / "hamburg-workflow.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema": HAMBURG_EXECUTION_CONFIG_SCHEMA,
+                "output_dir": "run",
+                "stages": {"W9": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(HamburgExecutionWorkflowError, match="unknown workflow stage"):
+        materialize_hamburg_execution_plan_from_config(config)

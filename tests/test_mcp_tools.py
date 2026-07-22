@@ -845,7 +845,9 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         assert kwargs["teacher_junction_id"] == "teacher_j"
         assert kwargs["edge_map"] == {"teacher_in": "cand_in"}
         assert kwargs["crossing_edge_overrides"] == {":j_c5": "cand_crossing"}
+        assert kwargs["source_conflict_core_node_ids"] == ["n1", "n2"]
         assert kwargs["replay_target_internal_subgraph"] is True
+        assert kwargs["preserve_teacher_lane_shapes"] is False
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -868,7 +870,9 @@ def test_sumo_network_teacher_guided_junction_variant_tool_returns_json_compatib
         output_dir=str(tmp_path / "teacher-guided"),
         edge_map={"teacher_in": "cand_in"},
         crossing_edge_overrides={":j_c5": "cand_crossing"},
+        source_conflict_core_node_ids=["n1", "n2"],
         replay_target_internal_subgraph=True,
+        preserve_teacher_lane_shapes=False,
     )
 
     assert report["status"] == "pass"

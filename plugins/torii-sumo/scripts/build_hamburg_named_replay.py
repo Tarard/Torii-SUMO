@@ -21,6 +21,11 @@ def main() -> int:
     parser.add_argument("--route-sampler-script", type=Path)
     parser.add_argument("--sumo-binary", default="sumo")
     parser.add_argument("--timeout-seconds", type=float, default=300.0)
+    parser.add_argument("--simulation-begin", type=int, default=0)
+    parser.add_argument("--simulation-end", type=int, default=9000)
+    parser.add_argument("--comparison-begin", type=int, default=1800)
+    parser.add_argument("--comparison-end", type=int, default=9000)
+    parser.add_argument("--interval", type=int, default=900)
     parser.add_argument(
         "--allow-detector-cross-section-boundaries",
         action="store_true",
@@ -41,6 +46,11 @@ def main() -> int:
             route_sampler_script=args.route_sampler_script,
             sumo_binary=args.sumo_binary,
             timeout_seconds=args.timeout_seconds,
+            simulation_begin=args.simulation_begin,
+            simulation_end=args.simulation_end,
+            comparison_begin=args.comparison_begin,
+            comparison_end=args.comparison_end,
+            interval=args.interval,
             allow_detector_cross_section_boundaries=args.allow_detector_cross_section_boundaries,
         )
     except (OSError, ValueError, HamburgNamedReplayError) as exc:

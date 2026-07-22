@@ -136,6 +136,41 @@ def test_candidate_blocks_broken_axis_chain(tmp_path: Path) -> None:
     assert report["gates"]["official_axis_link_chain"] == "blocked"
 
 
+def test_candidate_blocks_node_type_that_is_not_an_intersection(tmp_path: Path) -> None:
+    lsa, static, counts, plainxml, roads = _fixtures(tmp_path)
+    payload = json.loads(lsa.read_text(encoding="utf-8"))
+    payload["selections"][0]["selected_node"]["signal_type"] = "F-LSA"
+    lsa.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = build_hamburg_corridor_candidate_evidence(
+        candidate_id="three-intersection-candidate",
+        ordered_node_ids=("a", "b"),
+        lsa_identity_manifest=lsa,
+        static_signal_manifest=static,
+        count_manifest=counts,
+        plainxml_manifests=plainxml,
+        official_road_snapshot=roads,
+        axis_paths=(
+            {
+                "from_node_id": "a",
+                "to_node_id": "b",
+                "start_network_node": "n1",
+                "end_network_node": "n2",
+                "links": [{"feature_id": "r1", "direction": "forward"}],
+            },
+        ),
+        required_signal_types=("K-LSA",),
+    )
+
+    assert report["status"] == "blocked"
+    assert report["gates"]["corridor_node_signal_type"] == "blocked"
+    assert report["node_type_policy"] == {
+        "required_signal_types": ["K-LSA"],
+        "observed_signal_types_by_node": {"a": "F-LSA", "b": "K-LSA"},
+        "mismatched_signal_types_by_node": {"a": "F-LSA"},
+    }
+
+
 def test_candidate_records_lane_axis_stitch_gate_without_promoting_network(tmp_path: Path) -> None:
     lsa, static, counts, plainxml, roads = _fixtures(tmp_path)
     stitch = _write(

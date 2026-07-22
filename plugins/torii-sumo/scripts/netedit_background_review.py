@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import ctypes.wintypes as wintypes
 import hashlib
 import json
 import os
@@ -37,6 +38,7 @@ class TargetJunction:
     y: float
     incoming_lanes: tuple[str, ...]
     junction_type: str
+    junction_shape: str
 
 
 @dataclass(frozen=True)
@@ -679,6 +681,7 @@ def read_target_junction(net_file: Path, junction_id: str) -> TargetJunction:
             y=float(junction.get("y", "0")),
             incoming_lanes=tuple(junction.get("incLanes", "").split()),
             junction_type=str(junction.get("type", "")),
+            junction_shape=str(junction.get("shape", "")),
         )
     raise ValueError(f"Target junction {junction_id!r} is not present in {net_file}.")
 
@@ -695,8 +698,10 @@ def parse_size(value: str) -> tuple[int, int]:
 
 def viewsettings_text(center: tuple[float, float], *, zoom: float) -> str:
     x, y = center
+    scheme = '  <scheme name="standard"/>\n'
     return (
         "<viewsettings>\n"
+        f"{scheme}"
         f'  <viewport zoom="{zoom:g}" x="{x:g}" y="{y:g}" angle="0"/>\n'
         '  <delay value="100"/>\n'
         "</viewsettings>\n"
@@ -825,10 +830,24 @@ def _wait_for_window(pid: int, *, timeout_seconds: float) -> int:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         windows = _windows_for_pid(pid)
-        if windows:
-            return windows[0]
+        for hwnd in windows:
+            if _find_fxgl_canvas(hwnd):
+                return hwnd
         time.sleep(0.2)
-    raise TimeoutError(f"NetEdit process {pid} did not create a visible window.")
+    raise TimeoutError(f"NetEdit process {pid} did not create a visible canvas window.")
+
+
+def _find_fxgl_canvas(hwnd: int) -> int:
+    _, win32gui, _, _ = _windows_modules()
+    canvases: list[int] = []
+
+    def find_canvas(child: int, _: Any) -> bool:
+        if win32gui.GetClassName(child) == "FXGLCanvas":
+            canvases.append(child)
+        return True
+
+    win32gui.EnumChildWindows(hwnd, find_canvas, None)
+    return canvases[0] if canvases else 0
 
 
 def _post_mode_key(hwnd: int, mode: str) -> dict[str, Any]:
@@ -840,15 +859,7 @@ def _post_mode_key(hwnd: int, mode: str) -> dict[str, Any]:
             "foreground_context_unchanged": True,
         }
     win32con, win32gui, _, _ = _windows_modules()
-    canvases: list[int] = []
-
-    def find_canvas(child: int, _: Any) -> bool:
-        if win32gui.GetClassName(child) == "FXGLCanvas":
-            canvases.append(child)
-        return True
-
-    win32gui.EnumChildWindows(hwnd, find_canvas, None)
-    target = canvases[0] if canvases else hwnd
+    target = _find_fxgl_canvas(hwnd) or hwnd
     foreground_before = _foreground_context()
     virtual_key = ord(key)
     scan_code = ctypes.windll.user32.MapVirtualKeyW(virtual_key, 0)
@@ -968,8 +979,8 @@ def _foreground_context() -> dict[str, int]:
     return {"hwnd": hwnd, "process_id": int(process_id)}
 
 
-def _keyboard_layout_context() -> dict[str, Any]:
-    """Record the foreground keyboard layout before any NetEdit key delivery."""
+def _keyboard_layout_context(hwnd: int | None = None) -> dict[str, Any]:
+    """Record the target window layout before background key delivery."""
 
     if sys.platform != "win32":
         return {
@@ -980,9 +991,10 @@ def _keyboard_layout_context() -> dict[str, Any]:
     _, win32gui, _, _ = _windows_modules()
     user32 = ctypes.windll.user32
     foreground_hwnd = int(win32gui.GetForegroundWindow())
+    target_hwnd = foreground_hwnd if hwnd is None else hwnd
     thread_id = 0
-    if foreground_hwnd:
-        thread_id = int(user32.GetWindowThreadProcessId(foreground_hwnd, None))
+    if target_hwnd:
+        thread_id = int(user32.GetWindowThreadProcessId(target_hwnd, None))
     if not thread_id:
         return {
             "status": "unknown",
@@ -1005,12 +1017,31 @@ def _keyboard_layout_context() -> dict[str, Any]:
         "status": "blocked" if is_chinese else "pass",
         "is_chinese": is_chinese,
         "foreground_hwnd": foreground_hwnd,
+        "target_hwnd": target_hwnd,
         "thread_id": thread_id,
         "hkl": f"0x{hkl:X}",
         "lang_id": f"0x{lang_id:04X}",
         "primary_language_id": primary_language_id,
         "layout_name": layout_name,
     }
+
+
+def _ensure_english_window_layout(hwnd: int) -> dict[str, Any]:
+    before = _keyboard_layout_context(hwnd)
+    if before["status"] != "blocked":
+        return {**before, "changed_by_torii": False}
+    user32 = ctypes.windll.user32
+    loader = user32.LoadKeyboardLayoutW
+    loader.argtypes = (wintypes.LPCWSTR, wintypes.UINT)
+    loader.restype = wintypes.HANDLE
+    english_hkl = int(loader("00000409", 0) or 0)
+    if not english_hkl:
+        raise RuntimeError("Unable to load the English keyboard layout for NetEdit.")
+    _windows_modules()[1].SendMessage(hwnd, 0x0050, 0, english_hkl)  # WM_INPUTLANGCHANGEREQUEST
+    after = _keyboard_layout_context(hwnd)
+    if after["status"] == "blocked":
+        raise RuntimeError("NetEdit rejected the background English keyboard-layout request.")
+    return {**after, "changed_by_torii": True, "before": before}
 
 
 def _force_foreground_window(hwnd: int) -> bool:
@@ -1093,21 +1124,16 @@ def _capture_request(
     additional_file: Path | None,
 ) -> dict[str, Any]:
     dpi_awareness = _enable_dpi_awareness()
-    keyboard_layout = _keyboard_layout_context()
-    if keyboard_layout["status"] == "blocked":
-        raise RuntimeError(
-            "NetEdit review requires a non-Chinese foreground keyboard layout; "
-            f"observed {keyboard_layout.get('lang_id', 'unknown')}."
-        )
     win32con, win32gui, _, _ = _windows_modules()
     view_file = output_dir / f"{request.name}.view.xml"
     selection_file = output_dir / f"{request.name}.selection.txt"
     screenshot_file = output_dir / f"{request.name}.png"
-    view_file.write_text(viewsettings_text(center, zoom=zoom), encoding="utf-8")
-    selection_file.write_text(
-        selection_text(request.selection_type, request.selection_id),
+    view_file.write_text(
+        viewsettings_text(center, zoom=zoom),
         encoding="utf-8",
     )
+    preselection_text = selection_text(request.selection_type, request.selection_id)
+    selection_file.write_text(preselection_text, encoding="utf-8")
     command = build_netedit_command(
         netedit_binary=netedit_binary,
         net_file=net_file,
@@ -1125,6 +1151,7 @@ def _capture_request(
     hwnd = 0
     try:
         hwnd = _wait_for_window(process.pid, timeout_seconds=20.0)
+        keyboard_layout = _ensure_english_window_layout(hwnd)
         foreground_restore_events.append(_observe_and_restore_foreground(foreground_context_before))
         foreground_samples.append(int(win32gui.GetForegroundWindow()))
         window_presentation = _maximize_review_window(hwnd, win32con, win32gui)
@@ -1180,8 +1207,15 @@ def _capture_request(
         "window_title": title,
         "view_file": str(view_file),
         "selection_file": str(selection_file),
+        "preselection_applied": bool(preselection_text),
         "screenshot_file": str(screenshot_file),
         "mode_delivery": mode_delivery,
+        "inspect_delivery": {
+            "status": "unverified" if request.mode == "inspect" else "not_required",
+            "object_type": "junction" if request.mode == "inspect" else None,
+            "delivery": "NetEdit junction selection file; attribute-pane inspection not claimed",
+            "foreground_context_unchanged": True,
+        },
         "foreground_before": foreground_before,
         "foreground_after": foreground_after,
         "foreground_context_before": foreground_context_before,
@@ -1388,6 +1422,7 @@ def run_direct_background_review(
         and item["foreground_unchanged"]
         and item["foreground_context_restored"]
         and item["mode_delivery"]["foreground_context_unchanged"]
+        and item.get("inspect_delivery", {}).get("foreground_context_unchanged", True)
         and item.get("keyboard_layout", {}).get("status") != "blocked"
         for item in captures
     )
@@ -1421,6 +1456,8 @@ def run_direct_background_review(
             if neutral_overview
             else "NetEdit --selection-file"
         ),
+        "inspect_object_delivery": "junction selection only; Net: junction attribute pane remains unverified",
+        "inspect_object_source": f"{candidate}#junction[{target.junction_id}]",
         "capture_session_count": len(captures),
         "expected_capture_session_count": 4 if neutral_overview else 3,
         "global_keyboard_or_mouse_input_used": False,

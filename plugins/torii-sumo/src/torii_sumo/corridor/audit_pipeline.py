@@ -405,23 +405,11 @@ def _artifact(
     producer: str,
     toolchain_id: str,
 ) -> ArtifactIdentity:
-    resolved = path.resolve()
-    sha256 = file_sha256(resolved)
-    return ArtifactIdentity(
-        artifact_schema=artifact_schema,
-        artifact_id=stable_id(
-            "artifact",
-            {
-                "logical_name": logical_name,
-                "role": role.value,
-                "sha256": sha256,
-                "artifact_schema": artifact_schema,
-            },
-        ),
+    return ArtifactIdentity.from_file(
+        path,
         logical_name=logical_name,
         role=role,
-        path=str(resolved),
-        sha256=sha256,
+        artifact_schema=artifact_schema,
         producer=producer,
         toolchain_id=toolchain_id,
     )

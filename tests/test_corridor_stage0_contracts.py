@@ -380,6 +380,121 @@ def test_artifact_manifest_blocks_source_candidate_identity_collision() -> None:
         )
 
 
+def test_artifact_identity_from_file_is_hash_bound_and_stable(tmp_path: Path) -> None:
+    artifact_file = tmp_path / "candidate.net.xml"
+    artifact_file.write_text("<net version=\"1.21\"/>", encoding="utf-8")
+    toolchain_id = stable_id("toolchain", {"version": 1})
+
+    first = ArtifactIdentity.from_file(
+        artifact_file,
+        logical_name="candidate_net",
+        role=ArtifactRole.CANDIDATE_NET,
+        artifact_schema="sumo.net.xml",
+        producer="torii",
+        toolchain_id=toolchain_id,
+    )
+    second = ArtifactIdentity.from_file(
+        artifact_file,
+        logical_name="candidate_net",
+        role=ArtifactRole.CANDIDATE_NET,
+        artifact_schema="sumo.net.xml",
+        producer="torii",
+        toolchain_id=toolchain_id,
+    )
+
+    assert first == second
+    assert Path(first.path) == artifact_file.resolve()
+    assert first.sha256 == hashlib.sha256(artifact_file.read_bytes()).hexdigest()
+
+
+def test_artifact_identity_from_file_fails_closed_for_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        ArtifactIdentity.from_file(
+            tmp_path / "missing.json",
+            logical_name="missing_report",
+            role=ArtifactRole.REPORT,
+            artifact_schema="application/json",
+            producer="torii",
+            toolchain_id=stable_id("toolchain", {"version": 1}),
+        )
+
+
+def test_artifact_manifest_rehashes_files_before_use(tmp_path: Path) -> None:
+    source_file = tmp_path / "source.net.xml"
+    candidate_file = tmp_path / "candidate.net.xml"
+    source_file.write_text("<net version=\"source\"/>", encoding="utf-8")
+    candidate_file.write_text("<net version=\"candidate\"/>", encoding="utf-8")
+    toolchain_id = stable_id("toolchain", {"version": 1})
+    source = ArtifactIdentity.from_file(
+        source_file,
+        logical_name="source_net",
+        role=ArtifactRole.SOURCE_NET,
+        artifact_schema="sumo.net.xml",
+        producer="netconvert",
+        toolchain_id=toolchain_id,
+    )
+    candidate = ArtifactIdentity.from_file(
+        candidate_file,
+        logical_name="candidate_net",
+        role=ArtifactRole.CANDIDATE_NET,
+        artifact_schema="sumo.net.xml",
+        producer="torii",
+        toolchain_id=toolchain_id,
+    )
+    manifest = ArtifactManifestV1(
+        manifest_id=stable_id("manifest", {"artifacts": 2}),
+        created_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        toolchain_id=toolchain_id,
+        source_artifact_id=source.artifact_id,
+        candidate_artifact_ids=(candidate.artifact_id,),
+        artifacts=(source, candidate),
+        gate_trace={"identity": GateStatus.PASS},
+    )
+
+    manifest.assert_artifact_files_unchanged()
+    candidate_file.write_text("<net version=\"tampered\"/>", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="candidate_net"):
+        manifest.assert_artifact_files_unchanged()
+
+
+def test_artifact_manifest_blocks_missing_file_during_rehash(tmp_path: Path) -> None:
+    source_file = tmp_path / "source.net.xml"
+    candidate_file = tmp_path / "candidate.net.xml"
+    source_file.write_text("<net version=\"source\"/>", encoding="utf-8")
+    candidate_file.write_text("<net version=\"candidate\"/>", encoding="utf-8")
+    toolchain_id = stable_id("toolchain", {"version": 1})
+    source = ArtifactIdentity.from_file(
+        source_file,
+        logical_name="source_net",
+        role=ArtifactRole.SOURCE_NET,
+        artifact_schema="sumo.net.xml",
+        producer="netconvert",
+        toolchain_id=toolchain_id,
+    )
+    candidate = ArtifactIdentity.from_file(
+        candidate_file,
+        logical_name="candidate_net",
+        role=ArtifactRole.CANDIDATE_NET,
+        artifact_schema="sumo.net.xml",
+        producer="torii",
+        toolchain_id=toolchain_id,
+    )
+    manifest = ArtifactManifestV1(
+        manifest_id=stable_id("manifest", {"artifacts": "missing"}),
+        created_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        toolchain_id=toolchain_id,
+        source_artifact_id=source.artifact_id,
+        candidate_artifact_ids=(candidate.artifact_id,),
+        artifacts=(source, candidate),
+        gate_trace={"identity": GateStatus.PASS},
+    )
+    candidate_file.unlink()
+
+    with pytest.raises(FileNotFoundError):
+        manifest.assert_artifact_files_unchanged()
+
+
 def test_quality_vector_is_not_a_weighted_partial_score() -> None:
     quality = _quality_vector()
 

@@ -467,7 +467,13 @@ def test_plain_from_only_connection_directive_is_preserved_and_not_indexed(
 
     rows = ET.parse(output_connections).getroot().findall("connection")
     assert rows[0].attrib == {"from": "deleted-outgoing-edge"}
-    assert rows[1].attrib == {"from": "a", "fromLane": "0", "to": "b", "toLane": "0"}
+    assert rows[1].attrib == {
+        "from": "a",
+        "fromLane": "0",
+        "to": "b",
+        "toLane": "0",
+        "uncontrolled": "false",
+    }
     tls_rows = ET.parse(tmp_path / "official.tll.xml").getroot().findall("connection")
     assert len(tls_rows) == 1
     assert tls_rows[0].attrib["tl"] == "HH_N1"
@@ -676,7 +682,9 @@ def test_hamburg_corridor_preset_contains_exactly_nine_versioned_repairs() -> No
     }
 
 
-def test_derivation_uses_unique_path_source_tls_and_declared_repair(tmp_path: Path) -> None:
+def test_derivation_uses_stopline_tls_and_keeps_later_repair_topology_only(
+    tmp_path: Path,
+) -> None:
     source_net = tmp_path / "source.net.xml"
     _derivation_net(
         source_net,
@@ -705,10 +713,7 @@ def test_derivation_uses_unique_path_source_tls_and_declared_repair(tmp_path: Pa
             "K3",
             "HH_N1",
             0,
-            (
-                PhysicalControlledLink("in", 0, "mid", 0),
-                PhysicalControlledLink("mid", 0, "out", 0),
-            ),
+            (PhysicalControlledLink("in", 0, "mid", 0),),
         ),
     )
     assert audit["status"] == "pass"
@@ -716,7 +721,126 @@ def test_derivation_uses_unique_path_source_tls_and_declared_repair(tmp_path: Pa
     assert audit["movements"][0]["path_lane_ids"] == ["in_0", "mid_0", "out_0"]
     assert [
         row["evidence"] for row in audit["movements"][0]["selected_physical_links"]
-    ] == [["source_tls"], ["declared_repair"]]
+    ] == [["source_tls"]]
+    assert audit["movements"][0]["demoted_duplicate_control_links"] == []
+
+
+def test_derivation_demotes_later_source_tls_on_same_movement(tmp_path: Path) -> None:
+    source_net = tmp_path / "sequential-tls.net.xml"
+    _derivation_net(
+        source_net,
+        edge_ids=("in", "mid", "out"),
+        connections=(("in", "mid", "old_stopline"), ("mid", "out", "old_downstream")),
+    )
+
+    plan, audit = derive_official_tls_plan(
+        signal_streams=(_signal_stream(1, "K3"),),
+        lane_bindings=(
+            _lane_binding("1", "in", "ingress"),
+            _lane_binding("2", "out", "egress"),
+        ),
+        source_net_file=source_net,
+        repairs=(),
+        group_index_by_node={"N1": {"K3": 0}},
+        plan_id="sequential-tls",
+        version="1",
+    )
+
+    assert plan.groups[0].physical_links == (
+        PhysicalControlledLink("in", 0, "mid", 0),
+    )
+    assert plan.demoted_links == (
+        PhysicalControlledLink("mid", 0, "out", 0),
+    )
+    assert audit["movements"][0]["demoted_duplicate_control_links"] == [
+        {"from_edge": "mid", "from_lane": 0, "to_edge": "out", "to_lane": 0}
+    ]
+
+
+def test_derivation_accepts_explicit_stopline_repair_without_source_tls(
+    tmp_path: Path,
+) -> None:
+    source_net = tmp_path / "stopline-repair.net.xml"
+    _derivation_net(source_net, edge_ids=("in", "out"), connections=())
+
+    plan, audit = derive_official_tls_plan(
+        signal_streams=(_signal_stream(1, "K3"),),
+        lane_bindings=(
+            _lane_binding("1", "in", "ingress"),
+            _lane_binding("2", "out", "egress"),
+        ),
+        source_net_file=source_net,
+        repairs=(
+            ConnectionRepair(
+                "N1", "in", 0, "out", 0, evidence="official_map_stopline"
+            ),
+        ),
+        group_index_by_node={"N1": {"K3": 0}},
+        plan_id="stopline-repair",
+        version="1",
+    )
+
+    assert plan.groups[0].physical_links == (
+        PhysicalControlledLink("in", 0, "out", 0),
+    )
+    assert audit["movements"][0]["selection_policy"] == (
+        "explicit_official_stopline_control_arc"
+    )
+    assert audit["movements"][0]["selected_physical_links"][0]["evidence"] == [
+        "declared_repair",
+        "official_map_stopline",
+    ]
+
+
+def test_derivation_rejects_multiple_stopline_arcs_for_one_movement(
+    tmp_path: Path,
+) -> None:
+    source_net = tmp_path / "multiple-stoplines.net.xml"
+    _derivation_net(source_net, edge_ids=("in", "mid", "out"), connections=())
+
+    with pytest.raises(OfficialTlsPlanError, match="multiple official stop-line"):
+        derive_official_tls_plan(
+            signal_streams=(_signal_stream(1, "K3"),),
+            lane_bindings=(
+                _lane_binding("1", "in", "ingress"),
+                _lane_binding("2", "out", "egress"),
+            ),
+            source_net_file=source_net,
+            repairs=(
+                ConnectionRepair(
+                    "N1", "in", 0, "mid", 0, evidence="official_map_stopline"
+                ),
+                ConnectionRepair(
+                    "N1", "mid", 0, "out", 0, evidence="official_map_stopline"
+                ),
+            ),
+            group_index_by_node={"N1": {"K3": 0}},
+            plan_id="multiple-stoplines",
+            version="1",
+        )
+
+
+def test_derivation_rejects_stopline_shared_by_different_groups(tmp_path: Path) -> None:
+    source_net = tmp_path / "shared-stopline.net.xml"
+    _derivation_net(source_net, edge_ids=("in", "out"), connections=())
+
+    with pytest.raises(OfficialTlsPlanError, match="shared by different control groups"):
+        derive_official_tls_plan(
+            signal_streams=(_signal_stream(1, "K1"), _signal_stream(2, "K2")),
+            lane_bindings=(
+                _lane_binding("1", "in", "ingress"),
+                _lane_binding("2", "out", "egress"),
+            ),
+            source_net_file=source_net,
+            repairs=(
+                ConnectionRepair(
+                    "N1", "in", 0, "out", 0, evidence="official_map_stopline"
+                ),
+            ),
+            group_index_by_node={"N1": {"K1": 0, "K2": 1}},
+            plan_id="shared-stopline",
+            version="1",
+        )
 
 
 def test_derivation_rejects_multiple_bounded_lane_paths(tmp_path: Path) -> None:
@@ -795,7 +919,7 @@ def test_derivation_first_arc_fallback_is_explicit_and_requires_visual_review(
         "version": "1",
     }
 
-    with pytest.raises(OfficialTlsPlanError, match="no controlled or declared-repair arc"):
+    with pytest.raises(OfficialTlsPlanError, match="no source TLS or official stop-line authority"):
         derive_official_tls_plan(**arguments)
 
     plan, audit = derive_official_tls_plan(
@@ -917,7 +1041,16 @@ def test_derivation_demotes_cross_group_shared_prefix_and_suffix(tmp_path: Path)
             _lane_binding("3", "out2", "egress"),
         ),
         source_net_file=prefix_net,
-        repairs=(ConnectionRepair("N1", "trunk", 0, "out1", 0),),
+        repairs=(
+            ConnectionRepair(
+                "N1",
+                "trunk",
+                0,
+                "out1",
+                0,
+                evidence="official_map_stopline",
+            ),
+        ),
         group_index_by_node={"N1": {"K1": 0, "K2": 1}},
         plan_id="shared-prefix",
         version="1",
@@ -930,6 +1063,10 @@ def test_derivation_demotes_cross_group_shared_prefix_and_suffix(tmp_path: Path)
     assert all(
         shared_prefix not in group.physical_links for group in prefix_plan.groups
     )
+    assert prefix_audit["status"] == "visual_review_required"
+    assert prefix_audit["movements"][0]["visual_review_reasons"] == [
+        "selected_control_arc_not_on_bound_ingress"
+    ]
 
     suffix_net = tmp_path / "shared-suffix.net.xml"
     _derivation_net(
@@ -1019,6 +1156,7 @@ def test_plain_application_demotes_links_and_reclassifies_retired_tls_nodes(
     assert rows[("a", "b")]["uncontrolled"] == "true"
     assert "tl" not in rows[("c", "d")]
     assert "linkIndex" not in rows[("c", "d")]
+    assert rows[("c", "d")]["uncontrolled"] == "false"
     tls_bindings = ET.parse(tmp_path / "official.tll.xml").getroot().findall("connection")
     assert [binding.attrib for binding in tls_bindings] == [
         {

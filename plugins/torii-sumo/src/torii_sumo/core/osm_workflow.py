@@ -3934,6 +3934,7 @@ def run_osm_cleanup_workflow(
     confirmed_area: bool = False,
     prefix: str = "sumo_osm_cleanup",
     source_osm_path: Path | None = None,
+    clip_source_ways_to_bbox: bool = True,
     highway_classes: set[str] | None = None,
     traffic_layers: str | set[str] | None = None,
     network_profile: str | None = None,
@@ -4197,6 +4198,8 @@ def run_osm_cleanup_workflow(
     }
     if _supports_keyword(build_func, "netconvert_binary"):
         build_kwargs["netconvert_binary"] = netconvert_binary
+    if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+        build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
     build_report = build_func(**build_kwargs)
     if build_report.get("status") != "pass":
         return {
@@ -4503,6 +4506,8 @@ def run_osm_cleanup_workflow(
             ) or None
         if _supports_keyword(build_func, "netconvert_binary"):
             visual_build_kwargs["netconvert_binary"] = netconvert_binary
+        if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+            visual_build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
         reference_visual_detail_build_report = build_func(
             **visual_build_kwargs,
         )
