@@ -10,6 +10,20 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 
+# These are the operational mode groups that matter for the OSM-to-reference
+# comparison.  SUMO accepts a larger and version-dependent vClass vocabulary;
+# the raw allow/disallow fields remain in the report, while this stable subset
+# prevents equivalent permission expressions from becoming false road gaps.
+ROAD_SEMANTIC_MODE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("passenger", ("passenger", "private", "taxi", "delivery", "truck", "trailer")),
+    ("bus", ("bus", "coach")),
+    ("bicycle", ("bicycle",)),
+    ("pedestrian", ("pedestrian", "wheelchair")),
+    ("motorcycle", ("motorcycle", "moped", "scooter")),
+    ("rail", ("tram", "rail_urban", "rail", "rail_electric", "rail_fast")),
+)
+
+
 def canonical_road_connectivity_bundle(
     net_file: Path,
     *,
@@ -984,12 +998,45 @@ def build_internal_movement_owner_approach_edge_map(
         candidate_osm_way_index.setdefault((direction, _osm_way_edge_root(edge_id)), []).append(edge_id)
 
     edge_map = {}
+    exact_candidate_edge_ids = set(teacher_edges) & set(candidate_edges)
+    used_candidate_edge_ids: set[str] = set(exact_candidate_edge_ids)
+    reserved_mismatched_exact_edges = []
     ambiguous_teacher_edges = []
     unmapped_teacher_edges = []
+    candidate_edge_collisions = []
+
+    # Reserve exact ids first. Without this pass, an earlier split segment can
+    # consume the only candidate edge and a later exact teacher id can be
+    # mapped onto that same edge as well. Reusing a candidate edge makes the
+    # replay copy two distinct teacher movement bundles into one SUMO edge.
     for teacher_edge_id, direction in sorted(teacher_edges.items()):
+        if teacher_edge_id not in exact_candidate_edge_ids:
+            continue
+        if candidate_edges[teacher_edge_id] == direction:
+            edge_map[teacher_edge_id] = teacher_edge_id
+        else:
+            # Keep the exact id reserved for same-id replacement. Letting a
+            # neighbouring teacher split consume it causes the later missing
+            # edge repair to merge two teacher segments into one candidate.
+            reserved_mismatched_exact_edges.append(teacher_edge_id)
+
+    for teacher_edge_id, direction in sorted(teacher_edges.items()):
+        if teacher_edge_id in edge_map:
+            continue
         matches = sorted(candidate_index.get((direction, _split_edge_root(teacher_edge_id)), []))
         if not matches:
             matches = sorted(candidate_osm_way_index.get((direction, _osm_way_edge_root(teacher_edge_id)), []))
+        available_matches = [edge_id for edge_id in matches if edge_id not in used_candidate_edge_ids]
+        if matches and not available_matches:
+            candidate_edge_collisions.append(
+                {
+                    "teacher_edge_id": teacher_edge_id,
+                    "candidate_edge_ids": matches,
+                }
+            )
+            unmapped_teacher_edges.append(teacher_edge_id)
+            continue
+        matches = available_matches
         if len(matches) == 1:
             endpoint_matches = _same_terminal_endpoint_matches(
                 teacher_edge_nodes.get(teacher_edge_id),
@@ -1011,6 +1058,7 @@ def build_internal_movement_owner_approach_edge_map(
                 unmapped_teacher_edges.append(teacher_edge_id)
             else:
                 edge_map[teacher_edge_id] = matches[0]
+                used_candidate_edge_ids.add(matches[0])
         elif len(matches) > 1:
             endpoint_matches = _same_terminal_endpoint_matches(
                 teacher_edge_nodes.get(teacher_edge_id),
@@ -1020,6 +1068,7 @@ def build_internal_movement_owner_approach_edge_map(
             )
             if len(endpoint_matches) == 1:
                 edge_map[teacher_edge_id] = endpoint_matches[0]
+                used_candidate_edge_ids.add(endpoint_matches[0])
             else:
                 ambiguous_teacher_edges.append(teacher_edge_id)
         else:
@@ -1038,6 +1087,8 @@ def build_internal_movement_owner_approach_edge_map(
         "edge_map": edge_map,
         "ambiguous_teacher_edges": ambiguous_teacher_edges,
         "unmapped_teacher_edges": unmapped_teacher_edges,
+        "candidate_edge_collisions": candidate_edge_collisions,
+        "reserved_mismatched_exact_edges": reserved_mismatched_exact_edges,
     }
 
 
@@ -1719,6 +1770,53 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         output_file,
         owner_id=owner_id,
     )
+    convergence_endpoint_replay_reports: list[dict[str, Any]] = []
+    convergence_status = "not_needed"
+    before_convergence_lane_delta_count = int(
+        owner_road_connectivity_audit.get("gate", {}).get("lane_delta_count", 0)
+    )
+    after_convergence_lane_delta_count = before_convergence_lane_delta_count
+    if before_convergence_lane_delta_count > 0 and pre_endpoint_owner_ids:
+        convergence_status = "no_improvement"
+        convergence_current_file = output_file
+        best_convergence_file = output_file
+        best_convergence_audit = owner_road_connectivity_audit
+        best_lane_delta_count = before_convergence_lane_delta_count
+        for index, endpoint_owner_id in enumerate(pre_endpoint_owner_ids, start=1):
+            convergence_file = output_file.with_name(
+                f"{output_file.stem}_convergence_endpoint_{index}{output_file.suffix}"
+            )
+            convergence_report = write_internal_movement_owner_teacher_replay_candidate(
+                teacher_net_file,
+                convergence_current_file,
+                convergence_file,
+                owner_id=endpoint_owner_id,
+                copy_tls=copy_tls,
+            )
+            convergence_report = dict(convergence_report)
+            convergence_endpoint_replay_reports.append(convergence_report)
+            if convergence_report.get("status") != "pass" or not convergence_file.exists():
+                break
+            convergence_current_file = convergence_file
+            convergence_audit = build_internal_movement_owner_road_connectivity_parity_audit(
+                teacher_net_file,
+                convergence_file,
+                owner_id=owner_id,
+            )
+            convergence_report["target_owner_road_connectivity_audit"] = convergence_audit
+            lane_delta_count = int(convergence_audit.get("gate", {}).get("lane_delta_count", 0))
+            if lane_delta_count < best_lane_delta_count:
+                best_lane_delta_count = lane_delta_count
+                best_convergence_file = convergence_file
+                best_convergence_audit = convergence_audit
+            if lane_delta_count == 0:
+                break
+        if best_lane_delta_count < before_convergence_lane_delta_count:
+            if best_convergence_file != output_file:
+                output_file.write_bytes(best_convergence_file.read_bytes())
+            owner_road_connectivity_audit = best_convergence_audit
+            after_convergence_lane_delta_count = best_lane_delta_count
+            convergence_status = "promoted"
     return {
         "status": (
             "pass"
@@ -1759,6 +1857,10 @@ def write_internal_movement_owner_layered_teacher_replay_candidate(
         "road_span_endpoint_replay_report": road_span_endpoint_replay_report,
         "blocked_replayed_endpoint_owner_ids": blocked_replayed_endpoint_owner_ids,
         "blocked_endpoint_replay_reports": blocked_endpoint_replay_reports,
+        "convergence_status": convergence_status,
+        "convergence_endpoint_replay_reports": convergence_endpoint_replay_reports,
+        "before_convergence_lane_delta_count": before_convergence_lane_delta_count,
+        "after_convergence_lane_delta_count": after_convergence_lane_delta_count,
         "owner_road_connectivity_audit": owner_road_connectivity_audit,
         "warnings": [],
     }
@@ -1838,11 +1940,6 @@ def build_internal_movement_owner_missing_approach_edge_repair_candidates(
     teacher_offset = _root_net_offset(teacher_root)
     candidate_offset = _root_net_offset(candidate_root)
     teacher_edge_map = teacher_edge_map or {}
-    candidate_edge_ids = {
-        edge.attrib.get("id", "")
-        for edge in candidate_root.findall("edge")
-        if edge.attrib.get("id")
-    }
     candidate_edges = {
         edge.attrib.get("id", ""): edge
         for edge in candidate_root.findall("edge")
@@ -2486,6 +2583,7 @@ def compare_net_road_template_parity(
     candidate_net_file: Path,
     *,
     max_examples: int = 3,
+    semantic_gate: bool = False,
 ) -> dict[str, Any]:
     teacher_lane_templates = summarize_net_road_lane_model_templates(
         teacher_net_file,
@@ -2502,6 +2600,26 @@ def compare_net_road_template_parity(
     candidate_connection_templates = summarize_net_road_connection_templates(
         candidate_net_file,
         max_examples=max_examples,
+    )
+    teacher_semantic_lane_templates = summarize_net_road_lane_model_templates(
+        teacher_net_file,
+        max_examples=max_examples,
+        include_semantic=True,
+    )
+    candidate_semantic_lane_templates = summarize_net_road_lane_model_templates(
+        candidate_net_file,
+        max_examples=max_examples,
+        include_semantic=True,
+    )
+    teacher_semantic_connection_templates = summarize_net_road_connection_templates(
+        teacher_net_file,
+        max_examples=max_examples,
+        include_semantic=True,
+    )
+    candidate_semantic_connection_templates = summarize_net_road_connection_templates(
+        candidate_net_file,
+        max_examples=max_examples,
+        include_semantic=True,
     )
     lane_parity = compare_road_template_summaries(
         teacher_lane_templates,
@@ -2532,11 +2650,41 @@ def compare_net_road_template_parity(
             "to_lane",
         ],
     )
-    status = "pass" if lane_parity["status"] == connection_parity["status"] == "pass" else "fail"
-    gate = _road_template_gate_summary(lane_parity, connection_parity)
+    semantic_lane_parity = compare_road_template_summaries(
+        teacher_semantic_lane_templates,
+        candidate_semantic_lane_templates,
+        key_fields=["type", "lane_semantic_signature"],
+    )
+    semantic_connection_parity = compare_road_template_summaries(
+        teacher_semantic_connection_templates,
+        candidate_semantic_connection_templates,
+        key_fields=[
+            "dir",
+            "from_type",
+            "from_lane",
+            "from_lane_semantic_signature",
+            "to_type",
+            "to_lane",
+            "to_lane_semantic_signature",
+        ],
+    )
+    active_lane_parity = semantic_lane_parity if semantic_gate else lane_parity
+    active_connection_parity = semantic_connection_parity if semantic_gate else connection_parity
+    status = (
+        "pass"
+        if active_lane_parity["status"] == active_connection_parity["status"] == "pass"
+        else "fail"
+    )
+    gate = _road_template_gate_summary(active_lane_parity, active_connection_parity)
+    if semantic_gate:
+        gate["comparison_basis"] = "semantic"
+        gate["raw_road_layer_status"] = (
+            "pass" if lane_parity["status"] == connection_parity["status"] == "pass" else "fail"
+        )
     report = {
         "status": status,
         "gate": gate,
+        "comparison_basis": "semantic" if semantic_gate else "raw_xml",
         "teacher_net_file": str(teacher_net_file),
         "candidate_net_file": str(candidate_net_file),
         "lane_template_summary": {
@@ -2553,6 +2701,20 @@ def compare_net_road_template_parity(
             "candidate_template_count": len(candidate_connection_templates),
             "parity": connection_parity,
         },
+        "semantic_lane_template_summary": {
+            "teacher_edge_count": _template_count_total(teacher_semantic_lane_templates),
+            "candidate_edge_count": _template_count_total(candidate_semantic_lane_templates),
+            "teacher_template_count": len(teacher_semantic_lane_templates),
+            "candidate_template_count": len(candidate_semantic_lane_templates),
+            "parity": semantic_lane_parity,
+        },
+        "semantic_connection_template_summary": {
+            "teacher_connection_count": _template_count_total(teacher_semantic_connection_templates),
+            "candidate_connection_count": _template_count_total(candidate_semantic_connection_templates),
+            "teacher_template_count": len(teacher_semantic_connection_templates),
+            "candidate_template_count": len(candidate_semantic_connection_templates),
+            "parity": semantic_connection_parity,
+        },
         "connection_topology_summary": {
             "teacher_connection_count": _template_count_total(teacher_connection_templates),
             "candidate_connection_count": _template_count_total(candidate_connection_templates),
@@ -2565,33 +2727,211 @@ def compare_net_road_template_parity(
     return report
 
 
+def audit_road_connectivity_parity(
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    *,
+    source_osm_file: Path | None = None,
+    output_dir: Path | None = None,
+    prefix: str = "road_connectivity_parity",
+    max_examples: int = 20,
+) -> dict[str, Any]:
+    """Audit the complete road layer before any junction replay is promoted.
+
+    The owner replay helpers are intentionally local probes: they can pass for
+    one junction even while the selected network still differs materially from
+    the teacher.  This audit is the workflow-level baseline.  It combines the
+    lane/road template comparison with the complete teacher connection replay
+    inventory and the internal-movement inventory, and it never mutates either
+    input network.
+    """
+
+    report: dict[str, Any]
+    try:
+        from .reference_road_alignment import audit_reference_road_alignment
+
+        road_template_report = compare_net_road_template_parity(
+            teacher_net_file,
+            candidate_net_file,
+            max_examples=max_examples,
+            semantic_gate=True,
+        )
+        connection_topology_report = build_road_connection_topology_replay_audit(
+            teacher_net_file,
+            candidate_net_file,
+            max_examples=max_examples,
+        )
+        internal_movement_report = build_internal_movement_replay_audit(
+            teacher_net_file,
+            candidate_net_file,
+            max_examples=max_examples,
+        )
+        reference_road_alignment_report = audit_reference_road_alignment(
+            teacher_net_file,
+            candidate_net_file,
+            source_osm_file=source_osm_file,
+            output_dir=None,
+            prefix=f"{prefix}_reference_road_alignment",
+            max_examples=max_examples,
+        )
+        topology_gate = {
+            "status": (
+                "pass"
+                if int(connection_topology_report.get("replayable_connection_count", 0)) == 0
+                and int(connection_topology_report.get("blocked_connection_count", 0)) == 0
+                else "fail"
+            ),
+            "replayable_connection_count": int(
+                connection_topology_report.get("replayable_connection_count", 0)
+            ),
+            "blocked_connection_count": int(
+                connection_topology_report.get("blocked_connection_count", 0)
+            ),
+            "already_present_connection_count": int(
+                connection_topology_report.get("already_present_connection_count", 0)
+            ),
+        }
+        movement_gate = {
+            "status": (
+                "pass"
+                if int(internal_movement_report.get("internal_movement_missing_count", 0)) == 0
+                else "fail"
+            ),
+            "internal_movement_missing_count": int(
+                internal_movement_report.get("internal_movement_missing_count", 0)
+            ),
+            "tls_controlled_missing_count": int(
+                internal_movement_report.get("tls_controlled_missing_count", 0)
+            ),
+            "turnaround_missing_count": int(
+                internal_movement_report.get("turnaround_missing_count", 0)
+            ),
+            "non_turnaround_missing_count": int(
+                internal_movement_report.get("non_turnaround_missing_count", 0)
+            ),
+        }
+        template_gate = dict(road_template_report.get("gate", {}))
+        overall_status = (
+            "pass"
+            if str(road_template_report.get("status", "fail")) == "pass"
+            and topology_gate["status"] == "pass"
+            and movement_gate["status"] == "pass"
+            else "fail"
+        )
+        report = {
+            "status": overall_status,
+            "claim_status": "reference-audit",
+            "audit_scope": "complete_road_and_connection_layer",
+            "teacher_net_file": str(teacher_net_file),
+            "candidate_net_file": str(candidate_net_file),
+            "road_template_status": str(road_template_report.get("status", "fail")),
+            "road_template_gate": template_gate,
+            "connection_topology_gate": topology_gate,
+            "internal_movement_gate": movement_gate,
+            "road_template_report": road_template_report,
+            "connection_topology_report": connection_topology_report,
+            "internal_movement_report": internal_movement_report,
+            "reference_road_alignment": reference_road_alignment_report,
+            "repair_queue": road_template_report.get("repair_queue", {}),
+            "warnings": [],
+        }
+    except (ET.ParseError, OSError, ValueError, TypeError, KeyError) as exc:
+        report = {
+            "status": "blocked",
+            "claim_status": "reference-audit",
+            "audit_scope": "complete_road_and_connection_layer",
+            "teacher_net_file": str(teacher_net_file),
+            "candidate_net_file": str(candidate_net_file),
+            "blocking_reason": f"road_connectivity_parity_audit_failed:{type(exc).__name__}",
+            "error": str(exc),
+            "road_template_status": "blocked",
+            "road_template_gate": {"road_layer_status": "blocked"},
+            "connection_topology_gate": {"status": "blocked"},
+            "internal_movement_gate": {"status": "blocked"},
+            "road_template_report": {},
+            "connection_topology_report": {},
+            "internal_movement_report": {},
+            "reference_road_alignment": {},
+            "repair_queue": {},
+            "warnings": [],
+        }
+
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        component_files = {
+            "road_template_report_file": output_dir / f"{prefix}_road_template.json",
+            "connection_topology_report_file": output_dir / f"{prefix}_connection_topology.json",
+            "internal_movement_report_file": output_dir / f"{prefix}_internal_movement.json",
+            "reference_road_alignment_report_file": output_dir / f"{prefix}_reference_road_alignment.json",
+        }
+        for key, path in component_files.items():
+            payload_key = {
+                "road_template_report_file": "road_template_report",
+                "connection_topology_report_file": "connection_topology_report",
+                "internal_movement_report_file": "internal_movement_report",
+                "reference_road_alignment_report_file": "reference_road_alignment",
+            }[key]
+            if key.endswith("_report_file"):
+                path.write_text(
+                    json.dumps(report.get(payload_key, {}), indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            report[key] = str(path)
+        alignment = report.get("reference_road_alignment", {})
+        if isinstance(alignment, dict):
+            from .reference_road_alignment import _write_additional_overlay
+
+            additional_path = output_dir / f"{prefix}_reference_road_alignment.add.xml"
+            _write_additional_overlay(
+                additional_path,
+                alignment.get("review_locations", []),
+            )
+            report["reference_road_alignment_additional_file"] = str(additional_path)
+        report_file = output_dir / f"{prefix}.json"
+        report["report_file"] = str(report_file)
+        report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
+
+
 def summarize_road_lane_model_templates(
     bundle: dict[str, Any],
     *,
     max_examples: int = 3,
+    include_semantic: bool = False,
 ) -> list[dict[str, Any]]:
     groups: dict[tuple[str, tuple[str, ...]], list[str]] = {}
     for edge in bundle.get("edges", []):
         if not isinstance(edge, dict):
             continue
-        key = (str(edge.get("type", "")), tuple(_lane_signature(edge)))
+        lane_signature = (
+            _lane_semantic_signature(edge)
+            if include_semantic
+            else _lane_signature(edge)
+        )
+        key = (str(edge.get("type", "")), tuple(lane_signature))
         edge_id = str(edge.get("id", ""))
         if edge_id:
             groups.setdefault(key, []).append(edge_id)
 
     templates = []
     for (edge_type, lane_signature), edge_ids in groups.items():
-        templates.append(
-            {
+        template = {
                 "type": edge_type,
-                "lane_signature": list(lane_signature),
                 "count": len(edge_ids),
                 "example_edge_ids": sorted(edge_ids)[:max_examples],
             }
-        )
+        if include_semantic:
+            template["lane_semantic_signature"] = list(lane_signature)
+        else:
+            template["lane_signature"] = list(lane_signature)
+        templates.append(template)
     return sorted(
         templates,
-        key=lambda item: (-int(item["count"]), str(item["type"]), str(item["lane_signature"])),
+        key=lambda item: (
+            -int(item["count"]),
+            str(item["type"]),
+            str(item.get("lane_signature", item.get("lane_semantic_signature", []))),
+        ),
     )
 
 
@@ -2599,6 +2939,7 @@ def summarize_net_road_lane_model_templates(
     net_file: Path,
     *,
     max_examples: int = 3,
+    include_semantic: bool = False,
 ) -> list[dict[str, Any]]:
     root = ET.parse(net_file).getroot()
     edges = [
@@ -2611,6 +2952,7 @@ def summarize_net_road_lane_model_templates(
     return summarize_road_lane_model_templates(
         {"edges": edges},
         max_examples=max_examples,
+        include_semantic=include_semantic,
     )
 
 
@@ -2618,6 +2960,7 @@ def summarize_net_road_connection_templates(
     net_file: Path,
     *,
     max_examples: int = 3,
+    include_semantic: bool = False,
 ) -> list[dict[str, Any]]:
     root = ET.parse(net_file).getroot()
     edges = {
@@ -2635,14 +2978,24 @@ def summarize_net_road_connection_templates(
             continue
         from_lane = connection.attrib.get("fromLane", "")
         to_lane = connection.attrib.get("toLane", "")
+        from_signature = (
+            _lane_semantic_signature(from_edge)
+            if include_semantic
+            else _lane_signature(from_edge)
+        )
+        to_signature = (
+            _lane_semantic_signature(to_edge)
+            if include_semantic
+            else _lane_signature(to_edge)
+        )
         key = (
             connection.attrib.get("dir", ""),
             str(from_edge.get("type", "")),
             from_lane,
-            tuple(_lane_signature(from_edge)),
+            tuple(from_signature),
             str(to_edge.get("type", "")),
             to_lane,
-            tuple(_lane_signature(to_edge)),
+            tuple(to_signature),
         )
         example = f"{connection.attrib.get('from', '')}[{from_lane}]->{connection.attrib.get('to', '')}[{to_lane}]"
         groups.setdefault(key, []).append(example)
@@ -2657,19 +3010,22 @@ def summarize_net_road_connection_templates(
         to_lane,
         to_lane_signature,
     ), examples in groups.items():
-        templates.append(
-            {
+        template = {
                 "dir": direction,
                 "from_type": from_type,
                 "from_lane": from_lane,
-                "from_lane_signature": list(from_lane_signature),
                 "to_type": to_type,
                 "to_lane": to_lane,
-                "to_lane_signature": list(to_lane_signature),
                 "count": len(examples),
                 "example_connections": sorted(examples)[:max_examples],
             }
-        )
+        if include_semantic:
+            template["from_lane_semantic_signature"] = list(from_lane_signature)
+            template["to_lane_semantic_signature"] = list(to_lane_signature)
+        else:
+            template["from_lane_signature"] = list(from_lane_signature)
+            template["to_lane_signature"] = list(to_lane_signature)
+        templates.append(template)
     return sorted(
         templates,
         key=lambda item: (
@@ -3838,6 +4194,58 @@ def _lane_signature(edge: dict[str, Any]) -> list[str]:
         for lane in edge.get("lanes", [])
         if isinstance(lane, dict)
     ]
+
+
+def _lane_semantic_signature(edge: dict[str, Any]) -> list[str]:
+    """Return stable effective mode roles for a lane model.
+
+    SUMO accepts both explicit ``allow`` lists and complement-style
+    ``disallow`` lists.  Comparing those XML strings directly reports false
+    differences (especially after netconvert adds version-specific classes).
+    The semantic signature keeps lane order and the effective operational
+    roles, while the raw signature remains available for diagnostics and
+    repair proposals.
+    """
+
+    edge_type = str(edge.get("type", "")).lower()
+    signatures = []
+    for lane in edge.get("lanes", []):
+        if not isinstance(lane, dict):
+            continue
+        allow = set(str(lane.get("allow", "")).split())
+        disallow = set(str(lane.get("disallow", "")).split())
+        if allow:
+            effective = allow
+        elif disallow:
+            # Only the stable role aliases are needed here.  Unknown SUMO
+            # classes are intentionally retained in raw XML diagnostics.
+            effective = {
+                token
+                for _, aliases in ROAD_SEMANTIC_MODE_GROUPS
+                for token in aliases
+                if token not in disallow
+            }
+        else:
+            base_type = edge_type.split(".")[-1].split("|")[-1]
+            if base_type in {"footway", "pedestrian", "steps"}:
+                effective = {"pedestrian"}
+            elif base_type == "cycleway":
+                effective = {"bicycle"}
+            elif base_type == "path":
+                effective = {"bicycle", "pedestrian"}
+            elif edge_type.startswith("railway."):
+                effective = {"rail"}
+            else:
+                effective = {"passenger", "bus", "bicycle", "motorcycle"}
+
+        roles = []
+        for role, aliases in ROAD_SEMANTIC_MODE_GROUPS:
+            if effective.intersection(aliases):
+                roles.append(role)
+        signatures.append(
+            f"index={lane.get('index', '')}|roles={','.join(roles)}"
+        )
+    return signatures
 
 
 def _point_distance(left: tuple[float, float], right: tuple[float, float]) -> float:

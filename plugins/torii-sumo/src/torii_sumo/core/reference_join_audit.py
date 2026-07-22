@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 from collections import Counter
@@ -21,6 +22,30 @@ from .topology_audit import audit_topology_fragmentation
 
 
 STRUCTURAL_ONLY_PATTERN_SAMPLE_LIMIT = 40
+PORTABLE_ARTIFACT_PATH_LIMIT = 240
+
+
+def _artifact_path(output_dir: Path, prefix: str, suffix: str) -> Path:
+    """Return a deterministic artifact path that remains usable on Windows.
+
+    Workflow stage names are intentionally descriptive, but nested stages can
+    otherwise exceed the traditional Windows MAX_PATH limit.  Keep short names
+    unchanged and shorten only the prefix, retaining a digest of the complete
+    logical name so distinct stages cannot collide.
+    """
+    candidate = output_dir / f"{prefix}{suffix}"
+    if len(str(candidate.resolve())) <= PORTABLE_ARTIFACT_PATH_LIMIT:
+        return candidate
+
+    digest = hashlib.sha256(prefix.encode("utf-8")).hexdigest()[:10]
+    fixed_path = (output_dir / f"_{digest}{suffix}").resolve()
+    available_prefix_chars = PORTABLE_ARTIFACT_PATH_LIMIT - len(str(fixed_path))
+    if available_prefix_chars < 1:
+        raise OSError(
+            f"output directory is too long for portable artifact names: {output_dir.resolve()}"
+        )
+    shortened_prefix = prefix[:available_prefix_chars].rstrip("._-") or "artifact"
+    return output_dir / f"{shortened_prefix}_{digest}{suffix}"
 
 
 def audit_reference_join_patterns(
@@ -138,11 +163,13 @@ def audit_reference_join_patterns(
     ]
     matched = [case for case in matched_cases if case["match_status"] == "matched"]
 
-    cases_file = output_dir / f"{prefix}_reference_join_cases.csv"
-    junction_pattern_comparisons_file = output_dir / f"{prefix}_junction_pattern_comparisons.csv"
-    junction_pattern_templates_file = output_dir / f"{prefix}_junction_pattern_templates.json"
-    junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
-    summary_file = output_dir / f"{prefix}_reference_join_audit.json"
+    cases_file = _artifact_path(output_dir, prefix, "_reference_join_cases.csv")
+    junction_pattern_comparisons_file = _artifact_path(
+        output_dir, prefix, "_junction_pattern_comparisons.csv"
+    )
+    junction_pattern_templates_file = _artifact_path(output_dir, prefix, "_junction_pattern_templates.json")
+    junction_teacher_delta_file = _artifact_path(output_dir, prefix, "_junction_teacher_delta.json")
+    summary_file = _artifact_path(output_dir, prefix, "_reference_join_audit.json")
     _write_cases_csv(cases_file, matched_cases)
     _write_junction_pattern_comparisons_csv(junction_pattern_comparisons_file, junction_pattern_comparisons)
     junction_pattern_templates_file.write_text(
@@ -184,6 +211,7 @@ def audit_reference_join_patterns(
         "tls_control_review_status": tls_control_review["status"],
         "tls_control_review_queue_count": tls_control_review["queue_count"],
         "tls_control_review_queue": tls_control_review["queue"],
+        "tls_controller_alignment": tls_control_review["controller_alignment"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -234,6 +262,7 @@ def audit_reference_join_patterns(
         "tls_control_review_status": tls_control_review["status"],
         "tls_control_review_queue_count": tls_control_review["queue_count"],
         "tls_control_review_queue": tls_control_review["queue"],
+        "tls_controller_alignment": tls_control_review["controller_alignment"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -316,10 +345,12 @@ def _structural_only_report(
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    junction_teacher_delta_file = output_dir / f"{prefix}_junction_teacher_delta.json"
-    junction_pattern_comparisons_file = output_dir / f"{prefix}_junction_pattern_comparisons.csv"
-    junction_pattern_templates_file = output_dir / f"{prefix}_junction_pattern_templates.json"
-    summary_file = output_dir / f"{prefix}_reference_join_audit.json"
+    junction_teacher_delta_file = _artifact_path(output_dir, prefix, "_junction_teacher_delta.json")
+    junction_pattern_comparisons_file = _artifact_path(
+        output_dir, prefix, "_junction_pattern_comparisons.csv"
+    )
+    junction_pattern_templates_file = _artifact_path(output_dir, prefix, "_junction_pattern_templates.json")
+    summary_file = _artifact_path(output_dir, prefix, "_reference_join_audit.json")
     _write_junction_pattern_comparisons_csv(junction_pattern_comparisons_file, junction_pattern_comparisons)
     junction_pattern_templates_file.write_text(
         json.dumps(
@@ -375,6 +406,7 @@ def _structural_only_report(
         "tls_control_review_status": tls_control_review["status"],
         "tls_control_review_queue_count": tls_control_review["queue_count"],
         "tls_control_review_queue": tls_control_review["queue"],
+        "tls_controller_alignment": tls_control_review["controller_alignment"],
         "reference_network_structural_summary": reference_network_structural_summary,
         "candidate_network_structural_summary": candidate_network_structural_summary,
         "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -417,6 +449,7 @@ def _structural_only_report(
                 "tls_control_review_status": tls_control_review["status"],
                 "tls_control_review_queue_count": tls_control_review["queue_count"],
                 "tls_control_review_queue": tls_control_review["queue"],
+                "tls_controller_alignment": tls_control_review["controller_alignment"],
                 "reference_network_structural_summary": reference_network_structural_summary,
                 "candidate_network_structural_summary": candidate_network_structural_summary,
                 "junction_pattern_comparisons": junction_pattern_comparisons,
@@ -736,7 +769,7 @@ def _net_structural_summary(net_file: Path) -> dict[str, Any]:
         if not junction.attrib.get("id", "").startswith(":") and junction.attrib.get("type") != "internal"
     )
     connections = root.findall("connection")
-    tls_summary = _tls_semantic_summary(root, connections, junction_ids)
+    tls_summary = _tls_semantic_summary(root, connections, junction_ids, net_file=net_file)
     return {
         "plain_edge_count": edge_function_counts.get("plain", 0),
         "internal_edge_count": edge_function_counts.get("internal", 0),
@@ -760,7 +793,13 @@ def _net_structural_summary(net_file: Path) -> dict[str, Any]:
     }
 
 
-def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junction_ids: set[str]) -> dict[str, Any]:
+def _tls_semantic_summary(
+    root: ET.Element,
+    connections: list[ET.Element],
+    junction_ids: set[str],
+    *,
+    net_file: Path,
+) -> dict[str, Any]:
     tl_logic_ids = [tl.attrib["id"] for tl in root.findall("tlLogic") if tl.attrib.get("id")]
     passenger_edges = {
         edge.attrib.get("id", "")
@@ -768,11 +807,42 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
         if edge.attrib.get("id") and any(lane_allows_passenger(lane) for lane in edge.findall("lane"))
     }
     known_edges = {edge.attrib.get("id", "") for edge in root.findall("edge") if edge.attrib.get("id")}
+    edge_endpoints = {
+        edge.attrib.get("id", ""): (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    passenger_lane_rank_by_edge: dict[str, dict[str, int]] = {}
+    for edge in root.findall("edge"):
+        edge_id = edge.attrib.get("id", "")
+        if not edge_id:
+            continue
+        passenger_lane_indexes = sorted(
+            (lane.attrib.get("index", "") for lane in edge.findall("lane") if lane_allows_passenger(lane)),
+            key=lambda value: (0, int(value)) if value.isdigit() else (1, value),
+        )
+        passenger_lane_rank_by_edge[edge_id] = {
+            lane_index: rank for rank, lane_index in enumerate(passenger_lane_indexes)
+        }
+    passenger_approach_bearings = {
+        edge_id: bearing
+        for edge in root.findall("edge")
+        if (edge_id := edge.attrib.get("id", "")) in passenger_edges
+        and (bearing := _incoming_edge_bearing_deg(edge)) is not None
+    }
     traffic_light_ids = {
         junction.attrib["id"]
         for junction in root.findall("junction")
         if junction.attrib.get("id") and junction.attrib.get("type") == "traffic_light"
     }
+    junction_xy = {
+        junction.attrib["id"]: (float(junction.attrib["x"]), float(junction.attrib["y"]))
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+        and junction.attrib.get("x") is not None
+        and junction.attrib.get("y") is not None
+    }
+    xy_to_latlon = _coordinate_converter(root, net_file)
     phase_state_lengths = {
         tl_id: max((len(phase.attrib.get("state", "")) for phase in tl.findall("phase")), default=0)
         for tl in root.findall("tlLogic")
@@ -785,6 +855,9 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
     linkindexes_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
     known_from_edges_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
     passenger_from_edges_by_tl = {tl_id: set() for tl_id in tl_logic_ids}
+    passenger_movements_by_tl_and_edge: dict[str, dict[str, Counter[str]]] = {
+        tl_id: {} for tl_id in tl_logic_ids
+    }
     for connection in connections:
         tl_id = connection.attrib.get("tl", "")
         link_index = connection.attrib.get("linkIndex", "")
@@ -796,6 +869,21 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
             known_from_edges_by_tl.setdefault(tl_id, set()).add(from_edge)
         if from_edge in passenger_edges:
             passenger_from_edges_by_tl.setdefault(tl_id, set()).add(from_edge)
+            to_edge = connection.attrib.get("to", "")
+            from_lane = connection.attrib.get("fromLane", "")
+            to_lane = connection.attrib.get("toLane", "")
+            from_passenger_rank = passenger_lane_rank_by_edge.get(from_edge, {}).get(from_lane)
+            to_passenger_rank = passenger_lane_rank_by_edge.get(to_edge, {}).get(to_lane)
+            movement_signature = "|".join(
+                (
+                    f"dir={connection.attrib.get('dir', '')}",
+                    f"fromPassengerLaneRank={from_passenger_rank if from_passenger_rank is not None else from_lane}",
+                    f"toPassengerLaneRank={to_passenger_rank if to_passenger_rank is not None else to_lane}",
+                )
+            )
+            passenger_movements_by_tl_and_edge.setdefault(tl_id, {}).setdefault(
+                from_edge, Counter()
+            )[movement_signature] += 1
         linkindex_group_counts[(tl_id, link_index)] += 1
         try:
             linkindexes_by_tl.setdefault(tl_id, set()).add(int(link_index))
@@ -813,6 +901,52 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
     for tl_id in tl_logic_ids:
         linkindexes = sorted(linkindexes_by_tl.get(tl_id, set()))
         phase_state_length = int(phase_state_lengths.get(tl_id, 0))
+        controlled_xy = [
+            junction_xy[junction_id]
+            for junction_id in controlled_junctions_by_tl.get(tl_id, set())
+            if junction_id in junction_xy
+        ]
+        centroid_fields: dict[str, Any] = {
+            "controlled_junction_centroid_lat": None,
+            "controlled_junction_centroid_lon": None,
+            "controlled_junction_centroid_status": "unavailable",
+        }
+        if controlled_xy:
+            centroid_x = sum(point[0] for point in controlled_xy) / len(controlled_xy)
+            centroid_y = sum(point[1] for point in controlled_xy) / len(controlled_xy)
+            centroid_lat, centroid_lon, centroid_status = _junction_latlon(
+                centroid_x,
+                centroid_y,
+                xy_to_latlon,
+            )
+            centroid_fields = {
+                "controlled_junction_centroid_lat": round(centroid_lat, 8),
+                "controlled_junction_centroid_lon": round(centroid_lon, 8),
+                "controlled_junction_centroid_status": centroid_status,
+                "controlled_junction_points": [
+                    {
+                        "junction_id": junction_id,
+                        "lat": round(point_lat, 8),
+                        "lon": round(point_lon, 8),
+                        "status": point_status,
+                    }
+                    for junction_id in sorted(controlled_junctions_by_tl.get(tl_id, set()))
+                    if junction_id in junction_xy
+                    for point_lat, point_lon, point_status in [
+                        _junction_latlon(*junction_xy[junction_id], xy_to_latlon)
+                    ]
+                ],
+            }
+        else:
+            centroid_fields["controlled_junction_points"] = []
+        controlled_junction_ids = controlled_junctions_by_tl.get(tl_id, set())
+        controller_internal_passenger_edges = {
+            edge_id
+            for edge_id in passenger_from_edges_by_tl.get(tl_id, set())
+            if edge_id in edge_endpoints
+            and edge_endpoints[edge_id][0] in controlled_junction_ids
+            and edge_endpoints[edge_id][1] in controlled_junction_ids
+        }
         tl_logic_control_records.append(
             {
                 "tl_id": tl_id,
@@ -822,11 +956,34 @@ def _tls_semantic_summary(root: ET.Element, connections: list[ET.Element], junct
                 "controlled_known_from_edge_count": len(known_from_edges_by_tl.get(tl_id, set())),
                 "controlled_passenger_from_edge_count": len(passenger_from_edges_by_tl.get(tl_id, set())),
                 "passenger_from_edge_ids": sorted(passenger_from_edges_by_tl.get(tl_id, set())),
+                "controller_internal_passenger_from_edge_ids": sorted(
+                    controller_internal_passenger_edges
+                ),
+                "passenger_approaches": [
+                    {
+                        "edge_id": edge_id,
+                        "split_root_edge_id": _split_root_edge_id(edge_id),
+                        "bearing_deg": passenger_approach_bearings.get(edge_id),
+                        "controlled_connection_count": sum(
+                            passenger_movements_by_tl_and_edge.get(tl_id, {}).get(edge_id, {}).values()
+                        ),
+                        "movement_signature_counts": dict(
+                            sorted(
+                                passenger_movements_by_tl_and_edge.get(tl_id, {}).get(
+                                    edge_id, {}
+                                ).items()
+                            )
+                        ),
+                    }
+                    for edge_id in sorted(passenger_from_edges_by_tl.get(tl_id, set()))
+                    if edge_id not in controller_internal_passenger_edges
+                ],
                 "linkindexes": linkindexes,
                 "controlled_linkindex_count": len(linkindexes),
                 "phase_state_length": phase_state_length,
                 "shared_linkindex_group_count": int(shared_linkindex_groups_by_tl.get(tl_id, 0)),
                 "sparse_linkindex": bool(linkindexes and phase_state_length > len(linkindexes)),
+                **centroid_fields,
             }
         )
     return {
@@ -865,6 +1022,7 @@ def _count_distribution(values: Any) -> dict[str, int]:
 
 
 def _tls_control_review(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    controller_alignment = _tls_controller_alignment(reference, candidate)
     reference_max_junction_count = _max_distribution_key(
         reference.get("tl_logic_controlled_junction_count_distribution", {})
     )
@@ -969,7 +1127,551 @@ def _tls_control_review(reference: dict[str, Any], candidate: dict[str, Any]) ->
                     "reason": reason,
                 }
             )
-    return {"status": "needs_review" if queue else "pass", "queue_count": len(queue), "queue": queue}
+    return {
+        "status": "needs_review" if queue else "pass",
+        "queue_count": len(queue),
+        "queue": queue,
+        "controller_alignment": controller_alignment,
+    }
+
+
+def _tls_controller_alignment(
+    reference: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    max_distance_m: float = 100.0,
+    controller_group_distance_m: float = 30.0,
+) -> dict[str, Any]:
+    """Pair TLS controllers geographically without assuming stable controller IDs.
+
+    This is diagnostic evidence, not a repair instruction.  A global count delta
+    can hide simultaneous local deficits and surpluses caused by controller
+    splitting, joining, or manual junction aggregation.
+    """
+
+    def usable_records(summary: dict[str, Any]) -> list[dict[str, Any]]:
+        return [
+            record
+            for record in summary.get("tl_logic_control_records", [])
+            if int(record.get("controlled_connection_count", 0)) > 0
+            and isinstance(record.get("controlled_junction_centroid_lat"), (int, float))
+            and isinstance(record.get("controlled_junction_centroid_lon"), (int, float))
+            and not str(record.get("controlled_junction_centroid_status", "")).startswith("xy_fallback")
+        ]
+
+    reference_records = usable_records(reference)
+    candidate_records = usable_records(candidate)
+    if not reference_records or not candidate_records:
+        return {
+            "status": "unavailable",
+            "method": "injective_nearest_controlled_junction_centroid",
+            "max_distance_m": max_distance_m,
+            "reason": "one or both networks lack georeferenced controlled-junction centroids",
+            "pairs": [],
+        }
+
+    distances = sorted(
+        (
+            _tls_controller_distance_m(reference_record, candidate_record),
+            reference_index,
+            candidate_index,
+        )
+        for reference_index, reference_record in enumerate(reference_records)
+        for candidate_index, candidate_record in enumerate(candidate_records)
+    )
+    reference_neighborhoods = []
+    for reference_index, reference_record in enumerate(reference_records):
+        neighbors = sorted(
+            [
+                [distance_m, candidate_records[candidate_index]]
+                for distance_m, candidate_reference_index, candidate_index in distances
+                if candidate_reference_index == reference_index and distance_m <= max_distance_m
+            ],
+            key=lambda item: (item[0], str(item[1].get("tl_id", ""))),
+        )
+        reference_neighborhoods.append(
+            {
+                "reference_tl_id": str(reference_record.get("tl_id", "")),
+                "candidate_tl_ids": [str(record.get("tl_id", "")) for _, record in neighbors],
+                "candidate_controller_count": len(neighbors),
+                "reference_controlled_connection_count": int(
+                    reference_record.get("controlled_connection_count", 0)
+                ),
+                "nearby_candidate_controlled_connection_count": sum(
+                    int(record.get("controlled_connection_count", 0)) for _, record in neighbors
+                ),
+                "possible_candidate_split": len(neighbors) > 1,
+            }
+        )
+    candidate_neighborhoods = []
+    for candidate_index, candidate_record in enumerate(candidate_records):
+        neighbors = sorted(
+            [
+                [distance_m, reference_records[reference_index]]
+                for distance_m, reference_index, candidate_candidate_index in distances
+                if candidate_candidate_index == candidate_index and distance_m <= max_distance_m
+            ],
+            key=lambda item: (item[0], str(item[1].get("tl_id", ""))),
+        )
+        candidate_neighborhoods.append(
+            {
+                "candidate_tl_id": str(candidate_record.get("tl_id", "")),
+                "reference_tl_ids": [str(record.get("tl_id", "")) for _, record in neighbors],
+                "reference_controller_count": len(neighbors),
+                "candidate_controlled_connection_count": int(
+                    candidate_record.get("controlled_connection_count", 0)
+                ),
+                "nearby_reference_controlled_connection_count": sum(
+                    int(record.get("controlled_connection_count", 0)) for _, record in neighbors
+                ),
+                "possible_candidate_merge": len(neighbors) > 1,
+            }
+        )
+    controller_groups = _tls_controller_proximity_groups(
+        reference_records,
+        candidate_records,
+        distances,
+        max_distance_m=controller_group_distance_m,
+    )
+    paired_reference: set[int] = set()
+    paired_candidate: set[int] = set()
+    pairs = []
+    for distance_m, reference_index, candidate_index in distances:
+        if distance_m > max_distance_m:
+            break
+        if reference_index in paired_reference or candidate_index in paired_candidate:
+            continue
+        paired_reference.add(reference_index)
+        paired_candidate.add(candidate_index)
+        reference_record = reference_records[reference_index]
+        candidate_record = candidate_records[candidate_index]
+        reference_count = int(reference_record.get("controlled_connection_count", 0))
+        candidate_count = int(candidate_record.get("controlled_connection_count", 0))
+        pair = {
+                "reference_tl_id": str(reference_record.get("tl_id", "")),
+                "candidate_tl_id": str(candidate_record.get("tl_id", "")),
+                "distance_m": round(distance_m, 3),
+                "reference_controlled_connection_count": reference_count,
+                "candidate_controlled_connection_count": candidate_count,
+                "controlled_connection_delta": candidate_count - reference_count,
+                "reference_junction_ids": list(reference_record.get("junction_ids", [])),
+                "candidate_junction_ids": list(candidate_record.get("junction_ids", [])),
+            }
+        pair.update(_tls_approach_alignment(reference_record, candidate_record))
+        pairs.append(pair)
+
+    unpaired_reference = [
+        reference_records[index] for index in range(len(reference_records)) if index not in paired_reference
+    ]
+    unpaired_candidate = [
+        candidate_records[index] for index in range(len(candidate_records)) if index not in paired_candidate
+    ]
+    paired_reference_count = sum(pair["reference_controlled_connection_count"] for pair in pairs)
+    paired_candidate_count = sum(pair["candidate_controlled_connection_count"] for pair in pairs)
+    high_confidence_movement_gap_queue = [
+        {
+            "reference_tl_id": pair["reference_tl_id"],
+            "candidate_tl_id": pair["candidate_tl_id"],
+            "controller_distance_m": pair["distance_m"],
+            "reference_edge_id": approach["reference_edge_id"],
+            "candidate_edge_id": approach["candidate_edge_id"],
+            "split_root_edge_id": approach["reference_split_root_edge_id"],
+            "bearing_delta_deg": approach["bearing_delta_deg"],
+            "missing_direction_counts": approach["missing_direction_counts"],
+            "missing_direction_instance_count": sum(approach["missing_direction_counts"].values()),
+            "readiness": "needs_destination_edge_and_lane_mapping",
+        }
+        for pair in pairs
+        if float(pair.get("distance_m", max_distance_m + 1.0)) <= controller_group_distance_m
+        for approach in pair.get("approach_pairs", [])
+        if bool(approach.get("split_root_match", False))
+        and float(approach.get("bearing_delta_deg", 360.0)) <= 15.0
+        and bool(approach.get("missing_direction_counts", {}))
+        and not bool(approach.get("extra_direction_counts", {}))
+    ]
+    return {
+        "status": "diagnostic",
+        "method": "injective_nearest_controlled_junction_centroid",
+        "max_distance_m": max_distance_m,
+        "controller_group_distance_m": controller_group_distance_m,
+        "pair_count": len(pairs),
+        "pairs": sorted(pairs, key=lambda pair: (pair["distance_m"], pair["reference_tl_id"])),
+        "boundary_approach_pair_count": sum(
+            int(pair.get("approach_pair_count", 0)) for pair in pairs
+        ),
+        "split_root_approach_pair_count": sum(
+            1
+            for pair in pairs
+            for approach in pair.get("approach_pairs", [])
+            if bool(approach.get("split_root_match", False))
+        ),
+        "bearing_fallback_approach_pair_count": sum(
+            1
+            for pair in pairs
+            for approach in pair.get("approach_pairs", [])
+            if not bool(approach.get("split_root_match", False))
+        ),
+        "high_confidence_movement_gap_candidate_count": len(high_confidence_movement_gap_queue),
+        "high_confidence_missing_direction_instance_count": sum(
+            item["missing_direction_instance_count"] for item in high_confidence_movement_gap_queue
+        ),
+        "high_confidence_movement_gap_queue": sorted(
+            high_confidence_movement_gap_queue,
+            key=lambda item: (
+                item["candidate_tl_id"],
+                item["candidate_edge_id"],
+                item["reference_edge_id"],
+            ),
+        ),
+        "unpaired_reference_boundary_approach_count": sum(
+            int(pair.get("unpaired_reference_approach_count", 0)) for pair in pairs
+            if pair.get("approach_alignment_status") == "diagnostic"
+        ),
+        "unpaired_candidate_boundary_approach_count": sum(
+            int(pair.get("unpaired_candidate_approach_count", 0)) for pair in pairs
+            if pair.get("approach_alignment_status") == "diagnostic"
+        ),
+        "missing_movement_signature_instance_count": sum(
+            sum(approach.get("missing_movement_signature_counts", {}).values())
+            for pair in pairs
+            for approach in pair.get("approach_pairs", [])
+        ),
+        "extra_movement_signature_instance_count": sum(
+            sum(approach.get("extra_movement_signature_counts", {}).values())
+            for pair in pairs
+            for approach in pair.get("approach_pairs", [])
+        ),
+        "exact_direction_approach_pair_count": sum(
+            int(pair.get("exact_direction_approach_pair_count", 0)) for pair in pairs
+        ),
+        "missing_direction_instance_count": sum(
+            int(pair.get("missing_direction_instance_count", 0)) for pair in pairs
+        ),
+        "extra_direction_instance_count": sum(
+            int(pair.get("extra_direction_instance_count", 0)) for pair in pairs
+        ),
+        "reference_controller_internal_passenger_edge_count": sum(
+            len(record.get("controller_internal_passenger_from_edge_ids", []))
+            for record in reference_records
+        ),
+        "candidate_controller_internal_passenger_edge_count": sum(
+            len(record.get("controller_internal_passenger_from_edge_ids", []))
+            for record in candidate_records
+        ),
+        "paired_reference_controlled_connection_count": paired_reference_count,
+        "paired_candidate_controlled_connection_count": paired_candidate_count,
+        "paired_controlled_connection_delta": paired_candidate_count - paired_reference_count,
+        "unpaired_reference_tl_ids": sorted(str(record.get("tl_id", "")) for record in unpaired_reference),
+        "unpaired_candidate_tl_ids": sorted(str(record.get("tl_id", "")) for record in unpaired_candidate),
+        "unpaired_reference_controlled_connection_count": sum(
+            int(record.get("controlled_connection_count", 0)) for record in unpaired_reference
+        ),
+        "unpaired_candidate_controlled_connection_count": sum(
+            int(record.get("controlled_connection_count", 0)) for record in unpaired_candidate
+        ),
+        "aggregate_reference_controlled_connection_count": sum(
+            int(record.get("controlled_connection_count", 0)) for record in reference_records
+        ),
+        "aggregate_candidate_controlled_connection_count": sum(
+            int(record.get("controlled_connection_count", 0)) for record in candidate_records
+        ),
+        "reference_neighborhoods": sorted(
+            reference_neighborhoods,
+            key=lambda item: item["reference_tl_id"],
+        ),
+        "candidate_neighborhoods": sorted(
+            candidate_neighborhoods,
+            key=lambda item: item["candidate_tl_id"],
+        ),
+        "possible_candidate_split_reference_count": sum(
+            1 for item in reference_neighborhoods if item["possible_candidate_split"]
+        ),
+        "possible_candidate_merge_controller_count": sum(
+            1 for item in candidate_neighborhoods if item["possible_candidate_merge"]
+        ),
+        "controller_group_count": len(controller_groups),
+        "controller_groups": controller_groups,
+        "split_controller_group_count": sum(
+            1
+            for group in controller_groups
+            if group["reference_controller_count"] == 1 and group["candidate_controller_count"] > 1
+        ),
+        "merge_controller_group_count": sum(
+            1
+            for group in controller_groups
+            if group["reference_controller_count"] > 1 and group["candidate_controller_count"] == 1
+        ),
+        "many_to_many_controller_group_count": sum(
+            1
+            for group in controller_groups
+            if group["reference_controller_count"] > 1 and group["candidate_controller_count"] > 1
+        ),
+        "repair_safe": False,
+        "warning": "centroid pairing does not yet align approaches or controller split/merge groups",
+    }
+
+
+def _latlon_distance_m(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> float:
+    mean_lat_radians = math.radians((lat_a + lat_b) / 2.0)
+    delta_y = (lat_a - lat_b) * 111_320.0
+    delta_x = (lon_a - lon_b) * 111_320.0 * math.cos(mean_lat_radians)
+    return math.hypot(delta_x, delta_y)
+
+
+def _tls_controller_distance_m(
+    reference_record: dict[str, Any],
+    candidate_record: dict[str, Any],
+) -> float:
+    reference_points = [
+        point
+        for point in reference_record.get("controlled_junction_points", [])
+        if isinstance(point.get("lat"), (int, float))
+        and isinstance(point.get("lon"), (int, float))
+        and not str(point.get("status", "")).startswith("xy_fallback")
+    ]
+    candidate_points = [
+        point
+        for point in candidate_record.get("controlled_junction_points", [])
+        if isinstance(point.get("lat"), (int, float))
+        and isinstance(point.get("lon"), (int, float))
+        and not str(point.get("status", "")).startswith("xy_fallback")
+    ]
+    if reference_points and candidate_points:
+        return min(
+            _latlon_distance_m(
+                float(reference_point["lat"]),
+                float(reference_point["lon"]),
+                float(candidate_point["lat"]),
+                float(candidate_point["lon"]),
+            )
+            for reference_point in reference_points
+            for candidate_point in candidate_points
+        )
+    return _latlon_distance_m(
+        float(reference_record["controlled_junction_centroid_lat"]),
+        float(reference_record["controlled_junction_centroid_lon"]),
+        float(candidate_record["controlled_junction_centroid_lat"]),
+        float(candidate_record["controlled_junction_centroid_lon"]),
+    )
+
+
+def _tls_controller_proximity_groups(
+    reference_records: list[dict[str, Any]],
+    candidate_records: list[dict[str, Any]],
+    distances: list[tuple[float, int, int]],
+    *,
+    max_distance_m: float,
+) -> list[dict[str, Any]]:
+    adjacency: dict[tuple[str, int], set[tuple[str, int]]] = {}
+    for distance_m, reference_index, candidate_index in distances:
+        if distance_m > max_distance_m:
+            break
+        reference_node = ("reference", reference_index)
+        candidate_node = ("candidate", candidate_index)
+        adjacency.setdefault(reference_node, set()).add(candidate_node)
+        adjacency.setdefault(candidate_node, set()).add(reference_node)
+
+    groups = []
+    visited: set[tuple[str, int]] = set()
+    for start in sorted(adjacency):
+        if start in visited:
+            continue
+        stack = [start]
+        component: set[tuple[str, int]] = set()
+        while stack:
+            node = stack.pop()
+            if node in visited:
+                continue
+            visited.add(node)
+            component.add(node)
+            stack.extend(adjacency.get(node, set()) - visited)
+        reference_indexes = sorted(index for side, index in component if side == "reference")
+        candidate_indexes = sorted(index for side, index in component if side == "candidate")
+        if not reference_indexes or not candidate_indexes:
+            continue
+        references = [reference_records[index] for index in reference_indexes]
+        candidates = [candidate_records[index] for index in candidate_indexes]
+        reference_count = sum(int(record.get("controlled_connection_count", 0)) for record in references)
+        candidate_count = sum(int(record.get("controlled_connection_count", 0)) for record in candidates)
+        group = {
+            "group_id": f"tls_group_{len(groups) + 1:03d}",
+            "reference_tl_ids": sorted(str(record.get("tl_id", "")) for record in references),
+            "candidate_tl_ids": sorted(str(record.get("tl_id", "")) for record in candidates),
+            "reference_controller_count": len(references),
+            "candidate_controller_count": len(candidates),
+            "reference_controlled_connection_count": reference_count,
+            "candidate_controlled_connection_count": candidate_count,
+            "controlled_connection_delta": candidate_count - reference_count,
+        }
+        group.update(
+            _tls_approach_alignment(
+                {
+                    "passenger_approaches": [
+                        approach
+                        for record in references
+                        for approach in record.get("passenger_approaches", [])
+                    ]
+                },
+                {
+                    "passenger_approaches": [
+                        approach
+                        for record in candidates
+                        for approach in record.get("passenger_approaches", [])
+                    ]
+                },
+            )
+        )
+        groups.append(group)
+    return sorted(groups, key=lambda group: group["group_id"])
+
+
+def _incoming_edge_bearing_deg(edge: ET.Element) -> float | None:
+    for lane in edge.findall("lane"):
+        if not lane_allows_passenger(lane):
+            continue
+        try:
+            points = _parse_shape(lane.attrib.get("shape", ""))
+        except ValueError:
+            continue
+        if len(points) < 2:
+            continue
+        start, end = points[-2], points[-1]
+        delta_x = end[0] - start[0]
+        delta_y = end[1] - start[1]
+        if math.hypot(delta_x, delta_y) <= 1e-9:
+            continue
+        return round(math.degrees(math.atan2(delta_y, delta_x)) % 360.0, 3)
+    return None
+
+
+def _tls_approach_alignment(
+    reference_record: dict[str, Any],
+    candidate_record: dict[str, Any],
+    *,
+    max_bearing_delta_deg: float = 35.0,
+) -> dict[str, Any]:
+    reference_approaches = [
+        approach
+        for approach in reference_record.get("passenger_approaches", [])
+        if isinstance(approach.get("bearing_deg"), (int, float))
+    ]
+    candidate_approaches = [
+        approach
+        for approach in candidate_record.get("passenger_approaches", [])
+        if isinstance(approach.get("bearing_deg"), (int, float))
+    ]
+    if not reference_approaches or not candidate_approaches:
+        return {
+            "approach_alignment_status": "unavailable",
+            "approach_pair_count": 0,
+            "approach_pairs": [],
+        }
+    distances = sorted(
+        (
+            0
+            if _approach_split_root(reference_approach)
+            and _approach_split_root(reference_approach) == _approach_split_root(candidate_approach)
+            else 1,
+            min(
+                abs(float(reference_approach["bearing_deg"]) - float(candidate_approach["bearing_deg"])),
+                360.0
+                - abs(
+                    float(reference_approach["bearing_deg"])
+                    - float(candidate_approach["bearing_deg"])
+                ),
+            ),
+            reference_index,
+            candidate_index,
+        )
+        for reference_index, reference_approach in enumerate(reference_approaches)
+        for candidate_index, candidate_approach in enumerate(candidate_approaches)
+    )
+    used_reference: set[int] = set()
+    used_candidate: set[int] = set()
+    approach_pairs = []
+    for root_mismatch, bearing_delta_deg, reference_index, candidate_index in distances:
+        if bearing_delta_deg > max_bearing_delta_deg:
+            continue
+        if reference_index in used_reference or candidate_index in used_candidate:
+            continue
+        used_reference.add(reference_index)
+        used_candidate.add(candidate_index)
+        reference_approach = reference_approaches[reference_index]
+        candidate_approach = candidate_approaches[candidate_index]
+        reference_movements = Counter(reference_approach.get("movement_signature_counts", {}))
+        candidate_movements = Counter(candidate_approach.get("movement_signature_counts", {}))
+        reference_directions = _movement_direction_counts(reference_movements)
+        candidate_directions = _movement_direction_counts(candidate_movements)
+        approach_pairs.append(
+            {
+                "reference_edge_id": str(reference_approach.get("edge_id", "")),
+                "candidate_edge_id": str(candidate_approach.get("edge_id", "")),
+                "bearing_delta_deg": round(bearing_delta_deg, 3),
+                "split_root_match": root_mismatch == 0,
+                "reference_split_root_edge_id": _approach_split_root(reference_approach),
+                "candidate_split_root_edge_id": _approach_split_root(candidate_approach),
+                "reference_controlled_connection_count": int(
+                    reference_approach.get("controlled_connection_count", 0)
+                ),
+                "candidate_controlled_connection_count": int(
+                    candidate_approach.get("controlled_connection_count", 0)
+                ),
+                "missing_movement_signature_counts": dict(reference_movements - candidate_movements),
+                "extra_movement_signature_counts": dict(candidate_movements - reference_movements),
+                "missing_direction_counts": dict(reference_directions - candidate_directions),
+                "extra_direction_counts": dict(candidate_directions - reference_directions),
+            }
+        )
+    return {
+        "approach_alignment_status": "diagnostic",
+        "approach_max_bearing_delta_deg": max_bearing_delta_deg,
+        "approach_pair_count": len(approach_pairs),
+        "reference_approach_count": len(reference_approaches),
+        "candidate_approach_count": len(candidate_approaches),
+        "unpaired_reference_approach_count": len(reference_approaches) - len(used_reference),
+        "unpaired_candidate_approach_count": len(candidate_approaches) - len(used_candidate),
+        "approach_pairs": sorted(
+            approach_pairs,
+            key=lambda item: (item["bearing_delta_deg"], item["reference_edge_id"]),
+        ),
+        "exact_direction_approach_pair_count": sum(
+            1
+            for approach in approach_pairs
+            if not approach["missing_direction_counts"] and not approach["extra_direction_counts"]
+        ),
+        "missing_direction_instance_count": sum(
+            sum(approach["missing_direction_counts"].values()) for approach in approach_pairs
+        ),
+        "extra_direction_instance_count": sum(
+            sum(approach["extra_direction_counts"].values()) for approach in approach_pairs
+        ),
+    }
+
+
+def _movement_direction_counts(movements: Counter[str]) -> Counter[str]:
+    directions: Counter[str] = Counter()
+    for signature, count in movements.items():
+        direction = next(
+            (
+                field.partition("=")[2]
+                for field in str(signature).split("|")
+                if field.startswith("dir=")
+            ),
+            "",
+        )
+        directions[direction] += int(count)
+    return directions
+
+
+def _split_root_edge_id(edge_id: str) -> str:
+    return edge_id.split("#", 1)[0]
+
+
+def _approach_split_root(approach: dict[str, Any]) -> str:
+    return str(
+        approach.get("split_root_edge_id")
+        or _split_root_edge_id(str(approach.get("edge_id", "")))
+    )
 
 
 def _max_distribution_key(distribution: Any) -> int:
@@ -1141,7 +1843,7 @@ def _coordinate_converter(root: ET.Element, net_file: Path) -> Callable[[float, 
 
         net = sumolib.net.readNet(str(net_file))
         return lambda x, y: _net_xy_to_latlon(net, x, y)
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional sumolib projection has an explicit no-geo fallback.
         return None
 
 
@@ -1154,7 +1856,7 @@ def _junction_latlon(
         return y, x, "xy_fallback_no_geo_projection"
     try:
         lat, lon = xy_to_latlon(x, y)
-    except Exception:
+    except Exception:  # noqa: BLE001 - converter may be supplied by sumolib/pyproj and is best-effort.
         return y, x, "xy_fallback_geo_projection_failed"
     return lat, lon, "wgs84_from_sumo_projection"
 

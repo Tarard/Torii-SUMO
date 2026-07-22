@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import xml.etree.ElementTree as ET
 
 from torii_sumo.core.reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
@@ -95,6 +96,64 @@ def test_reference_hierarchy_audit_classifies_high_road_gap_modes(tmp_path: Path
     assert Path(report["cases_file"]).is_file()
     assert Path(report["type_comparison_file"]).is_file()
     assert Path(report["summary_file"]).is_file()
+
+
+def test_reference_hierarchy_can_resolve_proven_equivalent_osm_fragmentation(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference_fragmented.net.xml"
+    candidate_net = tmp_path / "candidate_fragmented.net.xml"
+    _write_named_net(
+        reference_net,
+        [("ref_corridor", "ra", "rd", "highway.primary", 300.0, "0,0 300,0", "Ringstrasse")],
+    )
+    _write_named_net(
+        candidate_net,
+        [
+            ("cand_a", "ca", "cb", "highway.primary", 90.0, "0,1 90,1", "ringstrasse"),
+            ("cand_b", "cb", "cc", "highway.primary", 95.0, "90,1 185,1", "ringstrasse"),
+            ("cand_c", "cc", "cd", "highway.primary", 110.0, "185,1 295,1", "ringstrasse"),
+        ],
+    )
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy_equivalent",
+        prefix="equivalent",
+        match_distance_m=20.0,
+        oversplit_length_ratio=0.5,
+        min_extra_edges=1,
+        resolve_equivalent_fragmentation=True,
+    )
+
+    assert report["status"] == "pass"
+    assert report["reference_hierarchy_status"] == "pass"
+    assert report["high_hierarchy_issue_count"] == 0
+    assert report["raw_high_hierarchy_issue_count"] == 3
+    assert report["equivalent_fragmentation_count"] == 3
+    assert report["decision_counts"] == {"aligned": 3}
+    assert all(
+        case["hierarchy_resolution"] == "equivalent_fragmentation"
+        for case in report["candidate_cases"]
+    )
+
+
+def test_reference_hierarchy_audit_shortens_long_artifact_paths(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference_short.net.xml"
+    candidate_net = tmp_path / "candidate_short.net.xml"
+    _write_net(reference_net, [("ref_primary", "a", "b", "highway.primary", 100.0, "0,0 100,0")])
+    _write_net(candidate_net, [("cand_primary", "c", "d", "highway.primary", 100.0, "0,0 100,0")])
+
+    report = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / ("hierarchy_" + "x" * 100),
+        prefix="p" * 140,
+    )
+
+    assert Path(report["cases_file"]).is_file()
+    assert Path(report["type_comparison_file"]).is_file()
+    assert Path(report["summary_file"]).is_file()
+    assert Path(report["cases_file"]).name.startswith("p_")
 
 
 def test_reference_hierarchy_audit_passes_when_high_roads_are_aligned(tmp_path: Path) -> None:
@@ -409,6 +468,51 @@ def test_reference_hierarchy_type_repair_variant_copies_same_name_reference_type
         min_extra_edges=1,
     )
     assert repaired_audit["status"] == "pass"
+
+
+def test_reference_hierarchy_type_repair_preserves_candidate_modal_decoration(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    _write_named_net(
+        reference_net,
+        [
+            (
+                "ref_ring",
+                "ra",
+                "rb",
+                "cycleway.track|highway.tertiary",
+                120.0,
+                "0,0 120,0",
+                "Ringstrasse",
+            )
+        ],
+    )
+    _write_named_net(
+        candidate_net,
+        [("cand_ring", "ca", "cb", "highway.secondary", 118.0, "0,2 118,2", "Ringstrasse")],
+    )
+    audit = audit_reference_hierarchy(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        output_dir=tmp_path / "hierarchy",
+        prefix="before",
+        match_distance_m=10.0,
+        min_extra_edges=1,
+    )
+
+    repair = build_reference_hierarchy_type_repair_variant(
+        candidate_net_file=candidate_net,
+        reference_hierarchy_report=audit,
+        output_dir=tmp_path / "repair",
+        prefix="repair",
+    )
+
+    assert repair["reference_hierarchy_type_repair_count"] == 1
+    plan = json.loads(Path(repair["reference_hierarchy_type_repair_plan_file"]).read_text(encoding="utf-8"))
+    assert plan["repairs"][0]["reference_edge_type"] == "cycleway.track|highway.tertiary"
+    assert plan["repairs"][0]["applied_edge_type"] == "highway.tertiary"
+    variant_root = ET.parse(repair["reference_hierarchy_type_repair_variant_file"]).getroot()
+    assert variant_root.find("edge[@id='cand_ring']").attrib["type"] == "highway.tertiary"
 
 
 def test_reference_hierarchy_type_repair_variant_skips_ambiguous_mismatch(tmp_path: Path) -> None:

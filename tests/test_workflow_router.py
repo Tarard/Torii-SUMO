@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from torii_sumo.core.workflow_router import (
+    WORKFLOW_RECIPES,
     detect_workflow,
     infer_place_name,
     infer_seed_osm_node_id,
@@ -34,6 +37,7 @@ def test_infer_place_name_from_one_prompt_osm_request() -> None:
 
 
 def test_detect_workflow_routes_common_one_sentence_requests() -> None:
+    assert detect_workflow("Build a four-way TLS intersection") == "intersection_scene"
     assert detect_workflow("download the Altstadt map from OSM and open it in SUMO") == "osm_to_sumo"
     assert detect_workflow("generate a TUM-like SUMO network from OSM with TLS and connection semantics") == "osm_to_sumo"
     assert (
@@ -48,6 +52,150 @@ def test_detect_workflow_routes_common_one_sentence_requests() -> None:
     assert detect_workflow("check whether this route from station to museum is connected") == "routeability"
     assert detect_workflow("my waiting time got worse after cleanup") == "debug_bad_run"
     assert detect_workflow("compare fixed-time and max-pressure controllers") == "experiment_audit"
+
+
+def test_intersection_scene_recipe_uses_phase_one_workflow_tool() -> None:
+    recipe = WORKFLOW_RECIPES["intersection_scene"]
+
+    assert recipe["tool_chain"] == ["sumo_intersection_scene_workflow"]
+    assert "four-way" in recipe["description"]
+
+
+def test_detect_workflow_keeps_audit_and_osm_patch_requests_out_of_scene_generation() -> None:
+    assert detect_workflow("Create a TLS audit for this SUMO network") == "tls_review"
+    assert (
+        detect_workflow("Build this local OSM four-way TLS intersection patch")
+        == "intersection_clean"
+    )
+    assert (
+        detect_workflow("Create this local OSM four-way TLS intersection patch")
+        == "intersection_clean"
+    )
+    assert (
+        detect_workflow("Patch this local OSM four-way TLS intersection")
+        == "intersection_clean"
+    )
+    assert (
+        detect_workflow("Dispatch this local OSM four-way TLS intersection")
+        != "intersection_clean"
+    )
+
+
+def test_detect_workflow_requires_affirmative_scene_signalization() -> None:
+    for prompt in (
+        "Build a four-way unsignalized intersection",
+        "Build a four-way non-signalized intersection",
+        "Build a four-way not signalized intersection",
+        "Build a four-way without traffic lights",
+        "Build a four-way without any traffic lights",
+        "Build a four-way with no traffic lights",
+        "Build a four-way intersection that isn't signalized",
+        "Build a four-way intersection that does not have traffic lights",
+        "Build a four-way intersection that isn't controlled by traffic lights",
+        "Build a four-way never-signalized intersection",
+        "Build a four-way intersection with neither TLS nor traffic lights",
+        "Build a four-way intersection that is not actually signalized",
+    ):
+        assert detect_workflow(prompt) != "intersection_scene"
+        assert detect_workflow(prompt) == "tls_review"
+
+
+def test_detect_workflow_keeps_negated_signalization_reviews_in_tls_review() -> None:
+    assert detect_workflow("Audit why this intersection is not signalized") == "tls_review"
+    assert (
+        detect_workflow("Review the TLS because this junction is not signalized")
+        == "tls_review"
+    )
+
+
+@pytest.mark.parametrize(
+    "near_match", ["traffic-lighting", "tlssuffix", "signalizedness"]
+)
+def test_detect_workflow_does_not_treat_signalization_near_matches_as_scene(
+    near_match: str,
+) -> None:
+    assert (
+        detect_workflow(f"Build a four-way {near_match} intersection") == "general"
+    )
+
+
+@pytest.mark.parametrize(
+    "unsupported_feature",
+    [
+        "taxi",
+        "taxis",
+        "all modes",
+        "bus",
+    ],
+)
+def test_detect_workflow_shares_scene_feature_limits(unsupported_feature: str) -> None:
+    assert (
+        detect_workflow(
+            f"Build a four-way TLS intersection with {unsupported_feature} access"
+        )
+        == "tls_review"
+    )
+
+
+@pytest.mark.parametrize(
+    "supported_feature",
+    ["pedestrian", "ped", "bike", "cyclist", "cyclists", "biking", "sidewalk", "sidewalks", "ramp"],
+)
+def test_detect_workflow_routes_phase_two_scene_features_to_scene_builder(
+    supported_feature: str,
+) -> None:
+    assert (
+        detect_workflow(
+            f"Build a four-way TLS intersection with {supported_feature} access"
+        )
+        == "intersection_scene"
+    )
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Build a four-way TLS intersection from OSM",
+        "Generate a map for a four-way TLS intersection",
+        "Create a map for a four-way TLS intersection",
+        "Make an OSM four-way TLS intersection",
+        "Create an OpenStreetMap four-way TLS intersection",
+        "Make an OpenStreetMap four-way TLS intersection",
+    ],
+)
+def test_detect_workflow_prioritizes_osm_generation_over_scene(prompt: str) -> None:
+    assert detect_workflow(prompt) == "osm_to_sumo"
+
+
+@pytest.mark.parametrize("intent", ["compare", "baseline", "fixed-time", "max-pressure"])
+def test_detect_workflow_prioritizes_experiments_over_scene(intent: str) -> None:
+    assert (
+        detect_workflow(f"Build a four-way TLS intersection for a {intent} experiment")
+        == "experiment_audit"
+    )
+
+
+def test_detect_workflow_recognizes_explicit_experiment_intent() -> None:
+    assert (
+        detect_workflow("Build a four-way TLS intersection experiment")
+        == "experiment_audit"
+    )
+
+
+def test_detect_workflow_prioritizes_tls_review_over_generic_network_review() -> None:
+    assert detect_workflow("Review TLS in this SUMO network") == "tls_review"
+    assert (
+        detect_workflow("Review traffic signals in this SUMO network")
+        == "tls_review"
+    )
+    assert (
+        detect_workflow("Create an HTML review cockpit for this TLS SUMO network")
+        == "network_review"
+    )
+
+
+def test_detect_workflow_does_not_treat_roadmap_as_map_intent() -> None:
+    assert detect_workflow("Create a roadmap for later work") == "general"
 
 
 def test_infer_seed_osm_node_id_requires_node_context() -> None:
@@ -309,6 +457,52 @@ def test_auto_workflow_routes_local_osm_intersection_patch_to_intersection_clean
     assert captured["osm_file"] == osm_file
     assert captured["output_dir"] == tmp_path
     assert captured["compile_net"] is True
+
+
+def test_auto_workflow_runs_synthetic_four_way_tls_scene(tmp_path: Path) -> None:
+    prompt = "Generate a four-way signalized intersection"
+    calls = {}
+
+    def fake_scene(prompt: str, output_dir: Path, launch_netedit_after_build: bool = False):
+        calls.update(
+            prompt=prompt,
+            output_dir=output_dir,
+            launch_netedit_after_build=launch_netedit_after_build,
+        )
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "artifact_manifest_file": str(tmp_path / "intersection_scene_artifact_manifest.json"),
+            "net_file": str(tmp_path / "intersection_scene.net.xml"),
+            "sumocfg_file": str(tmp_path / "intersection_scene.sumocfg"),
+            "netconvert_status": "pass",
+            "sumo_load_status": "pass",
+            "routeability_status": "pass",
+            "tls_status": "pass",
+            "netedit_status": "not_requested",
+        }
+
+    report = run_auto_workflow(
+        user_request=prompt,
+        output_dir=tmp_path,
+        intersection_scene_func=fake_scene,
+    )
+
+    assert calls == {
+        "prompt": prompt,
+        "output_dir": tmp_path,
+        "launch_netedit_after_build": False,
+    }
+    assert report["detected_workflow"] == "intersection_scene"
+    assert report["execution_status"] == "executed"
+    assert report["tool_called"] == "sumo_intersection_scene_workflow"
+    assert report["status"] == "pass"
+    assert report["claim_status"] == "diagnostic-demo"
+    assert report["artifact_manifest_file"].endswith("_artifact_manifest.json")
+    assert report["sumo_load_status"] == "pass"
+    assert report["routeability_status"] == "pass"
+    assert report["tls_status"] == "pass"
+    assert report["workflow_result"]["netconvert_status"] == "pass"
 
 
 def test_auto_workflow_passes_prompt_seed_to_intersection_cleaner(tmp_path: Path) -> None:
@@ -620,8 +814,9 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
             "reference_join_post_teacher_audit_status": "pass",
             "routeability_audit_status": "pass",
             "reference_join_audit": {"junction_pattern_index": [{"junction_id": "cluster_a_b"}]},
-            "gate_status": {
-                "reference_join_audit": "pass",
+                "gate_status": {
+                    "connection_mode_audit": "review_required",
+                    "reference_join_audit": "pass",
                 "reference_join_aggregation": "blocked",
                 "netedit_connection_mode_review": "blocked",
                 "netedit": "blocked",
@@ -763,8 +958,14 @@ def test_auto_workflow_exposes_reference_matched_semantics_chain(tmp_path: Path)
     assert promotion_trace["claim_status"] == "diagnostic-demo"
     assert [stage["stage_id"] for stage in promotion_trace["stages"]] == list(stage_results)
     assert promotion_trace["stages"][1]["promotion_decision"] == "pass"
-    assert "netedit_connection_mode_review" in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
-    assert "netedit_connection_mode" not in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    assert (
+        "map_or_field_evidence_for_connection_review_findings"
+        in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    )
+    assert (
+        "netedit_connection_mode_review"
+        not in report["reference_matched_semantics_workflow"]["required_manual_reviews"]
+    )
     assert "connection_semantics_parity" in report["network_plan"]["validation_gates"]
     assert "road_connectivity_parity" in report["network_plan"]["validation_gates"]
     assert "tls_semantics_parity" in report["network_plan"]["validation_gates"]

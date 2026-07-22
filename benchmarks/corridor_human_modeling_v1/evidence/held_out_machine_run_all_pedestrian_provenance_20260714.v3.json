@@ -1,0 +1,177 @@
+{
+  "schema": "torii.corridor.real-held-out-machine-evidence/v3",
+  "recorded_at": "2026-07-14",
+  "corpus_id": "manifest_e2562c4125f9f157ece520d5",
+  "producer": {
+    "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+    "branch": "codex/ingolstadt-osm-baseline",
+    "revision": "be15f6e4a3eb2ecbc08a8826e5a6afb1f6ccac94",
+    "tree_revision": "9d0e8624ea527a6232eef05f03367cf9edc51bd4",
+    "working_tree_clean": true
+  },
+  "run_identity": {
+    "schema": "torii.corridor.held-out-machine-run-identity/v1",
+    "run_identity_id": "toolchain_5a0df28cdada493db9515ec4",
+    "run_identity_sha256": "8ff57e2273311164a78058e72c34b83461fbacac9f73eeaec835bd2dbc1fcfe8",
+    "toolchain_id": "toolchain_48d9790480acc11e5c4b6b5d",
+    "toolchain_lock_sha256": "9fd07c42362f70f129d11fe21b85a4b304f22c493366f6cd125ed30424e49c55",
+    "python_version": "3.12.13",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "timeout_seconds": 300.0,
+    "selected_corridor_count": 30,
+    "runtime_dependencies": {
+      "pydantic": "2.13.4",
+      "pytest": "9.1.1",
+      "ruff": "0.15.21",
+      "sumolib": "1.27.1",
+      "torii-sumo": "1.0.2"
+    },
+    "runtime_tools": {
+      "python": {
+        "version": "3.12.13",
+        "sha256": "e850bfe7e4ca64d4b1a10a34fd8ab4f74108c75a559c200700655df9eaad905f"
+      },
+      "netconvert": {
+        "version": "1.27.1",
+        "sha256": "97dd530fa8c5a784ca0db2c645d77306916579c08867996c98b97f18f62cc8ad"
+      },
+      "sumo": {
+        "version": "1.27.1",
+        "sha256": "8cc770aca4257d2cb821d91c0d346256c72c2983708137bc94789c75d00254b4"
+      }
+    },
+    "support_file_count": 4
+  },
+  "artifact_contracts": {
+    "machine_report_schema": "torii.corridor.held-out-corpus-machine-report/v2",
+    "machine_manifest_schema": "torii.corridor.held-out-corpus-machine-manifest/v2",
+    "contracts_valid": true,
+    "report_sha256": "71888103870ebdae17471d5f77ea2df12ca8721a2037bc462c77fa1133a1d6bb",
+    "manifest_sha256": "6ecec5b8477ae6298c78b86b15c42767b5f3b2f19b7ea4385b8aa2e5a2393ba4",
+    "manifest_artifact_count": 1243,
+    "manifest_missing_artifact_count": 0,
+    "manifest_hash_failure_count": 0,
+    "output_artifact_unlisted_count": 0,
+    "identity_ids_consistent": true
+  },
+  "automatic_promotion_gate": "blocked",
+  "evidence_build_status": "blocked",
+  "case_outcomes": {
+    "expected_case_count": 30,
+    "processed_case_count": 30,
+    "pipeline_pass_count": 27,
+    "pipeline_blocked_count": 3,
+    "review_case_count": 27,
+    "source_osm_immutable_count": 30,
+    "machine_label_counts": {
+      "acceptable": 0,
+      "ambiguous": 0,
+      "defect": 30
+    },
+    "applicability_counts": {
+      "out-of-domain": 27,
+      "invalid": 3
+    },
+    "sumo_load_status_counts": {
+      "pass": 22,
+      "fail": 5,
+      "not-run": 3
+    },
+    "connection_mode_status_counts": {
+      "review_required": 1,
+      "fail": 26,
+      "not-run": 3
+    },
+    "independent_safety_status_counts": {
+      "review": 2,
+      "blocked": 28
+    },
+    "routeability_status_counts": {
+      "pass": 14,
+      "fail": 13,
+      "not-run": 3
+    }
+  },
+  "pedestrian_safety_coverage": {
+    "canonical_movement_count": 184426,
+    "controlled_connection_count": 32525,
+    "mapped_controlled_movement_count": 32525,
+    "unsupported_controlled_connection_count": 0,
+    "crossing_edge_count": 18313,
+    "modeled_crossing_edge_count": 18311,
+    "unmodeled_crossing_edge_count": 2,
+    "modeled_pedestrian_movement_count": 18311,
+    "modeled_controlled_pedestrian_movement_count": 4529,
+    "modeled_uncontrolled_pedestrian_movement_count": 13782,
+    "walkingarea_edge_count": 72914,
+    "unresolved_owner_record_count": 27,
+    "link_index2_connection_count": 0,
+    "complete_case_safety_status_counts": {
+      "review": 2,
+      "blocked": 25
+    },
+    "review_cases": [
+      "amsterdam-a10-amstel",
+      "sydney-harbour-bridge"
+    ],
+    "remaining_unmodeled_crossings": [
+      {
+        "corridor_key": "paris-porte-maillot",
+        "count": 2,
+        "exact_stable_review_task_status": "not-yet-emitted"
+      }
+    ]
+  },
+  "independent_safety_finding_counts": {
+    "controlled_pedestrian_signal_group_missing": 453,
+    "movement_modes_outside_certified_conflict_applicability": 20965,
+    "movement_path_permission_empty": 2,
+    "pedestrian_facilities_outside_independent_conflict_model": 1,
+    "pedestrian_facility_ownership_unresolved": 27,
+    "permissive_conflict_requires_independent_yield_review": 13795,
+    "permissive_potential_envelope_conflict_requires_review": 19561,
+    "protected_green_movement_conflict": 2500,
+    "protected_green_potential_envelope_conflict": 21517,
+    "uncontrolled_pedestrian_vehicle_conflict_requires_right_of_way_review": 34493,
+    "uncontrolled_pedestrian_vehicle_envelope_requires_review": 53930
+  },
+  "comparison_to_controlled_pedestrian_run": {
+    "baseline_commit": "e552b82165bef0c4c2b6ca95afdb437c525d5c66",
+    "canonical_movement_count_before": 170644,
+    "canonical_movement_count_after": 184426,
+    "modeled_crossing_edge_count_before": 4529,
+    "modeled_crossing_edge_count_after": 18311,
+    "unmodeled_crossing_edge_count_before": 13784,
+    "unmodeled_crossing_edge_count_after": 2,
+    "modeled_uncontrolled_pedestrian_movement_count_before": 0,
+    "modeled_uncontrolled_pedestrian_movement_count_after": 13782,
+    "protected_green_movement_conflict_before": 2500,
+    "protected_green_movement_conflict_after": 2500,
+    "non_safety_case_status_difference_count": 0,
+    "interpretation": "Uncontrolled crossings now enter the independent geometry graph but remain review-only until right-of-way is independently verified. Protected TLS conflict counts are unchanged."
+  },
+  "netconvert_replay_failures": [
+    "london-kings-cross",
+    "melbourne-royal-parade",
+    "sydney-cross-city-tunnel"
+  ],
+  "review_package": {
+    "blinded_dataset_sha256": "80428dab4fa88522159101a4ef9d7baa831c8e1d2bbcc8792ea9b4f125a8f0fa",
+    "unblinding_key_sha256": "c94f603134e6d1a9d64d91c764a83e111b84d618a5694e72af801f0b26cd1048",
+    "bound_review_case_count": 27,
+    "human_review_decision_count": 0,
+    "human_adjudication_count": 0
+  },
+  "diagnostic_runtime_seconds": 1242.8,
+  "authoritative_ingolstadt_source_sha256_after_run": "52114063a325b26f1b50ca08d4686697cc03ea1767dce1dc3815f4a5ae362f57",
+  "claims_not_supported": [
+    "The 34493 confirmed uncontrolled pedestrian conflicts are human-confirmed field defects",
+    "The 53930 envelope-proximity findings are independent real-world defects",
+    "Uncontrolled pedestrian right-of-way has been independently verified",
+    "The 453 missing signal-group findings all have the same root cause",
+    "The two remaining unmodeled crossings are safe or irrelevant",
+    "Stage 1 exit conditions are complete",
+    "AutoPrecision or AutoCoverage has been measured",
+    "Any city can now be automatically cleaned to expert NetEdit quality"
+  ]
+}

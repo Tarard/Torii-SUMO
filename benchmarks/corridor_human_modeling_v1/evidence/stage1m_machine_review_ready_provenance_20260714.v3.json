@@ -1,0 +1,763 @@
+{
+  "artifacts": [
+    {
+      "logical_name": "contract_workflow",
+      "path": ".github/workflows/corridor-contracts.yml",
+      "role": "contract-ci",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "d33e009a5fefc5106721c75a4c94d7cd1366d77e463968b340b8555007531f5d",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "prior_retained_provenance",
+      "path": "benchmarks/corridor_human_modeling_v1/evidence/held_out_machine_run_all_pedestrian_provenance_20260714.v3.json",
+      "role": "historical-provenance",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "b7d25cfed227bdd4578b82026330fcce63789cd2539869079dd58e39ded14192",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "effective_corpus",
+      "path": "benchmarks/corridor_human_modeling_v1/held_out_effective_corpus.v2.json",
+      "role": "benchmark-spec",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "a5a6669ac2da4451cc5a3ac863bbd46ab76216898a807f68d49a1b4bddc7ff58",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "replacement_ledger",
+      "path": "benchmarks/corridor_human_modeling_v1/held_out_replacement_attempt_ledger.v2.json",
+      "role": "replacement-ledger",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "1e58ffb42f6979917a57a14f0963a8dd618993cfa53e153aff6f0f84aa6318c4",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "execution_parent",
+      "path": "benchmarks/corridor_human_modeling_v1/held_out_review_execution_parent.v2-r2.json",
+      "role": "review-parent",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "0c551de8774ea94e25915239fe3c0c4a2be817d74af024952cc9b10968c3e296",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "base_review_policy",
+      "path": "benchmarks/corridor_human_modeling_v1/held_out_review_preregistration.v2.json",
+      "role": "review-policy",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "ef32d15b9c2d7deb3c7076029db2d2acf759c47b59d8b9416e4230412eda2414",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "trial_instance",
+      "path": "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+      "role": "review-trial",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "7f9ff6c44283d430c4020f286789be6dcf98fecf083a20abd8b42438e73771b3",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "source_snapshot_protocol",
+      "path": "benchmarks/corridor_human_modeling_v1/held_out_source_snapshot_protocol.v2.json",
+      "role": "source-protocol",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "study_sampling_policy",
+      "path": "benchmarks/corridor_human_modeling_v1/review_study_sampling_policy.v2-r2.json",
+      "role": "sampling-policy",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "82e3bcbc50e4eeb352d265a34856584b905e113d7031862d8228c922be7d6be7",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "witness_sampling_policy",
+      "path": "benchmarks/corridor_human_modeling_v1/review_witness_sampling_policy.v2.json",
+      "role": "sampling-policy",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "aa733c926a1b3edf53a29903c36e090b8e5e85111b5c9956a28c6cf1d5d80d99",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "toolchain_lock",
+      "path": "benchmarks/corridor_human_modeling_v1/toolchain.lock.json",
+      "role": "toolchain-lock",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "9fd07c42362f70f129d11fe21b85a4b304f22c493366f6cd125ed30424e49c55",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "blind_review_protocol",
+      "path": "docs/held-out-corridor-blind-review-protocol-v2.md",
+      "role": "review-protocol",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "6b7a035324f7d2aeef8e251d8afccb4c59d83fcdefacd5a648bb0dc92425c2e1",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "review_ready_plan",
+      "path": "docs/stage1-machine-review-ready-plan.md",
+      "role": "status-document",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "b41f3c769830e3115fdf35b2b158bd72190b8ad54a90862b2783f360fe049dca",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "implementation_status",
+      "path": "docs/torii-corridor-human-modeling-implementation-status.md",
+      "role": "status-document",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "1dfda591af8284459d3daad9edbdfcff59ecc7d6f31b972da23d7ba7b4005a07",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    },
+    {
+      "logical_name": "row_1_report",
+      "path": "outputs/row1-dev-experiment-v5/row-1-experiment-report.json",
+      "role": "row-experiment-report",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "80a540c1045639d2a834ceaddd4e4b913980aec93fb277501089c335a84a02e8",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "row_1_repeat_report",
+      "path": "outputs/row1-dev-experiment-v6/row-1-experiment-report.json",
+      "role": "row-experiment-report",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "80a540c1045639d2a834ceaddd4e4b913980aec93fb277501089c335a84a02e8",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "snapshot_manifest",
+      "path": "outputs/stage1m-v2-effective-snapshots/held_out_corpus.snapshot-manifest.json",
+      "role": "snapshot-manifest",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "f80d03799bbac58072a2bd02368f702fa0f63d075925f09e043fdc5858118152",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "snapshot_report",
+      "path": "outputs/stage1m-v2-effective-snapshots/held_out_corpus.snapshot-report.json",
+      "role": "snapshot-report",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "47adec49d5dd0af85ef52314a48ab3df712a74837924bc87fe1b165cc567f976",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "london_coverage_evidence",
+      "path": "outputs/stage1m-v2-machine-final/cases/london-liverpool-street/independent-safety.json",
+      "role": "independent-safety-report",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "52168045f30b2be12bb58220c3c757391ab9dcf929bc60ba289772789d2f01cd",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "paris_coverage_evidence",
+      "path": "outputs/stage1m-v2-machine-final/cases/paris-porte-maillot/independent-safety.json",
+      "role": "independent-safety-report",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "d1ed637c30023d85f06f8cdb198abba3bebab2537c2f9fdb00e33bfdcfa88919",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "machine_manifest",
+      "path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-manifest.json",
+      "role": "machine-manifest",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "a7c832ef7cf7ce950f131921bb232ea7eca78d34ade9d9712a78fa16f7dbe5af",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "machine_report",
+      "path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-report.json",
+      "role": "machine-report",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "fc1155f3b33ff8ca0451976278d77d77b92a67c072499a4e7e264270437b7c0c",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "machine_run_identity",
+      "path": "outputs/stage1m-v2-machine-final/held_out_corpus.run-identity.json",
+      "role": "run-identity",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "4a9242b22d6861cd6e3675df2a77940d7e056d268a3036015ee0850643531b21",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "review_repeat_manifest",
+      "path": "outputs/stage1m-v2-review-package-final-rerun/held_out_review.package-manifest.v2-r2.json",
+      "role": "review-package-repeat-manifest",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "760c1a5c176104d2c02a393245743450b79d0c12b0a4449c82675ca1e2d8edc2",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "review_dataset",
+      "path": "outputs/stage1m-v2-review-package-final/held_out_review.blinded-attention-dataset.v2-r2.json",
+      "role": "blinded-review-dataset",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "3e5270fa12e0d7b367785dc1352c75e4428ee5ad5b4ea27fd04343b202749070",
+      "tracked_in_git": false,
+      "visibility": "reviewer-visible"
+    },
+    {
+      "logical_name": "review_package_manifest",
+      "path": "outputs/stage1m-v2-review-package-final/held_out_review.package-manifest.v2-r2.json",
+      "role": "review-package-manifest",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "760c1a5c176104d2c02a393245743450b79d0c12b0a4449c82675ca1e2d8edc2",
+      "tracked_in_git": false,
+      "visibility": "local-machine-evidence"
+    },
+    {
+      "logical_name": "review_evaluation_key",
+      "path": "outputs/stage1m-v2-review-package-final/restricted/held_out_review.attention-evaluation-key.v2-r2.json",
+      "role": "evaluation-key",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "fd5c35ab1dc68bf0308461db141aaf729c3b15334af3100e805adb28cc5b3767",
+      "tracked_in_git": false,
+      "visibility": "restricted-hash-only"
+    },
+    {
+      "logical_name": "review_sampling_ledger",
+      "path": "outputs/stage1m-v2-review-package-final/restricted/held_out_review.sampling-ledger.v2-r2.json",
+      "role": "sampling-ledger",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "654aa56aba0ba0046630466113d4b25992b3301cbfaab742230f04e787d62b52",
+      "tracked_in_git": false,
+      "visibility": "restricted-hash-only"
+    },
+    {
+      "logical_name": "provenance_schema",
+      "path": "schemas/torii.corridor.stage1m-machine-review-ready-provenance.v3.schema.json",
+      "role": "json-schema",
+      "schema": "torii.corridor.contracts/v1",
+      "sha256": "39114227edbbcdc6c3a78131c34b8b686f0ab0b56ee2dc91994a507458ffe5ff",
+      "tracked_in_git": true,
+      "visibility": "tracked-public"
+    }
+  ],
+  "automatic_promotion_gate": "blocked",
+  "claims_not_supported": [
+    "auto-precision-or-auto-coverage-has-been-measured",
+    "machine-findings-are-human-confirmed-field-defects",
+    "nema-pedestrian-bicycle-rail-or-multimodal-safety-is-certified",
+    "request-foes-internal-geometry-or-tls-is-independently-proven-correct",
+    "stage-1-has-exited",
+    "stage-2-or-later-edit-classes-are-certified",
+    "the-held-out-corpus-proves-cross-city-generalization",
+    "the-row-1-development-oracle-proves-field-right-of-way-truth",
+    "universal-osm-cleaning-to-expert-netedit-quality-is-achieved"
+  ],
+  "coverage": {
+    "certification_site_group_count": 2,
+    "effective_coverage_gap_count": 3,
+    "field_structural_defect_claimed": false,
+    "gaps": [
+      {
+        "certification_site_group": "london-liverpool-street-facility",
+        "corridor_key": "london-liverpool-street",
+        "coverage_gap_id": "coverage_6bd0ab011400a059cc11da27",
+        "crossing_signature": "signature_9ad24b6a99c8b98c4fec979e",
+        "position_xy": [
+          3622.97,
+          277.65
+        ],
+        "primary_classification": "safety-coverage-blocker",
+        "rejection_reasons": [
+          "pedestrian_crossed_ports_empty",
+          "pedestrian_destination_owner_unresolved",
+          "pedestrian_owner_unresolved"
+        ],
+        "schema": "torii.corridor.contracts/v1",
+        "secondary_classifications": [
+          "review-required",
+          "out-of-domain"
+        ]
+      },
+      {
+        "certification_site_group": "paris-porte-maillot-complex",
+        "corridor_key": "paris-porte-maillot",
+        "coverage_gap_id": "coverage_849e1b18356ae0d0ce9612e8",
+        "crossing_signature": "signature_4aaaeebd3aaa97b8a2739679",
+        "position_xy": [
+          1895.26,
+          1363.745
+        ],
+        "primary_classification": "safety-coverage-blocker",
+        "rejection_reasons": [
+          "pedestrian_crossed_ports_empty",
+          "pedestrian_destination_owner_unresolved",
+          "pedestrian_owner_unresolved"
+        ],
+        "schema": "torii.corridor.contracts/v1",
+        "secondary_classifications": [
+          "review-required",
+          "out-of-domain"
+        ]
+      },
+      {
+        "certification_site_group": "paris-porte-maillot-complex",
+        "corridor_key": "paris-porte-maillot",
+        "coverage_gap_id": "coverage_b063d4f7f07b0db6e6cdb050",
+        "crossing_signature": "signature_1cdf3be8eb48a50e151b6db4",
+        "position_xy": [
+          3238.07,
+          1583.44
+        ],
+        "primary_classification": "safety-coverage-blocker",
+        "rejection_reasons": [
+          "pedestrian_crossed_ports_empty",
+          "pedestrian_destination_owner_unresolved",
+          "pedestrian_owner_unresolved"
+        ],
+        "schema": "torii.corridor.contracts/v1",
+        "secondary_classifications": [
+          "review-required",
+          "out-of-domain"
+        ]
+      }
+    ],
+    "paris_coverage_gap_count": 2,
+    "schema": "torii.corridor.contracts/v1"
+  },
+  "dependencies": [
+    {
+      "child_path": "benchmarks/corridor_human_modeling_v1/held_out_effective_corpus.v2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_source_snapshot_protocol.v2.json",
+      "relation": "defines-source-closure",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "benchmarks/corridor_human_modeling_v1/held_out_effective_corpus.v2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_replacement_attempt_ledger.v2.json",
+      "relation": "selects-effective-corpus",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-effective-snapshots/held_out_corpus.snapshot-report.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_effective_corpus.v2.json",
+      "relation": "materializes",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-effective-snapshots/held_out_corpus.snapshot-manifest.json",
+      "parent_path": "outputs/stage1m-v2-effective-snapshots/held_out_corpus.snapshot-report.json",
+      "relation": "is-closed-by",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-machine-final/held_out_corpus.run-identity.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/toolchain.lock.json",
+      "relation": "locks-runtime",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-machine-final/held_out_corpus.run-identity.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_effective_corpus.v2.json",
+      "relation": "selects-corridors",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-report.json",
+      "parent_path": "outputs/stage1m-v2-effective-snapshots/held_out_corpus.snapshot-report.json",
+      "relation": "supplies-source-evidence",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-report.json",
+      "parent_path": "outputs/stage1m-v2-machine-final/held_out_corpus.run-identity.json",
+      "relation": "binds-producer-and-toolchain",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-manifest.json",
+      "parent_path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-report.json",
+      "relation": "is-closed-by",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "benchmarks/corridor_human_modeling_v1/held_out_review_execution_parent.v2-r2.json",
+      "parent_path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-manifest.json",
+      "relation": "is-frozen-by",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "benchmarks/corridor_human_modeling_v1/held_out_review_execution_parent.v2-r2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_review_preregistration.v2.json",
+      "relation": "defines-trial-policy",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/review_study_sampling_policy.v2-r2.json",
+      "relation": "defines-sampling",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_review_execution_parent.v2-r2.json",
+      "relation": "defines-machine-parent",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-review-package-final/held_out_review.blinded-attention-dataset.v2-r2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+      "relation": "blinds",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-review-package-final/restricted/held_out_review.sampling-ledger.v2-r2.json",
+      "parent_path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-manifest.json",
+      "relation": "supplies-machine-population",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-review-package-final/restricted/held_out_review.sampling-ledger.v2-r2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+      "relation": "commits-seed-hash",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-review-package-final/held_out_review.package-manifest.v2-r2.json",
+      "parent_path": "outputs/stage1m-v2-review-package-final/held_out_review.blinded-attention-dataset.v2-r2.json",
+      "relation": "is-closed-by",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-review-package-final/held_out_review.package-manifest.v2-r2.json",
+      "parent_path": "outputs/stage1m-v2-review-package-final/restricted/held_out_review.sampling-ledger.v2-r2.json",
+      "relation": "is-closed-by",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-review-package-final/held_out_review.package-manifest.v2-r2.json",
+      "parent_path": "outputs/stage1m-v2-review-package-final/restricted/held_out_review.attention-evaluation-key.v2-r2.json",
+      "relation": "is-closed-by-hash",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-review-package-final-rerun/held_out_review.package-manifest.v2-r2.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+      "relation": "replays",
+      "schema": "torii.corridor.contracts/v1"
+    },
+    {
+      "child_path": "outputs/stage1m-v2-machine-final/held_out_corpus.machine-report.json",
+      "parent_path": "benchmarks/corridor_human_modeling_v1/evidence/held_out_machine_run_all_pedestrian_provenance_20260714.v3.json",
+      "relation": "defines-retained-baseline",
+      "schema": "torii.corridor.contracts/v1"
+    }
+  ],
+  "gates": [
+    {
+      "conclusion": "The frozen contract workflow regenerates schemas and executes the full contract suite.",
+      "evidence_paths": [
+        ".github/workflows/corridor-contracts.yml",
+        "schemas/torii.corridor.stage1m-machine-review-ready-provenance.v3.schema.json"
+      ],
+      "gate_id": "contract-conformance",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "Clean producers, toolchain identity, and machine/review artifact closure are bound.",
+      "evidence_paths": [
+        "benchmarks/corridor_human_modeling_v1/toolchain.lock.json",
+        "outputs/stage1m-v2-machine-final/held_out_corpus.run-identity.json",
+        "outputs/stage1m-v2-machine-final/held_out_corpus.machine-manifest.json",
+        "outputs/stage1m-v2-review-package-final/held_out_review.package-manifest.v2-r2.json"
+      ],
+      "gate_id": "provenance-identity-closure",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "Thirty complete blinded corridor packages are frozen; replay-invalid cases remain separate.",
+      "evidence_paths": [
+        "benchmarks/corridor_human_modeling_v1/held_out_effective_corpus.v2.json",
+        "outputs/stage1m-v2-review-package-final/held_out_review.blinded-attention-dataset.v2-r2.json",
+        "outputs/stage1m-v2-review-package-final/held_out_review.package-manifest.v2-r2.json"
+      ],
+      "gate_id": "thirty-blinded-review-cases",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "All effective-corpus pedestrian coverage gaps have stable IDs, reasons, and review positions.",
+      "evidence_paths": [
+        "outputs/stage1m-v2-machine-final/cases/paris-porte-maillot/independent-safety.json",
+        "outputs/stage1m-v2-machine-final/cases/london-liverpool-street/independent-safety.json"
+      ],
+      "gate_id": "stable-coverage-gap-entities",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "PCB-453 is retained and all 459 effective-corpus assessments have one technical class.",
+      "evidence_paths": [
+        "outputs/stage1m-v2-machine-final/held_out_corpus.machine-manifest.json",
+        "outputs/stage1m-v2-review-package-final/restricted/held_out_review.sampling-ledger.v2-r2.json"
+      ],
+      "gate_id": "controlled-binding-census",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "Every atomic witness is retained with zero loss, duplication, or hard-key mixing.",
+      "evidence_paths": [
+        "outputs/stage1m-v2-machine-final/held_out_corpus.machine-manifest.json",
+        "outputs/stage1m-v2-review-package-final/restricted/held_out_review.sampling-ledger.v2-r2.json"
+      ],
+      "gate_id": "lossless-conflict-ledger",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "Bounded stratified sampling, probabilities, hidden members, and deterministic replay are frozen.",
+      "evidence_paths": [
+        "benchmarks/corridor_human_modeling_v1/review_witness_sampling_policy.v2.json",
+        "benchmarks/corridor_human_modeling_v1/review_study_sampling_policy.v2-r2.json",
+        "outputs/stage1m-v2-review-package-final/restricted/held_out_review.sampling-ledger.v2-r2.json",
+        "outputs/stage1m-v2-review-package-final-rerun/held_out_review.package-manifest.v2-r2.json"
+      ],
+      "gate_id": "sampling-and-hidden-member-protocol",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "The v2-R2 attention and prospective safe-pass design is frozen before human decisions.",
+      "evidence_paths": [
+        "benchmarks/corridor_human_modeling_v1/held_out_review_preregistration.v2.json",
+        "benchmarks/corridor_human_modeling_v1/held_out_review_execution_parent.v2-r2.json",
+        "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+        "docs/held-out-corridor-blind-review-protocol-v2.md"
+      ],
+      "gate_id": "trial-and-statistics-frozen",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "Every machine, experiment, trial, and review-package promotion gate remains blocked.",
+      "evidence_paths": [
+        "outputs/stage1m-v2-machine-final/held_out_corpus.machine-report.json",
+        "benchmarks/corridor_human_modeling_v1/held_out_review_trial_instance.v2-r2.json",
+        "outputs/stage1m-v2-review-package-final/held_out_review.package-manifest.v2-r2.json",
+        "outputs/row1-dev-experiment-v5/row-1-experiment-report.json"
+      ],
+      "gate_id": "automatic-promotion-blocked",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    },
+    {
+      "conclusion": "Project status explicitly states that REVIEW_READY is not Stage 1 exit or certification.",
+      "evidence_paths": [
+        "docs/stage1-machine-review-ready-plan.md",
+        "docs/torii-corridor-human-modeling-implementation-status.md"
+      ],
+      "gate_id": "review-ready-stage-semantics-explicit",
+      "schema": "torii.corridor.contracts/v1",
+      "status": "pass"
+    }
+  ],
+  "human_decisions_present": false,
+  "machine": {
+    "automatic_promotion_gate": "blocked",
+    "evidence_build_status": "review",
+    "expected_case_count": 30,
+    "machine_label_counts": {
+      "defect": 30
+    },
+    "manifest_artifact_count": 1404,
+    "manifest_hash_failure_count": 0,
+    "manifest_missing_artifact_count": 0,
+    "manifest_sha256": "a7c832ef7cf7ce950f131921bb232ea7eca78d34ade9d9712a78fa16f7dbe5af",
+    "pipeline_pass_count": 30,
+    "processed_case_count": 30,
+    "report_sha256": "fc1155f3b33ff8ca0451976278d77d77b92a67c072499a4e7e264270437b7c0c",
+    "run_identity_sha256": "4a9242b22d6861cd6e3675df2a77940d7e056d268a3036015ee0850643531b21",
+    "schema": "torii.corridor.contracts/v1",
+    "semantic_replay_pass_count": 30,
+    "source_osm_immutable_count": 30
+  },
+  "machine_evidence_producer": {
+    "branch": "codex/ingolstadt-osm-baseline",
+    "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+    "revision": "f14eb888b25ffec7f27cdbe0c40ce10a481fb544",
+    "schema": "torii.corridor.contracts/v1",
+    "tree_revision": "85b471168e14e312d5c8a31f63ce9d778d85b77f",
+    "working_tree_clean": true
+  },
+  "pcb": {
+    "ambiguous_count": 0,
+    "automatic_promotion_gate": "blocked",
+    "class_counts": {
+      "ordinary-program-truly-absent": 21,
+      "runtime-special-controller": 438
+    },
+    "effective_corridor_count": 30,
+    "effective_experiment_name": "PCB-459",
+    "effective_program_misclassified_as_missing_count": 0,
+    "effective_unresolved_binding_count": 459,
+    "exact_review_position_count": 459,
+    "frozen_experiment_name": "PCB-453",
+    "frozen_retained_corridor_count": 27,
+    "frozen_unresolved_binding_count": 453,
+    "hard_structural_count": 21,
+    "replacement_contribution_count": 6,
+    "runtime_special_misclassified_as_ordinary_count": 0,
+    "schema": "torii.corridor.contracts/v1",
+    "unique_primary_classification_count": 459
+  },
+  "producer": {
+    "branch": "codex/ingolstadt-osm-baseline",
+    "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+    "revision": "a21fc73ace1c6f68a6931ef6455b62311a89cbae",
+    "schema": "torii.corridor.contracts/v1",
+    "tree_revision": "3645e30b1cf34e0a45bbea035e375cc3bed1d021",
+    "working_tree_clean": true
+  },
+  "provenance_id": "manifest_91a3d4702ae8b2079d5b6b00",
+  "recorded_at": "2026-07-14T14:24:50+02:00",
+  "review_package": {
+    "atomic_witness_population_count": 102398,
+    "automatic_promotion_gate": "blocked",
+    "controlled_binding_hard_census_count": 21,
+    "corridor_package_count": 30,
+    "dataset_sha256": "3e5270fa12e0d7b367785dc1352c75e4428ee5ad5b4ea27fd04343b202749070",
+    "human_decisions_present": false,
+    "independent_hidden_witness_count": 217,
+    "independent_repeat_file_count": 892,
+    "manifest_artifact_count": 891,
+    "package_file_count": 892,
+    "package_manifest_sha256": "760c1a5c176104d2c02a393245743450b79d0c12b0a4449c82675ca1e2d8edc2",
+    "pedestrian_coverage_gap_census_count": 3,
+    "repeat_hash_difference_count": 0,
+    "restricted_evaluation_key_sha256": "fd5c35ab1dc68bf0308461db141aaf729c3b15334af3100e805adb28cc5b3767",
+    "review_unit_count": 384,
+    "reviewer_visible_attention_role_count": 0,
+    "reviewer_visible_hidden_role_count": 0,
+    "reviewer_visible_machine_label_count": 0,
+    "sampling_ledger_sha256": "654aa56aba0ba0046630466113d4b25992b3301cbfaab742230f04e787d62b52",
+    "schema": "torii.corridor.contracts/v1",
+    "selected_conflict_site_count": 240,
+    "selected_negative_pair_count": 120,
+    "trial_id": "review_a784b285271ca7f510ed79f2"
+  },
+  "review_package_producer": {
+    "branch": "codex/ingolstadt-osm-baseline",
+    "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+    "revision": "c5c9cef9410b373f38390420409548eaaeca67d3",
+    "schema": "torii.corridor.contracts/v1",
+    "tree_revision": "98b9701876a0d710b210a8e2a69cfb3c5796fe12",
+    "working_tree_clean": true
+  },
+  "review_ready_is_not_stage1_exit": true,
+  "row_1": {
+    "automatic_promotion_gate": "blocked",
+    "case_count": 15,
+    "exact_repeat_match": true,
+    "expected_answer_model_claim_read_count": 0,
+    "experiment_name": "ROW-1",
+    "failed_case_count": 0,
+    "field_truth_claimed": false,
+    "independent_repeat_sha256": "80a540c1045639d2a834ceaddd4e4b913980aec93fb277501089c335a84a02e8",
+    "report_id": "manifest_63f6594cbc1bb25cde1b605d",
+    "report_sha256": "80a540c1045639d2a834ceaddd4e4b913980aec93fb277501089c335a84a02e8",
+    "runtime_probe_count": 12,
+    "schema": "torii.corridor.contracts/v1",
+    "source_insufficient_forced_decision_count": 0,
+    "status": "pass",
+    "unsafe_false_pass_count": 0
+  },
+  "rwc": {
+    "atomic_membership_coverage": 1.0,
+    "automatic_promotion_gate": "blocked",
+    "duplicate_membership_count": 0,
+    "effective_atomic_witness_count": 102398,
+    "effective_cluster_count": 98041,
+    "effective_confirmed_count": 39725,
+    "effective_corridor_count": 30,
+    "effective_potential_count": 62673,
+    "effective_site_review_case_count": 15878,
+    "extraneous_membership_count": 0,
+    "frozen_atomic_witness_count": 88423,
+    "frozen_confirmed_count": 34493,
+    "frozen_experiment_name": "RWC-1",
+    "frozen_potential_count": 53930,
+    "frozen_retained_corridor_count": 27,
+    "lost_witness_count": 0,
+    "mixed_hard_key_violation_count": 0,
+    "replacement_contributions": [
+      {
+        "atomic_witness_count": 11746,
+        "cluster_count": 11181,
+        "confirmed_count": 4546,
+        "corridor_key": "london-liverpool-street",
+        "potential_count": 7200,
+        "schema": "torii.corridor.contracts/v1",
+        "site_review_case_count": 1759
+      },
+      {
+        "atomic_witness_count": 1673,
+        "cluster_count": 1588,
+        "confirmed_count": 495,
+        "corridor_key": "melbourne-dandenong-orrong",
+        "potential_count": 1178,
+        "schema": "torii.corridor.contracts/v1",
+        "site_review_case_count": 246
+      },
+      {
+        "atomic_witness_count": 556,
+        "cluster_count": 548,
+        "confirmed_count": 191,
+        "corridor_key": "sydney-m5-east-kingsgrove",
+        "potential_count": 365,
+        "schema": "torii.corridor.contracts/v1",
+        "site_review_case_count": 91
+      }
+    ],
+    "schema": "torii.corridor.contracts/v1"
+  },
+  "schema": "torii.corridor.stage1m-machine-review-ready-provenance/v3",
+  "snapshot": {
+    "city_extract_count": 6,
+    "corridor_count": 30,
+    "manifest_artifact_count": 40,
+    "manifest_hash_failure_count": 0,
+    "manifest_missing_artifact_count": 0,
+    "reference_complete_corridor_count": 30,
+    "schema": "torii.corridor.contracts/v1",
+    "status": "pass",
+    "unconfirmed_feature_count": 0
+  },
+  "stage_1h_human_validation_gate": "blocked",
+  "stage_1m_machine_review_ready_gate": "pass",
+  "status": "review-ready",
+  "trial_id": "review_a784b285271ca7f510ed79f2"
+}

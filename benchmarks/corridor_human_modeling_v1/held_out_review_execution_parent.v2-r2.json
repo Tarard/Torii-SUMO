@@ -1,0 +1,29 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "base_review_parent_sha256": "3cd790f943d029e527074a30370a29b2c304adb088875583a7efff1673b41eb0",
+  "base_review_policy_sha256": "ef32d15b9c2d7deb3c7076029db2d2acf759c47b59d8b9416e4230412eda2414",
+  "effective_corpus_sha256": "a5a6669ac2da4451cc5a3ac863bbd46ab76216898a807f68d49a1b4bddc7ff58",
+  "human_decisions_present": false,
+  "machine_assessments_frozen": true,
+  "machine_manifest_sha256": "a7c832ef7cf7ce950f131921bb232ea7eca78d34ade9d9712a78fa16f7dbe5af",
+  "machine_report_sha256": "fc1155f3b33ff8ca0451976278d77d77b92a67c072499a4e7e264270437b7c0c",
+  "machine_run_identity_sha256": "4a9242b22d6861cd6e3675df2a77940d7e056d268a3036015ee0850643531b21",
+  "parent_id": "manifest_16660e5e00eeaccc7cb93526",
+  "pipeline_pass_count": 30,
+  "producer": {
+    "branch": "codex/ingolstadt-osm-baseline",
+    "repository_url": "https://github.com/Tarard/Torii-SUMO.git",
+    "revision": "f14eb888b25ffec7f27cdbe0c40ce10a481fb544",
+    "schema": "torii.corridor.contracts/v1",
+    "tree_revision": "85b471168e14e312d5c8a31f63ce9d778d85b77f",
+    "working_tree_clean": true
+  },
+  "replacement_attempt_ledger_sha256": "1e58ffb42f6979917a57a14f0963a8dd618993cfa53e153aff6f0f84aa6318c4",
+  "review_ready_is_not_stage1_exit": true,
+  "schema": "torii.corridor.held-out-review-execution-parent/v2-r2",
+  "semantic_replay_pass_count": 30,
+  "snapshot_manifest_sha256": "f80d03799bbac58072a2bd02368f702fa0f63d075925f09e043fdc5858118152",
+  "snapshot_report_sha256": "47adec49d5dd0af85ef52314a48ab3df712a74837924bc87fe1b165cc567f976",
+  "source_snapshot_protocol_sha256": "3e5ed29c5f1fb344af4b685f62859c45a988cb9a0c9181043352512c9e7a2f58",
+  "valid_corridor_package_count": 30
+}

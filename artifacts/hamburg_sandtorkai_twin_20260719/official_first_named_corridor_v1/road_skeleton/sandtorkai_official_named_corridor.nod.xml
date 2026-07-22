@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodes>
+  <node id="hh_sib.n.242500071" x="566117.41" y="5933264.86">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242500071" />
+  </node>
+  <node id="hh_sib.n.242510300" x="565816.8" y="5933160.61">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242510300" />
+  </node>
+  <node id="hh_sib.n.242514393" x="566003.21" y="5933044.08">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242514393" />
+  </node>
+  <node id="hh_sib.n.242514394" x="566065.18" y="5933071.94">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242514394" />
+  </node>
+  <node id="hh_sib.n.242514481" x="565839.4" y="5932992.98">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242514481" />
+  </node>
+  <node id="hh_sib.n.242516613" x="565940.39" y="5933182.79">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242516613" />
+  </node>
+  <node id="hh_sib.n.242516617" x="566014.21" y="5933199.42">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242516617" />
+  </node>
+  <node id="hh_sib.n.242615095" x="566319.82" y="5933367.23">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+    <param key="torii:hh_sib_network_node" value="242615095" />
+  </node>
+  <node id="hh_sib.s.54c0ad4da3dd2581.191" x="566175.189" y="5933121.113">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+  <node id="hh_sib.s.54c0ad4da3dd2581.227" x="566160.503" y="5933154.008">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+  <node id="hh_sib.s.54c0ad4da3dd2581.261" x="566146.857" y="5933185.177">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+  <node id="hh_sib.s.717050612f6d38b4.99" x="565978.838" y="5933091.305">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+  <node id="hh_sib.s.ccadcbda1162eb68.660" x="565808.187" y="5933167.032">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+  <node id="hh_sib.s.ccadcbda1162eb68.698" x="565846.046" y="5933171.281">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+  <node id="hh_sib.s.ccadcbda1162eb68.723" x="565870.756" y="5933175.519">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+  <node id="hh_sib.s.ccadcbda1162eb68.811" x="565956.447" y="5933196.387">
+    <param key="torii:control_status" value="unresolved_official_map_stage" />
+  </node>
+</nodes>

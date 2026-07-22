@@ -15,6 +15,7 @@ EXISTING_PUBLIC_REFERENCES = {
     "develop-and-verify-code.md",
     "detector-constrained-demand-reconstruction.md",
     "evaluate-and-report-results.md",
+    "hamburg-sandtorkai-digital-twin.md",
     "interactive-experiment-intake.md",
     "learn-sumo-knowledge.md",
     "model-osm-detectors.md",
@@ -103,6 +104,10 @@ def test_skill_routes_mcp_tools_and_feedback_diagnosis() -> None:
     assert "sumo_compare_outputs" in reference
     assert "sumo_osm_resolve_place" in reference
     assert "sumo_network_routeability_audit" in reference
+    assert "sumo_hamburg_sandtorkai_digital_twin" in reference
+    assert "sumo_signal_device_profile_classify" in reference
+    assert "sumo_detector_route_sampler_calibrate" in reference
+    assert "sumo_digital_twin_replay_validate" in reference
     assert "MCP tool output is observation" in reference
     assert "diagnose what the metric implies" in reference
 
@@ -232,5 +237,45 @@ def test_detector_constrained_demand_reference_lists_reusable_python_executors()
     assert "sumo_detector_route_support" in reference
     assert "sumo_detector_count_constraints" in reference
     assert "sumo_detector_count_audit" in reference
+    assert "sumo_hamburg_sandtorkai_digital_twin" in reference
+    assert "sumo_detector_route_sampler_calibrate" in reference
+    assert "sumo_digital_twin_replay_validate" in reference
     assert "The bundled code contains no project-specific detector data" in reference
     assert "Public outputs require anonymized inputs" in reference
+
+
+def test_skill_routes_fixed_hamburg_sandtorkai_digital_twin() -> None:
+    body = read_skill()
+    reference = (SKILL / "references" / "hamburg-sandtorkai-digital-twin.md").read_text(encoding="utf-8")
+
+    assert "references/hamburg-sandtorkai-digital-twin.md" in body
+    required_contract_terms = [
+        "https://iot.hamburg.de/v1.1/",
+        "https://tld.iot.hamburg.de/v1.1/",
+        "https://daten-hamburg.de/tlf_public/",
+        "9.9780,53.5390,10.0005,53.5475",
+        "count_node_ids: 0228, 2421, 2394",
+        "signal_node_ids: 228, 2421, 2394",
+        "Europe/Berlin",
+        "strict complete",
+        "300-second source cells",
+        "15-minute",
+        "official MAP ingress lane",
+        "virtual_detector_mapping.csv",
+        "virtual_expected_counts_15min.csv",
+        "(physical node, SUMO lane)",
+        "route_sampler_edge_constraints.csv",
+        "partial-lane",
+        "--edgedata-attribute count",
+        "nVehContrib",
+        "A measured zero is a valid matched value",
+        "measurement, not zero",
+        "Non-identifiability statement",
+        "Many route/OD assignments",
+        "Datenlizenz Deutschland Namensnennung 2.0",
+        "sumo_hamburg_sandtorkai_digital_twin",
+        "sumo_detector_route_sampler_calibrate",
+        "sumo_digital_twin_replay_validate",
+    ]
+    for term in required_contract_terms:
+        assert term in reference

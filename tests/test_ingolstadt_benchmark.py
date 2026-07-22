@@ -24,6 +24,7 @@ def test_ingolstadt_reference_matched_benchmark_files_are_present() -> None:
         "semantic_counts.json",
         "semantic_gaps.json",
         "summary_table.json",
+        "teacher_probe_signatures.json",
     }
 
     assert expected <= {path.name for path in BENCHMARK.iterdir()}
@@ -32,6 +33,21 @@ def test_ingolstadt_reference_matched_benchmark_files_are_present() -> None:
     assert "11.413800,48.755391,11.433800,48.775391" in case_text
     assert "network_profile: reference_matched" in case_text
     assert "claim_status: diagnostic-demo" in case_text
+
+
+def test_ingolstadt_teacher_probe_signatures_are_frozen() -> None:
+    signatures = _read_json(BENCHMARK / "teacher_probe_signatures.json")
+    probes = {probe["junction_id"]: probe for probe in signatures["probe_cases"]}
+
+    assert signatures["schema_version"] == 1
+    assert signatures["teacher_net_file"] == (
+        "examples/02_one_prompt_osm_network/networks/"
+        "tum_ingolstadt_center_reference.net.xml"
+    )
+    assert set(probes) == {"1433119620", "267380207", "267517510", "1031988198"}
+    assert probes["267517510"]["pattern_family"] == "four_way"
+    assert probes["267517510"]["control_type"] == "traffic_light"
+    assert probes["267517510"]["movement_signature_count"] == 10
 
 
 def test_ingolstadt_summary_table_matches_committed_example_counts() -> None:

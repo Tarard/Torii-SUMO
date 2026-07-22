@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\sumo.EXE",
+    "-c",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.sumocfg",
+    "--log",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene_sumo.log",
+    "--error-log",
+    "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene_sumo_errors.log"
+  ],
+  "cwd": null,
+  "status": "pass",
+  "returncode": 0,
+  "stdout": "Loading net-file from 'C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.net.xml' ... done (7ms).\nLoading route-files incrementally from 'C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.rou.xml'\nLoading done.\nSimulation version 1.25.0 started with time: 0.00.\nSimulation ended at time: 600.00.\nReason: The final simulation step has been reached.\nPerformance:\n Duration: 0.07s\n Real time factor: 8571.43\n UPS: 57414.285714\nVehicles:\n Inserted: 78\n Running: 0\n Waiting: 0\nStatistics (avg of 78):\n RouteLength: 380.79\n Speed: 7.78\n Duration: 51.52\n WaitingTime: 12.53\n TimeLoss: 23.10\n DepartDelay: 0.00\n",
+  "stderr": "",
+  "error": ""
+}

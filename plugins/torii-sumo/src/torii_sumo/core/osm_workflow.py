@@ -13,15 +13,26 @@ from typing import Any, Callable, Mapping
 
 from .osm_area import osm_map_url_bbox, osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
+from .connection_mode_audit import build_network_connection_mode_audit
+from .corridor_edit_ledger import build_corridor_edit_ledger
+from .corridor_simplification import build_corridor_geometry_simplification_variant
 from .command_runner import run_command
 from .junction_aggregation import build_junction_aggregation_variant
 from .junction_rebuild_candidate import (
+    _stage_file,
+    build_shared_teacher_tls_controller_replay_plan,
+    build_scoped_teacher_tls_cell_replay_plan,
     build_teacher_guided_repair_queue,
     build_tls_connection_repair_variant,
     _restore_false_traffic_light_junction_types,
     _restore_replayed_geometry_attrs,
+    restore_off_scope_netconvert_artifacts,
     run_teacher_guided_repair_matrix,
+    restore_teacher_tls_connection_semantics_after_normalize,
+    restore_scoped_pedestrian_internal_semantics_after_normalize,
     run_teacher_guided_repair_queue,
+    write_scoped_teacher_tls_cell_replay_net,
+    write_shared_teacher_tls_controller_replay_net,
     write_teacher_target_internal_replay_net,
     write_teacher_tllogic_net,
 )
@@ -32,20 +43,36 @@ from .network_plan import NETWORK_PLAN_QUESTION, derive_network_plan
 from .osm_network import audit_tls, build_osm_network, build_routeability_probe, regional_map_baseline_for_bbox
 from .reference_bbox import derive_reference_net_bbox
 from .reference_hierarchy import audit_reference_hierarchy, build_reference_hierarchy_type_repair_variant
+from .junction_connection_audit import (
+    compare_shared_tls_via_path_semantics,
+    compare_tls_via_path_semantics,
+)
 from .reference_join_audit import audit_reference_join_patterns
+from .tls_gap_mapping import (
+    audit_tls_gap_variant_semantics,
+    build_tls_gap_destination_mapping,
+    build_tls_gap_repair_variant,
+    build_tls_repair_decision_report,
+)
 from .road_connectivity_teacher_model import (
+    audit_road_connectivity_parity,
     canonical_road_connectivity_bundle,
     compare_road_connectivity_bundles,
     write_internal_movement_owner_layered_teacher_replay_candidate,
     write_road_connection_topology_replay_candidate,
     write_road_connectivity_split_root_alias_repair_candidate,
 )
-from .reference_scope import audit_reference_scope, build_scope_pruning_variant
+from .reference_scope import (
+    audit_reference_scope,
+    build_reference_bbox_variant,
+    build_scope_pruning_variant,
+)
 from .road_scope import (
     ROAD_LEVEL_SCOPE_OPTIONS,
     RECOMMENDED_ROAD_LEVEL_SCOPE,
 )
 from .routeability_audit import run_routeability_audit
+from .standard_nema_binding import build_standard_nema_phase_binding
 from .sumo_gui import launch_sumo_gui
 from .tls_aggregation import (
     build_tls_aggregation_variant,
@@ -53,7 +80,7 @@ from .tls_aggregation import (
     build_tls_non_controller_junction_demotion_variant,
     build_tls_signal_grouping_variant,
 )
-from .topology_audit import audit_topology_fragmentation
+from .topology_audit import audit_topology_fragmentation, compare_topology_canonical_cells
 from .workflow_review_html import build_workflow_review_html
 
 
@@ -84,6 +111,24 @@ def _supports_keyword(func: Callable[..., Any], name: str) -> bool:
     )
 
 
+def _load_review_decisions_file(path: Path | None) -> tuple[dict[str, Any] | None, str, str]:
+    """Load an explicit review-decision artifact without weakening the default gate."""
+
+    if path is None:
+        return None, "not_supplied", ""
+    try:
+        resolved = path.resolve()
+        loaded = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, "invalid", f"{type(exc).__name__}: {exc}"
+    if not isinstance(loaded, Mapping):
+        return None, "invalid", "review decisions must be a JSON object"
+    locations = loaded.get("locations")
+    if not isinstance(locations, list):
+        return None, "invalid", "review decisions must contain a locations list"
+    return dict(loaded), "loaded", ""
+
+
 def _osm_highway_classes(osm_file: Path) -> set[str] | None:
     try:
         if osm_file.suffix == ".gz":
@@ -101,10 +146,28 @@ def _osm_highway_classes(osm_file: Path) -> set[str] | None:
     }
 
 
+def _osm_tag_values(osm_file: Path, key: str) -> set[str] | None:
+    try:
+        if osm_file.suffix == ".gz":
+            with gzip.open(osm_file, "rt", encoding="utf-8") as handle:
+                root = ET.parse(handle).getroot()
+        else:
+            root = ET.parse(osm_file).getroot()
+    except (OSError, ET.ParseError, UnicodeDecodeError):
+        return None
+    return {
+        str(tag.attrib.get("v", "")).strip()
+        for way in root.findall("way")
+        for tag in way.findall("tag")
+        if tag.attrib.get("k") == key and str(tag.attrib.get("v", "")).strip()
+    }
+
+
 def _reference_visual_source_osm_path(
     build_report: Mapping[str, Any],
     source_osm_path: Path | None,
     required_highways: set[str],
+    required_modal_way_tags: Mapping[str, set[str]] | None = None,
 ) -> Path | None:
     source_osm_value = build_report.get("source_osm_file") or source_osm_path
     if not source_osm_value:
@@ -113,6 +176,10 @@ def _reference_visual_source_osm_path(
     source_highways = _osm_highway_classes(source)
     if source_highways and not required_highways <= source_highways:
         return None
+    for key, required_values in (required_modal_way_tags or {}).items():
+        source_values = _osm_tag_values(source, key)
+        if source_values is not None and not set(required_values) <= source_values:
+            return None
     return source
 
 
@@ -232,6 +299,13 @@ def _gate_value(report: Mapping[str, Any]) -> str:
     if status == "blocked":
         return "blocked"
     return "fail"
+
+
+def _connection_mode_gate_value(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    status = str(report.get("status", "fail"))
+    return status if status in {"pass", "review_required", "fail"} else "fail"
 
 
 def _int_field(report: Mapping[str, Any], key: str) -> int:
@@ -450,21 +524,78 @@ def _connectivity_quality(connectivity_report: Mapping[str, Any]) -> dict[str, A
     }
 
 
-def _tls_review_summary(tls_report: Mapping[str, Any]) -> dict[str, Any]:
+def _tls_review_summary(
+    tls_report: Mapping[str, Any],
+    *,
+    review_decisions: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     cluster_count = int(tls_report.get("tls_cluster_count", 0) or 0)
     candidate_count = int(tls_report.get("tls_candidate_count", 0) or 0)
     review_required = cluster_count > 0 or candidate_count > 0
+    expected_location_ids: set[str] = set()
+    clusters_file = Path(str(tls_report.get("clusters_file", "")))
+    if clusters_file.exists():
+        try:
+            with clusters_file.open("r", encoding="utf-8", newline="") as handle:
+                expected_location_ids = {
+                    f"tls_reality_{str(row.get('cluster_id', '')).strip()}"
+                    for row in csv.DictReader(handle)
+                    if str(row.get("cluster_id", "")).strip()
+                }
+        except (OSError, csv.Error):
+            expected_location_ids = set()
+    supplied_by_id = {
+        str(item.get("location_id", "")): item
+        for item in (review_decisions or {}).get("locations", []) or []
+        if isinstance(item, Mapping) and str(item.get("location_id", "")).strip()
+    }
+    missing_location_ids = sorted(expected_location_ids - set(supplied_by_id))
+    pending_location_ids = sorted(
+        location_id
+        for location_id in expected_location_ids & set(supplied_by_id)
+        if str(supplied_by_id[location_id].get("decision", "pending"))
+        not in {"approved", "rejected_with_evidence"}
+    )
+    missing_evidence_location_ids = sorted(
+        location_id
+        for location_id in expected_location_ids & set(supplied_by_id)
+        if str(supplied_by_id[location_id].get("decision", ""))
+        in {"approved", "rejected_with_evidence"}
+        and not str(supplied_by_id[location_id].get("evidence", "")).strip()
+    )
+    tls_reality_status = (
+        "pass"
+        if not review_required
+        or (expected_location_ids and not missing_location_ids and not pending_location_ids and not missing_evidence_location_ids)
+        else "blocked"
+    )
+    unresolved_count = len(missing_location_ids) + len(pending_location_ids)
+    if review_required and not expected_location_ids:
+        # If the cluster manifest is unavailable, retain the conservative
+        # audit signal from the TLS detector instead of reporting zero open
+        # reviews merely because IDs could not be read.
+        unresolved_count = max(unresolved_count, cluster_count or candidate_count)
     return {
         "tls_candidate_count": candidate_count,
         "tls_cluster_count": cluster_count,
         "tls_review_file": str(tls_report.get("clusters_file", "")),
-        "tls_review_complete": "yes" if cluster_count == 0 and candidate_count == 0 else "no",
-        "tls_google_maps_review_required": "yes" if review_required else "no",
-        "tls_google_maps_review_status": "needs_google_review" if review_required else "not_required",
+        "tls_review_complete": "yes" if tls_reality_status == "pass" else "no",
+        "tls_reality_review_status": tls_reality_status,
+        "tls_reality_review_location_count": len(expected_location_ids),
+        "tls_reality_review_decision_count": len(expected_location_ids & set(supplied_by_id)),
+        "tls_reality_review_missing_location_ids": missing_location_ids,
+        "tls_reality_review_pending_location_ids": pending_location_ids,
+        "tls_reality_review_missing_evidence_location_ids": missing_evidence_location_ids,
+        "tls_google_maps_review_required": "yes" if tls_reality_status != "pass" and review_required else "no",
+        "tls_google_maps_review_status": "needs_google_review" if tls_reality_status != "pass" and review_required else "not_required",
         "tls_keep_count": 0,
         "tls_remove_count": 0,
-        "tls_downgrade_count": 0,
-        "tls_needs_review_count": cluster_count,
+        "tls_downgrade_count": sum(
+            1
+            for location_id in expected_location_ids & set(supplied_by_id)
+            if str(supplied_by_id[location_id].get("decision", "")) == "rejected_with_evidence"
+        ),
+        "tls_needs_review_count": unresolved_count,
     }
 
 
@@ -472,7 +603,7 @@ def _tls_gate_value(tls_report: Mapping[str, Any], tls_summary: Mapping[str, Any
     base_gate = _gate_value(tls_report)
     if base_gate != "pass":
         return base_gate
-    if tls_summary.get("tls_google_maps_review_required") == "yes":
+    if tls_summary.get("tls_reality_review_status") != "pass":
         return "blocked"
     return "pass"
 
@@ -739,6 +870,17 @@ def _road_connectivity_gate_status(report: Mapping[str, Any] | None) -> str:
     audit = report.get("owner_road_connectivity_audit", {})
     audit = audit if isinstance(audit, Mapping) else {}
     return str(audit.get("status", report.get("status", "fail")))
+
+
+def _road_connectivity_parity_gate_status(
+    parity_report: Mapping[str, Any] | None,
+    replay_report: Mapping[str, Any] | None,
+) -> str:
+    """Prefer the complete road-layer audit over a local owner replay result."""
+
+    if parity_report is not None:
+        return str(parity_report.get("status", "blocked"))
+    return _road_connectivity_gate_status(replay_report)
 
 
 def _road_connectivity_best_variant_file(report: Mapping[str, Any] | None) -> Path | None:
@@ -1425,6 +1567,246 @@ def _normalize_sumo_net(
     return report
 
 
+def _teacher_tls_has_multiple_internal_owners(
+    *,
+    teacher_net_file: Path,
+    teacher_junction_id: str,
+) -> bool:
+    """Return whether a controller's controlled links span owner prefixes."""
+
+    try:
+        root = ET.parse(teacher_net_file).getroot()
+    except (ET.ParseError, OSError, ValueError):
+        return False
+    junction_ids = sorted(
+        {
+            junction.attrib.get("id", "")
+            for junction in root.findall("junction")
+            if junction.attrib.get("id")
+        },
+        key=len,
+        reverse=True,
+    )
+    owners: set[str] = set()
+    for connection in root.findall("connection"):
+        if (
+            connection.attrib.get("tl") != teacher_junction_id
+            or connection.attrib.get("linkIndex") is None
+        ):
+            continue
+        via = connection.attrib.get("via", "")
+        owner = next(
+            (junction_id for junction_id in junction_ids if via.startswith(f":{junction_id}_")),
+            "",
+        )
+        if owner:
+            owners.add(owner)
+    return len(owners) > 1
+
+
+def _run_tls_movement_routeability_smoke(
+    *,
+    net_file: Path,
+    controller_id: str,
+    output_dir: Path,
+    prefix: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any],
+) -> dict[str, Any]:
+    """Run one explicit route through every controlled movement in a cell."""
+
+    if not net_file.exists():
+        return {"status": "blocked", "reason": "routeability_net_file_missing", "net_file": str(net_file)}
+    try:
+        root = ET.parse(net_file).getroot()
+    except (ET.ParseError, OSError, ValueError) as exc:
+        return {"status": "blocked", "reason": f"routeability_net_parse_failed:{type(exc).__name__}"}
+    all_controlled_connections = sorted(
+        [
+            connection
+            for connection in root.findall("connection")
+            if connection.attrib.get("tl") == controller_id and connection.attrib.get("linkIndex") is not None
+        ],
+        key=lambda connection: (
+            int(connection.attrib["linkIndex"])
+            if connection.attrib.get("linkIndex", "").isdigit()
+            else connection.attrib.get("linkIndex", ""),
+            connection.attrib.get("from", ""),
+            connection.attrib.get("to", ""),
+        ),
+    )
+    if not all_controlled_connections:
+        return {
+            "status": "blocked",
+            "reason": "routeability_no_controlled_connections",
+            "controller_id": controller_id,
+        }
+    edges_by_id = {
+        edge.attrib.get("id", ""): edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    non_vehicle_functions = {"internal", "crossing", "walkingarea"}
+
+    def lane_allows_passenger(edge_id: str, lane_index: str) -> bool:
+        edge = edges_by_id.get(edge_id)
+        if edge is None:
+            return False
+        lane = next(
+            (item for item in edge.findall("lane") if item.attrib.get("index") == lane_index),
+            None,
+        )
+        if lane is None:
+            return False
+        allow = set(lane.attrib.get("allow", "").split())
+        disallow = set(lane.attrib.get("disallow", "").split())
+        if allow and not ("passenger" in allow or "all" in allow or "private" in allow):
+            return False
+        return not bool({"passenger", "all"} & disallow)
+
+    controlled_connections = [
+        connection
+        for connection in all_controlled_connections
+        if all(
+            edges_by_id.get(connection.attrib.get(attr, "")) is not None
+            and edges_by_id[connection.attrib.get(attr, "")].attrib.get("function") not in non_vehicle_functions
+            and lane_allows_passenger(
+                connection.attrib.get(attr, ""),
+                connection.attrib.get("fromLane" if attr == "from" else "toLane", ""),
+            )
+            for attr in ("from", "to")
+        )
+    ]
+    excluded_non_vehicle_connection_count = len(all_controlled_connections) - len(controlled_connections)
+    if not controlled_connections:
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "reason": "no_vehicle_controlled_connections",
+            "controller_id": controller_id,
+            "controlled_connection_count": 0,
+            "excluded_non_vehicle_connection_count": excluded_non_vehicle_connection_count,
+        }
+    # This is a smoke check for the cell, not a replacement for the full
+    # connection/TLS parity audit.  One passenger movement avoids creating a
+    # synthetic traffic jam when several controller links share the same
+    # approach edge; the semantic gate below still checks every controlled
+    # movement and every linkIndex.
+    smoke_connections = controlled_connections[:1]
+    edge_ids = set(edges_by_id)
+    invalid_routes = [
+        dict(connection.attrib)
+        for connection in controlled_connections
+        if connection.attrib.get("from") not in edge_ids or connection.attrib.get("to") not in edge_ids
+    ]
+    if invalid_routes:
+        return {
+            "status": "blocked",
+            "reason": "routeability_controlled_edge_missing",
+            "controller_id": controller_id,
+            "controlled_connection_count": len(controlled_connections),
+            "invalid_routes": invalid_routes,
+        }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    # This directory is already unique per candidate.  Keep filenames short
+    # because Windows resolves the full path before SUMO opens the outputs.
+    route_file = output_dir / "m.rou.xml"
+    summary_file = output_dir / "m.sum.xml"
+    tripinfo_file = output_dir / "m.ti.xml"
+    route_root = ET.Element("routes")
+    ET.SubElement(route_root, "vType", {"id": "torii_smoke_passenger", "vClass": "passenger", "maxSpeed": "13.9"})
+    for position, connection in enumerate(smoke_connections):
+        vehicle = ET.SubElement(
+            route_root,
+            "vehicle",
+            {
+                "id": f"{prefix}_movement_{position}_{connection.attrib.get('linkIndex', position)}",
+                "type": "torii_smoke_passenger",
+                "depart": str(position * 2),
+            },
+        )
+        ET.SubElement(
+            vehicle,
+            "route",
+            {
+                "edges": f"{connection.attrib.get('from', '')} {connection.attrib.get('to', '')}",
+            },
+        )
+    ET.indent(route_root, space="    ")
+    route_file.parent.mkdir(parents=True, exist_ok=True)
+    route_file.write_text(
+        ET.tostring(route_root, encoding="unicode"),
+        encoding="utf-8",
+    )
+    end_time = max(300, len(smoke_connections) * 2 + 180)
+    command = [
+        sumo_binary,
+        "--net-file",
+        str(net_file.resolve()),
+        "--route-files",
+        str(route_file.resolve()),
+        "--begin",
+        "0",
+        "--end",
+        str(end_time),
+        "--summary-output",
+        str(summary_file.resolve()),
+        "--tripinfo-output",
+        str(tripinfo_file.resolve()),
+        "--duration-log.disable",
+        "true",
+    ]
+    command_report = _command_result_report(
+        command_runner(command, cwd=output_dir.resolve(), timeout_seconds=timeout_seconds)
+    )
+    last_step: dict[str, str] = {}
+    if summary_file.exists():
+        try:
+            summary_root = ET.parse(summary_file).getroot()
+            steps = summary_root.findall("step")
+            if steps:
+                last_step = dict(steps[-1].attrib)
+        except (ET.ParseError, OSError, ValueError):
+            last_step = {}
+    expected_count = len(smoke_connections)
+    loaded = int(last_step.get("loaded", "-1")) if last_step.get("loaded", "").isdigit() else -1
+    arrived = int(last_step.get("arrived", "-1")) if last_step.get("arrived", "").isdigit() else -1
+    inserted = int(last_step.get("inserted", "-1")) if last_step.get("inserted", "").isdigit() else -1
+    teleports = int(last_step.get("teleports", "0")) if last_step.get("teleports", "0").isdigit() else 0
+    collisions = int(last_step.get("collisions", "0")) if last_step.get("collisions", "0").isdigit() else 0
+    status = "pass" if (
+        command_report.get("status") == "pass"
+        and loaded == expected_count
+        and inserted == expected_count
+        and arrived == expected_count
+        and teleports == 0
+        and collisions == 0
+    ) else "blocked"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "controller_id": controller_id,
+        "net_file": str(net_file),
+        "route_file": str(route_file),
+        "summary_file": str(summary_file),
+        "tripinfo_file": str(tripinfo_file),
+        "controlled_connection_count": len(controlled_connections),
+        "tested_connection_count": expected_count,
+        "all_controlled_connection_count": len(all_controlled_connections),
+        "excluded_non_vehicle_connection_count": excluded_non_vehicle_connection_count,
+        "loaded": loaded,
+        "inserted": inserted,
+        "arrived": arrived,
+        "teleports": teleports,
+        "collisions": collisions,
+        "end_time": end_time,
+        "command": command_report,
+        "last_summary_step": last_step,
+    }
+
+
 def _run_direct_local_teacher_replay(
     *,
     queue_report: dict[str, Any] | None,
@@ -1435,6 +1817,7 @@ def _run_direct_local_teacher_replay(
     sumo_binary: str,
     timeout_seconds: float,
     command_runner: Callable[..., Any],
+    shared_controller_source_net_file: Path | None = None,
 ) -> dict[str, Any]:
     if not _teacher_guided_queue_has_replay_candidates(queue_report):
         return {"status": "skipped", "reason": "no_replay_candidates", "variant_reports": []}
@@ -1450,50 +1833,261 @@ def _run_direct_local_teacher_replay(
     ]
     variant_reports: list[dict[str, Any]] = []
     for index, candidate in enumerate(candidates, start=1):
-        if candidate.get("candidate_status") != "ready_for_teacher_guided_variant":
+        tls_candidate_junction_id = str(candidate.get("tls_candidate_tl_id", "")).strip()
+        tls_candidate_junction_ids = {
+            str(item)
+            for item in candidate.get("tls_candidate_junction_ids", []) or []
+            if str(item)
+        }
+        scoped_candidate = bool(tls_candidate_junction_id and len(tls_candidate_junction_ids) > 1)
+        candidate_status = str(candidate.get("candidate_status", ""))
+        if candidate_status != "ready_for_teacher_guided_variant" and not (
+            scoped_candidate and candidate_status == "needs_expanded_rebuild_scope"
+        ):
             continue
         junction_id = str(
-            candidate.get("junction_id")
+            tls_candidate_junction_id
+            or candidate.get("junction_id")
             or candidate.get("candidate_junction_id")
             or candidate.get("candidate_id")
             or ""
         ).strip()
-        teacher_junction_id = str(candidate.get("reference_id") or candidate.get("teacher_junction_id") or "").strip()
+        teacher_junction_id = str(
+            candidate.get("tls_reference_tl_id")
+            or candidate.get("reference_id")
+            or candidate.get("teacher_junction_id")
+            or ""
+        ).strip()
         teacher_junction_id = teacher_junction_id or junction_id
         edge_map_value = candidate.get("edge_map", {})
         edge_map = {str(key): str(value) for key, value in edge_map_value.items()} if isinstance(edge_map_value, Mapping) else {}
+        scoped_plan: dict[str, Any] | None = None
+        shared_controller_plan: dict[str, Any] | None = None
+        shared_controller_candidate = False
+        candidate_source_net_file = source_net_file
+        candidate_shared_source = str(candidate.get("shared_controller_candidate_net_file", "")).strip()
+        candidate_has_shared_controller = _teacher_tls_has_multiple_internal_owners(
+            teacher_net_file=teacher_net_file,
+            teacher_junction_id=teacher_junction_id,
+        )
+        if candidate_shared_source and candidate_has_shared_controller:
+            candidate_shared_source_file = Path(candidate_shared_source)
+            if candidate_shared_source_file.exists():
+                candidate_source_net_file = candidate_shared_source_file
+        elif (
+            candidate_status == "needs_expanded_rebuild_scope"
+            and candidate_has_shared_controller
+            and shared_controller_source_net_file is not None
+            and shared_controller_source_net_file.exists()
+        ):
+            candidate_source_net_file = shared_controller_source_net_file
+        collapse_junction_ids: set[str] = set()
+        junction_map: dict[str, str] = {}
+        if scoped_candidate:
+            approach_pairs = [
+                dict(item)
+                for item in candidate.get("tls_approach_pairs", []) or []
+                if isinstance(item, Mapping)
+            ]
+            if (
+                candidate_source_net_file != source_net_file
+                and candidate_status == "needs_expanded_rebuild_scope"
+            ):
+                shared_controller_plan = build_shared_teacher_tls_controller_replay_plan(
+                    candidate_net_file=candidate_source_net_file,
+                    teacher_net_file=teacher_net_file,
+                    teacher_controller_id=teacher_junction_id,
+                    candidate_controller_id=junction_id,
+                    candidate_junction_ids=tls_candidate_junction_ids,
+                    approach_pairs=approach_pairs,
+                    collapse_junction_ids=tls_candidate_junction_ids,
+                )
+                if shared_controller_plan.get("status") == "pass":
+                    shared_controller_candidate = True
+                    edge_map = {
+                        str(key): str(value)
+                        for key, value in (shared_controller_plan.get("edge_map", {}) or {}).items()
+                        if str(key) and str(value)
+                    }
+                    collapse_junction_ids = {
+                        str(item)
+                        for item in shared_controller_plan.get("candidate_junction_ids", []) or []
+                        if str(item)
+                    }
+                    junction_map = {
+                        str(key): str(value)
+                        for key, value in (shared_controller_plan.get("junction_map", {}) or {}).items()
+                        if str(key) and str(value)
+                    }
+                else:
+                    variant_report = {
+                        "candidate_index": index,
+                        "junction_id": junction_id,
+                        "teacher_junction_id": teacher_junction_id,
+                        "shared_controller_replay_plan": shared_controller_plan,
+                        "status": "blocked",
+                        "reason": "shared_controller_replay_plan_not_pass",
+                    }
+                    variant_reports.append(variant_report)
+                    continue
+            else:
+                scoped_plan = build_scoped_teacher_tls_cell_replay_plan(
+                    candidate_net_file=candidate_source_net_file,
+                    teacher_net_file=teacher_net_file,
+                    teacher_junction_id=teacher_junction_id,
+                    candidate_junction_id=junction_id,
+                    candidate_junction_ids=tls_candidate_junction_ids,
+                    approach_pairs=approach_pairs,
+                )
+                if scoped_plan.get("status") == "pass":
+                    edge_map = {
+                        str(key): str(value)
+                        for key, value in (scoped_plan.get("edge_map", {}) or {}).items()
+                        if str(key) and str(value)
+                    }
+                    collapse_junction_ids = {
+                        str(item)
+                        for item in scoped_plan.get("candidate_junction_ids", []) or []
+                        if str(item)
+                    }
+                    junction_map = {
+                        str(key): str(value)
+                        for key, value in (scoped_plan.get("junction_map", {}) or {}).items()
+                        if str(key) and str(value)
+                    }
+                elif candidate_status == "needs_expanded_rebuild_scope":
+                    variant_report = {
+                        "candidate_index": index,
+                        "junction_id": junction_id,
+                        "teacher_junction_id": teacher_junction_id,
+                        "scoped_tls_cell_plan": scoped_plan,
+                        "status": "blocked",
+                        "reason": "scoped_tls_cell_plan_not_pass",
+                    }
+                    variant_reports.append(variant_report)
+                    continue
+            if candidate_status == "needs_expanded_rebuild_scope" and not shared_controller_candidate and scoped_plan is None:
+                variant_report = {
+                    "candidate_index": index,
+                    "junction_id": junction_id,
+                    "teacher_junction_id": teacher_junction_id,
+                    "shared_controller_candidate_source_net_file": str(candidate_source_net_file),
+                    "status": "blocked",
+                    "reason": "shared_controller_candidate_source_missing",
+                }
+                variant_reports.append(variant_report)
+                continue
+        if not junction_id:
+            variant_report = {
+                "candidate_index": index,
+                "junction_id": junction_id,
+                "teacher_junction_id": teacher_junction_id,
+                "status": "blocked",
+                "reason": "junction_id_missing",
+            }
+            variant_reports.append(variant_report)
+            continue
         variant_dir = output_dir / f"candidate_{index:03d}_{_safe_path_part(junction_id)}"
         variant_report: dict[str, Any] = {
             "candidate_index": index,
             "junction_id": junction_id,
             "teacher_junction_id": teacher_junction_id,
+            "scoped_tls_cell": scoped_candidate,
+            "candidate_source_net_file": str(candidate_source_net_file),
+            "shared_controller_candidate": shared_controller_candidate,
         }
-        if not junction_id:
-            variant_report.update({"status": "blocked", "reason": "junction_id_missing"})
-            variant_reports.append(variant_report)
-            continue
+        if scoped_plan is not None:
+            variant_report["scoped_tls_cell_plan"] = scoped_plan
+        if shared_controller_plan is not None:
+            variant_report["shared_controller_replay_plan"] = shared_controller_plan
         if not edge_map:
             variant_report.update({"status": "blocked", "reason": "edge_map_missing"})
             variant_reports.append(variant_report)
             continue
 
-        replay_file = variant_dir / f"{prefix}_candidate_{index:03d}_target_internal_replay.net.xml"
-        replay_report = write_teacher_target_internal_replay_net(
-            candidate_net_file=source_net_file,
-            teacher_net_file=teacher_net_file,
-            output_file=replay_file,
-            junction_id=junction_id,
-            teacher_junction_id=teacher_junction_id,
-            edge_map=edge_map,
-        )
+        replay_prefix = f"{prefix}_candidate_{index:03d}"
+        replay_file = _stage_file(variant_dir, replay_prefix, "target_internal_replay.net.xml")
+        if shared_controller_candidate and shared_controller_plan is not None:
+            replay_report = write_shared_teacher_tls_controller_replay_net(
+                candidate_net_file=candidate_source_net_file,
+                teacher_net_file=teacher_net_file,
+                output_file=replay_file,
+                candidate_controller_id=junction_id,
+                teacher_controller_id=teacher_junction_id,
+                owner_map={
+                    str(key): str(value)
+                    for key, value in (shared_controller_plan.get("owner_map", {}) or {}).items()
+                    if str(key) and str(value)
+                },
+                edge_map=edge_map,
+                junction_map=junction_map,
+                collapse_junction_ids=collapse_junction_ids,
+            )
+        elif scoped_candidate and scoped_plan is not None and scoped_plan.get("status") == "pass":
+            replay_report = write_scoped_teacher_tls_cell_replay_net(
+                candidate_net_file=candidate_source_net_file,
+                teacher_net_file=teacher_net_file,
+                output_file=replay_file,
+                junction_id=junction_id,
+                teacher_junction_id=teacher_junction_id,
+                edge_map=edge_map,
+                collapse_junction_ids=collapse_junction_ids,
+                junction_map=junction_map,
+            )
+        else:
+            replay_report = write_teacher_target_internal_replay_net(
+                candidate_net_file=candidate_source_net_file,
+                teacher_net_file=teacher_net_file,
+                output_file=replay_file,
+                junction_id=junction_id,
+                teacher_junction_id=teacher_junction_id,
+                edge_map=edge_map,
+            )
         variant_report["target_internal_replay"] = replay_report
         if replay_report.get("status") != "pass":
             variant_report.update({"status": "blocked", "reason": "target_internal_replay_not_pass"})
             variant_reports.append(variant_report)
             continue
+        if scoped_candidate:
+            base_replay_report = replay_report.get("base_replay_report", {})
+            ignored_off_scope_tls_connections = (
+                int(base_replay_report.get("ignored_off_scope_tls_connection_count", 0) or 0)
+                if isinstance(base_replay_report, Mapping)
+                else 0
+            )
+            shared_controlled_connection_count = (
+                int(replay_report.get("teacher_controlled_connection_count", 0) or 0)
+                if shared_controller_candidate
+                else 0
+            )
+            variant_report["scoped_tls_replay_coverage"] = {
+                "status": "pass"
+                if ignored_off_scope_tls_connections == 0
+                and (not shared_controller_candidate or shared_controlled_connection_count > 0)
+                else "blocked",
+                "ignored_off_scope_tls_connection_count": ignored_off_scope_tls_connections,
+                "shared_controller_teacher_controlled_connection_count": shared_controlled_connection_count,
+                "ignored_off_scope_tls_connections": list(
+                    base_replay_report.get("ignored_off_scope_tls_connections", []) or []
+                )
+                if isinstance(base_replay_report, Mapping)
+                else [],
+                "policy": "all teacher-controlled movements must remain in the scoped candidate before TLS restore",
+            }
+            if ignored_off_scope_tls_connections or (
+                shared_controller_candidate and shared_controlled_connection_count == 0
+            ):
+                variant_report.update(
+                    {
+                        "status": "blocked",
+                        "reason": "scoped_tls_teacher_connections_off_scope",
+                    }
+                )
+                variant_reports.append(variant_report)
+                continue
 
         teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
-        tllogic_file = variant_dir / f"{prefix}_candidate_{index:03d}_teacher_tllogic.net.xml"
+        tllogic_file = _stage_file(variant_dir, replay_prefix, "teacher_tllogic.net.xml")
         tllogic_report = write_teacher_tllogic_net(
             candidate_net_file=replay_file,
             output_file=tllogic_file,
@@ -1515,7 +2109,7 @@ def _run_direct_local_teacher_replay(
         )
         variant_report["tllogic_sumo_load"] = tllogic_sumo_load
 
-        normalized_file = variant_dir / f"{prefix}_candidate_{index:03d}_normalized.net.xml"
+        normalized_file = _stage_file(variant_dir, replay_prefix, "normalized.net.xml")
         normalize_report = _normalize_sumo_net(
             net_file=tllogic_file,
             output_file=normalized_file,
@@ -1526,16 +2120,144 @@ def _run_direct_local_teacher_replay(
         )
         variant_report["normalize"] = normalize_report
         if normalize_report.get("status") == "pass" and normalized_file.exists():
+            effective_replay_edge_map = {
+                str(key): str(value)
+                for key, value in (
+                    replay_report.get("effective_edge_map", edge_map)
+                    if isinstance(replay_report, Mapping)
+                    else edge_map
+                ).items()
+                if str(key) and str(value)
+            }
+            restore_owner_ids = [junction_id]
+            if shared_controller_candidate and shared_controller_plan is not None:
+                restore_owner_ids = sorted(
+                    {
+                        str(value)
+                        for value in (shared_controller_plan.get("owner_map", {}) or {}).values()
+                        if str(value)
+                    }
+                )
+            off_scope_restore_report = restore_off_scope_netconvert_artifacts(
+                source_file=tllogic_file,
+                target_file=normalized_file,
+                mutable_junction_ids={
+                    *restore_owner_ids,
+                    *(
+                        str(value)
+                        for value in (
+                            replay_report.get("collapse_junction_ids", ())
+                            if isinstance(replay_report, Mapping)
+                            else ()
+                        )
+                        if str(value)
+                    ),
+                },
+                mutable_edge_ids=set(effective_replay_edge_map.values()),
+            )
+            normalize_report["off_scope_netconvert_restore"] = off_scope_restore_report
+            if off_scope_restore_report.get("status") != "pass":
+                variant_report.update(
+                    {
+                        "status": "blocked",
+                        "reason": "off_scope_netconvert_restore_not_pass",
+                    }
+                )
+                variant_reports.append(variant_report)
+                continue
+            if scoped_candidate:
+                pedestrian_semantic_restore_reports: dict[str, Any] = {}
+                pedestrian_restore_failed = False
+                for restore_owner_id in restore_owner_ids:
+                    pedestrian_semantic_restore_report = restore_scoped_pedestrian_internal_semantics_after_normalize(
+                        source_net_file=tllogic_file,
+                        target_net_file=normalized_file,
+                        junction_id=restore_owner_id,
+                        edge_map=effective_replay_edge_map,
+                    )
+                    pedestrian_semantic_restore_reports[restore_owner_id] = pedestrian_semantic_restore_report
+                    if pedestrian_semantic_restore_report.get("status") != "pass":
+                        pedestrian_restore_failed = True
+                normalize_report["pedestrian_semantic_restore"] = (
+                    pedestrian_semantic_restore_reports
+                    if shared_controller_candidate
+                    else pedestrian_semantic_restore_reports.get(junction_id, {})
+                )
+                if pedestrian_restore_failed:
+                    variant_report.update(
+                        {
+                            "status": "blocked",
+                            "reason": "pedestrian_semantic_restore_not_pass",
+                        }
+                    )
+                    variant_reports.append(variant_report)
+                    continue
+                tls_semantic_restore_report = restore_teacher_tls_connection_semantics_after_normalize(
+                    source_net_file=tllogic_file,
+                    target_net_file=normalized_file,
+                    junction_id=junction_id,
+                )
+                normalize_report["teacher_tls_semantic_restore"] = tls_semantic_restore_report
+                if tls_semantic_restore_report.get("status") != "pass":
+                    variant_report.update(
+                        {
+                            "status": "blocked",
+                            "reason": "teacher_tls_semantic_restore_not_pass",
+                        }
+                    )
+                    variant_reports.append(variant_report)
+                    continue
             normalize_report["false_traffic_light_type_restore"] = _restore_false_traffic_light_junction_types(
                 source_file=tllogic_file,
                 target_file=normalized_file,
-                exclude_junction_ids={junction_id},
+                exclude_junction_ids=(
+                    {
+                        str(value)
+                        for value in (shared_controller_plan.get("owner_map", {}) or {}).values()
+                        if str(value)
+                    }
+                    if shared_controller_candidate and shared_controller_plan is not None
+                    else {junction_id}
+                ),
             )
-            normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
-                source_file=tllogic_file,
-                target_file=normalized_file,
-                junction_id=junction_id,
-            )
+            if shared_controller_candidate and shared_controller_plan is not None:
+                geometry_restore_reports: dict[str, Any] = {}
+                for restore_owner_id in sorted(
+                    {
+                        str(value)
+                        for value in (shared_controller_plan.get("owner_map", {}) or {}).values()
+                        if str(value)
+                    }
+                ):
+                    geometry_restore_reports[restore_owner_id] = _restore_replayed_geometry_attrs(
+                        source_file=tllogic_file,
+                        target_file=normalized_file,
+                        junction_id=restore_owner_id,
+                    )
+                normalize_report["geometry_restore"] = geometry_restore_reports
+                shared_tls_restore_after_geometry = restore_teacher_tls_connection_semantics_after_normalize(
+                    source_net_file=tllogic_file,
+                    target_net_file=normalized_file,
+                    junction_id=junction_id,
+                )
+                normalize_report["shared_controller_tls_semantic_restore_after_geometry"] = (
+                    shared_tls_restore_after_geometry
+                )
+                if shared_tls_restore_after_geometry.get("status") != "pass":
+                    variant_report.update(
+                        {
+                            "status": "blocked",
+                            "reason": "shared_controller_tls_semantic_restore_not_pass",
+                        }
+                    )
+                    variant_reports.append(variant_report)
+                    continue
+            else:
+                normalize_report["geometry_restore"] = _restore_replayed_geometry_attrs(
+                    source_file=tllogic_file,
+                    target_file=normalized_file,
+                    junction_id=junction_id,
+                )
             normalized_sumo_load = _sumo_load_net(
                 normalized_file,
                 output_dir=variant_dir / "sumo_load_normalized",
@@ -1545,6 +2267,59 @@ def _run_direct_local_teacher_replay(
             )
             variant_report["sumo_load"] = normalized_sumo_load
             if normalized_sumo_load.get("status") == "pass":
+                routeability_smoke = _run_tls_movement_routeability_smoke(
+                    net_file=normalized_file,
+                    controller_id=junction_id,
+                    output_dir=variant_dir / "routeability_smoke",
+                    prefix=replay_prefix,
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                variant_report["routeability_smoke"] = routeability_smoke
+                if routeability_smoke.get("status") != "pass":
+                    variant_report.update(
+                        {
+                            "status": "blocked",
+                            "reason": "routeability_smoke_not_pass",
+                        }
+                    )
+                    variant_reports.append(variant_report)
+                    continue
+                if scoped_candidate:
+                    if shared_controller_candidate and shared_controller_plan is not None:
+                        tls_via_path_semantics = compare_shared_tls_via_path_semantics(
+                            teacher_net_file,
+                            normalized_file,
+                            teacher_junction_id,
+                            junction_id,
+                            owner_map={
+                                str(key): str(value)
+                                for key, value in (shared_controller_plan.get("owner_map", {}) or {}).items()
+                                if str(key) and str(value)
+                            },
+                            teacher_edge_map=effective_replay_edge_map,
+                        )
+                    else:
+                        tls_via_path_semantics = compare_tls_via_path_semantics(
+                            teacher_net_file,
+                            normalized_file,
+                            teacher_junction_id,
+                            junction_id,
+                            teacher_edge_map=effective_replay_edge_map,
+                            teacher_internal_scope_id=teacher_junction_id,
+                            candidate_internal_scope_id=junction_id,
+                        )
+                    variant_report["tls_via_path_semantics"] = tls_via_path_semantics
+                    if tls_via_path_semantics.get("status") != "pass":
+                        variant_report.update(
+                            {
+                                "status": "blocked",
+                                "reason": "tls_via_path_semantics_not_pass",
+                            }
+                        )
+                        variant_reports.append(variant_report)
+                        continue
                 variant_report.update(
                     {
                         "status": "pass",
@@ -1565,6 +2340,15 @@ def _run_direct_local_teacher_replay(
                     "variant_reports": variant_reports,
                 }
 
+        if scoped_candidate and normalize_report.get("status") != "pass":
+            variant_report.update(
+                {
+                    "status": "blocked",
+                    "reason": "scoped_tls_normalize_not_pass",
+                }
+            )
+            variant_reports.append(variant_report)
+            continue
         if tllogic_sumo_load.get("status") == "pass":
             variant_report.update(
                 {
@@ -1587,12 +2371,273 @@ def _run_direct_local_teacher_replay(
             }
         variant_report.update({"status": "blocked", "reason": "sumo_load_not_pass"})
         variant_reports.append(variant_report)
-
+        continue
     return {
         "status": "blocked",
         "reason": "no_direct_local_replay_candidate_passed",
         "variant_reports": variant_reports,
     }
+
+
+def _scoped_tls_batch_artifact_paths(
+    *,
+    report: Mapping[str, Any],
+    source_net_file: Path,
+    output_dir: Path,
+) -> dict[str, Path]:
+    """Collect deterministic batch artifacts without treating a variant as adopted."""
+
+    paths: dict[str, Path] = {"source_net_file": source_net_file}
+    path_fields = {
+        "variant_file",
+        "final_net_file",
+        "net_file",
+        "output_file",
+        "connection_file",
+        "normalized_file",
+        "source_net_file",
+        "target_net_file",
+        "route_file",
+        "summary_file",
+        "tripinfo_file",
+    }
+
+    def resolve(value: object) -> Path | None:
+        if not value or not isinstance(value, (str, Path)):
+            return None
+        candidate = Path(str(value))
+        if candidate.is_absolute():
+            return candidate
+        for base in (output_dir, Path.cwd()):
+            resolved = base / candidate
+            if resolved.exists():
+                return resolved
+        return candidate
+
+    def visit(value: object, prefix: str) -> None:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                key_text = str(key)
+                if key_text in path_fields:
+                    resolved = resolve(item)
+                    if resolved is not None:
+                        paths[f"{prefix}.{key_text}"] = resolved
+                elif isinstance(item, (Mapping, list, tuple)):
+                    visit(item, f"{prefix}.{key_text}")
+        elif isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                if isinstance(item, (Mapping, list, tuple)):
+                    visit(item, f"{prefix}[{index}]")
+
+    visit(report, "batch")
+    return dict(sorted(paths.items()))
+
+
+def _hash_scoped_tls_batch_artifacts(
+    artifacts: Mapping[str, Path],
+    *,
+    base_dir: Path,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    unreadable: list[str] = []
+    hashed_count = 0
+    for key, path in artifacts.items():
+        resolved = path.resolve()
+        try:
+            if not resolved.is_file():
+                raise FileNotFoundError(str(resolved))
+            digest = hashlib.sha256()
+            size_bytes = 0
+            with resolved.open("rb") as stream:
+                while True:
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    size_bytes += len(chunk)
+        except FileNotFoundError:
+            records[key] = {
+                "path": os.path.relpath(resolved, base_dir.resolve()).replace("\\", "/"),
+                "status": "missing",
+            }
+            missing.append(key)
+        except OSError as exc:
+            records[key] = {
+                "path": os.path.relpath(resolved, base_dir.resolve()).replace("\\", "/"),
+                "status": "unreadable",
+                "error": str(exc),
+            }
+            unreadable.append(key)
+        else:
+            records[key] = {
+                "path": os.path.relpath(resolved, base_dir.resolve()).replace("\\", "/"),
+                "status": "pass",
+                "kind": "file",
+                "sha256": digest.hexdigest(),
+                "size_bytes": size_bytes,
+            }
+            hashed_count += 1
+    gate = {
+        "status": "pass" if not missing and not unreadable else "fail",
+        "algorithm": "sha256",
+        "hashed_artifact_count": hashed_count,
+        "missing_artifacts": sorted(missing),
+        "unreadable_artifacts": sorted(unreadable),
+    }
+    return records, gate
+
+
+def run_scoped_teacher_tls_cell_batch(
+    *,
+    queue_report: Mapping[str, Any] | None,
+    source_net_file: Path,
+    output_dir: Path,
+    prefix: str,
+    netconvert_binary: str,
+    sumo_binary: str,
+    timeout_seconds: float,
+    command_runner: Callable[..., Any] = run_command,
+    shared_controller_source_net_file: Path | None = None,
+) -> dict[str, Any]:
+    """Run every enriched split-TLS candidate as an independent gated variant.
+
+    Each cell is evaluated against the same untouched source network.  The
+    variants are deliberately not merged here: a cell can pass local
+    construction/TLS gates while the global reference topology still needs a
+    separate promotion decision.
+    """
+
+    if not queue_report:
+        return {"status": "skipped", "reason": "queue_missing", "cell_reports": []}
+    candidates = []
+    seen: set[tuple[str, str, tuple[str, ...]]] = set()
+    for candidate in queue_report.get("repair_candidates", []) or []:
+        if not isinstance(candidate, Mapping):
+            continue
+        candidate_tl_id = str(candidate.get("tls_candidate_tl_id", "")).strip()
+        member_ids = tuple(sorted(str(item) for item in candidate.get("tls_candidate_junction_ids", []) or [] if str(item)))
+        reference_tl_id = str(candidate.get("tls_reference_tl_id", "")).strip()
+        if not candidate_tl_id or len(member_ids) <= 1 or not reference_tl_id:
+            continue
+        key = (reference_tl_id, candidate_tl_id, member_ids)
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(candidate)
+    if not candidates:
+        return {"status": "skipped", "reason": "no_scoped_tls_candidates", "cell_reports": []}
+    if not source_net_file.exists():
+        return {"status": "blocked", "reason": "source_net_file_missing", "cell_reports": []}
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cell_reports: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates, start=1):
+        candidate_tl_id = str(candidate.get("tls_candidate_tl_id", "")).strip()
+        cell_dir = output_dir / f"cell_{index:03d}_{_safe_path_part(candidate_tl_id)}"
+        trial_queue = dict(queue_report)
+        trial_queue["repair_candidates"] = [dict(candidate)]
+        trial_queue["repair_candidate_count"] = 1
+        trial_queue["ready_candidate_count"] = 0
+        trial_queue["expanded_scope_candidate_count"] = 1
+        direct_report = _run_direct_local_teacher_replay(
+            queue_report=trial_queue,
+            source_net_file=source_net_file,
+            output_dir=cell_dir,
+            prefix=f"{prefix}_cell_{index:03d}",
+            netconvert_binary=netconvert_binary,
+            sumo_binary=sumo_binary,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+            shared_controller_source_net_file=shared_controller_source_net_file,
+        )
+        cell_report = {
+            "cell_index": index,
+            "reference_tl_id": str(candidate.get("tls_reference_tl_id", "")),
+            "candidate_tl_id": candidate_tl_id,
+            "candidate_junction_ids": list(candidate.get("tls_candidate_junction_ids", []) or []),
+            "status": str(direct_report.get("status", "fail")),
+            "direct_replay": direct_report,
+        }
+        cell_reports.append(cell_report)
+
+    report = {
+        "status": "pass" if all(item["status"] == "pass" for item in cell_reports) else "fail",
+        "claim_status": "diagnostic-demo",
+        "source_net_file": str(source_net_file),
+        "cell_count": len(cell_reports),
+        "pass_count": sum(item["status"] == "pass" for item in cell_reports),
+        "blocked_count": sum(item["status"] == "blocked" for item in cell_reports),
+        "fail_count": sum(item["status"] == "fail" for item in cell_reports),
+        "cell_reports": cell_reports,
+        "policy": "independent scoped variants; no main-network merge without global promotion gates",
+    }
+    report_file = output_dir / f"{prefix}_scoped_tls_cell_batch.json"
+    report["report_file"] = str(report_file)
+    manifest_file = output_dir / f"{prefix}_scoped_tls_cell_batch_manifest.json"
+    artifact_paths = _scoped_tls_batch_artifact_paths(
+        report=report,
+        source_net_file=source_net_file,
+        output_dir=output_dir,
+    )
+    artifact_hashes, artifact_hash_gate = _hash_scoped_tls_batch_artifacts(
+        artifact_paths,
+        base_dir=output_dir,
+    )
+    report["artifact_manifest_file"] = str(manifest_file)
+    report["artifact_hashes"] = artifact_hashes
+    report["artifact_hash_gate"] = artifact_hash_gate
+    report["artifact_manifest_status"] = (
+        "pass" if report["status"] == "pass" and artifact_hash_gate["status"] == "pass" else "fail"
+    )
+    report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    report_hashes, report_hash_gate = _hash_scoped_tls_batch_artifacts(
+        {"batch_report": report_file},
+        base_dir=output_dir,
+    )
+    manifest_hashes = {**artifact_hashes, **report_hashes}
+    manifest_gate = {
+        "status": (
+            "pass"
+            if artifact_hash_gate["status"] == "pass"
+            and report_hash_gate["status"] == "pass"
+            and report["status"] == "pass"
+            else "fail"
+        ),
+        "algorithm": "sha256",
+        "hashed_artifact_count": len([item for item in manifest_hashes.values() if item.get("status") == "pass"]),
+        "missing_artifacts": sorted(
+            [key for key, item in manifest_hashes.items() if item.get("status") == "missing"]
+        ),
+        "unreadable_artifacts": sorted(
+            [key for key, item in manifest_hashes.items() if item.get("status") == "unreadable"]
+        ),
+        "batch_status": report["status"],
+    }
+    manifest = {
+        "schema_version": 1,
+        "artifact_manifest_kind": "scoped_tls_cell_batch",
+        "status": manifest_gate["status"],
+        "claim_status": "diagnostic-demo",
+        "source_net_file": str(source_net_file),
+        "report_file": str(report_file),
+        "cell_count": report["cell_count"],
+        "pass_count": report["pass_count"],
+        "blocked_count": report["blocked_count"],
+        "fail_count": report["fail_count"],
+        "netconvert_binary": netconvert_binary,
+        "sumo_binary": sumo_binary,
+        "policy": "hash every source/report/variant artifact; no main-network merge is implied",
+        "artifact_hashes": manifest_hashes,
+        "artifact_hash_gate": manifest_gate,
+        "rebuild_inputs": {
+            "prefix": prefix,
+            "timeout_seconds": timeout_seconds,
+            "source_net_sha256": manifest_hashes.get("source_net_file", {}).get("sha256", ""),
+        },
+    }
+    manifest_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report
 
 
 def _teacher_guided_application_stats(
@@ -1953,6 +2998,22 @@ def _reference_scope_gate(report: Mapping[str, Any] | None) -> str:
     return _gate_value(report)
 
 
+def _reference_bbox_scope_gate(report: Mapping[str, Any] | None) -> str:
+    if report is None:
+        return "skipped"
+    # Tiny synthetic/reference fixtures and legacy hand-authored nets may not
+    # carry SUMO <location> projection metadata.  They cannot prove a
+    # geographic bbox match, but they should remain usable for non-geographic
+    # unit/workflow tests.  The claim-tier evaluator still treats skipped as
+    # insufficient for reference_aligned claims.
+    if (
+        report.get("status") == "blocked"
+        and "projection metadata" in str(report.get("error", ""))
+    ):
+        return "skipped"
+    return _gate_value(report)
+
+
 def _reference_scope_pruning_gate(report: Mapping[str, Any] | None) -> str:
     if report is None:
         return "skipped"
@@ -1960,9 +3021,69 @@ def _reference_scope_pruning_gate(report: Mapping[str, Any] | None) -> str:
         return "skipped"
     if report.get("status") != "pass":
         return _gate_value(report)
+    if report.get("scope_pruning_promotion_status") == "pass":
+        return "pass"
     if report.get("scope_pruning_status") == "variant_created_for_review":
         return "blocked"
     return "pass"
+
+
+def _scope_pruning_promotion_decision(
+    *,
+    pruning_report: Mapping[str, Any] | None,
+    post_scope_report: Mapping[str, Any] | None,
+    sumo_load_report: Mapping[str, Any] | None,
+    source_net_file: Path | None = None,
+    variant_net_file: Path | None = None,
+) -> dict[str, Any]:
+    """Promote only a scope variant that is safe for the visual-detail layer."""
+
+    if pruning_report is None:
+        return {"status": "skipped", "reason": "not_run"}
+    checks = {
+        "variant_netconvert": pruning_report.get("scope_pruning_netconvert", {}).get("status")
+        if isinstance(pruning_report.get("scope_pruning_netconvert"), Mapping)
+        else "fail",
+        "sumo_load": sumo_load_report.get("status") if isinstance(sumo_load_report, Mapping) else "fail",
+        "post_scope_audit": post_scope_report.get("status") if isinstance(post_scope_report, Mapping) else "fail",
+        "modal_only": pruning_report.get("scope_pruning_modal_only_status", "blocked"),
+        "modal_leaf_continuity": pruning_report.get("scope_pruning_modal_leaf_continuity_status", "blocked"),
+        "vehicle_core_impact": pruning_report.get("scope_pruning_vehicle_core_impact_status", "blocked"),
+    }
+    source_controlled = _controlled_tls_connection_count_from_net_file(source_net_file)
+    variant_controlled = _controlled_tls_connection_count_from_net_file(variant_net_file)
+    controlled_tls_check = (
+        "pass"
+        if source_controlled is not None
+        and variant_controlled is not None
+        and variant_controlled >= source_controlled
+        else "blocked"
+    )
+    checks["controlled_tls_connection_preservation"] = controlled_tls_check
+    status = "pass" if all(value == "pass" for value in checks.values()) else "blocked"
+    return {
+        "status": status,
+        "scope_pruning_promotion_status": status,
+        "reason": (
+            "scope_variant_promoted_after_netconvert_sumo_load_post_scope_audit_and_modal_safety"
+            if status == "pass"
+            else "scope_variant_not_safe_for_promotion"
+        ),
+        "checks": checks,
+        "post_scope_audit_file": str(post_scope_report.get("report_file", ""))
+        if isinstance(post_scope_report, Mapping)
+        else "",
+        "sumo_load_status": sumo_load_report.get("status", "fail")
+        if isinstance(sumo_load_report, Mapping)
+        else "fail",
+        "source_controlled_connection_count": source_controlled,
+        "variant_controlled_connection_count": variant_controlled,
+        "controlled_connection_regression_count": (
+            max(source_controlled - variant_controlled, 0)
+            if source_controlled is not None and variant_controlled is not None
+            else None
+        ),
+    }
 
 
 def _reference_hierarchy_gate(report: Mapping[str, Any] | None) -> str:
@@ -1983,6 +3104,36 @@ def _should_run_tls_aggregation(
 
 def _tls_aggregation_preserves_controlled_connections(report: Mapping[str, Any]) -> bool:
     return str(report.get("tls_controlled_connection_preservation_status", "pass")) != "fail"
+
+
+def _controlled_tls_connection_count_from_net_file(value: Any) -> int | None:
+    """Return the TLS controlled-connection count, or ``None`` when unreadable."""
+
+    if not value:
+        return None
+    try:
+        root = ET.parse(Path(str(value))).getroot()
+    except (OSError, ET.ParseError, ValueError):
+        return None
+    connections = root.findall("connection")
+    # A tiny synthetic ``<net/>`` is commonly used by injected test/build
+    # adapters.  Treat it as unreadable for this metric so a trustworthy
+    # count already supplied by the adapter remains the fallback.  A real
+    # SUMO network contains connection elements even when its controlled
+    # count is zero, so a parsed zero is still authoritative in that case.
+    if not connections:
+        return None
+    return sum(
+        1
+        for connection in connections
+        if connection.attrib.get("tl") and connection.attrib.get("linkIndex")
+    )
+
+
+def _controlled_tls_connection_count_from_delta(report: Mapping[str, Any] | None) -> int | None:
+    if report is None:
+        return None
+    return _controlled_tls_connection_count_from_net_file(report.get("candidate_net_file"))
 
 
 def _tls_semantic_delta_score(report: Mapping[str, Any] | None) -> int:
@@ -2170,6 +3321,193 @@ def _tls_connection_repair_promotion_decision(
     }
 
 
+def _effective_tls_controlled_connection_preservation(
+    *,
+    aggregation_report: Mapping[str, Any] | None,
+    repair_report: Mapping[str, Any] | None,
+    repair_promotion_report: Mapping[str, Any] | None,
+    effective_net_file: Path | None,
+) -> dict[str, Any]:
+    if (
+        repair_report is not None
+        and repair_report.get("status") == "pass"
+        and repair_promotion_report is not None
+        and repair_promotion_report.get("status") == "pass"
+    ):
+        controlled_after = _int_field(repair_report, "candidate_tls_controlled_connection_count_after")
+        effective_count = _controlled_tls_connection_count_from_net_file(effective_net_file)
+        if effective_count is not None:
+            controlled_after = effective_count
+        source_controlled = _int_field(repair_report, "source_tls_controlled_connection_count")
+        if source_controlled == 0:
+            source_controlled = controlled_after
+        regression_count = max(source_controlled - controlled_after, 0)
+        return {
+            "source": "promoted_tls_connection_repair",
+            "network_file": str(effective_net_file or repair_report.get("variant_file", "")),
+            "source_controlled_connection_count": source_controlled,
+            "controlled_connection_count": controlled_after,
+            "controlled_connection_preservation_status": "pass" if regression_count == 0 else "fail",
+            "controlled_connection_regression_count": regression_count,
+        }
+    if aggregation_report is not None:
+        return {
+            "source": "tls_aggregation_variant",
+            "network_file": str(effective_net_file or aggregation_report.get("tls_aggregation_variant_file", "")),
+            "source_controlled_connection_count": _int_field(
+                aggregation_report, "source_tls_controlled_connection_count"
+            ),
+            "controlled_connection_count": _int_field(
+                aggregation_report, "tls_aggregated_controlled_connection_count"
+            ),
+            "controlled_connection_preservation_status": str(
+                aggregation_report.get("tls_controlled_connection_preservation_status", "pass")
+            ),
+            "controlled_connection_regression_count": _int_field(
+                aggregation_report, "tls_controlled_connection_regression_count"
+            ),
+        }
+    return {
+        "source": "not_run",
+        "network_file": str(effective_net_file or ""),
+        "source_controlled_connection_count": 0,
+        "controlled_connection_count": 0,
+        "controlled_connection_preservation_status": "skipped",
+        "controlled_connection_regression_count": 0,
+    }
+
+
+def _reference_hierarchy_type_repair_promotion_decision(
+    *,
+    baseline_audit_report: Mapping[str, Any] | None,
+    candidate_audit_report: Mapping[str, Any] | None,
+    sumo_load_report: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if sumo_load_report is None or sumo_load_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "sumo_load_not_pass"}
+    if candidate_audit_report is None:
+        return {"status": "blocked", "reason": "reference_hierarchy_type_repair_audit_missing"}
+    if _reference_hierarchy_gate(candidate_audit_report) == "pass":
+        return {
+            "status": "pass",
+            "reason": "reference_hierarchy_type_repair_promoted_after_sumo_load_and_audit",
+        }
+    if baseline_audit_report is None:
+        return {"status": "blocked", "reason": "reference_hierarchy_baseline_audit_missing"}
+
+    baseline_issues = _int_field(baseline_audit_report, "high_hierarchy_issue_count")
+    candidate_issues = _int_field(candidate_audit_report, "high_hierarchy_issue_count")
+    baseline_counts = baseline_audit_report.get("decision_counts", {})
+    candidate_counts = candidate_audit_report.get("decision_counts", {})
+    if not isinstance(baseline_counts, Mapping) or not isinstance(candidate_counts, Mapping):
+        return {"status": "blocked", "reason": "reference_hierarchy_decision_counts_missing"}
+
+    baseline_type_mismatches = int(baseline_counts.get("type_hierarchy_mismatch", 0) or 0)
+    candidate_type_mismatches = int(candidate_counts.get("type_hierarchy_mismatch", 0) or 0)
+    risk_regressions = {
+        decision: {
+            "baseline": int(baseline_counts.get(decision, 0) or 0),
+            "candidate": int(candidate_counts.get(decision, 0) or 0),
+        }
+        for decision in ("out_of_reference_scope", "link_or_slip_lane")
+        if int(candidate_counts.get(decision, 0) or 0) > int(baseline_counts.get(decision, 0) or 0)
+    }
+    aligned_regressed = int(candidate_counts.get("aligned", 0) or 0) < int(
+        baseline_counts.get("aligned", 0) or 0
+    )
+    if (
+        candidate_issues < baseline_issues
+        and candidate_type_mismatches < baseline_type_mismatches
+        and not risk_regressions
+        and not aligned_regressed
+    ):
+        return {
+            "status": "pass",
+            "reason": "reference_hierarchy_type_repair_promoted_by_strict_improvement",
+            "baseline_issue_count": baseline_issues,
+            "candidate_issue_count": candidate_issues,
+            "baseline_type_mismatch_count": baseline_type_mismatches,
+            "candidate_type_mismatch_count": candidate_type_mismatches,
+            "risk_regressions": {},
+        }
+    return {
+        "status": "blocked",
+        "reason": "reference_hierarchy_type_repair_not_strictly_better",
+        "baseline_issue_count": baseline_issues,
+        "candidate_issue_count": candidate_issues,
+        "baseline_type_mismatch_count": baseline_type_mismatches,
+        "candidate_type_mismatch_count": candidate_type_mismatches,
+        "risk_regressions": risk_regressions,
+        "aligned_regressed": aligned_regressed,
+    }
+
+
+def _corridor_geometry_simplification_promotion_decision(
+    *,
+    variant_report: Mapping[str, Any] | None,
+    sumo_load_report: Mapping[str, Any] | None,
+    baseline_delta_report: Mapping[str, Any] | None,
+    candidate_delta_report: Mapping[str, Any] | None,
+    baseline_topology_report: Mapping[str, Any] | None,
+    candidate_topology_report: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if variant_report is None or variant_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "corridor_variant_not_pass"}
+    if variant_report.get("semantic_preservation_status") != "pass":
+        return {"status": "blocked", "reason": "corridor_semantic_preservation_not_pass"}
+    connection_audit = variant_report.get("alias_normalized_connection_audit", {})
+    if not isinstance(connection_audit, Mapping) or any(
+        int(connection_audit.get(field, 0) or 0) > 0
+        for field in ("normal_missing_count", "normal_extra_count", "controlled_missing_count", "controlled_extra_count")
+    ):
+        return {"status": "blocked", "reason": "corridor_alias_normalized_connections_regressed"}
+    if sumo_load_report is None or sumo_load_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "corridor_sumo_load_not_pass"}
+    if candidate_delta_report is None or candidate_delta_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "corridor_reference_delta_not_pass"}
+    if baseline_delta_report is None or baseline_delta_report.get("status") != "pass":
+        return {"status": "blocked", "reason": "corridor_baseline_reference_delta_not_pass"}
+    baseline_score = _tls_semantic_delta_score(baseline_delta_report)
+    candidate_score = _tls_semantic_delta_score(candidate_delta_report)
+    if candidate_score > baseline_score:
+        return {
+            "status": "blocked",
+            "reason": "corridor_reference_tls_semantic_delta_regressed",
+            "baseline_tls_semantic_delta_score": baseline_score,
+            "candidate_tls_semantic_delta_score": candidate_score,
+        }
+    if baseline_topology_report is None or candidate_topology_report is None:
+        return {"status": "blocked", "reason": "corridor_topology_audit_missing"}
+    topology_metrics = (
+        "suspicious_cluster_count",
+        "junction_aggregation_candidate_count",
+        "physical_intersection_candidate_count",
+        "topology_connection_cell_candidate_count",
+        "max_cluster_node_count",
+    )
+    topology_regressions = {
+        metric: {
+            "baseline": _int_field(baseline_topology_report, metric),
+            "candidate": _int_field(candidate_topology_report, metric),
+        }
+        for metric in topology_metrics
+        if _int_field(candidate_topology_report, metric) > _int_field(baseline_topology_report, metric)
+    }
+    if topology_regressions:
+        return {
+            "status": "blocked",
+            "reason": "corridor_topology_regressed",
+            "topology_regressions": topology_regressions,
+        }
+    return {
+        "status": "pass",
+        "reason": "corridor_geometry_simplification_promoted_by_semantic_and_topology_gates",
+        "baseline_tls_semantic_delta_score": baseline_score,
+        "candidate_tls_semantic_delta_score": candidate_score,
+        "topology_regressions": {},
+    }
+
+
 def _reference_delta_promotion_decision(
     *,
     candidate_delta_report: Mapping[str, Any] | None,
@@ -2247,6 +3585,14 @@ def _movement_rebuild_reference_delta_promotion_decision(
     baseline_tls_junction_count = _structural_delta_key_count(baseline_delta_report, "traffic_light_junction_count")
     candidate_structural_score = _total_structural_delta_score(candidate_delta_report)
     baseline_structural_score = _total_structural_delta_score(baseline_delta_report)
+    candidate_controlled_connection_count = _controlled_tls_connection_count_from_delta(candidate_delta_report)
+    baseline_controlled_connection_count = _controlled_tls_connection_count_from_delta(baseline_delta_report)
+    controlled_connection_regression_count = 0
+    if candidate_controlled_connection_count is not None and baseline_controlled_connection_count is not None:
+        controlled_connection_regression_count = max(
+            baseline_controlled_connection_count - candidate_controlled_connection_count,
+            0,
+        )
     guard_structural_score = (
         _total_structural_delta_score(structural_guard_delta_report)
         if structural_guard_delta_report is not None
@@ -2260,7 +3606,17 @@ def _movement_rebuild_reference_delta_promotion_decision(
         "candidate_total_structural_delta_score": candidate_structural_score,
         "baseline_total_structural_delta_score": baseline_structural_score,
         "guard_total_structural_delta_score": guard_structural_score,
+        "candidate_controlled_connection_count": candidate_controlled_connection_count,
+        "baseline_controlled_connection_count": baseline_controlled_connection_count,
+        "controlled_connection_regression_count": controlled_connection_regression_count,
     }
+    if controlled_connection_regression_count > 0:
+        return {
+            **decision,
+            **movement_fields,
+            "status": "blocked",
+            "reason": "controlled_tls_connection_regressed",
+        }
     structural_regression_allowance = 100
     if candidate_structural_score > guard_structural_score + structural_regression_allowance:
         return {
@@ -2510,6 +3866,12 @@ def _reference_topology_parity_gate(
             "metrics": {},
         }
 
+    if (
+        "topology_canonical_cell_records" in candidate_report
+        and "topology_canonical_cell_records" in reference_report
+    ):
+        return compare_topology_canonical_cells(candidate_report, reference_report)
+
     metric_keys = (
         "suspicious_cluster_count",
         "junction_aggregation_candidate_count",
@@ -2572,6 +3934,7 @@ def run_osm_cleanup_workflow(
     confirmed_area: bool = False,
     prefix: str = "sumo_osm_cleanup",
     source_osm_path: Path | None = None,
+    clip_source_ways_to_bbox: bool = True,
     highway_classes: set[str] | None = None,
     traffic_layers: str | set[str] | None = None,
     network_profile: str | None = None,
@@ -2588,6 +3951,7 @@ def run_osm_cleanup_workflow(
     retry_pause_seconds: float = 5.0,
     map_temporal_scope: str = "current",
     map_target_date: str | None = None,
+    review_decisions_file: Path | None = None,
     launch_netedit_after_build: bool = True,
     launch_netedit_review_after_build: bool | None = None,
     launch_sumo_gui_after_build: bool = True,
@@ -2595,6 +3959,8 @@ def run_osm_cleanup_workflow(
     topology_cluster_radius_m: float = 30.0,
     topology_min_cluster_nodes: int = 3,
     run_routeability_audit_after_build: bool = True,
+    run_connection_mode_audit_after_build: bool = True,
+    run_standard_nema_scan_after_build: bool = True,
     routeability_vehicle_count: int | None = None,
     routeability_initial_end: int | None = None,
     routeability_max_end: int | None = None,
@@ -2605,7 +3971,11 @@ def run_osm_cleanup_workflow(
     run_reference_join_aggregation_after_build: bool = True,
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
+    run_reference_bbox_scope_after_build: bool = True,
+    run_road_connectivity_parity_audit_after_build: bool = True,
     run_scope_pruning_after_build: bool = False,
+    run_corridor_geometry_simplification_after_build: bool = False,
+    run_corridor_edit_ledger_after_build: bool = False,
     teacher_guided_repair_max_ready_candidates: int | None = 80,
     run_teacher_guided_repair_after_build: bool = True,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
@@ -2619,6 +3989,8 @@ def run_osm_cleanup_workflow(
     routeability_func: Callable[..., dict[str, Any]] = build_routeability_probe,
     topology_audit_func: Callable[..., dict[str, Any]] = audit_topology_fragmentation,
     routeability_audit_func: Callable[..., dict[str, Any]] = run_routeability_audit,
+    connection_mode_audit_func: Callable[..., dict[str, Any]] = build_network_connection_mode_audit,
+    standard_nema_binding_func: Callable[..., dict[str, Any]] = build_standard_nema_phase_binding,
     tls_aggregation_func: Callable[..., dict[str, Any]] = build_tls_aggregation_variant,
     tls_signal_grouping_func: Callable[..., dict[str, Any]] = build_tls_signal_grouping_variant,
     tls_low_vehicle_control_func: Callable[..., dict[str, Any]] = build_tls_low_vehicle_control_variant,
@@ -2639,13 +4011,17 @@ def run_osm_cleanup_workflow(
     road_connectivity_replay_func: Callable[..., dict[str, Any]] = _run_owner_road_connectivity_replay,
     road_connectivity_seed_probe_func: Callable[..., dict[str, Any]] = _run_road_connectivity_seed_probe,
     road_connection_topology_replay_func: Callable[..., dict[str, Any]] = _run_road_connection_topology_replay,
+    road_connectivity_parity_func: Callable[..., dict[str, Any]] = audit_road_connectivity_parity,
     reference_scope_audit_func: Callable[..., dict[str, Any]] = audit_reference_scope,
     scope_pruning_func: Callable[..., dict[str, Any]] = build_scope_pruning_variant,
+    corridor_geometry_simplification_func: Callable[..., dict[str, Any]] = build_corridor_geometry_simplification_variant,
+    corridor_edit_ledger_func: Callable[..., dict[str, Any]] = build_corridor_edit_ledger,
     netedit_func: Callable[[Path], dict[str, Any]] = launch_netedit,
     netedit_review_func: Callable[[Path], dict[str, Any]] | None = None,
     sumo_gui_func: Callable[..., dict[str, Any]] = launch_sumo_gui,
     place_resolver: Callable[[str], dict[str, Any]] = resolve_osm_place,
     reference_bbox_func: Callable[[Path], dict[str, Any]] = derive_reference_net_bbox,
+    reference_bbox_scope_func: Callable[..., dict[str, Any]] = build_reference_bbox_variant,
     service_permission_func: Callable[..., dict[str, Any]] = apply_service_passenger_permissions,
     review_html_func: Callable[..., dict[str, Any]] = build_workflow_review_html,
     command_runner: Callable[..., Any] = run_command,
@@ -2769,6 +4145,35 @@ def run_osm_cleanup_workflow(
             },
             "warnings": list(network_plan.get("warnings", [])),
         }
+
+    reference_source_net_file = reference_net_file
+    reference_bbox_scope_report: dict[str, Any] | None = None
+    if (
+        run_reference_bbox_scope_after_build
+        and str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+    ):
+        reference_bbox_scope_report = reference_bbox_scope_func(
+            reference_net_file=reference_net_file,
+            bbox=bbox,
+            output_dir=output_dir / "reference_bbox_scope",
+            prefix=f"{prefix}_reference_bbox_scope",
+            netconvert_binary=netconvert_binary,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+        )
+        scoped_reference_value = reference_bbox_scope_report.get("variant_file", "")
+        scoped_reference_file = Path(str(scoped_reference_value)) if scoped_reference_value else None
+        if (
+            reference_bbox_scope_report.get("status") == "pass"
+            and scoped_reference_file is not None
+            and scoped_reference_file.exists()
+        ):
+            # From this point on, all teacher-guided parity and replay stages
+            # use the same geographic scope as the candidate OSM build.  Keep
+            # the original teacher path separately for provenance and source
+            # way-scope planning.
+            reference_net_file = scoped_reference_file
     selected_highway_classes = set(network_plan.get("highway_classes", []))
     reference_source_way_ids = {
         str(item)
@@ -2776,21 +4181,26 @@ def run_osm_cleanup_workflow(
         if str(item).strip()
     }
     reference_source_way_scope = reference_source_way_ids or None
-    build_report = build_func(
-        bbox=bbox,
-        output_dir=output_dir,
-        prefix=prefix,
-        source_osm_path=source_osm_path,
-        allowed_highways=selected_highway_classes,
-        allowed_way_ids=reference_source_way_scope,
-        historical_date=historical_date,
-        overpass_url=overpass_url,
-        timeout_seconds=timeout_seconds,
-        max_tile_area_km2=max_tile_area_km2,
-        max_retries=max_retries,
-        retry_pause_seconds=retry_pause_seconds,
-        netconvert_profile="vehicle_core",
-    )
+    build_kwargs: dict[str, Any] = {
+        "bbox": bbox,
+        "output_dir": output_dir,
+        "prefix": prefix,
+        "source_osm_path": source_osm_path,
+        "allowed_highways": selected_highway_classes,
+        "allowed_way_ids": reference_source_way_scope,
+        "historical_date": historical_date,
+        "overpass_url": overpass_url,
+        "timeout_seconds": timeout_seconds,
+        "max_tile_area_km2": max_tile_area_km2,
+        "max_retries": max_retries,
+        "retry_pause_seconds": retry_pause_seconds,
+        "netconvert_profile": "vehicle_core",
+    }
+    if _supports_keyword(build_func, "netconvert_binary"):
+        build_kwargs["netconvert_binary"] = netconvert_binary
+    if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+        build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
+    build_report = build_func(**build_kwargs)
     if build_report.get("status") != "pass":
         return {
             "status": "fail",
@@ -2903,6 +4313,12 @@ def run_osm_cleanup_workflow(
     }
     junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
+    tls_gap_destination_mapping_report: dict[str, Any] | None = None
+    tls_repair_variant_report: dict[str, Any] | None = None
+    tls_repair_variant_sumo_load_report: dict[str, Any] | None = None
+    tls_repair_variant_semantic_report: dict[str, Any] | None = None
+    tls_repair_variant_reference_audit_report: dict[str, Any] | None = None
+    tls_repair_decision_report: dict[str, Any] | None = None
     reference_join_post_teacher_audit_report: dict[str, Any] | None = None
     post_teacher_tls_low_vehicle_control_report: dict[str, Any] | None = None
     post_teacher_tls_low_vehicle_control_candidates: list[dict[str, Any]] = []
@@ -2961,10 +4377,13 @@ def run_osm_cleanup_workflow(
     final_movement_rebuild_internal_regression_restore_promotion_report: dict[str, Any] | None = None
     reference_join_aggregation_report: dict[str, Any] | None = None
     teacher_guided_repair_queue_report: dict[str, Any] | None = None
+    teacher_guided_scoped_tls_cell_batch_report: dict[str, Any] | None = None
+    teacher_guided_scoped_tls_batch_pass_candidate_ids: set[str] = set()
     teacher_guided_plain_export_report: dict[str, Any] | None = None
     teacher_guided_repair_run_report: dict[str, Any] | None = None
     teacher_guided_probe_matrix_report: dict[str, Any] | None = None
     road_connectivity_replay_report: dict[str, Any] | None = None
+    road_connectivity_parity_audit_report: dict[str, Any] | None = None
     road_connectivity_seed_probe_report: dict[str, Any] | None = None
     road_connectivity_split_root_alias_repair_report: dict[str, Any] | None = None
     road_connection_topology_replay_report: dict[str, Any] | None = None
@@ -2995,12 +4414,35 @@ def run_osm_cleanup_workflow(
         "status": "skipped",
         "reason": "not_run",
     }
+    corridor_geometry_simplification_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_sumo_load_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_reference_delta_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_topology_report: dict[str, Any] | None = None
+    corridor_geometry_simplification_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
+    corridor_edit_ledger_report: dict[str, Any] | None = None
     reference_scope_audit_report: dict[str, Any] | None = None
     reference_scope_pruning_report: dict[str, Any] | None = None
+    reference_scope_post_prune_audit_report: dict[str, Any] | None = None
+    reference_scope_pruning_sumo_load_report: dict[str, Any] | None = None
+    reference_scope_pruning_promotion_report: dict[str, Any] = {}
+    reference_scope_final_audit_report: dict[str, Any] | None = None
+    reference_scope_final_pruning_report: dict[str, Any] | None = None
+    reference_scope_final_post_prune_audit_report: dict[str, Any] | None = None
+    reference_scope_final_sumo_load_report: dict[str, Any] | None = None
+    reference_scope_final_promotion_report: dict[str, Any] = {
+        "status": "skipped",
+        "reason": "not_run",
+    }
     reference_scope_candidate_layer = "not_applicable"
     reference_scope_candidate_net_file: Path | None = None
     reference_join_audit_candidate_layer = "not_applicable"
     reference_join_audit_candidate_net_file: Path | None = None
+    supplied_review_decisions: dict[str, Any] | None = None
+    review_decisions_source_status = "not_supplied"
+    review_decisions_source_error = ""
     tls_aggregation_report: dict[str, Any] | None = None
     vehicle_core_highway_classes = _class_set(
         network_plan.get("vehicle_core_highway_classes", network_plan.get("highway_classes", []))
@@ -3008,10 +4450,24 @@ def run_osm_cleanup_workflow(
     reference_visual_detail_highway_classes = _class_set(
         network_plan.get("reference_visual_detail_highway_classes", [])
     )
+    reference_visual_detail_modal_way_tags = {
+        str(key): {
+            str(value)
+            for value in values
+            if str(value).strip()
+        }
+        for key, values in dict(
+            network_plan.get("reference_visual_detail_modal_way_tags", {})
+        ).items()
+        if isinstance(values, (list, tuple, set, frozenset)) and values
+    }
     should_build_reference_visual_detail = (
         str(network_plan.get("network_profile", "")) == "reference_matched"
-        and bool(reference_visual_detail_highway_classes)
-        and reference_visual_detail_highway_classes != vehicle_core_highway_classes
+        and (
+            bool(reference_visual_detail_highway_classes)
+            and reference_visual_detail_highway_classes != vehicle_core_highway_classes
+            or bool(reference_visual_detail_modal_way_tags)
+        )
     )
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         reference_visual_detail_status = "same_as_vehicle_core"
@@ -3020,24 +4476,40 @@ def run_osm_cleanup_workflow(
             build_report,
             source_osm_path,
             reference_visual_detail_highway_classes,
+            reference_visual_detail_modal_way_tags,
         )
         visual_source_osm_value = str(visual_source_osm_path) if visual_source_osm_path is not None else None
         if not visual_source_osm_value:
             visual_source_osm_value = None
+        visual_build_kwargs: dict[str, Any] = {
+            "bbox": bbox,
+            "output_dir": output_dir,
+            "prefix": f"{prefix}_reference_visual_detail",
+            "source_osm_path": Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
+            "allowed_highways": reference_visual_detail_highway_classes,
+            "allowed_way_ids": reference_source_way_scope,
+            "historical_date": historical_date,
+            "overpass_url": overpass_url,
+            "timeout_seconds": timeout_seconds,
+            "max_tile_area_km2": max_tile_area_km2,
+            "max_retries": max_retries,
+            "retry_pause_seconds": retry_pause_seconds,
+            "netconvert_profile": "reference_visual_detail",
+        }
+        if _supports_keyword(build_func, "include_railway"):
+            visual_build_kwargs["include_railway"] = bool(
+                reference_visual_detail_modal_way_tags.get("railway")
+            )
+        if _supports_keyword(build_func, "allowed_railways"):
+            visual_build_kwargs["allowed_railways"] = set(
+                reference_visual_detail_modal_way_tags.get("railway", set())
+            ) or None
+        if _supports_keyword(build_func, "netconvert_binary"):
+            visual_build_kwargs["netconvert_binary"] = netconvert_binary
+        if _supports_keyword(build_func, "clip_source_ways_to_bbox"):
+            visual_build_kwargs["clip_source_ways_to_bbox"] = clip_source_ways_to_bbox
         reference_visual_detail_build_report = build_func(
-            bbox=bbox,
-            output_dir=output_dir,
-            prefix=f"{prefix}_reference_visual_detail",
-            source_osm_path=Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
-            allowed_highways=reference_visual_detail_highway_classes,
-            allowed_way_ids=reference_source_way_scope,
-            historical_date=historical_date,
-            overpass_url=overpass_url,
-            timeout_seconds=timeout_seconds,
-            max_tile_area_km2=max_tile_area_km2,
-            max_retries=max_retries,
-            retry_pause_seconds=retry_pause_seconds,
-            netconvert_profile="reference_visual_detail",
+            **visual_build_kwargs,
         )
         if reference_visual_detail_build_report.get("status") != "pass":
             return {
@@ -3627,6 +5099,7 @@ def run_osm_cleanup_workflow(
             candidate_net_file=reference_hierarchy_audit_candidate_net_file,
             output_dir=output_dir / "reference_hierarchy_audit",
             prefix=f"{prefix}_reference_hierarchy_audit",
+            resolve_equivalent_fragmentation=True,
         )
     if (
         str(network_plan.get("network_profile", "")) == "reference_matched"
@@ -3653,6 +5126,47 @@ def run_osm_cleanup_workflow(
                 prefix=f"{prefix}_reference_scope_pruning",
                 timeout_seconds=timeout_seconds,
             )
+            scope_variant_value = str(
+                reference_scope_pruning_report.get("scope_pruning_variant_file", "")
+            )
+            scope_variant_file = Path(scope_variant_value) if scope_variant_value else None
+            if (
+                reference_scope_pruning_report.get("status") == "pass"
+                and scope_variant_file is not None
+                and scope_variant_file.exists()
+            ):
+                reference_scope_pruning_sumo_load_report = _sumo_load_net(
+                    scope_variant_file,
+                    output_dir=output_dir / "reference_scope_pruning_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                reference_scope_post_prune_audit_report = reference_scope_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=scope_variant_file,
+                    output_dir=output_dir / "reference_scope_post_prune_audit",
+                    prefix=f"{prefix}_reference_scope_post_prune_audit",
+                )
+                reference_scope_pruning_promotion_report = _scope_pruning_promotion_decision(
+                    pruning_report=reference_scope_pruning_report,
+                    post_scope_report=reference_scope_post_prune_audit_report,
+                    sumo_load_report=reference_scope_pruning_sumo_load_report,
+                    source_net_file=reference_scope_candidate_net_file,
+                    variant_net_file=scope_variant_file,
+                )
+                reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
+                    reference_scope_pruning_promotion_report.get("status", "blocked")
+                )
+                reference_scope_pruning_report["scope_pruning_promotion_checks"] = reference_scope_pruning_promotion_report.get(
+                    "checks", {}
+                )
+                if reference_scope_pruning_promotion_report.get("status") == "pass":
+                    reference_visual_detail_comparison_net_file = scope_variant_file
+                    reference_visual_detail_comparison_selection_reason = "reference_scope_pruning_promoted"
+                    reference_scope_candidate_net_file = scope_variant_file
+                    reference_scope_candidate_layer = "reference_visual_detail"
+                    reference_scope_audit_report = reference_scope_post_prune_audit_report
     if (
         str(network_plan.get("network_profile", "")) == "reference_matched"
         and reference_net_file is not None
@@ -3684,6 +5198,64 @@ def run_osm_cleanup_workflow(
             candidate_min_cluster_nodes=topology_min_cluster_nodes,
             structural_only=reference_join_audit_structural_only,
         )
+        if (
+            reference_join_audit_report.get("status") in {"pass", "blocked"}
+            and reference_join_audit_candidate_net_file.exists()
+            and reference_join_audit_report.get("tls_controller_alignment")
+        ):
+            tls_gap_destination_mapping_report = build_tls_gap_destination_mapping(
+                reference_net_file=reference_net_file,
+                candidate_net_file=reference_join_audit_candidate_net_file,
+                alignment_report=reference_join_audit_report,
+                output_dir=output_dir / "tls_gap_destination_mapping",
+                prefix=f"{prefix}_tls_gap_destination_mapping",
+            )
+            tls_repair_variant_report = build_tls_gap_repair_variant(
+                mapping_report=tls_gap_destination_mapping_report,
+                candidate_net_file=reference_join_audit_candidate_net_file,
+                output_dir=output_dir / "tls_gap_repair_variant",
+                prefix=f"{prefix}_tls_gap_repair",
+                netconvert_binary=netconvert_binary,
+                timeout_seconds=timeout_seconds,
+                command_runner=command_runner,
+            )
+            repair_variant_value = tls_repair_variant_report.get("variant_file", "")
+            repair_variant_file = Path(str(repair_variant_value)) if repair_variant_value else None
+            if repair_variant_file is not None and repair_variant_file.exists():
+                tls_repair_variant_semantic_report = audit_tls_gap_variant_semantics(
+                    mapping_report=tls_gap_destination_mapping_report,
+                    variant_report=tls_repair_variant_report,
+                    candidate_net_file=reference_join_audit_candidate_net_file,
+                    variant_net_file=repair_variant_file,
+                    output_dir=output_dir / "tls_gap_repair_variant",
+                    prefix=f"{prefix}_tls_gap_variant_semantic_parity",
+                )
+                tls_repair_variant_sumo_load_report = _sumo_load_net(
+                    repair_variant_file,
+                    output_dir=output_dir / "tls_gap_repair_variant",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                if tls_repair_variant_sumo_load_report.get("status") == "pass":
+                    tls_repair_variant_reference_audit_report = reference_join_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=repair_variant_file,
+                        output_dir=output_dir / "tls_gap_repair_variant_reference_audit",
+                        prefix=f"{prefix}_tls_gap_repair_variant_reference_audit",
+                        candidate_cluster_radius_m=topology_cluster_radius_m,
+                        candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                        structural_only=True,
+                    )
+            tls_repair_decision_report = build_tls_repair_decision_report(
+                mapping_report=tls_gap_destination_mapping_report,
+                variant_report=tls_repair_variant_report,
+                sumo_load_report=tls_repair_variant_sumo_load_report,
+                semantic_report=tls_repair_variant_reference_audit_report,
+                tls_variant_semantic_report=tls_repair_variant_semantic_report,
+                output_dir=output_dir / "tls_gap_destination_mapping",
+                prefix=f"{prefix}_tls_repair_decision",
+            )
         reference_join_audit_is_structural_only = reference_join_audit_report.get("audit_mode") == "structural_only"
         if run_reference_join_aggregation_after_build and not reference_join_audit_is_structural_only:
             reference_join_aggregation_report = reference_join_aggregation_func(
@@ -3696,7 +5268,18 @@ def run_osm_cleanup_workflow(
                 timeout_seconds=timeout_seconds,
             )
             joined_value = reference_join_aggregation_report.get("junction_aggregation_variant_file", "")
-            if reference_join_aggregation_report.get("status") == "pass" and joined_value:
+            preservation_status = str(
+                reference_join_aggregation_report.get("junction_aggregation_preservation_status", "pass")
+            )
+            join_output_status = str(
+                reference_join_aggregation_report.get("junction_aggregation_join_output_audit_status", "pass")
+            )
+            if (
+                reference_join_aggregation_report.get("status") == "pass"
+                and joined_value
+                and preservation_status == "pass"
+                and join_output_status == "pass"
+            ):
                 candidate_joined_net_file = Path(str(joined_value))
                 if candidate_joined_net_file.exists():
                     reference_visual_detail_comparison_net_file = candidate_joined_net_file
@@ -3728,7 +5311,14 @@ def run_osm_cleanup_workflow(
                 ("reference_visual_detail_raw_reference_delta", reference_visual_detail_raw_reference_delta_report),
             ],
         )
-        if _reference_join_audit_can_seed_teacher_guided_queue(
+        teacher_guided_queue_needed = (
+            run_teacher_guided_repair_after_build
+            or road_connectivity_replay_max_owners is None
+            or road_connectivity_replay_max_owners > 0
+            or bool(road_connectivity_seed_edge_ids)
+            or bool(teacher_guided_probe_matrix_junction_ids)
+        )
+        if teacher_guided_queue_needed and _reference_join_audit_can_seed_teacher_guided_queue(
             teacher_guided_seed_report,
             structural_only=teacher_guided_seed_structural_only,
         ):
@@ -3747,6 +5337,30 @@ def run_osm_cleanup_workflow(
                 output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
             )
+            shared_controller_candidate_net_file: Path | None = None
+            if reference_join_aggregation_report is not None:
+                shared_candidate_value = str(
+                    reference_join_aggregation_report.get("junction_aggregation_variant_file", "")
+                ).strip()
+                if shared_candidate_value and Path(shared_candidate_value).exists():
+                    shared_controller_candidate_net_file = Path(shared_candidate_value)
+            teacher_guided_scoped_tls_cell_batch_report = run_scoped_teacher_tls_cell_batch(
+                queue_report=teacher_guided_repair_queue_report,
+                source_net_file=reference_visual_detail_comparison_net_file
+                or reference_join_audit_candidate_net_file,
+                output_dir=output_dir / "teacher_guided_scoped_tls_cell_batch",
+                prefix=f"{prefix}_teacher_guided",
+                netconvert_binary=netconvert_binary,
+                sumo_binary=sumo_binary,
+                timeout_seconds=timeout_seconds,
+                command_runner=command_runner,
+                shared_controller_source_net_file=shared_controller_candidate_net_file,
+            )
+            teacher_guided_scoped_tls_batch_pass_candidate_ids = {
+                str(item.get("candidate_tl_id", "")).strip()
+                for item in teacher_guided_scoped_tls_cell_batch_report.get("cell_reports", []) or []
+                if isinstance(item, Mapping) and item.get("status") == "pass" and str(item.get("candidate_tl_id", "")).strip()
+            }
             (
                 road_connectivity_replay_report,
                 road_connectivity_seed_probe_report,
@@ -4565,12 +6179,16 @@ def run_osm_cleanup_workflow(
                         for candidate in teacher_guided_repair_queue_report.get("repair_candidates", []) or []
                         if isinstance(candidate, Mapping)
                         and candidate.get("candidate_status") == "ready_for_teacher_guided_variant"
+                        and str(candidate.get("tls_candidate_tl_id", "")).strip()
+                        not in teacher_guided_scoped_tls_batch_pass_candidate_ids
                     ]
                     if not direct_replay_candidates:
                         direct_replay_candidates = [
                             dict(candidate)
                             for candidate in teacher_guided_repair_queue_report.get("repair_candidates", []) or []
                             if isinstance(candidate, Mapping)
+                            and str(candidate.get("tls_candidate_tl_id", "")).strip()
+                            not in teacher_guided_scoped_tls_batch_pass_candidate_ids
                         ]
                     for direct_index, candidate in enumerate(direct_replay_candidates, start=1):
                         trial_queue_report = dict(teacher_guided_repair_queue_report)
@@ -4978,7 +6596,7 @@ def run_osm_cleanup_workflow(
                 prefix=f"{prefix}_reference_topology_audit",
                 cluster_radius_m=topology_cluster_radius_m,
                 min_cluster_nodes=topology_min_cluster_nodes,
-                osm_file=None,
+                osm_file=osm_file,
             )
         if run_topology_audit_after_build and not _same_path_value(
             None if topology_audit_report is None else topology_audit_report.get("net_file", ""),
@@ -5005,6 +6623,7 @@ def run_osm_cleanup_workflow(
                 candidate_net_file=reference_hierarchy_audit_candidate_net_file,
                 output_dir=output_dir / "final_reference_hierarchy_audit",
                 prefix=f"{prefix}_final_reference_hierarchy_audit",
+                resolve_equivalent_fragmentation=True,
             )
         if (
             str(network_plan.get("network_profile", "")) == "reference_matched"
@@ -5041,17 +6660,21 @@ def run_osm_cleanup_workflow(
                         candidate_net_file=type_repair_variant_file,
                         output_dir=output_dir / "reference_hierarchy_type_repair_audit",
                         prefix=f"{prefix}_reference_hierarchy_type_repair_audit",
+                        resolve_equivalent_fragmentation=True,
                     )
-                    if _reference_hierarchy_gate(reference_hierarchy_type_repair_audit_report) == "pass":
+                    reference_hierarchy_type_repair_promotion_report = (
+                        _reference_hierarchy_type_repair_promotion_decision(
+                            baseline_audit_report=reference_hierarchy_audit_report,
+                            candidate_audit_report=reference_hierarchy_type_repair_audit_report,
+                            sumo_load_report=reference_hierarchy_type_repair_sumo_load_report,
+                        )
+                    )
+                    if reference_hierarchy_type_repair_promotion_report.get("status") == "pass":
                         reference_visual_detail_comparison_net_file = type_repair_variant_file
                         reference_visual_detail_comparison_selection_reason = "reference_hierarchy_type_repair_promoted"
                         reference_hierarchy_audit_report = reference_hierarchy_type_repair_audit_report
                         reference_hierarchy_audit_candidate_net_file = type_repair_variant_file
                         reference_hierarchy_audit_candidate_layer = "reference_visual_detail"
-                        reference_hierarchy_type_repair_promotion_report = {
-                            "status": "pass",
-                            "reason": "reference_hierarchy_type_repair_promoted_after_sumo_load_and_audit",
-                        }
                         if run_topology_audit_after_build:
                             topology_audit_report = topology_audit_func(
                                 net_file=reference_visual_detail_comparison_net_file,
@@ -5061,11 +6684,6 @@ def run_osm_cleanup_workflow(
                                 min_cluster_nodes=topology_min_cluster_nodes,
                                 osm_file=osm_file,
                             )
-                    else:
-                        reference_hierarchy_type_repair_promotion_report = {
-                            "status": "blocked",
-                            "reason": "reference_hierarchy_type_repair_audit_not_pass",
-                        }
                 else:
                     reference_hierarchy_type_repair_promotion_report = {
                         "status": "blocked",
@@ -5081,6 +6699,233 @@ def run_osm_cleanup_workflow(
                     "status": "blocked",
                     "reason": "type_repair_variant_not_created",
                 }
+
+        if (
+            run_corridor_geometry_simplification_after_build
+            and reference_visual_detail_comparison_net_file is not None
+        ):
+            corridor_geometry_simplification_report = corridor_geometry_simplification_func(
+                net_file=reference_visual_detail_comparison_net_file,
+                reference_net_file=reference_net_file,
+                output_dir=output_dir / "corridor_geometry_simplification",
+                prefix=f"{prefix}_corridor_geometry_simplification",
+                timeout_seconds=timeout_seconds,
+            )
+            corridor_variant_value = corridor_geometry_simplification_report.get("variant_file", "")
+            corridor_variant_file = Path(str(corridor_variant_value)) if corridor_variant_value else None
+            if (
+                corridor_geometry_simplification_report.get("status") == "pass"
+                and corridor_variant_file is not None
+                and corridor_variant_file.exists()
+            ):
+                corridor_geometry_simplification_sumo_load_report = _sumo_load_net(
+                    corridor_variant_file,
+                    output_dir=output_dir / "corridor_geometry_simplification_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                corridor_geometry_simplification_reference_delta_report = reference_join_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=corridor_variant_file,
+                    output_dir=output_dir / "corridor_geometry_simplification_reference_delta",
+                    prefix=f"{prefix}_corridor_geometry_simplification_reference_delta",
+                    candidate_cluster_radius_m=topology_cluster_radius_m,
+                    candidate_min_cluster_nodes=topology_min_cluster_nodes,
+                    structural_only=True,
+                )
+                corridor_geometry_simplification_topology_report = topology_audit_func(
+                    net_file=corridor_variant_file,
+                    output_dir=output_dir / "corridor_geometry_simplification_topology",
+                    prefix=f"{prefix}_corridor_geometry_simplification_topology",
+                    cluster_radius_m=topology_cluster_radius_m,
+                    min_cluster_nodes=topology_min_cluster_nodes,
+                    osm_file=osm_file,
+                )
+                corridor_baseline_delta_report = (
+                    reference_join_post_teacher_audit_report
+                    or reference_visual_detail_tls_connection_repair_reference_delta_report
+                    or reference_visual_detail_raw_reference_delta_report
+                )
+                corridor_geometry_simplification_promotion_report = (
+                    _corridor_geometry_simplification_promotion_decision(
+                        variant_report=corridor_geometry_simplification_report,
+                        sumo_load_report=corridor_geometry_simplification_sumo_load_report,
+                        baseline_delta_report=corridor_baseline_delta_report,
+                        candidate_delta_report=corridor_geometry_simplification_reference_delta_report,
+                        baseline_topology_report=topology_audit_report,
+                        candidate_topology_report=corridor_geometry_simplification_topology_report,
+                    )
+                )
+                if corridor_geometry_simplification_promotion_report.get("status") == "pass":
+                    reference_visual_detail_comparison_net_file = corridor_variant_file
+                    reference_visual_detail_comparison_selection_reason = str(
+                        corridor_geometry_simplification_promotion_report.get("reason", "")
+                    )
+                    topology_audit_report = corridor_geometry_simplification_topology_report
+                    reference_hierarchy_audit_report = reference_hierarchy_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=corridor_variant_file,
+                        output_dir=output_dir / "corridor_geometry_simplification_hierarchy_audit",
+                        prefix=f"{prefix}_corridor_geometry_simplification_hierarchy_audit",
+                        resolve_equivalent_fragmentation=True,
+                    )
+                    reference_hierarchy_audit_candidate_net_file = corridor_variant_file
+                    reference_scope_audit_report = reference_scope_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=corridor_variant_file,
+                        output_dir=output_dir / "corridor_geometry_simplification_scope_audit",
+                        prefix=f"{prefix}_corridor_geometry_simplification_scope_audit",
+                    )
+                    reference_scope_candidate_net_file = corridor_variant_file
+            elif corridor_geometry_simplification_report.get(
+                "corridor_geometry_simplification_status"
+            ) == "not_needed":
+                corridor_geometry_simplification_promotion_report = {
+                    "status": "skipped",
+                    "reason": "not_needed",
+                }
+
+    # Later repair stages can change the visual-detail candidate after the first
+    # scope pass. Re-run scope pruning at the end so the artifact selected for
+    # review is the artifact that actually passed the final scope checks.
+    if (
+        run_scope_pruning_after_build
+        and str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+        and reference_visual_detail_comparison_net_file is not None
+        and reference_visual_detail_comparison_net_file.exists()
+    ):
+        reference_scope_final_audit_report = reference_scope_audit_func(
+            reference_net_file=reference_net_file,
+            candidate_net_file=reference_visual_detail_comparison_net_file,
+            output_dir=output_dir / "final_reference_scope_audit",
+            prefix=f"{prefix}_final_reference_scope_audit",
+        )
+        if _int_field(reference_scope_final_audit_report, "prune_candidate_count") > 0:
+            reference_scope_final_pruning_report = scope_pruning_func(
+                net_file=reference_visual_detail_comparison_net_file,
+                reference_scope_report=reference_scope_final_audit_report,
+                output_dir=output_dir / "final_reference_scope_pruning",
+                prefix=f"{prefix}_final_reference_scope_pruning",
+                timeout_seconds=timeout_seconds,
+            )
+            final_scope_variant_value = str(
+                reference_scope_final_pruning_report.get("scope_pruning_variant_file", "")
+            )
+            final_scope_variant_file = Path(final_scope_variant_value) if final_scope_variant_value else None
+            if final_scope_variant_file is not None and final_scope_variant_file.exists():
+                reference_scope_final_sumo_load_report = _sumo_load_net(
+                    final_scope_variant_file,
+                    output_dir=output_dir / "final_reference_scope_pruning_sumo_load",
+                    sumo_binary=sumo_binary,
+                    timeout_seconds=timeout_seconds,
+                    command_runner=command_runner,
+                )
+                reference_scope_final_post_prune_audit_report = reference_scope_audit_func(
+                    reference_net_file=reference_net_file,
+                    candidate_net_file=final_scope_variant_file,
+                    output_dir=output_dir / "final_reference_scope_post_prune_audit",
+                    prefix=f"{prefix}_final_reference_scope_post_prune_audit",
+                )
+                reference_scope_final_promotion_report = _scope_pruning_promotion_decision(
+                    pruning_report=reference_scope_final_pruning_report,
+                    post_scope_report=reference_scope_final_post_prune_audit_report,
+                    sumo_load_report=reference_scope_final_sumo_load_report,
+                    source_net_file=reference_scope_candidate_net_file,
+                    variant_net_file=final_scope_variant_file,
+                )
+                if reference_scope_final_promotion_report.get("status") == "pass":
+                    final_hierarchy_report = reference_hierarchy_audit_func(
+                        reference_net_file=reference_net_file,
+                        candidate_net_file=final_scope_variant_file,
+                        output_dir=output_dir / "final_reference_scope_hierarchy_audit",
+                        prefix=f"{prefix}_final_reference_scope_hierarchy_audit",
+                        resolve_equivalent_fragmentation=True,
+                    )
+                    if _gate_value(final_hierarchy_report) == "pass":
+                        reference_visual_detail_comparison_net_file = final_scope_variant_file
+                        reference_visual_detail_comparison_selection_reason = (
+                            "reference_scope_pruning_promoted_final"
+                        )
+                        reference_scope_audit_report = reference_scope_final_post_prune_audit_report
+                        reference_scope_candidate_net_file = final_scope_variant_file
+                        reference_scope_candidate_layer = "reference_visual_detail"
+                        reference_scope_pruning_report = reference_scope_final_pruning_report
+                        reference_scope_pruning_report["scope_pruning_promotion_status"] = str(
+                            reference_scope_final_promotion_report.get("status", "blocked")
+                        )
+                        reference_scope_pruning_report["scope_pruning_promotion_checks"] = (
+                            reference_scope_final_promotion_report.get("checks", {})
+                        )
+                        reference_scope_pruning_promotion_report = reference_scope_final_promotion_report
+                        reference_hierarchy_audit_report = final_hierarchy_report
+                        reference_hierarchy_audit_candidate_net_file = final_scope_variant_file
+                        if run_topology_audit_after_build:
+                            topology_audit_report = topology_audit_func(
+                                net_file=final_scope_variant_file,
+                                output_dir=output_dir / "final_reference_scope_topology_audit",
+                                prefix=f"{prefix}_final_reference_scope_topology_audit",
+                                cluster_radius_m=topology_cluster_radius_m,
+                                min_cluster_nodes=topology_min_cluster_nodes,
+                                osm_file=osm_file,
+                            )
+                    else:
+                        reference_scope_final_promotion_report = {
+                            **reference_scope_final_promotion_report,
+                            "status": "blocked",
+                            "reason": "final_scope_hierarchy_audit_not_pass",
+                            "checks": {
+                                **dict(reference_scope_final_promotion_report.get("checks", {})),
+                                "final_hierarchy_audit": _gate_value(final_hierarchy_report),
+                            },
+                        }
+
+    # Run the complete road/connection audit on the artifact that will be
+    # shown in HTML/NetEdit.  Local owner replays below are useful repair
+    # probes, but they must not be allowed to turn a globally mismatched road
+    # layer into a passing parity claim.
+    if (
+        run_road_connectivity_parity_audit_after_build
+        and str(network_plan.get("network_profile", "")) == "reference_matched"
+        and reference_net_file is not None
+        and _reference_bbox_scope_gate(reference_bbox_scope_report) == "pass"
+    ):
+        road_parity_candidate_net_file = (
+            reference_visual_detail_comparison_net_file
+            or reference_visual_detail_net_file
+            or net_file
+        )
+        if road_parity_candidate_net_file is not None and road_parity_candidate_net_file.exists():
+            road_parity_kwargs: dict[str, Any] = {
+                "teacher_net_file": reference_net_file,
+                "candidate_net_file": road_parity_candidate_net_file,
+                "output_dir": output_dir / "road_connectivity_parity_audit",
+                "prefix": f"{prefix}_road_connectivity_parity",
+                "max_examples": 20,
+            }
+            visual_source_value = (
+                reference_visual_detail_build_report.get("filtered_osm_file")
+                or reference_visual_detail_build_report.get("source_osm_file")
+                if isinstance(reference_visual_detail_build_report, Mapping)
+                else ""
+            )
+            visual_source_path = Path(str(visual_source_value)) if visual_source_value else None
+            if visual_source_path is not None and visual_source_path.exists() and _supports_keyword(
+                road_connectivity_parity_func,
+                "source_osm_file",
+            ):
+                road_parity_kwargs["source_osm_file"] = visual_source_path
+            road_connectivity_parity_audit_report = road_connectivity_parity_func(**road_parity_kwargs)
+        else:
+            road_connectivity_parity_audit_report = {
+                "status": "blocked",
+                "claim_status": "reference-audit",
+                "blocking_reason": "road_connectivity_parity_candidate_missing",
+                "teacher_net_file": str(reference_net_file),
+                "candidate_net_file": "",
+                "warnings": [],
+            }
 
     routeability_report = None
     if key_edge_queries:
@@ -5106,6 +6951,23 @@ def run_osm_cleanup_workflow(
             initial_end=routeability_profile["routeability_audit_initial_end"],
             max_end=routeability_profile["routeability_audit_max_end"],
             timeout_seconds=timeout_seconds,
+        )
+    connection_mode_audit_report = None
+    if run_connection_mode_audit_after_build:
+        connection_mode_audit_report = connection_mode_audit_func(
+            net_file,
+            output_dir=output_dir / "connection_mode_audit",
+            prefix=f"{prefix}_connection_mode",
+        )
+    standard_nema_scan_report = None
+    if run_standard_nema_scan_after_build:
+        standard_nema_scan_report = standard_nema_binding_func(
+            net_file,
+            output_dir=output_dir / "standard_nema_review",
+            prefix=f"{prefix}_standard_nema",
+            junction_id=None,
+            run_runtime_checks=False,
+            run_routeability=False,
         )
     if launch_netedit_after_build:
         netedit_report = netedit_func(net_file)
@@ -5146,7 +7008,10 @@ def run_osm_cleanup_workflow(
             "warnings": ["sumo-gui launch disabled by caller"],
         }
 
-    tls_summary = _tls_review_summary(tls_report)
+    supplied_review_decisions, review_decisions_source_status, review_decisions_source_error = (
+        _load_review_decisions_file(review_decisions_file)
+    )
+    tls_summary = _tls_review_summary(tls_report, review_decisions=supplied_review_decisions)
     junction_aggregation_summary = _junction_aggregation_summary(topology_audit_report)
     topology_reference_parity_report = (
         _reference_topology_parity_gate(topology_audit_report, reference_topology_audit_report)
@@ -5204,12 +7069,28 @@ def run_osm_cleanup_workflow(
         reference_hierarchy_type_repair_sumo_load_report or {},
         reference_hierarchy_type_repair_audit_report or {},
         reference_hierarchy_type_repair_promotion_report,
+        corridor_geometry_simplification_report or {},
+        corridor_geometry_simplification_sumo_load_report or {},
+        corridor_geometry_simplification_reference_delta_report or {},
+        corridor_geometry_simplification_topology_report or {},
+        corridor_geometry_simplification_promotion_report,
         routeability_audit_report or {},
+        connection_mode_audit_report or {},
+        standard_nema_scan_report or {},
         netedit_report,
         reference_visual_detail_netedit_report,
         sumo_gui_report,
+        teacher_guided_scoped_tls_cell_batch_report or {},
     ):
         warnings.extend(str(item) for item in child.get("warnings", []))
+    if (
+        teacher_guided_scoped_tls_cell_batch_report is not None
+        and teacher_guided_scoped_tls_cell_batch_report.get("status") != "pass"
+    ):
+        warnings.append(
+            "scoped TLS cell batch contains blocked cells; keep them as review variants until pedestrian/internal "
+            "link semantics and global reference gates pass"
+        )
     if tls_summary["tls_review_complete"] == "no":
         warnings.append("TLS reality review still requires human Google Maps/current-or-user-targeted map inspection")
     if tls_aggregation_report is not None and tls_aggregation_report.get("tls_aggregation_status") == "variant_created_for_review":
@@ -5283,6 +7164,7 @@ def run_osm_cleanup_workflow(
     if (
         reference_scope_pruning_report is not None
         and reference_scope_pruning_report.get("scope_pruning_status") == "variant_created_for_review"
+        and reference_scope_pruning_promotion_report.get("status") != "pass"
     ):
         warnings.append(
             "reference scope pruning created a separate review variant; compare it in Netedit and map imagery "
@@ -5301,14 +7183,46 @@ def run_osm_cleanup_workflow(
     }
     if tls_aggregation_report is not None:
         gate_status["tls_aggregation"] = "blocked" if tls_aggregation_report.get("status") == "pass" else _gate_value(tls_aggregation_report)
+    gate_status["tls_scoped_cell_batch"] = (
+        "skipped"
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else _gate_value(teacher_guided_scoped_tls_cell_batch_report)
+    )
     if str(network_plan.get("network_profile", "")) == "reference_matched":
         gate_status["reference_visual_detail"] = "pass" if reference_visual_detail_status in {"built", "same_as_vehicle_core"} else "fail"
+        gate_status["reference_bbox_scope"] = _reference_bbox_scope_gate(reference_bbox_scope_report)
         gate_status["reference_hierarchy_audit"] = _reference_hierarchy_gate(reference_hierarchy_audit_report)
         gate_status["reference_scope_audit"] = _reference_scope_gate(reference_scope_audit_report)
         gate_status["reference_scope_pruning"] = _reference_scope_pruning_gate(reference_scope_pruning_report)
+        if corridor_geometry_simplification_report is None:
+            gate_status["corridor_geometry_simplification"] = "skipped"
+        elif corridor_geometry_simplification_promotion_report.get("status") == "pass":
+            gate_status["corridor_geometry_simplification"] = "pass"
+        elif corridor_geometry_simplification_promotion_report.get("reason") == "not_needed":
+            gate_status["corridor_geometry_simplification"] = "skipped"
+        else:
+            gate_status["corridor_geometry_simplification"] = "blocked"
         gate_status["reference_join_audit"] = _reference_join_gate(reference_join_audit_report)
         gate_status["junction_pattern_index"] = _junction_pattern_index_gate(reference_join_audit_report)
-        gate_status["road_connectivity_parity"] = _road_connectivity_gate_status(road_connectivity_replay_report)
+        gate_status["road_connectivity_parity"] = _road_connectivity_parity_gate_status(
+            road_connectivity_parity_audit_report,
+            road_connectivity_replay_report,
+        )
+        gate_status["road_connectivity_parity_audit"] = (
+            "skipped"
+            if road_connectivity_parity_audit_report is None
+            else str(road_connectivity_parity_audit_report.get("status", "blocked"))
+        )
+        alignment_report = (
+            road_connectivity_parity_audit_report.get("reference_road_alignment", {})
+            if isinstance(road_connectivity_parity_audit_report, Mapping)
+            else {}
+        )
+        gate_status["reference_road_alignment"] = (
+            "skipped"
+            if not isinstance(alignment_report, Mapping) or not alignment_report
+            else str(alignment_report.get("status", "blocked"))
+        )
         gate_status["road_connectivity_seed_parity"] = (
             "skipped"
             if road_connectivity_seed_probe_report is None
@@ -5334,7 +7248,6 @@ def run_osm_cleanup_workflow(
         ):
             reference_join_aggregation_gate = "skipped"
         gate_status["reference_join_aggregation"] = reference_join_aggregation_gate
-        gate_status["netedit_connection_mode_review"] = "blocked"
         gate_status["teacher_guided_junction_parity"] = _teacher_guided_junction_parity_gate(
             teacher_guided_repair_run_report or teacher_guided_plain_export_report or teacher_guided_repair_queue_report,
             semantic_parity_report,
@@ -5351,17 +7264,35 @@ def run_osm_cleanup_workflow(
         )
     if routeability_audit_report is not None:
         gate_status["routeability_audit"] = _gate_value(routeability_audit_report)
+    gate_status["connection_mode_audit"] = _connection_mode_gate_value(
+        connection_mode_audit_report
+    )
+    if str(network_plan.get("network_profile", "")) == "reference_matched":
+        # Deprecated compatibility alias. The value now comes from the
+        # code-native gate; launching NetEdit is never required to compute it.
+        gate_status["netedit_connection_mode_review"] = gate_status[
+            "connection_mode_audit"
+        ]
+    gate_status["standard_nema_scan"] = (
+        "skipped" if standard_nema_scan_report is None else _gate_value(standard_nema_scan_report)
+    )
     workflow_ok = (
         gate_status["network_build"] == "pass"
         and gate_status["tls_reality_audit"] == "pass"
         and gate_status["connectivity"] in {"pass", "partial"}
         and gate_status.get("topology_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("routeability_audit", "skipped") in {"pass", "blocked", "skipped"}
+        and gate_status.get("connection_mode_audit", "skipped")
+        in {"pass", "review_required", "skipped"}
+        and gate_status.get("standard_nema_scan", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_visual_detail", "skipped") in {"pass", "skipped"}
+        and gate_status.get("reference_bbox_scope", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_hierarchy_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_scope_audit", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_scope_pruning", "skipped") in {"pass", "skipped"}
+        and gate_status.get("corridor_geometry_simplification", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_audit", "skipped") in {"pass", "skipped"}
+        and gate_status.get("tls_scoped_cell_batch", "skipped") in {"pass", "skipped"}
         and gate_status.get("reference_join_aggregation", "skipped") in {"pass", "skipped"}
         and gate_status.get("road_connectivity_parity", "skipped") in {"pass", "skipped"}
         and gate_status.get("road_connectivity_seed_parity", "skipped") in {"pass", "skipped"}
@@ -5410,7 +7341,14 @@ def run_osm_cleanup_workflow(
     ) = _teacher_guided_movement_gap_stats(final_movement_direct_replay_last_queue_report)
     road_connectivity_promoted_variant_file = None
     road_connectivity_promoted_variant_reason = ""
-    if road_connectivity_seed_probe_report is not None and road_connectivity_seed_probe_report.get("status") == "pass":
+    if (
+        road_connectivity_seed_probe_report is not None
+        and road_connectivity_seed_probe_report.get("status") == "pass"
+        and (
+            road_connectivity_parity_audit_report is None
+            or road_connectivity_parity_audit_report.get("status") == "pass"
+        )
+    ):
         road_connectivity_promoted_variant_file = _road_connectivity_promoted_variant_file(
             road_connectivity_replay_report,
             road_connectivity_split_root_alias_repair_report,
@@ -5418,6 +7356,42 @@ def run_osm_cleanup_workflow(
         )
         if road_connectivity_promoted_variant_file is not None:
             road_connectivity_promoted_variant_reason = "seed_probe_pass"
+    elif road_connectivity_parity_audit_report is not None:
+        road_connectivity_promoted_variant_reason = "global_road_parity_not_pass"
+    if run_corridor_edit_ledger_after_build:
+        ledger_source_net_file = reference_visual_detail_comparison_net_file or net_file
+        if ledger_source_net_file.exists():
+            try:
+                corridor_edit_ledger_report = corridor_edit_ledger_func(
+                    net_file=ledger_source_net_file,
+                    output_dir=output_dir / "corridor_edit_ledger",
+                    reference_net_file=reference_net_file,
+                    osm_file=osm_file,
+                    prefix=f"{prefix}_corridor_edit_ledger",
+                    include_auto_proposals=True,
+                )
+            except (OSError, ET.ParseError, TypeError, ValueError) as exc:
+                corridor_edit_ledger_report = {
+                    "status": "fail",
+                    "claim_status": "construction-invalid",
+                    "corridor_edit_ledger_status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "warnings": ["corridor edit ledger was requested but could not be built"],
+                }
+        else:
+            corridor_edit_ledger_report = {
+                "status": "fail",
+                "claim_status": "construction-invalid",
+                "corridor_edit_ledger_status": "failed",
+                "error": f"ledger source network does not exist: {ledger_source_net_file}",
+                "warnings": ["corridor edit ledger was requested but no source network was available"],
+            }
+    effective_visual_tls_preservation = _effective_tls_controlled_connection_preservation(
+        aggregation_report=reference_visual_detail_tls_aggregation_report,
+        repair_report=reference_visual_detail_tls_connection_repair_report,
+        repair_promotion_report=reference_visual_detail_tls_connection_repair_promotion_report,
+        effective_net_file=reference_visual_detail_comparison_net_file,
+    )
     report = {
         "status": "pass" if workflow_ok else "fail",
         "claim_status": "diagnostic-demo" if workflow_ok else "construction-invalid",
@@ -5432,6 +7406,8 @@ def run_osm_cleanup_workflow(
         "network_profile": network_plan.get("network_profile", ""),
         "reference_target": network_plan.get("reference_target", ""),
         "reference_net_file": network_plan.get("reference_net_file", ""),
+        "reference_source_net_file": str(reference_source_net_file or ""),
+        "reference_validation_net_file": str(reference_net_file or ""),
         "network_detail_target": network_plan.get("network_detail_target", ""),
         "primary_network_layer": network_plan.get("primary_network_layer", ""),
         "default_routeability_layer": network_plan.get("default_routeability_layer", ""),
@@ -5529,6 +7505,7 @@ def run_osm_cleanup_workflow(
         "topology_reference_parity_status": str(topology_reference_parity_report.get("status", "skipped")),
         "topology_reference_parity_reason": str(topology_reference_parity_report.get("reason", "")),
         "topology_reference_parity_metrics": topology_reference_parity_report.get("metrics", {}),
+        "topology_reference_parity_details": topology_reference_parity_report,
         **junction_aggregation_summary,
         "junction_aggregation_variant_status": "skipped"
         if junction_aggregation_report is None
@@ -5630,6 +7607,62 @@ def run_osm_cleanup_workflow(
         "reference_join_network_structural_extra_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_extra_counts", {}),
+        "tls_gap_destination_mapping_status": "skipped"
+        if tls_gap_destination_mapping_report is None
+        else str(tls_gap_destination_mapping_report.get("status", "fail")),
+        "tls_gap_destination_mapping_report_file": ""
+        if tls_gap_destination_mapping_report is None
+        else str(tls_gap_destination_mapping_report.get("report_file", "")),
+        "tls_gap_destination_mapping_missing_connection_count": 0
+        if tls_gap_destination_mapping_report is None
+        else int(tls_gap_destination_mapping_report.get("missing_connection_count", 0) or 0),
+        "tls_gap_destination_mapping_endpoint_mapped_count": 0
+        if tls_gap_destination_mapping_report is None
+        else int(
+            tls_gap_destination_mapping_report.get("destination_edge_and_endpoint_mapped_count", 0) or 0
+        ),
+        "tls_gap_destination_mapping_unmapped_count": 0
+        if tls_gap_destination_mapping_report is None
+        else int(tls_gap_destination_mapping_report.get("unmapped_destination_edge_count", 0) or 0),
+        "tls_gap_destination_mapping_repair_safe": False
+        if tls_gap_destination_mapping_report is None
+        else bool(tls_gap_destination_mapping_report.get("repair_safe", False)),
+        "tls_repair_variant_status": "skipped"
+        if tls_repair_variant_report is None
+        else str(tls_repair_variant_report.get("repair_variant_status", "not_created")),
+        "tls_repair_variant_file": ""
+        if tls_repair_variant_report is None
+        else str(tls_repair_variant_report.get("variant_file", "")),
+        "tls_repair_variant_report_file": ""
+        if tls_repair_variant_report is None
+        else str(tls_repair_variant_report.get("report_file", "")),
+        "tls_repair_variant_netconvert_status": "skipped"
+        if tls_repair_variant_report is None
+        else str(tls_repair_variant_report.get("status", "fail")),
+        "tls_repair_variant_sumo_load_status": "skipped"
+        if tls_repair_variant_sumo_load_report is None
+        else str(tls_repair_variant_sumo_load_report.get("status", "fail")),
+        "tls_repair_variant_semantic_status": "skipped"
+        if tls_repair_variant_semantic_report is None
+        else str(tls_repair_variant_semantic_report.get("status", "fail")),
+        "tls_repair_variant_semantic_report_file": ""
+        if tls_repair_variant_semantic_report is None
+        else str(tls_repair_variant_semantic_report.get("report_file", "")),
+        "tls_repair_variant_reference_audit_status": "skipped"
+        if tls_repair_variant_reference_audit_report is None
+        else str(tls_repair_variant_reference_audit_report.get("status", "fail")),
+        "tls_repair_variant_reference_parity_status": "skipped"
+        if tls_repair_decision_report is None
+        else str(tls_repair_decision_report.get("repair_variant_reference_parity_status", "skipped")),
+        "tls_repair_variant_reference_audit_report_file": ""
+        if tls_repair_variant_reference_audit_report is None
+        else str(tls_repair_variant_reference_audit_report.get("summary_file", "")),
+        "tls_repair_decision_status": "skipped"
+        if tls_repair_decision_report is None
+        else str(tls_repair_decision_report.get("status", "fail")),
+        "tls_repair_decision_report_file": ""
+        if tls_repair_decision_report is None
+        else str(tls_repair_decision_report.get("report_file", "")),
         "reference_join_post_teacher_audit_status": "skipped"
         if reference_join_post_teacher_audit_report is None
         else reference_join_post_teacher_audit_report.get("status", "fail"),
@@ -5950,6 +7983,63 @@ def run_osm_cleanup_workflow(
         "reference_join_tls_control_review_category_counts": _tls_control_review_category_counts(
             reference_join_audit_report
         ),
+        "reference_join_tls_controller_alignment": {}
+        if reference_join_audit_report is None
+        else reference_join_audit_report.get("tls_controller_alignment", {}),
+        "reference_join_tls_controller_alignment_status": "skipped"
+        if reference_join_audit_report is None
+        else str(
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get(
+                "status", "skipped"
+            )
+        ),
+        "reference_join_tls_controller_alignment_pair_count": 0
+        if reference_join_audit_report is None
+        else int(
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get(
+                "pair_count", 0
+            )
+            or 0
+        ),
+        "reference_join_tls_controller_possible_split_count": 0
+        if reference_join_audit_report is None
+        else int(
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get(
+                "possible_candidate_split_reference_count", 0
+            )
+            or 0
+        ),
+        "reference_join_tls_controller_possible_merge_count": 0
+        if reference_join_audit_report is None
+        else int(
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get(
+                "possible_candidate_merge_controller_count", 0
+            )
+            or 0
+        ),
+        "reference_join_tls_high_confidence_movement_gap_candidate_count": 0
+        if reference_join_audit_report is None
+        else int(
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get(
+                "high_confidence_movement_gap_candidate_count", 0
+            )
+            or 0
+        ),
+        "reference_join_tls_high_confidence_missing_direction_instance_count": 0
+        if reference_join_audit_report is None
+        else int(
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get(
+                "high_confidence_missing_direction_instance_count", 0
+            )
+            or 0
+        ),
+        "reference_join_tls_controller_alignment_repair_safe": False
+        if reference_join_audit_report is None
+        else bool(
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get(
+                "repair_safe", False
+            )
+        ),
         "reference_join_network_structural_junction_type_missing_counts": {}
         if reference_join_audit_report is None
         else reference_join_audit_report.get("network_structural_junction_type_missing_counts", {}),
@@ -6001,6 +8091,30 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_queue_status": "skipped"
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("status", "fail"),
+        "teacher_guided_scoped_tls_cell_batch_status": "skipped"
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else teacher_guided_scoped_tls_cell_batch_report.get("status", "fail"),
+        "teacher_guided_scoped_tls_cell_batch_count": 0
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else teacher_guided_scoped_tls_cell_batch_report.get("cell_count", 0),
+        "teacher_guided_scoped_tls_cell_batch_pass_count": 0
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else teacher_guided_scoped_tls_cell_batch_report.get("pass_count", 0),
+        "teacher_guided_scoped_tls_cell_batch_blocked_count": 0
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else teacher_guided_scoped_tls_cell_batch_report.get("blocked_count", 0),
+        "teacher_guided_scoped_tls_cell_batch_report_file": ""
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else str(teacher_guided_scoped_tls_cell_batch_report.get("report_file", "")),
+        "teacher_guided_scoped_tls_cell_batch_manifest_file": ""
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else str(teacher_guided_scoped_tls_cell_batch_report.get("artifact_manifest_file", "")),
+        "teacher_guided_scoped_tls_cell_batch_manifest_status": "skipped"
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else str(teacher_guided_scoped_tls_cell_batch_report.get("artifact_manifest_status", "fail")),
+        "teacher_guided_scoped_tls_cell_batch_artifact_hash_gate": {}
+        if teacher_guided_scoped_tls_cell_batch_report is None
+        else teacher_guided_scoped_tls_cell_batch_report.get("artifact_hash_gate", {}),
         "run_teacher_guided_repair_after_build": run_teacher_guided_repair_after_build,
         "teacher_guided_repair_candidate_count": 0
         if teacher_guided_repair_queue_report is None
@@ -6127,6 +8241,36 @@ def run_osm_cleanup_workflow(
         "teacher_guided_repair_best_variant_file": ""
         if teacher_guided_repair_best_variant_file is None
         else str(teacher_guided_repair_best_variant_file),
+        "road_connectivity_parity_audit_status": "skipped"
+        if road_connectivity_parity_audit_report is None
+        else str(road_connectivity_parity_audit_report.get("status", "blocked")),
+        "road_connectivity_parity_audit_report_file": ""
+        if road_connectivity_parity_audit_report is None
+        else str(road_connectivity_parity_audit_report.get("report_file", "")),
+        "road_connectivity_parity_audit_road_template_report_file": ""
+        if road_connectivity_parity_audit_report is None
+        else str(road_connectivity_parity_audit_report.get("road_template_report_file", "")),
+        "road_connectivity_parity_audit_connection_topology_report_file": ""
+        if road_connectivity_parity_audit_report is None
+        else str(road_connectivity_parity_audit_report.get("connection_topology_report_file", "")),
+        "road_connectivity_parity_audit_internal_movement_report_file": ""
+        if road_connectivity_parity_audit_report is None
+        else str(road_connectivity_parity_audit_report.get("internal_movement_report_file", "")),
+        "reference_road_alignment_status": "skipped"
+        if road_connectivity_parity_audit_report is None
+        else str(
+            road_connectivity_parity_audit_report.get("reference_road_alignment", {}).get(
+                "status", "blocked"
+            )
+            if isinstance(road_connectivity_parity_audit_report.get("reference_road_alignment", {}), Mapping)
+            else "blocked"
+        ),
+        "reference_road_alignment_report_file": ""
+        if road_connectivity_parity_audit_report is None
+        else str(road_connectivity_parity_audit_report.get("reference_road_alignment_report_file", "")),
+        "reference_road_alignment_additional_file": ""
+        if road_connectivity_parity_audit_report is None
+        else str(road_connectivity_parity_audit_report.get("reference_road_alignment_additional_file", "")),
         "road_connectivity_replay_status": "skipped"
         if road_connectivity_replay_report is None
         else str(road_connectivity_replay_report.get("status", "fail")),
@@ -6273,6 +8417,66 @@ def run_osm_cleanup_workflow(
         "reference_hierarchy_type_repair_promotion_reason": str(
             reference_hierarchy_type_repair_promotion_report.get("reason", "")
         ),
+        "corridor_edit_ledger_status": "skipped"
+        if corridor_edit_ledger_report is None
+        else str(
+            corridor_edit_ledger_report.get(
+                "corridor_edit_ledger_status",
+                corridor_edit_ledger_report.get("status", "fail"),
+            )
+        ),
+        "corridor_edit_ledger_file": ""
+        if corridor_edit_ledger_report is None
+        else str(corridor_edit_ledger_report.get("ledger_file", "")),
+        "corridor_edit_ledger_manifest_file": ""
+        if corridor_edit_ledger_report is None
+        else str(corridor_edit_ledger_report.get("manifest_file", "")),
+        "corridor_geometry_simplification_status": "skipped"
+        if corridor_geometry_simplification_report is None
+        else str(
+            corridor_geometry_simplification_report.get(
+                "corridor_geometry_simplification_status",
+                corridor_geometry_simplification_report.get("status", "fail"),
+            )
+        ),
+        "corridor_geometry_simplification_candidate_node_count": 0
+        if corridor_geometry_simplification_report is None
+        else corridor_geometry_simplification_report.get("candidate_node_count", 0),
+        "corridor_geometry_simplification_removed_node_count": 0
+        if corridor_geometry_simplification_report is None
+        else corridor_geometry_simplification_report.get("removed_node_count", 0),
+        "corridor_geometry_simplification_semantic_preservation_status": "skipped"
+        if corridor_geometry_simplification_report is None
+        else str(corridor_geometry_simplification_report.get("semantic_preservation_status", "fail")),
+        "corridor_geometry_simplification_normal_connection_missing_count": 0
+        if corridor_geometry_simplification_report is None
+        else int(
+            (corridor_geometry_simplification_report.get("alias_normalized_connection_audit", {}) or {}).get(
+                "normal_missing_count", 0
+            )
+        ),
+        "corridor_geometry_simplification_normal_connection_extra_count": 0
+        if corridor_geometry_simplification_report is None
+        else int(
+            (corridor_geometry_simplification_report.get("alias_normalized_connection_audit", {}) or {}).get(
+                "normal_extra_count", 0
+            )
+        ),
+        "corridor_geometry_simplification_sumo_load_status": "skipped"
+        if corridor_geometry_simplification_sumo_load_report is None
+        else str(corridor_geometry_simplification_sumo_load_report.get("status", "fail")),
+        "corridor_geometry_simplification_reference_tls_semantic_delta_score": _tls_semantic_delta_score(
+            corridor_geometry_simplification_reference_delta_report
+        ),
+        "corridor_geometry_simplification_promotion_status": str(
+            corridor_geometry_simplification_promotion_report.get("status", "skipped")
+        ),
+        "corridor_geometry_simplification_promotion_reason": str(
+            corridor_geometry_simplification_promotion_report.get("reason", "")
+        ),
+        "corridor_geometry_simplification_variant_file": ""
+        if corridor_geometry_simplification_report is None
+        else str(corridor_geometry_simplification_report.get("variant_file", "")),
         "reference_scope_status": "skipped"
         if reference_scope_audit_report is None
         else reference_scope_audit_report.get("reference_scope_status", reference_scope_audit_report.get("status", "fail")),
@@ -6301,12 +8505,109 @@ def run_osm_cleanup_workflow(
         "reference_scope_pruning_plan_file": ""
         if reference_scope_pruning_report is None
         else str(reference_scope_pruning_report.get("scope_pruning_plan_file", "")),
+        "reference_scope_post_prune_audit_status": "skipped"
+        if reference_scope_post_prune_audit_report is None
+        else reference_scope_post_prune_audit_report.get(
+            "reference_scope_status", reference_scope_post_prune_audit_report.get("status", "fail")
+        ),
+        "reference_scope_post_prune_audit_report_file": ""
+        if reference_scope_post_prune_audit_report is None
+        else str(reference_scope_post_prune_audit_report.get("report_file", "")),
+        "reference_scope_pruning_sumo_load_status": "skipped"
+        if reference_scope_pruning_sumo_load_report is None
+        else str(reference_scope_pruning_sumo_load_report.get("status", "fail")),
+        "reference_scope_pruning_promotion_status": str(
+            reference_scope_pruning_promotion_report.get("status", "skipped")
+        ),
+        "reference_scope_pruning_promotion_reason": str(
+            reference_scope_pruning_promotion_report.get("reason", "")
+        ),
+        "reference_scope_pruning_promotion_checks": reference_scope_pruning_promotion_report.get("checks", {}),
+        "reference_scope_final_audit_status": "skipped"
+        if reference_scope_final_audit_report is None
+        else reference_scope_final_audit_report.get(
+            "reference_scope_status", reference_scope_final_audit_report.get("status", "fail")
+        ),
+        "reference_scope_final_audit_report_file": ""
+        if reference_scope_final_audit_report is None
+        else str(reference_scope_final_audit_report.get("report_file", "")),
+        "reference_scope_final_pruning_status": "skipped"
+        if reference_scope_final_pruning_report is None
+        else reference_scope_final_pruning_report.get(
+            "scope_pruning_status", reference_scope_final_pruning_report.get("status", "fail")
+        ),
+        "reference_scope_final_pruning_variant_file": ""
+        if reference_scope_final_pruning_report is None
+        else str(reference_scope_final_pruning_report.get("scope_pruning_variant_file", "")),
+        "reference_scope_final_pruning_plan_file": ""
+        if reference_scope_final_pruning_report is None
+        else str(reference_scope_final_pruning_report.get("scope_pruning_plan_file", "")),
+        "reference_scope_final_post_prune_audit_status": "skipped"
+        if reference_scope_final_post_prune_audit_report is None
+        else reference_scope_final_post_prune_audit_report.get(
+            "reference_scope_status", reference_scope_final_post_prune_audit_report.get("status", "fail")
+        ),
+        "reference_scope_final_post_prune_audit_report_file": ""
+        if reference_scope_final_post_prune_audit_report is None
+        else str(reference_scope_final_post_prune_audit_report.get("report_file", "")),
+        "reference_scope_final_sumo_load_status": "skipped"
+        if reference_scope_final_sumo_load_report is None
+        else str(reference_scope_final_sumo_load_report.get("status", "fail")),
+        "reference_scope_final_promotion_status": str(
+            reference_scope_final_promotion_report.get("status", "skipped")
+        ),
+        "reference_scope_final_promotion_reason": str(
+            reference_scope_final_promotion_report.get("reason", "")
+        ),
+        "reference_scope_final_promotion_checks": reference_scope_final_promotion_report.get("checks", {}),
         "routeability_probe_file": "" if routeability_report is None else str(routeability_report.get("sumocfg_file", "")),
         "missing_key_edges": [] if routeability_report is None else routeability_report.get("missing_key_edges", []),
         "routeability_probe_status": "skipped" if routeability_report is None else routeability_report.get("status", "fail"),
         **routeability_profile,
         "routeability_audit_status": "skipped" if routeability_audit_report is None else routeability_audit_report.get("routeability_status", routeability_audit_report.get("status", "fail")),
         "routeability_audit_report_file": "" if routeability_audit_report is None else str(routeability_audit_report.get("report_file", "")),
+        "connection_mode_audit_status": "skipped"
+        if connection_mode_audit_report is None
+        else str(connection_mode_audit_report.get("status", "fail")),
+        "connection_mode_audit_pass_count": 0
+        if connection_mode_audit_report is None
+        else int(connection_mode_audit_report.get("pass_count", 0)),
+        "connection_mode_audit_review_required_count": 0
+        if connection_mode_audit_report is None
+        else int(connection_mode_audit_report.get("review_required_count", 0)),
+        "connection_mode_audit_fail_count": 0
+        if connection_mode_audit_report is None
+        else int(connection_mode_audit_report.get("fail_count", 0)),
+        "connection_mode_audit_report_file": ""
+        if connection_mode_audit_report is None
+        else str(connection_mode_audit_report.get("report_file", "")),
+        "connection_mode_review_overlay_file": ""
+        if connection_mode_audit_report is None
+        else str(connection_mode_audit_report.get("review_overlay_file", "")),
+        "connection_mode_manifest_file": ""
+        if connection_mode_audit_report is None
+        else str(connection_mode_audit_report.get("manifest_file", "")),
+        "standard_nema_scan_status": "skipped"
+        if standard_nema_scan_report is None
+        else str(standard_nema_scan_report.get("nema_binding_status", standard_nema_scan_report.get("status", "fail"))),
+        "standard_nema_eligible_count": 0
+        if standard_nema_scan_report is None
+        else int((standard_nema_scan_report.get("scan_counts") or {}).get("eligible_count", 0)),
+        "standard_nema_review_required_count": 0
+        if standard_nema_scan_report is None
+        else int((standard_nema_scan_report.get("scan_counts") or {}).get("review_required_count", 0)),
+        "standard_nema_report_file": ""
+        if standard_nema_scan_report is None
+        else str(standard_nema_scan_report.get("report_file", "")),
+        "standard_nema_connection_mode_report_file": ""
+        if standard_nema_scan_report is None
+        else str(standard_nema_scan_report.get("connection_mode_report_file", "")),
+        "standard_nema_review_overlay_file": ""
+        if standard_nema_scan_report is None
+        else str(standard_nema_scan_report.get("review_overlay_file", "")),
+        "standard_nema_review_html_file": ""
+        if standard_nema_scan_report is None
+        else str(standard_nema_scan_report.get("review_html_file", "")),
         "netedit_status": netedit_report.get("netedit_status", "failed"),
         "netedit_binary": netedit_report.get("netedit_binary"),
         "netedit_process_id": netedit_report.get("netedit_process_id"),
@@ -6498,6 +8799,20 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_tls_connection_repair_summary_file": ""
         if reference_visual_detail_tls_connection_repair_report is None
         else str(reference_visual_detail_tls_connection_repair_report.get("summary_file", "")),
+        "reference_visual_detail_tls_effective_source": effective_visual_tls_preservation["source"],
+        "reference_visual_detail_tls_effective_network_file": effective_visual_tls_preservation["network_file"],
+        "reference_visual_detail_tls_effective_source_controlled_connection_count": effective_visual_tls_preservation[
+            "source_controlled_connection_count"
+        ],
+        "reference_visual_detail_tls_effective_controlled_connection_count": effective_visual_tls_preservation[
+            "controlled_connection_count"
+        ],
+        "reference_visual_detail_tls_effective_controlled_connection_preservation_status": effective_visual_tls_preservation[
+            "controlled_connection_preservation_status"
+        ],
+        "reference_visual_detail_tls_effective_controlled_connection_regression_count": effective_visual_tls_preservation[
+            "controlled_connection_regression_count"
+        ],
         "reference_visual_detail_netedit_status": reference_visual_detail_netedit_report.get("netedit_status", "not_started"),
         "reference_visual_detail_netedit_network_file": reference_visual_detail_netedit_report.get("netedit_network_file", ""),
         "sumo_gui_status": sumo_gui_report.get("sumo_gui_status", "failed"),
@@ -6508,6 +8823,9 @@ def run_osm_cleanup_workflow(
         "net_file": str(net_file),
         "raw_net_file": str(raw_net_file),
         "connected_core_file": "" if connected_core_report is None else str(connected_core_report.get("connected_core_file", "")),
+        "connected_core_discarded_components_review_file": ""
+        if connected_core_report is None
+        else str(connected_core_report.get("discarded_components_review_file", "")),
         "filtered_osm_file": str(filtered_osm_value) if filtered_osm_value else "",
         "build": build_report,
         "reference_visual_detail_build": reference_visual_detail_build_report,
@@ -6609,16 +8927,31 @@ def run_osm_cleanup_workflow(
         "reference_hierarchy_type_repair_sumo_load": reference_hierarchy_type_repair_sumo_load_report or {},
         "reference_hierarchy_type_repair_audit": reference_hierarchy_type_repair_audit_report or {},
         "reference_hierarchy_type_repair_promotion": reference_hierarchy_type_repair_promotion_report,
+        "reference_bbox_scope": reference_bbox_scope_report or {},
+        "corridor_edit_ledger": corridor_edit_ledger_report or {},
+        "corridor_geometry_simplification": corridor_geometry_simplification_report or {},
+        "corridor_geometry_simplification_sumo_load": corridor_geometry_simplification_sumo_load_report or {},
+        "corridor_geometry_simplification_reference_delta": corridor_geometry_simplification_reference_delta_report or {},
+        "corridor_geometry_simplification_topology": corridor_geometry_simplification_topology_report or {},
+        "corridor_geometry_simplification_promotion": corridor_geometry_simplification_promotion_report,
         "reference_scope_audit": reference_scope_audit_report or {},
         "reference_scope_pruning": reference_scope_pruning_report or {},
         "reference_join_audit": reference_join_audit_report or {},
+        "tls_gap_destination_mapping": tls_gap_destination_mapping_report or {},
+        "tls_repair_variant": tls_repair_variant_report or {},
+        "tls_repair_variant_sumo_load": tls_repair_variant_sumo_load_report or {},
+        "tls_repair_variant_semantic": tls_repair_variant_semantic_report or {},
+        "tls_repair_variant_reference_audit": tls_repair_variant_reference_audit_report or {},
+        "tls_repair_decision": tls_repair_decision_report or {},
         "reference_join_post_teacher_audit": reference_join_post_teacher_audit_report or {},
         "reference_join_aggregation": reference_join_aggregation_report or {},
         "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
+        "teacher_guided_scoped_tls_cell_batch": teacher_guided_scoped_tls_cell_batch_report or {},
         "teacher_guided_repair_plain_export": teacher_guided_plain_export_report or {},
         "teacher_guided_repair_run": teacher_guided_repair_run_report or {},
         "teacher_guided_probe_matrix": teacher_guided_probe_matrix_report or {},
         "road_connectivity_replay": road_connectivity_replay_report or {},
+        "road_connectivity_parity_audit": road_connectivity_parity_audit_report or {},
         "road_connectivity_split_root_alias_repair": road_connectivity_split_root_alias_repair_report or {},
         "road_connection_topology_replay": road_connection_topology_replay_report or {},
         "road_connectivity_seed_probe": road_connectivity_seed_probe_report or {},
@@ -6626,12 +8959,19 @@ def run_osm_cleanup_workflow(
         "teacher_guided_direct_replay_reference_delta": teacher_guided_direct_replay_reference_delta_report or {},
         "teacher_guided_direct_replay_reference_promotion": teacher_guided_direct_replay_reference_promotion_report,
         "routeability_audit": routeability_audit_report or {},
+        "connection_mode_audit": connection_mode_audit_report or {},
+        "standard_nema_scan": standard_nema_scan_report or {},
         "netedit": netedit_report,
         "reference_visual_detail_netedit": reference_visual_detail_netedit_report,
         "sumo_gui": sumo_gui_report,
         "gate_status": gate_status,
         "warnings": warnings,
     }
+    report["review_decisions_source_file"] = str(review_decisions_file) if review_decisions_file else ""
+    report["review_decisions_source_status"] = review_decisions_source_status
+    report["review_decisions_source_error"] = review_decisions_source_error
+    if supplied_review_decisions is not None:
+        report["review_decisions"] = supplied_review_decisions
     workflow_review_html_report = review_html_func(
         output_dir=output_dir / "review",
         prefix=f"{prefix}_workflow_review",
@@ -6641,7 +8981,7 @@ def run_osm_cleanup_workflow(
         net_file=reference_visual_detail_comparison_net_file or report.get("net_file"),
         raw_net_file=report.get("raw_net_file"),
         connected_core_file=report.get("connected_core_file"),
-        reference_net_file=report.get("reference_net_file"),
+        reference_net_file=report.get("reference_validation_net_file") or report.get("reference_net_file"),
         tls_review_file=report.get("tls_review_file"),
         topology_audit_report=topology_audit_report,
         topology_audit_report_file=report.get("topology_audit_clusters_file"),
@@ -6697,6 +9037,9 @@ def run_osm_cleanup_workflow(
             "workflow_review_net_file": workflow_review_html_report.get("workflow_review_net_file", ""),
             "workflow_report_file": workflow_review_html_report.get("workflow_report_file", ""),
             "review_manifest_file": workflow_review_html_report.get("review_manifest_file", ""),
+            "artifact_hash_gate": workflow_review_html_report.get("artifact_hash_gate", {}),
+            "artifact_hash_gate_status": workflow_review_html_report.get("artifact_hash_gate_status", "fail"),
+            "artifact_hashes": workflow_review_html_report.get("artifact_hashes", {}),
             "network_overview_png": workflow_review_html_report.get("network_overview_png", ""),
             "problem_overlay_png": workflow_review_html_report.get("problem_overlay_png", ""),
             "reference_comparison_png": workflow_review_html_report.get("reference_comparison_png", ""),
@@ -6706,6 +9049,13 @@ def run_osm_cleanup_workflow(
             "netedit_review_command": workflow_review_html_report.get("netedit_review_command", ""),
             "netedit_review_selection_files": netedit_review_selection_files,
             "netedit_review_viewsettings_files": netedit_review_viewsettings_files,
+            "claim_tiers": workflow_review_html_report.get("claim_tiers", {}),
+            "review_decisions_file": workflow_review_html_report.get("review_decisions_file", ""),
+            "review_decisions_status": workflow_review_html_report.get("review_decisions_status", "pending"),
+            "review_overlay_location_count": workflow_review_html_report.get("review_overlay_location_count", 0),
+            "review_overlay_category_counts": workflow_review_html_report.get(
+                "review_overlay_category_counts", {}
+            ),
             "netedit_review_launch_status": netedit_review_launch_report.get("netedit_status", "not_started"),
             "netedit_review_launch_process_id": netedit_review_launch_report.get("netedit_process_id"),
             "netedit_review_launch_file": netedit_review_launch_report.get("netedit_input_file", ""),

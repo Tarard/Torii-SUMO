@@ -1,0 +1,152 @@
+{
+  "schema": "torii.corridor.real-held-out-probe-evidence/v1",
+  "corpus_id": "manifest_e2562c4125f9f157ece520d5",
+  "recorded_at": "2026-07-14",
+  "toolchain": {
+    "sumo_version": "1.27.1",
+    "traffic_side": "left",
+    "netconvert_left_hand_option": "--lefthand"
+  },
+  "source_extract": {
+    "source_id": "sydney-bbbike-20260711",
+    "provider_md5": "480d263525806f549648c7c518e1fcdb",
+    "sha256": "337d2d24e17ceed8049c1fa3e3fd7fab7b9e99911f43c87463b6133f5d39457d",
+    "content_length_bytes": 55931710,
+    "provider_identity_matched": true,
+    "source_mutated": false
+  },
+  "corridor_snapshots": [
+    {
+      "corridor_key": "sydney-george-park",
+      "selection_id": "scope_9cc6f0882d54e3135abbbe44",
+      "sha256": "a88fc7f7a6e14e4e5d347d73b27e5a25e195b09ad6e7fa2cd3407c57d2db6cf4",
+      "selected_way_count": 3378,
+      "selected_restriction_count": 50,
+      "reference_complete": true,
+      "unconfirmed_preregistered_features": []
+    },
+    {
+      "corridor_key": "sydney-harbour-bridge",
+      "selection_id": "scope_0958840e1b4f2c919cb464ea",
+      "sha256": "5541a3758ddd64a431219e96d552ee6bc885b5d01a24cd5ef93fc36ff4b61660",
+      "selected_way_count": 1346,
+      "selected_restriction_count": 1,
+      "reference_complete": true,
+      "unconfirmed_preregistered_features": []
+    },
+    {
+      "corridor_key": "sydney-cross-city-tunnel",
+      "selection_id": "scope_f6c3767dbd66180090580eeb",
+      "sha256": "688fa45e9ac7d6c28b77a4771641948a8b3f920a6c46327263518ec61974b282",
+      "selected_way_count": 1912,
+      "selected_restriction_count": 34,
+      "reference_complete": true,
+      "unconfirmed_preregistered_features": []
+    },
+    {
+      "corridor_key": "sydney-central",
+      "selection_id": "scope_00c18209d5e392a39556ab8a",
+      "sha256": "70d4f4086745108c0f89b411eb1625ca0ab2c788293e9510d58b5b36a24baf1d",
+      "selected_way_count": 3050,
+      "selected_restriction_count": 66,
+      "reference_complete": true,
+      "unconfirmed_preregistered_features": []
+    },
+    {
+      "corridor_key": "sydney-anzac-cleveland",
+      "selection_id": "scope_aaee79fb5aa8a714d66c3bb2",
+      "sha256": "adb4f777efa80be3293154a2c9e899c70ad9c0dffe68d7c1c9f276c63ca27d65",
+      "selected_way_count": 950,
+      "selected_restriction_count": 33,
+      "reference_complete": true,
+      "unconfirmed_preregistered_features": []
+    }
+  ],
+  "left_hand_regression": {
+    "initial_status": "blocked",
+    "initial_witness": "Canonicalization traffic side contradicts the SUMO network: requested=left, network=right.",
+    "cause": "OSM-to-SUMO builder did not pass traffic side to netconvert.",
+    "fix": "Traffic side is now an explicit build input and left-hand builds pass --lefthand.",
+    "same_frozen_snapshot_rerun": "entered full machine audit"
+  },
+  "harbour_bridge_machine_evidence": {
+    "candidate_net_sha256": "ae8eb471108d854a72823552c02a6d90463f6e8f6aa709ee11ea669758cdb953",
+    "pipeline_status": "pass",
+    "machine_label": "ambiguous",
+    "netconvert_status": "pass",
+    "netconvert_replay": {
+      "status": "pass",
+      "primary_raw_sha256": "ae8eb471108d854a72823552c02a6d90463f6e8f6aa709ee11ea669758cdb953",
+      "replay_raw_sha256": "50edebfcc4d01b748aca4eab0930d09942edba4f68c63b92d299cda357218b7c",
+      "primary_normalized_sha256": "dd0ae52b3059f63a27b8210a000c0cbc139311ff28d4e8ccfd3a989dc8a45a29",
+      "replay_normalized_sha256": "dd0ae52b3059f63a27b8210a000c0cbc139311ff28d4e8ccfd3a989dc8a45a29",
+      "reproducible_semantics": true,
+      "report_sha256": "f3568843291506c66b377657141e34e3363558fbaf9f8b9e18ccb20817d73c55"
+    },
+    "sumo_load_status": "pass",
+    "routeability": {
+      "status": "pass",
+      "vehicle_count": 20,
+      "collision_count": 0,
+      "teleport_count": 0,
+      "unfinished_trip_count": 0,
+      "report_sha256": "0dc6f9e906eeca3461297ab3a4e177230aea1e9f66caf9d8555337b60ba66cfb"
+    },
+    "connection_mode": {
+      "status": "review_required",
+      "junction_count": 715,
+      "pass_count": 703,
+      "review_required_count": 12,
+      "fail_count": 0,
+      "structural_failure_count": 0,
+      "review_finding_count": 29,
+      "report_sha256": "7b768ac18ee67e460406009d72f38d3df0a33bea98e12b83aae1695645b9a4b8"
+    },
+    "independent_safety": {
+      "status": "blocked",
+      "movement_count": 2231,
+      "conflict_count": 3723,
+      "finding_count": 439,
+      "broad_phase": {
+        "name": "aabb-sweep-v1",
+        "geometry_pair_count": 2487565,
+        "evaluated_geometry_pair_count": 7728,
+        "evaluation_fraction": 0.00310665,
+        "conflicts_exactly_equal_to_saved_exhaustive_result": true,
+        "diagnostic_elapsed_seconds_on_development_machine": 0.636745
+      },
+      "finding_category_counts": {
+        "controlled_link_outside_independent_conflict_model": 9,
+        "movement_modes_outside_certified_conflict_applicability": 156,
+        "pedestrian_facilities_outside_independent_conflict_model": 193,
+        "permissive_conflict_requires_independent_yield_review": 40,
+        "permissive_potential_envelope_conflict_requires_review": 31,
+        "protected_green_potential_envelope_conflict": 10
+      },
+      "report_sha256": "0ef39f7f427a718cccb5c5ff856be690d14a483e6fa05ee1e8c35d84b363cbb1"
+    },
+    "certification_applicability": "out-of-domain"
+  },
+  "review_state": {
+    "blinded_package_prepared": true,
+    "reviewer_visible_html_prepared": true,
+    "display_only_overlay_validated": true,
+    "candidate_hash_bound": true,
+    "machine_label_hidden_from_reviewer_html": true,
+    "human_review_decision_count": 0,
+    "human_adjudication_count": 0,
+    "automatic_promotion_gate": "blocked",
+    "blockers": [
+      "machine_evidence_partial:1/30",
+      "independent_safety_not_proven",
+      "two_independent_human_reviews_missing",
+      "adjudication_missing"
+    ]
+  },
+  "claims_not_supported": [
+    "Harbour Bridge is correctly cleaned",
+    "held-out AutoPrecision has been measured",
+    "Stage 1 exit conditions are complete",
+    "pedestrian-aware TLS safety is certified"
+  ]
+}

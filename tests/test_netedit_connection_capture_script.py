@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+from argparse import Namespace
 from pathlib import Path
+
+import pytest
 
 
 SCRIPT = Path("plugins/torii-sumo/scripts/netedit_connection_capture.py")
@@ -111,3 +114,11 @@ def test_connection_key_sequence_switches_chinese_ime_first() -> None:
     script = _load_script()
 
     assert script.connection_key_sequence() == ["shift", "c"]
+
+
+def test_runtime_capture_is_blocked_in_favor_of_background_silent(monkeypatch: pytest.MonkeyPatch) -> None:
+    script = _load_script()
+    monkeypatch.setattr(script, "_args", lambda: Namespace(dry_run=False))
+
+    with pytest.raises(SystemExit, match="netedit_background_review.py"):
+        script.main()

@@ -1,0 +1,364 @@
+{
+  "artifacts": {
+    "edges": {
+      "bytes": 27166,
+      "path": "sandtorkai_official_named_corridor.edg.xml",
+      "sha256": "7917490d0868f3bf8fb67f88c5c2da3121ac545eced4387668fa711b738d3e34"
+    },
+    "netconvert_config": {
+      "bytes": 609,
+      "path": "sandtorkai_official_named_corridor.netccfg",
+      "sha256": "8c665df050b1561c7b9168f47cbc0d88a50010e7f690f5dec38bfe717fb77372"
+    },
+    "nodes": {
+      "bytes": 3085,
+      "path": "sandtorkai_official_named_corridor.nod.xml",
+      "sha256": "b96cec9178ef90abc91dacc033b35889340bb85ff42d5e1e42877557c9092ffc"
+    },
+    "types": {
+      "bytes": 206,
+      "path": "sandtorkai_official_named_corridor.typ.xml",
+      "sha256": "1d3818fd0a32d980accead8fc35c71d66f9bae4fe825427dc2457abe3b7e7ad4"
+    }
+  },
+  "automatic_promotion_gate": "blocked",
+  "candidate_id": "hh-sib-plainxml-6f71dd6d29d0cf036c5c5015",
+  "claim_boundary": "The candidate reproduces selected official HH-SIB road-axis geometry, official network-node identity, station intervals, directional lane counts, and unconditional speed. It makes no claim about legal lane connections, conflict areas, priority, stop lines, signal ownership, phasing, or timing.",
+  "claim_status": "official_geometry_plainxml_candidate_only",
+  "counts": {
+    "directed_edge_count": 26,
+    "node_count": 16,
+    "official_interval_count": 13,
+    "selected_link_count": 7
+  },
+  "excluded_inputs": [
+    "OpenStreetMap",
+    "OSM-derived SUMO network",
+    "manual map review"
+  ],
+  "gates": {
+    "automatic_promotion": "blocked",
+    "explicit_corridor_scope": "pass",
+    "lane_to_lane_connection_materialization": "not_run",
+    "netconvert_execution": "not_run",
+    "official_directional_lane_counts": "pass",
+    "official_interval_geometry": "pass",
+    "official_link_identity": "pass",
+    "official_map_lane_connections": "blocked",
+    "official_signal_control_binding": "blocked",
+    "official_source_hash": "pass",
+    "official_source_time_alignment": "review_required",
+    "official_station_orientation": "pass",
+    "official_unconditional_speed": "pass",
+    "plainxml_artifact_hashes": "pass"
+  },
+  "human_map_review_required": false,
+  "netconvert": {
+    "candidate_net": "sandtorkai_official_named_corridor.net.xml",
+    "command": [
+      "netconvert",
+      "-c",
+      "sandtorkai_official_named_corridor.netccfg"
+    ],
+    "execution_gate": "blocked_until_official_connection_file_is_bound",
+    "status": "not_run",
+    "warning": "Running this geometry-only config would let netconvert infer lane connections; such output is diagnostic only and cannot be promoted by this manifest."
+  },
+  "projection": {
+    "crs": "EPSG:32632",
+    "hemisphere": "north",
+    "method": "deterministic_mean_coordinate_utm_zone",
+    "source_crs": "EPSG:4326",
+    "utm_zone": 32
+  },
+  "schema": "torii.hamburg-hh-sib-official-plainxml-candidate/v1",
+  "scope": {
+    "links": [
+      {
+        "geometry_order": "auto",
+        "link_object_id": "strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986",
+        "station_from_m": 660.0,
+        "station_to_m": 986.0
+      },
+      {
+        "geometry_order": "source_order_is_with_stationing",
+        "link_object_id": "strassennetz_gesamt:242510300:242514481:G485:8568:ast-0:len-176",
+        "station_from_m": null,
+        "station_to_m": null
+      },
+      {
+        "geometry_order": "source_order_is_against_stationing",
+        "link_object_id": "strassennetz_gesamt:242516613:242514393:A709:9914:ast-0:len-152",
+        "station_from_m": null,
+        "station_to_m": null
+      },
+      {
+        "geometry_order": "source_order_is_against_stationing",
+        "link_object_id": "strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346",
+        "station_from_m": 191.0,
+        "station_to_m": 346.0
+      },
+      {
+        "geometry_order": "source_order_is_against_stationing",
+        "link_object_id": "strassennetz_gesamt:242500071:242615095:B623:1124:ast-0:len-225",
+        "station_from_m": null,
+        "station_to_m": null
+      },
+      {
+        "geometry_order": "source_order_is_against_stationing",
+        "link_object_id": "strassennetz_gesamt:242516617:242514394:S942:9919:ast-0:len-138",
+        "station_from_m": null,
+        "station_to_m": null
+      },
+      {
+        "geometry_order": "source_order_is_against_stationing",
+        "link_object_id": "strassennetz_gesamt:242514393:242514394:T235:9920:ast-0:len-68",
+        "station_from_m": null,
+        "station_to_m": null
+      }
+    ],
+    "schema": "torii.hamburg-hh-sib-corridor-scope/v1",
+    "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1",
+    "sha256": "c06d6315bea3f0377843b20eb97d8255ba36def7094285d5488eaa74dad7dcd5"
+  },
+  "selected_links": [
+    {
+      "branch_code": 0,
+      "feature_ids": [
+        "16517481"
+      ],
+      "from_network_node": "242500071",
+      "length_m": 225.0,
+      "link_object_id": "strassennetz_gesamt:242500071:242615095:B623:1124:ast-0:len-225",
+      "orientation": {
+        "basis": "explicit_corridor_scope",
+        "geometry_order": "source_order_is_against_stationing",
+        "join_gaps_m": [],
+        "reverse_by_interval": [
+          true
+        ],
+        "status": "pass"
+      },
+      "road_key": "B623",
+      "road_name": "Brooktorkai",
+      "selected_station_range_m": [
+        0.0,
+        225.0
+      ],
+      "source_status": "review_required",
+      "to_network_node": "242615095"
+    },
+    {
+      "branch_code": 0,
+      "feature_ids": [
+        "16497212",
+        "16497213",
+        "16497214",
+        "16497215"
+      ],
+      "from_network_node": "242500211",
+      "length_m": 986.0,
+      "link_object_id": "strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986",
+      "orientation": {
+        "basis": "minimum_gap_across_ordered_official_station_intervals",
+        "best_chain_gap_sum_m": 0.0,
+        "geometry_order": "per_interval_inferred",
+        "join_gaps_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "reverse_by_interval": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "second_best_chain_gap_sum_m": 38.096175931705766,
+        "status": "pass"
+      },
+      "road_key": "A326",
+      "road_name": "Am Sandtorkai",
+      "selected_station_range_m": [
+        660.0,
+        986.0
+      ],
+      "source_status": "review_required",
+      "to_network_node": "242500071"
+    },
+    {
+      "branch_code": 0,
+      "feature_ids": [
+        "16517010"
+      ],
+      "from_network_node": "242510300",
+      "length_m": 176.0,
+      "link_object_id": "strassennetz_gesamt:242510300:242514481:G485:8568:ast-0:len-176",
+      "orientation": {
+        "basis": "explicit_corridor_scope",
+        "geometry_order": "source_order_is_with_stationing",
+        "join_gaps_m": [],
+        "reverse_by_interval": [
+          false
+        ],
+        "status": "pass"
+      },
+      "road_key": "G485",
+      "road_name": "Großer Grasbrook",
+      "selected_station_range_m": [
+        0.0,
+        176.0
+      ],
+      "source_status": "review_required",
+      "to_network_node": "242514481"
+    },
+    {
+      "branch_code": 0,
+      "feature_ids": [
+        "16517028"
+      ],
+      "from_network_node": "242514393",
+      "length_m": 68.0,
+      "link_object_id": "strassennetz_gesamt:242514393:242514394:T235:9920:ast-0:len-68",
+      "orientation": {
+        "basis": "explicit_corridor_scope",
+        "geometry_order": "source_order_is_against_stationing",
+        "join_gaps_m": [],
+        "reverse_by_interval": [
+          true
+        ],
+        "status": "pass"
+      },
+      "road_key": "T235",
+      "road_name": "Tokiostraße",
+      "selected_station_range_m": [
+        0.0,
+        68.0
+      ],
+      "source_status": "review_required",
+      "to_network_node": "242514394"
+    },
+    {
+      "branch_code": 0,
+      "feature_ids": [
+        "16517025",
+        "16517026"
+      ],
+      "from_network_node": "242516613",
+      "length_m": 152.0,
+      "link_object_id": "strassennetz_gesamt:242516613:242514393:A709:9914:ast-0:len-152",
+      "orientation": {
+        "basis": "explicit_corridor_scope",
+        "geometry_order": "source_order_is_against_stationing",
+        "join_gaps_m": [
+          0.0
+        ],
+        "reverse_by_interval": [
+          true,
+          true
+        ],
+        "status": "pass"
+      },
+      "road_key": "A709",
+      "road_name": "Am Sandtorpark",
+      "selected_station_range_m": [
+        0.0,
+        152.0
+      ],
+      "source_status": "review_required",
+      "to_network_node": "242514393"
+    },
+    {
+      "branch_code": 0,
+      "feature_ids": [
+        "16517029"
+      ],
+      "from_network_node": "242516617",
+      "length_m": 138.0,
+      "link_object_id": "strassennetz_gesamt:242516617:242514394:S942:9919:ast-0:len-138",
+      "orientation": {
+        "basis": "explicit_corridor_scope",
+        "geometry_order": "source_order_is_against_stationing",
+        "join_gaps_m": [],
+        "reverse_by_interval": [
+          true
+        ],
+        "status": "pass"
+      },
+      "road_key": "S942",
+      "road_name": "Singapurstraße",
+      "selected_station_range_m": [
+        0.0,
+        138.0
+      ],
+      "source_status": "review_required",
+      "to_network_node": "242514394"
+    },
+    {
+      "branch_code": 0,
+      "feature_ids": [
+        "16517022",
+        "16517023",
+        "16517024"
+      ],
+      "from_network_node": "242613918",
+      "length_m": 346.0,
+      "link_object_id": "strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346",
+      "orientation": {
+        "basis": "explicit_corridor_scope",
+        "geometry_order": "source_order_is_against_stationing",
+        "join_gaps_m": [
+          0.0,
+          0.0
+        ],
+        "reverse_by_interval": [
+          true,
+          true,
+          true
+        ],
+        "status": "pass"
+      },
+      "road_key": "O219",
+      "road_name": "Osakaallee",
+      "selected_station_range_m": [
+        191.0,
+        346.0
+      ],
+      "source_status": "review_required",
+      "to_network_node": "242500071"
+    }
+  ],
+  "source": {
+    "adapter_schema": "torii.hamburg-hh-sib-road-inventory/v1",
+    "attribution": "Freie und Hansestadt Hamburg",
+    "kind": "hamburg_hh_sib_official_snapshot",
+    "license": "Datenlizenz Deutschland Namensnennung 2.0",
+    "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\road_semantic_evidence_v1\\official_snapshots\\hh_sib_bbox_2026-07-19T195342Z.geojson",
+    "portable_parsed_report_sha256": "96588ff4011485df408bde93ba45fdfd99b4d4c2c24f22a350b4e66653717929",
+    "report_claim_status": "review_required",
+    "sha256": "cac627a1349cda6cd6fd884ba2b49db9639959d223372d5dea33bf84e6979a16",
+    "time_alignment_resolution": "machine-readable official validity metadata is required when status is not pass; manual map review is not the resolution mechanism",
+    "time_alignment_status": "review_required"
+  },
+  "status": "blocked",
+  "unresolved_machine_stages": [
+    {
+      "human_review_required": false,
+      "required_evidence": "hash-bound Hamburg MAP lane/movement topology covering every selected official network node",
+      "stage": "official_map_lane_connections",
+      "status": "blocked"
+    },
+    {
+      "human_review_required": false,
+      "required_evidence": "hash-bound Hamburg MAP/OCIT controller, signal-group, stop-line, and movement assignments",
+      "stage": "official_signal_control_binding",
+      "status": "blocked"
+    },
+    {
+      "human_review_required": false,
+      "required_evidence": "official connection PlainXML produced by the preceding machine stage",
+      "stage": "netconvert_materialization",
+      "status": "not_run"
+    }
+  ]
+}

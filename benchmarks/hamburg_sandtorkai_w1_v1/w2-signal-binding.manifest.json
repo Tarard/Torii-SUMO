@@ -1,0 +1,134 @@
+{
+  "artifacts": {
+    "bindings": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_binding_v5_iteration027_compound\\official-primary-signal-bindings.json",
+    "manifest": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_binding_v5_iteration027_compound\\official-primary-signal-binding.manifest.json"
+  },
+  "automatic_promotion_gate": "blocked",
+  "available_map_node_ids": [
+    "2349",
+    "2394"
+  ],
+  "binding_artifact": {
+    "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_binding_v5_iteration027_compound\\official-primary-signal-bindings.json",
+    "sha256": "c0aec5013d8c61bef5642e4ec981a844004171c5e409bdb141635d816fe91ca3"
+  },
+  "claim_boundary": {
+    "does_not_prove": [
+      "historical Saturday signal phases or cycle timing",
+      "a complete three-node signal controller while a required node is missing"
+    ],
+    "proves": [
+      "which official TLD primary-signal streams were used",
+      "which official MAP movement and SUMO controller linkIndex each stream binds to",
+      "that the candidate controlled physical connection set exactly equals the selected official TLS plan",
+      "that missing 2403 signal data is explicit rather than guessed"
+    ]
+  },
+  "claim_status": "official-tld-primary-signal-metadata-bound-to-map-movements",
+  "errors": [],
+  "execution_gate": "pass",
+  "execution_gate_reason": "available official MAP cells and every supplied TLD stream bind to candidate controller link indices",
+  "gates": {
+    "2403_official_signal_asset": "blocked",
+    "automatic_promotion": "blocked",
+    "candidate_controller_link_indices": "pass",
+    "historical_signal_replay": "blocked_pending_official_observations",
+    "map_movement_identity": "pass",
+    "official_movement_physical_key_parity": "pass",
+    "official_source_hashes": "pass"
+  },
+  "historical_signal_replay": {
+    "reason": "metadata identifies controlled movements but does not contain the requested Saturday history",
+    "status": "blocked_pending_official_observations"
+  },
+  "missing_official_signal_node_ids": [
+    "2403"
+  ],
+  "node_reports": {
+    "2349": {
+      "bound_count": 8,
+      "errors": [],
+      "expected_vehicle_movement_count": 8,
+      "official_movement_physical_key_parity": {
+        "candidate_count": 9,
+        "candidate_unique_count": 9,
+        "controller_id": "HH_2349",
+        "duplicate_physical_connections": [],
+        "evidence_mode": "compound_osm_tls_plan",
+        "expected_count": 9,
+        "missing_physical_keys": [],
+        "status": "pass",
+        "unexpected_physical_keys": []
+      },
+      "status": "pass",
+      "stream_count": 8,
+      "unbound_connection_ids": []
+    },
+    "2394": {
+      "bound_count": 8,
+      "errors": [],
+      "expected_vehicle_movement_count": 8,
+      "official_movement_physical_key_parity": {
+        "candidate_count": 13,
+        "candidate_unique_count": 13,
+        "controller_id": "HH_2394",
+        "duplicate_physical_connections": [],
+        "evidence_mode": "compound_osm_tls_plan",
+        "expected_count": 13,
+        "missing_physical_keys": [],
+        "status": "pass",
+        "unexpected_physical_keys": []
+      },
+      "status": "pass",
+      "stream_count": 8,
+      "unbound_connection_ids": []
+    },
+    "2403": {
+      "bound_count": 0,
+      "expected_vehicle_movement_count": 0,
+      "status": "missing_official_map_cell",
+      "stream_count": 0
+    }
+  },
+  "required_node_ids": [
+    "2349",
+    "2394",
+    "2403"
+  ],
+  "schema": "torii.hamburg-named-signal-binding/v1",
+  "source": {
+    "candidate_net": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_027_2403_two_conflict_core_semantic_prune\\hamburg_2403_two_conflict_core_semantic_prune.net.xml",
+      "sha256": "aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33"
+    },
+    "compound_tls_manifest": {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_009_2349_2394_official_inventory_prune\\hamburg_compound_official_tls.manifest.json",
+      "sha256": "00dde8f676d7294e07422c57034c2f353fcd25727ce7b83d0671782db4b3575b"
+    },
+    "intersection_manifests": {
+      "2349": {
+        "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_map_intersection_plainxml_v8\\2349\\hamburg-official-2349.manifest.json",
+        "sha256": "c46b3f7258d3741f0dc5445ec5b572226dba131c1adfc269e1a5c8ae134e68a4"
+      },
+      "2394": {
+        "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_map_intersection_plainxml_v8\\2394\\hamburg-official-2394.manifest.json",
+        "sha256": "d092f94b305cfc97c8bc9afb66815559bf05a133744aaffa4a5316e5dc0b873f"
+      }
+    },
+    "signal_stream_files": [
+      {
+        "api_base_url": "https://tld.iot.hamburg.de/v1.1/",
+        "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\workflow\\w2_official_signal_metadata_v1\\tld_primary_signal_metadata.json",
+        "schema": "torii.hamburg-tld-primary-signal-streams/v1",
+        "sha256": "f0466e78286523f7694c36c1bccc486b816444ac32afa595f01a660efd60490e"
+      },
+      {
+        "api_base_url": "https://tld.iot.hamburg.de/v1.0/",
+        "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\official\\signals\\tld_metadata\\tld_2349_2394_primary_signal_metadata.json",
+        "schema": "torii.hamburg-tld-metadata-bundle/v1",
+        "sha256": "6b30fda512ef6e6df696d4ff691f81620ab429338481b3d46bf325f5a67aad77"
+      }
+    ]
+  },
+  "status": "partial"
+}

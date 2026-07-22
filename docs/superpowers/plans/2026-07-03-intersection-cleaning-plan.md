@@ -12,6 +12,8 @@
 
 ---
 
+> **Status note (2026-07-03):** Tasks 1-5 from this plan were implemented on branch `html` in commit `a1686ee`. The remaining refinement work moved to `docs/superpowers/plans/2026-07-03-intersection-cleaning-next-phase.md`.
+
 ### Task 1: Freeze IR Layer Fields
 
 **Files:**

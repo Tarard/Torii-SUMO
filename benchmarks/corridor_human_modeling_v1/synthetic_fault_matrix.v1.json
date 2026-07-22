@@ -1,0 +1,285 @@
+{
+  "schema": "torii.corridor.synthetic-fault-benchmark/v1",
+  "benchmark_id": "manifest_fe327b09f51ea4f0061cb918",
+  "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "cases": [
+    {
+      "case_id": "x4-wrong-to-lane",
+      "fault_family": "wrong-to-lane",
+      "fixture_id": "standard-x4",
+      "mutation_id": "wrong-to-lane",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "internal_path_final_lane_mismatch"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-crossed-lane-map",
+      "fault_family": "crossed-lane-map",
+      "fixture_id": "parallel-two-lane-x4",
+      "mutation_id": "crossed-lane-map",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-review", "value": "crossed_lane_mapping"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-duplicate-connection",
+      "fault_family": "duplicate-connection",
+      "fixture_id": "standard-x4",
+      "mutation_id": "duplicate-connection",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "duplicate_direct_connection"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-missing-connection",
+      "fault_family": "missing-connection",
+      "fixture_id": "standard-x4",
+      "mutation_id": "missing-connection",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "request_count_mismatch"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-incorrect-via",
+      "fault_family": "incorrect-via",
+      "fixture_id": "standard-x4",
+      "mutation_id": "incorrect-via",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "internal_path_target_mismatch"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-internal-cycle",
+      "fault_family": "internal-cycle",
+      "fixture_id": "standard-x4",
+      "mutation_id": "internal-cycle",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "internal_path_cycle"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-target-mismatch",
+      "fault_family": "target-mismatch",
+      "fixture_id": "standard-x4",
+      "mutation_id": "target-mismatch",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "internal_path_target_mismatch"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-dangling-internal",
+      "fault_family": "dangling-internal",
+      "fixture_id": "standard-x4",
+      "mutation_id": "dangling-internal",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "direct_via_lane_not_found"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-left-endpoint-gap",
+      "fault_family": "endpoint-gap",
+      "fixture_id": "standard-x4",
+      "mutation_id": "endpoint-gap",
+      "traffic_side": "left",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "path_endpoint_gap"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-wrong-turn",
+      "fault_family": "wrong-turn",
+      "fixture_id": "standard-x4",
+      "mutation_id": "wrong-turn",
+      "traffic_side": "right",
+      "certification_expectation": "must-abstain",
+      "expected_observations": [
+        {"channel": "exact-delta", "value": "movement:added"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-illegal-movement",
+      "fault_family": "illegal-movement",
+      "fixture_id": "standard-x4",
+      "mutation_id": "illegal-movement",
+      "traffic_side": "right",
+      "certification_expectation": "must-abstain",
+      "expected_observations": [
+        {"channel": "exact-delta", "value": "movement:added"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-missing-legal-movement",
+      "fault_family": "missing-legal-movement",
+      "fixture_id": "standard-x4",
+      "mutation_id": "missing-legal-movement",
+      "traffic_side": "right",
+      "certification_expectation": "must-abstain",
+      "expected_observations": [
+        {"channel": "connection-review", "value": "incoming_motorized_lane_without_connection"},
+        {"channel": "exact-delta", "value": "movement:removed"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-request-length",
+      "fault_family": "request-length",
+      "fixture_id": "standard-x4",
+      "mutation_id": "request-length",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "request_foes_bitstring_invalid"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-request-bit-order",
+      "fault_family": "request-bit-order",
+      "fixture_id": "standard-x4",
+      "mutation_id": "request-bit-order",
+      "traffic_side": "right",
+      "certification_expectation": "must-abstain",
+      "expected_observations": [
+        {"channel": "exact-delta", "value": "request_foes:modified"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-asymmetric-foes",
+      "fault_family": "asymmetric-foes",
+      "fixture_id": "standard-x4",
+      "mutation_id": "asymmetric-foes",
+      "traffic_side": "right",
+      "certification_expectation": "must-abstain",
+      "expected_observations": [
+        {"channel": "exact-delta", "value": "request_foes:modified"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-protected-green-conflict",
+      "fault_family": "protected-green-conflict",
+      "fixture_id": "standard-x4",
+      "mutation_id": "protected-green-conflict",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "independent-safety", "value": "protected_green_movement_conflict"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-shared-link-index-conflict",
+      "fault_family": "shared-link-index-conflict",
+      "fixture_id": "standard-x4",
+      "mutation_id": "shared-link-index-conflict",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "independent-safety", "value": "conflicting_movements_share_signal_group"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-out-of-range-link-index",
+      "fault_family": "out-of-range-link-index",
+      "fixture_id": "standard-x4",
+      "mutation_id": "out-of-range-link-index",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "link_index_out_of_program_state"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-phase-state-length",
+      "fault_family": "phase-state-length",
+      "fixture_id": "standard-x4",
+      "mutation_id": "phase-state-length",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "controller_program_state_lengths_inconsistent"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-missing-program",
+      "fault_family": "missing-program",
+      "fixture_id": "standard-x4",
+      "mutation_id": "missing-program",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "connection-structural", "value": "controller_logic_missing"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-link-index-2",
+      "fault_family": "link-index-2",
+      "fixture_id": "standard-x4",
+      "mutation_id": "link-index-2",
+      "traffic_side": "right",
+      "certification_expectation": "must-detect",
+      "expected_observations": [
+        {"channel": "independent-safety", "value": "link_index2_outside_independent_conflict_model"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-pedestrian-conflict",
+      "fault_family": "pedestrian-conflict",
+      "fixture_id": "pedestrian-x4",
+      "mutation_id": "pedestrian-conflict",
+      "traffic_side": "right",
+      "certification_expectation": "must-abstain",
+      "expected_observations": [
+        {"channel": "independent-safety", "value": "protected_green_movement_conflict"}
+      ],
+      "expected_abstention": true
+    },
+    {
+      "case_id": "x4-rail-conflict",
+      "fault_family": "rail-conflict",
+      "fixture_id": "rail-x4",
+      "mutation_id": "rail-conflict",
+      "traffic_side": "right",
+      "certification_expectation": "must-abstain",
+      "expected_observations": [
+        {"channel": "independent-safety", "value": "protected_green_movement_conflict"},
+        {"channel": "independent-review", "value": "movement_modes_outside_certified_conflict_applicability"}
+      ],
+      "expected_abstention": true
+    }
+  ]
+}

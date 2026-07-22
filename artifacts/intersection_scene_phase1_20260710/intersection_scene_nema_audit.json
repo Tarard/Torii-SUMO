@@ -1,0 +1,147 @@
+{
+  "source_model": "SUMO plain XML plus .tll signal groups and embedded NEMA",
+  "net": "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.net.xml",
+  "additional": "C:\\Users\\qhu\\Documents\\torii\\artifacts\\intersection_scene_phase1_20260710\\intersection_scene.add.xml",
+  "tls_id": "J0",
+  "controlled_link_count": 12,
+  "tls_signal_group_count": 8,
+  "phase_order": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8"
+  ],
+  "params": {
+    "detector-length": "20",
+    "detector-length-leftTurnLane": "10",
+    "total-cycle-length": "90",
+    "ring1": "1,2,3,4",
+    "ring2": "5,6,7,8",
+    "barrierPhases": "2,6",
+    "coordinate-mode": "false",
+    "barrier2Phases": "4,8",
+    "minRecall": "2,6",
+    "maxRecall": "",
+    "whetherOutputState": "true",
+    "fixForceOff": "false"
+  },
+  "lane_rule": {
+    "lane0": "right turn",
+    "lane1": "through",
+    "lane2": "protected left turn"
+  },
+  "movement_map": [
+    {
+      "linkIndex": 0,
+      "from": "W_in",
+      "fromLane": "2",
+      "to": "N_out",
+      "toLane": "2",
+      "turn": "l",
+      "nemaPhase": "1"
+    },
+    {
+      "linkIndex": 1,
+      "from": "W_in",
+      "fromLane": "1",
+      "to": "E_out",
+      "toLane": "1",
+      "turn": "s",
+      "nemaPhase": "2"
+    },
+    {
+      "linkIndex": 1,
+      "from": "W_in",
+      "fromLane": "0",
+      "to": "S_out",
+      "toLane": "0",
+      "turn": "r",
+      "nemaPhase": "2"
+    },
+    {
+      "linkIndex": 2,
+      "from": "S_in",
+      "fromLane": "2",
+      "to": "W_out",
+      "toLane": "2",
+      "turn": "l",
+      "nemaPhase": "3"
+    },
+    {
+      "linkIndex": 3,
+      "from": "S_in",
+      "fromLane": "0",
+      "to": "E_out",
+      "toLane": "0",
+      "turn": "r",
+      "nemaPhase": "4"
+    },
+    {
+      "linkIndex": 3,
+      "from": "S_in",
+      "fromLane": "1",
+      "to": "N_out",
+      "toLane": "1",
+      "turn": "s",
+      "nemaPhase": "4"
+    },
+    {
+      "linkIndex": 4,
+      "from": "E_in",
+      "fromLane": "2",
+      "to": "S_out",
+      "toLane": "2",
+      "turn": "l",
+      "nemaPhase": "5"
+    },
+    {
+      "linkIndex": 5,
+      "from": "E_in",
+      "fromLane": "0",
+      "to": "N_out",
+      "toLane": "0",
+      "turn": "r",
+      "nemaPhase": "6"
+    },
+    {
+      "linkIndex": 5,
+      "from": "E_in",
+      "fromLane": "1",
+      "to": "W_out",
+      "toLane": "1",
+      "turn": "s",
+      "nemaPhase": "6"
+    },
+    {
+      "linkIndex": 6,
+      "from": "N_in",
+      "fromLane": "2",
+      "to": "E_out",
+      "toLane": "2",
+      "turn": "l",
+      "nemaPhase": "7"
+    },
+    {
+      "linkIndex": 7,
+      "from": "N_in",
+      "fromLane": "1",
+      "to": "S_out",
+      "toLane": "1",
+      "turn": "s",
+      "nemaPhase": "8"
+    },
+    {
+      "linkIndex": 7,
+      "from": "N_in",
+      "fromLane": "0",
+      "to": "W_out",
+      "toLane": "0",
+      "turn": "r",
+      "nemaPhase": "8"
+    }
+  ]
+}

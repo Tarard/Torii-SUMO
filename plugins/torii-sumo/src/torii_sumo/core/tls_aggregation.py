@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import copy
 import csv
+import hashlib
 import json
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
+from .connection_mode_audit import audit_network_connection_mode
+
+
+TlsPhysicalConnectionKey = tuple[str, str, str, str, str]
 
 
 def build_tls_signal_grouping_variant(
@@ -16,7 +21,18 @@ def build_tls_signal_grouping_variant(
     output_dir: Path,
     prefix: str = "tls_signal_grouping",
     max_shared_linkindex_groups: int,
+    control_key_by_connection: Mapping[TlsPhysicalConnectionKey, str] | None = None,
 ) -> dict[str, Any]:
+    """Build a review variant that shares only physically compatible TLS columns.
+
+    Identical phase columns are a necessary but insufficient merge condition.
+    When SUMO request/foe topology is present, every physical request in a
+    proposed shared group must be non-foe with every other request.  Optional
+    stable control keys further prevent coincidentally identical program columns
+    from being treated as one semantic control.  The report always persists the
+    resulting control-key-to-linkIndex relation, including one-to-many bindings
+    when foe movements must remain physically separate.
+    """
     if not source_net_file.exists():
         return _failure(f"net file does not exist: {source_net_file}")
     if max_shared_linkindex_groups <= 0:
@@ -31,11 +47,12 @@ def build_tls_signal_grouping_variant(
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     variant_file = output_dir / "tls_signal_grouped.net.xml"
-    plan_file = output_dir / f"{prefix}_plan.json"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
     variant_file.write_bytes(source_net_file.read_bytes())
     compression = _compress_identical_tls_signal_columns(
         variant_file,
         max_shared_linkindex_groups=max_shared_linkindex_groups,
+        control_key_by_connection=control_key_by_connection,
     )
     counts = _tls_counts(variant_file)
     plan = {
@@ -45,6 +62,15 @@ def build_tls_signal_grouping_variant(
         **compression,
     }
     plan_file.write_text(json.dumps(plan, indent=2), encoding="utf-8")
+    warnings = ["TLS signal grouping variant requires SUMO load and Netedit review before adoption"]
+    if compression["tls_signal_grouping_request_foe_evidence_status"] == "unavailable":
+        warnings.append(
+            "No SUMO request/foe matrix was available; identical-column grouping has no physical conflict proof"
+        )
+    if compression["tls_signal_grouping_unresolved_request_pair_count"]:
+        warnings.append(
+            "Some identical signal columns were kept separate because their physical request binding was unresolved"
+        )
     return {
         "status": "pass",
         "claim_status": "blocked",
@@ -54,7 +80,7 @@ def build_tls_signal_grouping_variant(
         "tls_signal_grouping_max_shared_linkindex_groups": max_shared_linkindex_groups,
         **compression,
         **counts,
-        "warnings": ["TLS signal grouping variant requires SUMO load and Netedit review before adoption"],
+        "warnings": warnings,
     }
 
 
@@ -118,10 +144,10 @@ def build_tls_low_vehicle_control_variant(
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     variant_file = output_dir / "tls_low_vehicle_control_review.net.xml"
-    plan_file = output_dir / f"{prefix}_plan.json"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
     variant_file.write_bytes(source_net_file.read_bytes())
     selected_tl_ids = [str(item["tl_id"]) for item in selected]
-    demotion = _demote_tls_ids(variant_file, selected_tl_ids)
+    demotion = demote_tls_ids(variant_file, selected_tl_ids)
     counts = _tls_counts(variant_file)
     plan = {
         "source_net_file": str(source_net_file),
@@ -158,7 +184,7 @@ def build_tls_non_controller_junction_demotion_variant(
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     variant_file = output_dir / "tls_non_controller_junction_demoted.net.xml"
-    plan_file = output_dir / f"{prefix}_plan.json"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
     variant_file.write_bytes(source_net_file.read_bytes())
     demotion = _demote_non_controller_traffic_light_junctions(variant_file)
     if demotion["tls_non_controller_traffic_light_junction_demoted_count"] == 0:
@@ -213,10 +239,10 @@ def build_tls_aggregation_variant(
 
     cluster_count = _int_field(tls_audit_report, "tls_cluster_count")
     output_dir.mkdir(parents=True, exist_ok=True)
-    plan_file = output_dir / f"{prefix}_plan.json"
-    candidates_file = output_dir / f"{prefix}_representatives.csv"
+    plan_file = _short_output_path(output_dir, prefix, "_plan.json")
+    candidates_file = _short_output_path(output_dir, prefix, "_representatives.csv")
     variant_file = output_dir / "tls_aggregated.net.xml"
-    command_record = output_dir / f"{prefix}_netconvert.cmd.txt"
+    command_record = _short_output_path(output_dir, prefix, "_netconvert.cmd.txt")
     source_tls_counts = _source_tls_program_counts(net_file)
 
     if cluster_count == 0:
@@ -263,7 +289,7 @@ def build_tls_aggregation_variant(
             if controlled_nodes_by_tls_func is not None
             else _controlled_nodes_by_tls(net_file)
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - callback boundary is persisted as a blocked report.
         return {
             **_failure(f"could not derive TLS-controlled junctions: {type(exc).__name__}: {exc}"),
             "tls_aggregation_plan_file": str(plan_file),
@@ -495,8 +521,10 @@ def _controlled_nodes_by_tls(net_file: Path) -> dict[str, list[str]]:
         node_ids = []
         try:
             node_ids.append(net.getNode(tls.getID()).getID())
-        except Exception:
-            pass
+        except (KeyError, RuntimeError, ValueError):
+            # Some multi-node controllers do not have a node with the TLS id;
+            # connection endpoint nodes below remain authoritative.
+            node_ids = []
         for incoming_lane, outgoing_lane, _link in tls.getConnections():
             for node in (incoming_lane.getEdge().getToNode(), outgoing_lane.getEdge().getFromNode()):
                 node_id = node.getID()
@@ -582,25 +610,47 @@ def _tls_program_compatible(source: ET.Element, target: ET.Element) -> bool:
     return bool(source_lengths) and source_lengths == target_lengths
 
 
-def _compress_identical_tls_signal_columns(net_file: Path, *, max_shared_linkindex_groups: int) -> dict[str, int]:
+def _compress_identical_tls_signal_columns(
+    net_file: Path,
+    *,
+    max_shared_linkindex_groups: int,
+    control_key_by_connection: Mapping[TlsPhysicalConnectionKey, str] | None = None,
+) -> dict[str, Any]:
     tree = ET.parse(net_file)
     root = tree.getroot()
     tl_ids = {tl_logic.attrib["id"] for tl_logic in root.findall("tlLogic") if tl_logic.attrib.get("id")}
-    connections_by_tl: dict[str, list[tuple[ET.Element, int]]] = {tl_id: [] for tl_id in tl_ids}
-    for connection in root.findall("connection"):
+    connections = root.findall("connection")
+    connections_by_tl: dict[str, list[tuple[ET.Element, int, int]]] = {tl_id: [] for tl_id in tl_ids}
+    for connection_index, connection in enumerate(connections):
         tl_id = connection.attrib.get("tl", "")
         if tl_id not in tl_ids or not connection.attrib.get("linkIndex"):
             continue
         try:
-            connections_by_tl.setdefault(tl_id, []).append((connection, int(connection.attrib["linkIndex"])))
+            connections_by_tl.setdefault(tl_id, []).append(
+                (connection, int(connection.attrib["linkIndex"]), connection_index)
+            )
         except ValueError:
             continue
 
-    candidates: list[tuple[int, str, list[list[int]]]] = []
+    foe_evidence = _build_tls_request_foe_evidence(root)
+    old_link_indexes_by_connection: dict[int, int] = {
+        connection_index: old_index
+        for rows in connections_by_tl.values()
+        for _connection, old_index, connection_index in rows
+    }
+    control_keys_by_tl_index = _control_keys_by_tl_link_index(
+        connections_by_tl,
+        control_key_by_connection=control_key_by_connection,
+    )
+
+    signature_by_tl_index: dict[str, dict[int, tuple[str, ...]]] = {}
+    signature_groups_by_tl: dict[str, list[list[int]]] = {}
     for tl_logic in root.findall("tlLogic"):
         tl_id = tl_logic.attrib.get("id", "")
         phases = tl_logic.findall("phase")
-        used_linkindexes = sorted({link_index for _, link_index in connections_by_tl.get(tl_id, [])})
+        used_linkindexes = sorted(
+            {link_index for _, link_index, _connection_index in connections_by_tl.get(tl_id, [])}
+        )
         if len(used_linkindexes) < 2 or not phases:
             continue
         phase_states = [phase.attrib.get("state", "") for phase in phases]
@@ -609,24 +659,79 @@ def _compress_identical_tls_signal_columns(net_file: Path, *, max_shared_linkind
         groups_by_signature: dict[tuple[str, ...], list[int]] = {}
         for old_index in used_linkindexes:
             signature = tuple(state[old_index] for state in phase_states)
+            signature_by_tl_index.setdefault(tl_id, {})[old_index] = signature
             groups_by_signature.setdefault(signature, []).append(old_index)
         groups = [group for group in groups_by_signature.values() if len(group) > 1]
         if groups:
-            candidates.append((sum(len(group) - 1 for group in groups), tl_id, groups))
-    candidates.sort(reverse=True)
+            signature_groups_by_tl[tl_id] = groups
+
+    connection_indices_by_tl_link: dict[tuple[str, int], set[int]] = {}
+    for tl_id, rows in connections_by_tl.items():
+        for _connection, old_index, connection_index in rows:
+            connection_indices_by_tl_link.setdefault((tl_id, old_index), set()).add(connection_index)
+
+    blocked_foe_pairs: list[dict[str, Any]] = []
+    unresolved_pairs: set[tuple[str, int, int]] = set()
+    merge_candidates: list[tuple[int, str, tuple[int, ...]]] = []
+    for tl_id, signature_groups in signature_groups_by_tl.items():
+        for signature_group in signature_groups:
+            share_compatibility: dict[tuple[int, int], bool] = {}
+            for first_position, first_index in enumerate(sorted(signature_group)):
+                for second_index in sorted(signature_group)[first_position + 1 :]:
+                    share_compatibility[(first_index, second_index)] = _tls_link_indexes_can_share(
+                        tl_id=tl_id,
+                        first_index=first_index,
+                        second_index=second_index,
+                        connection_indices_by_tl_link=connection_indices_by_tl_link,
+                        foe_evidence=foe_evidence,
+                        control_keys_by_tl_index=control_keys_by_tl_index,
+                        control_keys_required=control_key_by_connection is not None,
+                        blocked_foe_pairs=blocked_foe_pairs,
+                        unresolved_pairs=unresolved_pairs,
+                        old_link_indexes_by_connection=old_link_indexes_by_connection,
+                    )
+            partitions: list[list[int]] = []
+            for old_index in sorted(signature_group):
+                target_partition = next(
+                    (
+                        partition
+                        for partition in partitions
+                        if all(
+                            share_compatibility[
+                                (min(old_index, other_index), max(old_index, other_index))
+                            ]
+                            for other_index in partition
+                        )
+                    ),
+                    None,
+                )
+                if target_partition is None:
+                    partitions.append([old_index])
+                else:
+                    target_partition.append(old_index)
+            merge_candidates.extend(
+                (len(partition) - 1, tl_id, tuple(partition))
+                for partition in partitions
+                if len(partition) > 1
+            )
+    merge_candidates.sort(key=lambda item: (-item[0], item[1], item[2]))
 
     groups_by_tl: dict[str, list[list[int]]] = {}
     remaining = max_shared_linkindex_groups
-    for _, tl_id, groups in candidates:
-        for group in groups:
-            if remaining <= 0:
-                break
-            groups_by_tl.setdefault(tl_id, []).append(group)
-            remaining -= 1
+    for _savings, tl_id, group in merge_candidates:
         if remaining <= 0:
             break
+        groups_by_tl.setdefault(tl_id, []).append(list(group))
+        remaining -= 1
 
     remapped_connections = 0
+    final_index_by_tl_old: dict[str, dict[int, int]] = {
+        tl_id: {
+            old_index: old_index
+            for _connection, old_index, _connection_index in rows
+        }
+        for tl_id, rows in connections_by_tl.items()
+    }
     for tl_logic in root.findall("tlLogic"):
         tl_id = tl_logic.attrib.get("id", "")
         if tl_id not in groups_by_tl:
@@ -638,9 +743,18 @@ def _compress_identical_tls_signal_columns(net_file: Path, *, max_shared_linkind
             target = min(group)
             for old_index in group:
                 old_target_index[old_index] = target
-        kept_old_indexes = sorted({old_target_index.get(index, index) for _, index in connections_by_tl[tl_id]})
+        kept_old_indexes = sorted(
+            {
+                old_target_index.get(index, index)
+                for _connection, index, _connection_index in connections_by_tl[tl_id]
+            }
+        )
         new_index_by_old = {old_index: new_index for new_index, old_index in enumerate(kept_old_indexes)}
-        for connection, old_index in connections_by_tl[tl_id]:
+        final_index_by_tl_old[tl_id] = {
+            old_index: new_index_by_old[old_target_index.get(old_index, old_index)]
+            for _connection, old_index, _connection_index in connections_by_tl[tl_id]
+        }
+        for connection, old_index, _connection_index in connections_by_tl[tl_id]:
             new_index = new_index_by_old[old_target_index.get(old_index, old_index)]
             if str(new_index) != connection.attrib.get("linkIndex"):
                 connection.set("linkIndex", str(new_index))
@@ -652,11 +766,247 @@ def _compress_identical_tls_signal_columns(net_file: Path, *, max_shared_linkind
     if groups_by_tl:
         ET.indent(root, space="    ")
         tree.write(net_file, encoding="utf-8", xml_declaration=True)
+    control_bindings = _build_tls_control_key_bindings(
+        connections_by_tl=connections_by_tl,
+        signature_by_tl_index=signature_by_tl_index,
+        control_keys_by_tl_index=control_keys_by_tl_index,
+        final_index_by_tl_old=final_index_by_tl_old,
+        foe_evidence=foe_evidence,
+    )
+    control_key_to_link_indices: dict[str, dict[str, list[int]]] = {}
+    for binding in control_bindings:
+        control_key_to_link_indices.setdefault(str(binding["controller_id"]), {})[
+            str(binding["control_key"])
+        ] = list(binding["sumo_link_indices"])
     return {
         "tls_signal_grouping_compressed_tllogic_count": len(groups_by_tl),
         "tls_signal_grouping_merged_group_count": merged_groups,
         "tls_signal_grouping_remapped_connection_count": remapped_connections,
+        "tls_signal_grouping_request_foe_evidence_status": foe_evidence["status"],
+        "tls_signal_grouping_request_bound_connection_count": len(
+            foe_evidence["request_bound_connection_indices"]
+        ),
+        "tls_signal_grouping_blocked_foe_pair_count": len(blocked_foe_pairs),
+        "tls_signal_grouping_blocked_foe_pairs": blocked_foe_pairs,
+        "tls_signal_grouping_unresolved_request_pair_count": len(unresolved_pairs),
+        "tls_signal_grouping_unresolved_request_pairs": [
+            {
+                "controller_id": tl_id,
+                "source_link_indices": [first_index, second_index],
+            }
+            for tl_id, first_index, second_index in sorted(unresolved_pairs)
+        ],
+        "tls_signal_grouping_control_bindings": control_bindings,
+        "tls_signal_grouping_control_key_to_link_indices": control_key_to_link_indices,
     }
+
+
+def _build_tls_request_foe_evidence(root: ET.Element) -> dict[str, Any]:
+    audit = audit_network_connection_mode(root)
+    junction_by_id = {
+        junction.attrib.get("id", ""): junction
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    request_bound_connection_indices: set[int] = set()
+    controller_ids_with_request_evidence: set[str] = set()
+    foe_pairs: set[frozenset[int]] = set()
+    foe_pair_details: dict[frozenset[int], dict[str, Any]] = {}
+    for record in audit.get("junctions", []):
+        junction_id = str(record.get("junction_id", ""))
+        junction = junction_by_id.get(junction_id)
+        if junction is None:
+            continue
+        requests = {
+            request_index: request
+            for request in junction.findall("request")
+            if (request_index := _safe_int(request.attrib.get("index"))) is not None
+        }
+        bindings = record.get("connection_mode_audit", {}).get("request_foe_audit", {}).get(
+            "request_bindings", []
+        )
+        valid_bindings = [
+            binding
+            for binding in bindings
+            if _safe_int(binding.get("request_index")) is not None
+            and _safe_int(binding.get("connection_index")) is not None
+            and str(binding.get("tl", ""))
+        ]
+        for binding in valid_bindings:
+            request_bound_connection_indices.add(int(binding["connection_index"]))
+            controller_ids_with_request_evidence.add(str(binding["tl"]))
+        for first_position, first in enumerate(valid_bindings):
+            for second in valid_bindings[first_position + 1 :]:
+                if first.get("tl") != second.get("tl"):
+                    continue
+                first_request = int(first["request_index"])
+                second_request = int(second["request_index"])
+                first_marks_second = _request_marks_foe(requests, first_request, second_request)
+                second_marks_first = _request_marks_foe(requests, second_request, first_request)
+                if not (first_marks_second or second_marks_first):
+                    continue
+                pair = frozenset(
+                    {int(first["connection_index"]), int(second["connection_index"])}
+                )
+                foe_pairs.add(pair)
+                foe_pair_details[pair] = {
+                    "junction_id": junction_id,
+                    "controller_id": str(first["tl"]),
+                    "request_indices": [first_request, second_request],
+                    "connection_indices": [
+                        int(first["connection_index"]),
+                        int(second["connection_index"]),
+                    ],
+                    "first_marks_second_as_foe": first_marks_second,
+                    "second_marks_first_as_foe": second_marks_first,
+                }
+    return {
+        "status": "available" if request_bound_connection_indices else "unavailable",
+        "request_bound_connection_indices": request_bound_connection_indices,
+        "controller_ids_with_request_evidence": controller_ids_with_request_evidence,
+        "foe_pairs": foe_pairs,
+        "foe_pair_details": foe_pair_details,
+    }
+
+
+def _tls_link_indexes_can_share(
+    *,
+    tl_id: str,
+    first_index: int,
+    second_index: int,
+    connection_indices_by_tl_link: Mapping[tuple[str, int], set[int]],
+    foe_evidence: Mapping[str, Any],
+    control_keys_by_tl_index: Mapping[str, Mapping[int, set[str]]],
+    control_keys_required: bool,
+    blocked_foe_pairs: list[dict[str, Any]],
+    unresolved_pairs: set[tuple[str, int, int]],
+    old_link_indexes_by_connection: Mapping[int, int],
+) -> bool:
+    first_connections = connection_indices_by_tl_link.get((tl_id, first_index), set())
+    second_connections = connection_indices_by_tl_link.get((tl_id, second_index), set())
+    if control_keys_required:
+        first_keys = control_keys_by_tl_index.get(tl_id, {}).get(first_index, set())
+        second_keys = control_keys_by_tl_index.get(tl_id, {}).get(second_index, set())
+        if len(first_keys) != 1 or first_keys != second_keys:
+            unresolved_pairs.add((tl_id, min(first_index, second_index), max(first_index, second_index)))
+            return False
+    for first_connection in first_connections:
+        for second_connection in second_connections:
+            pair = frozenset({first_connection, second_connection})
+            if pair not in foe_evidence["foe_pairs"]:
+                continue
+            detail = dict(foe_evidence["foe_pair_details"][pair])
+            detail["source_link_indices"] = sorted(
+                {
+                    old_link_indexes_by_connection[first_connection],
+                    old_link_indexes_by_connection[second_connection],
+                }
+            )
+            if detail not in blocked_foe_pairs:
+                blocked_foe_pairs.append(detail)
+            return False
+    if tl_id in foe_evidence["controller_ids_with_request_evidence"]:
+        bound = foe_evidence["request_bound_connection_indices"]
+        if not first_connections or not second_connections or not (first_connections | second_connections) <= bound:
+            unresolved_pairs.add((tl_id, min(first_index, second_index), max(first_index, second_index)))
+            return False
+    return True
+
+
+def _control_keys_by_tl_link_index(
+    connections_by_tl: Mapping[str, list[tuple[ET.Element, int, int]]],
+    *,
+    control_key_by_connection: Mapping[TlsPhysicalConnectionKey, str] | None,
+) -> dict[str, dict[int, set[str]]]:
+    result: dict[str, dict[int, set[str]]] = {}
+    if control_key_by_connection is None:
+        return result
+    for tl_id, rows in connections_by_tl.items():
+        for connection, old_index, _connection_index in rows:
+            key = _tls_physical_connection_key(connection)
+            control_key = str(control_key_by_connection.get(key, "")).strip()
+            if control_key:
+                result.setdefault(tl_id, {}).setdefault(old_index, set()).add(control_key)
+    return result
+
+
+def _build_tls_control_key_bindings(
+    *,
+    connections_by_tl: Mapping[str, list[tuple[ET.Element, int, int]]],
+    signature_by_tl_index: Mapping[str, Mapping[int, tuple[str, ...]]],
+    control_keys_by_tl_index: Mapping[str, Mapping[int, set[str]]],
+    final_index_by_tl_old: Mapping[str, Mapping[int, int]],
+    foe_evidence: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    records: dict[tuple[str, str], dict[str, Any]] = {}
+    for tl_id, rows in connections_by_tl.items():
+        for _connection, old_index, connection_index in rows:
+            signature = signature_by_tl_index.get(tl_id, {}).get(old_index, ())
+            explicit_keys = control_keys_by_tl_index.get(tl_id, {}).get(old_index, set())
+            control_keys = explicit_keys or {_phase_signature_control_key(signature)}
+            for control_key in control_keys:
+                record = records.setdefault(
+                    (tl_id, control_key),
+                    {
+                        "controller_id": tl_id,
+                        "control_key": control_key,
+                        "phase_signature": list(signature),
+                        "source_link_indices": set(),
+                        "sumo_link_indices": set(),
+                        "connection_indices": set(),
+                    },
+                )
+                record["source_link_indices"].add(old_index)
+                record["sumo_link_indices"].add(
+                    final_index_by_tl_old.get(tl_id, {}).get(old_index, old_index)
+                )
+                record["connection_indices"].add(connection_index)
+    bindings: list[dict[str, Any]] = []
+    for record in records.values():
+        connection_indices = record.pop("connection_indices")
+        foe_separated = any(
+            pair <= connection_indices for pair in foe_evidence["foe_pairs"]
+        ) and len(record["sumo_link_indices"]) > 1
+        record["source_link_indices"] = sorted(record["source_link_indices"])
+        record["sumo_link_indices"] = sorted(record["sumo_link_indices"])
+        record["physical_connection_count"] = len(connection_indices)
+        record["foe_separated"] = foe_separated
+        bindings.append(record)
+    return sorted(bindings, key=lambda item: (item["controller_id"], item["control_key"]))
+
+
+def _tls_physical_connection_key(connection: ET.Element) -> TlsPhysicalConnectionKey:
+    return (
+        connection.attrib.get("tl", ""),
+        connection.attrib.get("from", ""),
+        connection.attrib.get("to", ""),
+        connection.attrib.get("fromLane", ""),
+        connection.attrib.get("toLane", ""),
+    )
+
+
+def _phase_signature_control_key(signature: tuple[str, ...]) -> str:
+    return "phase_signature:" + "".join(signature)
+
+
+def _request_marks_foe(
+    requests: Mapping[int, ET.Element],
+    first: int,
+    second: int,
+) -> bool:
+    request = requests.get(first)
+    if request is None:
+        return False
+    bits = request.attrib.get("foes", "")
+    offset = len(bits) - second - 1
+    return 0 <= offset < len(bits) and bits[offset] == "1"
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _demote_uncontrolled_tls_artifacts(net_file: Path) -> dict[str, Any]:
@@ -733,8 +1083,23 @@ def _demote_non_controller_traffic_light_junctions(net_file: Path) -> dict[str, 
     }
 
 
-def _demote_tls_ids(net_file: Path, tls_ids: list[str]) -> dict[str, Any]:
-    selected = set(tls_ids)
+def demote_tls_ids(net_file: Path, tls_ids: Sequence[str]) -> dict[str, Any]:
+    """Remove selected TLS controllers from a SUMO network in place.
+
+    The operation removes the controller attributes from every selected
+    connection, removes the selected ``tlLogic`` elements, and demotes a
+    touched ``traffic_light`` junction only when no other controller still
+    controls it.  Callers remain responsible for proving that the selected
+    controllers are safe to retire and for validating the resulting network.
+    """
+
+    if not net_file.is_file():
+        raise ValueError(f"net file does not exist: {net_file}")
+    tls_id_rows: Sequence[str] = (tls_ids,) if isinstance(tls_ids, str) else tls_ids
+    normalized_ids = sorted(
+        {str(tls_id).strip() for tls_id in tls_id_rows if str(tls_id).strip()}
+    )
+    selected = set(normalized_ids)
     tree = ET.parse(net_file)
     root = tree.getroot()
     junction_ids = {
@@ -782,12 +1147,24 @@ def _demote_tls_ids(net_file: Path, tls_ids: list[str]) -> dict[str, Any]:
         ET.indent(root, space="    ")
         tree.write(net_file, encoding="utf-8", xml_declaration=True)
     return {
+        "tls_demotion_selected_controller_count": len(normalized_ids),
+        "tls_demotion_selected_controller_ids": normalized_ids,
+        "tls_demotion_removed_connection_count": removed_connections,
+        "tls_demotion_removed_tllogic_count": len(removed_tllogics),
+        "tls_demotion_removed_tllogic_ids": sorted(removed_tllogics),
+        "tls_demotion_demoted_junction_count": len(demoted_junctions),
+        "tls_demotion_demoted_junction_ids": sorted(demoted_junctions),
         "tls_low_vehicle_control_removed_connection_count": removed_connections,
         "tls_low_vehicle_control_removed_tllogic_count": len(removed_tllogics),
         "tls_low_vehicle_control_removed_tllogic_ids": sorted(removed_tllogics),
         "tls_low_vehicle_control_demoted_junction_count": len(demoted_junctions),
         "tls_low_vehicle_control_demoted_junction_ids": sorted(demoted_junctions),
     }
+
+
+# Compatibility alias for code that imported the former private helper while it
+# was being promoted into Torii's reusable public core API.
+_demote_tls_ids = demote_tls_ids
 
 
 def _connection_junction_id(connection: ET.Element, junction_ids: set[str]) -> str:
@@ -851,6 +1228,14 @@ def _tls_connection_preservation(source_counts: Mapping[str, int], variant_count
         "tls_controlled_connection_preservation_status": "fail" if regression else "pass",
         "tls_controlled_connection_regression_count": regression,
     }
+
+
+def _short_output_path(output_dir: Path, prefix: str, suffix: str) -> Path:
+    candidate = output_dir / f"{prefix}{suffix}"
+    if len(str(candidate.resolve())) < 239:
+        return candidate
+    digest = hashlib.sha1(prefix.encode("utf-8")).hexdigest()[:10]
+    return output_dir / f"p_{digest}{suffix}"
 
 
 def _int_field(report: Mapping[str, Any], key: str) -> int:

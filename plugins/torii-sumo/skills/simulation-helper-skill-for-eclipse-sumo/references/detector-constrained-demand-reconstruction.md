@@ -37,7 +37,7 @@ If one of these is manual, label the result as `diagnostic-demo` or `constructio
 
 ## Reusable Python Executors
 
-These helpers implement the generic workflow gates. The bundled code contains no project-specific detector data, proprietary sensor feed, private station table, or local absolute path. They accept caller-provided files and write generic manifests or comparisons. Public outputs require anonymized inputs because tool outputs preserve caller-provided detector ids and edge ids.
+These helpers implement the generic workflow gates. The bundled code contains no project-specific detector data in the three generic manifest/constraint/audit helpers, and no proprietary sensor feed, private station table, or local absolute path. They accept caller-provided files and write generic manifests or comparisons. The dedicated Hamburg executor contains only a public, fixed corridor preset plus official API fetch logic; see `hamburg-sandtorkai-digital-twin.md`. Public outputs require anonymized inputs when caller-provided ids or non-public metadata are present because tool outputs preserve caller-provided detector ids and edge ids.
 
 Available Torii MCP tools:
 
@@ -46,6 +46,9 @@ Available Torii MCP tools:
 | `sumo_detector_route_support` | Gate 2 route support coverage | `source_sink_manifest`, `route_candidate_manifest`, `route_detector_incidence` |
 | `sumo_detector_count_constraints` | Gate 3 time-bin constraint construction | `time_bin_count_constraints`, routeSampler-compatible edgeData XML |
 | `sumo_detector_count_audit` | Gate 4-6 detector comparison | detector comparison CSV plus MAE, RMSE, GEH, bias, and totals |
+| `sumo_hamburg_sandtorkai_digital_twin` | Fixed Hamburg Gates 0-3 and replay-input preparation | official API snapshots, complete Saturday window, MAP/SUMO bindings, E1/E2 additions, multi-interval edge counts, TLS events, route support, and optional routeSampler demand |
+| `sumo_detector_route_sampler_calibrate` | Gate 4 routeSampler baseline executor | generated plausible demand route file, input/script hashes, exact command, and mismatch deficit/overflow evidence |
+| `sumo_digital_twin_replay_validate` | Gates 4-6 detector/TLS replay and completion validation | SUMO E1/E2 outputs, strict `nVehContrib` count comparison, summary/tripinfo completion, and replay manifest |
 
 These tools reduce boilerplate; they do not prove the route volumes are calibrated by themselves. The current tool boundary is:
 
@@ -56,15 +59,25 @@ implemented:
   route_detector_incidence_builder:
   time_bin_count_constraint_builder:
   detector_count_auditor:
+  explicit_routeSampler_run_when_script_resolves:
+  SUMO_E1_E2_output_and_completion_collection:
+  fixed_Hamburg_official_count_signal_package:
 
 still_external_or_project_specific:
-  routeSampler_or_optimizer_run:
-  SUMO_detector_output_generation:
-  completion_summary_collection:
+  alternative_optimizer_run:
   incident_calendar_or_event_classification:
 ```
 
-Treat any run as `diagnostic-demo` until the external steps are replayable and included in the evidence package.
+Treat a routeSampler output as `detector-constrained-plausible-demand`, not true OD. Treat a package as construction-incomplete until the replay tool writes readable detector and completion evidence. Any external optimizer, manual mapping acceptance, or incident classification must be replayable and included in the evidence package before claim escalation.
+
+For lane-level sources such as Hamburg, first collapse multiple official fields only within the same
+`(physical node, SUMO lane)` and retain source membership. Use that virtual expected-count file for E1/E2 replay.
+Build routeSampler edgeData only from audited complete passenger-lane cross-sections; a partial-lane observation
+is not the total flow of a multi-lane SUMO edge. Keep the complete-section audit beside the edgeData file.
+When detector cross-sections are deliberately opened as local source/sink ports, departure-lane assignment may
+control only the first edge of each generated route. A detector edge that occurs later in a route is an internal
+observation, not a second departure point; leave that lane split as `review_required` unless an explicit segment or
+turn-flow model controls it. Never turn the internal-bin mismatch into fabricated `departLane` attributes.
 
 ## Workflow Contract
 
@@ -185,6 +198,8 @@ Pass condition: bins use the declared interval, preserve direction, and keep eno
 
 Fail condition: full-day totals are used as the only target, or missing sensor minutes are treated as zero without an imputation or exclusion flag.
 
+For routeSampler multi-interval edgeData, write one `<interval>` per declared bin and one `<edge count="...">` per mapped edge. Invoke routeSampler with explicit `--edgedata-attribute count`; do not collapse a two-hour target into one interval.
+
 ## Gate 4: Baseline Reconstruction
 
 Run the route candidate set without residual supplements first. The baseline is not optional.
@@ -208,6 +223,8 @@ baseline_comparison:
 Pass condition: SUMO writes readable detector output and completion summary, even if detector error is still high.
 
 Fail condition: routeSampler generates vehicles that SUMO cannot insert, route diversity collapses, or detector files are missing.
+
+Use `nVehContrib` by default for E1 comparison because it counts complete detector passages. Preserve a measured zero as a matched value and mark an absent detector interval as `missing`; never coerce missing output to zero in a strict audit.
 
 ## Gate 5: Residual-Correction Calibration
 
@@ -288,6 +305,8 @@ For public examples, use one of these:
 - manifests that show schema and mapping logic without exposing raw field data.
 
 Commit lightweight manifests, comparisons, and audit CSVs. Keep large SUMO XML, routeSampler logs, raw feeds, and non-public sensor metadata local unless the dataset is explicitly cleared for release.
+
+For the fixed Hamburg workflow, follow `hamburg-sandtorkai-digital-twin.md`: retain the official MetaVer links, API request URLs, snapshot hashes, `Datenlizenz Deutschland Namensnennung 2.0` attribution, and the explicit non-identifiability statement. Published infrastructure IDs do not justify inferring or releasing individual travel behavior.
 
 ## Required Target
 

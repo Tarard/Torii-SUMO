@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 from collections import Counter, deque
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
 from .modal_aggregation_policy import classify_cluster_modal_policy, classify_edge_modal_role
+from .candidate_contracts import file_sha256
+from .artifact_io import write_json_atomic
 from .osm_network import _net_xy_to_latlon
 from .road_corridor import (
     enrich_clusters_with_corridor_audit,
@@ -27,17 +30,34 @@ def audit_topology_fragmentation(
     min_cluster_nodes: int = 3,
     osm_file: Path | None = None,
 ) -> dict[str, Any]:
+    output_dir = output_dir.resolve()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return _failure(f"could not create topology output directory: {type(exc).__name__}: {exc}")
+    report_file = _short_output_path(output_dir, prefix, "topology_audit.json")
+    manifest_file = _short_output_path(output_dir, prefix, "topology_audit.manifest.json")
+
+    def finish(report: Mapping[str, Any]) -> dict[str, Any]:
+        return _write_topology_outcome(
+            report=report,
+            report_file=report_file,
+            manifest_file=manifest_file,
+            net_file=net_file,
+            osm_file=osm_file,
+        )
+
     if cluster_radius_m <= 0:
-        return _failure("cluster_radius_m must be positive")
+        return finish(_failure("cluster_radius_m must be positive"))
     if min_cluster_nodes <= 1:
-        return _failure("min_cluster_nodes must be greater than 1")
+        return finish(_failure("min_cluster_nodes must be greater than 1"))
     if not net_file.exists():
-        return _failure(f"net file does not exist: {net_file}")
+        return finish(_failure(f"net file does not exist: {net_file}"))
 
     try:
         junctions, edges = _read_network_graph(net_file)
     except (OSError, ET.ParseError, KeyError, ValueError) as exc:
-        return _failure(f"{type(exc).__name__}: {exc}")
+        return finish(_failure(f"{type(exc).__name__}: {exc}"))
 
     xy_to_latlon = _coordinate_converter(net_file)
     clusters = _dense_clusters(
@@ -65,12 +85,16 @@ def audit_topology_fragmentation(
             corridor_error = f"{type(exc).__name__}: {exc}"
             warnings.append(f"corridor audit failed: {corridor_error}")
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    clusters_file = output_dir / f"{prefix}_dense_junction_clusters.csv"
-    connection_cells_file = output_dir / f"{prefix}_topology_connection_candidates.csv"
-    report_file = output_dir / f"{prefix}_topology_audit.json"
-    _write_clusters_csv(clusters_file, clusters)
-    _write_connection_cells_csv(connection_cells_file, connection_cell_candidates)
+    canonical_cells = _canonical_cell_records(clusters)
+    osm_context_sha256 = _sha256_file(osm_file) if osm_file is not None else ""
+
+    clusters_file = _short_output_path(output_dir, prefix, "dense_junction_clusters.csv")
+    connection_cells_file = _short_output_path(output_dir, prefix, "topology_connection_candidates.csv")
+    try:
+        _write_clusters_csv(clusters_file, clusters)
+        _write_connection_cells_csv(connection_cells_file, connection_cell_candidates)
+    except OSError as exc:
+        return finish(_failure(f"could not write topology CSV artifacts: {type(exc).__name__}: {exc}"))
 
     status = "blocked" if clusters else "pass"
     if clusters:
@@ -96,16 +120,24 @@ def audit_topology_fragmentation(
         and float(cluster["physical_intersection_score"]) >= 0.6
     )
     report = {
+        "schema": "torii.topology_audit.v2",
         "status": status,
         "claim_status": "blocked" if clusters else "diagnostic-demo",
         "topology_fragmentation_status": "needs_review" if clusters else "pass",
-        "net_file": str(net_file),
-        "osm_file": str(osm_file) if osm_file is not None else "",
+        "net_file": str(net_file.resolve()),
+        "net_sha256": file_sha256(net_file),
+        "osm_file": str(osm_file.resolve()) if osm_file is not None else "",
+        "topology_osm_context_sha256": osm_context_sha256,
         "output_dir": str(output_dir),
         "cluster_radius_m": cluster_radius_m,
         "min_cluster_nodes": min_cluster_nodes,
         "junction_count": len(junctions),
         "suspicious_cluster_count": len(clusters),
+        "topology_canonical_cell_count": len(canonical_cells),
+        "topology_canonical_cell_records": canonical_cells,
+        "topology_canonical_unidentified_cell_count": sum(
+            1 for cell in canonical_cells if not cell["corridor_signatures"] and not cell["identity_node_ids"]
+        ),
         "topology_connection_cell_candidate_count": len(connection_cell_candidates),
         "topology_connection_cell_candidates_file": str(connection_cells_file),
         "topology_connection_cell_candidates": connection_cell_candidates,
@@ -145,11 +177,220 @@ def audit_topology_fragmentation(
         ),
         "clusters_file": str(clusters_file),
         "report_file": str(report_file),
+        "manifest_file": str(manifest_file),
         "suspicious_clusters": clusters,
         "warnings": warnings,
     }
-    report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    return report
+    return finish(report)
+
+
+def compare_topology_canonical_cells(
+    candidate_report: Mapping[str, Any],
+    reference_report: Mapping[str, Any],
+    *,
+    max_match_distance_m: float = 100.0,
+) -> dict[str, Any]:
+    """Compare physical topology cells using shared OSM identity evidence.
+
+    The legacy aggregate counts mix distance-chain clusters, modal filtering,
+    and corridor evidence. This comparison is intentionally cell-level: a
+    candidate cluster may contain more SUMO subdivision nodes, but it must map
+    to exactly one reference cell with shared OSM node/corridor evidence and
+    compatible physical/modal semantics.
+    """
+
+    candidate_cells = list(candidate_report.get("topology_canonical_cell_records", []) or [])
+    reference_cells = list(reference_report.get("topology_canonical_cell_records", []) or [])
+    candidate_context = str(candidate_report.get("topology_osm_context_sha256", ""))
+    reference_context = str(reference_report.get("topology_osm_context_sha256", ""))
+    if not candidate_context or not reference_context:
+        return {
+            "status": "blocked",
+            "reason": "canonical_topology_requires_shared_osm_context",
+            "matched_cell_count": 0,
+            "unmatched_candidate_cells": [str(cell.get("cluster_id", "")) for cell in candidate_cells],
+            "unmatched_reference_cells": [str(cell.get("cluster_id", "")) for cell in reference_cells],
+            "approach_mismatches": [],
+            "modal_mismatches": [],
+            "graph_mismatches": [],
+        }
+    if candidate_context != reference_context:
+        return {
+            "status": "blocked",
+            "reason": "candidate_reference_osm_context_mismatch",
+            "candidate_osm_context_sha256": candidate_context,
+            "reference_osm_context_sha256": reference_context,
+            "matched_cell_count": 0,
+            "unmatched_candidate_cells": [str(cell.get("cluster_id", "")) for cell in candidate_cells],
+            "unmatched_reference_cells": [str(cell.get("cluster_id", "")) for cell in reference_cells],
+            "approach_mismatches": [],
+            "modal_mismatches": [],
+            "graph_mismatches": [],
+        }
+
+    def distance(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
+        return math.hypot(
+            (float(left.get("centroid_lat", 0.0)) - float(right.get("centroid_lat", 0.0))) * 111_000.0,
+            (float(left.get("centroid_lon", 0.0)) - float(right.get("centroid_lon", 0.0))) * 74_000.0,
+        )
+
+    pair_candidates: list[tuple[tuple[int, int, int, int, float], int, int]] = []
+    for candidate_index, candidate in enumerate(candidate_cells):
+        candidate_nodes = set(str(item) for item in candidate.get("identity_node_ids", []) or [])
+        candidate_signatures = set(str(item) for item in candidate.get("corridor_signatures", []) or [])
+        for reference_index, reference in enumerate(reference_cells):
+            reference_nodes = set(str(item) for item in reference.get("identity_node_ids", []) or [])
+            reference_signatures = set(str(item) for item in reference.get("corridor_signatures", []) or [])
+            node_overlap = len(candidate_nodes & reference_nodes)
+            signature_overlap = len(candidate_signatures & reference_signatures)
+            if not node_overlap and not signature_overlap:
+                continue
+            separation = distance(candidate, reference)
+            if separation > max_match_distance_m:
+                continue
+            shape_match = int(
+                str(candidate.get("physical_intersection_shape", ""))
+                == str(reference.get("physical_intersection_shape", ""))
+            )
+            pair_candidates.append(
+                (
+                    (int(bool(node_overlap)), node_overlap, signature_overlap, shape_match, -separation),
+                    candidate_index,
+                    reference_index,
+                )
+            )
+    pair_candidates.sort(reverse=True)
+    matched_candidate_indices: set[int] = set()
+    matched_reference_indices: set[int] = set()
+    matched_pairs: list[dict[str, Any]] = []
+    for score, candidate_index, reference_index in pair_candidates:
+        if candidate_index in matched_candidate_indices or reference_index in matched_reference_indices:
+            continue
+        candidate = candidate_cells[candidate_index]
+        reference = reference_cells[reference_index]
+        matched_candidate_indices.add(candidate_index)
+        matched_reference_indices.add(reference_index)
+        candidate_signatures = set(str(item) for item in candidate.get("corridor_signatures", []) or [])
+        reference_signatures = set(str(item) for item in reference.get("corridor_signatures", []) or [])
+        matched_pairs.append(
+            {
+                "candidate_cluster_id": str(candidate.get("cluster_id", "")),
+                "reference_cluster_id": str(reference.get("cluster_id", "")),
+                "distance_m": round(distance(candidate, reference), 3),
+                "node_overlap_count": len(
+                    set(str(item) for item in candidate.get("identity_node_ids", []) or [])
+                    & set(str(item) for item in reference.get("identity_node_ids", []) or [])
+                ),
+                "corridor_signature_overlap_count": len(candidate_signatures & reference_signatures),
+                "physical_shape_match": str(candidate.get("physical_intersection_shape", ""))
+                == str(reference.get("physical_intersection_shape", "")),
+            }
+        )
+
+    approach_mismatches = []
+    modal_mismatches = []
+    graph_mismatches = []
+    for pair in matched_pairs:
+        candidate = next(
+            cell for cell in candidate_cells if str(cell.get("cluster_id", "")) == pair["candidate_cluster_id"]
+        )
+        reference = next(
+            cell for cell in reference_cells if str(cell.get("cluster_id", "")) == pair["reference_cluster_id"]
+        )
+        if abs(int(candidate.get("approach_count", 0)) - int(reference.get("approach_count", 0))) > 1:
+            approach_mismatches.append(
+                {
+                    **pair,
+                    "candidate_approach_count": int(candidate.get("approach_count", 0)),
+                    "reference_approach_count": int(reference.get("approach_count", 0)),
+                }
+            )
+        if str(candidate.get("modal_primary_role", "")) != str(reference.get("modal_primary_role", "")):
+            modal_mismatches.append(
+                {
+                    **pair,
+                    "candidate_modal_primary_role": str(candidate.get("modal_primary_role", "")),
+                    "reference_modal_primary_role": str(reference.get("modal_primary_role", "")),
+                }
+            )
+        if not pair["physical_shape_match"]:
+            graph_mismatches.append(
+                {
+                    **pair,
+                    "candidate_physical_intersection_shape": str(candidate.get("physical_intersection_shape", "")),
+                    "reference_physical_intersection_shape": str(reference.get("physical_intersection_shape", "")),
+                }
+            )
+
+    unmatched_candidate = [
+        str(cell.get("cluster_id", ""))
+        for index, cell in enumerate(candidate_cells)
+        if index not in matched_candidate_indices
+    ]
+    unmatched_reference = [
+        str(cell.get("cluster_id", ""))
+        for index, cell in enumerate(reference_cells)
+        if index not in matched_reference_indices
+    ]
+    status = "pass" if not unmatched_candidate and not unmatched_reference and not approach_mismatches and not modal_mismatches and not graph_mismatches else "blocked"
+    return {
+        "status": status,
+        "reason": "canonical_topology_cells_are_one_to_one" if status == "pass" else "canonical_topology_cell_mismatch",
+        "candidate_osm_context_sha256": candidate_context,
+        "reference_osm_context_sha256": reference_context,
+        "candidate_cell_count": len(candidate_cells),
+        "reference_cell_count": len(reference_cells),
+        "matched_cell_count": len(matched_pairs),
+        "matched_pairs": matched_pairs,
+        "unmatched_candidate_cells": unmatched_candidate,
+        "unmatched_reference_cells": unmatched_reference,
+        "approach_mismatches": approach_mismatches,
+        "modal_mismatches": modal_mismatches,
+        "graph_mismatches": graph_mismatches,
+    }
+
+
+def _canonical_cell_records(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    records = []
+    for cluster in clusters:
+        identity_nodes: set[str] = set()
+        for raw_node_id in cluster.get("node_ids", []) or []:
+            node_id = str(raw_node_id)
+            if node_id.startswith("cluster_"):
+                identity_nodes.update(token for token in node_id.removeprefix("cluster_").split("_") if token.isdigit())
+            elif node_id.isdigit():
+                identity_nodes.add(node_id)
+        records.append(
+            {
+                "cluster_id": str(cluster.get("cluster_id", "")),
+                "identity_node_ids": sorted(identity_nodes),
+                "corridor_signatures": sorted(
+                    str(item)
+                    for item in cluster.get("corridor_intersection_cell_signatures", []) or []
+                    if str(item)
+                ),
+                "centroid_lat": float(cluster.get("centroid_lat", 0.0) or 0.0),
+                "centroid_lon": float(cluster.get("centroid_lon", 0.0) or 0.0),
+                "physical_intersection_shape": str(cluster.get("physical_intersection_shape", "")),
+                "approach_count": int(cluster.get("approach_count", 0) or 0),
+                "modal_primary_role": str(cluster.get("modal_primary_role", "")),
+                "traffic_light_node_count": int(cluster.get("traffic_light_node_count", 0) or 0),
+            }
+        )
+    return records
+
+
+def _sha256_file(path: Path | None) -> str:
+    if path is None or not path.exists():
+        return ""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return ""
+    return digest.hexdigest()
 
 
 def _failure(error: str) -> dict[str, Any]:
@@ -159,6 +400,82 @@ def _failure(error: str) -> dict[str, Any]:
         "topology_fragmentation_status": "construction-invalid",
         "error": error,
     }
+
+
+def _write_topology_outcome(
+    *,
+    report: Mapping[str, Any],
+    report_file: Path,
+    manifest_file: Path,
+    net_file: Path,
+    osm_file: Path | None,
+) -> dict[str, Any]:
+    persisted = dict(report)
+    persisted.setdefault("schema", "torii.topology_audit.v2")
+    persisted.setdefault("net_file", str(net_file.resolve()))
+    if net_file.is_file():
+        persisted.setdefault("net_sha256", file_sha256(net_file))
+    persisted.setdefault("osm_file", str(osm_file.resolve()) if osm_file is not None else "")
+    persisted["report_file"] = str(report_file)
+    persisted["manifest_file"] = str(manifest_file)
+    write_json_atomic(report_file, persisted)
+
+    artifact_candidates: list[tuple[Path, str]] = []
+    if net_file.is_file():
+        artifact_candidates.append((net_file, "topology_net"))
+    if osm_file is not None and osm_file.is_file():
+        artifact_candidates.append((osm_file, "topology_osm_context"))
+    for key, kind in (
+        ("clusters_file", "dense_junction_clusters"),
+        ("topology_connection_cell_candidates_file", "topology_connection_candidates"),
+    ):
+        value = persisted.get(key)
+        if value:
+            artifact_candidates.append((Path(str(value)), kind))
+    artifact_candidates.append((report_file, "topology_report"))
+
+    artifacts: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for path, kind in artifact_candidates:
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        if str(resolved) in seen_paths:
+            continue
+        seen_paths.add(str(resolved))
+        artifacts.append(
+            {
+                "kind": kind,
+                "path": str(resolved),
+                "size_bytes": resolved.stat().st_size,
+                "sha256": file_sha256(resolved),
+            }
+        )
+    manifest = {
+        "schema": "torii.topology_manifest.v2",
+        "status": persisted.get("status", "fail"),
+        "claim_status": persisted.get("claim_status", "construction-invalid"),
+        "topology_fragmentation_status": persisted.get(
+            "topology_fragmentation_status",
+            "construction-invalid",
+        ),
+        "net_file": persisted.get("net_file", ""),
+        "net_sha256": persisted.get("net_sha256", ""),
+        "osm_file": persisted.get("osm_file", ""),
+        "topology_osm_context_sha256": persisted.get("topology_osm_context_sha256", ""),
+        "artifacts": artifacts,
+    }
+    write_json_atomic(manifest_file, manifest)
+    return persisted
+
+
+def _short_output_path(output_dir: Path, prefix: str, suffix: str) -> Path:
+    """Keep generated audit artifacts writable on Windows' legacy path limits."""
+    candidate = output_dir / f"{prefix}_{suffix}"
+    if len(str(candidate.resolve())) < 239:
+        return candidate
+    digest = hashlib.sha1(str(candidate).encode("utf-8")).hexdigest()[:10]
+    return output_dir / f"p_{digest}_{suffix}"
 
 
 def _read_network_graph(net_file: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -763,7 +1080,7 @@ def _coordinate_converter(net_file: Path) -> Callable[[float, float], tuple[floa
 
         net = sumolib.net.readNet(str(net_file))
         return lambda x, y: _net_xy_to_latlon(net, x, y)
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional sumolib projection has an explicit XY fallback.
         return None
 
 
@@ -776,7 +1093,7 @@ def _cluster_latlon(
         return centroid_y, centroid_x, "xy_fallback_no_geo_projection"
     try:
         lat, lon = xy_to_latlon(centroid_x, centroid_y)
-    except Exception:
+    except Exception:  # noqa: BLE001 - converter may be supplied by sumolib/pyproj and is best-effort.
         return centroid_y, centroid_x, "xy_fallback_geo_projection_failed"
     return lat, lon, "wgs84_from_sumo_projection"
 

@@ -1,0 +1,131 @@
+{
+  "schema": "torii.corridor.real-held-out-machine-evidence/v1",
+  "recorded_at": "2026-07-14",
+  "corpus_id": "manifest_e2562c4125f9f157ece520d5",
+  "machine_run_commit": "8ca462b",
+  "report_sha256": "565c9e11b22d6d0dc3e3dd0ff950fb7c292341c3911f6bb626042d7d43b68b3c",
+  "manifest_sha256": "7dd11c45dd45090a0fe58e1fa9d4af3b9467fd5fb3320729a87f6da01e8cd794",
+  "manifest_artifact_count": 497,
+  "manifest_missing_artifact_count": 0,
+  "manifest_hash_failure_count": 0,
+  "automatic_promotion_gate": "blocked",
+  "evidence_build_status": "blocked",
+  "case_outcomes": {
+    "expected_case_count": 30,
+    "processed_case_count": 30,
+    "pipeline_pass_count": 27,
+    "pipeline_blocked_count": 3,
+    "review_case_count": 27,
+    "source_osm_immutable_count": 30,
+    "machine_label_counts": {
+      "acceptable": 0,
+      "ambiguous": 2,
+      "defect": 28
+    },
+    "applicability_counts": {
+      "out-of-domain": 27,
+      "invalid": 3
+    },
+    "sumo_load_status_counts": {
+      "pass": 22,
+      "fail": 5,
+      "not-run": 3
+    },
+    "connection_mode_status_counts": {
+      "review_required": 13,
+      "fail": 14,
+      "not-run": 3
+    },
+    "independent_safety_status_counts": {
+      "blocked": 30
+    },
+    "routeability_status_counts": {
+      "pass": 14,
+      "fail": 13,
+      "not-run": 3
+    }
+  },
+  "review_package": {
+    "blinded_dataset_sha256": "87f026957b530338022be97a8fa2f05b2c66a9890f0ac8e3245cc2ae5a438c9e",
+    "unblinding_key_sha256": "6e6662b2bb6040e61e3201891116ea62a2fee6ab1793f20f577d215e882ddf83",
+    "bound_review_case_count": 27,
+    "human_review_decision_count": 0,
+    "human_adjudication_count": 0
+  },
+  "netconvert_replay_failures": [
+    {
+      "corridor_key": "london-kings-cross",
+      "primary_normalized_sha256": "7ff0954b9c93bcf4d44cc4fb2846885bc29fc79a1c395df45768216e74f1663d",
+      "replay_normalized_sha256": "374ecebe4d85fdae04ce4cb8c444fda725cf48c859ba7147426f96c8a8d9794d",
+      "exact_diagnostic": "One junction changed from right_before_left with four requests to priority with three requests; two internal edges changed, one internal edge disappeared, and connection and roundabout records changed.",
+      "semantic_difference_confirmed": true
+    },
+    {
+      "corridor_key": "melbourne-royal-parade",
+      "primary_normalized_sha256": "1a64c8cf871331a2916991d1a857a014f8196f6fbdbf18f72dcc4601b4d61570",
+      "replay_normalized_sha256": "a1413c16a16b678aef4fd57c44384c6ea83eaed159258c0996d44d15b82b274d",
+      "exact_diagnostic": "Edges, junctions, TLS programs, and connection multisets match; roundabout records partition the same global edge and node membership differently.",
+      "semantic_difference_confirmed": true
+    },
+    {
+      "corridor_key": "sydney-cross-city-tunnel",
+      "primary_normalized_sha256": "5093b5ac99c136445a2b51c107eb8d7b5da78b4a85526c9ab2a0b870e99c985f",
+      "replay_normalized_sha256": "7101ed66d82ceb01b72bc7db99d7ad9a35183f6f2561f96cc4240aca3cbd2d50",
+      "exact_diagnostic": "Edges, junctions, TLS programs, and connection multisets match; roundabout records partition the same global edge and node membership differently.",
+      "semantic_difference_confirmed": true
+    }
+  ],
+  "roundabout_semantics_basis": "SUMO 1.27.1 documentation states that roundabout records facilitate net re-import and may affect lane-changing models; regrouping cannot be discarded as formatting-only.",
+  "explicit_seed_probe": {
+    "corridor_key": "london-kings-cross",
+    "netconvert_seed": 42,
+    "first_normalized_sha256": "7ff0954b9c93bcf4d44cc4fb2846885bc29fc79a1c395df45768216e74f1663d",
+    "second_normalized_sha256": "be42a7d6e14107cc848362e5f1d6c09245652c847f54287fdef43d0af657be32",
+    "status": "blocked",
+    "conclusion": "An explicit random seed is required for toolchain identity but is insufficient to remove this netconvert nondeterminism."
+  },
+  "post_run_connection_audit_correction": {
+    "implementation_commit": "7c1e435",
+    "corridor_key": "berlin-alexanderplatz",
+    "cause": "Raw lane-centre endpoint distance treated netconvert's half-width lateral transition offset as a broken path, and calibration included display-only walkingarea-to-crossing nearest-endpoint distances.",
+    "width_transition_observation": {
+      "affected_old_structural_failure_count": 79,
+      "affected_mode_scope": "non_motorized_or_mixed",
+      "affected_internal_lane_permission": "bicycle",
+      "maximum_raw_gap_m": 3.706009,
+      "maximum_width_adjusted_gap_m": 0.11767
+    },
+    "corrected_calibration": {
+      "status": "pass",
+      "endpoint_path_count": 8919,
+      "endpoint_sample_count": 18746,
+      "observed_q995_m": 0.018742,
+      "maximum_observed_gap_m": 0.11767,
+      "endpoint_tolerance_m": 0.038742,
+      "artifact_sha256": "0ed12652f49b37901c9059e7d073727da474412d34fcecab6f8715f45be0e66f"
+    },
+    "default_two_metre_probe": {
+      "status": "review_required",
+      "structural_failure_count": 0,
+      "review_finding_count": 313,
+      "width_transition_review_count": 79,
+      "artifact_sha256": "dbae365de53aee8a1bdedb0ca1e1bddffa17aa4b6a77ae1a4ecb3ede6125016b"
+    },
+    "calibrated_probe": {
+      "status": "fail",
+      "structural_failure_count": 31,
+      "all_structural_failures_non_motorized_or_mixed": true,
+      "review_finding_count": 636,
+      "artifact_sha256": "e8173c5d9d0bfb8b43183e23b2523b12f3d8f8c6bce20527efe2f56e2497b176"
+    },
+    "full_corpus_rerun_complete": false
+  },
+  "claims_not_supported": [
+    "Any held-out corridor is acceptable according to independent human review",
+    "The 28 machine defect labels are human-confirmed defects",
+    "Stage 1 exit conditions are complete",
+    "Netconvert is deterministic for every frozen OSM input",
+    "The corrected connection audit has been rerun over all 30 corridors",
+    "AutoPrecision or AutoCoverage has been measured"
+  ]
+}

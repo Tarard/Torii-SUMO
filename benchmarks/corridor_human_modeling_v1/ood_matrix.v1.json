@@ -1,0 +1,157 @@
+{
+  "schema": "torii.corridor.ood-benchmark/v1",
+  "benchmark_id": "manifest_e6dd97310817e201d0ae24d9",
+  "parent_benchmark_sha256": "4fffbf73755c31ce5029b708cb3af3f7faf8e22e8d644f6b08c23f92b36ca272",
+  "certification_envelope_sha256": "1fb06208f4bf74615d83e9bfe7fa321d416319363943d267b825b7ac867c6d54",
+  "cases": [
+    {
+      "case_id": "vehicle-x4-right-negative-control",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "expected_decision": "in-domain",
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "vehicle-x4-left-negative-control",
+      "fixture_id": "standard-x4",
+      "traffic_side": "left",
+      "expected_decision": "in-domain",
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "parallel-lane-x4-negative-control",
+      "fixture_id": "parallel-two-lane-x4",
+      "traffic_side": "right",
+      "expected_decision": "in-domain",
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "in-domain-protected-conflict",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "mutation_ids": ["protected-green-conflict"],
+      "expected_decision": "in-domain",
+      "expected_independent_safety_status": "blocked"
+    },
+    {
+      "case_id": "pedestrian-x4-ood",
+      "fixture_id": "pedestrian-x4",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "movement_mode_class_outside_envelope",
+        "pedestrian_facility_outside_envelope",
+        "physical_cell_arm_count_outside_envelope"
+      ],
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "rail-x4-ood",
+      "fixture_id": "rail-x4",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "movement_mode_class_outside_envelope",
+        "physical_cell_arm_count_outside_envelope"
+      ],
+      "expected_independent_safety_status": "review"
+    },
+    {
+      "case_id": "bicycle-x4-ood",
+      "fixture_id": "bicycle-x4",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "movement_mode_class_outside_envelope",
+        "physical_cell_arm_count_outside_envelope"
+      ],
+      "expected_independent_safety_status": "review"
+    },
+    {
+      "case_id": "no-internal-links-ood",
+      "fixture_id": "no-internal-x4",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": ["internal_geometry_outside_envelope"],
+      "expected_independent_safety_status": "review"
+    },
+    {
+      "case_id": "ramp-x4-ood",
+      "fixture_id": "ramp-x4",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": ["edge_type_outside_envelope"],
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "actuated-controller-ood",
+      "fixture_id": "actuated-x4",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": ["controller_type_outside_envelope"],
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "multi-program-controller-ood",
+      "fixture_id": "multi-program-x4",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "controller_program_count_outside_envelope"
+      ],
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "three-arm-topology-ood",
+      "fixture_id": "radial-t3",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "physical_cell_arm_count_outside_envelope"
+      ],
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "five-arm-topology-ood",
+      "fixture_id": "radial-x5",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "physical_cell_arm_count_outside_envelope"
+      ],
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "shared-controller-two-cells-ood",
+      "fixture_id": "shared-controller-pair",
+      "traffic_side": "right",
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "controller_ownership_outside_envelope"
+      ],
+      "expected_independent_safety_status": "pass"
+    },
+    {
+      "case_id": "secondary-signal-index-ood",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "mutation_ids": ["link-index-2"],
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "secondary_signal_index_outside_envelope"
+      ],
+      "expected_independent_safety_status": "blocked"
+    },
+    {
+      "case_id": "shared-signal-group-ood",
+      "fixture_id": "standard-x4",
+      "traffic_side": "right",
+      "mutation_ids": ["shared-link-index-conflict"],
+      "expected_decision": "out-of-domain",
+      "expected_reason_categories": [
+        "signal_group_size_outside_envelope"
+      ],
+      "expected_independent_safety_status": "blocked"
+    }
+  ]
+}

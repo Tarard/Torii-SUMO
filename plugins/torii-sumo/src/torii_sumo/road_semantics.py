@@ -19,6 +19,29 @@ VEHICLE_CORE_TYPES = {
     "highway.living_street",
 }
 
+# Keep OSM source classification explicit.  Access tags answer whether a mode
+# may use a way; they do not turn every ``highway=*`` feature (for example a
+# platform) into a passenger road.
+OSM_PASSENGER_HIGHWAYS = frozenset(
+    {
+        "motorway",
+        "motorway_link",
+        "trunk",
+        "trunk_link",
+        "primary",
+        "primary_link",
+        "secondary",
+        "secondary_link",
+        "tertiary",
+        "tertiary_link",
+        "unclassified",
+        "residential",
+        "living_street",
+        "service",
+        "road",
+    }
+)
+
 _BLOCKING_ACCESS_VALUES = {"no", "private"}
 _POSITIVE_ACCESS_VALUES = {"yes", "designated", "permissive"}
 _MODE_ACCESS_HIERARCHY = {
@@ -93,6 +116,14 @@ def filtered_osm_modes(tags: Mapping[str, str], base_modes: Iterable[str]) -> se
     return filtered
 
 
+def is_osm_passenger_way(tags: Mapping[str, str]) -> bool:
+    """Return whether an OSM way belongs in a passenger-road graph."""
+
+    return bool(
+        _tag_value(tags, "highway") in OSM_PASSENGER_HIGHWAYS and "passenger" in filtered_osm_modes(tags, {"passenger"})
+    )
+
+
 def classify_turn_direction(in_axis: tuple[float, float], out_axis: tuple[float, float]) -> JunctionTurn:
     incoming = _unit(in_axis)
     outgoing = _unit(out_axis)
@@ -119,11 +150,12 @@ def classify_modal_role_from_edge(edge: Mapping[str, Any]) -> ModalRole:
     type_id = str(edge.get("type", "") or "")
     function = str(edge.get("function", "") or "")
     text = " ".join(
-        str(edge.get(key, "") or "").lower()
-        for key in ("id", "type", "function", "allow", "disallow", "name")
+        str(edge.get(key, "") or "").lower() for key in ("id", "type", "function", "allow", "disallow", "name")
     )
     if type_id.startswith("railway."):
-        return _modal_role("rail", "never_join", "railway edge must not be joined into vehicle core", ("railway_present",))
+        return _modal_role(
+            "rail", "never_join", "railway edge must not be joined into vehicle core", ("railway_present",)
+        )
     if type_id in {"highway.motorway", "highway.trunk"} or type_id.endswith("_link"):
         return _modal_role(
             "ramp",
@@ -154,7 +186,9 @@ def classify_modal_role_from_edge(edge: Mapping[str, Any]) -> ModalRole:
             "bicycle infrastructure is support evidence unless map/reference includes it in the core",
             ("bicycle_support",),
         )
-    if "service" in type_id or any(token in text for token in ("driveway", "parking_aisle", "parking", "private", "alley")):
+    if "service" in type_id or any(
+        token in text for token in ("driveway", "parking_aisle", "parking", "private", "alley")
+    ):
         return _modal_role(
             "service",
             "protected_terminal",
@@ -163,7 +197,9 @@ def classify_modal_role_from_edge(edge: Mapping[str, Any]) -> ModalRole:
         )
     if type_id in VEHICLE_CORE_TYPES or "passenger" in text:
         return _modal_role("vehicle_core", "join_core", "ordinary passenger-drivable urban road", ())
-    return _modal_role("unknown", "review_required", "modal role is unknown from SUMO edge attributes", ("unknown_modal_role",))
+    return _modal_role(
+        "unknown", "review_required", "modal role is unknown from SUMO edge attributes", ("unknown_modal_role",)
+    )
 
 
 def _deduped_mode_sets(

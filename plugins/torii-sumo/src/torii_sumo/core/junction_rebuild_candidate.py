@@ -12,6 +12,7 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
+from .corridor_simplification import audit_alias_normalized_connections
 from .junction_connection_audit import (
     build_connection_signature,
     compare_pedestrian_crossing_signatures,
@@ -28,6 +29,7 @@ from .junction_teacher_model import (
     materialize_exemplar_movement_signatures,
     slot_edge_map_from_exemplar,
 )
+from .official_tls_rebuild import edge_lane_signature
 
 
 APPROACH_INTEGRITY_FAILURE_FIELDS = {
@@ -74,6 +76,29 @@ GEOMETRY_RESTORE_LANE_ATTRS = (
     "endOffset",
     "customShape",
     "outlineShape",
+)
+
+BOUNDARY_EDGE_OPERATIONAL_ATTRS = (
+    "type",
+    "priority",
+    "name",
+    "spreadType",
+    "allow",
+    "disallow",
+    "speed",
+    "width",
+)
+
+BOUNDARY_LANE_OPERATIONAL_ATTRS = (
+    "speed",
+    "width",
+    "allow",
+    "disallow",
+    "endOffset",
+    "acceleration",
+    "changeLeft",
+    "changeRight",
+    "stopOffset",
 )
 
 TURNAROUND_DIR = "t"
@@ -221,6 +246,15 @@ def build_teacher_guided_repair_queue(
         key=lambda case: _teacher_guided_case_sort_key(case, pattern_records, pattern_templates)
     )
     repair_candidates = []
+    tls_alignment_by_reference_id = {
+        str(pair.get("reference_tl_id", "")): pair
+        for pair in (
+            (reference_join_audit_report.get("tls_controller_alignment", {}) or {}).get("pairs", [])
+            if isinstance(reference_join_audit_report.get("tls_controller_alignment", {}), dict)
+            else []
+        )
+        if isinstance(pair, dict) and str(pair.get("reference_tl_id", ""))
+    }
     for case in matched_cases:
         candidate = _attach_teacher_pattern_template(
             _attach_junction_pattern_delta(
@@ -239,6 +273,27 @@ def build_teacher_guided_repair_queue(
             pattern_records,
             pattern_templates,
         )
+        tls_alignment = tls_alignment_by_reference_id.get(str(candidate.get("reference_id", "")))
+        if isinstance(tls_alignment, dict):
+            candidate = {
+                **candidate,
+                "tls_reference_tl_id": str(tls_alignment.get("reference_tl_id", "")),
+                "tls_candidate_tl_id": str(tls_alignment.get("candidate_tl_id", "")),
+                "tls_candidate_junction_ids": [
+                    str(item) for item in tls_alignment.get("candidate_junction_ids", []) or [] if str(item)
+                ],
+                "tls_approach_pairs": [
+                    dict(item)
+                    for item in tls_alignment.get("approach_pairs", []) or []
+                    if isinstance(item, dict)
+                ],
+                "tls_reference_controlled_connection_count": int(
+                    tls_alignment.get("reference_controlled_connection_count", 0) or 0
+                ),
+                "tls_candidate_controlled_connection_count": int(
+                    tls_alignment.get("candidate_controlled_connection_count", 0) or 0
+                ),
+            }
         repair_candidates.append(candidate)
     repair_candidates.sort(key=_teacher_guided_candidate_sort_key)
     tls_repair_candidates = _tls_repair_candidates(reference_join_audit_report)
@@ -311,8 +366,8 @@ def build_tls_connection_repair_variant(
     candidate_net_file = candidate_net_file.resolve()
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    variant_file = output_dir / f"{prefix}_tls_connection_repaired.net.xml"
-    summary_file = output_dir / f"{prefix}_tls_connection_repair.json"
+    variant_file = _stage_file(output_dir, prefix, "tls_connection_repaired.net.xml")
+    summary_file = _stage_file(output_dir, prefix, "tls_connection_repair.json")
 
     source_root = ET.parse(source_net_file).getroot()
     candidate_tree = ET.parse(candidate_net_file)
@@ -712,6 +767,7 @@ def write_teacher_lane_patch_edges(
     patched = []
     added_missing_mapped_edges = []
     pruned_boundary_edges = []
+    retained_unmapped_boundary_edges = []
     remapped_teacher_edges = set(edge_map)
     teacher_same_junction_edges = {
         edge_id
@@ -739,15 +795,12 @@ def write_teacher_lane_patch_edges(
             or edge.attrib.get("from") in boundary_node_ids
             or edge.attrib.get("to") in boundary_node_ids
         )
-        if (
-            prune_unmapped_boundary_edges
-            and junction_id
-            and touches_target
-            and edge_id not in allowed_boundary_edges
-        ):
-            root.remove(edge)
-            pruned_boundary_edges.append(edge_id)
-            continue
+        if junction_id and touches_target and edge_id not in allowed_boundary_edges:
+            if prune_unmapped_boundary_edges:
+                root.remove(edge)
+                pruned_boundary_edges.append(edge_id)
+                continue
+            retained_unmapped_boundary_edges.append(edge_id)
         teacher_edge = teacher_by_candidate.get(edge.attrib.get("id", ""))
         if teacher_edge is None:
             continue
@@ -914,6 +967,8 @@ def write_teacher_lane_patch_edges(
         "skipped_rebased_self_loop_edges": skipped_rebased_self_loop_edges,
         "pruned_boundary_edge_count": len(pruned_boundary_edges),
         "pruned_boundary_edges": pruned_boundary_edges,
+        "retained_unmapped_boundary_edge_count": len(retained_unmapped_boundary_edges),
+        "retained_unmapped_boundary_edges": retained_unmapped_boundary_edges,
         "lane_shape_translation_applied": lane_shape_delta is not None,
         "preserve_lane_shapes": preserve_lane_shapes,
     }
@@ -958,7 +1013,18 @@ def write_missing_edge_type_patch(
         known_type_ids.add(type_id)
         synthesized.append(type_id)
 
-    if synthesized:
+    removed_lane_synthesis_attributes = []
+    for edge_type in type_root.findall("type"):
+        type_id = str(edge_type.attrib.get("id", ""))
+        for attribute in ("sidewalkWidth", "bikeLaneWidth"):
+            value = edge_type.attrib.pop(attribute, None)
+            if value is not None:
+                removed_lane_synthesis_attributes.append(
+                    {"type_id": type_id, "attribute": attribute, "value": value}
+                )
+
+    patched = bool(synthesized or removed_lane_synthesis_attributes)
+    if patched:
         output_file.parent.mkdir(parents=True, exist_ok=True)
         ET.indent(type_root, space="    ")
         type_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -970,9 +1036,13 @@ def write_missing_edge_type_patch(
         "claim_status": "diagnostic-demo",
         "raw_type_file": str(raw_type_file) if raw_type_file is not None else "",
         "type_file": str(type_file) if type_file is not None else "",
-        "patched_type_file": str(output_file) if synthesized else "",
+        "patched_type_file": str(output_file) if patched else "",
         "synthesized_edge_type_count": len(synthesized),
         "synthesized_edge_type_ids": synthesized,
+        "roundtrip_lane_synthesis_attribute_removal_count": len(
+            removed_lane_synthesis_attributes
+        ),
+        "roundtrip_lane_synthesis_attribute_removals": removed_lane_synthesis_attributes,
     }
 
 
@@ -1421,19 +1491,25 @@ def write_teacher_target_internal_replay_net(
     edge_map: dict[str, str],
     teacher_junction_id: str | None = None,
     geometry_anchor_edge_file: Path | None = None,
+    blend_geometry_anchor_at_target: bool = False,
+    copy_unmapped_boundary_edges: bool = True,
+    preserve_mapped_boundary_endpoints: bool = False,
+    preserve_target_junction_shape: bool = False,
 ) -> dict[str, object]:
     teacher_junction_id = teacher_junction_id or junction_id
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     candidate_tree = ET.parse(candidate_net_file)
     candidate_root = candidate_tree.getroot()
+    source_candidate_root = copy.deepcopy(candidate_root)
     teacher_root = ET.parse(teacher_net_file).getroot()
     internal_prefix = f":{junction_id}_"
     teacher_internal_prefix = f":{teacher_junction_id}_"
     candidate_edges_by_id = {edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")}
     candidate_edge_ids = set(candidate_edges_by_id)
     replay_edge_map = dict(edge_map)
-    geometry_anchor_edge_ids = _load_geometry_anchor_edge_ids(geometry_anchor_edge_file)
+    geometry_anchor_edges_by_id = _load_geometry_anchor_edges(geometry_anchor_edge_file)
+    geometry_anchor_edge_ids = set(geometry_anchor_edges_by_id)
 
     target_candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
     teacher_junction = teacher_root.find(f"junction[@id='{teacher_junction_id}']")
@@ -1441,6 +1517,8 @@ def write_teacher_target_internal_replay_net(
         return _failure(f"candidate junction not found: {junction_id}")
     if teacher_junction is None:
         return _failure(f"teacher junction not found: {junction_id}")
+    original_target_junction_shape = target_candidate_junction.attrib.get("shape")
+    original_target_custom_shape = target_candidate_junction.attrib.get("customShape")
 
     dx = float(target_candidate_junction.attrib.get("x", "0") or 0) - float(
         teacher_junction.attrib.get("x", "0") or 0
@@ -1467,7 +1545,9 @@ def write_teacher_target_internal_replay_net(
     ]
     copied_boundary_edges = []
     copied_boundary_candidate_edges = []
+    blended_geometry_anchor_edge_ids = []
     skipped_boundary_edges = []
+    preserved_mapped_boundary_endpoints = []
     replaced_boundary_edge_ids: set[str] = set()
     boundary_insert_offset = 0
     teacher_edges = {edge.attrib["id"]: edge for edge in teacher_root.findall("edge") if edge.attrib.get("id")}
@@ -1559,6 +1639,18 @@ def write_teacher_target_internal_replay_net(
             ]
         )
     )
+    skipped_unmapped_teacher_boundary_edges = []
+    if not copy_unmapped_boundary_edges:
+        skipped_unmapped_teacher_boundary_edges = [
+            edge_id
+            for edge_id in needed_boundary_edge_ids
+            if edge_id not in replay_edge_map
+        ]
+        needed_boundary_edge_ids = [
+            edge_id
+            for edge_id in needed_boundary_edge_ids
+            if edge_id in replay_edge_map
+        ]
     needed_boundary_edge_id_set = set(needed_boundary_edge_ids)
     mapped_boundary_counts = Counter(replay_edge_map.get(edge_id, edge_id) for edge_id in needed_boundary_edge_ids)
     preserved_colliding_boundary_edges = []
@@ -1581,6 +1673,43 @@ def write_teacher_target_internal_replay_net(
         teacher_edge = teacher_edges[edge_id]
         mapped_from = junction_id if teacher_edge.attrib.get("from") == teacher_junction_id else teacher_edge.attrib.get("from", "")
         mapped_to = junction_id if teacher_edge.attrib.get("to") == teacher_junction_id else teacher_edge.attrib.get("to", "")
+        mapped_candidate_edge_id = replay_edge_map.get(edge_id, edge_id)
+        mapped_candidate_edge = candidate_edges_by_id.get(mapped_candidate_edge_id)
+        if (
+            mapped_candidate_edge is not None
+            and not copy_unmapped_boundary_edges
+            and preserve_mapped_boundary_endpoints
+            and junction_id
+            in (
+            mapped_candidate_edge.attrib.get("from"),
+            mapped_candidate_edge.attrib.get("to"),
+            )
+            and (
+                (
+                    teacher_edge.attrib.get("from") == teacher_junction_id
+                    and mapped_candidate_edge.attrib.get("from") == junction_id
+                )
+                or (
+                    teacher_edge.attrib.get("to") == teacher_junction_id
+                    and mapped_candidate_edge.attrib.get("to") == junction_id
+                )
+            )
+        ):
+            candidate_from = mapped_candidate_edge.attrib.get("from", "")
+            candidate_to = mapped_candidate_edge.attrib.get("to", "")
+            if (mapped_from, mapped_to) != (candidate_from, candidate_to):
+                preserved_mapped_boundary_endpoints.append(
+                    {
+                        "teacher_edge_id": edge_id,
+                        "candidate_edge_id": mapped_candidate_edge_id,
+                        "teacher_mapped_from": mapped_from,
+                        "teacher_mapped_to": mapped_to,
+                        "candidate_from": candidate_from,
+                        "candidate_to": candidate_to,
+                    }
+                )
+            mapped_from = candidate_from
+            mapped_to = candidate_to
         for teacher_endpoint, mapped_endpoint in (
             (teacher_edge.attrib.get("from", ""), mapped_from),
             (teacher_edge.attrib.get("to", ""), mapped_to),
@@ -1614,6 +1743,8 @@ def write_teacher_target_internal_replay_net(
             teacher_junction_id,
             junction_id,
         )
+        copied_edge.set("from", mapped_from)
+        copied_edge.set("to", mapped_to)
         copied_edge_id = copied_edge.attrib.get("id", "")
         if not copied_edge_id:
             skipped_boundary_edges.append(edge_id)
@@ -1623,12 +1754,23 @@ def write_teacher_target_internal_replay_net(
         if replaced_edge is not None:
             replaced_boundary_source_edges[copied_edge_id] = copy.deepcopy(replaced_edge)
             if copied_edge_id in geometry_anchor_edge_ids:
-                _restore_existing_edge_geometry(
-                    copied_edge,
+                geometry_source_edge = geometry_anchor_edges_by_id.get(
+                    copied_edge_id,
                     replaced_edge,
-                    candidate_root,
-                    max_endpoint_delta=None,
                 )
+                if blend_geometry_anchor_at_target and _blend_geometry_anchor_at_target(
+                    copied_edge,
+                    geometry_source_edge,
+                    junction_id,
+                ):
+                    blended_geometry_anchor_edge_ids.append(copied_edge_id)
+                else:
+                    _restore_existing_edge_geometry(
+                        copied_edge,
+                        geometry_source_edge,
+                        candidate_root,
+                        max_endpoint_delta=None,
+                    )
             insert_at = list(candidate_root).index(replaced_edge)
             _remove_edge_lanes_from_destination_junction(candidate_root, replaced_edge)
             candidate_root.remove(replaced_edge)
@@ -1687,10 +1829,35 @@ def write_teacher_target_internal_replay_net(
                 continue
             stale_split_replacements[candidate_edge_id] = (edge_id, remote_junction_id)
             source_edge = replaced_boundary_source_edges.get(edge_id)
+            source_anchor_edge = geometry_anchor_edges_by_id.get(edge_id)
+            if source_edge is not None and source_anchor_edge is not None:
+                source_edge = copy.deepcopy(source_edge)
+                _restore_existing_edge_geometry(
+                    source_edge,
+                    source_anchor_edge,
+                    candidate_root,
+                    max_endpoint_delta=None,
+                )
+            stale_split_edge = candidate_edge
+            stale_split_anchor_edge = geometry_anchor_edges_by_id.get(
+                candidate_edge_id
+            )
+            if stale_split_anchor_edge is not None:
+                stale_split_edge = copy.deepcopy(candidate_edge)
+                _restore_existing_edge_geometry(
+                    stale_split_edge,
+                    stale_split_anchor_edge,
+                    candidate_root,
+                    max_endpoint_delta=None,
+                )
             if (
                 source_edge is not None
                 and {candidate_edge_id, edge_id} & geometry_anchor_edge_ids
-                and _restore_joined_split_edge_geometry(copied_edge, candidate_edge, source_edge)
+                and _restore_joined_split_edge_geometry(
+                    copied_edge,
+                    stale_split_edge,
+                    source_edge,
+                )
             ):
                 geometry_anchor_junctions_by_id.update(
                     _geometry_anchor_junctions_by_id(
@@ -1844,7 +2011,7 @@ def write_teacher_target_internal_replay_net(
         if candidate_edge_id in geometry_anchor_edge_ids:
             _restore_existing_edge_geometry(
                 copied_edge,
-                existing_edge,
+                geometry_anchor_edges_by_id.get(candidate_edge_id, existing_edge),
                 candidate_root,
                 max_endpoint_delta=None,
             )
@@ -2293,10 +2460,22 @@ def write_teacher_target_internal_replay_net(
             _clone_transformed_junction(junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix),
         )
 
-    target_candidate_junction.attrib.clear()
-    target_candidate_junction.attrib.update(
-        _mapped_junction_attrs(teacher_junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix)
+    mapped_target_attrs = _mapped_junction_attrs(
+        teacher_junction,
+        dx,
+        dy,
+        replay_edge_map,
+        teacher_internal_prefix,
+        internal_prefix,
     )
+    if preserve_target_junction_shape and original_target_junction_shape:
+        mapped_target_attrs["shape"] = original_target_junction_shape
+        if original_target_custom_shape is not None:
+            mapped_target_attrs["customShape"] = original_target_custom_shape
+        else:
+            mapped_target_attrs.pop("customShape", None)
+    target_candidate_junction.attrib.clear()
+    target_candidate_junction.attrib.update(mapped_target_attrs)
     for child in list(target_candidate_junction):
         target_candidate_junction.remove(child)
     for request in teacher_junction.findall("request"):
@@ -2455,11 +2634,38 @@ def write_teacher_target_internal_replay_net(
             added_missing_teacher_endpoint_junctions.append(endpoint)
 
     restored_geometry_anchor_junctions = _restore_geometry_anchor_junctions(candidate_root, geometry_anchor_junctions_by_id)
-    target_shape_anchor_report = _expand_junction_shape_to_approach_endpoints(
-        candidate_root,
-        junction_id,
-        geometry_anchor_edge_ids,
+    external_boundary_connection_report: dict[str, object] = {
+        "status": "skipped",
+        "restored_connection_count": 0,
+        "restored_connections": [],
+        "preserved_existing_connection_count": 0,
+        "preserved_existing_connections": [],
+        "skipped_connection_count": 0,
+        "skipped_connections": [],
+    }
+    if preserve_mapped_boundary_endpoints:
+        external_boundary_connection_report = _restore_external_boundary_connections(
+            source_root=source_candidate_root,
+            target_root=candidate_root,
+            boundary_edge_ids=set(replaced_boundary_edge_ids),
+            source_local_junction_ids={junction_id},
+        )
+
+    unblended_geometry_anchor_edge_ids = geometry_anchor_edge_ids - set(
+        blended_geometry_anchor_edge_ids
     )
+    if geometry_anchor_edge_ids and not unblended_geometry_anchor_edge_ids:
+        target_shape_anchor_report = {
+            "status": "skipped",
+            "reason": "all_geometry_anchor_edges_blended_at_target",
+            "blended_approach_edge_ids": sorted(set(blended_geometry_anchor_edge_ids)),
+        }
+    else:
+        target_shape_anchor_report = _expand_junction_shape_to_approach_endpoints(
+            candidate_root,
+            junction_id,
+            unblended_geometry_anchor_edge_ids,
+        )
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -2474,6 +2680,35 @@ def write_teacher_target_internal_replay_net(
         "copied_boundary_edge_count": len(copied_boundary_edges),
         "copied_boundary_edges": copied_boundary_edges,
         "copied_boundary_candidate_edges": copied_boundary_candidate_edges,
+        "copy_unmapped_boundary_edges": copy_unmapped_boundary_edges,
+        "preserve_mapped_boundary_endpoints": preserve_mapped_boundary_endpoints,
+        "preserve_target_junction_shape": preserve_target_junction_shape,
+        "skipped_unmapped_teacher_boundary_edge_count": len(
+            skipped_unmapped_teacher_boundary_edges
+        ),
+        "skipped_unmapped_teacher_boundary_edges": skipped_unmapped_teacher_boundary_edges,
+        "preserved_mapped_boundary_endpoint_count": len(
+            preserved_mapped_boundary_endpoints
+        ),
+        "preserved_mapped_boundary_endpoints": preserved_mapped_boundary_endpoints,
+        "restored_external_boundary_connection_count": external_boundary_connection_report[
+            "restored_connection_count"
+        ],
+        "restored_external_boundary_connections": external_boundary_connection_report[
+            "restored_connections"
+        ],
+        "preserved_existing_external_boundary_connection_count": (
+            external_boundary_connection_report["preserved_existing_connection_count"]
+        ),
+        "preserved_existing_external_boundary_connections": (
+            external_boundary_connection_report["preserved_existing_connections"]
+        ),
+        "skipped_external_boundary_connection_count": external_boundary_connection_report[
+            "skipped_connection_count"
+        ],
+        "skipped_external_boundary_connections": external_boundary_connection_report[
+            "skipped_connections"
+        ],
         "copied_boundary_continuation_edge_count": len(copied_boundary_continuation_edges),
         "copied_boundary_continuation_edges": copied_boundary_continuation_edges,
         "copied_boundary_continuation_connection_count": len(copied_boundary_continuation_connections),
@@ -2529,6 +2764,13 @@ def write_teacher_target_internal_replay_net(
         "added_missing_teacher_endpoint_junction_count": len(added_missing_teacher_endpoint_junctions),
         "added_missing_teacher_endpoint_junction_ids": added_missing_teacher_endpoint_junctions,
         "geometry_anchor_edge_count": len(geometry_anchor_edge_ids),
+        "blend_geometry_anchor_at_target": blend_geometry_anchor_at_target,
+        "blended_geometry_anchor_edge_count": len(
+            blended_geometry_anchor_edge_ids
+        ),
+        "blended_geometry_anchor_edge_ids": sorted(
+            set(blended_geometry_anchor_edge_ids)
+        ),
         "restored_geometry_anchor_junction_count": len(restored_geometry_anchor_junctions),
         "restored_geometry_anchor_junctions": restored_geometry_anchor_junctions,
         "target_shape_anchor": target_shape_anchor_report,
@@ -2552,6 +2794,1975 @@ def write_teacher_target_internal_replay_net(
         "removed_stale_tls_connections": removed_stale_tls_connections,
         "copied_request_count": len(teacher_junction.findall("request")),
         "effective_edge_map": dict(sorted(replay_edge_map.items())),
+    }
+
+
+def write_scoped_teacher_tls_cell_replay_net(
+    *,
+    candidate_net_file: Path,
+    teacher_net_file: Path,
+    output_file: Path,
+    junction_id: str,
+    edge_map: dict[str, str],
+    teacher_junction_id: str | None = None,
+    collapse_junction_ids: set[str] | None = None,
+    junction_map: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Replay one reference TLS cell while collapsing a split OSM junction group.
+
+    ``write_teacher_target_internal_replay_net`` is intentionally permissive: it
+    can copy teacher continuation edges so that a small synthetic example stays
+    connected.  That is useful for diagnostics, but it is unsafe for a real
+    split TLS cell because those copied continuations leave the old split graph
+    beside the new teacher cell.  This wrapper adds an explicit cell boundary:
+    boundary edges are mapped/reused, non-boundary edges touching the supplied
+    candidate members are removed, and teacher endpoint junctions may be mapped
+    back to existing candidate endpoints.  No inference is made when a mapping
+    is absent; the teacher boundary is copied and remains visible in the
+    returned report for review.
+    """
+
+    teacher_junction_id = teacher_junction_id or junction_id
+    collapse_ids = {str(value) for value in (collapse_junction_ids or set()) if str(value)}
+    collapse_ids.add(junction_id)
+    ordinary_junction_map = {
+        str(key): str(value)
+        for key, value in (junction_map or {}).items()
+        if str(key) and str(value)
+    }
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    if not candidate_net_file.exists():
+        return _failure(f"candidate net file does not exist: {candidate_net_file}")
+    if not teacher_net_file.exists():
+        return _failure(f"teacher net file does not exist: {teacher_net_file}")
+
+    # Keep the permissive writer as the well-tested semantic replay primitive;
+    # the scoped cleanup below is the only layer that changes its boundary.
+    # Keep the intermediate name deliberately short; the caller already
+    # allocates one directory per candidate and Windows path limits apply
+    # before the final artifact manifest is written.
+    unscoped_file = output_file.parent / "unscoped.net.xml"
+    unscoped_file.parent.mkdir(parents=True, exist_ok=True)
+    replay_report = write_teacher_target_internal_replay_net(
+        candidate_net_file=candidate_net_file,
+        teacher_net_file=teacher_net_file,
+        output_file=unscoped_file,
+        junction_id=junction_id,
+        teacher_junction_id=teacher_junction_id,
+        edge_map=edge_map,
+    )
+    if replay_report.get("status") != "pass":
+        return {
+            **replay_report,
+            "scoped_replay_status": "blocked",
+            "scoped_replay_reason": "unscoped_teacher_replay_failed",
+        }
+
+    try:
+        source_root = ET.parse(candidate_net_file).getroot()
+        teacher_root = ET.parse(teacher_net_file).getroot()
+        candidate_tree = ET.parse(unscoped_file)
+        candidate_root = candidate_tree.getroot()
+    except (ET.ParseError, OSError, KeyError, ValueError) as exc:
+        return _failure(f"scoped TLS cell replay parse failed: {type(exc).__name__}: {exc}")
+
+    target_candidate_junction = candidate_root.find(f"junction[@id='{junction_id}']")
+    teacher_junction = teacher_root.find(f"junction[@id='{teacher_junction_id}']")
+    if target_candidate_junction is None:
+        return _failure(f"candidate junction not found: {junction_id}")
+    if teacher_junction is None:
+        return _failure(f"teacher junction not found: {teacher_junction_id}")
+
+    teacher_edges = {
+        edge.attrib["id"]: edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    source_edges = {
+        edge.attrib["id"]: edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    source_junction_ids = {
+        junction.attrib["id"]
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    teacher_boundary_edge_ids = _teacher_boundary_edge_ids_touching_internal_subgraph(
+        teacher_root.findall("connection"),
+        teacher_edges,
+        teacher_junction_id,
+    )
+    effective_edge_map = {str(key): str(value) for key, value in edge_map.items()}
+    for teacher_edge_id in teacher_boundary_edge_ids:
+        effective_edge_map.setdefault(teacher_edge_id, teacher_edge_id)
+    protected_edge_ids = {
+        effective_edge_map.get(edge_id, edge_id)
+        for edge_id in teacher_boundary_edge_ids
+        if effective_edge_map.get(edge_id, edge_id)
+    }
+    old_member_ids = collapse_ids - {junction_id}
+    old_member_prefixes = tuple(f":{member_id}_" for member_id in sorted(old_member_ids))
+
+    target_x = float(target_candidate_junction.attrib.get("x", "0") or 0)
+    target_y = float(target_candidate_junction.attrib.get("y", "0") or 0)
+    teacher_x = float(teacher_junction.attrib.get("x", "0") or 0)
+    teacher_y = float(teacher_junction.attrib.get("y", "0") or 0)
+    dx = target_x - teacher_x
+    dy = target_y - teacher_y
+
+    def map_junction_id(value: str) -> str:
+        if value == teacher_junction_id:
+            return junction_id
+        return ordinary_junction_map.get(value, value)
+
+    def map_boundary_junction(teacher_endpoint_id: str) -> str:
+        mapped_id = map_junction_id(teacher_endpoint_id)
+        if mapped_id in source_junction_ids:
+            return mapped_id
+        if candidate_root.find(f"junction[@id='{mapped_id}']") is not None:
+            return mapped_id
+        teacher_endpoint = teacher_root.find(f"junction[@id='{teacher_endpoint_id}']")
+        if teacher_endpoint is None:
+            return mapped_id
+        attrs = _mapped_spatial_attrs(
+            teacher_endpoint.attrib,
+            dx,
+            dy,
+            effective_edge_map,
+            teacher_junction_id,
+            junction_id,
+        )
+        for attr in ("id", "from", "to", "tl"):
+            if attr in attrs:
+                attrs[attr] = map_junction_id(attrs[attr])
+        attrs["id"] = mapped_id
+        attrs["incLanes"] = ""
+        attrs["intLanes"] = ""
+        candidate_root.insert(_first_junction_index(candidate_root), ET.Element("junction", attrs))
+        return mapped_id
+
+    def edge_lane_ids(edge: ET.Element) -> set[str]:
+        return {
+            lane.attrib["id"]
+            for lane in edge.findall("lane")
+            if lane.attrib.get("id")
+        }
+
+    def remove_lane_refs(lane_ids: set[str]) -> None:
+        if not lane_ids:
+            return
+        for junction in candidate_root.findall("junction"):
+            inc_lanes = _split(junction.attrib.get("incLanes", ""))
+            if inc_lanes:
+                junction.set("incLanes", " ".join(lane for lane in inc_lanes if lane not in lane_ids))
+
+    def append_lane_refs(junction_id_value: str, lane_ids: set[str]) -> None:
+        junction = candidate_root.find(f"junction[@id='{junction_id_value}']")
+        if junction is None or not lane_ids:
+            return
+        inc_lanes = _split(junction.attrib.get("incLanes", ""))
+        for lane_id in sorted(lane_ids):
+            if lane_id not in inc_lanes:
+                inc_lanes.append(lane_id)
+        junction.set("incLanes", " ".join(inc_lanes))
+
+    removed_edge_ids: set[str] = set()
+    removed_non_boundary_edge_ids: list[str] = []
+    removed_non_boundary_edges_added_by_replay: list[str] = []
+    candidate_edges = {
+        edge.attrib["id"]: edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    # First remove the old split road graph around the supplied physical cell.
+    # Internal/crossing/walkingarea elements are handled separately so the
+    # teacher cell can remain intact.
+    for edge_id, edge in list(candidate_edges.items()):
+        if edge_id in protected_edge_ids or edge_id.startswith(":"):
+            continue
+        if edge.attrib.get("from") in collapse_ids or edge.attrib.get("to") in collapse_ids:
+            remove_lane_refs(edge_lane_ids(edge))
+            candidate_root.remove(edge)
+            removed_edge_ids.add(edge_id)
+            removed_non_boundary_edge_ids.append(edge_id)
+    # The permissive writer may have copied a continuation edge that was not in
+    # the candidate at all.  Keep only the explicit teacher cell boundary.
+    for edge in list(candidate_root.findall("edge")):
+        edge_id = edge.attrib.get("id", "")
+        if (
+            not edge_id
+            or edge_id in protected_edge_ids
+            or edge_id in source_edges
+            or edge_id.startswith(":")
+            or edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}
+        ):
+            continue
+        remove_lane_refs(edge_lane_ids(edge))
+        candidate_root.remove(edge)
+        removed_edge_ids.add(edge_id)
+        removed_non_boundary_edges_added_by_replay.append(edge_id)
+
+    # Remove member-owned internal artifacts but retain the newly replayed
+    # target prefix.  This is the actual split-junction collapse.
+    removed_member_internal_edge_ids: list[str] = []
+    removed_member_internal_junction_ids: list[str] = []
+    for edge in list(candidate_root.findall("edge")):
+        edge_id = edge.attrib.get("id", "")
+        if edge_id.startswith(old_member_prefixes):
+            remove_lane_refs(edge_lane_ids(edge))
+            candidate_root.remove(edge)
+            removed_edge_ids.add(edge_id)
+            removed_member_internal_edge_ids.append(edge_id)
+    for junction in list(candidate_root.findall("junction")):
+        junction_id_value = junction.attrib.get("id", "")
+        if junction_id_value.startswith(old_member_prefixes):
+            candidate_root.remove(junction)
+            removed_member_internal_junction_ids.append(junction_id_value)
+
+    # Map/reuse each explicit teacher boundary edge.  A candidate edge with a
+    # different lane cardinality is replaced by the teacher edge under the
+    # mapped candidate ID; otherwise a 1-lane continuation can silently drop
+    # several controlled linkIndexes during netconvert.
+    remapped_boundary_edge_count = 0
+    replaced_lane_cardinality_edge_ids: list[str] = []
+    replayed_boundary_geometry_edge_ids: list[str] = []
+    preserved_mapped_boundary_geometry_edge_ids: list[str] = []
+    boundary_geometry_preservation_failures: list[dict[str, object]] = []
+    candidate_edges = {
+        edge.attrib["id"]: edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    for teacher_edge_id in teacher_boundary_edge_ids:
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        if teacher_edge is None:
+            continue
+        candidate_edge_id = effective_edge_map.get(teacher_edge_id, teacher_edge_id)
+        candidate_edge = candidate_edges.get(candidate_edge_id)
+        if candidate_edge is None:
+            candidate_edge = _clone_transformed_boundary_edge(
+                teacher_edge,
+                candidate_edge_id,
+                dx,
+                dy,
+                effective_edge_map,
+                teacher_junction_id,
+                junction_id,
+            )
+            candidate_root.insert(0, candidate_edge)
+            candidate_edges[candidate_edge_id] = candidate_edge
+        else:
+            replacement = _clone_transformed_boundary_edge(
+                teacher_edge,
+                candidate_edge_id,
+                dx,
+                dy,
+                effective_edge_map,
+                teacher_junction_id,
+                junction_id,
+            )
+            lane_cardinality_changed = len(candidate_edge.findall("lane")) != len(teacher_edge.findall("lane"))
+            remove_lane_refs(edge_lane_ids(candidate_edge))
+            insert_at = list(candidate_root).index(candidate_edge)
+            candidate_root.remove(candidate_edge)
+            candidate_root.insert(insert_at, replacement)
+            candidate_edge = replacement
+            candidate_edges[candidate_edge_id] = candidate_edge
+            replayed_boundary_geometry_edge_ids.append(candidate_edge_id)
+            if lane_cardinality_changed:
+                replaced_lane_cardinality_edge_ids.append(candidate_edge_id)
+        mapped_from = map_boundary_junction(teacher_edge.attrib.get("from", ""))
+        mapped_to = map_boundary_junction(teacher_edge.attrib.get("to", ""))
+        remove_lane_refs(edge_lane_ids(candidate_edge))
+        candidate_edge.set("from", mapped_from)
+        candidate_edge.set("to", mapped_to)
+        geometry_source_edge = source_edges.get(candidate_edge_id)
+        if geometry_source_edge is not None:
+            geometry_report = _preserve_mapped_boundary_geometry(
+                candidate_edge,
+                geometry_source_edge,
+                target_junction_ids={junction_id},
+                source_local_junction_ids=collapse_ids,
+            )
+            if geometry_report.get("status") == "pass":
+                preserved_mapped_boundary_geometry_edge_ids.append(candidate_edge_id)
+            elif geometry_report.get("status") == "blocked":
+                boundary_geometry_preservation_failures.append(
+                    {
+                        "teacher_edge_id": teacher_edge_id,
+                        "candidate_edge_id": candidate_edge_id,
+                        **geometry_report,
+                    }
+                )
+        append_lane_refs(mapped_to, edge_lane_ids(candidate_edge))
+        remapped_boundary_edge_count += 1
+
+    # Rewrite connection edge aliases before removing stale member references.
+    remapped_connection_count = 0
+    for connection in list(candidate_root.findall("connection")):
+        for attr in ("from", "to"):
+            value = connection.attrib.get(attr, "")
+            mapped_value = effective_edge_map.get(value, value)
+            if mapped_value != value:
+                connection.set(attr, mapped_value)
+                remapped_connection_count += 1
+        values = tuple(connection.attrib.get(attr, "") for attr in ("from", "to", "via"))
+        if any(value in removed_edge_ids for value in values) or any(
+            value.startswith(old_member_prefixes) for value in values if value
+        ):
+            candidate_root.remove(connection)
+            continue
+
+    # Drop member junctions that are no longer endpoints.  Do not remove an
+    # unrelated external junction merely because the teacher supplied a new
+    # boundary endpoint for review.
+    for junction in list(candidate_root.findall("junction")):
+        junction_id_value = junction.attrib.get("id", "")
+        if junction_id_value not in old_member_ids:
+            continue
+        if not any(
+            junction_id_value in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+            for edge in candidate_root.findall("edge")
+        ):
+            candidate_root.remove(junction)
+
+    external_boundary_connection_report = _restore_external_boundary_connections(
+        source_root=source_root,
+        target_root=candidate_root,
+        boundary_edge_ids={
+            effective_edge_map.get(edge_id, edge_id)
+            for edge_id in teacher_boundary_edge_ids
+            if effective_edge_map.get(edge_id, edge_id) in source_edges
+        },
+        source_local_junction_ids=collapse_ids,
+    )
+
+    # Clean stale lane references left by removed split fragments and reject
+    # dangling connections before netconvert sees the variant.
+    remaining_edge_ids = {
+        edge.attrib["id"]
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    for junction in candidate_root.findall("junction"):
+        inc_lanes = [
+            lane
+            for lane in _split(junction.attrib.get("incLanes", ""))
+            if lane.rsplit("_", 1)[0] in remaining_edge_ids
+            and not lane.startswith(old_member_prefixes)
+        ]
+        junction.set("incLanes", " ".join(inc_lanes))
+        int_lanes = [
+            lane
+            for lane in _split(junction.attrib.get("intLanes", ""))
+            if not lane.startswith(old_member_prefixes)
+        ]
+        junction.set("intLanes", " ".join(int_lanes))
+    # Replacing a mapped boundary edge with the teacher lane cardinality can
+    # invalidate stale connections that belonged to the former split graph.
+    # Remove those connections before netconvert/SUMO sees the scoped variant;
+    # silently retaining them would turn a safe replay into a construction
+    # failure or, worse, a lane-index reinterpretation.
+    edge_lane_counts = _net_lane_counts(candidate_root)
+    removed_invalid_lane_connection_count = 0
+    removed_invalid_lane_connections: list[dict[str, str]] = []
+    for connection in list(candidate_root.findall("connection")):
+        if _connection_lane_indices_valid(connection, edge_lane_counts):
+            continue
+        removed_invalid_lane_connections.append(dict(connection.attrib))
+        candidate_root.remove(connection)
+        removed_invalid_lane_connection_count += 1
+    removed_dangling_connection_count = 0
+    seen_connection_keys: set[tuple[str, ...]] = set()
+    for connection in list(candidate_root.findall("connection")):
+        if connection.attrib.get("from") not in remaining_edge_ids or connection.attrib.get("to") not in remaining_edge_ids:
+            candidate_root.remove(connection)
+            removed_dangling_connection_count += 1
+            continue
+        key = tuple(
+            connection.attrib.get(attr, "")
+            for attr in ("from", "to", "fromLane", "toLane", "via", "tl", "linkIndex", "dir", "state")
+        )
+        if key in seen_connection_keys:
+            candidate_root.remove(connection)
+            removed_dangling_connection_count += 1
+            continue
+        seen_connection_keys.add(key)
+
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "blocked" if boundary_geometry_preservation_failures else "pass",
+        "claim_status": "diagnostic-demo",
+        "scoped_replay_status": "pass",
+        "net_file": str(output_file),
+        "unscoped_net_file": str(unscoped_file),
+        "junction_id": junction_id,
+        "teacher_junction_id": teacher_junction_id,
+        "collapse_junction_ids": sorted(collapse_ids),
+        "old_member_ids": sorted(old_member_ids),
+        "teacher_boundary_edge_ids": teacher_boundary_edge_ids,
+        "protected_boundary_edge_ids": sorted(protected_edge_ids),
+        "effective_edge_map": dict(sorted(effective_edge_map.items())),
+        "junction_map": dict(sorted(ordinary_junction_map.items())),
+        "remapped_boundary_edge_count": remapped_boundary_edge_count,
+        "remapped_connection_endpoint_count": remapped_connection_count,
+        "replaced_lane_cardinality_edge_ids": sorted(replaced_lane_cardinality_edge_ids),
+        "replayed_boundary_geometry_edge_ids": sorted(set(replayed_boundary_geometry_edge_ids)),
+        "preserved_mapped_boundary_geometry_edge_ids": sorted(
+            set(preserved_mapped_boundary_geometry_edge_ids)
+        ),
+        "boundary_geometry_preservation_failure_count": len(boundary_geometry_preservation_failures),
+        "boundary_geometry_preservation_failures": boundary_geometry_preservation_failures,
+        "restored_external_boundary_connection_count": external_boundary_connection_report[
+            "restored_connection_count"
+        ],
+        "restored_external_boundary_connections": external_boundary_connection_report[
+            "restored_connections"
+        ],
+        "preserved_existing_external_boundary_connection_count": external_boundary_connection_report[
+            "preserved_existing_connection_count"
+        ],
+        "preserved_existing_external_boundary_connections": external_boundary_connection_report[
+            "preserved_existing_connections"
+        ],
+        "skipped_external_boundary_connection_count": external_boundary_connection_report[
+            "skipped_connection_count"
+        ],
+        "skipped_external_boundary_connections": external_boundary_connection_report[
+            "skipped_connections"
+        ],
+        "removed_non_boundary_edge_count": len(removed_non_boundary_edge_ids),
+        "removed_non_boundary_edge_ids": sorted(removed_non_boundary_edge_ids),
+        "removed_replay_continuation_edge_count": len(removed_non_boundary_edges_added_by_replay),
+        "removed_replay_continuation_edge_ids": sorted(removed_non_boundary_edges_added_by_replay),
+        "removed_member_internal_edge_count": len(removed_member_internal_edge_ids),
+        "removed_member_internal_edge_ids": sorted(removed_member_internal_edge_ids),
+        "removed_member_internal_junction_count": len(removed_member_internal_junction_ids),
+        "removed_member_internal_junction_ids": sorted(removed_member_internal_junction_ids),
+        "removed_invalid_lane_connection_count": removed_invalid_lane_connection_count,
+        "removed_invalid_lane_connections": removed_invalid_lane_connections,
+        "removed_dangling_or_duplicate_connection_count": removed_dangling_connection_count,
+        "base_replay_report": replay_report,
+    }
+
+
+def write_shared_teacher_tls_controller_replay_net(
+    *,
+    candidate_net_file: Path,
+    teacher_net_file: Path,
+    output_file: Path,
+    candidate_controller_id: str,
+    teacher_controller_id: str,
+    owner_map: dict[str, str],
+    edge_map: dict[str, str],
+    junction_map: dict[str, str] | None = None,
+    collapse_junction_ids: set[str] | list[str] | None = None,
+) -> dict[str, object]:
+    """Replay a TLS whose link indexes span more than one internal owner.
+
+    SUMO permits several physical junctions to use one ``tlLogic``.  The
+    single-owner writer above deliberately rejects that shape because mapping
+    a secondary ``via`` prefix into the primary prefix would silently change
+    topology.  This writer requires an explicit reference-owner to
+    candidate-owner map and an explicit boundary-edge map, then replays all
+    owner-local internal artifacts and connections in one variant.
+
+    The function is intentionally local to a repair variant.  It never edits
+    the source network and it reports every teacher boundary that was copied
+    under a generated candidate edge id, so a later semantic gate can decide
+    whether the copy is acceptable.
+    """
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    if not candidate_net_file.exists():
+        return _failure(f"candidate net file does not exist: {candidate_net_file}")
+    if not teacher_net_file.exists():
+        return _failure(f"teacher net file does not exist: {teacher_net_file}")
+    try:
+        candidate_tree = ET.parse(candidate_net_file)
+        candidate_root = candidate_tree.getroot()
+        candidate_source_root = copy.deepcopy(candidate_root)
+        teacher_root = ET.parse(teacher_net_file).getroot()
+    except (ET.ParseError, OSError, ValueError) as exc:
+        return _failure(f"shared TLS controller replay parse failed: {type(exc).__name__}: {exc}")
+
+    clean_owner_map = {
+        str(key): str(value)
+        for key, value in (owner_map or {}).items()
+        if str(key) and str(value)
+    }
+    clean_owner_map.setdefault(teacher_controller_id, candidate_controller_id)
+    clean_junction_map = {
+        str(key): str(value)
+        for key, value in (junction_map or {}).items()
+        if str(key) and str(value)
+    }
+    collapse_ids = {
+        str(value)
+        for value in (collapse_junction_ids or set())
+        if str(value)
+    }
+    collapse_ids.update(clean_owner_map.values())
+    candidate_owner_ids = set(clean_owner_map.values())
+    teacher_owner_ids = sorted(clean_owner_map, key=len, reverse=True)
+    teacher_edges = {
+        edge.attrib["id"]: edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_edges = {
+        edge.attrib["id"]: edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    teacher_junctions = {
+        junction.attrib["id"]: junction
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    candidate_junctions = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    if candidate_controller_id not in candidate_junctions:
+        return _failure(f"candidate controller junction not found: {candidate_controller_id}")
+    if teacher_controller_id not in teacher_junctions:
+        return _failure(f"teacher controller junction not found: {teacher_controller_id}")
+    missing_owner_ids = [
+        owner_id
+        for owner_id in teacher_owner_ids
+        if owner_id not in teacher_junctions or clean_owner_map[owner_id] not in candidate_junctions
+    ]
+    if missing_owner_ids:
+        return {
+            **_failure("shared TLS owner closure is incomplete"),
+            "missing_owner_ids": missing_owner_ids,
+            "owner_map": dict(sorted(clean_owner_map.items())),
+        }
+
+    def teacher_owner_for(value: str) -> str:
+        for owner_id in teacher_owner_ids:
+            if value.startswith(f":{owner_id}_"):
+                return owner_id
+        return ""
+
+    def candidate_internal_ref(value: str) -> str:
+        owner_id = teacher_owner_for(value)
+        if not owner_id:
+            return value
+        prefix = f":{owner_id}_"
+        return f":{clean_owner_map[owner_id]}_{value[len(prefix):]}"
+
+    def teacher_edge_owner(edge: ET.Element) -> str:
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+            if endpoint in teacher_owner_ids:
+                return endpoint
+        return ""
+
+    def point_delta(owner_id: str = "") -> tuple[float, float]:
+        anchor_owner = owner_id if owner_id in clean_owner_map else teacher_controller_id
+        teacher_anchor = teacher_junctions.get(anchor_owner)
+        candidate_anchor = candidate_junctions.get(clean_owner_map.get(anchor_owner, candidate_controller_id))
+        if teacher_anchor is None or candidate_anchor is None:
+            return (0.0, 0.0)
+        try:
+            return (
+                float(candidate_anchor.attrib.get("x", "0") or 0)
+                - float(teacher_anchor.attrib.get("x", "0") or 0),
+                float(candidate_anchor.attrib.get("y", "0") or 0)
+                - float(teacher_anchor.attrib.get("y", "0") or 0),
+            )
+        except (TypeError, ValueError):
+            return (0.0, 0.0)
+
+    def map_junction_id(value: str) -> str:
+        if value in clean_owner_map:
+            return clean_owner_map[value]
+        if value in clean_junction_map:
+            return clean_junction_map[value]
+        return value
+
+    def map_edge_ref(value: str, resolved_edge_map: dict[str, str]) -> str:
+        if not value:
+            return ""
+        if value.startswith(":"):
+            return candidate_internal_ref(value)
+        return resolved_edge_map.get(value, value if value in candidate_edges else "")
+
+    def map_crossing_edges(value: str, resolved_edge_map: dict[str, str]) -> str:
+        mapped: list[str] = []
+        for edge_id in _split(value):
+            if edge_id.startswith(":"):
+                mapped_id = candidate_internal_ref(edge_id)
+            else:
+                mapped_id = resolved_edge_map.get(edge_id, edge_id if edge_id in candidate_edges else "")
+            if mapped_id:
+                mapped.append(mapped_id)
+        return " ".join(mapped)
+
+    def relevant_connection(connection: ET.Element) -> bool:
+        if any(teacher_owner_for(connection.attrib.get(attr, "")) for attr in ("from", "to", "via")):
+            return True
+        if connection.attrib.get("tl") != teacher_controller_id:
+            return False
+        for attr in ("from", "to"):
+            edge = teacher_edges.get(connection.attrib.get(attr, ""))
+            if edge is not None and teacher_edge_owner(edge):
+                return True
+        return False
+
+    relevant_connections = [
+        connection for connection in teacher_root.findall("connection") if relevant_connection(connection)
+    ]
+    controlled_connections = [
+        connection
+        for connection in relevant_connections
+        if connection.attrib.get("tl") == teacher_controller_id and connection.attrib.get("linkIndex") is not None
+    ]
+    teacher_link_indices = {
+        str(connection.attrib.get("linkIndex", "")) for connection in controlled_connections
+    }
+    if not controlled_connections:
+        return _failure("shared TLS controller has no controlled connections")
+
+    boundary_edge_ids: list[str] = []
+    seen_boundary_edge_ids: set[str] = set()
+    for connection in relevant_connections:
+        for attr in ("from", "to"):
+            edge_id = connection.attrib.get(attr, "")
+            if not edge_id or edge_id.startswith(":") or edge_id not in teacher_edges:
+                continue
+            if edge_id not in seen_boundary_edge_ids:
+                seen_boundary_edge_ids.add(edge_id)
+                boundary_edge_ids.append(edge_id)
+    for edge in teacher_edges.values():
+        edge_id = edge.attrib.get("id", "")
+        owner_id = teacher_owner_for(edge_id)
+        if not owner_id:
+            continue
+        for crossing_edge_id in _split(edge.attrib.get("crossingEdges", "")):
+            if crossing_edge_id in teacher_edges and crossing_edge_id not in seen_boundary_edge_ids:
+                seen_boundary_edge_ids.add(crossing_edge_id)
+                boundary_edge_ids.append(crossing_edge_id)
+
+    resolved_edge_map: dict[str, str] = {}
+    generated_boundary_edge_ids: list[str] = []
+    edge_mapping_sources: dict[str, str] = {}
+    reverse_edge_map: dict[str, str] = {}
+    for teacher_edge_id in boundary_edge_ids:
+        mapped_edge_id = str((edge_map or {}).get(teacher_edge_id, "")).strip()
+        if not mapped_edge_id:
+            if teacher_edge_id in candidate_edges:
+                mapped_edge_id = teacher_edge_id
+                edge_mapping_sources[teacher_edge_id] = "candidate_identity"
+            else:
+                safe_id = "".join(
+                    character if character.isalnum() or character in "_.-" else "_"
+                    for character in teacher_edge_id
+                ).strip("_") or "edge"
+                mapped_edge_id = f"torii_shared_{safe_id}"
+                edge_mapping_sources[teacher_edge_id] = "explicit_teacher_boundary_copy"
+                generated_boundary_edge_ids.append(teacher_edge_id)
+        else:
+            edge_mapping_sources[teacher_edge_id] = "explicit_edge_map"
+        previous_teacher_edge_id = reverse_edge_map.get(mapped_edge_id)
+        if previous_teacher_edge_id and previous_teacher_edge_id != teacher_edge_id:
+            return {
+                **_failure("shared TLS boundary edge map is not one-to-one"),
+                "edge_mapping_conflict": {
+                    "candidate_edge_id": mapped_edge_id,
+                    "teacher_edge_ids": [previous_teacher_edge_id, teacher_edge_id],
+                },
+            }
+        reverse_edge_map[mapped_edge_id] = teacher_edge_id
+        resolved_edge_map[teacher_edge_id] = mapped_edge_id
+
+    unanchored_boundary_edge_ids = sorted(
+        teacher_edge_id
+        for teacher_edge_id, mapped_edge_id in resolved_edge_map.items()
+        if mapped_edge_id not in candidate_edges
+    )
+    if unanchored_boundary_edge_ids:
+        return {
+            **_failure("shared TLS boundary geometry anchor is missing"),
+            "status": "blocked",
+            "shared_controller_replay_status": "blocked",
+            "candidate_controller_id": candidate_controller_id,
+            "teacher_controller_id": teacher_controller_id,
+            "owner_map": dict(sorted(clean_owner_map.items())),
+            "junction_map": dict(sorted(clean_junction_map.items())),
+            "effective_edge_map": dict(sorted(resolved_edge_map.items())),
+            "edge_mapping_sources": dict(sorted(edge_mapping_sources.items())),
+            "generated_boundary_edge_ids": sorted(generated_boundary_edge_ids),
+            "unanchored_boundary_edge_count": len(unanchored_boundary_edge_ids),
+            "unanchored_boundary_edge_ids": unanchored_boundary_edge_ids,
+            "replay_policy": "mapped shared boundaries require existing candidate geometry anchors",
+        }
+
+    # Remove only the local candidate cell.  Existing normal edges that are
+    # explicitly mapped are replaced below; all other network edges remain.
+    candidate_internal_prefixes = tuple(f":{owner_id}_" for owner_id in sorted(collapse_ids, key=len, reverse=True))
+    removed_internal_edge_ids: list[str] = []
+    for edge in list(candidate_root.findall("edge")):
+        edge_id = edge.attrib.get("id", "")
+        if edge_id.startswith(candidate_internal_prefixes):
+            _remove_edge_lanes_from_destination_junction(candidate_root, edge, all_junctions=True)
+            candidate_root.remove(edge)
+            removed_internal_edge_ids.append(edge_id)
+    removed_internal_junction_ids: list[str] = []
+    for junction in list(candidate_root.findall("junction")):
+        junction_id = junction.attrib.get("id", "")
+        if junction_id.startswith(candidate_internal_prefixes):
+            candidate_root.remove(junction)
+            removed_internal_junction_ids.append(junction_id)
+
+    protected_edge_ids = set(resolved_edge_map.values())
+    removed_member_edge_ids: list[str] = []
+    for edge in list(candidate_root.findall("edge")):
+        edge_id = edge.attrib.get("id", "")
+        if (
+            not edge_id
+            or edge_id.startswith(":")
+            or edge_id in protected_edge_ids
+            or edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}
+            or not ({edge.attrib.get("from", ""), edge.attrib.get("to", "")} & collapse_ids)
+        ):
+            continue
+        _remove_edge_lanes_from_destination_junction(candidate_root, edge, all_junctions=True)
+        candidate_root.remove(edge)
+        removed_member_edge_ids.append(edge_id)
+
+    removed_connection_count = 0
+    removed_edge_id_set = set(removed_member_edge_ids)
+    for connection in list(candidate_root.findall("connection")):
+        values = tuple(connection.attrib.get(attr, "") for attr in ("from", "to", "via"))
+        if (
+            connection.attrib.get("tl") in candidate_owner_ids | {candidate_controller_id}
+            or any(value.startswith(candidate_internal_prefixes) for value in values if value)
+            or any(value in removed_edge_id_set for value in values if value)
+            or any(value in protected_edge_ids for value in values if value)
+        ):
+            candidate_root.remove(connection)
+            removed_connection_count += 1
+
+    # Existing mapped boundary edges can carry connections outside the local
+    # cell.  They must be removed with the old edge before the teacher edge is
+    # inserted, otherwise lane indices from the old split survive silently.
+    removed_mapped_edge_connection_count = 0
+    for connection in list(candidate_root.findall("connection")):
+        if any(connection.attrib.get(attr, "") in protected_edge_ids for attr in ("from", "to")):
+            candidate_root.remove(connection)
+            removed_mapped_edge_connection_count += 1
+
+    candidate_edges = {
+        edge.attrib["id"]: edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_junctions = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+
+    def ensure_boundary_junction(teacher_junction_id: str, owner_hint: str) -> str:
+        mapped_id = map_junction_id(teacher_junction_id)
+        if mapped_id in candidate_junctions:
+            return mapped_id
+        source_junction = teacher_junctions.get(teacher_junction_id)
+        if source_junction is None:
+            return mapped_id
+        dx, dy = point_delta(owner_hint)
+        attrs = dict(source_junction.attrib)
+        if "x" in attrs:
+            attrs["x"] = _format_xy(float(attrs["x"]) + dx)
+        if "y" in attrs:
+            attrs["y"] = _format_xy(float(attrs["y"]) + dy)
+        for attr in ("shape", "outlineShape", "customShape"):
+            if attr in attrs:
+                attrs[attr] = _translate_shape(attrs[attr], dx, dy)
+        attrs["id"] = mapped_id
+        for attr in ("from", "to", "tl"):
+            if attr in attrs:
+                attrs[attr] = map_junction_id(attrs[attr])
+        if "crossingEdges" in attrs:
+            attrs["crossingEdges"] = map_crossing_edges(attrs["crossingEdges"], resolved_edge_map)
+        attrs["incLanes"] = ""
+        attrs["intLanes"] = ""
+        candidate_root.insert(_first_junction_index(candidate_root), ET.Element("junction", attrs))
+        candidate_junctions[mapped_id] = candidate_root.find(f"junction[@id='{mapped_id}']")
+        return mapped_id
+
+    # Add all normal teacher boundaries first so every mapped connection has a
+    # concrete edge endpoint.  A copied boundary is a deliberate artifact, not
+    # a nearest-family guess.
+    copied_boundary_edge_ids: list[str] = []
+    replaced_boundary_edge_ids: list[str] = []
+    preserved_mapped_boundary_geometry_edge_ids: list[str] = []
+    boundary_geometry_preservation_failures: list[dict[str, object]] = []
+    for teacher_edge_id in boundary_edge_ids:
+        teacher_edge = teacher_edges[teacher_edge_id]
+        mapped_edge_id = resolved_edge_map[teacher_edge_id]
+        owner_hint = teacher_edge_owner(teacher_edge)
+        mapped_from = ensure_boundary_junction(teacher_edge.attrib.get("from", ""), owner_hint)
+        mapped_to = ensure_boundary_junction(teacher_edge.attrib.get("to", ""), owner_hint)
+        dx, dy = point_delta(owner_hint)
+        clone = _clone_transformed_net_element(
+            teacher_edge,
+            dx,
+            dy,
+            resolved_edge_map,
+        )
+        clone.set("id", mapped_edge_id)
+        clone.set("from", mapped_from)
+        clone.set("to", mapped_to)
+        geometry_source_edge = candidate_source_root.find(f"edge[@id='{mapped_edge_id}']")
+        if geometry_source_edge is not None:
+            geometry_report = _preserve_mapped_boundary_geometry(
+                clone,
+                geometry_source_edge,
+                target_junction_ids=candidate_owner_ids,
+                source_local_junction_ids=collapse_ids,
+            )
+            if geometry_report.get("status") == "pass":
+                preserved_mapped_boundary_geometry_edge_ids.append(mapped_edge_id)
+            elif geometry_report.get("status") == "blocked":
+                boundary_geometry_preservation_failures.append(
+                    {
+                        "teacher_edge_id": teacher_edge_id,
+                        "candidate_edge_id": mapped_edge_id,
+                        **geometry_report,
+                    }
+                )
+        clone.attrib.pop("tl", None)
+        for attr in ("crossingEdges",):
+            if attr in clone.attrib:
+                clone.set(attr, map_crossing_edges(clone.attrib[attr], resolved_edge_map))
+        teacher_edge_prefix = f"{teacher_edge_id}_"
+        mapped_edge_prefix = f"{mapped_edge_id}_"
+        for lane_index, lane in enumerate(clone.findall("lane")):
+            old_lane_id = lane.attrib.get("id", "")
+            suffix = old_lane_id[len(teacher_edge_prefix):] if old_lane_id.startswith(teacher_edge_prefix) else str(
+                lane.attrib.get("index", lane_index)
+            )
+            lane.set("id", f"{mapped_edge_prefix}{suffix}")
+        existing = candidate_edges.get(mapped_edge_id)
+        if existing is not None:
+            _remove_edge_lanes_from_destination_junction(candidate_root, existing, all_junctions=True)
+            insert_at = list(candidate_root).index(existing)
+            candidate_root.remove(existing)
+            candidate_root.insert(insert_at, clone)
+            replaced_boundary_edge_ids.append(teacher_edge_id)
+        else:
+            candidate_root.insert(_first_junction_index(candidate_root), clone)
+            copied_boundary_edge_ids.append(teacher_edge_id)
+        candidate_edges[mapped_edge_id] = clone
+
+    # Rebuild every owner-local internal edge and junction under its explicit
+    # candidate owner prefix.  This includes non-vehicle movement artifacts.
+    copied_internal_edge_count = 0
+    copied_internal_junction_count = 0
+    for teacher_owner_id in teacher_owner_ids:
+        candidate_owner_id = clean_owner_map[teacher_owner_id]
+        dx, dy = point_delta(teacher_owner_id)
+        teacher_prefix = f":{teacher_owner_id}_"
+        candidate_prefix = f":{candidate_owner_id}_"
+        for edge in teacher_root.findall("edge"):
+            # Owner ids may themselves share prefixes (for example ``tls``
+            # and ``tls__owner_01``).  A plain ``startswith`` check would
+            # replay the secondary owner's internal artifacts a second time
+            # under the primary owner, yielding ids such as
+            # ``:candidate__owner_01_0`` whose implicit SUMO junction does
+            # not exist.  Resolve ownership with the same longest-prefix
+            # rule used for connection and ``via`` mapping.
+            if teacher_owner_for(edge.attrib.get("id", "")) != teacher_owner_id:
+                continue
+            clone = _clone_transformed_net_element(
+                edge,
+                dx,
+                dy,
+                resolved_edge_map,
+                teacher_owner_id,
+                candidate_owner_id,
+            )
+            if "crossingEdges" in clone.attrib:
+                clone.set("crossingEdges", map_crossing_edges(clone.attrib["crossingEdges"], resolved_edge_map))
+            candidate_root.insert(_first_junction_index(candidate_root), clone)
+            candidate_edges[clone.attrib.get("id", "")] = clone
+            copied_internal_edge_count += 1
+        for junction in teacher_root.findall("junction"):
+            if teacher_owner_for(junction.attrib.get("id", "")) != teacher_owner_id:
+                continue
+            candidate_root.insert(
+                _first_junction_index(candidate_root),
+                _clone_transformed_junction(
+                    junction,
+                    dx,
+                    dy,
+                    resolved_edge_map,
+                    teacher_prefix,
+                    candidate_prefix,
+                ),
+            )
+            copied_internal_junction_count += 1
+
+        teacher_normal_junction = teacher_junctions.get(teacher_owner_id)
+        candidate_normal_junction = candidate_root.find(f"junction[@id='{candidate_owner_id}']")
+        if teacher_normal_junction is None or candidate_normal_junction is None:
+            continue
+        attrs = _mapped_junction_attrs(
+            teacher_normal_junction,
+            dx,
+            dy,
+            resolved_edge_map,
+            teacher_prefix,
+            candidate_prefix,
+        )
+        attrs["id"] = candidate_owner_id
+        candidate_normal_junction.attrib.clear()
+        candidate_normal_junction.attrib.update(attrs)
+        for child in list(candidate_normal_junction):
+            candidate_normal_junction.remove(child)
+        for request in teacher_normal_junction.findall("request"):
+            candidate_normal_junction.append(ET.Element("request", dict(request.attrib)))
+
+    # Replace any old local tlLogics with one shared controller logic.  The
+    # controller id intentionally remains the primary candidate id while its
+    # connections may originate at either physical candidate owner.
+    removed_tllogic_ids: list[str] = []
+    for tl_logic in list(candidate_root.findall("tlLogic")):
+        if tl_logic.attrib.get("id") in candidate_owner_ids | {candidate_controller_id}:
+            removed_tllogic_ids.append(tl_logic.attrib.get("id", ""))
+            candidate_root.remove(tl_logic)
+    teacher_tllogic = teacher_root.find(f"tlLogic[@id='{teacher_controller_id}']")
+    if teacher_tllogic is None:
+        return _failure(f"teacher tlLogic not found: {teacher_controller_id}")
+    controller_dx, controller_dy = point_delta(teacher_controller_id)
+    copied_tllogic = _clone_transformed_net_element(
+        teacher_tllogic,
+        controller_dx,
+        controller_dy,
+        resolved_edge_map,
+    )
+    copied_tllogic.set("id", candidate_controller_id)
+    candidate_root.insert(
+        next(
+            (index for index, child in enumerate(list(candidate_root)) if child.tag == "connection"),
+            len(list(candidate_root)),
+        ),
+        copied_tllogic,
+    )
+
+    copied_connection_count = 0
+    copied_controlled_connection_count = 0
+    skipped_connections: list[dict[str, str]] = []
+    copied_connections: list[dict[str, str]] = []
+    for connection in relevant_connections:
+        mapped = dict(connection.attrib)
+        owner_hint = teacher_owner_for(connection.attrib.get("via", ""))
+        if not owner_hint:
+            for attr in ("from", "to"):
+                owner_hint = teacher_edge_owner(teacher_edges.get(connection.attrib.get(attr, ""), ET.Element("edge")))
+                if owner_hint:
+                    break
+        for attr in ("from", "to"):
+            mapped_value = map_edge_ref(connection.attrib.get(attr, ""), resolved_edge_map)
+            if not mapped_value:
+                skipped_connections.append(dict(connection.attrib))
+                break
+            mapped[attr] = mapped_value
+        else:
+            if mapped.get("via"):
+                mapped["via"] = candidate_internal_ref(mapped["via"])
+            if mapped.get("tl") == teacher_controller_id:
+                mapped["tl"] = candidate_controller_id
+            if mapped.get("shape"):
+                dx, dy = point_delta(owner_hint)
+                mapped["shape"] = _translate_shape(mapped["shape"], dx, dy)
+            via_value = mapped.get("via", "")
+            if via_value:
+                via_edge_id = via_value.rsplit("_", 1)[0]
+                if via_edge_id not in candidate_edges:
+                    skipped_connections.append(dict(connection.attrib))
+                    continue
+            if mapped["from"] not in candidate_edges or mapped["to"] not in candidate_edges:
+                skipped_connections.append(dict(connection.attrib))
+                continue
+            candidate_root.append(ET.Element("connection", mapped))
+            copied_connections.append(mapped)
+            copied_connection_count += 1
+            if mapped.get("tl") == candidate_controller_id and mapped.get("linkIndex") is not None:
+                copied_controlled_connection_count += 1
+
+    external_boundary_connection_report = _restore_external_boundary_connections(
+        source_root=candidate_source_root,
+        target_root=candidate_root,
+        boundary_edge_ids=protected_edge_ids,
+        source_local_junction_ids=collapse_ids,
+    )
+
+    # Remove member junctions that no longer have an edge endpoint, then clean
+    # lane references and invalid connections before the external SUMO gates.
+    candidate_edge_ids = {
+        edge.attrib["id"] for edge in candidate_root.findall("edge") if edge.attrib.get("id")
+    }
+    for junction in list(candidate_root.findall("junction")):
+        junction_id = junction.attrib.get("id", "")
+        if junction_id not in collapse_ids or junction_id in candidate_owner_ids:
+            continue
+        if not any(
+            junction_id in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+            for edge in candidate_root.findall("edge")
+        ):
+            candidate_root.remove(junction)
+
+    for junction in candidate_root.findall("junction"):
+        inc_lanes = [
+            lane
+            for lane in _split(junction.attrib.get("incLanes", ""))
+            if lane.rsplit("_", 1)[0] in candidate_edge_ids
+        ]
+        junction.set("incLanes", " ".join(inc_lanes))
+    for owner_id in candidate_owner_ids:
+        junction = candidate_root.find(f"junction[@id='{owner_id}']")
+        if junction is None:
+            continue
+        incoming_lanes = [
+            lane.attrib["id"]
+            for edge in candidate_root.findall("edge")
+            if edge.attrib.get("to") == owner_id
+            for lane in edge.findall("lane")
+            if lane.attrib.get("id")
+        ]
+        existing_inc_lanes = _split(junction.attrib.get("incLanes", ""))
+        junction.set("incLanes", " ".join(dict.fromkeys([*existing_inc_lanes, *incoming_lanes])))
+
+    invalid_connections: list[dict[str, str]] = []
+    dangling_connections: list[dict[str, str]] = []
+    edge_lane_counts = _net_lane_counts(candidate_root)
+    for connection in list(candidate_root.findall("connection")):
+        if connection.attrib.get("from") not in candidate_edge_ids or connection.attrib.get("to") not in candidate_edge_ids:
+            dangling_connections.append(dict(connection.attrib))
+            candidate_root.remove(connection)
+            continue
+        if not _connection_lane_indices_valid(connection, edge_lane_counts):
+            invalid_connections.append(dict(connection.attrib))
+            candidate_root.remove(connection)
+
+    actual_controlled_connections = [
+        connection
+        for connection in candidate_root.findall("connection")
+        if connection.attrib.get("tl") == candidate_controller_id and connection.attrib.get("linkIndex") is not None
+    ]
+    actual_link_indices = {str(connection.attrib.get("linkIndex", "")) for connection in actual_controlled_connections}
+    invalid_controlled_connections = [
+        connection
+        for connection in [*invalid_connections, *dangling_connections]
+        if connection.get("tl") == candidate_controller_id and connection.get("linkIndex") is not None
+    ]
+    missing_link_indices = sorted(teacher_link_indices - actual_link_indices, key=lambda value: int(value) if value.isdigit() else value)
+    unexpected_link_indices = sorted(actual_link_indices - teacher_link_indices, key=lambda value: int(value) if value.isdigit() else value)
+    status = "pass"
+    if (
+        skipped_connections
+        or invalid_controlled_connections
+        or missing_link_indices
+        or unexpected_link_indices
+        or copied_controlled_connection_count != len(controlled_connections)
+        or boundary_geometry_preservation_failures
+        or not output_file.parent.exists()
+    ):
+        status = "blocked"
+
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "net_file": str(output_file),
+        "candidate_controller_id": candidate_controller_id,
+        "teacher_controller_id": teacher_controller_id,
+        "owner_map": dict(sorted(clean_owner_map.items())),
+        "junction_map": dict(sorted(clean_junction_map.items())),
+        "collapse_junction_ids": sorted(collapse_ids),
+        "teacher_owner_ids": teacher_owner_ids,
+        "candidate_owner_ids": sorted(candidate_owner_ids),
+        "teacher_boundary_edge_ids": boundary_edge_ids,
+        "effective_edge_map": dict(sorted(resolved_edge_map.items())),
+        "edge_mapping_sources": dict(sorted(edge_mapping_sources.items())),
+        "generated_boundary_edge_ids": sorted(generated_boundary_edge_ids),
+        "unanchored_boundary_edge_count": 0,
+        "unanchored_boundary_edge_ids": [],
+        "copied_boundary_edge_ids": sorted(copied_boundary_edge_ids),
+        "replaced_boundary_edge_ids": sorted(replaced_boundary_edge_ids),
+        "preserved_mapped_boundary_geometry_edge_ids": sorted(
+            set(preserved_mapped_boundary_geometry_edge_ids)
+        ),
+        "boundary_geometry_preservation_failure_count": len(boundary_geometry_preservation_failures),
+        "boundary_geometry_preservation_failures": boundary_geometry_preservation_failures,
+        "restored_external_boundary_connection_count": external_boundary_connection_report[
+            "restored_connection_count"
+        ],
+        "restored_external_boundary_connections": external_boundary_connection_report[
+            "restored_connections"
+        ],
+        "preserved_existing_external_boundary_connection_count": external_boundary_connection_report[
+            "preserved_existing_connection_count"
+        ],
+        "preserved_existing_external_boundary_connections": external_boundary_connection_report[
+            "preserved_existing_connections"
+        ],
+        "skipped_external_boundary_connection_count": external_boundary_connection_report[
+            "skipped_connection_count"
+        ],
+        "skipped_external_boundary_connections": external_boundary_connection_report[
+            "skipped_connections"
+        ],
+        "removed_internal_edge_count": len(removed_internal_edge_ids),
+        "removed_internal_junction_count": len(removed_internal_junction_ids),
+        "removed_member_edge_count": len(removed_member_edge_ids),
+        "removed_connection_count": removed_connection_count,
+        "removed_mapped_edge_connection_count": removed_mapped_edge_connection_count,
+        "copied_internal_edge_count": copied_internal_edge_count,
+        "copied_internal_junction_count": copied_internal_junction_count,
+        "removed_tllogic_ids": sorted(removed_tllogic_ids),
+        "teacher_controlled_connection_count": len(controlled_connections),
+        "teacher_link_indices": sorted(teacher_link_indices, key=lambda value: int(value) if value.isdigit() else value),
+        "copied_connection_count": copied_connection_count,
+        "copied_controlled_connection_count": copied_controlled_connection_count,
+        "actual_controlled_connection_count": len(actual_controlled_connections),
+        "actual_link_indices": sorted(actual_link_indices, key=lambda value: int(value) if value.isdigit() else value),
+        "missing_link_indices": missing_link_indices,
+        "unexpected_link_indices": unexpected_link_indices,
+        "skipped_connections": skipped_connections,
+        "invalid_connection_count": len(invalid_connections),
+        "invalid_connections": invalid_connections,
+        "dangling_connection_count": len(dangling_connections),
+        "dangling_connections": dangling_connections,
+        "invalid_controlled_connection_count": len(invalid_controlled_connections),
+        "policy": "explicit multi-owner closure; generated boundary edges remain reviewable artifacts",
+    }
+
+
+def build_scoped_teacher_tls_cell_replay_plan(
+    *,
+    candidate_net_file: Path,
+    teacher_net_file: Path,
+    teacher_junction_id: str,
+    candidate_junction_id: str,
+    candidate_junction_ids: set[str] | list[str] | None = None,
+    approach_pairs: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Derive an auditable boundary map for a split TLS cell.
+
+    The plan follows same-way edge chains through the candidate member nodes.
+    It does not invent a destination edge: a reference boundary with no
+    candidate family is left as an explicit identity/copy boundary and marked
+    for review in the returned evidence.
+    """
+
+    if not candidate_net_file.exists() or not teacher_net_file.exists():
+        return _failure("candidate or teacher net file is missing")
+    try:
+        candidate_root = ET.parse(candidate_net_file).getroot()
+        teacher_root = ET.parse(teacher_net_file).getroot()
+    except (ET.ParseError, OSError, KeyError, ValueError) as exc:
+        return _failure(f"TLS cell replay plan parse failed: {type(exc).__name__}: {exc}")
+    teacher_edges = {
+        edge.attrib["id"]: edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_edges = {
+        edge.attrib["id"]: edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    teacher_junction = teacher_root.find(f"junction[@id='{teacher_junction_id}']")
+    candidate_junction = candidate_root.find(f"junction[@id='{candidate_junction_id}']")
+    if teacher_junction is None or candidate_junction is None:
+        return _failure("TLS cell replay plan target junction is missing")
+    member_ids = {
+        str(value)
+        for value in (candidate_junction_ids or set())
+        if str(value)
+    }
+    member_ids.add(candidate_junction_id)
+    teacher_boundary_edge_ids = _teacher_boundary_edge_ids_touching_internal_subgraph(
+        teacher_root.findall("connection"),
+        teacher_edges,
+        teacher_junction_id,
+    )
+    pair_edge_map = {
+        str(pair.get("reference_edge_id", "")): str(pair.get("candidate_edge_id", ""))
+        for pair in (approach_pairs or [])
+        if isinstance(pair, dict)
+        and str(pair.get("reference_edge_id", ""))
+        and str(pair.get("candidate_edge_id", ""))
+    }
+
+    def lane_count(edge: ET.Element | None) -> int:
+        return len(edge.findall("lane")) if edge is not None else 0
+
+    def boundary_direction(edge: ET.Element) -> str:
+        return "outgoing" if edge.attrib.get("from") == teacher_junction_id else "incoming"
+
+    def candidate_boundary_side_matches(edge: ET.Element, direction: str) -> bool:
+        """Require the candidate edge to leave/enter the split cell correctly.
+
+        An OSM split often contains an edge with the same signed id as a
+        teacher boundary edge, but on the opposite side of the physical cell.
+        Treating that id as an identity mapping silently reverses the approach
+        and can create duplicate candidate boundary aliases.
+        """
+
+        member_endpoint = edge.attrib.get("from" if direction == "outgoing" else "to", "")
+        return member_endpoint in member_ids
+
+    def family_candidates(
+        teacher_edge: ET.Element,
+        direction: str,
+        *,
+        excluded_candidate_ids: set[str] | None = None,
+        family_override: str | None = None,
+    ) -> list[tuple[int, str, ET.Element]]:
+        teacher_id = teacher_edge.attrib.get("id", "")
+        teacher_family = family_override or _signed_edge_family_id(teacher_id)
+        expected_lane_count = lane_count(teacher_edge)
+        excluded_candidate_ids = excluded_candidate_ids or set()
+        ranked: list[tuple[int, str, ET.Element]] = []
+        for candidate_id, candidate_edge in candidate_edges.items():
+            if candidate_id.startswith(":") or candidate_edge.attrib.get("function") in {
+                "internal",
+                "crossing",
+                "walkingarea",
+            }:
+                continue
+            if candidate_id in excluded_candidate_ids:
+                continue
+            if _signed_edge_family_id(candidate_id) != teacher_family:
+                continue
+            if not candidate_boundary_side_matches(candidate_edge, direction):
+                continue
+            score = abs(lane_count(candidate_edge) - expected_lane_count) * 100
+            frontier_endpoint = candidate_edge.attrib.get("from" if direction == "incoming" else "to", "")
+            if frontier_endpoint not in member_ids:
+                score -= 50
+            if candidate_id == teacher_id:
+                score -= 1000
+            ranked.append((score, candidate_id, candidate_edge))
+        return sorted(ranked, key=lambda item: (item[0], item[1]))
+
+    effective_edge_map: dict[str, str] = {}
+    inferred_boundary_edge_ids: list[str] = []
+    copied_boundary_edge_ids: list[str] = []
+    mapping_conflicts: list[dict[str, object]] = []
+    used_candidate_boundary_ids: set[str] = set()
+
+    def counterpart_candidate_for_teacher_edge(teacher_edge_id: str, direction: str) -> str:
+        """Use a paired approach's opposite candidate edge when OSM renamed a way."""
+
+        opposite_teacher_id = _opposite_direction_edge_id(teacher_edge_id)
+        paired_candidate_id = pair_edge_map.get(opposite_teacher_id, "")
+        if not paired_candidate_id:
+            return ""
+        opposite_candidate_id = _opposite_direction_edge_id(paired_candidate_id)
+        opposite_candidate = candidate_edges.get(opposite_candidate_id)
+        if opposite_candidate is not None and candidate_boundary_side_matches(opposite_candidate, direction):
+            return opposite_candidate_id
+        candidate_family = _edge_family_id(paired_candidate_id)
+        alternatives = [
+            (candidate_id, edge)
+            for candidate_id, edge in candidate_edges.items()
+            if _edge_family_id(candidate_id) == candidate_family
+            and candidate_boundary_side_matches(edge, direction)
+            and candidate_id not in used_candidate_boundary_ids
+        ]
+        alternatives.sort(key=lambda item: item[0])
+        return alternatives[0][0] if alternatives else ""
+
+    for teacher_edge_id in teacher_boundary_edge_ids:
+        teacher_edge = teacher_edges[teacher_edge_id]
+        direction = boundary_direction(teacher_edge)
+        candidate_edge_id = pair_edge_map.get(teacher_edge_id, "")
+        if candidate_edge_id and (
+            candidate_edge_id not in candidate_edges
+            or not candidate_boundary_side_matches(candidate_edges[candidate_edge_id], direction)
+        ):
+            mapping_conflicts.append(
+                {
+                    "teacher_edge_id": teacher_edge_id,
+                    "candidate_edge_id": candidate_edge_id,
+                    "reason": "approach_pair_candidate_is_not_on_expected_boundary_side",
+                    "direction": direction,
+                }
+            )
+            candidate_edge_id = ""
+        if not candidate_edge_id:
+            candidate_edge_id = counterpart_candidate_for_teacher_edge(teacher_edge_id, direction)
+        if not candidate_edge_id:
+            exact_candidate = candidate_edges.get(teacher_edge_id)
+            if exact_candidate is not None and candidate_boundary_side_matches(exact_candidate, direction):
+                candidate_edge_id = teacher_edge_id
+            else:
+                ranked = family_candidates(
+                    teacher_edge,
+                    direction,
+                    excluded_candidate_ids=used_candidate_boundary_ids,
+                )
+                candidate_edge_id = ranked[0][1] if ranked else ""
+        if candidate_edge_id and candidate_edge_id in used_candidate_boundary_ids:
+            mapping_conflicts.append(
+                {
+                    "teacher_edge_id": teacher_edge_id,
+                    "candidate_edge_id": candidate_edge_id,
+                    "reason": "candidate_boundary_edge_reused",
+                    "direction": direction,
+                }
+            )
+        if candidate_edge_id:
+            effective_edge_map[teacher_edge_id] = candidate_edge_id
+            inferred_boundary_edge_ids.append(teacher_edge_id)
+            used_candidate_boundary_ids.add(candidate_edge_id)
+        else:
+            effective_edge_map[teacher_edge_id] = teacher_edge_id
+            copied_boundary_edge_ids.append(teacher_edge_id)
+
+    def follow_chain_endpoint(
+        candidate_edge: ET.Element,
+        direction: str,
+        family: str,
+    ) -> str:
+        endpoint = candidate_edge.attrib.get("to" if direction == "outgoing" else "from", "")
+        visited = {candidate_edge.attrib.get("id", "")}
+        while endpoint in member_ids:
+            if direction == "outgoing":
+                next_edges = [
+                    edge
+                    for edge in candidate_edges.values()
+                    if edge.attrib.get("id") not in visited
+                    and not edge.attrib.get("id", "").startswith(":")
+                    and _signed_edge_family_id(edge.attrib.get("id", "")) == family
+                    and edge.attrib.get("from") == endpoint
+                ]
+                next_edges.sort(key=lambda edge: edge.attrib.get("id", ""))
+                if not next_edges:
+                    break
+                next_edge = next_edges[0]
+                visited.add(next_edge.attrib.get("id", ""))
+                endpoint = next_edge.attrib.get("to", "")
+            else:
+                previous_edges = [
+                    edge
+                    for edge in candidate_edges.values()
+                    if edge.attrib.get("id") not in visited
+                    and not edge.attrib.get("id", "").startswith(":")
+                    and _signed_edge_family_id(edge.attrib.get("id", "")) == family
+                    and edge.attrib.get("to") == endpoint
+                ]
+                previous_edges.sort(key=lambda edge: edge.attrib.get("id", ""))
+                if not previous_edges:
+                    break
+                previous_edge = previous_edges[0]
+                visited.add(previous_edge.attrib.get("id", ""))
+                endpoint = previous_edge.attrib.get("from", "")
+        return endpoint
+
+    junction_map: dict[str, str] = {}
+    for teacher_edge_id in teacher_boundary_edge_ids:
+        teacher_edge = teacher_edges[teacher_edge_id]
+        candidate_edge = candidate_edges.get(effective_edge_map.get(teacher_edge_id, ""))
+        if candidate_edge is None:
+            continue
+        direction = boundary_direction(teacher_edge)
+        teacher_external_endpoint = (
+            teacher_edge.attrib.get("to", "")
+            if direction == "outgoing"
+            else teacher_edge.attrib.get("from", "")
+        )
+        candidate_external_endpoint = follow_chain_endpoint(
+            candidate_edge,
+            direction,
+            _signed_edge_family_id(candidate_edge.attrib.get("id", "")),
+        )
+        if (
+            teacher_external_endpoint
+            and teacher_external_endpoint != teacher_junction_id
+            and candidate_external_endpoint
+            and candidate_external_endpoint not in member_ids
+        ):
+            junction_map[teacher_external_endpoint] = candidate_external_endpoint
+
+    teacher_junctions_by_id = {
+        junction.attrib["id"]: junction
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    candidate_junctions_by_id = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+
+    def internal_owner(value: str) -> str:
+        for junction_id in sorted(teacher_junctions_by_id, key=len, reverse=True):
+            if value.startswith(f":{junction_id}_"):
+                return junction_id
+        return ""
+
+    controller_connections = [
+        connection
+        for connection in teacher_root.findall("connection")
+        if connection.attrib.get("tl") == teacher_junction_id and connection.attrib.get("linkIndex")
+    ]
+    teacher_controller_owner_ids = sorted(
+        {
+            owner
+            for connection in controller_connections
+            for owner in [internal_owner(connection.attrib.get("via", ""))]
+            if owner
+        }
+    )
+    owner_connection_counts = Counter(
+        internal_owner(connection.attrib.get("via", ""))
+        for connection in controller_connections
+        if internal_owner(connection.attrib.get("via", ""))
+    )
+    try:
+        controller_dx = float(candidate_junction.attrib.get("x", "0") or 0) - float(
+            teacher_junction.attrib.get("x", "0") or 0
+        )
+        controller_dy = float(candidate_junction.attrib.get("y", "0") or 0) - float(
+            teacher_junction.attrib.get("y", "0") or 0
+        )
+    except (TypeError, ValueError):
+        controller_dx = controller_dy = 0.0
+
+    controller_owner_candidates: dict[str, list[dict[str, object]]] = {}
+    controller_owner_map: dict[str, str] = {}
+    for owner_id in teacher_controller_owner_ids:
+        if owner_id == teacher_junction_id:
+            controller_owner_map[owner_id] = candidate_junction_id
+            continue
+        teacher_owner = teacher_junctions_by_id.get(owner_id)
+        if teacher_owner is None:
+            continue
+        try:
+            expected_x = float(teacher_owner.attrib.get("x", "0") or 0) + controller_dx
+            expected_y = float(teacher_owner.attrib.get("y", "0") or 0) + controller_dy
+        except (TypeError, ValueError):
+            expected_x = expected_y = 0.0
+        candidates: list[dict[str, object]] = []
+        for candidate_owner_id, candidate_owner in candidate_junctions_by_id.items():
+            try:
+                distance_m = math.hypot(
+                    float(candidate_owner.attrib.get("x", "0") or 0) - expected_x,
+                    float(candidate_owner.attrib.get("y", "0") or 0) - expected_y,
+                )
+            except (TypeError, ValueError):
+                continue
+            candidates.append(
+                {
+                    "candidate_junction_id": candidate_owner_id,
+                    "candidate_type": candidate_owner.attrib.get("type", ""),
+                    "distance_m": round(distance_m, 3),
+                    "candidate_is_traffic_light": candidate_owner.attrib.get("type") == "traffic_light",
+                    "candidate_is_declared_cell_member": candidate_owner_id in member_ids,
+                }
+            )
+        candidates.sort(
+            key=lambda item: (
+                not bool(item["candidate_is_traffic_light"]),
+                not bool(item["candidate_is_declared_cell_member"]),
+                float(item["distance_m"]),
+                str(item["candidate_junction_id"]),
+            )
+        )
+        controller_owner_candidates[owner_id] = candidates[:10]
+        if candidates and float(candidates[0]["distance_m"]) <= 100.0:
+            controller_owner_map[owner_id] = str(candidates[0]["candidate_junction_id"])
+
+    teacher_controller_edge_ids = sorted(
+        {
+            edge_id
+            for connection in controller_connections
+            for edge_id in (connection.attrib.get("from", ""), connection.attrib.get("to", ""))
+            if edge_id and not edge_id.startswith(":")
+        }
+    )
+    identity_available_controller_edge_ids = sorted(
+        edge_id
+        for edge_id in teacher_controller_edge_ids
+        if edge_id not in effective_edge_map and edge_id in candidate_edges
+    )
+    unmapped_controller_edge_ids = sorted(
+        edge_id
+        for edge_id in teacher_controller_edge_ids
+        if edge_id not in effective_edge_map and edge_id not in candidate_edges
+    )
+    extra_controller_owner_ids = [
+        owner_id for owner_id in teacher_controller_owner_ids if owner_id != teacher_junction_id
+    ]
+    shared_controller_scope = {
+        "status": "pass" if not extra_controller_owner_ids else "needs_expanded_scope",
+        "teacher_controller_id": teacher_junction_id,
+        "teacher_controller_connection_count": len(controller_connections),
+        "teacher_controller_link_indices": sorted(
+            {str(connection.attrib["linkIndex"]) for connection in controller_connections},
+            key=lambda value: int(value) if value.isdigit() else value,
+        ),
+        "teacher_internal_owner_ids": teacher_controller_owner_ids,
+        "extra_teacher_internal_owner_ids": extra_controller_owner_ids,
+        "teacher_internal_owner_connection_counts": dict(sorted(owner_connection_counts.items())),
+        "candidate_owner_map": dict(sorted(controller_owner_map.items())),
+        "candidate_owner_candidates": controller_owner_candidates,
+        "teacher_controller_edge_ids": teacher_controller_edge_ids,
+        "identity_available_controller_edge_ids": identity_available_controller_edge_ids,
+        "unmapped_controller_edge_ids": unmapped_controller_edge_ids,
+        "policy": (
+            "shared TLS controllers require an explicit owner closure and boundary edge mapping; "
+            "nearest candidate junctions are evidence only and do not authorize adoption"
+        ),
+    }
+
+    return {
+        "status": "pass" if teacher_boundary_edge_ids else "blocked",
+        "claim_status": "diagnostic-demo",
+        "teacher_junction_id": teacher_junction_id,
+        "candidate_junction_id": candidate_junction_id,
+        "candidate_junction_ids": sorted(member_ids),
+        "teacher_boundary_edge_ids": teacher_boundary_edge_ids,
+        "edge_map": dict(sorted(effective_edge_map.items())),
+        "junction_map": dict(sorted(junction_map.items())),
+        "approach_edge_map": dict(sorted(pair_edge_map.items())),
+        "inferred_boundary_edge_ids": sorted(inferred_boundary_edge_ids),
+        "copied_boundary_edge_ids": sorted(copied_boundary_edge_ids),
+        "mapping_conflicts": mapping_conflicts,
+        "candidate_boundary_edge_reuse_count": sum(
+            1
+            for value, count in Counter(effective_edge_map.values()).items()
+            if count > 1
+        ),
+        "shared_controller_scope": shared_controller_scope,
+        "mapping_policy": "approach-pair_then_same_signed_family_then_explicit_teacher_boundary_copy",
+    }
+
+
+def build_shared_teacher_tls_controller_replay_plan(
+    *,
+    candidate_net_file: Path,
+    teacher_net_file: Path,
+    teacher_controller_id: str,
+    candidate_controller_id: str,
+    candidate_junction_ids: set[str] | list[str] | None = None,
+    approach_pairs: list[dict[str, object]] | None = None,
+    collapse_junction_ids: set[str] | list[str] | None = None,
+    candidate_owner_map: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Build an explicit replay plan for a shared TLS controller.
+
+    The ordinary scoped planner intentionally reports a shared controller as
+    ``needs_expanded_scope``.  This planner closes that scope only when every
+    teacher internal owner has a concrete candidate owner.  Boundary matching
+    prefers the queue's approach pair, then an exact signed edge family with
+    compatible owner-side topology.  A missing family is represented by a
+    deterministic teacher-boundary copy id; it is never silently reused from a
+    nearby road.
+    """
+
+    if not candidate_net_file.exists() or not teacher_net_file.exists():
+        return _failure("candidate or teacher net file is missing")
+    try:
+        candidate_root = ET.parse(candidate_net_file).getroot()
+        teacher_root = ET.parse(teacher_net_file).getroot()
+    except (ET.ParseError, OSError, ValueError) as exc:
+        return _failure(f"shared TLS replay plan parse failed: {type(exc).__name__}: {exc}")
+
+    candidate_edges = {
+        edge.attrib["id"]: edge
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    teacher_edges = {
+        edge.attrib["id"]: edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_junctions = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    teacher_junctions = {
+        junction.attrib["id"]: junction
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    base_candidate_ids = {
+        str(item)
+        for item in (candidate_junction_ids or set())
+        if str(item)
+    }
+    base_candidate_ids.add(candidate_controller_id)
+    base_plan = build_scoped_teacher_tls_cell_replay_plan(
+        candidate_net_file=candidate_net_file,
+        teacher_net_file=teacher_net_file,
+        teacher_junction_id=teacher_controller_id,
+        candidate_junction_id=candidate_controller_id,
+        candidate_junction_ids=base_candidate_ids,
+        approach_pairs=approach_pairs,
+    )
+    if base_plan.get("status") != "pass":
+        return {
+            **base_plan,
+            "shared_controller_replay_status": "blocked",
+            "shared_controller_replay_reason": "base_boundary_plan_not_pass",
+        }
+    shared_scope = base_plan.get("shared_controller_scope", {})
+    if not isinstance(shared_scope, dict):
+        return _failure("base plan did not provide shared_controller_scope evidence")
+    inferred_owner_map = {
+        str(key): str(value)
+        for key, value in (shared_scope.get("candidate_owner_map", {}) or {}).items()
+        if str(key) and str(value)
+    }
+    if candidate_owner_map:
+        inferred_owner_map.update(
+            {
+                str(key): str(value)
+                for key, value in candidate_owner_map.items()
+                if str(key) and str(value)
+            }
+        )
+    inferred_owner_map.setdefault(teacher_controller_id, candidate_controller_id)
+    # A reference owner can be represented by a pre-joined candidate cluster.
+    # The base planner prefers declared cell members for stability, which is
+    # correct for a single-owner cell but wrong for a shared controller when a
+    # nearby traffic-light cluster is present.  Prefer that explicit cluster
+    # representation when it is available; otherwise retain the base planner
+    # evidence (for example the unjoined OSM source).
+    for owner_id in list(inferred_owner_map):
+        if owner_id == teacher_controller_id:
+            continue
+        candidates = [
+            item
+            for item in (shared_scope.get("candidate_owner_candidates", {}).get(owner_id, []) or [])
+            if isinstance(item, dict)
+            and str(item.get("candidate_junction_id", "")) in candidate_junctions
+            and str(item.get("candidate_junction_id", "")).startswith("cluster_")
+            and item.get("candidate_type") == "traffic_light"
+        ]
+        if candidates:
+            candidates.sort(
+                key=lambda item: (
+                    float(item.get("distance_m", float("inf"))),
+                    str(item.get("candidate_junction_id", "")),
+                )
+            )
+            inferred_owner_map[owner_id] = str(candidates[0]["candidate_junction_id"])
+    missing_owner_ids = [
+        owner_id
+        for owner_id, candidate_owner_id in inferred_owner_map.items()
+        if owner_id not in teacher_junctions or candidate_owner_id not in candidate_junctions
+    ]
+    if missing_owner_ids:
+        return {
+            **base_plan,
+            "status": "blocked",
+            "shared_controller_replay_status": "blocked",
+            "shared_controller_replay_reason": "owner_closure_missing",
+            "owner_map": dict(sorted(inferred_owner_map.items())),
+            "missing_owner_ids": missing_owner_ids,
+        }
+
+    teacher_owner_ids = sorted(inferred_owner_map, key=len, reverse=True)
+
+    def owner_for(value: str) -> str:
+        for owner_id in teacher_owner_ids:
+            if value.startswith(f":{owner_id}_"):
+                return owner_id
+        return ""
+
+    def edge_owner(edge: ET.Element) -> str:
+        for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")):
+            if endpoint in teacher_owner_ids:
+                return endpoint
+        return ""
+
+    def has_owner_side(edge: ET.Element, owner_id: str, side: str) -> bool:
+        endpoint = edge.attrib.get("from" if side == "from" else "to", "")
+        return endpoint == owner_id or endpoint in {
+            inferred_owner_map.get(owner_id, ""),
+            *{
+                str(item)
+                for item in (collapse_junction_ids or set())
+                if str(item)
+            },
+        }
+
+    relevant_connections = [
+        connection
+        for connection in teacher_root.findall("connection")
+        if (
+            owner_for(connection.attrib.get("from", ""))
+            or owner_for(connection.attrib.get("to", ""))
+            or owner_for(connection.attrib.get("via", ""))
+            or connection.attrib.get("tl") == teacher_controller_id
+        )
+    ]
+    boundary_edge_ids: list[str] = []
+    seen_boundary_edge_ids: set[str] = set()
+    for connection in relevant_connections:
+        for attr in ("from", "to"):
+            edge_id = connection.attrib.get(attr, "")
+            if not edge_id or edge_id.startswith(":") or edge_id not in teacher_edges:
+                continue
+            if edge_id not in seen_boundary_edge_ids:
+                seen_boundary_edge_ids.add(edge_id)
+                boundary_edge_ids.append(edge_id)
+    for edge in teacher_edges.values():
+        if not owner_for(edge.attrib.get("id", "")):
+            continue
+        for edge_id in _split(edge.attrib.get("crossingEdges", "")):
+            if edge_id in teacher_edges and edge_id not in seen_boundary_edge_ids:
+                seen_boundary_edge_ids.add(edge_id)
+                boundary_edge_ids.append(edge_id)
+
+    pair_map = {
+        str(pair.get("reference_edge_id", "")): str(pair.get("candidate_edge_id", ""))
+        for pair in (approach_pairs or [])
+        if isinstance(pair, dict)
+        and str(pair.get("reference_edge_id", ""))
+        and str(pair.get("candidate_edge_id", ""))
+    }
+    requested_edge_map = {
+        str(key): str(value)
+        for key, value in (base_plan.get("edge_map", {}) or {}).items()
+        if str(key) and str(value)
+    }
+    base_edge_map = dict(requested_edge_map)
+    requested_edge_map.update(pair_map)
+    resolved_edge_map: dict[str, str] = {}
+    edge_mapping_sources: dict[str, str] = {}
+    mapping_conflicts: list[dict[str, object]] = []
+    mapping_rejections: list[dict[str, object]] = []
+    used_candidate_edge_ids: set[str] = set()
+    target_candidate_ids = {
+        str(item)
+        for item in (collapse_junction_ids or base_candidate_ids)
+        if str(item)
+    }
+    target_candidate_ids.update(inferred_owner_map.values())
+
+    def compatible_pair(teacher_edge_id: str, candidate_edge_id: str) -> bool:
+        teacher_edge = teacher_edges.get(teacher_edge_id)
+        candidate_edge = candidate_edges.get(candidate_edge_id)
+        if teacher_edge is None or candidate_edge is None:
+            return False
+        if candidate_edge_id.startswith(":") or candidate_edge.attrib.get("function") in {
+            "internal",
+            "crossing",
+            "walkingarea",
+        }:
+            return False
+        teacher_local_at_start = teacher_edge.attrib.get("from", "") in teacher_owner_ids
+        teacher_local_at_end = teacher_edge.attrib.get("to", "") in teacher_owner_ids
+        candidate_local_at_start = candidate_edge.attrib.get("from", "") in target_candidate_ids
+        candidate_local_at_end = candidate_edge.attrib.get("to", "") in target_candidate_ids
+        # An explicit approach pair is topology evidence and commonly maps a
+        # synthetic teacher id to a differently named OSM way.  Validate its
+        # directed cell side, not an impossible signed-id family equality.
+        return (
+            teacher_local_at_start != teacher_local_at_end
+            and candidate_local_at_start != candidate_local_at_end
+            and teacher_local_at_start == candidate_local_at_start
+        )
+
+    def generated_edge_id(teacher_edge_id: str) -> str:
+        safe = "".join(
+            character if character.isalnum() or character in "_.-" else "_"
+            for character in teacher_edge_id
+        ).strip("_") or "edge"
+        candidate = f"torii_shared_{safe}"
+        suffix = 2
+        while candidate in candidate_edges or candidate in used_candidate_edge_ids:
+            candidate = f"torii_shared_{safe}_{suffix}"
+            suffix += 1
+        return candidate
+
+    for teacher_edge_id in boundary_edge_ids:
+        teacher_edge = teacher_edges[teacher_edge_id]
+        chosen = requested_edge_map.get(teacher_edge_id, "")
+        requested_source = (
+            "explicit_approach_pair"
+            if teacher_edge_id in pair_map
+            else "base_plan_edge_map"
+            if teacher_edge_id in base_edge_map
+            else ""
+        )
+        if (
+            chosen
+            and compatible_pair(teacher_edge_id, chosen)
+            and (
+                teacher_edge_id in pair_map
+                or (requested_source == "base_plan_edge_map" and chosen == teacher_edge_id)
+            )
+        ):
+            edge_mapping_sources[teacher_edge_id] = (
+                "explicit_approach_pair" if teacher_edge_id in pair_map else "base_plan_edge_map"
+            )
+        else:
+            if chosen and chosen in candidate_edges:
+                mapping_rejections.append(
+                    {
+                        "teacher_edge_id": teacher_edge_id,
+                        "candidate_edge_id": chosen,
+                        "reason": "explicit_candidate_missing_or_boundary_side_mismatch",
+                    }
+                )
+            chosen = ""
+        if not chosen:
+            candidates: list[tuple[int, str]] = []
+            teacher_from_owner = teacher_edge.attrib.get("from", "") in teacher_owner_ids
+            teacher_to_owner = teacher_edge.attrib.get("to", "") in teacher_owner_ids
+            for candidate_edge_id, candidate_edge in candidate_edges.items():
+                if (
+                    candidate_edge_id.startswith(":")
+                    or candidate_edge.attrib.get("function") in {"internal", "crossing", "walkingarea"}
+                    or candidate_edge_id in used_candidate_edge_ids
+                    or _signed_edge_family_id(candidate_edge_id) != _signed_edge_family_id(teacher_edge_id)
+                ):
+                    continue
+                score = abs(len(candidate_edge.findall("lane")) - len(teacher_edge.findall("lane"))) * 100
+                if candidate_edge_id == teacher_edge_id:
+                    score -= 1000
+                if teacher_from_owner:
+                    score += 0 if has_owner_side(candidate_edge, inferred_owner_map[teacher_edge.attrib["from"]], "from") else 1000
+                if teacher_to_owner:
+                    score += 0 if has_owner_side(candidate_edge, inferred_owner_map[teacher_edge.attrib["to"]], "to") else 1000
+                candidates.append((score, candidate_edge_id))
+            if candidates:
+                candidates.sort()
+                best_score, best_id = candidates[0]
+                owner_side_match = (
+                    (teacher_from_owner and has_owner_side(candidate_edges[best_id], inferred_owner_map[teacher_edge.attrib["from"]], "from"))
+                    or (teacher_to_owner and has_owner_side(candidate_edges[best_id], inferred_owner_map[teacher_edge.attrib["to"]], "to"))
+                )
+                if best_score < 1000 or (best_score == 1000 and owner_side_match):
+                    chosen = best_id
+                    edge_mapping_sources[teacher_edge_id] = "signed_family_owner_side"
+                elif (
+                    requested_source == "base_plan_edge_map"
+                    and len(candidates) == 1
+                    and _signed_edge_family_id(best_id) == _signed_edge_family_id(teacher_edge_id)
+                ):
+                    # The OSM network may contain one split fragment with the
+                    # same signed family but no endpoint at the collapsed
+                    # owner.  Replacing that exact family edge with the
+                    # teacher boundary is still explicit and auditable; a
+                    # different-family nearest edge is never accepted here.
+                    chosen = best_id
+                    edge_mapping_sources[teacher_edge_id] = "base_plan_signed_family_identity"
+        if not chosen:
+            chosen = generated_edge_id(teacher_edge_id)
+            edge_mapping_sources[teacher_edge_id] = "explicit_teacher_boundary_copy"
+        if chosen in used_candidate_edge_ids and chosen != resolved_edge_map.get(teacher_edge_id):
+            # Bridges may legitimately be shared by two owners, but a single
+            # teacher boundary id must still have one deterministic target.
+            previous = next(
+                (source for source, target in resolved_edge_map.items() if target == chosen),
+                "",
+            )
+            if previous and previous != teacher_edge_id:
+                mapping_conflicts.append(
+                    {
+                        "teacher_edge_id": teacher_edge_id,
+                        "candidate_edge_id": chosen,
+                        "reason": "candidate_boundary_edge_reused",
+                    }
+                )
+        used_candidate_edge_ids.add(chosen)
+        resolved_edge_map[teacher_edge_id] = chosen
+
+    resolved_junction_map: dict[str, str] = {}
+    # Use a selected candidate edge to map the remote endpoint of an approach
+    # pair.  This is especially important for a way whose OSM id differs from
+    # the teacher edge id (for example gneE18 -> 816287496#0).
+    def add_endpoint_evidence(teacher_edge: ET.Element, candidate_edge: ET.Element | None) -> None:
+        if candidate_edge is None:
+            return
+        for side in ("from", "to"):
+            teacher_endpoint = teacher_edge.attrib.get(side, "")
+            if not teacher_endpoint or teacher_endpoint in teacher_owner_ids:
+                continue
+            candidate_endpoint = candidate_edge.attrib.get(side, "")
+            if candidate_endpoint and candidate_endpoint not in target_candidate_ids:
+                resolved_junction_map.setdefault(teacher_endpoint, candidate_endpoint)
+
+    for teacher_edge_id, candidate_edge_id in resolved_edge_map.items():
+        add_endpoint_evidence(teacher_edges[teacher_edge_id], candidate_edges.get(candidate_edge_id))
+    # Preserve endpoint evidence from a queue approach pair even if the edge
+    # family itself is rejected and the teacher edge is copied.  This is a
+    # valid topology hint for a renamed OSM way, not permission to reuse that
+    # candidate edge as the teacher boundary.
+    for teacher_edge_id, candidate_edge_id in pair_map.items():
+        if teacher_edge_id in teacher_edges and candidate_edge_id in candidate_edges:
+            pair_teacher_edge = teacher_edges[teacher_edge_id]
+            pair_candidate_edge = candidate_edges[candidate_edge_id]
+            for side in ("from", "to"):
+                teacher_endpoint = pair_teacher_edge.attrib.get(side, "")
+                candidate_endpoint = pair_candidate_edge.attrib.get(side, "")
+                if (
+                    teacher_endpoint
+                    and teacher_endpoint not in teacher_owner_ids
+                    and candidate_endpoint
+                    and candidate_endpoint not in target_candidate_ids
+                ):
+                    resolved_junction_map[teacher_endpoint] = candidate_endpoint
+
+    teacher_link_indices = sorted(
+        {
+            str(connection.attrib.get("linkIndex", ""))
+            for connection in teacher_root.findall("connection")
+            if connection.attrib.get("tl") == teacher_controller_id and connection.attrib.get("linkIndex") is not None
+        },
+        key=lambda value: int(value) if value.isdigit() else value,
+    )
+    generated_boundary_edge_ids = sorted(
+        teacher_edge_id
+        for teacher_edge_id, source in edge_mapping_sources.items()
+        if source == "explicit_teacher_boundary_copy"
+    )
+    status = "pass" if not missing_owner_ids and not mapping_conflicts and set(resolved_edge_map) == set(boundary_edge_ids) else "blocked"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "shared_controller_replay_status": status,
+        "teacher_controller_id": teacher_controller_id,
+        "candidate_controller_id": candidate_controller_id,
+        "owner_map": dict(sorted(inferred_owner_map.items())),
+        "candidate_junction_ids": sorted(target_candidate_ids),
+        "teacher_owner_ids": teacher_owner_ids,
+        "teacher_boundary_edge_ids": boundary_edge_ids,
+        "edge_map": dict(sorted(resolved_edge_map.items())),
+        "edge_mapping_sources": dict(sorted(edge_mapping_sources.items())),
+        "generated_boundary_edge_ids": generated_boundary_edge_ids,
+        "junction_map": dict(sorted(resolved_junction_map.items())),
+        "teacher_controller_link_indices": teacher_link_indices,
+        "teacher_controller_connection_count": len(
+            [
+                connection
+                for connection in teacher_root.findall("connection")
+                if connection.attrib.get("tl") == teacher_controller_id and connection.attrib.get("linkIndex") is not None
+            ]
+        ),
+        "mapping_conflicts": mapping_conflicts,
+        "mapping_rejections": mapping_rejections,
+        "base_plan": base_plan,
+        "mapping_policy": "explicit_owner_closure_then_topology_checked_approach_pair_then_signed_family_owner_side_then_teacher_boundary_copy",
     }
 
 
@@ -2629,6 +4840,347 @@ def write_teacher_tllogic_net(
     }
 
 
+def restore_teacher_tls_connection_semantics_after_normalize(
+    *,
+    source_net_file: Path,
+    target_net_file: Path,
+    junction_id: str,
+) -> dict[str, object]:
+    """Restore teacher TLS attributes after netconvert rebuilds internal links.
+
+    netconvert is authoritative for legal internal geometry and may recompute
+    ``dir``/``state`` while assigning a different internal ``via`` suffix.  A
+    scoped teacher replay needs the teacher control semantics on the resulting
+    candidate connection, keyed by the stable ``linkIndex``.  This function
+    refuses partial rebinding and reports every rewrite; it never creates a
+    missing connection or changes the candidate's endpoints/lanes/via path.
+    """
+
+    if not source_net_file.exists() or not target_net_file.exists():
+        return _failure("source or target normalized net file is missing")
+    try:
+        source_root = ET.parse(source_net_file).getroot()
+        target_tree = ET.parse(target_net_file)
+        target_root = target_tree.getroot()
+    except (ET.ParseError, OSError, ValueError) as exc:
+        return _failure(f"TLS semantic restore parse failed: {type(exc).__name__}: {exc}")
+
+    source_connections = [
+        connection
+        for connection in source_root.findall("connection")
+        if connection.attrib.get("tl") == junction_id and connection.attrib.get("linkIndex")
+    ]
+    target_connections = [
+        connection
+        for connection in target_root.findall("connection")
+        if connection.attrib.get("tl") == junction_id and connection.attrib.get("linkIndex")
+    ]
+
+    def connection_semantic_key(connection: ET.Element) -> tuple[str, str, str, str, str]:
+        """Identify a controlled movement without depending on the internal via id."""
+
+        attrs = connection.attrib
+        return (
+            attrs.get("from", ""),
+            attrs.get("to", ""),
+            attrs.get("fromLane", ""),
+            attrs.get("toLane", ""),
+            attrs.get("linkIndex", ""),
+        )
+
+    source_semantic_key_counts = Counter(connection_semantic_key(connection) for connection in source_connections)
+    retained_semantic_key_counts: Counter[tuple[str, str, str, str, str]] = Counter()
+    removed_stale_target_connections: list[dict[str, str]] = []
+    retained_target_connections: list[ET.Element] = []
+    for target_connection in target_connections:
+        semantic_key = connection_semantic_key(target_connection)
+        if retained_semantic_key_counts[semantic_key] >= source_semantic_key_counts.get(semantic_key, 0):
+            target_root.remove(target_connection)
+            removed_stale_target_connections.append(
+                {
+                    "from": target_connection.attrib.get("from", ""),
+                    "to": target_connection.attrib.get("to", ""),
+                    "fromLane": target_connection.attrib.get("fromLane", ""),
+                    "toLane": target_connection.attrib.get("toLane", ""),
+                    "linkIndex": target_connection.attrib.get("linkIndex", ""),
+                }
+            )
+            continue
+        retained_semantic_key_counts[semantic_key] += 1
+        retained_target_connections.append(target_connection)
+    target_connections = retained_target_connections
+
+    source_by_link_index: dict[str, list[ET.Element]] = {}
+    target_by_link_index: dict[str, list[ET.Element]] = {}
+    for connection in source_connections:
+        source_by_link_index.setdefault(connection.attrib["linkIndex"], []).append(connection)
+    for connection in target_connections:
+        target_by_link_index.setdefault(connection.attrib["linkIndex"], []).append(connection)
+
+    rewritten: list[dict[str, str]] = []
+    missing_source_link_indices: list[str] = []
+    extra_target_link_indices: list[str] = []
+    used_source_counts: dict[str, int] = {}
+    for link_index, target_items in sorted(target_by_link_index.items()):
+        source_items = source_by_link_index.get(link_index, [])
+        if len(target_items) > len(source_items):
+            extra_target_link_indices.extend([link_index] * (len(target_items) - len(source_items)))
+        for position, target_connection in enumerate(target_items):
+            if position >= len(source_items):
+                continue
+            source_connection = source_items[position]
+            before = dict(target_connection.attrib)
+            for attr in TLS_CONNECTION_REPAIR_ATTRS:
+                if attr in source_connection.attrib:
+                    target_connection.set(attr, source_connection.attrib[attr])
+                else:
+                    target_connection.attrib.pop(attr, None)
+            target_connection.set("tl", junction_id)
+            target_connection.set("linkIndex", link_index)
+            used_source_counts[link_index] = used_source_counts.get(link_index, 0) + 1
+            if target_connection.attrib != before:
+                rewritten.append(
+                    {
+                        "linkIndex": link_index,
+                        "from": target_connection.attrib.get("from", ""),
+                        "to": target_connection.attrib.get("to", ""),
+                    }
+                )
+    for link_index, source_items in sorted(source_by_link_index.items()):
+        if used_source_counts.get(link_index, 0) < len(source_items):
+            missing_source_link_indices.extend(
+                [link_index] * (len(source_items) - used_source_counts.get(link_index, 0))
+            )
+
+    source_tl_logic = next(
+        (tl_logic for tl_logic in source_root.findall("tlLogic") if tl_logic.attrib.get("id") == junction_id),
+        None,
+    )
+    target_tl_logic = next(
+        (tl_logic for tl_logic in target_root.findall("tlLogic") if tl_logic.attrib.get("id") == junction_id),
+        None,
+    )
+    tl_logic_status = "skipped"
+    restored_tl_logic_phase_count = 0
+    phase_state_length_mismatches: list[dict[str, int]] = []
+    phase_state_extra_slot_warnings: list[dict[str, int]] = []
+    if source_tl_logic is not None:
+        if target_tl_logic is None:
+            tl_logic_status = "blocked"
+        else:
+            source_phases = list(source_tl_logic.findall("phase"))
+            numeric_link_indices = [
+                int(connection.attrib["linkIndex"])
+                for connection in source_connections
+                if connection.attrib.get("linkIndex", "").isdigit()
+            ]
+            expected_phase_state_length = max(numeric_link_indices, default=-1) + 1
+            for phase in source_phases:
+                state = phase.attrib.get("state")
+                if state is not None and len(state) != expected_phase_state_length:
+                    evidence = {
+                        "source_state_length": len(state),
+                        "expected_phase_state_length": expected_phase_state_length,
+                        "target_controlled_connection_count": len(target_connections),
+                    }
+                    if len(state) < expected_phase_state_length:
+                        phase_state_length_mismatches.append(evidence)
+                    else:
+                        phase_state_extra_slot_warnings.append(evidence)
+            for attr in ("type", "programID", "offset"):
+                if attr in source_tl_logic.attrib:
+                    target_tl_logic.set(attr, source_tl_logic.attrib[attr])
+                else:
+                    target_tl_logic.attrib.pop(attr, None)
+            for phase in list(target_tl_logic.findall("phase")):
+                target_tl_logic.remove(phase)
+            for phase in source_phases:
+                target_tl_logic.append(copy.deepcopy(phase))
+            restored_tl_logic_phase_count = len(source_phases)
+            tl_logic_status = "pass" if not phase_state_length_mismatches else "blocked"
+
+    status = (
+        "pass"
+        if not missing_source_link_indices
+        and not extra_target_link_indices
+        and tl_logic_status != "blocked"
+        else "blocked"
+    )
+    if rewritten or removed_stale_target_connections or (source_tl_logic is not None and target_tl_logic is not None):
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_net_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "source_net_file": str(source_net_file),
+        "target_net_file": str(target_net_file),
+        "junction_id": junction_id,
+        "source_controlled_connection_count": len(source_connections),
+        "target_controlled_connection_count": len(target_connections),
+        "removed_stale_target_connection_count": len(removed_stale_target_connections),
+        "removed_stale_target_connections": removed_stale_target_connections,
+        "rewritten_connection_count": len(rewritten),
+        "rewritten_connections": rewritten,
+        "missing_source_link_indices": missing_source_link_indices,
+        "extra_target_link_indices": extra_target_link_indices,
+        "tl_logic_status": tl_logic_status,
+        "restored_tl_logic": source_tl_logic is not None and target_tl_logic is not None,
+        "restored_tl_logic_phase_count": restored_tl_logic_phase_count,
+        "phase_state_length_mismatches": phase_state_length_mismatches,
+        "phase_state_extra_slot_warnings": phase_state_extra_slot_warnings,
+        "policy": "restore teacher TLS attrs by linkIndex; preserve candidate endpoints/lanes/via",
+    }
+
+
+def restore_scoped_pedestrian_internal_semantics_after_normalize(
+    *,
+    source_net_file: Path,
+    target_net_file: Path,
+    junction_id: str,
+    edge_map: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Restore scoped crossing/walkingarea edges dropped by netconvert.
+
+    SUMO may discard a crossing whose OSM-side boundary edge was remapped or
+    whose geometry is not reconstructible from plain vehicle links.  The
+    teacher replay already contains the audited pedestrian layer, so this
+    function overlays only the target cell's crossing/walkingarea edges and
+    their connections, then verifies that every source element is represented.
+    It never copies pedestrian infrastructure outside the target prefix.
+    """
+
+    if not source_net_file.exists() or not target_net_file.exists():
+        return _failure("source or target normalized net file is missing")
+    try:
+        source_root = ET.parse(source_net_file).getroot()
+        target_tree = ET.parse(target_net_file)
+        target_root = target_tree.getroot()
+    except (ET.ParseError, OSError, ValueError) as exc:
+        return _failure(f"pedestrian semantic restore parse failed: {type(exc).__name__}: {exc}")
+
+    edge_map = {str(key): str(value) for key, value in (edge_map or {}).items() if str(key) and str(value)}
+    internal_prefix = f":{junction_id}_"
+    pedestrian_functions = {"crossing", "walkingarea"}
+    source_pedestrian_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id", "").startswith(internal_prefix)
+        and edge.attrib.get("function") in pedestrian_functions
+    }
+    target_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in target_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    replaced_edge_ids: list[str] = []
+    added_edge_ids: list[str] = []
+
+    def mapped_pedestrian_edge(source_edge: ET.Element) -> ET.Element:
+        clone = copy.deepcopy(source_edge)
+        if clone.attrib.get("crossingEdges"):
+            clone.set(
+                "crossingEdges",
+                " ".join(
+                    edge_map.get(value, value)
+                    for value in clone.attrib.get("crossingEdges", "").split()
+                    if value
+                ),
+            )
+        return clone
+
+    for edge_id, source_edge in sorted(source_pedestrian_edges.items()):
+        replacement = mapped_pedestrian_edge(source_edge)
+        existing = target_edges.get(edge_id)
+        if existing is None:
+            target_root.append(replacement)
+            target_edges[edge_id] = replacement
+            added_edge_ids.append(edge_id)
+            continue
+        index = list(target_root).index(existing)
+        target_root.remove(existing)
+        target_root.insert(index, replacement)
+        target_edges[edge_id] = replacement
+        replaced_edge_ids.append(edge_id)
+
+    source_pedestrian_connections = [
+        connection
+        for connection in source_root.findall("connection")
+        if connection.attrib.get("from", "") in source_pedestrian_edges
+        or connection.attrib.get("to", "") in source_pedestrian_edges
+    ]
+
+    def mapped_connection(source_connection: ET.Element) -> ET.Element:
+        attrs = dict(source_connection.attrib)
+        for attr in ("from", "to"):
+            value = attrs.get(attr, "")
+            if value and not value.startswith(":"):
+                attrs[attr] = edge_map.get(value, value)
+        return ET.Element("connection", attrs)
+
+    def connection_key(connection: ET.Element) -> tuple[str, ...]:
+        return tuple(
+            connection.attrib.get(attr, "")
+            for attr in ("from", "to", "fromLane", "toLane", "via", "tl", "linkIndex")
+        )
+
+    target_connections = {connection_key(connection): connection for connection in target_root.findall("connection")}
+    added_connection_count = 0
+    updated_connection_count = 0
+    for source_connection in source_pedestrian_connections:
+        mapped = mapped_connection(source_connection)
+        key = connection_key(mapped)
+        existing = target_connections.get(key)
+        if existing is None:
+            target_root.append(mapped)
+            target_connections[key] = mapped
+            added_connection_count += 1
+            continue
+        before = dict(existing.attrib)
+        existing.attrib.clear()
+        existing.attrib.update(mapped.attrib)
+        if before != existing.attrib:
+            updated_connection_count += 1
+
+    missing_edge_ids = sorted(set(source_pedestrian_edges) - set(target_edges))
+    missing_connection_keys = sorted(
+        set(connection_key(mapped_connection(connection)) for connection in source_pedestrian_connections)
+        - set(target_connections)
+    )
+    missing_crossing_edge_refs = []
+    target_edge_ids = set(target_edges)
+    for edge in target_edges.values():
+        if edge.attrib.get("id") not in source_pedestrian_edges or not edge.attrib.get("crossingEdges"):
+            continue
+        for referenced_edge_id in edge.attrib.get("crossingEdges", "").split():
+            if referenced_edge_id not in target_edge_ids:
+                missing_crossing_edge_refs.append(
+                    {"crossing_edge_id": edge.attrib.get("id", ""), "referenced_edge_id": referenced_edge_id}
+                )
+    status = "pass" if not missing_edge_ids and not missing_connection_keys and not missing_crossing_edge_refs else "blocked"
+    if source_pedestrian_edges or source_pedestrian_connections:
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_net_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo",
+        "source_net_file": str(source_net_file),
+        "target_net_file": str(target_net_file),
+        "junction_id": junction_id,
+        "source_pedestrian_edge_count": len(source_pedestrian_edges),
+        "source_pedestrian_connection_count": len(source_pedestrian_connections),
+        "replaced_pedestrian_edge_count": len(replaced_edge_ids),
+        "replaced_pedestrian_edge_ids": replaced_edge_ids,
+        "added_pedestrian_edge_count": len(added_edge_ids),
+        "added_pedestrian_edge_ids": added_edge_ids,
+        "added_pedestrian_connection_count": added_connection_count,
+        "updated_pedestrian_connection_count": updated_connection_count,
+        "missing_pedestrian_edge_ids": missing_edge_ids,
+        "missing_pedestrian_connection_keys": missing_connection_keys,
+        "missing_crossing_edge_refs": missing_crossing_edge_refs,
+        "policy": "scoped teacher crossing/walkingarea overlay; no outside-cell pedestrian copy",
+    }
+
+
 def build_teacher_guided_junction_variant(
     *,
     raw_node_file: Path,
@@ -2645,9 +5197,11 @@ def build_teacher_guided_junction_variant(
     raw_tllogic_file: Path | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     approach_endpoint_rebuild_plan: object | None = None,
+    source_conflict_core_node_ids: list[str] | None = None,
     replay_target_internal_subgraph: bool = False,
     preserve_teacher_lane_shapes: bool = True,
     emit_teacher_crossings: bool = True,
+    prune_unmapped_boundary_edges: bool = False,
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
@@ -2666,17 +5220,32 @@ def build_teacher_guided_junction_variant(
     if missing:
         return _failure(f"missing input file(s): {', '.join(missing)}")
 
+    # Downstream netconvert stages run from candidate-specific working
+    # directories.  Keep every caller-supplied path absolute so a valid plain
+    # XML input cannot become unreachable after the working directory changes.
+    teacher_net_file = teacher_net_file.resolve()
+    candidate_net_file = candidate_net_file.resolve()
     raw_node_file = raw_node_file.resolve()
     raw_edge_file = raw_edge_file.resolve()
     raw_connection_file = raw_connection_file.resolve()
-    teacher_net_file = teacher_net_file.resolve()
-    candidate_net_file = candidate_net_file.resolve()
     raw_type_file = raw_type_file.resolve() if raw_type_file is not None else None
     raw_tllogic_file = raw_tllogic_file.resolve() if raw_tllogic_file is not None else None
     output_dir = output_dir.resolve()
+
     output_dir.mkdir(parents=True, exist_ok=True)
     teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
     candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
+    inferred_joined_source_node_ids = _joined_source_node_ids(raw_node_file, junction_id)
+    joined_source_node_ids = (
+        {str(node_id) for node_id in source_conflict_core_node_ids if str(node_id)}
+        if source_conflict_core_node_ids is not None
+        else inferred_joined_source_node_ids
+    )
+    source_conflict_core_source = (
+        "declared_estimator_evidence"
+        if source_conflict_core_node_ids is not None
+        else "plain_join_definition"
+    )
 
     lane_shape_delta = _model_shape_delta(teacher_model, candidate_model)
     patched_node_file = _stage_file(output_dir, prefix, "nodes.nod.xml")
@@ -2705,8 +5274,8 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         junction_id=junction_id,
         teacher_junction_id=teacher_junction_id,
-        boundary_node_ids=_joined_source_node_ids(raw_node_file, junction_id),
-        prune_unmapped_boundary_edges=True,
+        boundary_node_ids=joined_source_node_ids,
+        prune_unmapped_boundary_edges=prune_unmapped_boundary_edges,
         approach_endpoint_rebuild_plan=approach_endpoint_rebuild_plan,
         lane_shape_delta=lane_shape_delta,
         preserve_lane_shapes=preserve_teacher_lane_shapes,
@@ -2750,7 +5319,7 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         crossing_edge_overrides=crossing_edge_overrides,
         candidate_edge_file=patched_edge_file,
-        crossing_node_ids=_joined_source_node_ids(raw_node_file, junction_id),
+        crossing_node_ids=joined_source_node_ids,
         emit_crossings=emit_teacher_crossings and not replay_target_internal_subgraph,
         teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
     )
@@ -2791,10 +5360,12 @@ def build_teacher_guided_junction_variant(
             },
         )
 
-    non_target_internal_restore_report = _restore_non_target_internal_artifacts(
+    non_target_internal_restore_report = restore_off_scope_netconvert_artifacts(
         source_file=candidate_net_file,
         target_file=sidewalks_net_file,
-        exclude_junction_ids=internal_restore_exclude_junction_ids,
+        mutable_junction_ids=internal_restore_exclude_junction_ids,
+        mutable_edge_ids=set(edge_map.values()),
+        expand_mutable_edge_endpoints=False,
     )
     if non_target_internal_restore_report.get("status") != "pass":
         return _write_teacher_guided_report(
@@ -2853,6 +5424,17 @@ def build_teacher_guided_junction_variant(
             junction_id=junction_id,
             edge_map=edge_map,
             teacher_junction_id=teacher_junction_id,
+            # A joined OSM cell may keep real remote endpoints that do not
+            # coincide with the teacher network.  In that case teacher lane
+            # geometry is only a semantic template: retain the candidate
+            # boundary shapes so every lane still reaches its real endpoint.
+            # Single-junction replay keeps teacher geometry for parity.
+            geometry_anchor_edge_file=(
+                candidate_net_file if len(joined_source_node_ids) > 1 else None
+            ),
+            blend_geometry_anchor_at_target=len(joined_source_node_ids) > 1,
+            copy_unmapped_boundary_edges=False,
+            preserve_mapped_boundary_endpoints=True,
         )
         if target_internal_replay_report.get("status") != "pass":
             return _write_teacher_guided_report(
@@ -2941,10 +5523,12 @@ def build_teacher_guided_junction_variant(
         if target_internal_normalize_report.get("status") == "pass":
             shutil.copyfile(target_internal_normalized_net_file, target_internal_normalized_unrestored_net_file)
             target_internal_normalize_report["unrestored_net_file"] = str(target_internal_normalized_unrestored_net_file)
-            target_internal_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
+            target_internal_normalize_report["non_target_internal_restore"] = restore_off_scope_netconvert_artifacts(
                 source_file=target_internal_replay_file,
                 target_file=target_internal_normalized_net_file,
-                exclude_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_edge_ids=set(edge_map.values()),
+                expand_mutable_edge_endpoints=False,
             )
         if (
             target_internal_normalize_report.get("status") == "pass"
@@ -3026,10 +5610,12 @@ def build_teacher_guided_junction_variant(
             command_runner(teacher_guided_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
         )
         if teacher_guided_normalize_report.get("status") == "pass":
-            teacher_guided_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
+            teacher_guided_normalize_report["non_target_internal_restore"] = restore_off_scope_netconvert_artifacts(
                 source_file=final_net_file,
                 target_file=teacher_guided_normalized_net_file,
-                exclude_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_edge_ids=set(edge_map.values()),
+                expand_mutable_edge_endpoints=False,
             )
         if (
             teacher_guided_normalize_report.get("status") == "pass"
@@ -3134,11 +5720,13 @@ def build_teacher_guided_junction_variant(
         target_internal_pedestrian_ring=target_internal_pedestrian_ring_report,
         target_internal_vehicle_connection_attrs=target_internal_vehicle_attrs_report,
     )
+    teacher_tls_id = _model_tls_id(teacher_model, fallback=teacher_junction_id)
+    candidate_tls_id = _model_tls_id(final_model, fallback=junction_id)
     tls_movement_parity = compare_tls_movement_signatures(
         teacher_net_file,
         final_net_file,
-        teacher_junction_id,
-        junction_id,
+        teacher_tls_id,
+        candidate_tls_id,
         teacher_edge_map=comparison_edge_map,
         teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
         candidate_internal_scope_id=junction_id if replay_target_internal_subgraph else None,
@@ -3150,10 +5738,25 @@ def build_teacher_guided_junction_variant(
         junction_id,
         teacher_edge_map=comparison_edge_map,
     )
-    semantic_layer_gates = _semantic_layer_gates(semantic_gate, tls_movement_parity, pedestrian_crossing_parity)
+    approach_authority_policy = _hybrid_osm_approach_authority_policy(
+        semantic_gate,
+        replay_target_internal_subgraph=replay_target_internal_subgraph,
+        preserve_teacher_lane_shapes=preserve_teacher_lane_shapes,
+        edge_map=comparison_edge_map,
+        lane_patch=lane_patch_report,
+        target_internal_replay=target_internal_replay_gate_report,
+        tls_movement_parity=tls_movement_parity,
+        pedestrian_crossing_parity=pedestrian_crossing_parity,
+    )
+    effective_semantic_gate = approach_authority_policy["effective_semantic_gate"]
+    semantic_layer_gates = _semantic_layer_gates(
+        effective_semantic_gate,
+        tls_movement_parity,
+        pedestrian_crossing_parity,
+    )
     parity_gate_status = (
         "pass"
-        if semantic_gate["status"] == "pass"
+        if effective_semantic_gate["status"] == "pass"
         and tls_movement_parity["status"] == "pass"
         and pedestrian_crossing_parity["status"] == "pass"
         else "fail"
@@ -3166,6 +5769,8 @@ def build_teacher_guided_junction_variant(
             "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
             "parity_gate_status": parity_gate_status,
             "junction_id": junction_id,
+            "source_conflict_core_node_ids": sorted(joined_source_node_ids),
+            "source_conflict_core_source": source_conflict_core_source,
             "teacher_net_file": str(teacher_net_file),
             "candidate_net_file": str(candidate_net_file),
             "final_net_file": str(final_net_file),
@@ -3214,6 +5819,8 @@ def build_teacher_guided_junction_variant(
             "parity": parity,
             "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
             "semantic_replay_gate": semantic_gate,
+            "semantic_replay_effective_gate": effective_semantic_gate,
+            "approach_authority_policy": approach_authority_policy,
             "tls_movement_parity": tls_movement_parity,
             "pedestrian_crossing_parity": pedestrian_crossing_parity,
             "semantic_layer_gates": semantic_layer_gates,
@@ -3346,6 +5953,157 @@ def _teacher_pattern_metric_is_positive(pattern_key: str, metric: str) -> bool:
     return False
 
 
+def _load_teacher_join_groups_by_cluster(
+    definition_value: object,
+    *,
+    queue_base_dir: Path | None = None,
+) -> dict[str, list[str]]:
+    """Load authoritative source members for teacher-side joined junctions.
+
+    A SUMO joined junction id is only a generated label; its numeric suffixes
+    are not guaranteed to be the complete source-node list.  The join
+    definition emitted by the reference aggregation stage is therefore the
+    source of truth whenever it is available.
+    """
+    if not definition_value:
+        return {}
+    definition_path = Path(str(definition_value))
+    if not definition_path.is_absolute() and queue_base_dir is not None:
+        definition_path = queue_base_dir / definition_path
+    try:
+        payload = json.loads(definition_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    groups: dict[str, list[str]] = {}
+    for record in payload.get("records", []) or []:
+        if not isinstance(record, dict):
+            continue
+        cluster_id = str(record.get("candidate_id", "")).strip()
+        decision = str(record.get("decision", record.get("action", ""))).strip().lower()
+        node_ids = sorted({str(node_id) for node_id in record.get("node_ids", []) or [] if str(node_id)})
+        encoded_member_ids = set(_sumo_cluster_member_ids(cluster_id))
+        # The aggregation report is a candidate repair suggestion, not an
+        # authoritative decomposition of an existing teacher cluster.  Accept
+        # it only when its source members agree with the generated cluster
+        # label; otherwise the label-based fallback remains authoritative.
+        if (
+            cluster_id.startswith("cluster_")
+            and decision == "join"
+            and len(node_ids) >= 2
+            and encoded_member_ids
+            and encoded_member_ids <= set(node_ids)
+        ):
+            groups[cluster_id] = node_ids
+    return groups
+
+
+def _prune_plain_tls_against_teacher(
+    *,
+    teacher_net_file: Path,
+    node_file: Path,
+    connection_file: Path,
+    tllogic_file: Path | None,
+) -> dict[str, object]:
+    """Keep sequential plain inputs from reviving TLS absent in the teacher.
+
+    netconvert plain export can materialize a stale traffic-light program from
+    an intermediate candidate.  That stale program later makes a valid join
+    fail because the joined source junction is no longer a controller.  The
+    teacher reference is authoritative for this cleanup; the main candidate
+    network is not edited here.
+    """
+    if not all(path.exists() for path in (teacher_net_file, node_file, connection_file)):
+        return {"status": "skipped", "reason": "plain_input_missing", "demoted_junction_count": 0}
+    try:
+        teacher_root = ET.parse(teacher_net_file).getroot()
+        node_tree = ET.parse(node_file)
+        connection_tree = ET.parse(connection_file)
+        tllogic_tree = ET.parse(tllogic_file) if tllogic_file is not None and tllogic_file.exists() else None
+    except (OSError, ET.ParseError) as exc:
+        return {"status": "fail", "reason": f"parse_error: {exc}", "demoted_junction_count": 0}
+
+    teacher_junction_types = {
+        str(junction.attrib.get("id", "")): str(junction.attrib.get("type", ""))
+        for junction in teacher_root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    teacher_tls_ids = {
+        junction_id
+        for junction_id, junction_type in teacher_junction_types.items()
+        if junction_type.startswith("traffic_light")
+    }
+    for junction in teacher_root.findall("junction"):
+        if not str(junction.attrib.get("type", "")).startswith("traffic_light"):
+            continue
+        teacher_tls_ids.update(str(item) for item in junction.attrib.get("tl", "").split() if str(item))
+    teacher_tls_ids.update(
+        str(logic.attrib.get("id", ""))
+        for logic in teacher_root.findall("tlLogic")
+        if logic.attrib.get("id")
+    )
+
+    demoted_junction_ids: list[str] = []
+    invalid_tls_ids: set[str] = set()
+    for node in node_tree.getroot().findall("node"):
+        node_id = str(node.attrib.get("id", ""))
+        if not node_id or not str(node.attrib.get("type", "")).startswith("traffic_light"):
+            continue
+        node_tls_ids = {node_id, *[str(item) for item in node.attrib.get("tl", "").split() if str(item)]}
+        teacher_type = teacher_junction_types.get(node_id, "")
+        valid = teacher_type.startswith("traffic_light") and bool(node_tls_ids & teacher_tls_ids)
+        if valid:
+            continue
+        invalid_tls_ids.update(node_tls_ids)
+        node.set("type", teacher_type or "priority")
+        node.attrib.pop("tl", None)
+        node.attrib.pop("tlType", None)
+        demoted_junction_ids.append(node_id)
+
+    removed_tllogic_ids: list[str] = []
+    removed_tllogic_connection_count = 0
+    if tllogic_tree is not None:
+        tllogic_root = tllogic_tree.getroot()
+        for child in list(tllogic_root):
+            child_tls_id = str(child.attrib.get("id", child.attrib.get("tl", "")))
+            if child_tls_id and child_tls_id in invalid_tls_ids:
+                tllogic_root.remove(child)
+                if child.tag == "tlLogic":
+                    removed_tllogic_ids.append(child_tls_id)
+                else:
+                    removed_tllogic_connection_count += 1
+
+    uncontrolled_connection_count = 0
+    for connection in connection_tree.getroot().findall("connection"):
+        tls_id = str(connection.attrib.get("tl", ""))
+        if not tls_id or tls_id not in invalid_tls_ids:
+            continue
+        for attr in ("tl", "linkIndex", "linkIndex2"):
+            connection.attrib.pop(attr, None)
+        connection.set("uncontrolled", "true")
+        uncontrolled_connection_count += 1
+
+    if demoted_junction_ids:
+        ET.indent(node_tree.getroot(), space="    ")
+        node_tree.write(node_file, encoding="utf-8", xml_declaration=True)
+    if tllogic_tree is not None and (removed_tllogic_ids or removed_tllogic_connection_count):
+        ET.indent(tllogic_tree.getroot(), space="    ")
+        tllogic_tree.write(tllogic_file, encoding="utf-8", xml_declaration=True)
+    if uncontrolled_connection_count:
+        ET.indent(connection_tree.getroot(), space="    ")
+        connection_tree.write(connection_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "demoted_junction_count": len(demoted_junction_ids),
+        "demoted_junction_ids": sorted(demoted_junction_ids),
+        "removed_tllogic_count": len(removed_tllogic_ids),
+        "removed_tllogic_ids": sorted(set(removed_tllogic_ids)),
+        "removed_tllogic_connection_count": removed_tllogic_connection_count,
+        "uncontrolled_connection_count": uncontrolled_connection_count,
+    }
+
+
 def run_teacher_guided_repair_queue(
     *,
     queue_report: dict[str, Any],
@@ -3357,6 +6115,8 @@ def run_teacher_guided_repair_queue(
     queue_base_dir: Path | None = None,
     raw_type_file: Path | None = None,
     raw_tllogic_file: Path | None = None,
+    teacher_join_definition_file: Path | None = None,
+    teacher_join_groups_by_cluster: dict[str, list[str]] | None = None,
     crossing_edge_overrides_by_junction: dict[str, dict[str, str | list[str]]] | None = None,
     replay_target_internal_subgraph: bool = False,
     max_ready_candidates: int | None = None,
@@ -3365,6 +6125,8 @@ def run_teacher_guided_repair_queue(
     timeout_seconds: float = 240.0,
     command_runner: Any = run_command,
     variant_builder: Any = build_teacher_guided_junction_variant,
+    connection_mode_regression_builder: Any | None = None,
+    expand_fragmented_tls_join_scope: bool = False,
     sequential_accept_passed_variants: bool = False,
     plain_exporter: Any | None = None,
     final_internal_replay_writer: Any = write_teacher_target_internal_replay_net,
@@ -3396,10 +6158,36 @@ def run_teacher_guided_repair_queue(
     if missing:
         return _failure(f"missing input file(s): {', '.join(missing)}")
 
+    teacher_net_file = teacher_net_file.resolve()
+    candidate_net_file = candidate_net_file.resolve()
+    raw_node_file = raw_node_file.resolve()
+    raw_edge_file = raw_edge_file.resolve()
+    raw_connection_file = raw_connection_file.resolve()
+    raw_type_file = raw_type_file.resolve() if raw_type_file is not None else None
+    raw_tllogic_file = raw_tllogic_file.resolve() if raw_tllogic_file is not None else None
+    output_dir = output_dir.resolve()
+
     candidates = queue_report.get("repair_candidates", []) or []
     if not isinstance(candidates, list):
         return _failure("queue report repair_candidates must be a list")
     candidates = list(candidates)
+
+    if teacher_join_groups_by_cluster is None:
+        teacher_join_definition_value = teacher_join_definition_file or queue_report.get(
+            "teacher_join_definition_file", ""
+        )
+        teacher_join_groups_by_cluster = _load_teacher_join_groups_by_cluster(
+            teacher_join_definition_value,
+            queue_base_dir=queue_base_dir,
+        )
+    else:
+        teacher_join_groups_by_cluster = {
+            str(cluster_id): sorted(
+                {str(node_id) for node_id in node_ids if str(node_id)}
+            )
+            for cluster_id, node_ids in teacher_join_groups_by_cluster.items()
+            if str(cluster_id) and isinstance(node_ids, (list, tuple, set))
+        }
 
     output_dir.mkdir(parents=True, exist_ok=True)
     crossing_edge_overrides_by_junction = crossing_edge_overrides_by_junction or {}
@@ -3464,6 +6252,73 @@ def run_teacher_guided_repair_queue(
                     "ready_for_teacher_guided_variant",
                     "needs_expanded_rebuild_scope",
                 }:
+                    original_expanded_scope = candidate.get("expanded_rebuild_scope", {})
+                    original_scope_ids = {
+                        str(item)
+                        for item in (
+                            original_expanded_scope.get("junction_ids", [])
+                            if isinstance(original_expanded_scope, dict)
+                            else []
+                        )
+                        if str(item)
+                    }
+                    original_cluster_scope_ids = {
+                        item for item in original_scope_ids if item.startswith("cluster_")
+                    }
+                    refreshed_expanded_scope = refreshed_candidate.get("expanded_rebuild_scope", {})
+                    # A sequential refresh can make the core junction look
+                    # individually repairable after an earlier candidate was
+                    # applied.  Preserve the teacher's explicit split-cluster
+                    # context in that case; otherwise the next replay silently
+                    # downgrades a context repair into a single-node repair and
+                    # the final composite regresses to the split cluster.
+                    if original_cluster_scope_ids:
+                        merged_scope = dict(
+                            refreshed_expanded_scope
+                            if isinstance(refreshed_expanded_scope, dict)
+                            else {}
+                        )
+                        merged_scope.update(
+                            {
+                                key: value
+                                for key, value in original_expanded_scope.items()
+                                if key in {
+                                    "core_junction_id",
+                                    "blocked_teacher_edge_ids",
+                                    "missing_desired_endpoint_ids",
+                                    "reason",
+                                }
+                            }
+                        )
+                        merged_scope["junction_ids"] = sorted(
+                            original_scope_ids
+                            | {
+                                str(item)
+                                for item in merged_scope.get("junction_ids", []) or []
+                                if str(item)
+                            }
+                        )
+                        original_join_ids = {
+                            str(item)
+                            for item in original_expanded_scope.get("join_junction_ids", []) or []
+                            if str(item)
+                        }
+                        refreshed_join_ids = {
+                            str(item)
+                            for item in merged_scope.get("join_junction_ids", []) or []
+                            if str(item)
+                        }
+                        merged_scope["join_junction_ids"] = sorted(original_join_ids | refreshed_join_ids)
+                        merged_scope["status"] = "review"
+                        merged_scope["recommended_action"] = "rebuild_plain_xml_scope"
+                        merged_scope["sequential_cluster_context_preserved"] = True
+                        merged_scope["sequential_cluster_context_ids"] = sorted(original_cluster_scope_ids)
+                        refreshed_candidate = {
+                            **refreshed_candidate,
+                            "candidate_status": "needs_expanded_rebuild_scope",
+                            "expanded_rebuild_scope": merged_scope,
+                            "sequential_cluster_context_preserved": True,
+                        }
                     candidate = {
                         **candidate,
                         **refreshed_candidate,
@@ -3483,6 +6338,19 @@ def run_teacher_guided_repair_queue(
                     "sequential_refresh_error": f"{type(exc).__name__}: {exc}",
                 }
         is_followup_candidate = bool(candidate.get("followup_reason"))
+        if (
+            expand_fragmented_tls_join_scope
+            and candidate.get("candidate_status") == "needs_expanded_rebuild_scope"
+        ):
+            candidate = _expand_fragmented_tls_join_scope_candidate(
+                candidate,
+                current_raw_node_file,
+            )
+            tls_scope_expansion = candidate.get("tls_join_scope_expansion", {})
+            if isinstance(tls_scope_expansion, dict) and tls_scope_expansion.get(
+                "automatic_expansion_applied"
+            ):
+                candidate = _augment_candidate_edge_map_from_tls_approach_pairs(candidate)
         junction_id = str(candidate.get("junction_id") or candidate.get("reference_id") or "")
         teacher_junction_id = str(candidate.get("reference_id") or junction_id)
         edge_map = _valid_edge_map(candidate.get("edge_map", {}))
@@ -3560,6 +6428,7 @@ def run_teacher_guided_repair_queue(
                     output_dir=output_dir / safe_junction_id,
                     expanded_rebuild_scope=candidate.get("expanded_rebuild_scope", {}),
                     approach_endpoint_rebuild_plan=candidate.get("approach_endpoint_rebuild_plan", {}),
+                    teacher_join_groups_by_cluster=teacher_join_groups_by_cluster,
                     netconvert_binary=netconvert_binary,
                     sumo_binary=sumo_binary,
                     timeout_seconds=timeout_seconds,
@@ -3569,6 +6438,12 @@ def run_teacher_guided_repair_queue(
             )
             expanded_scope_reports.append(scope_report)
             joined_scope_junction_id = str(scope_report.get("joined_scope_junction_id", ""))
+            rewrite_joined_endpoints = bool(scope_report.get("auto_cluster_join_count", 0))
+            joined_scope_junction_ids = [
+                str(item)
+                for item in scope_report.get("joined_scope_junction_ids", []) or []
+                if str(item)
+            ] or ([joined_scope_junction_id] if joined_scope_junction_id else [])
             replay_edge_map = edge_map
             if not replay_edge_map and joined_scope_junction_id:
                 try:
@@ -3675,7 +6550,7 @@ def run_teacher_guided_repair_queue(
             join_self_loop_edge_ids, join_blocking_self_loop_edge_ids = _joined_endpoint_self_loop_edge_ids(
                 current_raw_edge_file,
                 join_patch_file,
-                joined_scope_junction_id,
+                joined_scope_junction_ids,
             )
             expanded_rebuild_scope = candidate.get("expanded_rebuild_scope", {})
             blocked_teacher_edge_ids = (
@@ -3710,7 +6585,7 @@ def run_teacher_guided_repair_queue(
                 ) = _write_joined_endpoint_edge_file(
                     current_raw_edge_file,
                     join_patch_file,
-                    joined_scope_junction_id,
+                    joined_scope_junction_ids,
                     output_dir / safe_junction_id / "full_network_join_replay.edg.xml",
                 )
                 surviving_edge_ids = _edge_file_ids(candidate_full_network_join_edge_file)
@@ -3745,7 +6620,10 @@ def run_teacher_guided_repair_queue(
                     )
             use_full_network_join_patch_replay = (
                 join_patch_file.is_file()
-                and not scope_report.get("rewritten_endpoint_count")
+                and (
+                    not scope_report.get("rewritten_endpoint_count")
+                    or rewrite_joined_endpoints
+                )
                 and not full_network_join_blocking_self_loop_edge_ids
                 and not scope_report.get("blocking_missing_node_ids")
                 and not scope_report.get("blocking_missing_blocked_edge_ids")
@@ -3759,6 +6637,7 @@ def run_teacher_guided_repair_queue(
             if (
                 use_full_network_join_patch_replay
                 and joined_scope_junction_id in _plain_node_ids(current_raw_node_file)
+                and joined_scope_junction_id in join_patch_joined_node_ids
                 and not can_replace_stale_joined_node
             ):
                 skipped_candidates.append(
@@ -3790,6 +6669,7 @@ def run_teacher_guided_repair_queue(
                 )
             ):
                 variant_prefix = f"{_safe_stage_name(prefix, max_len=12)}_{index + 1:03d}"
+                replay_tllogic_file = current_raw_tllogic_file
                 if use_full_network_replay:
                     replay_node_file = current_raw_node_file
                     replay_edge_file = current_raw_edge_file
@@ -3806,6 +6686,13 @@ def run_teacher_guided_repair_queue(
                         join_patch_file,
                         output_dir / safe_junction_id / "full_network_join_replay.nod.xml",
                     )
+                    controlled_inner_prune = _prune_plain_node_controlled_inner_edges(
+                        replay_node_file,
+                        set(full_network_join_dropped_self_loop_edges),
+                    )
+                    scope_report["full_network_join_controlled_inner_prune"] = (
+                        controlled_inner_prune
+                    )
                     replay_edge_file = full_network_join_edge_file
                     replay_connection_file, dead_end_drop_count, dead_end_drop_edge_ids = _write_join_scope_connection_file(
                         replay_edge_file,
@@ -3814,13 +6701,76 @@ def run_teacher_guided_repair_queue(
                         output_dir / safe_junction_id / "full_network_join_replay.con.xml",
                         drop_edge_ids=set(full_network_join_dropped_self_loop_edges),
                     )
+                    rewritten_replay_edge_file, rewritten_endpoint_count, rewritten_self_loop_edges, rewritten_blocking_self_loops = (
+                        _write_joined_endpoint_edge_file(
+                            replay_edge_file,
+                            join_patch_file,
+                            joined_scope_junction_ids,
+                            output_dir / safe_junction_id / "full_network_join_replay_rewritten.edg.xml",
+                            rewrite_endpoints=rewrite_joined_endpoints,
+                        )
+                    )
+                    if rewrite_joined_endpoints:
+                        rewritten_replay_connection_file, crossing_rewrite_count = _write_joined_endpoint_connection_file(
+                            replay_connection_file,
+                            join_patch_file,
+                            output_dir / safe_junction_id / "full_network_join_replay_rewritten.con.xml",
+                        )
+                    else:
+                        rewritten_replay_connection_file, crossing_rewrite_count = replay_connection_file, 0
+                    if rewritten_replay_edge_file != replay_edge_file:
+                        replay_edge_file = rewritten_replay_edge_file
+                    if rewritten_replay_connection_file != replay_connection_file:
+                        replay_connection_file = rewritten_replay_connection_file
+                    scope_report["full_network_join_endpoint_rewrite_count"] = rewritten_endpoint_count
+                    scope_report["full_network_join_crossing_node_rewrite_count"] = crossing_rewrite_count
+                    scope_report["full_network_join_rewritten_self_loop_edges"] = rewritten_self_loop_edges
+                    scope_report["full_network_join_rewritten_blocking_self_loop_edges"] = rewritten_blocking_self_loops
                     scope_report["full_network_join_dead_end_connection_drop_count"] = dead_end_drop_count
                     scope_report["full_network_join_dead_end_connection_drop_edge_ids"] = dead_end_drop_edge_ids
+                    if current_raw_tllogic_file is not None:
+                        (
+                            replay_tllogic_file,
+                            tllogic_drop_count,
+                            tllogic_drop_edge_ids,
+                        ) = _write_join_scope_tllogic_file(
+                            current_raw_tllogic_file,
+                            set(full_network_join_dropped_self_loop_edges),
+                            output_dir / safe_junction_id / "full_network_join_replay.tll.xml",
+                        )
+                        scope_report["full_network_join_tllogic_connection_drop_count"] = (
+                            tllogic_drop_count
+                        )
+                        scope_report["full_network_join_tllogic_connection_drop_edge_ids"] = (
+                            tllogic_drop_edge_ids
+                        )
                     replay_edge_endpoint_rewrite_count = 0
                     replay_dropped_self_loop_edges = full_network_join_dropped_self_loop_edges
                     replay_blocking_self_loop_edge_drops = full_network_join_blocking_self_loop_edge_ids
                     preabsorbed_join_internal_edge_ids = full_network_join_absorbed_self_loop_edge_ids
                     replay_candidate_net_file = output_dir / safe_junction_id / "full_network_join_replay.net.xml"
+                    replay_type_file = current_raw_type_file
+                    if current_raw_type_file is not None:
+                        replay_type_report = write_missing_edge_type_patch(
+                            raw_type_file=current_raw_type_file,
+                            edge_file=replay_edge_file,
+                            output_file=output_dir
+                            / safe_junction_id
+                            / "full_network_join_replay.typ.xml",
+                        )
+                        scope_report["full_network_join_type_patch"] = replay_type_report
+                        if replay_type_report.get("status") != "pass":
+                            scope_report["status"] = "review"
+                            skipped_candidates.append(
+                                {
+                                    "index": index,
+                                    "junction_id": junction_id,
+                                    "candidate_status": "full_network_join_type_patch_failed",
+                                }
+                            )
+                            continue
+                        replay_type_value = str(replay_type_report.get("type_file", ""))
+                        replay_type_file = Path(replay_type_value) if replay_type_value else None
                     seed_command = [
                         netconvert_binary,
                         "--node-files",
@@ -3835,15 +6785,15 @@ def run_teacher_guided_repair_queue(
                         "true",
                         "--tls.ignore-internal-junction-jam",
                     ]
-                    if current_raw_type_file is not None:
+                    if replay_type_file is not None:
                         seed_command[5:5] = [
                             "--type-files",
-                            _command_path(current_raw_type_file, output_dir / safe_junction_id),
+                            _command_path(replay_type_file, output_dir / safe_junction_id),
                         ]
-                    if current_raw_tllogic_file is not None:
+                    if replay_tllogic_file is not None:
                         seed_command[5:5] = [
                             "--tllogic-files",
-                            _command_path(current_raw_tllogic_file, output_dir / safe_junction_id),
+                            _command_path(replay_tllogic_file, output_dir / safe_junction_id),
                         ]
                     seed_report = _command_report(
                         command_runner(seed_command, cwd=output_dir / safe_junction_id, timeout_seconds=timeout_seconds)
@@ -3865,6 +6815,7 @@ def run_teacher_guided_repair_queue(
                             extract_teacher_junction_model(replay_candidate_net_file, joined_scope_junction_id),
                             teacher_junction_id=teacher_junction_id,
                             candidate_junction_id=joined_scope_junction_id,
+                            drop_endpoint_mismatches=False,
                             max_bearing_delta=45.0,
                         )
                     except (ET.ParseError, OSError, KeyError, TypeError, ValueError) as exc:
@@ -3897,10 +6848,22 @@ def run_teacher_guided_repair_queue(
                     ) = _write_joined_endpoint_edge_file(
                         Path(str(scope_report.get("edge_file", ""))),
                         join_patch_file,
-                        joined_scope_junction_id,
+                        joined_scope_junction_ids,
                         output_dir / safe_junction_id / "expanded_scope_replay.edg.xml",
+                        rewrite_endpoints=rewrite_joined_endpoints,
                     )
-                    replay_connection_file = Path(str(scope_report.get("connection_file", "")))
+                    if rewrite_joined_endpoints:
+                        replay_connection_file, crossing_rewrite_count = _write_joined_endpoint_connection_file(
+                            Path(str(scope_report.get("connection_file", ""))),
+                            join_patch_file,
+                            output_dir / safe_junction_id / "expanded_scope_replay.con.xml",
+                        )
+                    else:
+                        replay_connection_file, crossing_rewrite_count = (
+                            Path(str(scope_report.get("connection_file", ""))),
+                            0,
+                        )
+                    scope_report["expanded_scope_crossing_node_rewrite_count"] = crossing_rewrite_count
                     replay_candidate_net_file = Path(str(scope_report.get("net_file", "")))
                     preabsorbed_join_internal_edge_ids = []
                     scope_report["replay_scope"] = "expanded_scope"
@@ -3978,7 +6941,7 @@ def run_teacher_guided_repair_queue(
                         raw_edge_file=replay_edge_file,
                         raw_connection_file=replay_connection_file,
                         raw_type_file=current_raw_type_file,
-                        raw_tllogic_file=current_raw_tllogic_file,
+                        raw_tllogic_file=replay_tllogic_file,
                         teacher_net_file=teacher_net_file,
                         candidate_net_file=replay_candidate_net_file,
                         junction_id=joined_scope_junction_id,
@@ -3997,7 +6960,7 @@ def run_teacher_guided_repair_queue(
                         sumo_binary=sumo_binary,
                         timeout_seconds=timeout_seconds,
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - isolate one injected variant builder failure.
                     variant_report = _variant_exception_report(exc, joined_scope_junction_id)
                 attached_report = _attach_candidate_template_context(variant_report, candidate)
                 attached_report.setdefault("teacher_junction_id", teacher_junction_id)
@@ -4050,6 +7013,16 @@ def run_teacher_guided_repair_queue(
                         )
                         sequential_plain_export_reports.append(export_report)
                         if export_report.get("status") == "pass":
+                            export_report["teacher_plain_tls_cleanup"] = _prune_plain_tls_against_teacher(
+                                teacher_net_file=teacher_net_file,
+                                node_file=Path(str(export_report["raw_node_file"])),
+                                connection_file=Path(str(export_report["raw_connection_file"])),
+                                tllogic_file=(
+                                    Path(str(export_report["raw_tllogic_file"]))
+                                    if export_report.get("raw_tllogic_file")
+                                    else None
+                                ),
+                            )
                             current_raw_node_file = Path(str(export_report["raw_node_file"]))
                             current_raw_edge_file = Path(str(export_report["raw_edge_file"]))
                             current_raw_connection_file = Path(str(export_report["raw_connection_file"]))
@@ -4123,7 +7096,7 @@ def run_teacher_guided_repair_queue(
                 sumo_binary=sumo_binary,
                 timeout_seconds=timeout_seconds,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - isolate one injected variant builder failure.
             variant_report = _variant_exception_report(exc, junction_id)
         attached_report = _attach_candidate_template_context(variant_report, candidate)
         attached_report.setdefault("teacher_junction_id", teacher_junction_id)
@@ -4168,6 +7141,16 @@ def run_teacher_guided_repair_queue(
                 )
                 sequential_plain_export_reports.append(export_report)
                 if export_report.get("status") == "pass":
+                    export_report["teacher_plain_tls_cleanup"] = _prune_plain_tls_against_teacher(
+                        teacher_net_file=teacher_net_file,
+                        node_file=Path(str(export_report["raw_node_file"])),
+                        connection_file=Path(str(export_report["raw_connection_file"])),
+                        tllogic_file=(
+                            Path(str(export_report["raw_tllogic_file"]))
+                            if export_report.get("raw_tllogic_file")
+                            else None
+                        ),
+                    )
                     current_raw_node_file = Path(str(export_report["raw_node_file"]))
                     current_raw_edge_file = Path(str(export_report["raw_edge_file"]))
                     current_raw_connection_file = Path(str(export_report["raw_connection_file"]))
@@ -4179,6 +7162,65 @@ def run_teacher_guided_repair_queue(
                     sequential_blocked_reason = str(
                         export_report.get("error", "plain export failed after accepted variant")
                     )
+
+    connection_mode_regression_reports: list[dict[str, object]] = []
+    if connection_mode_regression_builder is not None:
+        for regression_index, variant_report in enumerate(variant_reports, start=1):
+            if not bool(variant_report.get("global_candidate_eligible", True)):
+                variant_report["connection_mode_regression"] = {
+                    "status": "skipped",
+                    "automatic_promotion_gate": "not_applicable",
+                    "reason": "local-scope candidate cannot be compared with the full source network",
+                }
+                continue
+            final_net_file = Path(str(variant_report.get("final_net_file", "")))
+            if not final_net_file.is_file():
+                if variant_report.get("status") != "pass":
+                    variant_report["connection_mode_regression"] = {
+                        "status": "skipped",
+                        "automatic_promotion_gate": "not_applicable",
+                        "reason": "failed variant did not produce a candidate network",
+                    }
+                    continue
+                regression_report: dict[str, object] = {
+                    "status": "fail",
+                    "claim_status": "construction-invalid",
+                    "automatic_promotion_gate": "blocked",
+                    "error": f"candidate network missing: {final_net_file}",
+                }
+            else:
+                source_scope_ids, candidate_scope_ids = _candidate_connection_mode_scope_ids(
+                    variant_report
+                )
+                try:
+                    regression_report = dict(
+                        connection_mode_regression_builder(
+                            source_net_file=candidate_net_file,
+                            candidate_net_file=final_net_file,
+                            output_dir=final_net_file.parent / "connection_mode_regression",
+                            prefix=f"{_safe_stage_name(prefix, max_len=24)}_{regression_index:03d}",
+                            target_source_junction_ids=source_scope_ids,
+                            target_candidate_junction_ids=candidate_scope_ids,
+                        )
+                    )
+                except (ET.ParseError, OSError, RuntimeError, TypeError, ValueError) as exc:
+                    regression_report = {
+                        "status": "fail",
+                        "claim_status": "construction-invalid",
+                        "automatic_promotion_gate": "blocked",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+            variant_report["connection_mode_regression"] = regression_report
+            connection_mode_regression_reports.append(regression_report)
+    if connection_mode_regression_builder is None:
+        connection_mode_regression_status = "skipped"
+    elif not connection_mode_regression_reports:
+        connection_mode_regression_status = "not_run"
+    elif all(report.get("status") == "pass" for report in connection_mode_regression_reports):
+        connection_mode_regression_status = "pass"
+    else:
+        connection_mode_regression_status = "fail"
+    connection_mode_regression_failed = connection_mode_regression_status == "fail"
 
     attempted_count = len(variant_reports)
     pass_count = sum(1 for report in variant_reports if report.get("status") == "pass")
@@ -4398,6 +7440,7 @@ def run_teacher_guided_repair_queue(
         teacher_net_file=teacher_net_file,
         composite_net_file=Path(composite_net_file) if composite_net_file else None,
         accepted_internal_replays=accepted_internal_replays,
+        teacher_join_groups_by_cluster=teacher_join_groups_by_cluster,
         enabled=sequential_accept_passed_variants and final_internal_replay_status != "fail",
     )
     final_context_parity_failed = final_context_parity.get("status") == "fail"
@@ -4423,6 +7466,10 @@ def run_teacher_guided_repair_queue(
         status = "fail"
         claim_status = "construction-invalid"
         parity_gate_status = "pass" if parity_pass_count == attempted_count else "fail"
+    elif connection_mode_regression_failed:
+        status = "fail"
+        claim_status = "construction-invalid"
+        parity_gate_status = "pass" if parity_pass_count == attempted_count else "fail"
     elif sequential_composite_ready and failed_count == 0:
         status = "pass"
         claim_status = "diagnostic-demo"
@@ -4445,6 +7492,7 @@ def run_teacher_guided_repair_queue(
         claim_status=claim_status,
         parity_gate_status=parity_gate_status,
         context_gate_status=context_gate_status,
+        connection_mode_regression_status=connection_mode_regression_status,
         approach_integrity_status=approach_integrity_status,
         variant_reports=variant_reports,
     )
@@ -4475,6 +7523,8 @@ def run_teacher_guided_repair_queue(
         "approach_integrity_status": approach_integrity_status,
         "approach_integrity_failure_counts": approach_integrity_failure_counts,
         "context_gate_status": context_gate_status,
+        "connection_mode_regression_status": connection_mode_regression_status,
+        "connection_mode_regression_reports": connection_mode_regression_reports,
         "promotion_gate_status": promotion_gate["status"],
         "promotion_gate_file": str(promotion_gate_file),
         "expanded_scope_candidate_count": len(expanded_scope_reports),
@@ -4482,6 +7532,7 @@ def run_teacher_guided_repair_queue(
         "best_expanded_scope_net_file": best_expanded_scope_net_file,
         "expanded_scope_followup_candidate_count": len(expanded_scope_followup_candidates),
         "expanded_scope_followup_candidates": expanded_scope_followup_candidates,
+        "expand_fragmented_tls_join_scope": expand_fragmented_tls_join_scope,
         "sequential_accept_passed_variants": sequential_accept_passed_variants,
         "sequential_plain_export_status": "skipped"
         if not sequential_accept_passed_variants or not sequential_plain_export_reports
@@ -4503,7 +7554,9 @@ def run_teacher_guided_repair_queue(
         "variant_reports": variant_reports,
         "teacher_pattern_contexts": _teacher_pattern_contexts(variant_reports + expanded_scope_reports),
         "skipped_candidates": skipped_candidates,
-        "review_policy": "queue execution only; inspect each final net in NetEdit connection mode before adoption",
+        "review_policy": (
+            "code-native Connection Mode regression must pass; use NetEdit only as optional visual review"
+        ),
     }
     run_report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
@@ -4591,6 +7644,7 @@ def _final_context_parity_gate(
     teacher_net_file: Path,
     composite_net_file: Path | None,
     accepted_internal_replays: list[dict[str, object]],
+    teacher_join_groups_by_cluster: dict[str, list[str]] | None = None,
     enabled: bool,
     radius_m: float = 100.0,
 ) -> dict[str, object]:
@@ -4645,7 +7699,11 @@ def _final_context_parity_gate(
             )
             continue
         delta = _context_count_delta(teacher_context, candidate_context)
-        split_cluster_residuals = _split_cluster_member_residuals(teacher_context, candidate_context)
+        split_cluster_residuals = _split_cluster_member_residuals(
+            teacher_context,
+            candidate_context,
+            teacher_join_groups_by_cluster=teacher_join_groups_by_cluster,
+        )
         report_repair_seeds = []
         for residual in split_cluster_residuals:
             reference_id = str(residual.get("teacher_cluster_junction_id", ""))
@@ -4711,6 +7769,8 @@ def _final_context_parity_gate(
 def _split_cluster_member_residuals(
     teacher_context: dict[str, object],
     candidate_context: dict[str, object],
+    *,
+    teacher_join_groups_by_cluster: dict[str, list[str]] | None = None,
 ) -> list[dict[str, object]]:
     candidate_junction_ids = {str(item) for item in candidate_context.get("junction_ids", []) or [] if str(item)}
     residuals: list[dict[str, object]] = []
@@ -4718,7 +7778,11 @@ def _split_cluster_member_residuals(
         teacher_junction_id = str(teacher_junction_id)
         if not teacher_junction_id.startswith("cluster_"):
             continue
-        member_ids = [item for item in teacher_junction_id.removeprefix("cluster_").split("_") if item]
+        member_ids = list(
+            (teacher_join_groups_by_cluster or {}).get(teacher_junction_id, [])
+        )
+        if not member_ids:
+            member_ids = [item for item in teacher_junction_id.removeprefix("cluster_").split("_") if item]
         residual_members = sorted(member_id for member_id in member_ids if member_id in candidate_junction_ids)
         if residual_members:
             residuals.append(
@@ -5181,6 +8245,7 @@ def write_expanded_scope_plain_inputs(
     output_dir: Path,
     expanded_rebuild_scope: object,
     approach_endpoint_rebuild_plan: object | None = None,
+    teacher_join_groups_by_cluster: dict[str, list[str]] | None = None,
     netconvert_binary: str = "netconvert",
     sumo_binary: str = "sumo",
     timeout_seconds: float = 240.0,
@@ -5193,16 +8258,104 @@ def write_expanded_scope_plain_inputs(
     net_file = output_dir / "expanded_scope.net.xml"
 
     scope = expanded_rebuild_scope if isinstance(expanded_rebuild_scope, dict) else {}
-    seed_node_ids = {str(item) for item in scope.get("junction_ids", []) or [] if str(item)}
+    raw_scope_junction_ids = [str(item) for item in scope.get("junction_ids", []) or [] if str(item)]
     core_junction_id = str(scope.get("core_junction_id", ""))
     requested_join_ids = scope.get("join_junction_ids", None)
-    default_join_ids = [core_junction_id] if core_junction_id else scope.get("junction_ids", []) or []
-    join_seed_node_ids = {
+    default_join_ids = [core_junction_id] if core_junction_id else raw_scope_junction_ids
+    requested_join_ids_list = [
         str(item)
         for item in (requested_join_ids if requested_join_ids is not None else default_join_ids)
         if str(item)
-    }
+    ]
     blocked_edge_ids = {str(item) for item in scope.get("blocked_teacher_edge_ids", []) or [] if str(item)}
+    teacher_join_groups_by_cluster = teacher_join_groups_by_cluster or {}
+
+    raw_nodes = {
+        node.attrib["id"]: node
+        for node in ET.parse(raw_node_file).getroot()
+        if node.tag == "node" and node.attrib.get("id")
+    }
+
+    def expand_scope_ids(values: list[str]) -> set[str]:
+        expanded: set[str] = set()
+        for value in values:
+            members = _sumo_cluster_member_ids(value)
+            # Generated cluster ids are only expanded when their member ids
+            # are present in the current plain source.  Otherwise retain the
+            # id so the report can explain the missing teacher endpoint.
+            present_members = [member for member in members if member in raw_nodes]
+            if value.startswith("cluster_") and len(present_members) >= 2:
+                expanded.update(present_members)
+            elif value in raw_nodes:
+                expanded.add(value)
+            else:
+                expanded.add(value)
+        return expanded
+
+    seed_node_ids = expand_scope_ids(raw_scope_junction_ids)
+    join_seed_node_ids = expand_scope_ids(requested_join_ids_list)
+
+    # A teacher expanded scope may list a generated cluster as context rather
+    # than in join_junction_ids.  Recreate that cluster as a separate join;
+    # do not merge it with the core junction.  Explicit join groups remain
+    # authoritative when supplied by the caller.
+    explicit_join_groups: list[list[str]] = []
+    explicit_group = sorted(node_id for node_id in join_seed_node_ids if node_id in raw_nodes)
+    if len(explicit_group) >= 2:
+        explicit_join_groups.append(explicit_group)
+    join_groups = list(explicit_join_groups)
+    auto_cluster_join_count = 0
+    for cluster_id in raw_scope_junction_ids:
+        if not cluster_id.startswith("cluster_"):
+            continue
+        mapped_cluster_members = teacher_join_groups_by_cluster.get(cluster_id, [])
+        cluster_members = sorted(
+            member
+            for member in (
+                mapped_cluster_members
+                if mapped_cluster_members
+                else _sumo_cluster_member_ids(cluster_id)
+            )
+            if member in raw_nodes
+        )
+        if len(cluster_members) < 2:
+            continue
+        cluster_set = set(cluster_members)
+        if any(cluster_set <= set(group) for group in join_groups):
+            continue
+        join_groups.append(cluster_members)
+        auto_cluster_join_count += 1
+
+    cluster_aliases: dict[str, str] = {}
+    for group in join_groups:
+        generated_id = _sumo_joined_cluster_id(group)
+        if not generated_id:
+            continue
+        for source_cluster_id in raw_scope_junction_ids:
+            if not source_cluster_id.startswith("cluster_"):
+                continue
+            mapped_source_members = teacher_join_groups_by_cluster.get(source_cluster_id, [])
+            source_members = {
+                member
+                for member in (
+                    mapped_source_members
+                    if mapped_source_members
+                    else _sumo_cluster_member_ids(source_cluster_id)
+                )
+                if member in raw_nodes
+            }
+            if source_members and source_members == set(group):
+                cluster_aliases[source_cluster_id] = generated_id
+        cluster_aliases.setdefault(generated_id, generated_id)
+
+    def resolve_scope_endpoint(value: str) -> str:
+        return cluster_aliases.get(value, value)
+
+    joined_scope_junction_ids = [
+        joined_id
+        for joined_id in (_sumo_joined_cluster_id(group) for group in join_groups)
+        if joined_id
+    ]
 
     raw_edges = [edge for edge in ET.parse(raw_edge_file).getroot() if edge.tag == "edge"]
     selected_edges = [
@@ -5217,11 +8370,6 @@ def write_expanded_scope_plain_inputs(
     for edge in selected_edges:
         selected_node_ids.update(endpoint for endpoint in (edge.attrib.get("from", ""), edge.attrib.get("to", "")) if endpoint)
 
-    raw_nodes = {
-        node.attrib["id"]: node
-        for node in ET.parse(raw_node_file).getroot()
-        if node.tag == "node" and node.attrib.get("id")
-    }
     edge_root = ET.Element("edges")
     endpoint_rewrites = _endpoint_rewrites(approach_endpoint_rebuild_plan)
     rewritten_endpoint_count = 0
@@ -5229,10 +8377,22 @@ def write_expanded_scope_plain_inputs(
     for edge in selected_edges:
         copied_edge = copy.deepcopy(edge)
         edge_id = copied_edge.attrib.get("id", "")
+        for endpoint_attr in ("from", "to"):
+            original_endpoint = copied_edge.attrib.get(endpoint_attr, "")
+            resolved_endpoint = resolve_scope_endpoint(original_endpoint)
+            if resolved_endpoint != original_endpoint:
+                copied_edge.set(endpoint_attr, resolved_endpoint)
+                rewritten_endpoint_count += 1
         rewrite = endpoint_rewrites.get(edge_id)
         if rewrite is not None:
             desired_from, desired_to = rewrite
-            missing_endpoint_ids = [node_id for node_id in (desired_from, desired_to) if node_id not in raw_nodes]
+            desired_from = resolve_scope_endpoint(desired_from)
+            desired_to = resolve_scope_endpoint(desired_to)
+            missing_endpoint_ids = [
+                node_id
+                for node_id in (desired_from, desired_to)
+                if node_id not in raw_nodes and node_id not in set(cluster_aliases.values())
+            ]
             if missing_endpoint_ids:
                 skipped_endpoint_rewrites.append(
                     {
@@ -5249,31 +8409,48 @@ def write_expanded_scope_plain_inputs(
                 rewritten_endpoint_count += 1
         edge_root.append(copied_edge)
 
-    join_node_ids = sorted(node_id for node_id in join_seed_node_ids if node_id in raw_nodes)
-    if len(join_node_ids) >= 2:
-        joined_scope_junction_id = _sumo_joined_cluster_id(join_node_ids)
+    join_node_ids = sorted({node_id for group in join_groups for node_id in group})
+    if len(join_groups) == 1 and joined_scope_junction_ids:
+        joined_scope_junction_id = joined_scope_junction_ids[0]
     elif core_junction_id in raw_nodes:
         joined_scope_junction_id = core_junction_id
+    elif joined_scope_junction_ids:
+        joined_scope_junction_id = joined_scope_junction_ids[0]
     else:
         joined_scope_junction_id = ""
 
     node_root = ET.Element("nodes")
-    stale_joined_node_ids = {joined_scope_junction_id} if len(join_node_ids) >= 2 and joined_scope_junction_id else set()
+    stale_joined_node_ids = set(joined_scope_junction_ids)
+    # Remove a source cluster node only when this invocation recreated it as a
+    # join group.  If the current plain source contains only the already
+    # materialized cluster node (without all source members), preserve it;
+    # deleting it would turn a later sequential export into a split cluster.
+    stale_joined_node_ids.update(
+        cluster_id
+        for cluster_id in raw_scope_junction_ids
+        if cluster_id.startswith("cluster_") and cluster_id in cluster_aliases
+    )
     for node_id in sorted(node_id for node_id in selected_node_ids if node_id in raw_nodes):
         if node_id in stale_joined_node_ids:
             continue
         node_root.append(copy.deepcopy(raw_nodes[node_id]))
-    if len(join_node_ids) >= 2:
+    if join_groups:
         join_definition = build_junction_join_definition(
             [
                 {
                     "source": "teacher_guided_expanded_scope",
-                    "candidate_id": core_junction_id,
+                    "candidate_id": _sumo_joined_cluster_id(group),
                     "decision": "join",
-                    "confidence": "reference_matched",
-                    "node_ids": join_node_ids,
-                    "reason": "teacher-guided expanded scope needs a joined candidate junction for semantic replay",
+                    # The expanded scope is not a radius guess: it is the
+                    # explicit, already selected teacher target for this
+                    # materialization.  Mark that narrow decision as confirmed
+                    # so the generic join writer does not downgrade it back to
+                    # <joinExclude>.
+                    "confidence": "target_evidence_confirmed",
+                    "node_ids": group,
+                    "reason": "teacher-guided expanded scope restores an explicit reference cluster",
                 }
+                for group in join_groups
             ],
             output_dir=output_dir,
             prefix="expanded_scope",
@@ -5324,15 +8501,23 @@ def write_expanded_scope_plain_inputs(
         "--output-file",
         net_file.name,
     ]
-    missing_node_ids = sorted(node_id for node_id in selected_node_ids if node_id not in raw_nodes)
+    missing_node_ids = sorted(
+        node_id
+        for node_id in selected_node_ids
+        if node_id not in raw_nodes and node_id not in set(joined_scope_junction_ids)
+    )
     missing_blocked_edge_ids = sorted(edge_id for edge_id in blocked_edge_ids if edge_id not in selected_edge_ids)
     missing_desired_endpoint_ids = {
-        str(item) for item in scope.get("missing_desired_endpoint_ids", []) or [] if str(item)
+        resolve_scope_endpoint(str(item))
+        for item in scope.get("missing_desired_endpoint_ids", []) or []
+        if str(item)
     }
     blocking_missing_node_ids = sorted(
         node_id
         for node_id in missing_node_ids
-        if not (joined_scope_junction_id == core_junction_id and node_id in join_seed_node_ids)
+        if node_id not in join_node_ids
+        and node_id not in join_seed_node_ids
+        and node_id not in set(joined_scope_junction_ids)
         and node_id not in missing_desired_endpoint_ids
     )
     netconvert_report = _command_report(command_runner(command, cwd=output_dir, timeout_seconds=timeout_seconds))
@@ -5382,8 +8567,12 @@ def write_expanded_scope_plain_inputs(
         "join_definition_csv": str(join_definition.get("definition_csv", "")),
         "join_explicit_join_count": join_definition.get("explicit_join_count", 0),
         "joined_scope_junction_id": joined_scope_junction_id,
+        "joined_scope_junction_ids": joined_scope_junction_ids,
         "seed_node_ids": sorted(seed_node_ids),
-        "join_node_ids": sorted(join_seed_node_ids),
+        "join_node_ids": sorted({*join_seed_node_ids, *join_node_ids}),
+        "join_groups": join_groups,
+        "auto_cluster_join_count": auto_cluster_join_count,
+        "cluster_aliases": cluster_aliases,
         "blocked_edge_ids": sorted(blocked_edge_ids),
         "missing_node_ids": missing_node_ids,
         "blocking_missing_node_ids": blocking_missing_node_ids,
@@ -5485,12 +8674,110 @@ def _write_join_scope_connection_file(
     return output_file, len(dropped_edge_ids), dropped_edge_ids
 
 
+def _prune_plain_node_controlled_inner_edges(
+    node_file: Path,
+    drop_edge_ids: set[str],
+) -> dict[str, object]:
+    """Remove absorbed join-internal edges from plain-node TLS hints.
+
+    ``netconvert --plain-output-prefix`` repeats ``controlledInner`` on every
+    node that belongs to a joined controller.  Once a physical micro-edge is
+    absorbed by an explicit junction join, leaving that id in the staged node
+    file can revive a reference to an edge that no longer exists.
+    """
+
+    if not drop_edge_ids:
+        return {
+            "status": "pass",
+            "updated_node_count": 0,
+            "removed_edge_reference_count": 0,
+            "removed_edge_ids": [],
+        }
+    try:
+        node_tree = ET.parse(node_file)
+    except (ET.ParseError, OSError) as exc:
+        return {
+            "status": "fail",
+            "updated_node_count": 0,
+            "removed_edge_reference_count": 0,
+            "removed_edge_ids": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    updated_node_count = 0
+    removed_edge_reference_count = 0
+    removed_edge_ids: list[str] = []
+    for node in node_tree.getroot().findall("node"):
+        raw_value = node.attrib.get("controlledInner", "")
+        if not raw_value:
+            continue
+        edge_ids = raw_value.split()
+        kept = [edge_id for edge_id in edge_ids if edge_id not in drop_edge_ids]
+        removed = [edge_id for edge_id in edge_ids if edge_id in drop_edge_ids]
+        if not removed:
+            continue
+        updated_node_count += 1
+        removed_edge_reference_count += len(removed)
+        removed_edge_ids.extend(removed)
+        if kept:
+            node.set("controlledInner", " ".join(kept))
+        else:
+            node.attrib.pop("controlledInner", None)
+
+    if updated_node_count:
+        ET.indent(node_tree.getroot(), space="    ")
+        node_tree.write(node_file, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "pass",
+        "updated_node_count": updated_node_count,
+        "removed_edge_reference_count": removed_edge_reference_count,
+        "removed_edge_ids": sorted(set(removed_edge_ids)),
+    }
+
+
+def _write_join_scope_tllogic_file(
+    tllogic_file: Path,
+    drop_edge_ids: set[str],
+    output_file: Path,
+) -> tuple[Path, int, list[str]]:
+    """Stage TLS definitions without bindings to absorbed micro-edges."""
+
+    if not drop_edge_ids:
+        return tllogic_file, 0, []
+    tllogic_tree = ET.parse(tllogic_file)
+    root = tllogic_tree.getroot()
+    dropped_edge_ids: list[str] = []
+    for child in list(root):
+        if child.tag != "connection":
+            continue
+        connection_edge_ids = {
+            child.attrib.get("from", ""),
+            child.attrib.get("to", ""),
+        }
+        removed = sorted(
+            edge_id
+            for edge_id in connection_edge_ids & drop_edge_ids
+            if edge_id
+        )
+        if not removed:
+            continue
+        root.remove(child)
+        dropped_edge_ids.extend(removed)
+
+    if not dropped_edge_ids:
+        return tllogic_file, 0, []
+    ET.indent(root, space="    ")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    tllogic_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    return output_file, len(dropped_edge_ids), dropped_edge_ids
+
+
 def _joined_endpoint_self_loop_edge_ids(
     edge_file: Path,
     join_patch_file: Path,
-    joined_junction_id: str,
+    joined_junction_id: object,
 ) -> tuple[list[str], list[str]]:
-    if not join_patch_file.is_file() or not joined_junction_id:
+    if not join_patch_file.is_file() or not _normalize_joined_junction_ids(joined_junction_id):
         return [], []
     source_node_ids = _joined_source_node_ids(join_patch_file, joined_junction_id)
     if not source_node_ids:
@@ -5512,14 +8799,17 @@ def _joined_endpoint_self_loop_edge_ids(
 def _write_joined_endpoint_edge_file(
     edge_file: Path,
     join_patch_file: Path,
-    joined_junction_id: str,
+    joined_junction_id: object,
     output_file: Path,
+    *,
+    rewrite_endpoints: bool = False,
 ) -> tuple[Path, int, list[str], list[str]]:
-    if not join_patch_file.is_file() or not joined_junction_id:
+    if not join_patch_file.is_file() or not _normalize_joined_junction_ids(joined_junction_id):
         return edge_file, 0, [], []
     source_node_ids = _joined_source_node_ids(join_patch_file, joined_junction_id)
     if not source_node_ids:
         return edge_file, 0, [], []
+    endpoint_rewrites = _join_patch_endpoint_rewrites(join_patch_file) if rewrite_endpoints else {}
 
     edge_root = ET.parse(edge_file).getroot()
     rewrite_count = 0
@@ -5535,9 +8825,20 @@ def _write_joined_endpoint_edge_file(
                 blocking_self_loop_edge_drops.append(edge_id)
             edge_root.remove(edge)
             continue
-        # netconvert applies the <join> patch after reading node ids; rewriting
-        # boundary edges to the future joined id creates edges that reference an
-        # undefined node in plain XML.
+        if rewrite_endpoints:
+            old_from = edge.attrib.get("from", "")
+            old_to = edge.attrib.get("to", "")
+            new_from = endpoint_rewrites.get(old_from, old_from)
+            new_to = endpoint_rewrites.get(old_to, old_to)
+            if new_from != old_from:
+                edge.set("from", new_from)
+                rewrite_count += 1
+            if new_to != old_to:
+                edge.set("to", new_to)
+                rewrite_count += 1
+        # With the default mode netconvert applies the <join> patch after
+        # reading node ids.  Teacher replay inputs can opt into explicit
+        # endpoint rewriting above.
     if rewrite_count == 0 and not dropped_self_loop_edges:
         return edge_file, 0, [], []
 
@@ -5545,6 +8846,43 @@ def _write_joined_endpoint_edge_file(
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(edge_root).write(output_file, encoding="utf-8", xml_declaration=True)
     return output_file, rewrite_count, dropped_self_loop_edges, blocking_self_loop_edge_drops
+
+
+def _write_joined_endpoint_connection_file(
+    connection_file: Path,
+    join_patch_file: Path,
+    output_file: Path,
+) -> tuple[Path, int]:
+    if not join_patch_file.is_file():
+        return connection_file, 0
+    endpoint_rewrites = _join_patch_endpoint_rewrites(join_patch_file)
+    try:
+        connection_root = ET.parse(connection_file).getroot()
+    except (ET.ParseError, OSError):
+        return connection_file, 0
+    rewrite_count = 0
+    sanitized_crossing_count = 0
+    for crossing in connection_root.findall("crossing"):
+        old_node = crossing.attrib.get("node", "")
+        new_node = endpoint_rewrites.get(old_node, old_node)
+        if new_node != old_node:
+            crossing.set("node", new_node)
+            rewrite_count += 1
+        # netconvert plain-output can emit non-finite outlineShape values for
+        # crossings.  They are not valid SUMO XML geometry and can abort a
+        # later full-network join replay.  Dropping only that optional
+        # geometry keeps the crossing semantics and lets SUMO rebuild it.
+        for attr in ("outlineShape", "shape"):
+            value = crossing.attrib.get(attr, "")
+            if value and any(token in value.lower() for token in ("nan", "inf")):
+                crossing.attrib.pop(attr, None)
+                sanitized_crossing_count += 1
+    if not rewrite_count and not sanitized_crossing_count:
+        return connection_file, 0
+    ET.indent(connection_root, space="    ")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(connection_root).write(output_file, encoding="utf-8", xml_declaration=True)
+    return output_file, rewrite_count
 
 
 def _edge_file_ids(edge_file: Path) -> set[str]:
@@ -5654,13 +8992,36 @@ def _edge_drop_requires_review(edge: ET.Element) -> bool:
     return False
 
 
-def _joined_source_node_ids(node_file: Path, junction_id: str) -> set[str]:
-    if not junction_id:
+def _normalize_joined_junction_ids(value: object) -> set[str]:
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return {str(item) for item in value if str(item)}
+    return {str(value)} if str(value) else set()
+
+
+def _join_patch_endpoint_rewrites(join_patch_file: Path) -> dict[str, str]:
+    try:
+        joins = ET.parse(join_patch_file).getroot().findall("join")
+    except (ET.ParseError, OSError):
+        return {}
+    rewrites: dict[str, str] = {}
+    for join in joins:
+        node_ids = [node_id for node_id in join.attrib.get("nodes", "").split() if node_id]
+        joined_id = _sumo_joined_cluster_id(node_ids)
+        if len(node_ids) < 2 or not joined_id:
+            continue
+        for node_id in node_ids:
+            rewrites[node_id] = joined_id
+    return rewrites
+
+
+def _joined_source_node_ids(node_file: Path, junction_id: object) -> set[str]:
+    target_junction_ids = _normalize_joined_junction_ids(junction_id)
+    if not target_junction_ids:
         return set()
     source_node_ids: set[str] = set()
     for join in ET.parse(node_file).getroot().findall("join"):
         node_ids = [node_id for node_id in join.attrib.get("nodes", "").split() if node_id]
-        if _sumo_joined_cluster_id(node_ids) == junction_id:
+        if _sumo_joined_cluster_id(node_ids) in target_junction_ids:
             source_node_ids.update(node_ids)
     return source_node_ids
 
@@ -5809,6 +9170,209 @@ def _semantic_layer_gate_counts(variant_reports: list[dict[str, object]]) -> dic
     return {key: counts[key] for key in sorted(counts)}
 
 
+def _augment_candidate_edge_map_from_tls_approach_pairs(
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    pair_map: dict[str, str] = {}
+    for pair in candidate.get("tls_approach_pairs", []) or []:
+        if not isinstance(pair, dict):
+            continue
+        teacher_edge_id = str(pair.get("reference_edge_id", ""))
+        candidate_edge_id = str(pair.get("candidate_edge_id", ""))
+        if teacher_edge_id and candidate_edge_id:
+            pair_map[teacher_edge_id] = candidate_edge_id
+    existing = _valid_edge_map(candidate.get("edge_map", {}))
+    merged = {**existing, **pair_map}
+    return {
+        **candidate,
+        "edge_map": dict(sorted(merged.items())),
+        "tls_approach_edge_map_evidence": {
+            "status": "pass" if pair_map else "review",
+            "pair_edge_map": dict(sorted(pair_map.items())),
+            "added_or_overridden_count": sum(
+                1 for key, value in pair_map.items() if existing.get(key) != value
+            ),
+            "reason": "bearing-matched TLS approach evidence applied to full controller-cell variant",
+        },
+    }
+
+
+def _expand_fragmented_tls_join_scope_candidate(
+    candidate: dict[str, Any],
+    raw_node_file: Path,
+    *,
+    max_controller_span_m: float = 120.0,
+    max_controller_node_count: int = 20,
+) -> dict[str, Any]:
+    """Expand a partial OSM signal cluster to its compact shared controller cell."""
+
+    if candidate.get("learned_rule") != "tum_like_topology_fragmented_tls_candidate":
+        return candidate
+    scope_value = candidate.get("expanded_rebuild_scope", {})
+    if not isinstance(scope_value, dict):
+        return candidate
+    requested_ids = {
+        str(value)
+        for value in scope_value.get("join_junction_ids", []) or []
+        if str(value)
+    }
+    report: dict[str, object] = {
+        "status": "pass",
+        "claim_status": "diagnostic-demo",
+        "requested_join_junction_ids": sorted(requested_ids),
+        "automatic_expansion_applied": False,
+        "max_controller_span_m": max_controller_span_m,
+    }
+    if not requested_ids:
+        report["reason"] = "no_requested_join_junction_ids"
+        return {**candidate, "tls_join_scope_expansion": report}
+    try:
+        root = ET.parse(raw_node_file).getroot()
+    except (ET.ParseError, OSError) as exc:
+        report.update(
+            {
+                "status": "review",
+                "reason": "raw_node_file_unreadable",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+        return {**candidate, "tls_join_scope_expansion": report}
+
+    nodes = {
+        str(node.attrib.get("id", "")): node
+        for node in root.findall("node")
+        if node.attrib.get("id")
+    }
+    missing_ids = sorted(requested_ids - set(nodes))
+    controller_ids = {
+        str(nodes[node_id].attrib.get("tl", ""))
+        for node_id in requested_ids & set(nodes)
+        if nodes[node_id].attrib.get("tl")
+    }
+    report["missing_requested_join_junction_ids"] = missing_ids
+    report["controller_ids"] = sorted(controller_ids)
+    if missing_ids or len(controller_ids) != 1:
+        report.update(
+            {
+                "status": "review",
+                "reason": "requested join nodes do not resolve to one shared TLS controller",
+            }
+        )
+        return {**candidate, "tls_join_scope_expansion": report}
+
+    controller_id = next(iter(controller_ids))
+    controller_node_ids = sorted(
+        node_id
+        for node_id, node in nodes.items()
+        if node.attrib.get("tl", "") == controller_id
+    )
+    positions = []
+    for node_id in controller_node_ids:
+        node = nodes[node_id]
+        try:
+            positions.append((float(node.attrib["x"]), float(node.attrib["y"])))
+        except (KeyError, TypeError, ValueError):
+            report.update(
+                {
+                    "status": "review",
+                    "reason": "shared TLS controller node lacks finite coordinates",
+                    "controller_node_ids": controller_node_ids,
+                }
+            )
+            return {**candidate, "tls_join_scope_expansion": report}
+    span_m = max(
+        (
+            math.hypot(ax - bx, ay - by)
+            for index, (ax, ay) in enumerate(positions)
+            for bx, by in positions[index + 1 :]
+        ),
+        default=0.0,
+    )
+    report.update(
+        {
+            "controller_node_ids": controller_node_ids,
+            "controller_node_count": len(controller_node_ids),
+            "controller_span_m": round(span_m, 3),
+        }
+    )
+    if (
+        len(controller_node_ids) > max_controller_node_count
+        or span_m > max_controller_span_m
+    ):
+        report.update(
+            {
+                "status": "review",
+                "reason": "shared TLS controller is too broad for automatic physical junction joining",
+            }
+        )
+        return {**candidate, "tls_join_scope_expansion": report}
+
+    expanded_scope = copy.deepcopy(scope_value)
+    expanded_scope["join_junction_ids"] = controller_node_ids
+    expanded_scope["junction_ids"] = sorted(
+        {
+            *controller_node_ids,
+            *(
+                str(value)
+                for value in expanded_scope.get("junction_ids", []) or []
+                if str(value)
+            ),
+        }
+    )
+    added_ids = sorted(set(controller_node_ids) - requested_ids)
+    report.update(
+        {
+            "automatic_expansion_applied": bool(added_ids),
+            "added_join_junction_ids": added_ids,
+            "expanded_join_junction_ids": controller_node_ids,
+            "reason": "compact shared TLS controller cell expanded before physical junction join",
+        }
+    )
+    return {
+        **candidate,
+        "expanded_rebuild_scope": expanded_scope,
+        "tls_join_scope_expansion": report,
+    }
+
+
+def _candidate_connection_mode_scope_ids(
+    report: dict[str, object],
+) -> tuple[list[str], list[str]]:
+    """Return equivalent source/candidate scopes for a differential audit.
+
+    A plain-XML junction join removes several source junction IDs and creates a
+    new cluster ID.  Unchanged boundary junctions can also be part of the
+    intended edit scope.  Excluding the complete scope on both sides prevents
+    those expected identity changes from being mistaken for global collateral
+    damage while every other junction remains subject to the regression gate.
+    """
+
+    source_ids: set[str] = set()
+    matched_ids = report.get("matched_candidate_node_ids", [])
+    if isinstance(matched_ids, (list, tuple, set)):
+        source_ids.update(str(value) for value in matched_ids if str(value))
+    expanded_scope = report.get("expanded_rebuild_scope", {})
+    if isinstance(expanded_scope, dict):
+        for field in ("junction_ids", "join_junction_ids"):
+            values = expanded_scope.get(field, [])
+            if isinstance(values, (list, tuple, set)):
+                source_ids.update(str(value) for value in values if str(value))
+        if not source_ids:
+            core_junction_id = str(expanded_scope.get("core_junction_id", ""))
+            if core_junction_id:
+                source_ids.add(core_junction_id)
+    if not source_ids:
+        original_junction_id = str(report.get("candidate_original_junction_id", ""))
+        if original_junction_id:
+            source_ids.add(original_junction_id)
+
+    candidate_ids = set(source_ids)
+    candidate_junction_id = str(report.get("junction_id", ""))
+    if candidate_junction_id:
+        candidate_ids.add(candidate_junction_id)
+    return sorted(source_ids), sorted(candidate_ids)
+
+
 def _write_teacher_guided_promotion_gate(
     *,
     output_file: Path,
@@ -5818,6 +9382,7 @@ def _write_teacher_guided_promotion_gate(
     approach_integrity_status: str,
     variant_reports: list[dict[str, object]],
     context_gate_status: str = "skipped",
+    connection_mode_regression_status: str = "skipped",
 ) -> dict[str, object]:
     applied_reports = [report for report in variant_reports if report.get("composite_applied")]
     global_candidate_reports = [
@@ -5834,6 +9399,11 @@ def _write_teacher_guided_promotion_gate(
             "teacher_junction_id": str(report.get("teacher_junction_id", "")),
             "status": str(report.get("status", "")),
             "parity_gate_status": str(report.get("parity_gate_status", "")),
+            "connection_mode_regression_status": str(
+                report.get("connection_mode_regression", {}).get("status", "not_run")
+            )
+            if isinstance(report.get("connection_mode_regression"), dict)
+            else "not_run",
             "final_net_file": str(report.get("final_net_file", "")),
             "candidate_scope_status": str(report.get("candidate_scope_status") or "full_network"),
             "global_candidate_eligible": bool(report.get("global_candidate_eligible", True)),
@@ -5848,6 +9418,7 @@ def _write_teacher_guided_promotion_gate(
         if status == "pass"
         and parity_gate_status == "pass"
         and context_gate_status != "fail"
+        and connection_mode_regression_status != "fail"
         and approach_integrity_status == "pass"
         and items
         and all(item["status"] == "pass" and item["parity_gate_status"] == "pass" for item in items)
@@ -5858,6 +9429,7 @@ def _write_teacher_guided_promotion_gate(
         "claim_status": claim_status,
         "parity_gate_status": parity_gate_status,
         "context_gate_status": context_gate_status,
+        "connection_mode_regression_status": connection_mode_regression_status,
         "approach_integrity_status": approach_integrity_status,
         "candidate_count": len(items),
         "pass_candidate_count": sum(1 for item in items if item["status"] == "pass"),
@@ -5929,6 +9501,10 @@ def _attach_candidate_template_context(
             "teacher_pattern_family",
             "teacher_pattern_template_count",
             "teacher_pattern_template_examples",
+            "matched_candidate_node_ids",
+            "expanded_rebuild_scope",
+            "tls_join_scope_expansion",
+            "tls_approach_edge_map_evidence",
             "sequential_refreshed_candidate",
             "sequential_refresh_source_net_file",
             "sequential_refresh_status",
@@ -5937,6 +9513,9 @@ def _attach_candidate_template_context(
         )
         if key in candidate
     }
+    candidate_original_junction_id = str(candidate.get("junction_id", ""))
+    if candidate_original_junction_id:
+        context["candidate_original_junction_id"] = candidate_original_junction_id
     if not context:
         return report
     merged = {**report, **context}
@@ -6940,6 +10519,27 @@ def _sumo_joined_cluster_id(node_ids: list[str]) -> str:
     return f"cluster_{head}{suffix}"
 
 
+def _sumo_cluster_member_ids(node_id: str) -> list[str]:
+    """Expand the lossless part of a SUMO joined-cluster id.
+
+    ``netconvert`` names an explicit join from its source node ids as
+    ``cluster_<id>_<id>...``.  Expanded teacher scopes carry those generated
+    ids in ``junction_ids`` even though the plain OSM source still contains
+    the member nodes.  The ``_#Nmore`` suffix is deliberately ignored: it is
+    a display-only truncation and must never be treated as a real node id.
+    """
+
+    value = str(node_id or "")
+    if not value.startswith("cluster_"):
+        return [value] if value else []
+    members = [
+        token
+        for token in value.removeprefix("cluster_").split("_")
+        if token and not token.startswith("#")
+    ]
+    return members
+
+
 def _expanded_rebuild_scope(
     core_junction_id: str,
     approach_endpoint_rebuild_plan: dict[str, Any],
@@ -7615,39 +11215,468 @@ def _edge_geometry_matches_current_junctions(
 
 def _restore_existing_edge_geometry(
     edge: ET.Element,
-    existing_edge: ET.Element,
+    geometry_source_edge: ET.Element,
     root: ET.Element,
     *,
     max_endpoint_delta: float | None = None,
 ) -> None:
-    if max_endpoint_delta is not None and not _edge_geometry_matches_current_junctions(root, edge, existing_edge, max_endpoint_delta):
+    if max_endpoint_delta is not None and not _edge_geometry_matches_current_junctions(
+        root,
+        edge,
+        geometry_source_edge,
+        max_endpoint_delta,
+    ):
         return
-    if existing_edge.attrib.get("shape"):
-        edge.set("shape", existing_edge.attrib["shape"])
-    existing_lane_shapes = {
+    source_edge_shape = geometry_source_edge.attrib.get("shape", "")
+    if source_edge_shape:
+        edge.set("shape", source_edge_shape)
+    source_lane_shapes = {
         lane.attrib.get("index", ""): lane.attrib["shape"]
-        for lane in existing_edge.findall("lane")
+        for lane in geometry_source_edge.findall("lane")
         if lane.attrib.get("index", "") and lane.attrib.get("shape")
     }
     for lane in edge.findall("lane"):
-        if lane.attrib.get("index", "") in existing_lane_shapes:
-            lane.set("shape", existing_lane_shapes[lane.attrib.get("index", "")])
+        lane_shape = source_lane_shapes.get(lane.attrib.get("index", ""))
+        if lane_shape:
+            lane.set("shape", lane_shape)
+        elif source_edge_shape:
+            # Plain ``.edg.xml`` anchors often carry one centerline shape on
+            # the edge and no explicit lane children.  It is still better
+            # evidence than geometry translated from an unrelated teacher
+            # endpoint, and preserves the legacy marker-file behaviour.
+            lane.set("shape", source_edge_shape)
+        restored_shape = lane.attrib.get("shape", "")
+        if restored_shape and "length" in lane.attrib:
+            rendered_length = _polyline_length(restored_shape)
+            if rendered_length is not None:
+                lane.set("length", f"{rendered_length:.2f}")
 
 
-def _load_geometry_anchor_edge_ids(edge_file: Path | None) -> set[str]:
+def _blend_geometry_anchor_at_target(
+    edge: ET.Element,
+    geometry_source_edge: ET.Element,
+    target_junction_id: str,
+) -> bool:
+    """Keep the anchor's remote endpoint and the teacher's target endpoint.
+
+    A joined OSM cell and a hand-modelled teacher intersection rarely place
+    the junction boundary at exactly the same coordinate.  Copying either
+    complete shape creates a gap at one end.  This blend smoothly warps the
+    anchor polyline from zero displacement at the untouched remote junction
+    to the teacher displacement at the rebuilt target junction.
+    """
+
+    target_at_start = edge.attrib.get("from") == target_junction_id
+    target_at_end = edge.attrib.get("to") == target_junction_id
+    if target_at_start == target_at_end:
+        return False
+    if target_at_start and geometry_source_edge.attrib.get("from") != target_junction_id:
+        return False
+    if target_at_end and geometry_source_edge.attrib.get("to") != target_junction_id:
+        return False
+
+    return _blend_geometry_anchor_at_endpoint(
+        edge,
+        geometry_source_edge,
+        target_at_start=target_at_start,
+    )
+
+
+def _blend_geometry_anchor_at_endpoint(
+    edge: ET.Element,
+    geometry_source_edge: ET.Element,
+    *,
+    target_at_start: bool,
+) -> bool:
+    """Blend a replayed local endpoint into an existing boundary edge.
+
+    The source boundary may end at an OSM split member while the replayed
+    boundary ends at the newly collapsed owner.  The endpoint ids therefore
+    need not match even though their directed side does.  This lower-level
+    primitive keeps the source's remote endpoint exactly and warps only toward
+    the replayed teacher endpoint.
+    """
+
+    blended = False
+    # SUMO nets commonly keep geometry only on lane children.  Falling back
+    # to the first lane is essential here: leaving a translated teacher
+    # centerline on the edge while blending only lane shapes makes netconvert
+    # recreate the same remote-endpoint gap from the stale edge-level shape.
+    teacher_edge_shape = _primary_edge_shape(edge)
+    anchor_edge_shape = _primary_edge_shape(geometry_source_edge)
+    if teacher_edge_shape and anchor_edge_shape:
+        shape = _warp_anchor_shape_to_teacher_endpoint(
+            anchor_edge_shape,
+            teacher_edge_shape,
+            target_at_start=target_at_start,
+        )
+        if shape:
+            edge.set("shape", shape)
+            blended = True
+
+    anchor_lanes = {
+        lane.attrib.get("index", ""): lane
+        for lane in geometry_source_edge.findall("lane")
+        if lane.attrib.get("index", "")
+    }
+    for lane in edge.findall("lane"):
+        teacher_lane_shape = lane.attrib.get("shape", "")
+        anchor_lane = anchor_lanes.get(lane.attrib.get("index", ""))
+        anchor_lane_shape = (
+            anchor_lane.attrib.get("shape", "")
+            if anchor_lane is not None
+            else anchor_edge_shape
+        )
+        if not teacher_lane_shape or not anchor_lane_shape:
+            continue
+        shape = _warp_anchor_shape_to_teacher_endpoint(
+            anchor_lane_shape,
+            teacher_lane_shape,
+            target_at_start=target_at_start,
+        )
+        if shape:
+            lane.set("shape", shape)
+            # ``lane.length`` in a SUMO ``.net.xml`` is operational geometry,
+            # not a teacher semantic.  The replayed lane was cloned before its
+            # centre-line was warped and may therefore still carry the
+            # teacher's (often much longer) declared length.  NetEdit renders
+            # the new shape while SUMO positions vehicles using ``length``;
+            # keeping the stale value makes the two views disagree.  Plain XML
+            # conversion normally recomputes this field.  For the native net
+            # replay path, recompute it whenever the cloned lane declared one.
+            if "length" in lane.attrib:
+                rendered_length = _polyline_length(shape)
+                if rendered_length is not None:
+                    lane.set("length", f"{rendered_length:.2f}")
+            blended = True
+    return blended
+
+
+def _preserve_mapped_boundary_geometry(
+    replayed_edge: ET.Element,
+    geometry_source_edge: ET.Element,
+    *,
+    target_junction_ids: set[str],
+    source_local_junction_ids: set[str],
+) -> dict[str, object]:
+    """Preserve a mapped candidate boundary while moving its local endpoint.
+
+    A teacher boundary is a local intersection model, not evidence for the
+    complete public-road segment outside the rebuilt cell.  Replacing a mapped
+    candidate edge with the complete translated teacher shape can therefore
+    move its remote endpoint by tens of metres.  Require the teacher and source
+    to address the same directed side, keep the source remote endpoint, and
+    blend only toward the replayed local endpoint.
+    """
+
+    source_has_geometry = bool(_primary_edge_shape(geometry_source_edge))
+    replay_has_geometry = bool(_primary_edge_shape(replayed_edge))
+    if not source_has_geometry or not replay_has_geometry:
+        return {
+            "status": "skipped",
+            "reason": "source_or_replay_geometry_missing",
+        }
+
+    target_at_start = replayed_edge.attrib.get("from", "") in target_junction_ids
+    target_at_end = replayed_edge.attrib.get("to", "") in target_junction_ids
+    source_local_at_start = geometry_source_edge.attrib.get("from", "") in source_local_junction_ids
+    source_local_at_end = geometry_source_edge.attrib.get("to", "") in source_local_junction_ids
+    if target_at_start == target_at_end:
+        return {
+            "status": "blocked",
+            "reason": "replayed_boundary_does_not_have_one_local_endpoint",
+        }
+    if source_local_at_start == source_local_at_end:
+        return {
+            "status": "blocked",
+            "reason": "source_boundary_does_not_have_one_local_endpoint",
+        }
+    if target_at_start != source_local_at_start:
+        return {
+            "status": "blocked",
+            "reason": "source_and_replayed_boundary_orientation_mismatch",
+        }
+
+    source_remote_id = geometry_source_edge.attrib.get("to" if source_local_at_start else "from", "")
+    replayed_remote_id = replayed_edge.attrib.get("to" if target_at_start else "from", "")
+    if source_remote_id != replayed_remote_id:
+        return {
+            "status": "blocked",
+            "reason": "source_and_replayed_boundary_remote_endpoint_mismatch",
+            "source_remote_junction_id": source_remote_id,
+            "replayed_remote_junction_id": replayed_remote_id,
+        }
+
+    operational_restore = _preserve_boundary_operational_attributes(
+        replayed_edge,
+        geometry_source_edge,
+    )
+    if not _blend_geometry_anchor_at_endpoint(
+        replayed_edge,
+        geometry_source_edge,
+        target_at_start=target_at_start,
+    ):
+        return {
+            "status": "blocked",
+            "reason": "boundary_geometry_blend_failed",
+        }
+    return {
+        "status": "pass",
+        "target_at_start": target_at_start,
+        "source_remote_junction_id": source_remote_id,
+        **operational_restore,
+    }
+
+
+def _preserve_boundary_operational_attributes(
+    replayed_edge: ET.Element,
+    source_edge: ET.Element,
+) -> dict[str, object]:
+    """Keep OSM road semantics while MAP/teacher owns only local topology.
+
+    Official MAP evidence can authorize a lane-count expansion and the movement
+    matrix, but it does not reclassify the complete boundary segment or restrict
+    its vehicle classes.  Existing lanes retain their source operational fields;
+    a newly added lane clones the nearest source lane's fields.
+    """
+
+    changed_edge_attrs = 0
+    for attr in BOUNDARY_EDGE_OPERATIONAL_ATTRS:
+        before = replayed_edge.attrib.get(attr)
+        if attr in source_edge.attrib:
+            replayed_edge.set(attr, source_edge.attrib[attr])
+        else:
+            replayed_edge.attrib.pop(attr, None)
+        if before != replayed_edge.attrib.get(attr):
+            changed_edge_attrs += 1
+
+    source_lanes = {
+        int(lane.attrib.get("index", "0") or 0): lane
+        for lane in source_edge.findall("lane")
+    }
+    changed_lane_attrs = 0
+    cloned_lane_indices: list[int] = []
+    for replayed_lane in replayed_edge.findall("lane"):
+        replayed_index = int(replayed_lane.attrib.get("index", "0") or 0)
+        source_lane = source_lanes.get(replayed_index)
+        if source_lane is None and source_lanes:
+            source_index = min(source_lanes, key=lambda index: (abs(index - replayed_index), index))
+            source_lane = source_lanes[source_index]
+            cloned_lane_indices.append(replayed_index)
+        if source_lane is None:
+            continue
+        for attr in BOUNDARY_LANE_OPERATIONAL_ATTRS:
+            before = replayed_lane.attrib.get(attr)
+            if attr in source_lane.attrib:
+                replayed_lane.set(attr, source_lane.attrib[attr])
+            else:
+                replayed_lane.attrib.pop(attr, None)
+            if before != replayed_lane.attrib.get(attr):
+                changed_lane_attrs += 1
+    return {
+        "preserved_boundary_edge_operational_attr_count": changed_edge_attrs,
+        "preserved_boundary_lane_operational_attr_count": changed_lane_attrs,
+        "operational_attrs_cloned_to_new_lane_indices": sorted(cloned_lane_indices),
+    }
+
+
+def _restore_external_boundary_connections(
+    *,
+    source_root: ET.Element,
+    target_root: ET.Element,
+    boundary_edge_ids: set[str],
+    source_local_junction_ids: set[str],
+) -> dict[str, object]:
+    """Restore only the source connections on the remote side of boundaries."""
+
+    source_edges = {
+        edge.attrib["id"]: edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    target_edge_ids = {
+        edge.attrib["id"]
+        for edge in target_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    target_lane_counts = _net_lane_counts(target_root)
+    target_lane_ids = {
+        lane.attrib["id"]
+        for edge in target_root.findall("edge")
+        for lane in edge.findall("lane")
+        if lane.attrib.get("id")
+    }
+    existing_keys = {
+        tuple(sorted(connection.attrib.items()))
+        for connection in target_root.findall("connection")
+    }
+    restored: list[dict[str, str]] = []
+    preserved_existing: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+
+    source_connections = list(source_root.findall("connection"))
+    considered_connection_keys: set[tuple[tuple[str, str], ...]] = set()
+
+    def remote_connection_chain(seed: ET.Element) -> list[ET.Element]:
+        """Return a remote connection and its compiled internal continuations."""
+
+        chain: list[ET.Element] = []
+        queue = [seed]
+        queued_keys = {tuple(sorted(seed.attrib.items()))}
+        while queue:
+            connection = queue.pop(0)
+            chain.append(connection)
+            via_lane = connection.attrib.get("via", "")
+            if not via_lane:
+                continue
+            via_edge_id = via_lane.rsplit("_", 1)[0]
+            for continuation in source_connections:
+                if continuation.attrib.get("from", "") != via_edge_id:
+                    continue
+                key = tuple(sorted(continuation.attrib.items()))
+                if key not in queued_keys:
+                    queued_keys.add(key)
+                    queue.append(continuation)
+        return chain
+
+    for boundary_edge_id in sorted(boundary_edge_ids):
+        source_edge = source_edges.get(boundary_edge_id)
+        if source_edge is None:
+            continue
+        local_at_start = source_edge.attrib.get("from", "") in source_local_junction_ids
+        local_at_end = source_edge.attrib.get("to", "") in source_local_junction_ids
+        if local_at_start == local_at_end:
+            skipped.append(
+                {
+                    "boundary_edge_id": boundary_edge_id,
+                    "reason": "source_boundary_does_not_have_one_local_endpoint",
+                }
+            )
+            continue
+        # At the remote junction an outgoing boundary is the source of the
+        # continuation; an incoming boundary is its destination.
+        boundary_attr = "from" if local_at_start else "to"
+        for seed_connection in source_connections:
+            if seed_connection.attrib.get(boundary_attr, "") != boundary_edge_id:
+                continue
+            for connection in remote_connection_chain(seed_connection):
+                connection_key = tuple(sorted(connection.attrib.items()))
+                if connection_key in considered_connection_keys:
+                    continue
+                considered_connection_keys.add(connection_key)
+                record = dict(connection.attrib)
+                if (
+                    connection.attrib.get("from", "") not in target_edge_ids
+                    or connection.attrib.get("to", "") not in target_edge_ids
+                ):
+                    skipped.append({**record, "reason": "missing_target_edge"})
+                    continue
+                if not _connection_lane_indices_valid(connection, target_lane_counts):
+                    skipped.append({**record, "reason": "invalid_target_lane_index"})
+                    continue
+                via_lane = connection.attrib.get("via", "")
+                if via_lane and via_lane not in target_lane_ids:
+                    skipped.append({**record, "reason": "missing_target_via_lane"})
+                    continue
+                if connection_key in existing_keys:
+                    preserved_existing.append(record)
+                    continue
+                target_root.append(copy.deepcopy(connection))
+                existing_keys.add(connection_key)
+                restored.append(record)
+
+    return {
+        "status": "pass",
+        "restored_connection_count": len(restored),
+        "restored_connections": restored,
+        "preserved_existing_connection_count": len(preserved_existing),
+        "preserved_existing_connections": preserved_existing,
+        "skipped_connection_count": len(skipped),
+        "skipped_connections": skipped,
+    }
+
+
+def _warp_anchor_shape_to_teacher_endpoint(
+    anchor_shape: str,
+    teacher_shape: str,
+    *,
+    target_at_start: bool,
+) -> str:
+    anchor_tokens = _split(anchor_shape)
+    teacher_points = _shape_points(teacher_shape)
+    parsed: list[tuple[float, float, list[str]]] = []
+    for token in anchor_tokens:
+        coords = token.split(",")
+        if len(coords) < 2:
+            return ""
+        try:
+            parsed.append((float(coords[0]), float(coords[1]), coords[2:]))
+        except ValueError:
+            return ""
+    if not parsed or not teacher_points:
+        return ""
+
+    desired_x, desired_y = teacher_points[0 if target_at_start else -1]
+    anchor_x, anchor_y, _ = parsed[0 if target_at_start else -1]
+    delta_x = desired_x - anchor_x
+    delta_y = desired_y - anchor_y
+    displacement = math.hypot(delta_x, delta_y)
+    cumulative = [0.0]
+    for (left_x, left_y, _), (right_x, right_y, _) in zip(
+        parsed,
+        parsed[1:],
+    ):
+        cumulative.append(
+            cumulative[-1] + math.hypot(right_x - left_x, right_y - left_y)
+        )
+    total = cumulative[-1]
+    if total <= 1e-9:
+        weights = [1.0 for _ in parsed]
+    else:
+        # The teacher owns the local conflict core, not the complete OSM
+        # approach.  A full-edge linear warp can drag a lane across a nearby
+        # junction.  Taper the correction inside a bounded local splice and
+        # preserve the remote public-road geometry exactly.
+        blend_extent = min(total, max(15.0, displacement * 4.0))
+        distances_from_target = (
+            cumulative
+            if target_at_start
+            else [total - distance for distance in cumulative]
+        )
+        weights = []
+        for distance in distances_from_target:
+            linear_weight = max(0.0, 1.0 - distance / blend_extent)
+            weights.append(linear_weight * linear_weight * (3.0 - 2.0 * linear_weight))
+
+    output = []
+    for (x, y, extra), weight in zip(parsed, weights):
+        coords = [
+            _format_xy(x + delta_x * weight),
+            _format_xy(y + delta_y * weight),
+            *extra,
+        ]
+        output.append(",".join(coords))
+    return " ".join(output)
+
+
+def _load_geometry_anchor_edges(edge_file: Path | None) -> dict[str, ET.Element]:
     if edge_file is None:
-        return set()
+        return {}
     try:
         root = ET.parse(edge_file).getroot()
     except (ET.ParseError, OSError):
-        return set()
+        return {}
     return {
-        edge.attrib["id"]
+        edge.attrib["id"]: copy.deepcopy(edge)
         for edge in root.findall("edge")
         if edge.attrib.get("id")
         and edge.attrib.get("function") != "internal"
         and (edge.attrib.get("shape") or any(lane.attrib.get("shape") for lane in edge.findall("lane")))
     }
+
+
+def _load_geometry_anchor_edge_ids(edge_file: Path | None) -> set[str]:
+    return set(_load_geometry_anchor_edges(edge_file))
 
 
 def _geometry_anchor_junctions_by_id(
@@ -7749,6 +11778,16 @@ def _shape_points(shape: str) -> list[tuple[float, float]]:
         except ValueError:
             continue
     return points
+
+
+def _polyline_length(shape: str) -> float | None:
+    points = _shape_points(shape)
+    if len(points) < 2:
+        return None
+    return sum(
+        math.hypot(right[0] - left[0], right[1] - left[1])
+        for left, right in zip(points, points[1:])
+    )
 
 
 def _convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -8062,6 +12101,23 @@ def _teacher_boundary_edge_ids_touching_internal_subgraph(
                 and teacher_junction_id in (teacher_edge.attrib.get("from"), teacher_edge.attrib.get("to"))
             ):
                 edge_ids.append(edge_id)
+    # A crossing can reference a roadway edge that has no vehicle connection
+    # directly touching the target internal graph.  It is still part of the
+    # cell boundary and must survive a scoped replay; otherwise the pedestrian
+    # overlay would retain a dangling ``crossingEdges`` reference.
+    for crossing in teacher_edges.values():
+        if crossing.attrib.get("function") != "crossing":
+            continue
+        if not crossing.attrib.get("id", "").startswith(teacher_internal_prefix):
+            continue
+        for edge_id in _split(crossing.attrib.get("crossingEdges", "")):
+            teacher_edge = teacher_edges.get(edge_id)
+            if (
+                edge_id
+                and teacher_edge is not None
+                and teacher_junction_id in (teacher_edge.attrib.get("from"), teacher_edge.attrib.get("to"))
+            ):
+                edge_ids.append(edge_id)
     return list(dict.fromkeys(edge_ids))
 
 
@@ -8211,7 +12267,7 @@ def _touches_other_internal_owner(connection: ET.Element, internal_prefix: str) 
 
 
 def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
-    return any(
+    changed = any(
         int(report.get(key, 0) or 0)
         for key in (
             "removed_non_target_internal_edge_count",
@@ -8224,6 +12280,1302 @@ def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
             "restored_non_target_request_count",
         )
     )
+    if (
+        changed
+        or int(report.get("restored_external_lane_count", 0) or 0)
+        or int(report.get("restored_external_edge_centerline_count", 0) or 0)
+    ):
+        return True
+    internal_report = report.get("internal_artifact_restore")
+    return isinstance(internal_report, dict) and _non_target_internal_restore_changed(internal_report)
+
+
+def restore_off_scope_netconvert_artifacts(
+    *,
+    source_file: Path,
+    target_file: Path,
+    mutable_junction_ids: set[str],
+    mutable_edge_ids: set[str],
+    expand_mutable_edge_endpoints: bool = True,
+    junction_aliases: dict[str, str] | None = None,
+    declared_absorbed_edge_ids: set[str] | None = None,
+) -> dict[str, object]:
+    """Restore the network outside one explicitly mutable replay scope.
+
+    ``netconvert --sumo-net-file`` normalizes the complete network even when a
+    replay changes only one junction cell.  This helper preserves the current
+    cell and its boundary edges while restoring every other internal subgraph,
+    traffic-light program, junction shape, and external-lane geometry from the
+    immutable pre-normalization network.  Topology or lane-cardinality drift
+    outside the declared scope is reported as a hard failure rather than being
+    silently repaired.  ``junction_aliases`` is the narrow exception needed
+    after a declared SUMO junction join: a surviving public-road edge may keep
+    its source geometry while one endpoint changes from an absorbed member to
+    the joined cluster id.  When ``declared_absorbed_edge_ids`` is supplied,
+    only those source edges may disappear and each must collapse completely
+    inside one alias target.
+    """
+
+    if not source_file.exists():
+        return _failure(f"source net file does not exist: {source_file}")
+    if not target_file.exists():
+        return _failure(f"target net file does not exist: {target_file}")
+
+    source_root = ET.parse(source_file).getroot()
+    target_root = ET.parse(target_file).getroot()
+    source_edges = {
+        edge.attrib["id"]: edge
+        for edge in source_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    target_edges = {
+        edge.attrib["id"]: edge
+        for edge in target_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    normalized_junction_aliases = {
+        str(source_id): str(target_id)
+        for source_id, target_id in (junction_aliases or {}).items()
+        if str(source_id) and str(target_id) and str(source_id) != str(target_id)
+    }
+    source_junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id", "") and not junction.attrib.get("id", "").startswith(":")
+    }
+    target_junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in target_root.findall("junction")
+        if junction.attrib.get("id", "") and not junction.attrib.get("id", "").startswith(":")
+    }
+    invalid_aliases = [
+        {
+            "source_junction_id": source_id,
+            "target_junction_id": target_id,
+            "source_exists": source_id in source_junction_ids,
+            "target_exists": target_id in target_junction_ids,
+        }
+        for source_id, target_id in sorted(normalized_junction_aliases.items())
+        if source_id not in source_junction_ids or target_id not in target_junction_ids
+    ]
+    if invalid_aliases:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "junction_alias_validation_failed",
+            "source_file": str(source_file),
+            "target_file": str(target_file),
+            "invalid_junction_aliases": invalid_aliases,
+        }
+    expected_absorbed_edge_ids = (
+        {str(edge_id) for edge_id in declared_absorbed_edge_ids if str(edge_id)}
+        if declared_absorbed_edge_ids is not None
+        else None
+    )
+    effective_mutable_junction_ids = {
+        str(value) for value in mutable_junction_ids if str(value)
+    }
+    effective_mutable_junction_ids.update(normalized_junction_aliases)
+    effective_mutable_junction_ids.update(normalized_junction_aliases.values())
+    effective_mutable_edge_ids = {str(value) for value in mutable_edge_ids if str(value)}
+    if expand_mutable_edge_endpoints:
+        for edge_id in sorted(effective_mutable_edge_ids):
+            for edge in (source_edges.get(edge_id), target_edges.get(edge_id)):
+                if edge is None:
+                    continue
+                effective_mutable_junction_ids.update(
+                    value
+                    for value in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+                    if value
+                )
+
+    internal_report = _restore_non_target_internal_artifacts(
+        source_file=source_file,
+        target_file=target_file,
+        exclude_junction_ids=effective_mutable_junction_ids,
+    )
+    if internal_report.get("status") != "pass":
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "off_scope_internal_artifact_restore_not_pass",
+            "source_file": str(source_file),
+            "target_file": str(target_file),
+            "internal_artifact_restore": internal_report,
+        }
+
+    target_tree = ET.parse(target_file)
+    target_root = target_tree.getroot()
+    target_edges = {
+        edge.attrib["id"]: edge
+        for edge in target_root.findall("edge")
+        if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
+    }
+    failures: list[dict[str, object]] = []
+    authorized_absorbed_edge_ids: list[str] = []
+    restored_join_boundary_edge_ids: list[str] = []
+    restored_edge_ids: list[str] = []
+    restored_edge_centerline_ids: list[str] = []
+    restored_lane_count = 0
+    for edge_id, source_edge in sorted(source_edges.items()):
+        if edge_id in effective_mutable_edge_ids:
+            continue
+        target_edge = target_edges.get(edge_id)
+        source_endpoints = (
+            source_edge.attrib.get("from", ""),
+            source_edge.attrib.get("to", ""),
+        )
+        aliased_source_endpoints = tuple(
+            normalized_junction_aliases.get(endpoint, endpoint)
+            for endpoint in source_endpoints
+        )
+        if target_edge is None:
+            if expected_absorbed_edge_ids is not None:
+                authorized = (
+                    edge_id in expected_absorbed_edge_ids
+                    and aliased_source_endpoints[0]
+                    and aliased_source_endpoints[0] == aliased_source_endpoints[1]
+                )
+            else:
+                authorized = all(
+                    endpoint and endpoint in effective_mutable_junction_ids
+                    for endpoint in source_endpoints
+                )
+            if authorized:
+                authorized_absorbed_edge_ids.append(edge_id)
+            else:
+                failures.append(
+                    {
+                        "edge_id": edge_id,
+                        "reason": "off_scope_edge_missing",
+                        "source_endpoints": source_endpoints,
+                        "aliased_source_endpoints": aliased_source_endpoints,
+                        "declared_absorbed": (
+                            edge_id in expected_absorbed_edge_ids
+                            if expected_absorbed_edge_ids is not None
+                            else None
+                        ),
+                    }
+                )
+            continue
+        target_endpoints = (
+            target_edge.attrib.get("from", ""),
+            target_edge.attrib.get("to", ""),
+        )
+        join_boundary_endpoint_change = (
+            source_endpoints != target_endpoints
+            and bool(normalized_junction_aliases)
+            and aliased_source_endpoints == target_endpoints
+        )
+        if source_endpoints != target_endpoints and not join_boundary_endpoint_change:
+            failures.append(
+                {
+                    "edge_id": edge_id,
+                    "reason": "off_scope_edge_endpoints_changed",
+                    "source_endpoints": source_endpoints,
+                    "target_endpoints": target_endpoints,
+                }
+            )
+            continue
+        if join_boundary_endpoint_change:
+            restored_join_boundary_edge_ids.append(edge_id)
+        source_lanes = {
+            lane.attrib.get("index", ""): lane for lane in source_edge.findall("lane")
+        }
+        target_lanes = {
+            lane.attrib.get("index", ""): lane for lane in target_edge.findall("lane")
+        }
+        if source_lanes.keys() != target_lanes.keys():
+            failures.append(
+                {
+                    "edge_id": edge_id,
+                    "reason": "off_scope_lane_cardinality_changed",
+                    "source_lane_indices": sorted(source_lanes),
+                    "target_lane_indices": sorted(target_lanes),
+                }
+            )
+            continue
+        before_edge_shape = target_edge.attrib.get("shape")
+        before_lanes = {
+            lane_index: {
+                attr: target_lane.attrib.get(attr)
+                for attr in GEOMETRY_RESTORE_LANE_ATTRS
+            }
+            for lane_index, target_lane in target_lanes.items()
+        }
+        _restore_existing_edge_geometry(target_edge, source_edge, target_root)
+        if before_edge_shape != target_edge.attrib.get("shape"):
+            restored_edge_centerline_ids.append(edge_id)
+        edge_changed = False
+        for lane_index, source_lane in source_lanes.items():
+            target_lane = target_lanes[lane_index]
+            for attr in GEOMETRY_RESTORE_LANE_ATTRS:
+                if attr in source_lane.attrib:
+                    target_lane.set(attr, source_lane.attrib[attr])
+                else:
+                    target_lane.attrib.pop(attr, None)
+            after = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
+            if before_lanes[lane_index] != after:
+                edge_changed = True
+                restored_lane_count += 1
+        if edge_changed:
+            restored_edge_ids.append(edge_id)
+
+    undeleted_declared_absorbed_edge_ids: list[str] = []
+    if expected_absorbed_edge_ids is not None:
+        undeleted_declared_absorbed_edge_ids = sorted(
+            expected_absorbed_edge_ids - set(authorized_absorbed_edge_ids)
+        )
+        failures.extend(
+            {
+                "edge_id": edge_id,
+                "reason": "declared_absorbed_edge_not_absorbed",
+            }
+            for edge_id in undeleted_declared_absorbed_edge_ids
+        )
+
+    if restored_lane_count or restored_edge_centerline_ids:
+        ET.indent(target_root, space="    ")
+        target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
+
+    internal_failures = {
+        key: int(internal_report.get(key, 0) or 0)
+        for key in (
+            "skipped_non_target_internal_edge_missing_junction_count",
+            "skipped_non_target_internal_connection_missing_edge_count",
+            "skipped_non_target_internal_connection_invalid_lane_count",
+            "skipped_non_target_internal_connection_missing_via_lane_count",
+            "missing_non_target_tllogic_count",
+        )
+        if int(internal_report.get(key, 0) or 0)
+    }
+    status = "pass" if not failures and not internal_failures else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "source_file": str(source_file),
+        "target_file": str(target_file),
+        "mutable_junction_ids": sorted(effective_mutable_junction_ids),
+        "mutable_edge_ids": sorted(effective_mutable_edge_ids),
+        "junction_aliases": dict(sorted(normalized_junction_aliases.items())),
+        "declared_absorbed_edge_ids": (
+            sorted(expected_absorbed_edge_ids)
+            if expected_absorbed_edge_ids is not None
+            else None
+        ),
+        "expanded_mutable_edge_endpoints": expand_mutable_edge_endpoints,
+        "authorized_absorbed_external_edge_ids": authorized_absorbed_edge_ids,
+        "undeleted_declared_absorbed_edge_ids": undeleted_declared_absorbed_edge_ids,
+        "restored_join_boundary_edge_count": len(restored_join_boundary_edge_ids),
+        "restored_join_boundary_edge_ids": restored_join_boundary_edge_ids,
+        "restored_external_edge_count": len(restored_edge_ids),
+        "restored_external_edge_ids": restored_edge_ids,
+        "restored_external_edge_centerline_count": len(restored_edge_centerline_ids),
+        "restored_external_edge_centerline_ids": restored_edge_centerline_ids,
+        "restored_external_lane_count": restored_lane_count,
+        "failure_count": len(failures) + sum(internal_failures.values()),
+        "failures": failures,
+        "internal_failure_counts": internal_failures,
+        "internal_artifact_restore": internal_report,
+    }
+
+
+def write_reanchored_normal_junction_movements(
+    *,
+    source_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    junction_id: str,
+    declared_added_movement_shapes: dict[tuple[str, str, str, str], str],
+) -> dict[str, object]:
+    """Reanchor one normal junction's internal movement lanes, and nothing else.
+
+    The candidate may add only the explicitly declared external movements.  An
+    existing movement reuses its accepted source via-lane geometry; a declared
+    movement uses the supplied endpoint-bound polyline.  This helper is meant
+    to run after global ``netconvert`` geometry has already been restored.
+    """
+
+    missing = [str(path) for path in (source_net_file, candidate_net_file) if not path.exists()]
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+    junction_id = str(junction_id).strip()
+    if not junction_id or junction_id.startswith(":"):
+        return _failure("one normal junction id is required")
+    if not declared_added_movement_shapes:
+        return _failure("at least one declared added movement shape is required")
+
+    source_net_file = source_net_file.resolve()
+    candidate_net_file = candidate_net_file.resolve()
+    output_file = output_file.resolve()
+    if output_file in {source_net_file, candidate_net_file}:
+        return _failure("output file must differ from source and candidate inputs")
+
+    source_sha256 = hashlib.sha256(source_net_file.read_bytes()).hexdigest()
+    candidate_sha256 = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    source_root = ET.parse(source_net_file).getroot()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    internal_prefix = f":{junction_id}_"
+
+    def fail(reason: str, failures: list[dict[str, object]]) -> dict[str, object]:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": reason,
+            "source_net_file": str(source_net_file),
+            "source_sha256": source_sha256,
+            "candidate_net_file": str(candidate_net_file),
+            "candidate_sha256": candidate_sha256,
+            "output_file": str(output_file),
+            "junction_id": junction_id,
+            "failure_count": len(failures),
+            "failures": failures,
+        }
+
+    def strict_polyline(shape: str) -> tuple[list[tuple[float, ...]], float] | None:
+        points: list[tuple[float, ...]] = []
+        try:
+            for token in shape.split():
+                coordinates = tuple(float(value) for value in token.split(","))
+                if len(coordinates) not in {2, 3} or not all(math.isfinite(value) for value in coordinates):
+                    return None
+                points.append(coordinates)
+        except ValueError:
+            return None
+        if len(points) < 2 or any(len(point) != len(points[0]) for point in points):
+            return None
+        length = sum(math.dist(left, right) for left, right in zip(points, points[1:]))
+        return (points, length) if math.isfinite(length) and length > 0 else None
+
+    def external_connections(root: ET.Element) -> dict[tuple[str, str, str, str], list[ET.Element]]:
+        grouped: dict[tuple[str, str, str, str], list[ET.Element]] = {}
+        for connection in root.findall("connection"):
+            if connection.attrib.get("from", "").startswith(":") or connection.attrib.get("to", "").startswith(":"):
+                continue
+            grouped.setdefault(_connection_key(connection), []).append(connection)
+        return grouped
+
+    def lane_index(root: ET.Element) -> dict[str, list[ET.Element]]:
+        indexed: dict[str, list[ET.Element]] = {}
+        for lane in root.findall("edge/lane"):
+            lane_id = lane.attrib.get("id", "")
+            if lane_id:
+                indexed.setdefault(lane_id, []).append(lane)
+        return indexed
+
+    def external_lane(root: ET.Element, edge_id: str, lane_index_value: str) -> ET.Element | None:
+        edge = root.find(f"edge[@id='{edge_id}']")
+        if edge is None or edge_id.startswith(":"):
+            return None
+        lanes = [lane for lane in edge.findall("lane") if lane.attrib.get("index", "0") == lane_index_value]
+        return lanes[0] if len(lanes) == 1 else None
+
+    def invariant_hashes(root: ET.Element) -> dict[str, str]:
+        external_edges = [
+            _xml_element_semantic_payload(edge)
+            for edge in root.findall("edge")
+            if not edge.attrib.get("id", "").startswith(":")
+        ]
+        connections = [_xml_element_semantic_payload(connection) for connection in root.findall("connection")]
+        tls = [_xml_element_semantic_payload(logic) for logic in root.findall("tlLogic")]
+        requests = [
+            {
+                "junction_id": junction.attrib.get("id", ""),
+                "intLanes": junction.attrib.get("intLanes", ""),
+                "requests": [_xml_element_semantic_payload(request) for request in junction.findall("request")],
+            }
+            for junction in root.findall("junction")
+            if not junction.attrib.get("id", "").startswith(":")
+        ]
+
+        def digest(payload: object) -> str:
+            encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            return hashlib.sha256(encoded).hexdigest()
+
+        return {
+            "external_lanes_sha256": digest(external_edges),
+            "connections_sha256": digest(connections),
+            "tls_sha256": digest(tls),
+            "request_matrix_sha256": digest(requests),
+        }
+
+    failures: list[dict[str, object]] = []
+    source_junctions = source_root.findall(f"junction[@id='{junction_id}']")
+    candidate_junctions = candidate_root.findall(f"junction[@id='{junction_id}']")
+    if len(source_junctions) != 1 or len(candidate_junctions) != 1:
+        failures.append(
+            {
+                "reason": "target_normal_junction_not_unique",
+                "source_count": len(source_junctions),
+                "candidate_count": len(candidate_junctions),
+            }
+        )
+        return fail("target junction validation failed", failures)
+    source_junction = source_junctions[0]
+    candidate_junction = candidate_junctions[0]
+    if source_junction.attrib.get("shape", "") != candidate_junction.attrib.get("shape", ""):
+        failures.append(
+            {
+                "reason": "target_junction_shape_changed",
+                "source_shape": source_junction.attrib.get("shape", ""),
+                "candidate_shape": candidate_junction.attrib.get("shape", ""),
+            }
+        )
+
+    declared_shapes: dict[tuple[str, str, str, str], str] = {}
+    for raw_key, raw_shape in declared_added_movement_shapes.items():
+        if not isinstance(raw_key, tuple) or len(raw_key) != 4:
+            failures.append({"reason": "declared_movement_key_invalid", "key": repr(raw_key)})
+            continue
+        key = tuple(str(value) for value in raw_key)
+        if not key[0] or not key[1] or not key[2] or not key[3]:
+            failures.append({"reason": "declared_movement_key_has_empty_value", "key": _connection_key_record(key)})
+            continue
+        shape = str(raw_shape).strip()
+        if key in declared_shapes:
+            failures.append({"reason": "declared_movement_key_duplicate", "key": _connection_key_record(key)})
+            continue
+        declared_shapes[key] = shape
+
+    source_connections = external_connections(source_root)
+    candidate_connections = external_connections(candidate_root)
+    duplicate_source_keys = sorted(key for key, values in source_connections.items() if len(values) != 1)
+    duplicate_candidate_keys = sorted(key for key, values in candidate_connections.items() if len(values) != 1)
+    if duplicate_source_keys or duplicate_candidate_keys:
+        failures.append(
+            {
+                "reason": "external_movement_key_not_unique",
+                "source_keys": [_connection_key_record(key) for key in duplicate_source_keys],
+                "candidate_keys": [_connection_key_record(key) for key in duplicate_candidate_keys],
+            }
+        )
+    source_keys = set(source_connections)
+    candidate_keys = set(candidate_connections)
+    declared_keys = set(declared_shapes)
+    added_keys = candidate_keys - source_keys
+    removed_keys = source_keys - candidate_keys
+    if added_keys != declared_keys or removed_keys:
+        failures.append(
+            {
+                "reason": "external_movement_delta_not_declared",
+                "declared_additions": [_connection_key_record(key) for key in sorted(declared_keys)],
+                "actual_additions": [_connection_key_record(key) for key in sorted(added_keys)],
+                "actual_removals": [_connection_key_record(key) for key in sorted(removed_keys)],
+            }
+        )
+
+    source_lane_index = lane_index(source_root)
+    candidate_lane_index = lane_index(candidate_root)
+
+    def target_via_lane(
+        connection: ET.Element,
+        lanes: dict[str, list[ET.Element]],
+        *,
+        key: tuple[str, str, str, str],
+        side: str,
+    ) -> ET.Element | None:
+        via_lane_id = connection.attrib.get("via", "")
+        matches = lanes.get(via_lane_id, []) if via_lane_id.startswith(internal_prefix) else []
+        if len(matches) != 1:
+            failures.append(
+                {
+                    "reason": "target_owned_via_lane_not_unique",
+                    "side": side,
+                    "key": _connection_key_record(key),
+                    "via_lane_id": via_lane_id,
+                    "lane_count": len(matches),
+                }
+            )
+            return None
+        return matches[0]
+
+    source_target_keys = {
+        key
+        for key, values in source_connections.items()
+        if len(values) == 1 and values[0].attrib.get("via", "").startswith(internal_prefix)
+    }
+    candidate_target_keys = {
+        key
+        for key, values in candidate_connections.items()
+        if len(values) == 1 and values[0].attrib.get("via", "").startswith(internal_prefix)
+    }
+    if candidate_target_keys != source_target_keys | declared_keys:
+        failures.append(
+            {
+                "reason": "target_junction_movement_ownership_mismatch",
+                "source_keys": [_connection_key_record(key) for key in sorted(source_target_keys)],
+                "candidate_keys": [_connection_key_record(key) for key in sorted(candidate_target_keys)],
+                "declared_additions": [_connection_key_record(key) for key in sorted(declared_keys)],
+            }
+        )
+
+    lane_updates: list[tuple[ET.Element, dict[str, str], dict[str, object]]] = []
+    target_via_ids: set[str] = set()
+    for key in sorted(source_target_keys):
+        if len(source_connections.get(key, [])) != 1 or len(candidate_connections.get(key, [])) != 1:
+            continue
+        source_lane = target_via_lane(source_connections[key][0], source_lane_index, key=key, side="source")
+        candidate_lane = target_via_lane(candidate_connections[key][0], candidate_lane_index, key=key, side="candidate")
+        if source_lane is None or candidate_lane is None:
+            continue
+        via_lane_id = candidate_connections[key][0].attrib.get("via", "")
+        if via_lane_id in target_via_ids:
+            failures.append(
+                {
+                    "reason": "candidate_via_lane_reused_by_multiple_movements",
+                    "key": _connection_key_record(key),
+                    "via_lane_id": via_lane_id,
+                }
+            )
+            continue
+        target_via_ids.add(via_lane_id)
+        attrs = {attr: source_lane.attrib.get(attr, "") for attr in ("speed", "length", "shape")}
+        parsed_shape = strict_polyline(attrs["shape"])
+        try:
+            valid_scalars = all(math.isfinite(float(attrs[attr])) and float(attrs[attr]) > 0 for attr in ("speed", "length"))
+        except ValueError:
+            valid_scalars = False
+        if parsed_shape is None or not valid_scalars:
+            failures.append(
+                {
+                    "reason": "accepted_source_via_lane_geometry_invalid",
+                    "key": _connection_key_record(key),
+                    "via_lane_id": source_connections[key][0].attrib.get("via", ""),
+                }
+            )
+            continue
+        lane_updates.append(
+            (
+                candidate_lane,
+                attrs,
+                {
+                    "kind": "existing",
+                    "key": _connection_key_record(key),
+                    "source_via_lane_id": source_connections[key][0].attrib.get("via", ""),
+                    "candidate_via_lane_id": via_lane_id,
+                },
+            )
+        )
+
+    for key in sorted(declared_keys):
+        if len(candidate_connections.get(key, [])) != 1:
+            continue
+        connection = candidate_connections[key][0]
+        candidate_lane = target_via_lane(connection, candidate_lane_index, key=key, side="candidate")
+        if candidate_lane is None:
+            continue
+        via_lane_id = connection.attrib.get("via", "")
+        if via_lane_id in target_via_ids:
+            failures.append(
+                {
+                    "reason": "candidate_via_lane_reused_by_multiple_movements",
+                    "key": _connection_key_record(key),
+                    "via_lane_id": via_lane_id,
+                }
+            )
+            continue
+        target_via_ids.add(via_lane_id)
+        parsed = strict_polyline(declared_shapes[key])
+        from_lane = external_lane(candidate_root, key[0], key[2])
+        to_lane = external_lane(candidate_root, key[1], key[3])
+        from_shape = strict_polyline(from_lane.attrib.get("shape", "")) if from_lane is not None else None
+        to_shape = strict_polyline(to_lane.attrib.get("shape", "")) if to_lane is not None else None
+        if parsed is None or from_shape is None or to_shape is None:
+            failures.append(
+                {
+                    "reason": "declared_movement_or_external_lane_shape_invalid",
+                    "key": _connection_key_record(key),
+                }
+            )
+            continue
+        points, length = parsed
+        expected_start = from_shape[0][-1]
+        expected_end = to_shape[0][0]
+        if points[0] != expected_start or points[-1] != expected_end:
+            failures.append(
+                {
+                    "reason": "declared_movement_shape_endpoint_mismatch",
+                    "key": _connection_key_record(key),
+                    "provided_start": list(points[0]),
+                    "expected_start": list(expected_start),
+                    "provided_end": list(points[-1]),
+                    "expected_end": list(expected_end),
+                }
+            )
+            continue
+        lane_updates.append(
+            (
+                candidate_lane,
+                {"shape": declared_shapes[key], "length": f"{length:.12g}"},
+                {
+                    "kind": "added",
+                    "key": _connection_key_record(key),
+                    "candidate_via_lane_id": via_lane_id,
+                    "polyline_length": length,
+                },
+            )
+        )
+
+    if failures:
+        return fail("scoped internal movement validation failed", failures)
+
+    invariants_before = invariant_hashes(candidate_root)
+    mutations: list[dict[str, object]] = []
+    for lane, attrs, record in lane_updates:
+        before = {attr: lane.attrib.get(attr) for attr in attrs}
+        for attr, value in attrs.items():
+            lane.set(attr, value)
+        mutations.append({**record, "before": before, "after": attrs})
+    candidate_junction.set("shape", source_junction.attrib.get("shape", ""))
+    if "customShape" in source_junction.attrib:
+        candidate_junction.set("customShape", source_junction.attrib["customShape"])
+    else:
+        candidate_junction.attrib.pop("customShape", None)
+
+    invariants_after = invariant_hashes(candidate_root)
+    changed_invariants = sorted(
+        key for key, before in invariants_before.items() if invariants_after.get(key) != before
+    )
+    if changed_invariants:
+        return fail(
+            "scoped internal movement repair changed immutable network semantics",
+            [{"reason": "immutable_semantic_hash_changed", "fields": changed_invariants}],
+        )
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    source_sha256_after = hashlib.sha256(source_net_file.read_bytes()).hexdigest()
+    candidate_sha256_after = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    source_mutated = source_sha256_after != source_sha256
+    candidate_mutated = candidate_sha256_after != candidate_sha256
+    status = "pass" if not source_mutated and not candidate_mutated else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "promotion_status": "review_required",
+        "source_net_file": str(source_net_file),
+        "source_sha256": source_sha256,
+        "source_sha256_after": source_sha256_after,
+        "source_network_mutation": source_mutated,
+        "candidate_net_file": str(candidate_net_file),
+        "candidate_sha256": candidate_sha256,
+        "candidate_sha256_after": candidate_sha256_after,
+        "candidate_network_mutation": candidate_mutated,
+        "output_file": str(output_file),
+        "output_sha256": hashlib.sha256(output_file.read_bytes()).hexdigest(),
+        "junction_id": junction_id,
+        "declared_added_movement_count": len(declared_keys),
+        "reanchored_existing_movement_count": len(source_target_keys),
+        "reanchored_added_movement_count": len(declared_keys),
+        "mutation_count": len(mutations),
+        "mutations": mutations,
+        "junction_shape": source_junction.attrib.get("shape", ""),
+        "junction_custom_shape": source_junction.attrib.get("customShape"),
+        "immutable_hashes_before": invariants_before,
+        "immutable_hashes_after": invariants_after,
+        "failure_count": 0,
+        "failures": [],
+        "policy": (
+            "reanchor only the target normal junction's uniquely owned internal movement lanes; "
+            "preserve external lanes, connections, TLS, and request matrices"
+        ),
+    }
+
+
+def write_authorized_lane_transition_junction_shapes(
+    *,
+    candidate_net_file: Path,
+    output_file: Path,
+    junction_ids: set[str],
+    evidence_net_file: Path | None = None,
+    excluded_branch_edge_ids_by_junction: dict[str, list[str]] | None = None,
+) -> dict[str, object]:
+    """Tighten only evidence-authorized linear lane-transition junctions.
+
+    A human-cleaned network normally keeps a real lane-drop or lane-gain node
+    separate from the upstream conflict core.  The node polygon can still be
+    over-wide after OSM import, so this controller replaces only its ``shape``
+    with the convex hull of the adjacent lane endpoints.  Edge geometry,
+    lane cardinality, connections, via lanes, and TLS programs are immutable.
+
+    ``evidence_net_file`` should be the pre-rebuild OSM/SUMO baseline.  It is
+    used to prove that the selected cell was already a one-in/one-out straight
+    road transition before a teacher replay changed boundary edge metadata.
+    Selection remains explicit: this writer never scans the whole network and
+    never applies SUMO's global ``--junctions.minimal-shape`` option.
+    """
+
+    missing = [
+        str(path)
+        for path in (candidate_net_file, evidence_net_file)
+        if path is not None and not path.exists()
+    ]
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+    if not junction_ids:
+        return _failure("at least one evidence-authorized junction id is required")
+
+    candidate_net_file = candidate_net_file.resolve()
+    output_file = output_file.resolve()
+    evidence_net_file = evidence_net_file.resolve() if evidence_net_file is not None else candidate_net_file
+    source_sha256 = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    evidence_root = ET.parse(evidence_net_file).getroot()
+    excluded_branch_edge_ids_by_junction = excluded_branch_edge_ids_by_junction or {}
+
+    topology_before = _junction_shape_repair_topology_sha256(candidate_root)
+    repairs: list[dict[str, object]] = []
+    failures: list[dict[str, object]] = []
+    all_edge_ids = {
+        edge.attrib.get("id", "")
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    for junction_id in sorted(str(value) for value in junction_ids if str(value)):
+        candidate_estimate = _estimate_linear_lane_transition_shape(candidate_root, junction_id)
+        evidence_estimate = _estimate_linear_lane_transition_shape(evidence_root, junction_id)
+        excluded_branch_edge_ids = sorted(
+            {
+                str(value)
+                for value in excluded_branch_edge_ids_by_junction.get(junction_id, [])
+                if str(value)
+            }
+        )
+        present_excluded_branch_edge_ids = sorted(set(excluded_branch_edge_ids) & all_edge_ids)
+        if candidate_estimate.get("status") != "pass":
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "candidate_not_linear_lane_transition",
+                    "estimate": candidate_estimate,
+                }
+            )
+            continue
+        if evidence_estimate.get("status") != "pass":
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "evidence_not_linear_lane_transition",
+                    "estimate": evidence_estimate,
+                }
+            )
+            continue
+        candidate_edges = (
+            candidate_estimate.get("incoming_edge_id"),
+            candidate_estimate.get("outgoing_edge_id"),
+        )
+        evidence_edges = (
+            evidence_estimate.get("incoming_edge_id"),
+            evidence_estimate.get("outgoing_edge_id"),
+        )
+        if candidate_edges != evidence_edges:
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "candidate_evidence_boundary_edge_mismatch",
+                    "candidate_edges": candidate_edges,
+                    "evidence_edges": evidence_edges,
+                }
+            )
+            continue
+        if present_excluded_branch_edge_ids:
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "declared_excluded_branch_is_present_in_candidate",
+                    "edge_ids": present_excluded_branch_edge_ids,
+                }
+            )
+            continue
+
+        junction = candidate_root.find(f"junction[@id='{junction_id}']")
+        if junction is None:  # defensive; the estimator already checks this
+            failures.append({"junction_id": junction_id, "reason": "junction_not_found"})
+            continue
+        old_shape = junction.attrib.get("shape", "")
+        new_shape = str(candidate_estimate["estimated_shape"])
+        junction.set("shape", new_shape)
+        junction.set("customShape", "true")
+        repairs.append(
+            {
+                "junction_id": junction_id,
+                "old_shape": old_shape,
+                "new_shape": new_shape,
+                "polygon_area_m2": candidate_estimate["polygon_area_m2"],
+                "incoming_edge_id": candidate_estimate["incoming_edge_id"],
+                "outgoing_edge_id": candidate_estimate["outgoing_edge_id"],
+                "incoming_lane_count": candidate_estimate["incoming_lane_count"],
+                "outgoing_lane_count": candidate_estimate["outgoing_lane_count"],
+                "straight_connection_signatures": candidate_estimate["straight_connection_signatures"],
+                "evidence_road_identity": evidence_estimate["road_identity"],
+                "declared_excluded_branch_edge_ids": excluded_branch_edge_ids,
+            }
+        )
+
+    if failures:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "candidate_net_file": str(candidate_net_file),
+            "evidence_net_file": str(evidence_net_file),
+            "output_file": str(output_file),
+            "requested_junction_ids": sorted(junction_ids),
+            "repair_count": len(repairs),
+            "failure_count": len(failures),
+            "failures": failures,
+            "policy": "fail closed; no output written when any selected transition lacks evidence",
+        }
+
+    topology_after = _junction_shape_repair_topology_sha256(candidate_root)
+    if topology_before != topology_after:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "junction_shape_repair_changed_network_topology",
+            "topology_sha256_before": topology_before,
+            "topology_sha256_after": topology_after,
+        }
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    source_sha256_after = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    status = "pass" if source_sha256_after == source_sha256 else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "candidate_net_file": str(candidate_net_file),
+        "candidate_sha256": source_sha256,
+        "candidate_sha256_after": source_sha256_after,
+        "source_network_mutation": source_sha256_after != source_sha256,
+        "evidence_net_file": str(evidence_net_file),
+        "output_file": str(output_file),
+        "output_sha256": hashlib.sha256(output_file.read_bytes()).hexdigest(),
+        "topology_sha256_before": topology_before,
+        "topology_sha256_after": topology_after,
+        "repair_count": len(repairs),
+        "repairs": repairs,
+        "failure_count": 0,
+        "failures": [],
+        "policy": (
+            "Ingolstadt-style boundary repair: retain the linear lane transition and all movements; "
+            "replace only the authorized junction polygon with the adjacent-lane endpoint hull"
+        ),
+    }
+
+
+def write_authorized_junction_shapes_from_reference(
+    *,
+    candidate_net_file: Path,
+    reference_net_file: Path,
+    output_file: Path,
+    junction_ids: set[str],
+) -> dict[str, object]:
+    """Copy only explicitly authorized junction polygons from a reference net.
+
+    The reference must describe the same external edges, lanes, movements,
+    junction owners, and TLS programs.  Geometry-only values that SUMO may
+    recalculate (lane ``shape``/``length``, junction ``shape``/``intLanes``,
+    connection ``via``/``state``) are deliberately excluded from that
+    reference identity check.  The output still preserves every candidate
+    edge, lane, connection, internal artifact, and TLS byte-for-byte at the
+    XML attribute level; only the selected normal junction ``shape`` and
+    ``customShape`` attributes may change.
+
+    This is a scoped controller primitive, not an automatic topology repair.
+    It never scans for targets and does not authorize joins or movements.
+    """
+
+    missing = [
+        str(path)
+        for path in (candidate_net_file, reference_net_file)
+        if not path.exists()
+    ]
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+    requested_junction_ids = sorted({str(value) for value in junction_ids if str(value)})
+    if not requested_junction_ids:
+        return _failure("at least one evidence-authorized junction id is required")
+    if any(junction_id.startswith(":") for junction_id in requested_junction_ids):
+        return _failure("internal junction ids are not valid shape-copy targets")
+
+    candidate_net_file = candidate_net_file.resolve()
+    reference_net_file = reference_net_file.resolve()
+    output_file = output_file.resolve()
+    if output_file in {candidate_net_file, reference_net_file}:
+        return _failure("output file must differ from candidate and reference inputs")
+    candidate_sha256 = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    reference_sha256 = hashlib.sha256(reference_net_file.read_bytes()).hexdigest()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    reference_root = ET.parse(reference_net_file).getroot()
+
+    candidate_junctions = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    reference_junctions = {
+        junction.attrib["id"]: junction
+        for junction in reference_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    candidate_edge_lane_signature = edge_lane_signature(candidate_net_file)
+    reference_edge_lane_signature = edge_lane_signature(reference_net_file)
+    connection_audit = audit_alias_normalized_connections(
+        candidate_net_file,
+        reference_net_file,
+    )
+    candidate_tls_sha256 = _junction_shape_tls_sha256(candidate_root)
+    reference_tls_sha256 = _junction_shape_tls_sha256(reference_root)
+    reference_failures: list[dict[str, object]] = []
+    if candidate_edge_lane_signature != reference_edge_lane_signature:
+        reference_failures.append(
+            {
+                "reason": "external_edge_lane_signature_mismatch",
+                "candidate": candidate_edge_lane_signature,
+                "reference": reference_edge_lane_signature,
+            }
+        )
+    connection_failure_fields = (
+        "normal_missing_count",
+        "normal_extra_count",
+        "controlled_missing_count",
+        "controlled_extra_count",
+    )
+    if any(int(connection_audit.get(field, 0) or 0) for field in connection_failure_fields):
+        reference_failures.append(
+            {
+                "reason": "external_movement_signature_mismatch",
+                "connection_audit": connection_audit,
+            }
+        )
+    if candidate_tls_sha256 != reference_tls_sha256:
+        reference_failures.append(
+            {
+                "reason": "tls_program_signature_mismatch",
+                "candidate_tls_sha256": candidate_tls_sha256,
+                "reference_tls_sha256": reference_tls_sha256,
+            }
+        )
+    selected_junction_identity_attrs = ("id", "type", "x", "y", "tl", "incLanes")
+    for junction_id in requested_junction_ids:
+        candidate_junction = candidate_junctions.get(junction_id)
+        reference_junction = reference_junctions.get(junction_id)
+        if candidate_junction is None or reference_junction is None:
+            reference_failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "junction_missing_from_candidate_or_reference",
+                    "candidate_present": candidate_junction is not None,
+                    "reference_present": reference_junction is not None,
+                }
+            )
+            continue
+        candidate_identity = {
+            attr: candidate_junction.attrib.get(attr, "")
+            for attr in selected_junction_identity_attrs
+        }
+        reference_identity = {
+            attr: reference_junction.attrib.get(attr, "")
+            for attr in selected_junction_identity_attrs
+        }
+        if candidate_identity != reference_identity:
+            reference_failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "selected_junction_identity_mismatch",
+                    "candidate": candidate_identity,
+                    "reference": reference_identity,
+                }
+            )
+    if reference_failures:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "candidate_reference_topology_mismatch",
+            "candidate_net_file": str(candidate_net_file),
+            "candidate_sha256": candidate_sha256,
+            "reference_net_file": str(reference_net_file),
+            "reference_sha256": reference_sha256,
+            "output_file": str(output_file),
+            "candidate_edge_lane_signature": candidate_edge_lane_signature,
+            "reference_edge_lane_signature": reference_edge_lane_signature,
+            "connection_audit": connection_audit,
+            "candidate_tls_sha256": candidate_tls_sha256,
+            "reference_tls_sha256": reference_tls_sha256,
+            "reference_failure_count": len(reference_failures),
+            "reference_failures": reference_failures,
+            "policy": "fail closed; reference geometry must come from the same external topology",
+        }
+
+    failures: list[dict[str, object]] = []
+    repairs: list[dict[str, object]] = []
+    topology_before = _junction_shape_repair_topology_sha256(candidate_root)
+    for junction_id in requested_junction_ids:
+        candidate_junction = candidate_junctions.get(junction_id)
+        reference_junction = reference_junctions.get(junction_id)
+        if candidate_junction is None or reference_junction is None:  # proven above
+            raise AssertionError("selected junction identity validation was bypassed")
+        reference_shape = str(reference_junction.attrib.get("shape", "")).strip()
+        reference_points = _shape_points(reference_shape)
+        if len(set(reference_points)) < 2 or any(
+            not math.isfinite(value) for point in reference_points for value in point
+        ):
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "reference_junction_shape_has_fewer_than_two_points",
+                    "reference_shape": reference_shape,
+                }
+            )
+            continue
+        old_shape = str(candidate_junction.attrib.get("shape", ""))
+        old_custom_shape = candidate_junction.attrib.get("customShape")
+        candidate_junction.set("shape", reference_shape)
+        candidate_junction.set("customShape", "true")
+        repairs.append(
+            {
+                "junction_id": junction_id,
+                "old_shape": old_shape,
+                "new_shape": reference_shape,
+                "old_custom_shape": old_custom_shape,
+                "new_custom_shape": "true",
+            }
+        )
+
+    if failures:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "candidate_net_file": str(candidate_net_file),
+            "reference_net_file": str(reference_net_file),
+            "output_file": str(output_file),
+            "requested_junction_ids": requested_junction_ids,
+            "repair_count": len(repairs),
+            "failure_count": len(failures),
+            "failures": failures,
+            "policy": "fail closed; no output written when any selected junction lacks a usable shape",
+        }
+
+    topology_after = _junction_shape_repair_topology_sha256(candidate_root)
+    if topology_before != topology_after:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "junction_shape_copy_changed_network_topology",
+            "topology_sha256_before": topology_before,
+            "topology_sha256_after": topology_after,
+        }
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    candidate_sha256_after = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    reference_sha256_after = hashlib.sha256(reference_net_file.read_bytes()).hexdigest()
+    source_network_mutation = (
+        candidate_sha256_after != candidate_sha256 or reference_sha256_after != reference_sha256
+    )
+    status = "pass" if not source_network_mutation else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "promotion_status": "review_required",
+        "candidate_net_file": str(candidate_net_file),
+        "candidate_sha256": candidate_sha256,
+        "candidate_sha256_after": candidate_sha256_after,
+        "reference_net_file": str(reference_net_file),
+        "reference_sha256": reference_sha256,
+        "reference_sha256_after": reference_sha256_after,
+        "source_network_mutation": source_network_mutation,
+        "output_file": str(output_file),
+        "output_sha256": hashlib.sha256(output_file.read_bytes()).hexdigest(),
+        "requested_junction_ids": requested_junction_ids,
+        "candidate_edge_lane_signature": candidate_edge_lane_signature,
+        "reference_edge_lane_signature": reference_edge_lane_signature,
+        "connection_audit": connection_audit,
+        "candidate_tls_sha256": candidate_tls_sha256,
+        "reference_tls_sha256": reference_tls_sha256,
+        "topology_sha256_before": topology_before,
+        "topology_sha256_after": topology_after,
+        "repair_count": len(repairs),
+        "repairs": repairs,
+        "failure_count": 0,
+        "failures": [],
+        "policy": (
+            "copy only explicitly authorized normal-junction shapes from a hash-bound "
+            "same-topology reference; preserve every candidate edge, lane, movement, and TLS"
+        ),
+    }
+
+
+def _estimate_linear_lane_transition_shape(root: ET.Element, junction_id: str) -> dict[str, object]:
+    junction = root.find(f"junction[@id='{junction_id}']")
+    if junction is None:
+        return {"status": "fail", "reason": "junction_not_found"}
+    junction_type = junction.attrib.get("type", "")
+    if junction_type.startswith("traffic_light") or junction.attrib.get("tl"):
+        return {"status": "fail", "reason": "junction_is_signal_controlled", "junction_type": junction_type}
+
+    external_edges = [
+        edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+        and edge.attrib.get("function") not in {"internal", "crossing", "walkingarea"}
+        and junction_id in (edge.attrib.get("from"), edge.attrib.get("to"))
+        and _edge_is_vehicle_continuation_candidate(edge)
+    ]
+    incoming = [edge for edge in external_edges if edge.attrib.get("to") == junction_id]
+    outgoing = [edge for edge in external_edges if edge.attrib.get("from") == junction_id]
+    if len(incoming) != 1 or len(outgoing) != 1:
+        return {
+            "status": "fail",
+            "reason": "transition_requires_one_vehicle_incoming_and_one_vehicle_outgoing_edge",
+            "incoming_edge_ids": sorted(edge.attrib.get("id", "") for edge in incoming),
+            "outgoing_edge_ids": sorted(edge.attrib.get("id", "") for edge in outgoing),
+        }
+    incoming_edge = incoming[0]
+    outgoing_edge = outgoing[0]
+    incoming_lanes = incoming_edge.findall("lane")
+    outgoing_lanes = outgoing_edge.findall("lane")
+    if not incoming_lanes or not outgoing_lanes or len(incoming_lanes) == len(outgoing_lanes):
+        return {
+            "status": "fail",
+            "reason": "transition_requires_nonzero_lane_count_change",
+            "incoming_lane_count": len(incoming_lanes),
+            "outgoing_lane_count": len(outgoing_lanes),
+        }
+
+    incoming_edge_id = incoming_edge.attrib["id"]
+    outgoing_edge_id = outgoing_edge.attrib["id"]
+    relevant_connections = [
+        connection
+        for connection in root.findall("connection")
+        if connection.attrib.get("from") == incoming_edge_id
+    ]
+    straight_connections = [
+        connection
+        for connection in relevant_connections
+        if connection.attrib.get("to") == outgoing_edge_id
+        and connection.attrib.get("dir", "s") == "s"
+        and not connection.attrib.get("tl")
+    ]
+    if len(straight_connections) != min(len(incoming_lanes), len(outgoing_lanes)) or len(
+        straight_connections
+    ) != len(relevant_connections):
+        return {
+            "status": "fail",
+            "reason": "transition_movements_are_not_complete_uncontrolled_straight_connections",
+            "relevant_connection_count": len(relevant_connections),
+            "straight_connection_count": len(straight_connections),
+        }
+
+    endpoint_points: list[tuple[float, float]] = []
+    for lane in incoming_lanes:
+        points = _shape_points(lane.attrib.get("shape", "") or incoming_edge.attrib.get("shape", ""))
+        if points:
+            endpoint_points.append(points[-1])
+    for lane in outgoing_lanes:
+        points = _shape_points(lane.attrib.get("shape", "") or outgoing_edge.attrib.get("shape", ""))
+        if points:
+            endpoint_points.append(points[0])
+    hull = _convex_hull(endpoint_points)
+    polygon_area = _polygon_area(hull)
+    if len(endpoint_points) != len(incoming_lanes) + len(outgoing_lanes) or len(hull) < 3 or polygon_area <= 0:
+        return {
+            "status": "fail",
+            "reason": "adjacent_lane_endpoints_do_not_form_nonzero_polygon",
+            "endpoint_count": len(endpoint_points),
+            "hull_point_count": len(hull),
+            "polygon_area_m2": polygon_area,
+        }
+
+    return {
+        "status": "pass",
+        "junction_id": junction_id,
+        "junction_type": junction_type,
+        "incoming_edge_id": incoming_edge_id,
+        "outgoing_edge_id": outgoing_edge_id,
+        "incoming_lane_count": len(incoming_lanes),
+        "outgoing_lane_count": len(outgoing_lanes),
+        "straight_connection_signatures": sorted(
+            (
+                connection.attrib.get("fromLane", "0"),
+                connection.attrib.get("toLane", "0"),
+                connection.attrib.get("dir", "s"),
+            )
+            for connection in straight_connections
+        ),
+        "road_identity": {
+            attr: (incoming_edge.attrib.get(attr), outgoing_edge.attrib.get(attr))
+            for attr in ("name", "type", "priority", "spreadType")
+        },
+        "endpoint_count": len(endpoint_points),
+        "estimated_shape": " ".join(f"{x:.2f},{y:.2f}" for x, y in hull),
+        "polygon_area_m2": round(polygon_area, 6),
+    }
+
+
+def _polygon_area(points: list[tuple[float, float]]) -> float:
+    if len(points) < 3:
+        return 0.0
+    return abs(
+        sum(
+            left[0] * right[1] - right[0] * left[1]
+            for left, right in zip(points, [*points[1:], points[0]])
+        )
+    ) / 2.0
+
+
+def _junction_shape_repair_topology_sha256(root: ET.Element) -> str:
+    payload = {
+        "edges": [
+            {
+                "attributes": sorted(edge.attrib.items()),
+                "lanes": [sorted(lane.attrib.items()) for lane in edge.findall("lane")],
+            }
+            for edge in root.findall("edge")
+        ],
+        "connections": [sorted(connection.attrib.items()) for connection in root.findall("connection")],
+        "junctions": [
+            {
+                "attributes": sorted(
+                    (key, value)
+                    for key, value in junction.attrib.items()
+                    if key not in {"shape", "outlineShape", "customShape"}
+                ),
+                "children": [_xml_element_semantic_payload(child) for child in list(junction)],
+            }
+            for junction in root.findall("junction")
+        ],
+        "tlLogic": [_xml_element_semantic_payload(logic) for logic in root.findall("tlLogic")],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _junction_shape_tls_sha256(root: ET.Element) -> str:
+    payload = sorted(
+        (_xml_element_semantic_payload(logic) for logic in root.findall("tlLogic")),
+        key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True),
+    )
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _xml_element_semantic_payload(element: ET.Element) -> dict[str, object]:
+    """Return an XML semantic payload that ignores indentation and tail text."""
+
+    return {
+        "tag": element.tag,
+        "attributes": sorted(element.attrib.items()),
+        "children": [_xml_element_semantic_payload(child) for child in list(element)],
+    }
 
 
 def _restore_non_target_internal_artifacts(
@@ -8418,9 +13770,11 @@ def _restore_non_target_internal_artifacts(
             lane for lane in target_junction.attrib.get("intLanes", "").split() if lane in lane_ids
         ]
         new_attrs = dict(target_junction.attrib)
-        for attr in ("type", "x", "y", "z", "shape"):
+        for attr in ("type", "x", "y", "z", "shape", "customShape"):
             if attr in source_junction.attrib:
                 new_attrs[attr] = source_junction.attrib[attr]
+            elif attr == "customShape":
+                new_attrs.pop(attr, None)
         new_attrs["incLanes"] = (
             source_junction.attrib.get("incLanes", "")
             if source_inc_lanes_are_valid
@@ -9082,6 +14436,155 @@ def _compare_teacher_models(
     }
 
 
+def _hybrid_osm_approach_authority_policy(
+    raw_semantic_gate: dict[str, Any],
+    *,
+    replay_target_internal_subgraph: bool,
+    preserve_teacher_lane_shapes: bool,
+    edge_map: dict[str, str],
+    lane_patch: dict[str, Any],
+    target_internal_replay: dict[str, Any],
+    tls_movement_parity: dict[str, Any],
+    pedestrian_crossing_parity: dict[str, Any],
+) -> dict[str, Any]:
+    """Allow a deliberate OSM-approach/official-core authority split.
+
+    Strict teacher parity remains the default.  The hybrid policy is active
+    only when the caller explicitly preserves OSM lane shapes while replaying
+    the complete teacher internal subgraph.  It may waive only the expected
+    approach-edge and remote-endpoint signature deltas; every lane count,
+    movement, internal/via path, TLS/linkIndex, pedestrian crossing, and mapped
+    boundary invariant must still match.
+    """
+
+    active = replay_target_internal_subgraph and not preserve_teacher_lane_shapes
+    if not active:
+        return {
+            "schema": "torii.hybrid_osm_approach_authority_policy.v1",
+            "status": "not_applied",
+            "policy": "strict_teacher_parity",
+            "effective_semantic_gate": dict(raw_semantic_gate),
+            "waived_raw_failures": [],
+            "invariant_failures": [],
+        }
+
+    mapped_pairs = {
+        str(teacher_edge): str(candidate_edge)
+        for teacher_edge, candidate_edge in edge_map.items()
+        if str(teacher_edge) and str(candidate_edge)
+    }
+    mapped_candidate_edges = set(mapped_pairs.values())
+    invariant_failures: list[str] = []
+    if not mapped_pairs:
+        invariant_failures.append("edge_map_empty")
+    if len(mapped_candidate_edges) != len(mapped_pairs):
+        invariant_failures.append("edge_map_not_bijective")
+
+    patched_pairs = {
+        (str(item.get("teacher_edge_id", "")), str(item.get("candidate_edge_id", "")))
+        for item in lane_patch.get("patched_edges", [])
+        if isinstance(item, dict)
+    }
+    if lane_patch.get("status") != "pass":
+        invariant_failures.append("lane_patch_not_pass")
+    if patched_pairs != set(mapped_pairs.items()):
+        invariant_failures.append("lane_patch_edge_map_mismatch")
+    for field in (
+        "added_missing_mapped_edge_count",
+        "rebased_missing_mapped_edge_count",
+        "endpoint_rewritten_missing_mapped_edge_count",
+        "skipped_rebased_self_loop_edge_count",
+        "pruned_boundary_edge_count",
+    ):
+        if int(lane_patch.get(field, 0) or 0):
+            invariant_failures.append(f"lane_patch_{field}")
+    if lane_patch.get("preserve_lane_shapes") is not False:
+        invariant_failures.append("lane_patch_did_not_preserve_osm_shape_policy")
+
+    preserved_endpoint_edges = {
+        str(item.get("candidate_edge_id", ""))
+        for item in target_internal_replay.get("preserved_mapped_boundary_endpoints", [])
+        if isinstance(item, dict) and str(item.get("candidate_edge_id", ""))
+    }
+    blended_edges = {
+        str(edge_id)
+        for edge_id in target_internal_replay.get("blended_geometry_anchor_edge_ids", [])
+        if str(edge_id)
+    }
+    if target_internal_replay.get("status") != "pass":
+        invariant_failures.append("target_internal_replay_not_pass")
+    if int(target_internal_replay.get("skipped_connection_count", 0) or 0):
+        invariant_failures.append("target_internal_replay_skipped_connections")
+    if target_internal_replay.get("copy_unmapped_boundary_edges") is not False:
+        invariant_failures.append("target_internal_replay_copied_unmapped_boundary_edges")
+    if target_internal_replay.get("preserve_mapped_boundary_endpoints") is not True:
+        invariant_failures.append("mapped_boundary_endpoints_not_preserved")
+    if target_internal_replay.get("blend_geometry_anchor_at_target") is not True:
+        invariant_failures.append("local_target_geometry_blend_not_applied")
+    if preserved_endpoint_edges != mapped_candidate_edges:
+        invariant_failures.append("preserved_boundary_endpoint_set_mismatch")
+    if blended_edges != mapped_candidate_edges:
+        invariant_failures.append("blended_geometry_anchor_set_mismatch")
+    if int(target_internal_replay.get("copied_boundary_edge_count", 0) or 0) != len(
+        mapped_pairs
+    ):
+        invariant_failures.append("copied_boundary_edge_count_mismatch")
+    if tls_movement_parity.get("status") != "pass":
+        invariant_failures.append("tls_movement_parity_not_pass")
+    if pedestrian_crossing_parity.get("status") != "pass":
+        invariant_failures.append("pedestrian_crossing_parity_not_pass")
+
+    allowed_fields = {
+        "approach_edge_signature_mismatch_count",
+        "approach_endpoint_signature_mismatch_count",
+    }
+    waived_raw_failures: list[dict[str, Any]] = []
+    retained_raw_failures: list[dict[str, Any]] = []
+    for failure in raw_semantic_gate.get("failures", []):
+        if not isinstance(failure, dict):
+            retained_raw_failures.append(
+                {"report": "semantic_replay_gate", "field": "malformed_failure", "count": 1}
+            )
+            continue
+        field = str(failure.get("field", ""))
+        count = int(failure.get("count", 0) or 0)
+        if (
+            failure.get("report") == "parity"
+            and field in allowed_fields
+            and count == len(mapped_pairs)
+        ):
+            waived_raw_failures.append(dict(failure))
+        else:
+            retained_raw_failures.append(dict(failure))
+
+    effective_failures = [
+        *retained_raw_failures,
+        *(
+            {
+                "report": "hybrid_osm_approach_authority_policy",
+                "field": failure,
+                "count": 1,
+            }
+            for failure in invariant_failures
+        ),
+    ]
+    effective_gate = {
+        "status": "fail" if effective_failures else "pass",
+        "failures": effective_failures,
+    }
+    return {
+        "schema": "torii.hybrid_osm_approach_authority_policy.v1",
+        "status": "pass" if not effective_failures else "fail",
+        "policy": "osm_remote_approaches_official_internal_core",
+        "mapped_approach_edge_count": len(mapped_pairs),
+        "mapped_candidate_edge_ids": sorted(mapped_candidate_edges),
+        "waived_raw_failures": waived_raw_failures,
+        "retained_raw_failures": retained_raw_failures,
+        "invariant_failures": invariant_failures,
+        "effective_semantic_gate": effective_gate,
+    }
+
+
 def _teacher_guided_semantics_gate(parity: dict[str, Any], **reports: dict[str, Any] | None) -> dict[str, object]:
     failures: list[dict[str, object]] = []
     for field, count in (parity.get("delta", {}) if isinstance(parity.get("delta"), dict) else {}).items():
@@ -9245,6 +14748,12 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     summary["controlled_link_count"] = summary["controlled_vehicle_link_count"] + summary["controlled_pedestrian_link_count"]
     summary.update(_controlled_link_index_stats(vehicle_connections + pedestrian_connections, target_tls_id))
     return summary
+
+
+def _model_tls_id(model: dict[str, Any], *, fallback: str) -> str:
+    traffic_light = model.get("traffic_light", {})
+    attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
+    return str(attributes.get("id", "") or fallback)
 
 
 def _controlled_link_count(connections: list[object], tls_id: str) -> int:

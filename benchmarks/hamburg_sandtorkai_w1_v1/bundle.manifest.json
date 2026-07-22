@@ -1,0 +1,59 @@
+{
+  "schema": "torii.hamburg-w1-w2-evidence-bundle/v1",
+  "product_scope": "hamburg-am-sandtorkai-2349-2394-2403",
+  "created_date": "2026-07-21",
+  "w1": {
+    "status": "review_ready",
+    "execution_gate": "pass",
+    "automatic_promotion_gate": "blocked",
+    "network_sha256": "aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33",
+    "boundary_movement_count": 23,
+    "teleports": 0,
+    "collisions": 0
+  },
+  "w2": {
+    "published_node_ids": ["2349", "2394"],
+    "missing_required_node_ids": ["2403"],
+    "stream_count": 16,
+    "physical_controlled_connection_count": 22,
+    "event_count": 3671,
+    "automatic_promotion_gate": "blocked"
+  },
+  "w3": {
+    "status": "in_progress",
+    "automatic_promotion_gate": "blocked",
+    "source_of_truth": "Anzahl_Kfz_Zaehlstelle_15-Min",
+    "selected_window_utc": ["2026-07-18T14:00:00Z", "2026-07-18T16:30:00Z"],
+    "station_stream_count": 9,
+    "directional_constraint_count": 6,
+    "direction_zero_qa_count": 3,
+    "materialization_ready_directional_count": 4,
+    "semantic_review_directional_count": 2,
+    "missing_station_node_ids": ["2349"],
+    "raw_field_bindings": "diagnostic_only",
+    "virtual_detector_materialization": "withheld_pending_hash_bound_station_inventory"
+  },
+  "sources": {
+    "osm_bbox_wgs84": [9.9880, 53.5405, 10.0030, 53.5450],
+    "osm_rendered_tile_layer": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "osm_rendered_zoom": 17,
+    "official_map_service": "https://geodienste.hamburg.de/HH_WMS_Geobasiskarten",
+    "official_map_layer": "geobasiskarten_farbig",
+    "official_map_bbox_epsg25832": [565650, 5932950, 566220, 5933350]
+  },
+  "files": [
+    {"path": "hamburg_official_geobasemap.png", "size": 498424, "sha256": "c5ed769521ad7df4982364ca2f618d8c85db5a76a7475f2707899ebfe5366f4e"},
+    {"path": "hamburg_osm_original_map.png", "size": 757401, "sha256": "1090fb60ced2e6b2dec9569611c6825c69916a73dbfa89288d86c4b4ac767965"},
+    {"path": "hamburg_sandtorkai_source_bbox.osm.xml.gz", "size": 68252, "sha256": "0b2a2e94357a8e539af2938566418939371cd69fa7312e8850e1f30a92b3cc9c"},
+    {"path": "hamburg_sandtorkai_w1.net.xml", "size": 199224, "sha256": "aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33"},
+    {"path": "netedit_w1_north_core.png", "size": 61960, "sha256": "9a495174e214fcc0aa7128f584d1d831582819668a879c4e6038fa5c211f9e99"},
+    {"path": "netedit_w1_south_core.png", "size": 57551, "sha256": "2c0475338fa5ef963507957f6b9b580f1755e013c4999314235e6e22865345db"},
+    {"path": "osm-source-commands.txt", "size": 1251, "sha256": "b5615253ff1c45e8a61a5600c6c4328e3a98425a9ee0f1b10e0a75554ea1a71d"},
+    {"path": "osm-source-overpass-query.ql", "size": 165, "sha256": "542b915bd85dc9587371321b949c869e1034c7bc735a7872b766d44b78fbe687"},
+    {"path": "w1-handoff.manifest.json", "size": 5090, "sha256": "06f36e3c351a3de7b9bb8fc1a446d520d152028da709a2ead8702d2fafefbd20"},
+    {"path": "w2-signal-binding.manifest.json", "size": 6210, "sha256": "86dedaa40e23bd100b11ec95e80a631f4d47278a5f584a9295a520bbd7c63c7a"},
+    {"path": "w2-signal-bindings.json", "size": 10887, "sha256": "c0aec5013d8c61bef5642e4ec981a844004171c5e409bdb141635d816fe91ca3"},
+    {"path": "w2-signal-observations.manifest.json", "size": 8820, "sha256": "e9db1214c8265c634587c46aee8cea7abcb053094bf226f1d69b3431d480450d"},
+    {"path": "w2-tls-link-events.csv", "size": 296926, "sha256": "829b8658a99339bd9868e628d0aa1c2a1dc062989557309aaa88befb4f7b165a"}
+  ]
+}

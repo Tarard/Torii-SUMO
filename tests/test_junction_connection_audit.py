@@ -4,6 +4,7 @@ from torii_sumo.core.junction_connection_audit import (
     build_connection_signature,
     build_teacher_guided_owner_semantics_probe,
     compare_tls_movement_signatures,
+    compare_tls_via_path_semantics,
     write_connection_signature,
 )
 
@@ -433,6 +434,49 @@ def test_tls_movement_compare_ignores_internal_id_prefix_when_linkindex_and_phas
     assert report["tl_logic_phase_states_equal"] is True
     assert report["teacher_only_normalized_movement_signatures"] == []
     assert report["candidate_only_normalized_movement_signatures"] == []
+
+
+def test_tls_via_path_semantics_accepts_netconvert_internal_suffix_renumbering(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher_via.net.xml"
+    candidate = tmp_path / "candidate_via.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":teacher_0" function="internal"><lane id=":teacher_0_0" index="0" length="4" shape="0,0 2,0 4,0"/></edge>
+  <junction id="j" type="traffic_light" x="0" y="0"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":teacher_0_0" tl="j" linkIndex="0" dir="s" state="o"/>
+  <tlLogic id="j"><phase duration="10" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="in2" from="a2" to="c"><lane id="in2_0" index="0"/></edge>
+  <edge id="out2" from="c" to="b2"><lane id="out2_0" index="0"/></edge>
+  <edge id=":candidate_7" function="internal"><lane id=":candidate_7_0" index="0" length="4" shape="10,0 12,0 14,0"/></edge>
+  <junction id="c" type="traffic_light" x="10" y="0"/>
+  <connection from="in2" to="out2" fromLane="0" toLane="0" via=":candidate_7_0" tl="c" linkIndex="0" dir="s" state="o"/>
+  <tlLogic id="c"><phase duration="10" state="G"/></tlLogic>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = compare_tls_via_path_semantics(
+        teacher,
+        candidate,
+        "j",
+        "c",
+        teacher_edge_map={"in": "in2", "out": "out2"},
+        teacher_internal_scope_id="teacher",
+        candidate_internal_scope_id="candidate",
+    )
+
+    assert report["status"] == "pass"
+    assert report["movement_key_equal"] is True
+    assert report["via_geometry_status"] == "pass"
 
 
 def test_tls_movement_compare_maps_teacher_external_edges(tmp_path: Path) -> None:

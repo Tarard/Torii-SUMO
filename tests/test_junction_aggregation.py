@@ -4,6 +4,7 @@ from pathlib import Path
 from torii_sumo.core.junction_aggregation import (
     _aggregation_candidates,
     audit_join_collapse_residuals,
+    audit_junction_aggregation_preservation,
     build_junction_aggregation_variant,
 )
 from torii_sumo.core.junction_join_definition import (
@@ -82,10 +83,10 @@ def test_overlapping_reference_supported_group_uses_reference_core_nodes() -> No
         {
             "source": "overlapping_junction_audit",
             "candidate_id": "OJ009",
-            "decision": "join",
-            "confidence": "reference_matched",
+            "decision": "needs_map_review",
+            "confidence": "teacher_prior",
             "node_ids": "281967823;305519232;7009179649;7626856596;7626856598;7626856599",
-            "reason": "reference join cluster confirms the physical-intersection core",
+            "reason": "reference join cluster is teacher evidence and cannot authorize this join",
             "google_maps_url": "",
         }
     ]
@@ -107,8 +108,8 @@ def test_reference_join_audit_uses_matched_candidate_node_ids() -> None:
         reference_join_audit_report=reference_join_report,
     )
 
-    assert candidates[0]["decision"] == "join"
-    assert candidates[0]["confidence"] == "reference_matched"
+    assert candidates[0]["decision"] == "needs_map_review"
+    assert candidates[0]["confidence"] == "teacher_prior"
     assert candidates[0]["node_ids"] == "a;b;c"
 
 
@@ -160,7 +161,7 @@ def test_duplicate_overlapping_join_candidates_are_collapsed() -> None:
         overlapping_junction_audit_report=overlap_report,
     )
 
-    assert [candidate["candidate_id"] for candidate in candidates] == ["OJ001"]
+    assert [candidate["candidate_id"] for candidate in candidates] == ["OJ001", "OJ003"]
 
 
 def test_overlapping_human_confirmed_group_uses_join_node_ids() -> None:
@@ -299,7 +300,9 @@ def test_junction_aggregation_preserves_reference_confirmed_modal_nodes(tmp_path
                 {
                     "reference_id": "cluster_core_a_core_b_foot_node_cycle_node_service_node",
                     "candidate_node_ids": ["core_a", "core_b", "foot_node", "cycle_node", "service_node"],
-                    "match_reason": "reference_matched",
+                        "match_reason": "reference_matched",
+                        "transfer_gate_status": "pass",
+                        "target_evidence_status": "pass",
                 }
             ]
         },
@@ -362,7 +365,9 @@ def test_junction_aggregation_prunes_only_internal_short_modal_support_edges(tmp
                 {
                     "reference_id": "cluster_core_a_core_b",
                     "candidate_node_ids": ["core_a", "core_b"],
-                    "match_reason": "reference_matched",
+                        "match_reason": "reference_matched",
+                        "transfer_gate_status": "pass",
+                        "target_evidence_status": "pass",
                 }
             ]
         },
@@ -410,7 +415,9 @@ def test_junction_aggregation_variant_reports_failed_collapse_audit(tmp_path) ->
                 {
                     "reference_id": "cluster_core_a_core_b",
                     "candidate_node_ids": ["core_a", "core_b"],
-                    "match_reason": "reference_matched",
+                        "match_reason": "reference_matched",
+                        "transfer_gate_status": "pass",
+                        "target_evidence_status": "pass",
                 }
             ]
         },
@@ -449,7 +456,9 @@ def test_junction_aggregation_variant_fails_when_planned_join_is_missing_from_ou
                 {
                     "reference_id": "cluster_a_b",
                     "candidate_node_ids": ["a", "b"],
-                    "match_reason": "reference_matched",
+                        "match_reason": "reference_matched",
+                        "transfer_gate_status": "pass",
+                        "target_evidence_status": "pass",
                 }
             ]
         },
@@ -515,7 +524,9 @@ def test_junction_aggregation_variant_reports_normal_edge_and_connection_loss(tm
                 {
                     "reference_id": "cluster_core_a_core_b",
                     "candidate_node_ids": ["core_a", "core_b"],
-                    "match_reason": "reference_matched",
+                        "match_reason": "reference_matched",
+                        "transfer_gate_status": "pass",
+                        "target_evidence_status": "pass",
                 }
             ]
         },
@@ -535,6 +546,75 @@ def test_junction_aggregation_variant_reports_normal_edge_and_connection_loss(tm
     assert report["junction_aggregation_lost_shared_connection_count"] == 1
     assert report["junction_aggregation_new_dangling_shared_normal_edge_count"] == 1
     assert Path(report["junction_aggregation_preservation_audit_file"]).is_file()
+
+
+def test_junction_aggregation_preservation_accepts_join_absorption_and_via_renumbering(tmp_path) -> None:
+    source = tmp_path / "source.net.xml"
+    variant = tmp_path / "variant.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="outside" to="a"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="seam" from="a" to="b"><lane id="seam_0" index="0" length="0.2"/></edge>
+  <edge id="out" from="b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":a_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    variant.write_text(
+        """<net>
+  <edge id="in" from="outside" to="cluster_a_b"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="out" from="cluster_a_b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":cluster_a_b_0_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_junction_aggregation_preservation(source, variant, join_groups=(("a", "b"),))
+
+    assert report["schema"] == "torii.junction-aggregation-preservation/v1"
+    assert report["status"] == "pass"
+    assert report["source_net_file"] == str(source.resolve())
+    assert report["variant_net_file"] == str(variant.resolve())
+    assert report["source_sha256"]
+    assert report["variant_sha256"]
+    assert report["absorbed_join_edge_ids"] == ["seam"]
+    assert report["unexpected_removed_normal_edge_count"] == 0
+    assert report["lost_shared_connection_count"] == 0
+    assert report["boundary_movement_preservation"]["status"] == "pass"
+
+
+def test_junction_aggregation_preservation_flags_new_join_boundary_movement(tmp_path) -> None:
+    source = tmp_path / "source.net.xml"
+    variant = tmp_path / "variant.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="outside" to="a"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="seam" from="a" to="b"><lane id="seam_0" index="0" length="0.2"/></edge>
+  <edge id="out" from="b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <edge id="extra" from="b" to="outside3"><lane id="extra_0" index="0" length="20"/></edge>
+  <connection from="in" to="seam" fromLane="0" toLane="0"/>
+  <connection from="seam" to="out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    variant.write_text(
+        """<net>
+  <edge id="in" from="outside" to="cluster_a_b"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="out" from="cluster_a_b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <edge id="extra" from="cluster_a_b" to="outside3"><lane id="extra_0" index="0" length="20"/></edge>
+  <connection from="in" to="out" fromLane="0" toLane="0"/>
+  <connection from="in" to="extra" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = audit_junction_aggregation_preservation(source, variant, join_groups=(("a", "b"),))
+
+    assert report["status"] == "review"
+    boundary = report["boundary_movement_preservation"]
+    assert boundary["lost_boundary_movement_count"] == 0
+    assert boundary["added_boundary_movement_count"] == 1
+    assert boundary["groups"][0]["added_boundary_movements"] == ["in|0|extra|0"]
 
 
 def test_join_collapse_audit_flags_residual_nodes_edges_and_connections(tmp_path) -> None:
@@ -606,6 +686,46 @@ def test_unconfirmed_topology_join_candidate_stays_in_map_review(tmp_path) -> No
     assert report["explicit_join_count"] == 0
     assert report["join_exclude_count"] == 1
     assert report["needs_map_review_count"] == 1
+    assert report["records"][0]["decision"] == "needs_map_review"
+
+
+def test_unconfirmed_text_cannot_be_misread_as_a_confirmed_join(tmp_path) -> None:
+    report = build_junction_join_definition(
+        [
+            {
+                "source": "teacher_probe",
+                "candidate_id": "C-unconfirmed",
+                "decision": "join",
+                "confidence": "unconfirmed_reference_match",
+                "review_status": "not_confirmed",
+                "node_ids": ["n1", "n2"],
+            }
+        ],
+        output_dir=tmp_path,
+        prefix="strict",
+    )
+
+    assert report["explicit_join_count"] == 0
+    assert report["join_exclude_count"] == 1
+    assert report["records"][0]["decision"] == "needs_map_review"
+
+
+def test_reference_matched_teacher_prior_cannot_authorize_a_join(tmp_path) -> None:
+    report = build_junction_join_definition(
+        [
+            {
+                "source": "reference_join_audit",
+                "candidate_id": "teacher-core",
+                "decision": "join",
+                "confidence": "reference_matched",
+                "node_ids": ["n1", "n2"],
+            }
+        ],
+        output_dir=tmp_path,
+        prefix="teacher-prior",
+    )
+
+    assert report["explicit_join_count"] == 0
     assert report["records"][0]["decision"] == "needs_map_review"
 
 
