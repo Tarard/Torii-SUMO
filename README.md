@@ -48,18 +48,23 @@ Research status (2026-07-14): Stage 1-M is **Machine REVIEW_READY**. Thirty blin
 
 The product target is the three-node **Am Sandtorkai 2349 → 2394 → 2403** corridor. The model starts with OSM for continuous road geometry, applies bounded Torii cleanup, uses Hamburg MAP/OCIT-C/TLD and road datasets as authority for movements and signals, places SUMO detectors at official detector cross-sections, and solves for one plausible route realization whose virtual counts can be compared with the official observations. A route solution is not claimed to be a unique OD matrix.
 
-<table>
-<tr>
-<td width="50%"><strong>Official Hamburg aerial, 2024</strong><br><img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Official Hamburg aerial of the Am Sandtorkai corridor"></td>
-<td width="50%"><strong>Official LSBG construction plan, 2022</strong><br><img src="docs/assets/hamburg-digital-twin/official-construction-plan-2022.png" alt="Official construction plan for Am Sandtorkai and Brooktorkai"></td>
-</tr>
-<tr>
-<td><strong>OSM-derived input topology</strong><br><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="OSM-derived Hamburg topology before corridor cleanup"></td>
-<td><strong>Torii cleaned corridor — full Connection Mode</strong><br><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Complete repaired Hamburg corridor in NetEdit Connection Mode"></td>
-</tr>
-</table>
+**Official Hamburg aerial, 2024**
 
-The lower-right image is a new background capture of the **complete repaired network in Connection Mode**, not a local crop. It binds to network SHA-256 `2da03214…f5c559`. A separate `NeteditTargetSession` check clicked the real 2403 network object and verified that the left pane says `Net: junction`, not polygon; that local proof is retained as repository evidence but is not used as the report's main image. The bounded 2403 single-core probe preserves all 18 boundary movements, has zero surface overlaps, loads in SUMO, and completes 18/18 movement smoke trips without collision or teleport. It remains review-only because Hamburg has not published a bindable 2403 MAP/OCIT package.
+<p><img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Official Hamburg aerial of the Am Sandtorkai corridor" width="100%"></p>
+
+**Official LSBG construction plan, 2022**
+
+<p><img src="docs/assets/hamburg-digital-twin/official-construction-plan-2022.png" alt="Official construction plan for Am Sandtorkai and Brooktorkai" width="100%"></p>
+
+**OSM-derived input topology**
+
+<p><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="OSM-derived Hamburg topology before corridor cleanup" width="100%"></p>
+
+**Torii cleaned corridor — full Connection Mode**
+
+<p><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Complete repaired Hamburg corridor in NetEdit Connection Mode" width="100%"></p>
+
+The final image is a background capture of the **complete repaired network in Connection Mode**, not a local crop. It binds to network SHA-256 `2da03214…f5c559`. A separate `NeteditTargetSession` check clicked the real 2403 network object and verified that the left pane says `Net: junction`, not polygon; that local proof is retained as repository evidence but is not used as the report's main image. The bounded 2403 single-core probe preserves all 18 boundary movements, has zero surface overlaps, loads in SUMO, and completes 18/18 movement smoke trips without collision or teleport. It remains review-only because Hamburg has not published a bindable 2403 MAP/OCIT package.
 
 ### Signals, detectors, and reconstructed routes
 

@@ -47,18 +47,23 @@ Torii 有两层：
 
 产品目标是 **Am Sandtorkai 2349 → 2394 → 2403** 三节点带支路走廊。OSM 负责连续道路骨架，Torii 只在有证据的范围内清洗；Hamburg MAP/OCIT-C/TLD 和官方道路数据决定 movement、信号与传感器身份；SUMO 在同一断面放置 E1/E2，并求解一种能解释官方观测的可行 route 组合。该 route 是非唯一逆问题的一种解，不是唯一 OD 或车辆轨迹真值。
 
-<table>
-<tr>
-<td width="50%"><strong>汉堡官方 2024 航拍</strong><br><img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Am Sandtorkai 官方航拍"></td>
-<td width="50%"><strong>LSBG 2022 官方施工图</strong><br><img src="docs/assets/hamburg-digital-twin/official-construction-plan-2022.png" alt="Am Sandtorkai 与 Brooktorkai 官方施工图"></td>
-</tr>
-<tr>
-<td><strong>OSM 导入拓扑</strong><br><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="清洗前 OSM 派生拓扑"></td>
-<td><strong>Torii 清洗走廊——完整 Connection Mode</strong><br><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="NetEdit Connection Mode 中完整的汉堡修复走廊"></td>
-</tr>
-</table>
+**汉堡官方 2024 航拍**
 
-右下图是刚重新生成的**完整修正版路网 Connection Mode**，不是局部截图，绑定网络 SHA-256 `2da03214…f5c559`。另外的 `NeteditTargetSession` 已真实点击 2403 网络对象并确认左侧显示 `Net: junction`、不是 polygon；该局部证明保留为仓库证据，但不作为报告主图。该 2403 单核心探针保留 18/18 条边界 movement，表面重叠为 0，可被 SUMO 加载，18/18 条 movement smoke 全部到达，碰撞和 teleport 均为 0；但由于官方尚未发布可绑定的 2403 MAP/OCIT，它仍是审核候选，不是最终官方信号模型。
+<p><img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Am Sandtorkai 官方航拍" width="100%"></p>
+
+**LSBG 2022 官方施工图**
+
+<p><img src="docs/assets/hamburg-digital-twin/official-construction-plan-2022.png" alt="Am Sandtorkai 与 Brooktorkai 官方施工图" width="100%"></p>
+
+**OSM 导入拓扑**
+
+<p><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="清洗前 OSM 派生拓扑" width="100%"></p>
+
+**Torii 清洗走廊——完整 Connection Mode**
+
+<p><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="NetEdit Connection Mode 中完整的汉堡修复走廊" width="100%"></p>
+
+最后一张图是刚重新生成的**完整修正版路网 Connection Mode**，不是局部截图，绑定网络 SHA-256 `2da03214…f5c559`。另外的 `NeteditTargetSession` 已真实点击 2403 网络对象并确认左侧显示 `Net: junction`、不是 polygon；该局部证明保留为仓库证据，但不作为报告主图。该 2403 单核心探针保留 18/18 条边界 movement，表面重叠为 0，可被 SUMO 加载，18/18 条 movement smoke 全部到达，碰撞和 teleport 均为 0；但由于官方尚未发布可绑定的 2403 MAP/OCIT，它仍是审核候选，不是最终官方信号模型。
 
 ### 信号灯、传感器和 route 复原
 
