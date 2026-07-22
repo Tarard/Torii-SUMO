@@ -401,14 +401,27 @@ def _aggregation_candidates(
     candidates: list[dict[str, Any]] = []
     if reference_join_audit_report is not None:
         for case in reference_join_audit_report.get("matched_cases", []) or []:
+            target_evidence_confirmed = (
+                str(case.get("transfer_gate_status", "blocked")) == "pass"
+                and str(case.get("target_evidence_status", "blocked")) == "pass"
+            )
             candidates.append(
                 {
                     "source": "reference_join_audit",
                     "candidate_id": str(case.get("reference_id", "")),
-                    "decision": "join",
-                    "confidence": "reference_matched",
+                    "decision": "join" if target_evidence_confirmed else "needs_map_review",
+                    "confidence": (
+                        "target_evidence_confirmed" if target_evidence_confirmed else "teacher_prior"
+                    ),
                     "node_ids": ";".join(_reference_join_candidate_node_ids(case)),
-                    "reason": str(case.get("match_reason", case.get("learned_rule", ""))),
+                    "reason": (
+                        str(case.get("match_reason", case.get("learned_rule", "")))
+                        if target_evidence_confirmed
+                        else (
+                            "human-cleaned reference is a prior only; independent target geometry, "
+                            "movement, boundary, and audit evidence is required"
+                        )
+                    ),
                     "google_maps_url": str(case.get("google_maps_url", "")),
                 }
             )
@@ -467,7 +480,7 @@ def _filter_modal_support_join_nodes(candidates: list[dict[str, Any]], net_file:
         if str(candidate.get("decision", "")) != "join":
             filtered.append(candidate)
             continue
-        if "reference_matched" in {
+        if "target_evidence_confirmed" in {
             str(candidate.get("source", "")).lower(),
             str(candidate.get("confidence", "")).lower(),
         }:
@@ -755,13 +768,23 @@ def _internal_id_uses_join_node(identifier: str, node_ids: set[str]) -> bool:
 def _candidate_from_overlapping_group(group: Mapping[str, Any]) -> dict[str, Any] | None:
     reference_nodes = _reference_core_nodes(group)
     if reference_nodes:
+        target_evidence_confirmed = (
+            str(group.get("transfer_gate_status", "blocked")) == "pass"
+            and str(group.get("target_evidence_status", "blocked")) == "pass"
+        )
         return {
             "source": "overlapping_junction_audit",
             "candidate_id": str(group.get("group_id", "")),
-            "decision": "join",
-            "confidence": "reference_matched",
+            "decision": "join" if target_evidence_confirmed else "needs_map_review",
+            "confidence": (
+                "target_evidence_confirmed" if target_evidence_confirmed else "teacher_prior"
+            ),
             "node_ids": ";".join(reference_nodes),
-            "reason": "reference join cluster confirms the physical-intersection core",
+            "reason": (
+                "target-city evidence independently confirms the teacher-like conflict core"
+                if target_evidence_confirmed
+                else "reference join cluster is teacher evidence and cannot authorize this join"
+            ),
             "google_maps_url": str(group.get("google_maps_url", "")),
         }
 
@@ -813,16 +836,19 @@ def _overlap_group_is_confirmed(group: Mapping[str, Any]) -> bool:
 def _dedupe_join_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     joined_nodes: set[str] = set()
-    seen_join_sets: set[frozenset[str]] = set()
+    seen_node_sets: set[frozenset[str]] = set()
     for candidate in candidates:
         node_set = frozenset(item for item in str(candidate.get("node_ids", "")).split(";") if item)
+        if node_set and node_set in seen_node_sets:
+            continue
         if candidate.get("decision") == "join" and node_set:
-            if node_set in seen_join_sets or node_set & joined_nodes:
+            if node_set & joined_nodes:
                 continue
-            seen_join_sets.add(node_set)
             joined_nodes.update(node_set)
         elif node_set & joined_nodes:
             continue
+        if node_set:
+            seen_node_sets.add(node_set)
         selected.append(candidate)
     return selected
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
+from pathlib import Path
 
 from pydantic import model_validator
 
@@ -12,7 +14,7 @@ from .conflict_graph import IndependentSafetyReport
 from .enums import ArtifactRole, GateStatus
 from .evidence import EvidenceRecord, Finding, InvariantResult
 from .exact_diff import ExactSemanticDiffReport
-from .ids import require_stable_id
+from .ids import require_stable_id, stable_id
 from .review import ReviewCase, ReviewDecision, ReviewTask
 from .scope import ScopeSpec
 from .toolchain import ToolchainLock
@@ -28,6 +30,40 @@ class ArtifactIdentity(ContractModel):
     sha256: Sha256
     producer: str
     toolchain_id: StableToken
+
+    @classmethod
+    def from_file(
+        cls,
+        path: Path,
+        *,
+        logical_name: str,
+        role: ArtifactRole,
+        artifact_schema: str,
+        producer: str,
+        toolchain_id: str,
+    ) -> ArtifactIdentity:
+        """Build a stable identity from an artifact that already exists."""
+
+        resolved = Path(path).expanduser().resolve(strict=True)
+        sha256 = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        return cls(
+            artifact_schema=artifact_schema,
+            artifact_id=stable_id(
+                "artifact",
+                {
+                    "logical_name": logical_name,
+                    "role": role.value,
+                    "sha256": sha256,
+                    "artifact_schema": artifact_schema,
+                },
+            ),
+            logical_name=logical_name,
+            role=role,
+            path=str(resolved),
+            sha256=sha256,
+            producer=producer,
+            toolchain_id=toolchain_id,
+        )
 
     @model_validator(mode="after")
     def validate_artifact(self) -> ArtifactIdentity:
@@ -99,6 +135,18 @@ class ArtifactManifestV1(ContractModel):
         if self.source_mutated:
             raise ValueError("A corridor research manifest can never certify source mutation.")
         return self
+
+    def assert_artifact_files_unchanged(self) -> None:
+        """Fail closed when a manifest path is missing or its bytes changed."""
+
+        for artifact in self.artifacts:
+            resolved = Path(artifact.path).expanduser().resolve(strict=True)
+            actual_sha256 = hashlib.sha256(resolved.read_bytes()).hexdigest()
+            if actual_sha256 != artifact.sha256:
+                raise ValueError(
+                    "Artifact bytes no longer match the manifest: "
+                    f"{artifact.logical_name} ({resolved})."
+                )
 
 
 class CorridorResearchBundle(ContractModel):

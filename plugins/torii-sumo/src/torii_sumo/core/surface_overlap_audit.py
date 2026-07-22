@@ -271,13 +271,14 @@ def _base_report(
     return {
         "schema": SURFACE_OVERLAP_AUDIT_SCHEMA,
         "status": "fail",
-        "audit_engine": "torii.bevel-strip-and-junction-polygon-area/v1",
+        "audit_engine": "torii.bevel-strip-and-junction-polygon-area/v2",
         "source_net_file": str(source),
         "source_network_mutation": False,
         "minimum_overlap_area_m2": minimum_overlap_area_m2,
         "default_lane_width_m": default_lane_width_m,
         "scope": {
             "included": [
+                "non-internal junction polygon self-intersection",
                 "non-internal junction polygon versus non-internal junction polygon",
                 "reconstructed external lane face versus non-owner, non-internal junction polygon",
             ],
@@ -328,6 +329,11 @@ def _read_junction_polygons(
                     }
                 )
                 continue
+            self_crossings = polygon_self_intersection_count(polygon)
+            if self_crossings:
+                raise ValueError(
+                    f"junction polygon is self-intersecting ({self_crossings} proper segment crossings)"
+                )
             if abs(_signed_area(polygon)) <= _GEOMETRY_EPSILON:
                 non_area.append(
                     {
@@ -566,6 +572,23 @@ def _triangulate_polygon(polygon: Sequence[Point]) -> list[Polygon]:
             raise ValueError("junction polygon is not a simple triangulable polygon")
     triangles.append([vertices[index] for index in remaining])
     return triangles
+
+
+def polygon_self_intersection_count(polygon: Sequence[Point]) -> int:
+    segments = list(zip(polygon, polygon[1:] + polygon[:1], strict=True))
+    count = 0
+    for left_index, (left_start, left_end) in enumerate(segments):
+        for right_index in range(left_index + 1, len(segments)):
+            if right_index == left_index + 1 or (left_index == 0 and right_index == len(segments) - 1):
+                continue
+            right_start, right_end = segments[right_index]
+            left_a = _cross_points(left_start, left_end, right_start)
+            left_b = _cross_points(left_start, left_end, right_end)
+            right_a = _cross_points(right_start, right_end, left_start)
+            right_b = _cross_points(right_start, right_end, left_end)
+            if left_a * left_b < -_GEOMETRY_EPSILON and right_a * right_b < -_GEOMETRY_EPSILON:
+                count += 1
+    return count
 
 
 def _convex_polygon_intersection(subject: Sequence[Point], clip: Sequence[Point]) -> Polygon:

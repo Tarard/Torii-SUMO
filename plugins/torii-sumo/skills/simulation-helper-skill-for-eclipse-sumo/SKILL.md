@@ -53,6 +53,7 @@ If a target/current-state/deviation cannot be inferred, switch to the intake pat
 - Separate what SUMO loaded, what the controller did, what outputs were written, what warnings/failures occurred, and what claim is supportable.
 - Compare controllers only with paired route, demand, seed, horizon, outputs, and completion criteria.
 - Do not use GUI inspection, clean execution, or arrived-only metrics as sufficient evidence.
+- Open an existing `.net.xml` only through Torii's CLI launcher or `netedit -s <absolute-net-file>` (`--sumo-net-file` is equivalent). Never use MCP or desktop automation to launch NetEdit or choose the network file. NetEdit screenshots must default to the hash-bound `netedit_background_review.py` path, which uses no global keyboard or mouse input; use the CLI-opened foreground window only for explicitly requested interactive editing.
 - If completion differs across methods, report completion/unfinished/teleport status before travel-time, waiting-time, or delay averages.
 - Treat bad metrics, warnings, teleports, unfinished vehicles, and controller logs as feedback signals. Diagnose what the metric implies before changing code, routes, networks, signal plans, or controller parameters.
 - Use these claim labels: `formal-evidence`, `diagnostic-demo`, `stress-diagnostic`, `construction-invalid`, `claim-overreach`, `blocked`.

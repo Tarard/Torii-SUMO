@@ -39,6 +39,7 @@ def build_hamburg_corridor_candidate_evidence(
     signal_fetch_manifest: Path | None = None,
     map_lane_axis_stitch_plan: Path | None = None,
     official_splice_plan: Path | None = None,
+    required_signal_types: Sequence[str] = (),
     output_file: Path | None = None,
 ) -> dict[str, Any]:
     """Build and optionally write a corridor screening manifest.
@@ -77,6 +78,28 @@ def build_hamburg_corridor_candidate_evidence(
     }
     missing_lsa = [node_id for node_id in node_ids if node_id not in selected_by_id]
     lsa_gate = "pass" if str(lsa.get("decision", "")) == "pass" and not missing_lsa else "blocked"
+    required_types = tuple(sorted({str(value).strip() for value in required_signal_types if str(value).strip()}))
+    node_signal_types = {
+        node_id: str(
+            (
+                selected_by_id[node_id].get("selected_node")
+                if isinstance(selected_by_id[node_id].get("selected_node"), Mapping)
+                else {}
+            ).get("signal_type", "")
+        ).strip()
+        for node_id in node_ids
+        if node_id in selected_by_id
+    }
+    mismatched_signal_types = {
+        node_id: signal_type
+        for node_id, signal_type in node_signal_types.items()
+        if required_types and signal_type not in required_types
+    }
+    signal_type_gate = (
+        "pass"
+        if not missing_lsa and not mismatched_signal_types
+        else "blocked"
+    )
 
     static_nodes = {str(value) for value in static.get("node_ids", [])}
     static_gate = (
@@ -214,6 +237,7 @@ def build_hamburg_corridor_candidate_evidence(
 
     gates = {
         "official_lsa_identity": lsa_gate,
+        "corridor_node_signal_type": signal_type_gate,
         "official_static_map_kml_ocit": static_gate,
         "per_node_official_plainxml": plainxml_gate,
         "official_motor_vehicle_counts": count_gate,
@@ -232,6 +256,7 @@ def build_hamburg_corridor_candidate_evidence(
         gates[name] == "pass"
         for name in (
             "official_lsa_identity",
+            "corridor_node_signal_type",
             "official_static_map_kml_ocit",
             "per_node_official_plainxml",
             "official_motor_vehicle_counts",
@@ -269,6 +294,11 @@ def build_hamburg_corridor_candidate_evidence(
         "automatic_promotion_gate": "blocked",
         "ordered_node_ids": list(node_ids),
         "nodes": ordered_nodes,
+        "node_type_policy": {
+            "required_signal_types": list(required_types),
+            "observed_signal_types_by_node": node_signal_types,
+            "mismatched_signal_types_by_node": mismatched_signal_types,
+        },
         "distances": distances,
         "inputs": input_paths,
         "axis_connector": axis_report,

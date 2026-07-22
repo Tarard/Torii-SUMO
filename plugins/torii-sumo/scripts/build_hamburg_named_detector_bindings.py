@@ -25,6 +25,8 @@ def main() -> int:
     parser.add_argument("--period", type=int, default=900)
     parser.add_argument("--max-distance-m", type=float, default=5.0)
     parser.add_argument("--ambiguity-margin-m", type=float, default=1.0)
+    parser.add_argument("--map-file", action="append", default=[], type=Path)
+    parser.add_argument("--movement-evidence-file", type=Path)
     args = parser.parse_args()
 
     try:
@@ -36,6 +38,8 @@ def main() -> int:
             period=args.period,
             max_distance_m=args.max_distance_m,
             ambiguity_margin_m=args.ambiguity_margin_m,
+            map_files=tuple(args.map_file),
+            movement_evidence_file=args.movement_evidence_file,
         )
     except (OSError, ValueError, HamburgDetectorBindingError) as exc:
         print(json.dumps({"status": "error", "automatic_promotion_gate": "blocked", "error": str(exc)}))

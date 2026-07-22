@@ -146,3 +146,12 @@ def test_merge_planner_proves_added_lane_from_destination_group() -> None:
             "11": frozenset({"4"}),
         },
     ) == []
+
+
+def test_merge_planner_rejects_exact_count_without_movement_provenance() -> None:
+    assert _merge_through_lane_proof(
+        map_lane_ids=["6", "7", "8", "9"],
+        axis_count=3,
+        merge_lane_ids_starting_at_event=["8"],
+        destination_groups={},
+    ) == []

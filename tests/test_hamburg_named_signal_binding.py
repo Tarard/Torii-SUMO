@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from torii_sumo.core.hamburg_named_signal_binding import materialize_hamburg_named_signal_binding
+import pytest
+
+from torii_sumo.core.hamburg_named_signal_binding import (
+    HamburgSignalBindingError,
+    _load_compound_tls_manifest,
+    materialize_hamburg_named_signal_binding,
+)
 
 
 def _write_inputs(tmp_path: Path, *, mismatch: bool = False) -> tuple[Path, dict[str, Path], list[Path]]:
@@ -92,7 +98,6 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
   <tlLogic id="HH_2349" type="static" programID="structural-all-red" offset="0"/>
   <tlLogic id="HH_2394" type="static" programID="structural-all-red" offset="0"/>
   <connection from="osm-a" to="osm-b" fromLane="0" toLane="0" tl="HH_2349" linkIndex="0"/>
-  <connection from="osm-mid" to="osm-out" fromLane="1" toLane="0" tl="HH_2349" linkIndex="0"/>
   <connection from="osm-c" to="osm-d" fromLane="1" toLane="0" tl="HH_2394" linkIndex="2"/>
 </net>\n""",
         encoding="utf-8",
@@ -115,12 +120,6 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
                             "official_egress_lane": "11",
                             "selected_physical_links": [
                                 {"from_edge": "osm-a", "from_lane": 0, "to_edge": "osm-b", "to_lane": 0},
-                                {
-                                    "from_edge": "osm-mid",
-                                    "from_lane": 1,
-                                    "to_edge": "osm-out",
-                                    "to_lane": 0,
-                                },
                             ],
                         },
                         {
@@ -145,12 +144,6 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
                                 "link_index": 0,
                                 "physical_links": [
                                     {"from_edge": "osm-a", "from_lane": 0, "to_edge": "osm-b", "to_lane": 0},
-                                    {
-                                        "from_edge": "osm-mid",
-                                        "from_lane": 1,
-                                        "to_edge": "osm-out",
-                                        "to_lane": 0,
-                                    },
                                 ],
                             },
                             {
@@ -183,15 +176,15 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
     parity = report["node_reports"]["2349"]["official_movement_physical_key_parity"]
     assert (parity["evidence_mode"], parity["expected_count"], parity["candidate_count"]) == (
         "compound_osm_tls_plan",
-        2,
-        2,
+        1,
+        1,
     )
     bindings = json.loads(Path(report["binding_artifact"]["path"]).read_text(encoding="utf-8"))["bindings"]
     binding = next(row for row in bindings if row["node_id"] == "2349")
     assert (binding["controller_id"], binding["link_index"], len(binding["candidate_connections"])) == (
         "HH_2349",
         0,
-        2,
+        1,
     )
 
     manifest = json.loads(manifests["2349"].read_text(encoding="utf-8"))
@@ -210,6 +203,55 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
         and error["mismatches"] == ["topology_control_key"]
         for error in blocked["errors"]
     )
+
+
+def test_compound_tls_rejects_one_movement_bound_to_two_physical_links(
+    tmp_path: Path,
+) -> None:
+    compound = tmp_path / "compound.manifest.json"
+    links = [
+        {"from_edge": "a", "from_lane": 0, "to_edge": "b", "to_lane": 0},
+        {"from_edge": "b", "from_lane": 0, "to_edge": "c", "to_lane": 0},
+    ]
+    compound.write_text(
+        json.dumps(
+            {
+                "schema_id": "torii.hamburg-compound-official-tls/v1",
+                "status": "topology_ready",
+                "tls_derivation": {
+                    "schema_id": "torii.official-tls-plan-derivation.v1",
+                    "status": "pass",
+                    "movements": [
+                        {
+                            "official_node_id": "2349",
+                            "connection_id": "2",
+                            "signal_group": "K1",
+                            "official_ingress_lane": "1",
+                            "official_egress_lane": "2",
+                            "selected_physical_links": links,
+                        }
+                    ],
+                },
+                "network_rebuild": {
+                    "plan": {
+                        "groups": [
+                            {
+                                "official_node_id": "2349",
+                                "signal_group": "K1",
+                                "tls_id": "HH_2349",
+                                "link_index": 0,
+                                "physical_links": links,
+                            }
+                        ]
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(HamburgSignalBindingError, match="exactly one physical stop-line"):
+        _load_compound_tls_manifest(compound)
 
 
 def test_mismatched_lane_identity_blocks_binding(tmp_path: Path) -> None:

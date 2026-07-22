@@ -185,6 +185,96 @@ evidence is never replaced with a guessed connection or signal program.
 | 2026-07-21 | 2403 two-conflict-core closure and W1 handoff | Rejected the single-core/hull probes and the first two-core variant because they distorted surfaces or added two SUMO-guessed movements absent from the accepted parent. Iteration 027 keeps separate north/south conflict cores and deletes only those two guessed movements. | Preservation parity is 23/23 boundary movements with no loss/addition; surface, SUMO load and Connection Mode gates pass; 23/23 smoke vehicles arrive with zero teleport/collision; both owners have immutable background NetEdit reviews. The SHA-bound W1 handoff is `review_ready` with execution gate `pass`. | Join authorization is per physical conflict core. W1 promotion consumes one candidate SHA plus preservation, geometry, connection, runtime and NetEdit evidence; it still cannot prove official signal control. |
 | 2026-07-21 | Final-OSM signal binding | Reused the existing iteration-009 compound TLS derivation instead of re-running path inference or comparing final OSM edges with `hh-map-*` teacher IDs. The W2 binder now accepts the hash-bound compound plan and checks every selected physical connection against iteration 027. | 2349 binds 8/8 streams to 9/9 controlled OSM connections; 2394 binds 8/8 to 13/13. The two-hour official weekday history has 16/16 initialized streams and 3,671 exported events. W2 remains non-promoting because 2403 has no published MAP/OCIT/TLD control asset. | Preserve official movement-to-OSM evidence as a reusable contract. One movement may own multiple physical SUMO connections; exact set parity replaces edge-name equality. |
 | 2026-07-21 | W3 official count-station truth correction | Audited Hamburg's `Anzahl_Kfz_Zaehlstelle_15-Min` SensorThings layer before materializing detectors. Kept the 5-minute `Zählfeld` streams only as lane/location diagnostics and switched the intended demand/validation truth to the processed directional station streams. | The selected Saturday window contains 10/10 bins for all nine station streams. Six direction-1/2 streams represent real directional cross-sections; three direction-0 streams are totals used only for QA, never additional route constraints. Four directional cross-sections can be uniquely materialized on W1; the two 2403 arm-2 sections remain `review_required` because their geometry is unique but their movement semantics cannot be promoted without the missing 2403 MAP/OCIT evidence. Node 2349 has no published station stream. | A detector field is not a traffic-total contract. Bind one official station to one directed SUMO edge cross-section, place E1 on all passenger lanes, compare the lane sum with the single station observation, and keep direction-0 totals and raw fields outside routeSampler constraints. |
+| 2026-07-21 | W3 composition-first sensor identity correction | Replaced station-midpoint snapping with a hash-closed identity join: processed station stream → official `zusammensetzung` → physical 5-minute `Zählfeld` stream/Thing → official MAP, engineering-plan constellation, or unique official point evidence → frozen OSM-derived SUMO edge/lane. Added an explicit Hamburg↔SUMO sensor-type crosswalk. | Six directional station groups resolve to 15 unique physical fields and 16 memberships; `2403-Z.1` is intentionally reused by two processed groups. All 60 selected 15-minute bins exactly equal the sum of their 5-minute component fields. Fifteen E1 count equivalents and separate E2 queue/occupancy diagnostics load in SUMO. Only streams 28579, 29389, and 30599 directly cover every passenger lane of one co-located edge; 27143, 32721, and 36436 remain aggregation-only validation groups. Five field identities remain promotion-review items because four 2403 constellation source hashes are not closed by the upstream manifest and one 2394 detector point is 4.23 m from its official MAP lane. Node 2349 is still missing. | A processed `Zählstelle` midpoint is not a physical detector. Create one E1 per unique physical `Zählfeld`, aggregate E1 outputs by the official composition, use E2 only for queue/occupancy diagnostics, keep TLD request detectors separate from vehicle counts, and admit an edge constraint only when one co-located member exists on every passenger lane. The old midpoint-based W3 probe is superseded. |
+| 2026-07-21 | W3 composition-derived route support | Reused Torii's existing network-boundary route enumerator, interval edgeData writer, constraint-structure audit, and SUMO `routeSampler`; supplied only the three direct full-lane station groups from the new identity manifest. | The corrected input contains 30 rows (3 edges × 10 bins) and 3,273 vehicles. Fifty-eight candidate routes give 100% constraint match, zero deficit/overflow, and zero structural conflict. The prior 40-row/4,312-vehicle midpoint probe is invalidated. | Zero deficit proves only that a plausible realization exists for the direct measured sections. It does not identify a unique OD matrix; the three multi-edge processed groups remain E1 aggregation comparisons only. |
+| 2026-07-21 | W3 route inverse-problem formulation | Expressed route generation as a measured-edge-by-candidate-route incidence system before choosing any demand. Added rank, nullity, route-signature equivalence and unobserved-route diagnostics, and defined a multi-solution routeSampler ensemble followed by SUMO E1 scoring. | For the frozen Hamburg W3 inputs, the static matrix is `3 × 58`, has rank `3` and nullity `55`, and contains only eight distinct detector signatures; 18 candidate routes are invisible to the three direct hard constraints. Counts therefore identify aggregates of route-equivalence classes, not individual trips or a unique OD matrix. | Keep all plausible branch/through routes, generate one or more non-negative integer feasible realizations, and select only after simulation. `routeSampler` input deficit is a construction gate; co-located physical E1 output aggregated by official station composition is the acceptance evidence. |
+| 2026-07-21 | W3 feasible-route ensemble | Reused the unchanged 58-route whitelist and SUMO `routeSampler` with seeds `17, 42, 73, 101, 202`; no optimization or fabricated boundary flow was added. | All five versioned runs have zero deficit and five distinct interval-route fingerprints. They contain 2,302–2,339 vehicles and activate the same 40 physical route sequences, but pairwise interval-route L1 allocation distance is 838–971. The earlier `--optimize full` baseline contains 2,337 vehicles on only three routes and converges to one seed-independent sparse solution. | Retain multiple exact construction solutions. Sparse/full optimization is not automatically more realistic; choose among solutions only with SUMO E1 composition residuals, runtime quality and an explicit route prior. |
+| 2026-07-21 | W3 route-ensemble outer-loop diagnostic | Ran all five zero-deficit routeSampler solutions on the exact frozen W1 network with per-run absolute E1 outputs. Used native `--tls.all-off` only to isolate topology, route allocation and detector timing; no placeholder TLS was treated as historical control. | Every run inserts and completes all 2,302–2,339 vehicles with zero teleport/collision. Formal two-hour six-station MAE ranges from 15.50 to 17.96 vehicles/15 min; seed 73 is the diagnostic leader. The residual is concentrated in the three aggregation-only station groups that were absent from routeSampler's edge constraints. | A zero-deficit edge solution is not a six-station solution. Keep `selection=null`: no-signal ranking is diagnostic and cannot replace same-window official TLS replay. |
+| 2026-07-21 | W3 empirical sensor-response matrix | Probed every one of the 58 candidate routes with one isolated SUMO vehicle and all 15 co-located physical E1s, then aggregated the fields using the frozen six-station membership contract. Solved the resulting non-negative integer system with minimum L1 change from routeSampler seed 73. | The empirical station matrix is `6 × 58`, rank `6`, nullity `52`, with 17 distinct route signatures. Unlike the coarse edge matrix, all ten 15-minute systems have exact integer solutions. The prior-preserving solution contains 2,677 vehicles and matches all 60 station bins exactly (`5,928 = 5,928`, MAE/RMSE/max error `0`, GEH<5 `100%`). Four of five within-bin schedule permutations also finish with zero teleport/collision; schedule seed 74 is the clean diagnostic representative. | Sensor response must retain physical lane identity; a shared field cannot be expanded to a whole-edge count. The empirical matrix is an estimator, integer prior-distance minimization is the controller, and SUMO E1 is feedback. Promotion remains blocked because probes and replay disabled TLS and complete same-window official control for 2403 is unavailable. |
+| 2026-07-21 | W3 two-node official-signal proxy | Replayed the exact 2,677-vehicle schedule with the complete 2349/2394 weekday official event stream shifted onto the count window; kept 2403's existing OSM controller explicitly as a proxy. | All vehicles arrive with zero teleport/collision. The six-station audit has 59/60 exact bins, total `5,927/5,928`, MAE `0.0167`, max error `1`. The run is a cross-date signal sensitivity experiment, not a historical twin; manifest SHA is `e6e2c8d455471b9664675f36a1e2bdf884ee86875cb7319022d263cdd999dcad`. | Signal timing can change physical-lane choice even when the static route-incidence solution is exact. Keep the route allocation fixed and update only the smallest evidenced control variable; do not promote while 2403 and same-window timing are missing. |
+| 2026-07-21 | W3 legal-speed dimension | Used TraCI detector vehicle data to identify the single missing contribution: `s74_00929` touched 2394 Z8, but its lateral detector crossing produced an impossible apparent 57.4 m/s traversal and was excluded from `nVehContrib`. A first one-vehicle speed edit was invalidated because implicit SUMO speed draws shifted for later vehicles. Re-ran with every vehicle assigned an explicit factor at or below `1.00`, then varied only the target over `0.85/0.90/0.95/1.00`. | Every controlled case completes `2,677/2,677` with zero teleport/collision and all `60/60` station bins exact (`5,928/5,928`, MAE `0`). The result proves reproducibility and a legal speed axis, but not a measured speed distribution; manifest SHA is `2eba7bd8126267cdbee8e4f8637fd4e17637e0fb3d05ec81543d204e705e89d1`. | Flatten the speed tensor into a sparse matrix whose columns are route, departure pattern, and a discrete factor in `(0,1]`. Require explicit factors for the full fleet so random-number consumption cannot masquerade as a speed effect. Speed remains a regularized latent variable until official spot-speed/travel-time evidence exists. |
+| 2026-07-21 | Superseded v20 NetEdit comparison | Captured Inspect, TLS and Connection views for the separate official-geometry v20 candidate (`559a5752...`). The user-provided screenshot and accepted W1/W2 contracts instead reference iteration 027 (`aa1676df...`), so v20 is not evidence about the active signal binding. | The mismatch was detected before modifying either network. The correct iteration-027 network was reopened through Torii's existing `launch_netedit` helper and its exact window title was confirmed. | Always resolve the reviewed network from the current hash-bound W1/W2 manifest before launching NetEdit; never infer the active candidate from the newest artifact directory. |
+
+## Route inference as a sensor-matrix inverse problem
+
+For one time bin, Torii defines a route-incidence matrix
+
+\[
+A_{sr}=\text{number of times candidate route }r\text{ crosses measured section }s,
+\qquad A x_t \approx y_t,
+\]
+
+where `x[r,t]` is a non-negative integer route multiplicity and `y[s,t]` is the
+official count. Most entries are binary, but the definition permits a route to
+cross a section more than once. Equal columns are observationally
+indistinguishable. A non-zero nullity means that the measurements admit many
+route-flow solutions, so Torii must report that ambiguity rather than assigning
+the label "observed OD" to one arbitrary result.
+
+The reusable workflow is:
+
+1. Build a whitelist of legal through, one-intersection, two-intersection and
+   branch-exit routes from the frozen SUMO topology. Keep source/sink and route
+   provenance; do not create traffic on an unmeasured boundary merely to make
+   the picture look complete.
+2. Audit `A`: rank, nullity, identical route columns, unobserved columns and
+   necessary count-consistency conditions. This is the estimator's static
+   identifiability report.
+3. Generate an ensemble of non-negative integer feasible route multiplicities.
+   Different random seeds or explicit priors may choose different members of
+   the feasible set. A maximum-entropy/prior-distance objective is a selection
+   rule, not new evidence.
+4. Run every retained solution in SUMO. Replace static `A` with the simulator's
+   time-expanded response: departure-bin vehicles may reach downstream sensors
+   in later bins because of signals, queues and travel time.
+5. Compare every physical E1 with its official `Zählfeld`, then sum E1 members
+   using the official `Zählstelle` composition. Missing members make the whole
+   station/bin missing. Choose or update routes from those residuals; never
+   validate by summing unrelated serial detectors.
+6. Promote a route solution only when the declared count tolerance, interval
+   coverage, signal-history coverage, vehicle completion, teleport and
+   collision gates all pass. Multiple statistically equivalent solutions may
+   be retained as an uncertainty ensemble.
+
+For compound or lane-specific stations, the production matrix is an empirical
+response matrix `H`, not the coarse edge incidence `A`. Torii sends one isolated
+vehicle over each candidate route, records every physical E1 response, and then
+applies the frozen official field-to-station membership. This preserves cases
+where one processed station contains fields on different SUMO edges or shares a
+physical field with another processed group. The controller solves
+`H x_t = y_t` with non-negative integer `x_t`, minimizing L1 distance to a
+plausible routeSampler prior. SUMO then replays the full mixed demand; a changed
+lane choice, bin shift, queue or collision returns a residual to the next
+controller iteration.
+
+Speed adds a finite latent dimension rather than a continuous free variable.
+For speed classes `k` with factors such as `0.85, 0.90, 0.95, 1.00`, Torii uses
+
+\[
+H_{(s,t),(r,b,k)}=\text{SUMO E1 contributions at station/bin }(s,t)
+\text{ from route }r\text{ departing under pattern }b\text{ at speed class }k.
+\]
+
+The tensor is flattened so rows remain `(station, observation bin)` and columns
+are `(route, departure pattern, speed class)`. Decision variables are
+non-negative integer vehicle counts. Every factor is at most `1.00`, so the
+desired free-flow speed never exceeds the lane limit; car-following, queues,
+turning speed and red-light compliance may reduce the realized speed further.
+Because interacting vehicles make the full response nonlinear, isolated probes
+are only an estimator. The controller must run the complete mixed solution in
+SUMO, measure the residual, and refresh local columns or a finite-difference
+Jacobian when the additive approximation fails.
+
+This follows SUMO's own warning that traffic counts do not define a unique
+solution and its recommendation to use a plausible route whitelist with
+`routeSampler` ([Routes from Observation Points](https://sumo.dlr.de/docs/Demand/Routes_from_Observation_Points.html),
+[routeSampler](https://sumo.dlr.de/docs/Tools/Turns.html)). The simulation outer
+loop follows dynamic OD-estimation work that treats SUMO as the inner assignment
+model and minimizes sensor residuals outside it
+([Andersen, Chiarandini and Debrabant, 2022](https://arxiv.org/abs/2202.00099)).
+Flow conservation, positivity and prior trajectory structure are kept as
+separate constraints rather than being confused with measurements
+([Michau et al., 2016](https://arxiv.org/abs/1604.00391)).
 
 ## Current topology state
 
@@ -215,10 +305,12 @@ evidence is never replaced with a guessed connection or signal program.
   `aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33`;
   2403 controller ownership and historical timing remain unknown because no
   current machine-bindable MAP/OCIT/TLD package is published.
-- The earlier 19-field/17-lane result is retained only as diagnostic evidence;
-  it is not the W3 traffic truth. The official station audit identifies six real
-  directional cross-sections: four are ready for hash-bound E1/E2 materialization,
-  while the two 2403 arm-2 sections remain semantic reviews. Node 2349 has no
+- W3 now keeps two different official entity types separate. Fifteen unique
+  physical `Zählfeld` fields become co-located SUMO E1 count equivalents (with
+  optional E2 diagnostics); six processed directional `Zählstelle` streams are
+  aggregation groups over those fields, not additional detector points. The
+  60-bin composition audit has zero differences. Three groups are direct
+  single-edge constraints and three are validation-only. Node 2349 has no
   published station stream, so corridor-wide promotion remains blocked.
 
 ### 2403 topology status split
@@ -240,6 +332,54 @@ evidence is never replaced with a guessed connection or signal program.
 - Kept generated caches and experimental candidates outside version control;
   the bundle does not change the W1 topology or relax the W2/W3 gates.
 
+### 2026-07-21 stop-line and repeated-control audit
+
+- Reopened the hash-bound iteration-027 network rather than the superseded v20
+  candidate and traced all 16 official 2349/2394 vehicle movements through the
+  final SUMO lane graph.
+- Seven movements are currently controlled twice by the same official
+  `HH_* / linkIndex`. Four duplicates were introduced because a MAP-proven
+  connectivity repair was also treated as signal-control evidence; three came
+  from consecutive OSM micro-TLS links being absorbed into one official group.
+- Projection of the official MAP ingress stop lines onto iteration-027 separates
+  the real and duplicate arcs. At 2394 the first controls are 0.58--1.93 m from
+  the official stop lines, while the downstream duplicates are 8.13--9.94 m
+  away. At 2349/C9 the corresponding distances are 4.00 m and 22.94 m.
+- The repair policy is therefore: MAP connection repairs provide route topology
+  only unless they carry explicit stop-line authority; one official movement
+  keeps the first stop-line-aligned control arc and demotes later controls.
+- 2349/C5 and C6 remain a topology exception: their only controlled branch is
+  14.03 m downstream of the official stop line. The intervening external edge
+  must be represented as internal channelized connection geometry so both
+  movement-specific links begin at the real stop line.
+- Three additional 2349 OSM micro-TLS controllers precede the official owners by
+  only 4.11--4.74 m on the same straight OSM ways. They are duplicate approach
+  controls and must be retired in the corrected candidate. Equivalent 2403
+  pairs remain review-only because no official MAP/OCIT package identifies the
+  survivor.
+
+### 2026-07-21 official stop-line ownership correction
+
+- Projected every official MAP KML ingress endpoint B into the exact
+  iteration-027 SUMO coordinate frame instead of inferring the stop-line owner
+  from the current `HH_*` controller. This corrected the provisional retirement
+  interpretation above: the three 2349 OSM micro nodes are nearer the official
+  stop lines and must be taken over by `HH_2349`, not deleted as duplicates.
+- The same check found that 2394 MAP lanes 6/7 place their stop line near the
+  start of `381540198#1`; the physical control therefore belongs on the unique
+  predecessor connections from `381540198#0`, while the later conflict-core
+  connections remain routing-only.
+- Torii will treat a MAP ingress binding as a stop-line cross-section rather
+  than automatically treating the mapped lane's downstream end as the signal
+  owner. If the official anchor is nearer the lane start, the estimator may
+  shift to exactly one proven predecessor; ambiguous predecessors fail closed.
+- One local geometry exception remains. Official lane 10 at 2349 serves C5 and
+  C6 with different signal expressions after a shared channelized path. The
+  corrected PlainXML candidate must absorb only `61649647#1/#2` into the local
+  logical cell and create direct movement-specific internal connections from
+  `61649647#0`, preserving the concatenated OSM geometry. No movement is
+  collapsed to a central straight-line shortcut.
+
 ## Next steps
 
 1. Treat iteration 027 SHA `aa1676df…49a33` as the immutable W1 topology;
@@ -247,11 +387,219 @@ evidence is never replaced with a guessed connection or signal program.
 2. Preserve the completed 2349/2394 static and two-hour historical signal
    bindings; keep 2403 signal ownership/timing explicitly blocked until a
    machine-bindable official asset is available.
-3. Freeze the official 15-minute station inventory, then place co-located E1/E2
-   detectors for the four uniquely proven directional cross-sections. Keep the
-   two 2403 arm-2 sections diagnostic until official movement evidence closes
-   their semantics, and keep raw detector fields out of demand totals.
-4. Rebuild the selected Saturday two-hour demand with warm-up, then compare
-   official and SUMO detector bins, teleports, collisions and queues.
+3. Use the frozen composition-first identity index: one E1 per unique physical
+   field, E2 only as a queue/occupancy diagnostic, and official station totals
+   as group comparisons. Generate routeSampler edge constraints only for the
+   three direct, full-lane, single-edge groups; keep multi-edge groups out.
+4. Preserve the exact empirical-matrix allocation and clean schedule-74 route
+   evidence. Use explicit legal speed classes for every vehicle, not SUMO's
+   implicit random speed distribution, and extend the response columns by
+   departure pattern and speed class. Re-run the complete mixed demand after
+   every estimator update.
 5. Productize only the reusable estimator/controller/audit steps; Ingolstadt
    priors remain non-authoritative and no validation corridor replaces Hamburg.
+
+## 2026-07-21 scope reset: systematic Ingolstadt human-cleaning curriculum
+
+- Suspended every previous Hamburg W1 promotion claim. The latest compact-core
+  join experiment is retained only as a negative sample: it preserved external
+  lane geometry after repair, but introduced unsupported connection fanouts and
+  changed controller ownership without official 2403 MAP/OCIT evidence.
+- Audited the existing same-bbox Ingolstadt runner before adding code. Torii
+  already computes topology clusters, road hierarchy, scope, Connection Mode,
+  movement/TLS deltas and review artifacts; the missing layer was a curriculum
+  that connects those observations to typed human-cleaning actions.
+- Materialized `outputs/ingolstadt_teacher_curriculum_v1`: 149 existing
+  raw-versus-human cases become hash-bound state/action records. The current v1
+  evidence contains 29 exact positive bounded-core joins, 61 review
+  counterexamples, and 59 blocked/unidentified examples. Leakage grouping keeps
+  cases sharing a nearby spatial cell, absorbed source node, internal OSM way
+  family, or human controller in one fold; the resulting split is 123 train and
+  26 held-out cases. Eighteen diverse cases form the first NetEdit A/B queue.
+- The curriculum reuses the existing topology estimator and composable
+  intersection/road layers. `.net.xml` remains the exact NetEdit/SUMO payload;
+  the higher-level semantic state should reuse `CanonicalNetworkSnapshot` and
+  `CorridorResearchBundle`, not introduce another competing network language.
+- Found a safety defect in the legacy aggregation path: a
+  `reference_matched` Ingolstadt case can currently be treated as a confirmed
+  target join even though the teacher action contract explicitly blocks
+  transfer. The controller must convert teacher results to prior evidence and a
+  reversible hypothesis, then require independent target-city geometry,
+  stop-line, storage/channelization, movement, boundary and official-data gates.
+
+Next curriculum increment:
+
+1. Freeze representative NetEdit A/B views for T3, X4, offset/dog-leg,
+   channelized, shared-controller and abstain cases using identical view rules.
+2. Add typed v2 teacher actions for movement gaps, pedestrian internals,
+   controller split/merge, road hierarchy/type and geometry changes; v1 join
+   labels remain backward compatible.
+3. Evaluate JOIN / KEEP_SEPARATE / ABSTAIN and exact absorbed/internal/boundary
+   sets on held-out Ingolstadt families before enabling any Hamburg materializer.
+4. Transfer only a rule class that passes held-out tests, then let Hamburg OSM,
+   official road data, MAP/OCIT/TLD, imagery and NetEdit review accept or reject
+   each proposed edit independently.
+
+## 2026-07-21 Ingolstadt spatial registration and OSM micro-loop lesson
+
+- Corrected the Ingolstadt A/B screenshot protocol. The raw same-bbox SUMO net
+  and the human-cleaned teacher use the same UTM projection but different
+  `netOffset` values; separately centering their local coordinates did not prove
+  that the screenshots showed the same real intersection. A new read-only
+  registration artifact converts both local frames to common projected UTM and
+  binds each screenshot center to the exact source-network hash.
+- Rebuilt the curriculum with that registration: 141 of 149 cases register,
+  eight remain blocked, and 29 cases retain exact blocker-free core-join
+  evidence. Old screenshot pairs whose projected centers differed were
+  invalidated instead of being accepted visually.
+- Confirmed the user-observed small-loop pattern at Ingolstadt source nodes
+  `1448519097` and `7254701196`. The imported net contains reciprocal external
+  edges `24498193#1` and `-24498193#1`, each only 0.20 m long, plus a generated
+  `dir="t"` turnaround at each endpoint. The human-cleaned network contracts the
+  two source nodes into `cluster_1448519097_7254701196`; therefore this case is
+  a positive example of a false OSM/SUMO micro-fragment rather than a real
+  roundabout.
+- The existing generic corridor simplifier does not discover this case because
+  it requires a non-empty common road name and only accepts simple
+  lane-preserving geometry nodes. This pair is unnamed and each endpoint also
+  participates in a junction, so it requires a separate, fail-closed
+  reciprocal-micro-fragment estimator rather than a relaxed name check.
+- Hamburg contains the same structural family: the 2394 workflow already
+  records the 0.2 m edge `60578487#0` as consumed by a bounded join. Ingolstadt
+  supplies a reusable prior, but Hamburg contraction still requires its own
+  stop-line, channelization, movement, official-data and boundary-preservation
+  evidence.
+- A read-only run on the Hamburg source also classifies the 2403 pair
+  `249707791 <-> 757036954` (`-60578489` / `60578489`, two lanes in each
+  direction, 0.20 m) as a geometry-fragment candidate. The earlier diagnostic
+  join absorbed it, but that candidate failed later surface-overlap gates, so
+  the classification is not a promotion claim.
+- The strongest small-ring signature still visible in the current Hamburg
+  diagnostic candidate is different and must remain protected: at 2349,
+  `194672083` and `59990286` form a 0.82/0.81 m reciprocal pair and netconvert
+  generated one direct `dir="t"` movement at each end. The pair is controlled by
+  `HH_2349`, has asymmetric/unproven way semantics, and is used by the official
+  movement/stop-line binding. The estimator therefore returns
+  `protected_or_review`, not a join. The safe first repair is to compare the two
+  turnarounds with MAP/OCIT and suppress only an officially unsupported
+  turnaround; the short connector remains until independent evidence proves a
+  single physical core.
+- This Hamburg ring was produced by a partial node join plus automatic
+  turnaround generation, not by copying a complete OSM roundabout. This is why
+  micro-fragment contraction and turnaround suppression are separate actions.
+- Added the protocol actions `ABSORB_RECIPROCAL_MICRO_FRAGMENT` and
+  `SUPPRESS_ARTIFICIAL_TURNAROUNDS`. They are review-only until a candidate
+  round trip proves exact non-turnaround movement parity, controller/stop-line
+  preservation, zero outside-scope edits and no new geometry overlap.
+- Implemented the independent read-only estimator in
+  `external_micro_junction_audit.py`. Focused verification across the new
+  audit, owner-layout classifier, spatial registration, curriculum, visual
+  evidence, typed actions and aggregation safety completed with 53 passing
+  tests; Ruff and `git diff --check` passed. No source network was modified.
+
+### 2026-07-22 iteration 036: preserve iteration 027 and suppress its artificial small ring
+
+- Returned to the user-selected iteration-027 network instead of rebuilding its
+  road geometry. The official 2349 MAP/OCIT inventory contains eight vehicle
+  movements and none uses the direct `194672083 -> 59990286` or reverse
+  turnaround generated by `netconvert`.
+- Generated an independent candidate that deletes only those two `dir="t"`
+  connections. All external edge XML, non-turnaround connections, TLS IDs and
+  TLS programs remain unchanged; the two short channelized edges remain in the
+  network because their official movement and stop-line roles are still valid.
+- SUMO load passed. The 23-vehicle boundary movement smoke completed with 23/23
+  arrivals and zero teleports. Torii's bounded surface comparison reports zero
+  introduced findings and zero findings at the edited 2349 owners. Candidate
+  SHA-256: `8bab5e9996cfc48c5d9248a687b44b4adfdc245e12f38f5c06583ee70eff7e71`.
+
+### 2026-07-22 iteration 037: internalize only the 2403 sub-metre road fragments
+
+- Starting from iteration 036, joined only the three near-coincident owners that
+  bound the reciprocal `0.29 m` and `0.58 m` OSM fragments. This absorbs exactly
+  four external micro edges; the `7.85–12.53 m` approach/channelization edges
+  remain external.
+- The first native `netconvert` join inferred one new lane movement
+  (`83075275#2_0 -> 111747607#1_1`). A second semantic-prune pass removed only
+  that unsupported addition. The final boundary inventory is exactly `18 -> 18`
+  with no lost or added movement.
+- SUMO load, Torii collapse/presence gates and bounded surface comparison pass.
+  An all-off topology smoke sends 18 vehicles through all 18 movements with
+  18/18 arrivals, zero teleport and zero collision. Candidate SHA-256:
+  `f7e9fb4c25dc16873a7c3110870b7674f5fc643277700c4882933876945ce3d0`.
+  The candidate remains diagnostic because 2403 still lacks a published
+  MAP/OCIT package for official TLS promotion.
+
+### 2026-07-22 iteration 038: Ingolstadt-style single-core probe for 2403
+
+- Reused the existing Ingolstadt teacher curriculum. Human-cleaned `case04`
+  collapses 14 source OSM nodes into one physical `cluster_*` junction while
+  retaining the external approach cuts.
+- Applied the same bounded hypothesis to 2403 without replacing iteration 037:
+  merged the existing central core with four stop-line owners and their one
+  intermediate node; five short core edges became internal junction geometry.
+- SUMO initially dropped one parent movement. Restored only that exact
+  lane-to-lane connection (`25444569#0_0 -> 395272650#1_0`). The final probe
+  preserves all 18 boundary movements, introduces no surface overlap, loads in
+  SUMO, and all 18 topology-smoke vehicles arrive with zero teleport/collision.
+- The candidate SHA-256 is
+  `2da03214eea32571669d5a0cbac80fd88a4bd9079a76be36290a8c180df5c559`.
+  It remains diagnostic because 2403 has no published MAP/OCIT controller
+  package. Background NetEdit A/B capture is pending: the capture guard observed
+  the active foreground keyboard layout as Chinese (`0x0804`) and correctly
+  refused to send mode shortcuts.
+
+### 2026-07-22 NetEdit screenshot default
+
+- Made Torii's hash-bound background NetEdit reviewer the mandatory default for screenshots; it does not use global keyboard or mouse input.
+- The legacy foreground/full-screen capture command now fails closed and points to `netedit_background_review.py`.
+- Interactive NetEdit viewing remains a separate CLI-only action and is never used as the screenshot path.
+- Removed the background reviewer's dependency on the user's foreground input method: shortcut safety now checks the private NetEdit window's keyboard layout, so a Chinese ChatGPT input context no longer blocks silent capture.
+- If that private NetEdit window inherits Chinese input, Torii requests English for that window only with `WM_INPUTLANGCHANGEREQUEST`; it never changes or types into the user's foreground application.
+
+### 2026-07-22 junction Inspect correction
+
+- Continued iteration 038 after restoring the one dropped parent movement. The
+  candidate still passes 18/18 movement parity, SUMO loading and the 18-vehicle
+  topology smoke; this proves connection semantics, not junction-shape quality.
+- Verified that the Ingolstadt teacher network was used read-only. Its SHA-256
+  remains `cc629a9aaa7158cebafaa044971f82677506616476a487967a53543353efac5d`
+  and Git reports no modification to the teacher file.
+- Rejected a first screenshot experiment that drew the junction footprint as an
+  additional polygon. A polygon is not a SUMO junction and cannot be used as
+  Inspect evidence. Those images are diagnostic only.
+- SUMO's junction is the network node object; its `shape` determines where
+  incoming edges end and outgoing edges begin. The current background runner can
+  hash-bind and select `junction:<id>`, but it cannot yet prove that NetEdit's
+  left attribute pane entered `Net: junction` without taking foreground input.
+  The report now states this limitation instead of claiming successful object
+  inspection.
+- Added a stable canvas-window lookup so the reviewer does not attach to a
+  transient NetEdit top-level window. Background screenshots remain non-mutating
+  and promotion remains blocked until a real junction Inspect view is verified.
+- Reused the existing `NeteditTargetSession` rather than extending the
+  background reviewer with synthetic FOX messages. Its hash-bound real click
+  produced a Hamburg screenshot whose left pane is `Net: junction`; `Ctrl+J`
+  then switched from the node bubble to the compiled junction shape. The
+  session was aborted without saving and the source candidate hash remained
+  unchanged. This is now the required fallback only when attribute-pane proof
+  is requested; ordinary screenshots remain background-only.
+
+### 2026-07-22 repository report and reusable workflow
+
+- Added a curated README report containing the official 2024 LGV aerial, the
+  July-2022 LSBG construction plan, the OSM-derived input and a background
+  NetEdit **full-network Connection Mode** capture of iteration 038. The local
+  `Net: junction` capture remains a companion identity proof rather than the
+  main topology image. Both reference candidate SHA-256
+  `2da03214eea32571669d5a0cbac80fd88a4bd9079a76be36290a8c180df5c559`.
+- Split public showcase material from repository evidence. Curated images,
+  provenance, schemas, source/tests and a compact hash summary are versioned;
+  repeated API caches, NetEdit sessions and generated simulation directories
+  remain rebuild-only artifacts.
+- Added a portable config facade to the existing Hamburg W0-W5 execution
+  ledger. Stage paths are relative to the config, upstream manifest/feedback
+  changes still invalidate downstream stages, and the facade does not duplicate
+  the focused road, signal, detector or replay implementations.
+- The report keeps the product boundary explicit: exact route-matrix and
+  zero-teleport diagnostics are shown, while missing 2403 MAP/OCIT and
+  low-confidence detector-lane identities continue to block promotion.

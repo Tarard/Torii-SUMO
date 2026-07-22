@@ -12,6 +12,7 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 from .command_runner import run_command
+from .corridor_simplification import audit_alias_normalized_connections
 from .junction_connection_audit import (
     build_connection_signature,
     compare_pedestrian_crossing_signatures,
@@ -28,6 +29,7 @@ from .junction_teacher_model import (
     materialize_exemplar_movement_signatures,
     slot_edge_map_from_exemplar,
 )
+from .official_tls_rebuild import edge_lane_signature
 
 
 APPROACH_INTEGRITY_FAILURE_FIELDS = {
@@ -1492,12 +1494,14 @@ def write_teacher_target_internal_replay_net(
     blend_geometry_anchor_at_target: bool = False,
     copy_unmapped_boundary_edges: bool = True,
     preserve_mapped_boundary_endpoints: bool = False,
+    preserve_target_junction_shape: bool = False,
 ) -> dict[str, object]:
     teacher_junction_id = teacher_junction_id or junction_id
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     candidate_tree = ET.parse(candidate_net_file)
     candidate_root = candidate_tree.getroot()
+    source_candidate_root = copy.deepcopy(candidate_root)
     teacher_root = ET.parse(teacher_net_file).getroot()
     internal_prefix = f":{junction_id}_"
     teacher_internal_prefix = f":{teacher_junction_id}_"
@@ -1513,6 +1517,8 @@ def write_teacher_target_internal_replay_net(
         return _failure(f"candidate junction not found: {junction_id}")
     if teacher_junction is None:
         return _failure(f"teacher junction not found: {junction_id}")
+    original_target_junction_shape = target_candidate_junction.attrib.get("shape")
+    original_target_custom_shape = target_candidate_junction.attrib.get("customShape")
 
     dx = float(target_candidate_junction.attrib.get("x", "0") or 0) - float(
         teacher_junction.attrib.get("x", "0") or 0
@@ -2454,10 +2460,22 @@ def write_teacher_target_internal_replay_net(
             _clone_transformed_junction(junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix),
         )
 
-    target_candidate_junction.attrib.clear()
-    target_candidate_junction.attrib.update(
-        _mapped_junction_attrs(teacher_junction, dx, dy, replay_edge_map, teacher_internal_prefix, internal_prefix)
+    mapped_target_attrs = _mapped_junction_attrs(
+        teacher_junction,
+        dx,
+        dy,
+        replay_edge_map,
+        teacher_internal_prefix,
+        internal_prefix,
     )
+    if preserve_target_junction_shape and original_target_junction_shape:
+        mapped_target_attrs["shape"] = original_target_junction_shape
+        if original_target_custom_shape is not None:
+            mapped_target_attrs["customShape"] = original_target_custom_shape
+        else:
+            mapped_target_attrs.pop("customShape", None)
+    target_candidate_junction.attrib.clear()
+    target_candidate_junction.attrib.update(mapped_target_attrs)
     for child in list(target_candidate_junction):
         target_candidate_junction.remove(child)
     for request in teacher_junction.findall("request"):
@@ -2616,11 +2634,38 @@ def write_teacher_target_internal_replay_net(
             added_missing_teacher_endpoint_junctions.append(endpoint)
 
     restored_geometry_anchor_junctions = _restore_geometry_anchor_junctions(candidate_root, geometry_anchor_junctions_by_id)
-    target_shape_anchor_report = _expand_junction_shape_to_approach_endpoints(
-        candidate_root,
-        junction_id,
-        geometry_anchor_edge_ids,
+    external_boundary_connection_report: dict[str, object] = {
+        "status": "skipped",
+        "restored_connection_count": 0,
+        "restored_connections": [],
+        "preserved_existing_connection_count": 0,
+        "preserved_existing_connections": [],
+        "skipped_connection_count": 0,
+        "skipped_connections": [],
+    }
+    if preserve_mapped_boundary_endpoints:
+        external_boundary_connection_report = _restore_external_boundary_connections(
+            source_root=source_candidate_root,
+            target_root=candidate_root,
+            boundary_edge_ids=set(replaced_boundary_edge_ids),
+            source_local_junction_ids={junction_id},
+        )
+
+    unblended_geometry_anchor_edge_ids = geometry_anchor_edge_ids - set(
+        blended_geometry_anchor_edge_ids
     )
+    if geometry_anchor_edge_ids and not unblended_geometry_anchor_edge_ids:
+        target_shape_anchor_report = {
+            "status": "skipped",
+            "reason": "all_geometry_anchor_edges_blended_at_target",
+            "blended_approach_edge_ids": sorted(set(blended_geometry_anchor_edge_ids)),
+        }
+    else:
+        target_shape_anchor_report = _expand_junction_shape_to_approach_endpoints(
+            candidate_root,
+            junction_id,
+            unblended_geometry_anchor_edge_ids,
+        )
 
     ET.indent(candidate_root, space="    ")
     candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
@@ -2637,6 +2682,7 @@ def write_teacher_target_internal_replay_net(
         "copied_boundary_candidate_edges": copied_boundary_candidate_edges,
         "copy_unmapped_boundary_edges": copy_unmapped_boundary_edges,
         "preserve_mapped_boundary_endpoints": preserve_mapped_boundary_endpoints,
+        "preserve_target_junction_shape": preserve_target_junction_shape,
         "skipped_unmapped_teacher_boundary_edge_count": len(
             skipped_unmapped_teacher_boundary_edges
         ),
@@ -2645,6 +2691,24 @@ def write_teacher_target_internal_replay_net(
             preserved_mapped_boundary_endpoints
         ),
         "preserved_mapped_boundary_endpoints": preserved_mapped_boundary_endpoints,
+        "restored_external_boundary_connection_count": external_boundary_connection_report[
+            "restored_connection_count"
+        ],
+        "restored_external_boundary_connections": external_boundary_connection_report[
+            "restored_connections"
+        ],
+        "preserved_existing_external_boundary_connection_count": (
+            external_boundary_connection_report["preserved_existing_connection_count"]
+        ),
+        "preserved_existing_external_boundary_connections": (
+            external_boundary_connection_report["preserved_existing_connections"]
+        ),
+        "skipped_external_boundary_connection_count": external_boundary_connection_report[
+            "skipped_connection_count"
+        ],
+        "skipped_external_boundary_connections": external_boundary_connection_report[
+            "skipped_connections"
+        ],
         "copied_boundary_continuation_edge_count": len(copied_boundary_continuation_edges),
         "copied_boundary_continuation_edges": copied_boundary_continuation_edges,
         "copied_boundary_continuation_connection_count": len(copied_boundary_continuation_connections),
@@ -5133,6 +5197,7 @@ def build_teacher_guided_junction_variant(
     raw_tllogic_file: Path | None = None,
     crossing_edge_overrides: dict[str, str | list[str]] | None = None,
     approach_endpoint_rebuild_plan: object | None = None,
+    source_conflict_core_node_ids: list[str] | None = None,
     replay_target_internal_subgraph: bool = False,
     preserve_teacher_lane_shapes: bool = True,
     emit_teacher_crossings: bool = True,
@@ -5170,7 +5235,17 @@ def build_teacher_guided_junction_variant(
     output_dir.mkdir(parents=True, exist_ok=True)
     teacher_model = extract_teacher_junction_model(teacher_net_file, teacher_junction_id)
     candidate_model = extract_teacher_junction_model(candidate_net_file, junction_id)
-    joined_source_node_ids = _joined_source_node_ids(raw_node_file, junction_id)
+    inferred_joined_source_node_ids = _joined_source_node_ids(raw_node_file, junction_id)
+    joined_source_node_ids = (
+        {str(node_id) for node_id in source_conflict_core_node_ids if str(node_id)}
+        if source_conflict_core_node_ids is not None
+        else inferred_joined_source_node_ids
+    )
+    source_conflict_core_source = (
+        "declared_estimator_evidence"
+        if source_conflict_core_node_ids is not None
+        else "plain_join_definition"
+    )
 
     lane_shape_delta = _model_shape_delta(teacher_model, candidate_model)
     patched_node_file = _stage_file(output_dir, prefix, "nodes.nod.xml")
@@ -5285,10 +5360,12 @@ def build_teacher_guided_junction_variant(
             },
         )
 
-    non_target_internal_restore_report = _restore_non_target_internal_artifacts(
+    non_target_internal_restore_report = restore_off_scope_netconvert_artifacts(
         source_file=candidate_net_file,
         target_file=sidewalks_net_file,
-        exclude_junction_ids=internal_restore_exclude_junction_ids,
+        mutable_junction_ids=internal_restore_exclude_junction_ids,
+        mutable_edge_ids=set(edge_map.values()),
+        expand_mutable_edge_endpoints=False,
     )
     if non_target_internal_restore_report.get("status") != "pass":
         return _write_teacher_guided_report(
@@ -5446,10 +5523,12 @@ def build_teacher_guided_junction_variant(
         if target_internal_normalize_report.get("status") == "pass":
             shutil.copyfile(target_internal_normalized_net_file, target_internal_normalized_unrestored_net_file)
             target_internal_normalize_report["unrestored_net_file"] = str(target_internal_normalized_unrestored_net_file)
-            target_internal_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
+            target_internal_normalize_report["non_target_internal_restore"] = restore_off_scope_netconvert_artifacts(
                 source_file=target_internal_replay_file,
                 target_file=target_internal_normalized_net_file,
-                exclude_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_edge_ids=set(edge_map.values()),
+                expand_mutable_edge_endpoints=False,
             )
         if (
             target_internal_normalize_report.get("status") == "pass"
@@ -5531,10 +5610,12 @@ def build_teacher_guided_junction_variant(
             command_runner(teacher_guided_normalize_command, cwd=output_dir, timeout_seconds=timeout_seconds)
         )
         if teacher_guided_normalize_report.get("status") == "pass":
-            teacher_guided_normalize_report["non_target_internal_restore"] = _restore_non_target_internal_artifacts(
+            teacher_guided_normalize_report["non_target_internal_restore"] = restore_off_scope_netconvert_artifacts(
                 source_file=final_net_file,
                 target_file=teacher_guided_normalized_net_file,
-                exclude_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_junction_ids=internal_restore_exclude_junction_ids,
+                mutable_edge_ids=set(edge_map.values()),
+                expand_mutable_edge_endpoints=False,
             )
         if (
             teacher_guided_normalize_report.get("status") == "pass"
@@ -5639,11 +5720,13 @@ def build_teacher_guided_junction_variant(
         target_internal_pedestrian_ring=target_internal_pedestrian_ring_report,
         target_internal_vehicle_connection_attrs=target_internal_vehicle_attrs_report,
     )
+    teacher_tls_id = _model_tls_id(teacher_model, fallback=teacher_junction_id)
+    candidate_tls_id = _model_tls_id(final_model, fallback=junction_id)
     tls_movement_parity = compare_tls_movement_signatures(
         teacher_net_file,
         final_net_file,
-        teacher_junction_id,
-        junction_id,
+        teacher_tls_id,
+        candidate_tls_id,
         teacher_edge_map=comparison_edge_map,
         teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
         candidate_internal_scope_id=junction_id if replay_target_internal_subgraph else None,
@@ -5655,10 +5738,25 @@ def build_teacher_guided_junction_variant(
         junction_id,
         teacher_edge_map=comparison_edge_map,
     )
-    semantic_layer_gates = _semantic_layer_gates(semantic_gate, tls_movement_parity, pedestrian_crossing_parity)
+    approach_authority_policy = _hybrid_osm_approach_authority_policy(
+        semantic_gate,
+        replay_target_internal_subgraph=replay_target_internal_subgraph,
+        preserve_teacher_lane_shapes=preserve_teacher_lane_shapes,
+        edge_map=comparison_edge_map,
+        lane_patch=lane_patch_report,
+        target_internal_replay=target_internal_replay_gate_report,
+        tls_movement_parity=tls_movement_parity,
+        pedestrian_crossing_parity=pedestrian_crossing_parity,
+    )
+    effective_semantic_gate = approach_authority_policy["effective_semantic_gate"]
+    semantic_layer_gates = _semantic_layer_gates(
+        effective_semantic_gate,
+        tls_movement_parity,
+        pedestrian_crossing_parity,
+    )
     parity_gate_status = (
         "pass"
-        if semantic_gate["status"] == "pass"
+        if effective_semantic_gate["status"] == "pass"
         and tls_movement_parity["status"] == "pass"
         and pedestrian_crossing_parity["status"] == "pass"
         else "fail"
@@ -5671,6 +5769,8 @@ def build_teacher_guided_junction_variant(
             "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
             "parity_gate_status": parity_gate_status,
             "junction_id": junction_id,
+            "source_conflict_core_node_ids": sorted(joined_source_node_ids),
+            "source_conflict_core_source": source_conflict_core_source,
             "teacher_net_file": str(teacher_net_file),
             "candidate_net_file": str(candidate_net_file),
             "final_net_file": str(final_net_file),
@@ -5719,6 +5819,8 @@ def build_teacher_guided_junction_variant(
             "parity": parity,
             "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
             "semantic_replay_gate": semantic_gate,
+            "semantic_replay_effective_gate": effective_semantic_gate,
+            "approach_authority_policy": approach_authority_policy,
             "tls_movement_parity": tls_movement_parity,
             "pedestrian_crossing_parity": pedestrian_crossing_parity,
             "semantic_layer_gates": semantic_layer_gates,
@@ -8339,7 +8441,12 @@ def write_expanded_scope_plain_inputs(
                     "source": "teacher_guided_expanded_scope",
                     "candidate_id": _sumo_joined_cluster_id(group),
                     "decision": "join",
-                    "confidence": "reference_matched",
+                    # The expanded scope is not a radius guess: it is the
+                    # explicit, already selected teacher target for this
+                    # materialization.  Mark that narrow decision as confirmed
+                    # so the generic join writer does not downgrade it back to
+                    # <joinExclude>.
+                    "confidence": "target_evidence_confirmed",
                     "node_ids": group,
                     "reason": "teacher-guided expanded scope restores an explicit reference cluster",
                 }
@@ -11138,6 +11245,11 @@ def _restore_existing_edge_geometry(
             # evidence than geometry translated from an unrelated teacher
             # endpoint, and preserves the legacy marker-file behaviour.
             lane.set("shape", source_edge_shape)
+        restored_shape = lane.attrib.get("shape", "")
+        if restored_shape and "length" in lane.attrib:
+            rendered_length = _polyline_length(restored_shape)
+            if rendered_length is not None:
+                lane.set("length", f"{rendered_length:.2f}")
 
 
 def _blend_geometry_anchor_at_target(
@@ -11402,6 +11514,31 @@ def _restore_external_boundary_connections(
     preserved_existing: list[dict[str, str]] = []
     skipped: list[dict[str, str]] = []
 
+    source_connections = list(source_root.findall("connection"))
+    considered_connection_keys: set[tuple[tuple[str, str], ...]] = set()
+
+    def remote_connection_chain(seed: ET.Element) -> list[ET.Element]:
+        """Return a remote connection and its compiled internal continuations."""
+
+        chain: list[ET.Element] = []
+        queue = [seed]
+        queued_keys = {tuple(sorted(seed.attrib.items()))}
+        while queue:
+            connection = queue.pop(0)
+            chain.append(connection)
+            via_lane = connection.attrib.get("via", "")
+            if not via_lane:
+                continue
+            via_edge_id = via_lane.rsplit("_", 1)[0]
+            for continuation in source_connections:
+                if continuation.attrib.get("from", "") != via_edge_id:
+                    continue
+                key = tuple(sorted(continuation.attrib.items()))
+                if key not in queued_keys:
+                    queued_keys.add(key)
+                    queue.append(continuation)
+        return chain
+
     for boundary_edge_id in sorted(boundary_edge_ids):
         source_edge = source_edges.get(boundary_edge_id)
         if source_edge is None:
@@ -11419,30 +11556,34 @@ def _restore_external_boundary_connections(
         # At the remote junction an outgoing boundary is the source of the
         # continuation; an incoming boundary is its destination.
         boundary_attr = "from" if local_at_start else "to"
-        for connection in source_root.findall("connection"):
-            if connection.attrib.get(boundary_attr, "") != boundary_edge_id:
+        for seed_connection in source_connections:
+            if seed_connection.attrib.get(boundary_attr, "") != boundary_edge_id:
                 continue
-            record = dict(connection.attrib)
-            if (
-                connection.attrib.get("from", "") not in target_edge_ids
-                or connection.attrib.get("to", "") not in target_edge_ids
-            ):
-                skipped.append({**record, "reason": "missing_target_edge"})
-                continue
-            if not _connection_lane_indices_valid(connection, target_lane_counts):
-                skipped.append({**record, "reason": "invalid_target_lane_index"})
-                continue
-            via_lane = connection.attrib.get("via", "")
-            if via_lane and via_lane not in target_lane_ids:
-                skipped.append({**record, "reason": "missing_target_via_lane"})
-                continue
-            key = tuple(sorted(connection.attrib.items()))
-            if key in existing_keys:
-                preserved_existing.append(record)
-                continue
-            target_root.append(copy.deepcopy(connection))
-            existing_keys.add(key)
-            restored.append(record)
+            for connection in remote_connection_chain(seed_connection):
+                connection_key = tuple(sorted(connection.attrib.items()))
+                if connection_key in considered_connection_keys:
+                    continue
+                considered_connection_keys.add(connection_key)
+                record = dict(connection.attrib)
+                if (
+                    connection.attrib.get("from", "") not in target_edge_ids
+                    or connection.attrib.get("to", "") not in target_edge_ids
+                ):
+                    skipped.append({**record, "reason": "missing_target_edge"})
+                    continue
+                if not _connection_lane_indices_valid(connection, target_lane_counts):
+                    skipped.append({**record, "reason": "invalid_target_lane_index"})
+                    continue
+                via_lane = connection.attrib.get("via", "")
+                if via_lane and via_lane not in target_lane_ids:
+                    skipped.append({**record, "reason": "missing_target_via_lane"})
+                    continue
+                if connection_key in existing_keys:
+                    preserved_existing.append(record)
+                    continue
+                target_root.append(copy.deepcopy(connection))
+                existing_keys.add(connection_key)
+                restored.append(record)
 
     return {
         "status": "pass",
@@ -11479,6 +11620,7 @@ def _warp_anchor_shape_to_teacher_endpoint(
     anchor_x, anchor_y, _ = parsed[0 if target_at_start else -1]
     delta_x = desired_x - anchor_x
     delta_y = desired_y - anchor_y
+    displacement = math.hypot(delta_x, delta_y)
     cumulative = [0.0]
     for (left_x, left_y, _), (right_x, right_y, _) in zip(
         parsed,
@@ -11490,10 +11632,21 @@ def _warp_anchor_shape_to_teacher_endpoint(
     total = cumulative[-1]
     if total <= 1e-9:
         weights = [1.0 for _ in parsed]
-    elif target_at_start:
-        weights = [1.0 - distance / total for distance in cumulative]
     else:
-        weights = [distance / total for distance in cumulative]
+        # The teacher owns the local conflict core, not the complete OSM
+        # approach.  A full-edge linear warp can drag a lane across a nearby
+        # junction.  Taper the correction inside a bounded local splice and
+        # preserve the remote public-road geometry exactly.
+        blend_extent = min(total, max(15.0, displacement * 4.0))
+        distances_from_target = (
+            cumulative
+            if target_at_start
+            else [total - distance for distance in cumulative]
+        )
+        weights = []
+        for distance in distances_from_target:
+            linear_weight = max(0.0, 1.0 - distance / blend_extent)
+            weights.append(linear_weight * linear_weight * (3.0 - 2.0 * linear_weight))
 
     output = []
     for (x, y, extra), weight in zip(parsed, weights):
@@ -12114,7 +12267,7 @@ def _touches_other_internal_owner(connection: ET.Element, internal_prefix: str) 
 
 
 def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
-    return any(
+    changed = any(
         int(report.get(key, 0) or 0)
         for key in (
             "removed_non_target_internal_edge_count",
@@ -12127,6 +12280,14 @@ def _non_target_internal_restore_changed(report: dict[str, object]) -> bool:
             "restored_non_target_request_count",
         )
     )
+    if (
+        changed
+        or int(report.get("restored_external_lane_count", 0) or 0)
+        or int(report.get("restored_external_edge_centerline_count", 0) or 0)
+    ):
+        return True
+    internal_report = report.get("internal_artifact_restore")
+    return isinstance(internal_report, dict) and _non_target_internal_restore_changed(internal_report)
 
 
 def restore_off_scope_netconvert_artifacts(
@@ -12135,6 +12296,9 @@ def restore_off_scope_netconvert_artifacts(
     target_file: Path,
     mutable_junction_ids: set[str],
     mutable_edge_ids: set[str],
+    expand_mutable_edge_endpoints: bool = True,
+    junction_aliases: dict[str, str] | None = None,
+    declared_absorbed_edge_ids: set[str] | None = None,
 ) -> dict[str, object]:
     """Restore the network outside one explicitly mutable replay scope.
 
@@ -12144,7 +12308,12 @@ def restore_off_scope_netconvert_artifacts(
     traffic-light program, junction shape, and external-lane geometry from the
     immutable pre-normalization network.  Topology or lane-cardinality drift
     outside the declared scope is reported as a hard failure rather than being
-    silently repaired.
+    silently repaired.  ``junction_aliases`` is the narrow exception needed
+    after a declared SUMO junction join: a surviving public-road edge may keep
+    its source geometry while one endpoint changes from an absorbed member to
+    the joined cluster id.  When ``declared_absorbed_edge_ids`` is supplied,
+    only those source edges may disappear and each must collapse completely
+    inside one alias target.
     """
 
     if not source_file.exists():
@@ -12164,19 +12333,61 @@ def restore_off_scope_netconvert_artifacts(
         for edge in target_root.findall("edge")
         if edge.attrib.get("id") and not edge.attrib["id"].startswith(":")
     }
+    normalized_junction_aliases = {
+        str(source_id): str(target_id)
+        for source_id, target_id in (junction_aliases or {}).items()
+        if str(source_id) and str(target_id) and str(source_id) != str(target_id)
+    }
+    source_junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id", "") and not junction.attrib.get("id", "").startswith(":")
+    }
+    target_junction_ids = {
+        junction.attrib.get("id", "")
+        for junction in target_root.findall("junction")
+        if junction.attrib.get("id", "") and not junction.attrib.get("id", "").startswith(":")
+    }
+    invalid_aliases = [
+        {
+            "source_junction_id": source_id,
+            "target_junction_id": target_id,
+            "source_exists": source_id in source_junction_ids,
+            "target_exists": target_id in target_junction_ids,
+        }
+        for source_id, target_id in sorted(normalized_junction_aliases.items())
+        if source_id not in source_junction_ids or target_id not in target_junction_ids
+    ]
+    if invalid_aliases:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "junction_alias_validation_failed",
+            "source_file": str(source_file),
+            "target_file": str(target_file),
+            "invalid_junction_aliases": invalid_aliases,
+        }
+    expected_absorbed_edge_ids = (
+        {str(edge_id) for edge_id in declared_absorbed_edge_ids if str(edge_id)}
+        if declared_absorbed_edge_ids is not None
+        else None
+    )
     effective_mutable_junction_ids = {
         str(value) for value in mutable_junction_ids if str(value)
     }
+    effective_mutable_junction_ids.update(normalized_junction_aliases)
+    effective_mutable_junction_ids.update(normalized_junction_aliases.values())
     effective_mutable_edge_ids = {str(value) for value in mutable_edge_ids if str(value)}
-    for edge_id in sorted(effective_mutable_edge_ids):
-        for edge in (source_edges.get(edge_id), target_edges.get(edge_id)):
-            if edge is None:
-                continue
-            effective_mutable_junction_ids.update(
-                value
-                for value in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
-                if value
-            )
+    if expand_mutable_edge_endpoints:
+        for edge_id in sorted(effective_mutable_edge_ids):
+            for edge in (source_edges.get(edge_id), target_edges.get(edge_id)):
+                if edge is None:
+                    continue
+                effective_mutable_junction_ids.update(
+                    value
+                    for value in (edge.attrib.get("from", ""), edge.attrib.get("to", ""))
+                    if value
+                )
 
     internal_report = _restore_non_target_internal_artifacts(
         source_file=source_file,
@@ -12202,7 +12413,9 @@ def restore_off_scope_netconvert_artifacts(
     }
     failures: list[dict[str, object]] = []
     authorized_absorbed_edge_ids: list[str] = []
+    restored_join_boundary_edge_ids: list[str] = []
     restored_edge_ids: list[str] = []
+    restored_edge_centerline_ids: list[str] = []
     restored_lane_count = 0
     for edge_id, source_edge in sorted(source_edges.items()):
         if edge_id in effective_mutable_edge_ids:
@@ -12212,20 +12425,49 @@ def restore_off_scope_netconvert_artifacts(
             source_edge.attrib.get("from", ""),
             source_edge.attrib.get("to", ""),
         )
+        aliased_source_endpoints = tuple(
+            normalized_junction_aliases.get(endpoint, endpoint)
+            for endpoint in source_endpoints
+        )
         if target_edge is None:
-            if all(
-                endpoint and endpoint in effective_mutable_junction_ids
-                for endpoint in source_endpoints
-            ):
+            if expected_absorbed_edge_ids is not None:
+                authorized = (
+                    edge_id in expected_absorbed_edge_ids
+                    and aliased_source_endpoints[0]
+                    and aliased_source_endpoints[0] == aliased_source_endpoints[1]
+                )
+            else:
+                authorized = all(
+                    endpoint and endpoint in effective_mutable_junction_ids
+                    for endpoint in source_endpoints
+                )
+            if authorized:
                 authorized_absorbed_edge_ids.append(edge_id)
             else:
-                failures.append({"edge_id": edge_id, "reason": "off_scope_edge_missing"})
+                failures.append(
+                    {
+                        "edge_id": edge_id,
+                        "reason": "off_scope_edge_missing",
+                        "source_endpoints": source_endpoints,
+                        "aliased_source_endpoints": aliased_source_endpoints,
+                        "declared_absorbed": (
+                            edge_id in expected_absorbed_edge_ids
+                            if expected_absorbed_edge_ids is not None
+                            else None
+                        ),
+                    }
+                )
             continue
         target_endpoints = (
             target_edge.attrib.get("from", ""),
             target_edge.attrib.get("to", ""),
         )
-        if source_endpoints != target_endpoints:
+        join_boundary_endpoint_change = (
+            source_endpoints != target_endpoints
+            and bool(normalized_junction_aliases)
+            and aliased_source_endpoints == target_endpoints
+        )
+        if source_endpoints != target_endpoints and not join_boundary_endpoint_change:
             failures.append(
                 {
                     "edge_id": edge_id,
@@ -12235,6 +12477,8 @@ def restore_off_scope_netconvert_artifacts(
                 }
             )
             continue
+        if join_boundary_endpoint_change:
+            restored_join_boundary_edge_ids.append(edge_id)
         source_lanes = {
             lane.attrib.get("index", ""): lane for lane in source_edge.findall("lane")
         }
@@ -12251,23 +12495,46 @@ def restore_off_scope_netconvert_artifacts(
                 }
             )
             continue
+        before_edge_shape = target_edge.attrib.get("shape")
+        before_lanes = {
+            lane_index: {
+                attr: target_lane.attrib.get(attr)
+                for attr in GEOMETRY_RESTORE_LANE_ATTRS
+            }
+            for lane_index, target_lane in target_lanes.items()
+        }
+        _restore_existing_edge_geometry(target_edge, source_edge, target_root)
+        if before_edge_shape != target_edge.attrib.get("shape"):
+            restored_edge_centerline_ids.append(edge_id)
         edge_changed = False
         for lane_index, source_lane in source_lanes.items():
             target_lane = target_lanes[lane_index]
-            before = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
             for attr in GEOMETRY_RESTORE_LANE_ATTRS:
                 if attr in source_lane.attrib:
                     target_lane.set(attr, source_lane.attrib[attr])
                 else:
                     target_lane.attrib.pop(attr, None)
             after = {attr: target_lane.attrib.get(attr) for attr in GEOMETRY_RESTORE_LANE_ATTRS}
-            if before != after:
+            if before_lanes[lane_index] != after:
                 edge_changed = True
                 restored_lane_count += 1
         if edge_changed:
             restored_edge_ids.append(edge_id)
 
-    if restored_lane_count:
+    undeleted_declared_absorbed_edge_ids: list[str] = []
+    if expected_absorbed_edge_ids is not None:
+        undeleted_declared_absorbed_edge_ids = sorted(
+            expected_absorbed_edge_ids - set(authorized_absorbed_edge_ids)
+        )
+        failures.extend(
+            {
+                "edge_id": edge_id,
+                "reason": "declared_absorbed_edge_not_absorbed",
+            }
+            for edge_id in undeleted_declared_absorbed_edge_ids
+        )
+
+    if restored_lane_count or restored_edge_centerline_ids:
         ET.indent(target_root, space="    ")
         target_tree.write(target_file, encoding="utf-8", xml_declaration=True)
 
@@ -12290,14 +12557,1024 @@ def restore_off_scope_netconvert_artifacts(
         "target_file": str(target_file),
         "mutable_junction_ids": sorted(effective_mutable_junction_ids),
         "mutable_edge_ids": sorted(effective_mutable_edge_ids),
+        "junction_aliases": dict(sorted(normalized_junction_aliases.items())),
+        "declared_absorbed_edge_ids": (
+            sorted(expected_absorbed_edge_ids)
+            if expected_absorbed_edge_ids is not None
+            else None
+        ),
+        "expanded_mutable_edge_endpoints": expand_mutable_edge_endpoints,
         "authorized_absorbed_external_edge_ids": authorized_absorbed_edge_ids,
+        "undeleted_declared_absorbed_edge_ids": undeleted_declared_absorbed_edge_ids,
+        "restored_join_boundary_edge_count": len(restored_join_boundary_edge_ids),
+        "restored_join_boundary_edge_ids": restored_join_boundary_edge_ids,
         "restored_external_edge_count": len(restored_edge_ids),
         "restored_external_edge_ids": restored_edge_ids,
+        "restored_external_edge_centerline_count": len(restored_edge_centerline_ids),
+        "restored_external_edge_centerline_ids": restored_edge_centerline_ids,
         "restored_external_lane_count": restored_lane_count,
         "failure_count": len(failures) + sum(internal_failures.values()),
         "failures": failures,
         "internal_failure_counts": internal_failures,
         "internal_artifact_restore": internal_report,
+    }
+
+
+def write_reanchored_normal_junction_movements(
+    *,
+    source_net_file: Path,
+    candidate_net_file: Path,
+    output_file: Path,
+    junction_id: str,
+    declared_added_movement_shapes: dict[tuple[str, str, str, str], str],
+) -> dict[str, object]:
+    """Reanchor one normal junction's internal movement lanes, and nothing else.
+
+    The candidate may add only the explicitly declared external movements.  An
+    existing movement reuses its accepted source via-lane geometry; a declared
+    movement uses the supplied endpoint-bound polyline.  This helper is meant
+    to run after global ``netconvert`` geometry has already been restored.
+    """
+
+    missing = [str(path) for path in (source_net_file, candidate_net_file) if not path.exists()]
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+    junction_id = str(junction_id).strip()
+    if not junction_id or junction_id.startswith(":"):
+        return _failure("one normal junction id is required")
+    if not declared_added_movement_shapes:
+        return _failure("at least one declared added movement shape is required")
+
+    source_net_file = source_net_file.resolve()
+    candidate_net_file = candidate_net_file.resolve()
+    output_file = output_file.resolve()
+    if output_file in {source_net_file, candidate_net_file}:
+        return _failure("output file must differ from source and candidate inputs")
+
+    source_sha256 = hashlib.sha256(source_net_file.read_bytes()).hexdigest()
+    candidate_sha256 = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    source_root = ET.parse(source_net_file).getroot()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    internal_prefix = f":{junction_id}_"
+
+    def fail(reason: str, failures: list[dict[str, object]]) -> dict[str, object]:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": reason,
+            "source_net_file": str(source_net_file),
+            "source_sha256": source_sha256,
+            "candidate_net_file": str(candidate_net_file),
+            "candidate_sha256": candidate_sha256,
+            "output_file": str(output_file),
+            "junction_id": junction_id,
+            "failure_count": len(failures),
+            "failures": failures,
+        }
+
+    def strict_polyline(shape: str) -> tuple[list[tuple[float, ...]], float] | None:
+        points: list[tuple[float, ...]] = []
+        try:
+            for token in shape.split():
+                coordinates = tuple(float(value) for value in token.split(","))
+                if len(coordinates) not in {2, 3} or not all(math.isfinite(value) for value in coordinates):
+                    return None
+                points.append(coordinates)
+        except ValueError:
+            return None
+        if len(points) < 2 or any(len(point) != len(points[0]) for point in points):
+            return None
+        length = sum(math.dist(left, right) for left, right in zip(points, points[1:]))
+        return (points, length) if math.isfinite(length) and length > 0 else None
+
+    def external_connections(root: ET.Element) -> dict[tuple[str, str, str, str], list[ET.Element]]:
+        grouped: dict[tuple[str, str, str, str], list[ET.Element]] = {}
+        for connection in root.findall("connection"):
+            if connection.attrib.get("from", "").startswith(":") or connection.attrib.get("to", "").startswith(":"):
+                continue
+            grouped.setdefault(_connection_key(connection), []).append(connection)
+        return grouped
+
+    def lane_index(root: ET.Element) -> dict[str, list[ET.Element]]:
+        indexed: dict[str, list[ET.Element]] = {}
+        for lane in root.findall("edge/lane"):
+            lane_id = lane.attrib.get("id", "")
+            if lane_id:
+                indexed.setdefault(lane_id, []).append(lane)
+        return indexed
+
+    def external_lane(root: ET.Element, edge_id: str, lane_index_value: str) -> ET.Element | None:
+        edge = root.find(f"edge[@id='{edge_id}']")
+        if edge is None or edge_id.startswith(":"):
+            return None
+        lanes = [lane for lane in edge.findall("lane") if lane.attrib.get("index", "0") == lane_index_value]
+        return lanes[0] if len(lanes) == 1 else None
+
+    def invariant_hashes(root: ET.Element) -> dict[str, str]:
+        external_edges = [
+            _xml_element_semantic_payload(edge)
+            for edge in root.findall("edge")
+            if not edge.attrib.get("id", "").startswith(":")
+        ]
+        connections = [_xml_element_semantic_payload(connection) for connection in root.findall("connection")]
+        tls = [_xml_element_semantic_payload(logic) for logic in root.findall("tlLogic")]
+        requests = [
+            {
+                "junction_id": junction.attrib.get("id", ""),
+                "intLanes": junction.attrib.get("intLanes", ""),
+                "requests": [_xml_element_semantic_payload(request) for request in junction.findall("request")],
+            }
+            for junction in root.findall("junction")
+            if not junction.attrib.get("id", "").startswith(":")
+        ]
+
+        def digest(payload: object) -> str:
+            encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            return hashlib.sha256(encoded).hexdigest()
+
+        return {
+            "external_lanes_sha256": digest(external_edges),
+            "connections_sha256": digest(connections),
+            "tls_sha256": digest(tls),
+            "request_matrix_sha256": digest(requests),
+        }
+
+    failures: list[dict[str, object]] = []
+    source_junctions = source_root.findall(f"junction[@id='{junction_id}']")
+    candidate_junctions = candidate_root.findall(f"junction[@id='{junction_id}']")
+    if len(source_junctions) != 1 or len(candidate_junctions) != 1:
+        failures.append(
+            {
+                "reason": "target_normal_junction_not_unique",
+                "source_count": len(source_junctions),
+                "candidate_count": len(candidate_junctions),
+            }
+        )
+        return fail("target junction validation failed", failures)
+    source_junction = source_junctions[0]
+    candidate_junction = candidate_junctions[0]
+    if source_junction.attrib.get("shape", "") != candidate_junction.attrib.get("shape", ""):
+        failures.append(
+            {
+                "reason": "target_junction_shape_changed",
+                "source_shape": source_junction.attrib.get("shape", ""),
+                "candidate_shape": candidate_junction.attrib.get("shape", ""),
+            }
+        )
+
+    declared_shapes: dict[tuple[str, str, str, str], str] = {}
+    for raw_key, raw_shape in declared_added_movement_shapes.items():
+        if not isinstance(raw_key, tuple) or len(raw_key) != 4:
+            failures.append({"reason": "declared_movement_key_invalid", "key": repr(raw_key)})
+            continue
+        key = tuple(str(value) for value in raw_key)
+        if not key[0] or not key[1] or not key[2] or not key[3]:
+            failures.append({"reason": "declared_movement_key_has_empty_value", "key": _connection_key_record(key)})
+            continue
+        shape = str(raw_shape).strip()
+        if key in declared_shapes:
+            failures.append({"reason": "declared_movement_key_duplicate", "key": _connection_key_record(key)})
+            continue
+        declared_shapes[key] = shape
+
+    source_connections = external_connections(source_root)
+    candidate_connections = external_connections(candidate_root)
+    duplicate_source_keys = sorted(key for key, values in source_connections.items() if len(values) != 1)
+    duplicate_candidate_keys = sorted(key for key, values in candidate_connections.items() if len(values) != 1)
+    if duplicate_source_keys or duplicate_candidate_keys:
+        failures.append(
+            {
+                "reason": "external_movement_key_not_unique",
+                "source_keys": [_connection_key_record(key) for key in duplicate_source_keys],
+                "candidate_keys": [_connection_key_record(key) for key in duplicate_candidate_keys],
+            }
+        )
+    source_keys = set(source_connections)
+    candidate_keys = set(candidate_connections)
+    declared_keys = set(declared_shapes)
+    added_keys = candidate_keys - source_keys
+    removed_keys = source_keys - candidate_keys
+    if added_keys != declared_keys or removed_keys:
+        failures.append(
+            {
+                "reason": "external_movement_delta_not_declared",
+                "declared_additions": [_connection_key_record(key) for key in sorted(declared_keys)],
+                "actual_additions": [_connection_key_record(key) for key in sorted(added_keys)],
+                "actual_removals": [_connection_key_record(key) for key in sorted(removed_keys)],
+            }
+        )
+
+    source_lane_index = lane_index(source_root)
+    candidate_lane_index = lane_index(candidate_root)
+
+    def target_via_lane(
+        connection: ET.Element,
+        lanes: dict[str, list[ET.Element]],
+        *,
+        key: tuple[str, str, str, str],
+        side: str,
+    ) -> ET.Element | None:
+        via_lane_id = connection.attrib.get("via", "")
+        matches = lanes.get(via_lane_id, []) if via_lane_id.startswith(internal_prefix) else []
+        if len(matches) != 1:
+            failures.append(
+                {
+                    "reason": "target_owned_via_lane_not_unique",
+                    "side": side,
+                    "key": _connection_key_record(key),
+                    "via_lane_id": via_lane_id,
+                    "lane_count": len(matches),
+                }
+            )
+            return None
+        return matches[0]
+
+    source_target_keys = {
+        key
+        for key, values in source_connections.items()
+        if len(values) == 1 and values[0].attrib.get("via", "").startswith(internal_prefix)
+    }
+    candidate_target_keys = {
+        key
+        for key, values in candidate_connections.items()
+        if len(values) == 1 and values[0].attrib.get("via", "").startswith(internal_prefix)
+    }
+    if candidate_target_keys != source_target_keys | declared_keys:
+        failures.append(
+            {
+                "reason": "target_junction_movement_ownership_mismatch",
+                "source_keys": [_connection_key_record(key) for key in sorted(source_target_keys)],
+                "candidate_keys": [_connection_key_record(key) for key in sorted(candidate_target_keys)],
+                "declared_additions": [_connection_key_record(key) for key in sorted(declared_keys)],
+            }
+        )
+
+    lane_updates: list[tuple[ET.Element, dict[str, str], dict[str, object]]] = []
+    target_via_ids: set[str] = set()
+    for key in sorted(source_target_keys):
+        if len(source_connections.get(key, [])) != 1 or len(candidate_connections.get(key, [])) != 1:
+            continue
+        source_lane = target_via_lane(source_connections[key][0], source_lane_index, key=key, side="source")
+        candidate_lane = target_via_lane(candidate_connections[key][0], candidate_lane_index, key=key, side="candidate")
+        if source_lane is None or candidate_lane is None:
+            continue
+        via_lane_id = candidate_connections[key][0].attrib.get("via", "")
+        if via_lane_id in target_via_ids:
+            failures.append(
+                {
+                    "reason": "candidate_via_lane_reused_by_multiple_movements",
+                    "key": _connection_key_record(key),
+                    "via_lane_id": via_lane_id,
+                }
+            )
+            continue
+        target_via_ids.add(via_lane_id)
+        attrs = {attr: source_lane.attrib.get(attr, "") for attr in ("speed", "length", "shape")}
+        parsed_shape = strict_polyline(attrs["shape"])
+        try:
+            valid_scalars = all(math.isfinite(float(attrs[attr])) and float(attrs[attr]) > 0 for attr in ("speed", "length"))
+        except ValueError:
+            valid_scalars = False
+        if parsed_shape is None or not valid_scalars:
+            failures.append(
+                {
+                    "reason": "accepted_source_via_lane_geometry_invalid",
+                    "key": _connection_key_record(key),
+                    "via_lane_id": source_connections[key][0].attrib.get("via", ""),
+                }
+            )
+            continue
+        lane_updates.append(
+            (
+                candidate_lane,
+                attrs,
+                {
+                    "kind": "existing",
+                    "key": _connection_key_record(key),
+                    "source_via_lane_id": source_connections[key][0].attrib.get("via", ""),
+                    "candidate_via_lane_id": via_lane_id,
+                },
+            )
+        )
+
+    for key in sorted(declared_keys):
+        if len(candidate_connections.get(key, [])) != 1:
+            continue
+        connection = candidate_connections[key][0]
+        candidate_lane = target_via_lane(connection, candidate_lane_index, key=key, side="candidate")
+        if candidate_lane is None:
+            continue
+        via_lane_id = connection.attrib.get("via", "")
+        if via_lane_id in target_via_ids:
+            failures.append(
+                {
+                    "reason": "candidate_via_lane_reused_by_multiple_movements",
+                    "key": _connection_key_record(key),
+                    "via_lane_id": via_lane_id,
+                }
+            )
+            continue
+        target_via_ids.add(via_lane_id)
+        parsed = strict_polyline(declared_shapes[key])
+        from_lane = external_lane(candidate_root, key[0], key[2])
+        to_lane = external_lane(candidate_root, key[1], key[3])
+        from_shape = strict_polyline(from_lane.attrib.get("shape", "")) if from_lane is not None else None
+        to_shape = strict_polyline(to_lane.attrib.get("shape", "")) if to_lane is not None else None
+        if parsed is None or from_shape is None or to_shape is None:
+            failures.append(
+                {
+                    "reason": "declared_movement_or_external_lane_shape_invalid",
+                    "key": _connection_key_record(key),
+                }
+            )
+            continue
+        points, length = parsed
+        expected_start = from_shape[0][-1]
+        expected_end = to_shape[0][0]
+        if points[0] != expected_start or points[-1] != expected_end:
+            failures.append(
+                {
+                    "reason": "declared_movement_shape_endpoint_mismatch",
+                    "key": _connection_key_record(key),
+                    "provided_start": list(points[0]),
+                    "expected_start": list(expected_start),
+                    "provided_end": list(points[-1]),
+                    "expected_end": list(expected_end),
+                }
+            )
+            continue
+        lane_updates.append(
+            (
+                candidate_lane,
+                {"shape": declared_shapes[key], "length": f"{length:.12g}"},
+                {
+                    "kind": "added",
+                    "key": _connection_key_record(key),
+                    "candidate_via_lane_id": via_lane_id,
+                    "polyline_length": length,
+                },
+            )
+        )
+
+    if failures:
+        return fail("scoped internal movement validation failed", failures)
+
+    invariants_before = invariant_hashes(candidate_root)
+    mutations: list[dict[str, object]] = []
+    for lane, attrs, record in lane_updates:
+        before = {attr: lane.attrib.get(attr) for attr in attrs}
+        for attr, value in attrs.items():
+            lane.set(attr, value)
+        mutations.append({**record, "before": before, "after": attrs})
+    candidate_junction.set("shape", source_junction.attrib.get("shape", ""))
+    if "customShape" in source_junction.attrib:
+        candidate_junction.set("customShape", source_junction.attrib["customShape"])
+    else:
+        candidate_junction.attrib.pop("customShape", None)
+
+    invariants_after = invariant_hashes(candidate_root)
+    changed_invariants = sorted(
+        key for key, before in invariants_before.items() if invariants_after.get(key) != before
+    )
+    if changed_invariants:
+        return fail(
+            "scoped internal movement repair changed immutable network semantics",
+            [{"reason": "immutable_semantic_hash_changed", "fields": changed_invariants}],
+        )
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    source_sha256_after = hashlib.sha256(source_net_file.read_bytes()).hexdigest()
+    candidate_sha256_after = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    source_mutated = source_sha256_after != source_sha256
+    candidate_mutated = candidate_sha256_after != candidate_sha256
+    status = "pass" if not source_mutated and not candidate_mutated else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "promotion_status": "review_required",
+        "source_net_file": str(source_net_file),
+        "source_sha256": source_sha256,
+        "source_sha256_after": source_sha256_after,
+        "source_network_mutation": source_mutated,
+        "candidate_net_file": str(candidate_net_file),
+        "candidate_sha256": candidate_sha256,
+        "candidate_sha256_after": candidate_sha256_after,
+        "candidate_network_mutation": candidate_mutated,
+        "output_file": str(output_file),
+        "output_sha256": hashlib.sha256(output_file.read_bytes()).hexdigest(),
+        "junction_id": junction_id,
+        "declared_added_movement_count": len(declared_keys),
+        "reanchored_existing_movement_count": len(source_target_keys),
+        "reanchored_added_movement_count": len(declared_keys),
+        "mutation_count": len(mutations),
+        "mutations": mutations,
+        "junction_shape": source_junction.attrib.get("shape", ""),
+        "junction_custom_shape": source_junction.attrib.get("customShape"),
+        "immutable_hashes_before": invariants_before,
+        "immutable_hashes_after": invariants_after,
+        "failure_count": 0,
+        "failures": [],
+        "policy": (
+            "reanchor only the target normal junction's uniquely owned internal movement lanes; "
+            "preserve external lanes, connections, TLS, and request matrices"
+        ),
+    }
+
+
+def write_authorized_lane_transition_junction_shapes(
+    *,
+    candidate_net_file: Path,
+    output_file: Path,
+    junction_ids: set[str],
+    evidence_net_file: Path | None = None,
+    excluded_branch_edge_ids_by_junction: dict[str, list[str]] | None = None,
+) -> dict[str, object]:
+    """Tighten only evidence-authorized linear lane-transition junctions.
+
+    A human-cleaned network normally keeps a real lane-drop or lane-gain node
+    separate from the upstream conflict core.  The node polygon can still be
+    over-wide after OSM import, so this controller replaces only its ``shape``
+    with the convex hull of the adjacent lane endpoints.  Edge geometry,
+    lane cardinality, connections, via lanes, and TLS programs are immutable.
+
+    ``evidence_net_file`` should be the pre-rebuild OSM/SUMO baseline.  It is
+    used to prove that the selected cell was already a one-in/one-out straight
+    road transition before a teacher replay changed boundary edge metadata.
+    Selection remains explicit: this writer never scans the whole network and
+    never applies SUMO's global ``--junctions.minimal-shape`` option.
+    """
+
+    missing = [
+        str(path)
+        for path in (candidate_net_file, evidence_net_file)
+        if path is not None and not path.exists()
+    ]
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+    if not junction_ids:
+        return _failure("at least one evidence-authorized junction id is required")
+
+    candidate_net_file = candidate_net_file.resolve()
+    output_file = output_file.resolve()
+    evidence_net_file = evidence_net_file.resolve() if evidence_net_file is not None else candidate_net_file
+    source_sha256 = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    evidence_root = ET.parse(evidence_net_file).getroot()
+    excluded_branch_edge_ids_by_junction = excluded_branch_edge_ids_by_junction or {}
+
+    topology_before = _junction_shape_repair_topology_sha256(candidate_root)
+    repairs: list[dict[str, object]] = []
+    failures: list[dict[str, object]] = []
+    all_edge_ids = {
+        edge.attrib.get("id", "")
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    for junction_id in sorted(str(value) for value in junction_ids if str(value)):
+        candidate_estimate = _estimate_linear_lane_transition_shape(candidate_root, junction_id)
+        evidence_estimate = _estimate_linear_lane_transition_shape(evidence_root, junction_id)
+        excluded_branch_edge_ids = sorted(
+            {
+                str(value)
+                for value in excluded_branch_edge_ids_by_junction.get(junction_id, [])
+                if str(value)
+            }
+        )
+        present_excluded_branch_edge_ids = sorted(set(excluded_branch_edge_ids) & all_edge_ids)
+        if candidate_estimate.get("status") != "pass":
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "candidate_not_linear_lane_transition",
+                    "estimate": candidate_estimate,
+                }
+            )
+            continue
+        if evidence_estimate.get("status") != "pass":
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "evidence_not_linear_lane_transition",
+                    "estimate": evidence_estimate,
+                }
+            )
+            continue
+        candidate_edges = (
+            candidate_estimate.get("incoming_edge_id"),
+            candidate_estimate.get("outgoing_edge_id"),
+        )
+        evidence_edges = (
+            evidence_estimate.get("incoming_edge_id"),
+            evidence_estimate.get("outgoing_edge_id"),
+        )
+        if candidate_edges != evidence_edges:
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "candidate_evidence_boundary_edge_mismatch",
+                    "candidate_edges": candidate_edges,
+                    "evidence_edges": evidence_edges,
+                }
+            )
+            continue
+        if present_excluded_branch_edge_ids:
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "declared_excluded_branch_is_present_in_candidate",
+                    "edge_ids": present_excluded_branch_edge_ids,
+                }
+            )
+            continue
+
+        junction = candidate_root.find(f"junction[@id='{junction_id}']")
+        if junction is None:  # defensive; the estimator already checks this
+            failures.append({"junction_id": junction_id, "reason": "junction_not_found"})
+            continue
+        old_shape = junction.attrib.get("shape", "")
+        new_shape = str(candidate_estimate["estimated_shape"])
+        junction.set("shape", new_shape)
+        junction.set("customShape", "true")
+        repairs.append(
+            {
+                "junction_id": junction_id,
+                "old_shape": old_shape,
+                "new_shape": new_shape,
+                "polygon_area_m2": candidate_estimate["polygon_area_m2"],
+                "incoming_edge_id": candidate_estimate["incoming_edge_id"],
+                "outgoing_edge_id": candidate_estimate["outgoing_edge_id"],
+                "incoming_lane_count": candidate_estimate["incoming_lane_count"],
+                "outgoing_lane_count": candidate_estimate["outgoing_lane_count"],
+                "straight_connection_signatures": candidate_estimate["straight_connection_signatures"],
+                "evidence_road_identity": evidence_estimate["road_identity"],
+                "declared_excluded_branch_edge_ids": excluded_branch_edge_ids,
+            }
+        )
+
+    if failures:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "candidate_net_file": str(candidate_net_file),
+            "evidence_net_file": str(evidence_net_file),
+            "output_file": str(output_file),
+            "requested_junction_ids": sorted(junction_ids),
+            "repair_count": len(repairs),
+            "failure_count": len(failures),
+            "failures": failures,
+            "policy": "fail closed; no output written when any selected transition lacks evidence",
+        }
+
+    topology_after = _junction_shape_repair_topology_sha256(candidate_root)
+    if topology_before != topology_after:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "junction_shape_repair_changed_network_topology",
+            "topology_sha256_before": topology_before,
+            "topology_sha256_after": topology_after,
+        }
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    source_sha256_after = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    status = "pass" if source_sha256_after == source_sha256 else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "candidate_net_file": str(candidate_net_file),
+        "candidate_sha256": source_sha256,
+        "candidate_sha256_after": source_sha256_after,
+        "source_network_mutation": source_sha256_after != source_sha256,
+        "evidence_net_file": str(evidence_net_file),
+        "output_file": str(output_file),
+        "output_sha256": hashlib.sha256(output_file.read_bytes()).hexdigest(),
+        "topology_sha256_before": topology_before,
+        "topology_sha256_after": topology_after,
+        "repair_count": len(repairs),
+        "repairs": repairs,
+        "failure_count": 0,
+        "failures": [],
+        "policy": (
+            "Ingolstadt-style boundary repair: retain the linear lane transition and all movements; "
+            "replace only the authorized junction polygon with the adjacent-lane endpoint hull"
+        ),
+    }
+
+
+def write_authorized_junction_shapes_from_reference(
+    *,
+    candidate_net_file: Path,
+    reference_net_file: Path,
+    output_file: Path,
+    junction_ids: set[str],
+) -> dict[str, object]:
+    """Copy only explicitly authorized junction polygons from a reference net.
+
+    The reference must describe the same external edges, lanes, movements,
+    junction owners, and TLS programs.  Geometry-only values that SUMO may
+    recalculate (lane ``shape``/``length``, junction ``shape``/``intLanes``,
+    connection ``via``/``state``) are deliberately excluded from that
+    reference identity check.  The output still preserves every candidate
+    edge, lane, connection, internal artifact, and TLS byte-for-byte at the
+    XML attribute level; only the selected normal junction ``shape`` and
+    ``customShape`` attributes may change.
+
+    This is a scoped controller primitive, not an automatic topology repair.
+    It never scans for targets and does not authorize joins or movements.
+    """
+
+    missing = [
+        str(path)
+        for path in (candidate_net_file, reference_net_file)
+        if not path.exists()
+    ]
+    if missing:
+        return _failure(f"missing input file(s): {', '.join(missing)}")
+    requested_junction_ids = sorted({str(value) for value in junction_ids if str(value)})
+    if not requested_junction_ids:
+        return _failure("at least one evidence-authorized junction id is required")
+    if any(junction_id.startswith(":") for junction_id in requested_junction_ids):
+        return _failure("internal junction ids are not valid shape-copy targets")
+
+    candidate_net_file = candidate_net_file.resolve()
+    reference_net_file = reference_net_file.resolve()
+    output_file = output_file.resolve()
+    if output_file in {candidate_net_file, reference_net_file}:
+        return _failure("output file must differ from candidate and reference inputs")
+    candidate_sha256 = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    reference_sha256 = hashlib.sha256(reference_net_file.read_bytes()).hexdigest()
+    candidate_tree = ET.parse(candidate_net_file)
+    candidate_root = candidate_tree.getroot()
+    reference_root = ET.parse(reference_net_file).getroot()
+
+    candidate_junctions = {
+        junction.attrib["id"]: junction
+        for junction in candidate_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    reference_junctions = {
+        junction.attrib["id"]: junction
+        for junction in reference_root.findall("junction")
+        if junction.attrib.get("id") and not junction.attrib["id"].startswith(":")
+    }
+    candidate_edge_lane_signature = edge_lane_signature(candidate_net_file)
+    reference_edge_lane_signature = edge_lane_signature(reference_net_file)
+    connection_audit = audit_alias_normalized_connections(
+        candidate_net_file,
+        reference_net_file,
+    )
+    candidate_tls_sha256 = _junction_shape_tls_sha256(candidate_root)
+    reference_tls_sha256 = _junction_shape_tls_sha256(reference_root)
+    reference_failures: list[dict[str, object]] = []
+    if candidate_edge_lane_signature != reference_edge_lane_signature:
+        reference_failures.append(
+            {
+                "reason": "external_edge_lane_signature_mismatch",
+                "candidate": candidate_edge_lane_signature,
+                "reference": reference_edge_lane_signature,
+            }
+        )
+    connection_failure_fields = (
+        "normal_missing_count",
+        "normal_extra_count",
+        "controlled_missing_count",
+        "controlled_extra_count",
+    )
+    if any(int(connection_audit.get(field, 0) or 0) for field in connection_failure_fields):
+        reference_failures.append(
+            {
+                "reason": "external_movement_signature_mismatch",
+                "connection_audit": connection_audit,
+            }
+        )
+    if candidate_tls_sha256 != reference_tls_sha256:
+        reference_failures.append(
+            {
+                "reason": "tls_program_signature_mismatch",
+                "candidate_tls_sha256": candidate_tls_sha256,
+                "reference_tls_sha256": reference_tls_sha256,
+            }
+        )
+    selected_junction_identity_attrs = ("id", "type", "x", "y", "tl", "incLanes")
+    for junction_id in requested_junction_ids:
+        candidate_junction = candidate_junctions.get(junction_id)
+        reference_junction = reference_junctions.get(junction_id)
+        if candidate_junction is None or reference_junction is None:
+            reference_failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "junction_missing_from_candidate_or_reference",
+                    "candidate_present": candidate_junction is not None,
+                    "reference_present": reference_junction is not None,
+                }
+            )
+            continue
+        candidate_identity = {
+            attr: candidate_junction.attrib.get(attr, "")
+            for attr in selected_junction_identity_attrs
+        }
+        reference_identity = {
+            attr: reference_junction.attrib.get(attr, "")
+            for attr in selected_junction_identity_attrs
+        }
+        if candidate_identity != reference_identity:
+            reference_failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "selected_junction_identity_mismatch",
+                    "candidate": candidate_identity,
+                    "reference": reference_identity,
+                }
+            )
+    if reference_failures:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "candidate_reference_topology_mismatch",
+            "candidate_net_file": str(candidate_net_file),
+            "candidate_sha256": candidate_sha256,
+            "reference_net_file": str(reference_net_file),
+            "reference_sha256": reference_sha256,
+            "output_file": str(output_file),
+            "candidate_edge_lane_signature": candidate_edge_lane_signature,
+            "reference_edge_lane_signature": reference_edge_lane_signature,
+            "connection_audit": connection_audit,
+            "candidate_tls_sha256": candidate_tls_sha256,
+            "reference_tls_sha256": reference_tls_sha256,
+            "reference_failure_count": len(reference_failures),
+            "reference_failures": reference_failures,
+            "policy": "fail closed; reference geometry must come from the same external topology",
+        }
+
+    failures: list[dict[str, object]] = []
+    repairs: list[dict[str, object]] = []
+    topology_before = _junction_shape_repair_topology_sha256(candidate_root)
+    for junction_id in requested_junction_ids:
+        candidate_junction = candidate_junctions.get(junction_id)
+        reference_junction = reference_junctions.get(junction_id)
+        if candidate_junction is None or reference_junction is None:  # proven above
+            raise AssertionError("selected junction identity validation was bypassed")
+        reference_shape = str(reference_junction.attrib.get("shape", "")).strip()
+        reference_points = _shape_points(reference_shape)
+        if len(set(reference_points)) < 2 or any(
+            not math.isfinite(value) for point in reference_points for value in point
+        ):
+            failures.append(
+                {
+                    "junction_id": junction_id,
+                    "reason": "reference_junction_shape_has_fewer_than_two_points",
+                    "reference_shape": reference_shape,
+                }
+            )
+            continue
+        old_shape = str(candidate_junction.attrib.get("shape", ""))
+        old_custom_shape = candidate_junction.attrib.get("customShape")
+        candidate_junction.set("shape", reference_shape)
+        candidate_junction.set("customShape", "true")
+        repairs.append(
+            {
+                "junction_id": junction_id,
+                "old_shape": old_shape,
+                "new_shape": reference_shape,
+                "old_custom_shape": old_custom_shape,
+                "new_custom_shape": "true",
+            }
+        )
+
+    if failures:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "candidate_net_file": str(candidate_net_file),
+            "reference_net_file": str(reference_net_file),
+            "output_file": str(output_file),
+            "requested_junction_ids": requested_junction_ids,
+            "repair_count": len(repairs),
+            "failure_count": len(failures),
+            "failures": failures,
+            "policy": "fail closed; no output written when any selected junction lacks a usable shape",
+        }
+
+    topology_after = _junction_shape_repair_topology_sha256(candidate_root)
+    if topology_before != topology_after:
+        return {
+            "status": "fail",
+            "claim_status": "construction-invalid",
+            "reason": "junction_shape_copy_changed_network_topology",
+            "topology_sha256_before": topology_before,
+            "topology_sha256_after": topology_after,
+        }
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ET.indent(candidate_root, space="    ")
+    candidate_tree.write(output_file, encoding="utf-8", xml_declaration=True)
+    candidate_sha256_after = hashlib.sha256(candidate_net_file.read_bytes()).hexdigest()
+    reference_sha256_after = hashlib.sha256(reference_net_file.read_bytes()).hexdigest()
+    source_network_mutation = (
+        candidate_sha256_after != candidate_sha256 or reference_sha256_after != reference_sha256
+    )
+    status = "pass" if not source_network_mutation else "fail"
+    return {
+        "status": status,
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "promotion_status": "review_required",
+        "candidate_net_file": str(candidate_net_file),
+        "candidate_sha256": candidate_sha256,
+        "candidate_sha256_after": candidate_sha256_after,
+        "reference_net_file": str(reference_net_file),
+        "reference_sha256": reference_sha256,
+        "reference_sha256_after": reference_sha256_after,
+        "source_network_mutation": source_network_mutation,
+        "output_file": str(output_file),
+        "output_sha256": hashlib.sha256(output_file.read_bytes()).hexdigest(),
+        "requested_junction_ids": requested_junction_ids,
+        "candidate_edge_lane_signature": candidate_edge_lane_signature,
+        "reference_edge_lane_signature": reference_edge_lane_signature,
+        "connection_audit": connection_audit,
+        "candidate_tls_sha256": candidate_tls_sha256,
+        "reference_tls_sha256": reference_tls_sha256,
+        "topology_sha256_before": topology_before,
+        "topology_sha256_after": topology_after,
+        "repair_count": len(repairs),
+        "repairs": repairs,
+        "failure_count": 0,
+        "failures": [],
+        "policy": (
+            "copy only explicitly authorized normal-junction shapes from a hash-bound "
+            "same-topology reference; preserve every candidate edge, lane, movement, and TLS"
+        ),
+    }
+
+
+def _estimate_linear_lane_transition_shape(root: ET.Element, junction_id: str) -> dict[str, object]:
+    junction = root.find(f"junction[@id='{junction_id}']")
+    if junction is None:
+        return {"status": "fail", "reason": "junction_not_found"}
+    junction_type = junction.attrib.get("type", "")
+    if junction_type.startswith("traffic_light") or junction.attrib.get("tl"):
+        return {"status": "fail", "reason": "junction_is_signal_controlled", "junction_type": junction_type}
+
+    external_edges = [
+        edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+        and edge.attrib.get("function") not in {"internal", "crossing", "walkingarea"}
+        and junction_id in (edge.attrib.get("from"), edge.attrib.get("to"))
+        and _edge_is_vehicle_continuation_candidate(edge)
+    ]
+    incoming = [edge for edge in external_edges if edge.attrib.get("to") == junction_id]
+    outgoing = [edge for edge in external_edges if edge.attrib.get("from") == junction_id]
+    if len(incoming) != 1 or len(outgoing) != 1:
+        return {
+            "status": "fail",
+            "reason": "transition_requires_one_vehicle_incoming_and_one_vehicle_outgoing_edge",
+            "incoming_edge_ids": sorted(edge.attrib.get("id", "") for edge in incoming),
+            "outgoing_edge_ids": sorted(edge.attrib.get("id", "") for edge in outgoing),
+        }
+    incoming_edge = incoming[0]
+    outgoing_edge = outgoing[0]
+    incoming_lanes = incoming_edge.findall("lane")
+    outgoing_lanes = outgoing_edge.findall("lane")
+    if not incoming_lanes or not outgoing_lanes or len(incoming_lanes) == len(outgoing_lanes):
+        return {
+            "status": "fail",
+            "reason": "transition_requires_nonzero_lane_count_change",
+            "incoming_lane_count": len(incoming_lanes),
+            "outgoing_lane_count": len(outgoing_lanes),
+        }
+
+    incoming_edge_id = incoming_edge.attrib["id"]
+    outgoing_edge_id = outgoing_edge.attrib["id"]
+    relevant_connections = [
+        connection
+        for connection in root.findall("connection")
+        if connection.attrib.get("from") == incoming_edge_id
+    ]
+    straight_connections = [
+        connection
+        for connection in relevant_connections
+        if connection.attrib.get("to") == outgoing_edge_id
+        and connection.attrib.get("dir", "s") == "s"
+        and not connection.attrib.get("tl")
+    ]
+    if len(straight_connections) != min(len(incoming_lanes), len(outgoing_lanes)) or len(
+        straight_connections
+    ) != len(relevant_connections):
+        return {
+            "status": "fail",
+            "reason": "transition_movements_are_not_complete_uncontrolled_straight_connections",
+            "relevant_connection_count": len(relevant_connections),
+            "straight_connection_count": len(straight_connections),
+        }
+
+    endpoint_points: list[tuple[float, float]] = []
+    for lane in incoming_lanes:
+        points = _shape_points(lane.attrib.get("shape", "") or incoming_edge.attrib.get("shape", ""))
+        if points:
+            endpoint_points.append(points[-1])
+    for lane in outgoing_lanes:
+        points = _shape_points(lane.attrib.get("shape", "") or outgoing_edge.attrib.get("shape", ""))
+        if points:
+            endpoint_points.append(points[0])
+    hull = _convex_hull(endpoint_points)
+    polygon_area = _polygon_area(hull)
+    if len(endpoint_points) != len(incoming_lanes) + len(outgoing_lanes) or len(hull) < 3 or polygon_area <= 0:
+        return {
+            "status": "fail",
+            "reason": "adjacent_lane_endpoints_do_not_form_nonzero_polygon",
+            "endpoint_count": len(endpoint_points),
+            "hull_point_count": len(hull),
+            "polygon_area_m2": polygon_area,
+        }
+
+    return {
+        "status": "pass",
+        "junction_id": junction_id,
+        "junction_type": junction_type,
+        "incoming_edge_id": incoming_edge_id,
+        "outgoing_edge_id": outgoing_edge_id,
+        "incoming_lane_count": len(incoming_lanes),
+        "outgoing_lane_count": len(outgoing_lanes),
+        "straight_connection_signatures": sorted(
+            (
+                connection.attrib.get("fromLane", "0"),
+                connection.attrib.get("toLane", "0"),
+                connection.attrib.get("dir", "s"),
+            )
+            for connection in straight_connections
+        ),
+        "road_identity": {
+            attr: (incoming_edge.attrib.get(attr), outgoing_edge.attrib.get(attr))
+            for attr in ("name", "type", "priority", "spreadType")
+        },
+        "endpoint_count": len(endpoint_points),
+        "estimated_shape": " ".join(f"{x:.2f},{y:.2f}" for x, y in hull),
+        "polygon_area_m2": round(polygon_area, 6),
+    }
+
+
+def _polygon_area(points: list[tuple[float, float]]) -> float:
+    if len(points) < 3:
+        return 0.0
+    return abs(
+        sum(
+            left[0] * right[1] - right[0] * left[1]
+            for left, right in zip(points, [*points[1:], points[0]])
+        )
+    ) / 2.0
+
+
+def _junction_shape_repair_topology_sha256(root: ET.Element) -> str:
+    payload = {
+        "edges": [
+            {
+                "attributes": sorted(edge.attrib.items()),
+                "lanes": [sorted(lane.attrib.items()) for lane in edge.findall("lane")],
+            }
+            for edge in root.findall("edge")
+        ],
+        "connections": [sorted(connection.attrib.items()) for connection in root.findall("connection")],
+        "junctions": [
+            {
+                "attributes": sorted(
+                    (key, value)
+                    for key, value in junction.attrib.items()
+                    if key not in {"shape", "outlineShape", "customShape"}
+                ),
+                "children": [_xml_element_semantic_payload(child) for child in list(junction)],
+            }
+            for junction in root.findall("junction")
+        ],
+        "tlLogic": [_xml_element_semantic_payload(logic) for logic in root.findall("tlLogic")],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _junction_shape_tls_sha256(root: ET.Element) -> str:
+    payload = sorted(
+        (_xml_element_semantic_payload(logic) for logic in root.findall("tlLogic")),
+        key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True),
+    )
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _xml_element_semantic_payload(element: ET.Element) -> dict[str, object]:
+    """Return an XML semantic payload that ignores indentation and tail text."""
+
+    return {
+        "tag": element.tag,
+        "attributes": sorted(element.attrib.items()),
+        "children": [_xml_element_semantic_payload(child) for child in list(element)],
     }
 
 
@@ -12493,9 +13770,11 @@ def _restore_non_target_internal_artifacts(
             lane for lane in target_junction.attrib.get("intLanes", "").split() if lane in lane_ids
         ]
         new_attrs = dict(target_junction.attrib)
-        for attr in ("type", "x", "y", "z", "shape"):
+        for attr in ("type", "x", "y", "z", "shape", "customShape"):
             if attr in source_junction.attrib:
                 new_attrs[attr] = source_junction.attrib[attr]
+            elif attr == "customShape":
+                new_attrs.pop(attr, None)
         new_attrs["incLanes"] = (
             source_junction.attrib.get("incLanes", "")
             if source_inc_lanes_are_valid
@@ -13157,6 +14436,155 @@ def _compare_teacher_models(
     }
 
 
+def _hybrid_osm_approach_authority_policy(
+    raw_semantic_gate: dict[str, Any],
+    *,
+    replay_target_internal_subgraph: bool,
+    preserve_teacher_lane_shapes: bool,
+    edge_map: dict[str, str],
+    lane_patch: dict[str, Any],
+    target_internal_replay: dict[str, Any],
+    tls_movement_parity: dict[str, Any],
+    pedestrian_crossing_parity: dict[str, Any],
+) -> dict[str, Any]:
+    """Allow a deliberate OSM-approach/official-core authority split.
+
+    Strict teacher parity remains the default.  The hybrid policy is active
+    only when the caller explicitly preserves OSM lane shapes while replaying
+    the complete teacher internal subgraph.  It may waive only the expected
+    approach-edge and remote-endpoint signature deltas; every lane count,
+    movement, internal/via path, TLS/linkIndex, pedestrian crossing, and mapped
+    boundary invariant must still match.
+    """
+
+    active = replay_target_internal_subgraph and not preserve_teacher_lane_shapes
+    if not active:
+        return {
+            "schema": "torii.hybrid_osm_approach_authority_policy.v1",
+            "status": "not_applied",
+            "policy": "strict_teacher_parity",
+            "effective_semantic_gate": dict(raw_semantic_gate),
+            "waived_raw_failures": [],
+            "invariant_failures": [],
+        }
+
+    mapped_pairs = {
+        str(teacher_edge): str(candidate_edge)
+        for teacher_edge, candidate_edge in edge_map.items()
+        if str(teacher_edge) and str(candidate_edge)
+    }
+    mapped_candidate_edges = set(mapped_pairs.values())
+    invariant_failures: list[str] = []
+    if not mapped_pairs:
+        invariant_failures.append("edge_map_empty")
+    if len(mapped_candidate_edges) != len(mapped_pairs):
+        invariant_failures.append("edge_map_not_bijective")
+
+    patched_pairs = {
+        (str(item.get("teacher_edge_id", "")), str(item.get("candidate_edge_id", "")))
+        for item in lane_patch.get("patched_edges", [])
+        if isinstance(item, dict)
+    }
+    if lane_patch.get("status") != "pass":
+        invariant_failures.append("lane_patch_not_pass")
+    if patched_pairs != set(mapped_pairs.items()):
+        invariant_failures.append("lane_patch_edge_map_mismatch")
+    for field in (
+        "added_missing_mapped_edge_count",
+        "rebased_missing_mapped_edge_count",
+        "endpoint_rewritten_missing_mapped_edge_count",
+        "skipped_rebased_self_loop_edge_count",
+        "pruned_boundary_edge_count",
+    ):
+        if int(lane_patch.get(field, 0) or 0):
+            invariant_failures.append(f"lane_patch_{field}")
+    if lane_patch.get("preserve_lane_shapes") is not False:
+        invariant_failures.append("lane_patch_did_not_preserve_osm_shape_policy")
+
+    preserved_endpoint_edges = {
+        str(item.get("candidate_edge_id", ""))
+        for item in target_internal_replay.get("preserved_mapped_boundary_endpoints", [])
+        if isinstance(item, dict) and str(item.get("candidate_edge_id", ""))
+    }
+    blended_edges = {
+        str(edge_id)
+        for edge_id in target_internal_replay.get("blended_geometry_anchor_edge_ids", [])
+        if str(edge_id)
+    }
+    if target_internal_replay.get("status") != "pass":
+        invariant_failures.append("target_internal_replay_not_pass")
+    if int(target_internal_replay.get("skipped_connection_count", 0) or 0):
+        invariant_failures.append("target_internal_replay_skipped_connections")
+    if target_internal_replay.get("copy_unmapped_boundary_edges") is not False:
+        invariant_failures.append("target_internal_replay_copied_unmapped_boundary_edges")
+    if target_internal_replay.get("preserve_mapped_boundary_endpoints") is not True:
+        invariant_failures.append("mapped_boundary_endpoints_not_preserved")
+    if target_internal_replay.get("blend_geometry_anchor_at_target") is not True:
+        invariant_failures.append("local_target_geometry_blend_not_applied")
+    if preserved_endpoint_edges != mapped_candidate_edges:
+        invariant_failures.append("preserved_boundary_endpoint_set_mismatch")
+    if blended_edges != mapped_candidate_edges:
+        invariant_failures.append("blended_geometry_anchor_set_mismatch")
+    if int(target_internal_replay.get("copied_boundary_edge_count", 0) or 0) != len(
+        mapped_pairs
+    ):
+        invariant_failures.append("copied_boundary_edge_count_mismatch")
+    if tls_movement_parity.get("status") != "pass":
+        invariant_failures.append("tls_movement_parity_not_pass")
+    if pedestrian_crossing_parity.get("status") != "pass":
+        invariant_failures.append("pedestrian_crossing_parity_not_pass")
+
+    allowed_fields = {
+        "approach_edge_signature_mismatch_count",
+        "approach_endpoint_signature_mismatch_count",
+    }
+    waived_raw_failures: list[dict[str, Any]] = []
+    retained_raw_failures: list[dict[str, Any]] = []
+    for failure in raw_semantic_gate.get("failures", []):
+        if not isinstance(failure, dict):
+            retained_raw_failures.append(
+                {"report": "semantic_replay_gate", "field": "malformed_failure", "count": 1}
+            )
+            continue
+        field = str(failure.get("field", ""))
+        count = int(failure.get("count", 0) or 0)
+        if (
+            failure.get("report") == "parity"
+            and field in allowed_fields
+            and count == len(mapped_pairs)
+        ):
+            waived_raw_failures.append(dict(failure))
+        else:
+            retained_raw_failures.append(dict(failure))
+
+    effective_failures = [
+        *retained_raw_failures,
+        *(
+            {
+                "report": "hybrid_osm_approach_authority_policy",
+                "field": failure,
+                "count": 1,
+            }
+            for failure in invariant_failures
+        ),
+    ]
+    effective_gate = {
+        "status": "fail" if effective_failures else "pass",
+        "failures": effective_failures,
+    }
+    return {
+        "schema": "torii.hybrid_osm_approach_authority_policy.v1",
+        "status": "pass" if not effective_failures else "fail",
+        "policy": "osm_remote_approaches_official_internal_core",
+        "mapped_approach_edge_count": len(mapped_pairs),
+        "mapped_candidate_edge_ids": sorted(mapped_candidate_edges),
+        "waived_raw_failures": waived_raw_failures,
+        "retained_raw_failures": retained_raw_failures,
+        "invariant_failures": invariant_failures,
+        "effective_semantic_gate": effective_gate,
+    }
+
+
 def _teacher_guided_semantics_gate(parity: dict[str, Any], **reports: dict[str, Any] | None) -> dict[str, object]:
     failures: list[dict[str, object]] = []
     for field, count in (parity.get("delta", {}) if isinstance(parity.get("delta"), dict) else {}).items():
@@ -13320,6 +14748,12 @@ def _teacher_parity_summary(model: dict[str, Any]) -> dict[str, object]:
     summary["controlled_link_count"] = summary["controlled_vehicle_link_count"] + summary["controlled_pedestrian_link_count"]
     summary.update(_controlled_link_index_stats(vehicle_connections + pedestrian_connections, target_tls_id))
     return summary
+
+
+def _model_tls_id(model: dict[str, Any], *, fallback: str) -> str:
+    traffic_light = model.get("traffic_light", {})
+    attributes = traffic_light.get("attributes", {}) if isinstance(traffic_light, dict) else {}
+    return str(attributes.get("id", "") or fallback)
 
 
 def _controlled_link_count(connections: list[object], tls_id: str) -> int:

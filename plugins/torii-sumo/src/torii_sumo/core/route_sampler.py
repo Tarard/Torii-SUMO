@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import os
@@ -8,6 +9,7 @@ import re
 import shutil
 import sys
 import xml.etree.ElementTree as ET
+from collections import Counter
 from pathlib import Path
 from typing import Callable, Collection, Mapping
 
@@ -15,6 +17,7 @@ import sumolib
 
 from .command_runner import CommandResult, run_command
 from .hamburg_official import sha256_file
+from .route_sensor_matrix import audit_route_sensor_incidence
 
 
 CommandRunner = Callable[..., CommandResult]
@@ -56,6 +59,90 @@ def route_source_edges(demand_route_file: Path) -> set[str]:
         if edges:
             source_edges.add(edges.split()[0])
     return source_edges
+
+
+def apply_vehicle_speed_factors(
+    demand_route_file: Path,
+    speed_factors: Mapping[str, float],
+    *,
+    maximum_factor: float = 1.0,
+    output_file: Path | None = None,
+) -> dict[str, object]:
+    """Write reproducible per-vehicle speed factors without exceeding the limit.
+
+    A vehicle-level ``speedFactor`` is an exact SUMO override.  Leaving other
+    vehicles implicit still consumes SUMO's random speed distribution, so a
+    partial assignment is useful for sensitivity work but is not a controlled
+    calibration input.  The report therefore passes only when every vehicle
+    has an explicit legal factor after the update.
+    """
+
+    if not math.isfinite(maximum_factor) or maximum_factor <= 0:
+        raise ValueError("maximum_factor must be finite and positive")
+    normalized: dict[str, float] = {}
+    for raw_vehicle_id, raw_factor in speed_factors.items():
+        vehicle_id = str(raw_vehicle_id).strip()
+        factor = float(raw_factor)
+        if not vehicle_id:
+            raise ValueError("vehicle id must not be empty")
+        if not math.isfinite(factor) or factor <= 0 or factor > maximum_factor:
+            raise ValueError(
+                f"speed factor for {vehicle_id!r} must be finite and in (0, {maximum_factor:g}]"
+            )
+        normalized[vehicle_id] = factor
+
+    source = Path(demand_route_file).resolve(strict=True)
+    destination = Path(output_file).resolve() if output_file is not None else source
+    root = ET.parse(source).getroot()
+    vehicles: dict[str, ET.Element] = {}
+    for vehicle in root.findall("vehicle"):
+        vehicle_id = str(vehicle.attrib.get("id", "")).strip()
+        if not vehicle_id:
+            raise ValueError("every vehicle must have an id before assigning speed factors")
+        if vehicle_id in vehicles:
+            raise ValueError(f"duplicate vehicle id: {vehicle_id}")
+        vehicles[vehicle_id] = vehicle
+    unknown = sorted(set(normalized) - set(vehicles))
+    if unknown:
+        raise ValueError(f"speed factors reference unknown vehicle ids: {unknown}")
+
+    changed = 0
+    for vehicle_id, factor in normalized.items():
+        text = f"{factor:g}"
+        if vehicles[vehicle_id].attrib.get("speedFactor") != text:
+            vehicles[vehicle_id].set("speedFactor", text)
+            changed += 1
+
+    explicit = 0
+    for vehicle_id, vehicle in vehicles.items():
+        raw_factor = vehicle.attrib.get("speedFactor")
+        if raw_factor is None:
+            continue
+        factor = float(raw_factor)
+        if not math.isfinite(factor) or factor <= 0 or factor > maximum_factor:
+            raise ValueError(
+                f"existing speed factor for {vehicle_id!r} must be finite and in "
+                f"(0, {maximum_factor:g}]"
+            )
+        explicit += 1
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.speed-factors.tmp")
+    ET.indent(root, space="    ")
+    ET.ElementTree(root).write(temporary, encoding="utf-8", xml_declaration=True)
+    temporary.replace(destination)
+    vehicle_count = len(vehicles)
+    implicit_count = vehicle_count - explicit
+    return {
+        "status": "pass" if implicit_count == 0 else "review_required",
+        "vehicle_count": vehicle_count,
+        "targeted_vehicle_count": len(normalized),
+        "changed_vehicle_count": changed,
+        "explicit_speed_factor_count": explicit,
+        "implicit_speed_factor_count": implicit_count,
+        "maximum_factor": maximum_factor,
+        "demand_route_file": str(destination),
+    }
 
 
 def apply_departure_lane_targets(
@@ -276,6 +363,7 @@ def audit_route_constraint_structure(
     expected_bins = list(range(begin, end, interval))
     conflicts: list[dict[str, object]] = []
     checked_intervals = 0
+    measured_edges: set[str] = set()
     for interval_element in root.findall("interval"):
         row_begin = int(float(interval_element.attrib.get("begin", "nan")))
         if row_begin not in expected_bins:
@@ -285,6 +373,7 @@ def audit_route_constraint_structure(
             str(edge.attrib.get("id", "")).strip(): int(float(edge.attrib.get("count", "nan")))
             for edge in interval_element.findall("edge")
         }
+        measured_edges.update(values)
         constrained_edges = sorted(values)
         for edge_id in constrained_edges:
             if values[edge_id] > 0 and not route_ids_by_edge.get(edge_id):
@@ -358,6 +447,8 @@ def audit_route_constraint_structure(
             else "construction-inconsistent"
         ),
         "candidate_route_count": route_count,
+        "candidate_edge_count": len(route_ids_by_edge),
+        "measurement_row_count": len(measured_edges),
         "constrained_edge_count": len(route_ids_by_edge),
         "interval_count_checked": checked_intervals,
         "conflict_count": len(conflicts),
@@ -427,6 +518,7 @@ def run_route_sampler(
         end=end,
         interval=interval,
     )
+    identifiability = audit_route_sensor_incidence(candidate_manifest_csv, edge_data_file)
     script = resolve_route_sampler_script(route_sampler_script)
     if script is None:
         report = {
@@ -437,6 +529,7 @@ def run_route_sampler(
             "candidate_route_count": route_count,
             "edge_data_file": str(edge_data_file),
             "constraint_structure": constraint_structure,
+            "identifiability": identifiability,
             **edge_stats,
         }
         command_file.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -488,6 +581,7 @@ def run_route_sampler(
             "edge_data_sha256": sha256_file(edge_data_file),
         },
         "constraint_structure": constraint_structure,
+        "identifiability": identifiability,
         "parameters": {
             "begin": begin,
             "end": end,
@@ -507,6 +601,7 @@ def run_route_sampler(
             "candidate_route_file": str(candidate_routes),
             "edge_data_file": str(edge_data_file),
             "constraint_structure": constraint_structure,
+            "identifiability": identifiability,
         }
     mismatch = parse_route_sampler_mismatch(mismatch_file) if mismatch_file.is_file() else {
         "row_count": 0,
@@ -534,8 +629,222 @@ def run_route_sampler(
         "mismatch": mismatch,
         "constraint_match_fraction": matched_fraction,
         "constraint_structure": constraint_structure,
+        "identifiability": identifiability,
         "command_manifest": str(command_file),
         **edge_stats,
+    }
+
+
+def summarize_route_sampler_solution(
+    demand_route_file: Path,
+    *,
+    begin: int,
+    end: int,
+    interval: int,
+) -> dict[str, object]:
+    """Fingerprint interval-by-route allocations while ignoring departure jitter."""
+
+    if end <= begin or interval <= 0 or (end - begin) % interval:
+        raise ValueError("route solution window must be a positive whole number of intervals")
+    root = ET.parse(Path(demand_route_file).resolve(strict=True)).getroot()
+    named_routes = {
+        str(route.attrib["id"]): tuple(str(route.attrib.get("edges", "")).split())
+        for route in root.findall("route")
+        if route.attrib.get("id")
+    }
+    allocations: Counter[tuple[int, tuple[str, ...]]] = Counter()
+    source_sink_pairs: set[tuple[str, str]] = set()
+    for vehicle in root.findall("vehicle"):
+        try:
+            depart = float(vehicle.attrib["depart"])
+        except (KeyError, ValueError) as exc:
+            raise ValueError("routeSampler vehicle has no numeric depart time") from exc
+        if not begin <= depart < end:
+            raise ValueError(f"routeSampler vehicle depart {depart:g} lies outside {begin}-{end}")
+        child_route = vehicle.find("route")
+        edges = (
+            tuple(str(child_route.attrib.get("edges", "")).split())
+            if child_route is not None
+            else named_routes.get(str(vehicle.attrib.get("route", "")), ())
+        )
+        if not edges:
+            raise ValueError("routeSampler vehicle has no resolvable route")
+        bin_begin = begin + math.floor((depart - begin) / interval) * interval
+        allocations[(bin_begin, edges)] += 1
+        source_sink_pairs.add((edges[0], edges[-1]))
+    rows = [
+        {"begin": bin_begin, "edges": " ".join(edges), "vehicle_count": count}
+        for (bin_begin, edges), count in sorted(allocations.items())
+    ]
+    signature = hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return {
+        "vehicle_count": sum(allocations.values()),
+        "active_route_count": len({edges for _bin_begin, edges in allocations}),
+        "active_source_sink_pair_count": len(source_sink_pairs),
+        "interval_route_row_count": len(rows),
+        "allocation_signature_sha256": signature,
+        "route_allocations": rows,
+        "signature_boundary": "Counts by simulation interval and full edge sequence; exact departure-time jitter is ignored.",
+    }
+
+
+def run_route_sampler_ensemble(
+    *,
+    candidate_manifest_csv: Path,
+    edge_data_file: Path,
+    output_dir: Path,
+    prefix: str,
+    seeds: Collection[int],
+    begin: int = 0,
+    end: int = 7200,
+    interval: int = 900,
+    optimize: str | None = None,
+    route_sampler_script: Path | None = None,
+    timeout_seconds: float = 300.0,
+    command_runner: CommandRunner = run_command,
+) -> dict[str, object]:
+    """Generate and fingerprint feasible routeSampler realizations without selecting one."""
+
+    seed_list = [int(seed) for seed in seeds]
+    if not seed_list:
+        raise ValueError("routeSampler ensemble requires at least one seed")
+    if len(seed_list) != len(set(seed_list)):
+        raise ValueError("routeSampler ensemble seeds must be unique")
+    if any(seed < 0 for seed in seed_list):
+        raise ValueError("routeSampler ensemble seeds must be non-negative")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if any(output_dir.iterdir()):
+        raise ValueError("routeSampler ensemble output_dir must be empty; choose a new versioned run")
+    runs: list[dict[str, object]] = []
+    run_statuses: list[str] = []
+    feasible_signatures: set[str] = set()
+    for seed in seed_list:
+        run_dir = output_dir / f"seed_{seed}"
+        report = run_route_sampler(
+            candidate_manifest_csv=candidate_manifest_csv,
+            edge_data_file=edge_data_file,
+            output_dir=run_dir,
+            prefix=prefix,
+            begin=begin,
+            end=end,
+            interval=interval,
+            seed=seed,
+            optimize=optimize,
+            route_sampler_script=route_sampler_script,
+            timeout_seconds=timeout_seconds,
+            command_runner=command_runner,
+        )
+        solution = None
+        solution_error = None
+        demand_file = report.get("demand_route_file")
+        if demand_file and Path(str(demand_file)).is_file():
+            try:
+                solution = summarize_route_sampler_solution(
+                    Path(str(demand_file)),
+                    begin=begin,
+                    end=end,
+                    interval=interval,
+                )
+            except (OSError, ValueError, ET.ParseError) as exc:
+                solution_error = str(exc)
+        effective_status = str(report.get("status"))
+        if effective_status == "pass" and solution is None:
+            effective_status = "fail"
+        elif effective_status == "pass":
+            feasible_signatures.add(str(solution["allocation_signature_sha256"]))
+        report_for_manifest = dict(report)
+        report_for_manifest.pop("identifiability", None)
+        runs.append(
+            {
+                "seed": seed,
+                "status": effective_status,
+                "route_sampler": report_for_manifest,
+                "solution": solution,
+                "solution_error": solution_error,
+            }
+        )
+        run_statuses.append(effective_status)
+
+    feasible_count = run_statuses.count("pass")
+    statuses = set(run_statuses)
+    status = (
+        "pass"
+        if feasible_count
+        else "partial"
+        if "partial" in statuses
+        else "blocked"
+        if statuses == {"blocked"}
+        else "fail"
+    )
+    identifiability = audit_route_sensor_incidence(candidate_manifest_csv, edge_data_file)
+    diversity = _route_ensemble_diversity(runs)
+    manifest_file = output_dir / f"{prefix}_route_sampler_ensemble.json"
+    manifest: dict[str, object] = {
+        "status": status,
+        "claim_status": "detector-constrained-route-ensemble" if feasible_count else "construction-incomplete",
+        "promotion_decision": "review_required" if feasible_count else "blocked",
+        "requested_seed_count": len(seed_list),
+        "feasible_solution_count": feasible_count,
+        "distinct_feasible_solution_count": len(feasible_signatures),
+        "diversity": diversity,
+        "identifiability": identifiability,
+        "inputs": {
+            "candidate_manifest_csv": str(candidate_manifest_csv),
+            "candidate_manifest_sha256": sha256_file(candidate_manifest_csv),
+            "edge_data_file": str(edge_data_file),
+            "edge_data_sha256": sha256_file(edge_data_file),
+        },
+        "parameters": {"begin": begin, "end": end, "interval": interval, "seeds": seed_list, "optimize": optimize},
+        "runs": runs,
+        "selection": None,
+        "claim_boundary": (
+            "Each feasible member is one route allocation matching the supplied edge-count constraints. The ensemble "
+            "does not identify the real OD/path solution; selection requires SUMO E1 comparison and runtime gates."
+        ),
+        "manifest": str(manifest_file),
+    }
+    manifest_file.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest
+
+
+def _route_ensemble_diversity(runs: list[dict[str, object]]) -> dict[str, object]:
+    feasible = [run for run in runs if run.get("status") == "pass" and isinstance(run.get("solution"), Mapping)]
+    pairwise: list[dict[str, object]] = []
+    vehicle_counts: list[int] = []
+    parsed: list[tuple[int, dict[tuple[int, str], int], set[str]]] = []
+    for run in feasible:
+        solution = run["solution"]
+        assert isinstance(solution, Mapping)
+        vehicle_counts.append(int(solution["vehicle_count"]))
+        allocations = {
+            (int(row["begin"]), str(row["edges"])): int(row["vehicle_count"])
+            for row in solution.get("route_allocations", [])
+            if isinstance(row, Mapping)
+        }
+        parsed.append((int(run["seed"]), allocations, {edges for _begin, edges in allocations}))
+    for index, (seed_a, allocation_a, routes_a) in enumerate(parsed):
+        for seed_b, allocation_b, routes_b in parsed[index + 1 :]:
+            keys = set(allocation_a) | set(allocation_b)
+            union = routes_a | routes_b
+            pairwise.append(
+                {
+                    "seed_a": seed_a,
+                    "seed_b": seed_b,
+                    "interval_route_l1_distance": sum(
+                        abs(allocation_a.get(key, 0) - allocation_b.get(key, 0)) for key in keys
+                    ),
+                    "active_route_jaccard": len(routes_a & routes_b) / len(union) if union else 1.0,
+                }
+            )
+    return {
+        "vehicle_count_min": min(vehicle_counts) if vehicle_counts else None,
+        "vehicle_count_max": max(vehicle_counts) if vehicle_counts else None,
+        "pair_count": len(pairwise),
+        "pairwise": pairwise,
+        "claim_boundary": (
+            "Diversity describes route allocations only. A larger distance is not better until SUMO sensor output "
+            "and runtime quality have been evaluated."
+        ),
     }
 
 

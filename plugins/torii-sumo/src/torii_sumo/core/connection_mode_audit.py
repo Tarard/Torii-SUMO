@@ -43,6 +43,41 @@ _FOUR_WAY_COMPATIBLE_PHASE_PAIRS = frozenset(
         frozenset({4, 8}),
     }
 )
+
+
+def _engineering_plan_lane_arrows_justify_destination_merge(
+    evidence: Mapping[str, Any] | None,
+    *,
+    actual_source_lanes: Sequence[str],
+) -> bool:
+    """Accept only an exact, hash-bound official lane-arrow merge claim.
+
+    An engineering drawing can prove that two marked source lanes legally feed
+    one destination lane.  It does not prove a target-lane fanout or an
+    arbitrary connection curve, so this evidence basis is deliberately used
+    only by the destination-merge audit.
+    """
+
+    if not isinstance(evidence, Mapping):
+        return False
+    if evidence.get("basis") != "official_engineering_plan_lane_arrows":
+        return False
+    source_cell = str(evidence.get("source_cell", "")).strip()
+    if not source_cell:
+        return False
+    declared = evidence.get("source_lanes")
+    if not isinstance(declared, Sequence) or isinstance(declared, (str, bytes)):
+        return False
+    normalized = [str(value) for value in declared]
+    if not normalized or len(set(normalized)) != len(normalized):
+        return False
+    if sorted(normalized) != sorted(str(value) for value in actual_source_lanes):
+        return False
+    official_url = str(evidence.get("official_source_url", "")).strip()
+    if not official_url.startswith("https://") or len(official_url) <= len("https://"):
+        return False
+    source_sha256 = str(evidence.get("official_source_sha256", "")).strip().lower()
+    return len(source_sha256) == 64 and all(character in "0123456789abcdef" for character in source_sha256)
 _THREE_WAY_COMPATIBLE_PHASE_PAIRS = frozenset(
     {
         frozenset({1, 5}),
@@ -62,6 +97,185 @@ _TRAFFIC_SIDE_ALIASES = {
     "left_hand": "left",
     "left-hand": "left",
 }
+
+
+def build_official_teacher_connection_mode_evidence(
+    teacher_net_file: Path,
+    *,
+    teacher_junction_id: str,
+    edge_map: Mapping[str, str],
+    source_cell: str,
+) -> dict[str, Any]:
+    """Project exact official teacher movements into stable candidate keys.
+
+    This is deliberately narrower than a generic reference-network comparison.
+    A movement is evidence only when both mapped teacher edges meet at the
+    declared physical junction, both lanes carry motorized traffic, and the
+    teacher connection retains an explicit official curve.  Candidate
+    connection indices are intentionally excluded because ``netconvert`` may
+    reorder them.
+    """
+
+    teacher = teacher_net_file.resolve()
+    normalized_source_cell = str(source_cell).strip()
+    normalized_junction_id = str(teacher_junction_id).strip()
+    normalized_edge_map = {
+        str(teacher_edge): str(candidate_edge)
+        for teacher_edge, candidate_edge in edge_map.items()
+        if str(teacher_edge) and str(candidate_edge)
+    }
+    failures: list[str] = []
+    if not teacher.is_file():
+        failures.append("teacher_net_file_missing")
+    if not normalized_source_cell:
+        failures.append("source_cell_missing")
+    if not normalized_junction_id:
+        failures.append("teacher_junction_id_missing")
+    if not normalized_edge_map:
+        failures.append("edge_map_empty")
+    if len(set(normalized_edge_map.values())) != len(normalized_edge_map):
+        failures.append("edge_map_not_bijective")
+    if failures:
+        return {
+            "schema": "torii.official_teacher_connection_mode_evidence.v1",
+            "status": "fail",
+            "failures": failures,
+            "teacher_net_file": str(teacher),
+            "teacher_junction_id": normalized_junction_id,
+            "source_cell": normalized_source_cell,
+            "edge_map": dict(sorted(normalized_edge_map.items())),
+            "target_fanouts": {},
+            "destination_merges": {},
+            "lane_bindings": {},
+        }
+
+    root = ET.parse(teacher).getroot()
+    teacher_junction = root.find(f"junction[@id='{normalized_junction_id}']")
+    if teacher_junction is None:
+        failures.append("teacher_junction_missing")
+    edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    teacher_sha256 = file_sha256(teacher)
+    lane_bindings: dict[str, dict[str, Any]] = {}
+    fanout_lanes: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    fanout_signatures: dict[tuple[str, str, str], list[str]] = defaultdict(list)
+    merge_lanes: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    merge_signatures: dict[tuple[str, str, str], list[str]] = defaultdict(list)
+    ignored_connections: list[dict[str, str]] = []
+
+    for connection in root.findall("connection"):
+        teacher_from = connection.attrib.get("from", "")
+        teacher_to = connection.attrib.get("to", "")
+        if teacher_from not in normalized_edge_map or teacher_to not in normalized_edge_map:
+            continue
+        source_edge = edges.get(teacher_from)
+        target_edge = edges.get(teacher_to)
+        from_lane_index = _as_int(connection.attrib.get("fromLane"))
+        to_lane_index = _as_int(connection.attrib.get("toLane"))
+        source_lane = (
+            source_edge.find(f"lane[@index='{from_lane_index}']")
+            if source_edge is not None and from_lane_index is not None
+            else None
+        )
+        target_lane = (
+            target_edge.find(f"lane[@index='{to_lane_index}']")
+            if target_edge is not None and to_lane_index is not None
+            else None
+        )
+        rejection_reason = ""
+        if source_edge is None or target_edge is None:
+            rejection_reason = "mapped_teacher_edge_missing"
+        elif (
+            source_edge.attrib.get("to") != normalized_junction_id
+            or target_edge.attrib.get("from") != normalized_junction_id
+        ):
+            rejection_reason = "connection_outside_declared_teacher_junction"
+        elif from_lane_index is None or to_lane_index is None:
+            rejection_reason = "lane_index_invalid"
+        elif not lane_supports_motorized(source_lane) or not lane_supports_motorized(target_lane):
+            rejection_reason = "connection_not_motorized"
+        elif not connection.attrib.get("shape", "").strip():
+            rejection_reason = "official_connection_curve_missing"
+        if rejection_reason:
+            ignored_connections.append(
+                {
+                    "from": teacher_from,
+                    "fromLane": connection.attrib.get("fromLane", ""),
+                    "to": teacher_to,
+                    "toLane": connection.attrib.get("toLane", ""),
+                    "reason": rejection_reason,
+                }
+            )
+            continue
+
+        candidate_from = normalized_edge_map[teacher_from]
+        candidate_to = normalized_edge_map[teacher_to]
+        from_lane = str(from_lane_index)
+        to_lane = str(to_lane_index)
+        binding_key = "|".join((candidate_from, from_lane, candidate_to, to_lane))
+        teacher_signature = "|".join((teacher_from, from_lane, teacher_to, to_lane))
+        lane_bindings[binding_key] = {
+            "basis": "official_map_connection_curve",
+            "source_cell": normalized_source_cell,
+            "teacher_net_sha256": teacher_sha256,
+            "teacher_junction_id": normalized_junction_id,
+            "official_connection_signature": teacher_signature,
+            "official_connection_shape": connection.attrib.get("shape", ""),
+        }
+        fanout_key = (candidate_from, from_lane, candidate_to)
+        fanout_lanes[fanout_key].add(to_lane)
+        fanout_signatures[fanout_key].append(teacher_signature)
+        merge_key = (candidate_from, candidate_to, to_lane)
+        merge_lanes[merge_key].add(from_lane)
+        merge_signatures[merge_key].append(teacher_signature)
+
+    target_fanouts = {
+        "|".join(key): {
+            "basis": "official_map_connection_curve",
+            "source_cell": normalized_source_cell,
+            "teacher_net_sha256": teacher_sha256,
+            "teacher_junction_id": normalized_junction_id,
+            "target_lanes": sorted(target_lanes),
+            "official_connection_signatures": sorted(fanout_signatures[key]),
+        }
+        for key, target_lanes in sorted(fanout_lanes.items())
+        if len(target_lanes) > 1
+    }
+    destination_merges = {
+        "|".join(key): {
+            "basis": "official_map_connection_curve",
+            "source_cell": normalized_source_cell,
+            "teacher_net_sha256": teacher_sha256,
+            "teacher_junction_id": normalized_junction_id,
+            "source_lanes": sorted(source_lanes),
+            "official_connection_signatures": sorted(merge_signatures[key]),
+        }
+        for key, source_lanes in sorted(merge_lanes.items())
+        if len(source_lanes) > 1
+    }
+    if not lane_bindings:
+        failures.append("no_exact_motorized_teacher_connections")
+    return {
+        "schema": "torii.official_teacher_connection_mode_evidence.v1",
+        "status": "pass" if not failures else "fail",
+        "failures": failures,
+        "teacher_net_file": str(teacher),
+        "teacher_net_sha256": teacher_sha256,
+        "teacher_junction_id": normalized_junction_id,
+        "source_cell": normalized_source_cell,
+        "edge_map": dict(sorted(normalized_edge_map.items())),
+        "exact_connection_count": len(lane_bindings),
+        "target_fanout_count": len(target_fanouts),
+        "destination_merge_count": len(destination_merges),
+        "ignored_connection_count": len(ignored_connections),
+        "ignored_connections": ignored_connections,
+        "target_fanouts": target_fanouts,
+        "destination_merges": destination_merges,
+        "lane_bindings": dict(sorted(lane_bindings.items())),
+    }
 
 
 def resolve_network_traffic_side(
@@ -241,6 +455,9 @@ def build_connection_mode_regression_audit(
     traffic_side: str = "auto",
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
+    candidate_evidence_justified_target_fanouts: Mapping[str, Mapping[str, Any]] | None = None,
+    candidate_evidence_justified_destination_merges: Mapping[str, Mapping[str, Any]] | None = None,
+    candidate_evidence_justified_lane_bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Fail closed when a candidate worsens Connection Mode outside its scope."""
 
@@ -265,6 +482,9 @@ def build_connection_mode_regression_audit(
         traffic_side=traffic_side,
         endpoint_tolerance_m=endpoint_tolerance_m,
         normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
+        evidence_justified_target_fanouts=candidate_evidence_justified_target_fanouts,
+        evidence_justified_destination_merges=candidate_evidence_justified_destination_merges,
+        evidence_justified_lane_bindings=candidate_evidence_justified_lane_bindings,
     )
     requested_source_scope = sorted(
         {str(value) for value in target_source_junction_ids if str(value)}
@@ -602,6 +822,8 @@ def audit_network_connection_mode(
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
     evidence_justified_target_fanouts: Mapping[str, Mapping[str, Any]] | None = None,
+    evidence_justified_destination_merges: Mapping[str, Mapping[str, Any]] | None = None,
+    evidence_justified_lane_bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Reconstruct and audit Connection Mode for every relevant junction."""
 
@@ -630,6 +852,8 @@ def audit_network_connection_mode(
             endpoint_tolerance_m=endpoint_tolerance_m,
             normalized_lane_rank_tolerance=normalized_lane_rank_tolerance,
             evidence_justified_target_fanouts=evidence_justified_target_fanouts,
+            evidence_justified_destination_merges=evidence_justified_destination_merges,
+            evidence_justified_lane_bindings=evidence_justified_lane_bindings,
             catalog=catalog,
         )
         controller_ids = sorted(
@@ -742,6 +966,14 @@ def audit_network_connection_mode(
             len(record["connection_mode_audit"].get("evidence_justified_target_fanouts", []))
             for record in junction_records
         ),
+        "evidence_justified_destination_merge_count": sum(
+            len(record["connection_mode_audit"].get("evidence_justified_destination_merges", []))
+            for record in junction_records
+        ),
+        "evidence_justified_lane_binding_count": sum(
+            len(record["connection_mode_audit"].get("evidence_justified_lane_bindings", []))
+            for record in junction_records
+        ),
         "finding_category_counts": dict(sorted(connection_findings.items())),
         "tls_link_binding_audit": tls_audit,
         "junctions": junction_records,
@@ -761,6 +993,8 @@ def audit_standard_connection_mode(
     endpoint_tolerance_m: float = 2.0,
     normalized_lane_rank_tolerance: float = 0.5,
     evidence_justified_target_fanouts: Mapping[str, Mapping[str, Any]] | None = None,
+    evidence_justified_destination_merges: Mapping[str, Mapping[str, Any]] | None = None,
+    evidence_justified_lane_bindings: Mapping[str, Mapping[str, Any]] | None = None,
     catalog: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fail closed on lane-to-lane bindings that only look routeable.
@@ -779,6 +1013,7 @@ def audit_standard_connection_mode(
     for failure in traffic_side_contract["failures"]:
         _block(hard_blockers, failure)
     review_findings: list[str] = []
+    justified_lane_bindings: list[dict[str, Any]] = []
     warnings = [
         "map imagery or lane-tag evidence remains required for flagged semantic ambiguities; NetEdit is optional"
     ]
@@ -827,6 +1062,7 @@ def audit_standard_connection_mode(
     target_fanout: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     destination_merges: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     justified_target_fanouts: list[dict[str, Any]] = []
+    justified_destination_merges: list[dict[str, Any]] = []
 
     for row in rows:
         connection_index = _as_int(row.get("connection_index"))
@@ -909,11 +1145,29 @@ def audit_standard_connection_mode(
                     }
                 )
                 if rank_delta > normalized_lane_rank_tolerance:
-                    _flag_review(
-                        check,
-                        review_findings,
-                        f"lane_rank_jump:{connection_index}:{rank_delta:.3f}",
+                    binding_key = "|".join(
+                        (source_edge, str(source_index), target_edge, str(target_index))
                     )
+                    binding_evidence = (evidence_justified_lane_bindings or {}).get(binding_key)
+                    finding = f"lane_rank_jump:{connection_index}:{rank_delta:.3f}"
+                    if (
+                        isinstance(binding_evidence, Mapping)
+                        and binding_evidence.get("basis") == "official_map_connection_curve"
+                        and str(binding_evidence.get("source_cell", ""))
+                    ):
+                        justified = {
+                            "finding": finding,
+                            "key": binding_key,
+                            "from": source_edge,
+                            "from_lane": source_index,
+                            "to": target_edge,
+                            "to_lane": target_index,
+                            "evidence": dict(binding_evidence),
+                        }
+                        justified_lane_bindings.append(justified)
+                        check.setdefault("evidence_justified_findings", []).append(justified)
+                    else:
+                        _flag_review(check, review_findings, finding)
                 valid_lane_rows.append(
                     {
                         "connection_index": connection_index,
@@ -1002,10 +1256,34 @@ def audit_standard_connection_mode(
                 _review(review_findings, finding)
     for key, source_lanes in sorted(destination_merges.items()):
         if len(source_lanes) > 1:
-            _review(
-                review_findings,
-                f"destination_lane_merge:{'|'.join(key)}:{','.join(sorted(source_lanes))}",
+            finding = f"destination_lane_merge:{'|'.join(key)}:{','.join(sorted(source_lanes))}"
+            evidence = (evidence_justified_destination_merges or {}).get("|".join(key))
+            expected_lanes = (
+                sorted(str(value) for value in evidence.get("source_lanes", ()))
+                if isinstance(evidence, Mapping)
+                else []
             )
+            official_map_evidence = (
+                isinstance(evidence, Mapping)
+                and evidence.get("basis") == "official_map_connection_curve"
+                and expected_lanes == sorted(source_lanes)
+                and str(evidence.get("source_cell", ""))
+            )
+            engineering_plan_evidence = _engineering_plan_lane_arrows_justify_destination_merge(
+                evidence,
+                actual_source_lanes=source_lanes,
+            )
+            if official_map_evidence or engineering_plan_evidence:
+                justified_destination_merges.append(
+                    {
+                        "finding": finding,
+                        "key": "|".join(key),
+                        "source_lanes": sorted(source_lanes),
+                        "evidence": dict(evidence),
+                    }
+                )
+            else:
+                _review(review_findings, finding)
 
     lane_order_checks = _audit_lane_order(
         valid_lane_rows,
@@ -1073,6 +1351,8 @@ def audit_standard_connection_mode(
         "structural_failures": unique_hard_blockers,
         "review_findings": unique_review_findings,
         "evidence_justified_target_fanouts": justified_target_fanouts,
+        "evidence_justified_destination_merges": justified_destination_merges,
+        "evidence_justified_lane_bindings": justified_lane_bindings,
         "blockers": unique_blockers,
         "warnings": warnings,
         "human_review_requirement": (

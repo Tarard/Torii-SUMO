@@ -19,6 +19,7 @@ from .candidate_contracts import file_sha256
 
 
 HAMBURG_EXECUTION_WORKFLOW_SCHEMA = "torii.hamburg-sandtorkai-execution-workflow/v1"
+HAMBURG_EXECUTION_CONFIG_SCHEMA = "torii.hamburg-digital-twin-workflow-config/v1"
 HAMBURG_EXECUTION_WORKFLOW_ID = "hamburg_sandtorkai_2349_2394_2403"
 
 STAGE_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
@@ -106,6 +107,74 @@ STAGE_CONTRACTS: Mapping[str, Mapping[str, tuple[str, ...]]] = {
 
 class HamburgExecutionWorkflowError(ValueError):
     """Raised when a workflow plan cannot be made hash-safe."""
+
+
+def materialize_hamburg_execution_plan_from_config(
+    config_file: Path,
+    *,
+    output_dir: Path | None = None,
+    resume: bool | None = None,
+) -> dict[str, Any]:
+    """Run the existing W0-W5 ledger from one portable JSON configuration.
+
+    Paths are resolved relative to the configuration file. Focused Hamburg
+    modules remain responsible for producing each stage artifact; this facade
+    only unifies their evidence, dependencies, and downstream invalidation.
+    """
+
+    config_path = Path(config_file).expanduser().resolve(strict=True)
+    payload = _read_json_mapping(config_path)
+    if payload.get("schema") != HAMBURG_EXECUTION_CONFIG_SCHEMA:
+        raise HamburgExecutionWorkflowError(
+            f"workflow config schema must be {HAMBURG_EXECUTION_CONFIG_SCHEMA!r}"
+        )
+    base_dir = config_path.parent
+    configured_output = payload.get("output_dir")
+    if output_dir is None:
+        if not isinstance(configured_output, str) or not configured_output.strip():
+            raise HamburgExecutionWorkflowError("workflow config requires output_dir")
+        output_dir = _resolve_config_path(base_dir, configured_output)
+
+    raw_stages = payload.get("stages", {})
+    if not isinstance(raw_stages, Mapping):
+        raise HamburgExecutionWorkflowError("workflow config stages must be an object")
+    stage_manifests: dict[str, Path] = {}
+    stage_feedback: dict[str, tuple[Path, ...]] = {}
+    for raw_stage_id, raw_stage in raw_stages.items():
+        stage_id = str(raw_stage_id).upper()
+        if stage_id not in STAGE_NAMES:
+            raise HamburgExecutionWorkflowError(f"unknown workflow stage {stage_id!r}")
+        if not isinstance(raw_stage, Mapping):
+            raise HamburgExecutionWorkflowError(f"workflow stage {stage_id} must be an object")
+        manifest = raw_stage.get("manifest")
+        if manifest is not None:
+            if not isinstance(manifest, str) or not manifest.strip():
+                raise HamburgExecutionWorkflowError(f"workflow stage {stage_id} manifest is invalid")
+            stage_manifests[stage_id] = _resolve_config_path(base_dir, manifest)
+        feedback = raw_stage.get("feedback", ())
+        if not isinstance(feedback, Sequence) or isinstance(feedback, (str, bytes)):
+            raise HamburgExecutionWorkflowError(f"workflow stage {stage_id} feedback must be a list")
+        resolved_feedback = tuple(_resolve_config_path(base_dir, str(item)) for item in feedback)
+        if resolved_feedback:
+            stage_feedback[stage_id] = resolved_feedback
+
+    configured_resume = payload.get("resume", True)
+    if resume is None:
+        if not isinstance(configured_resume, bool):
+            raise HamburgExecutionWorkflowError("workflow config resume must be boolean")
+        resume = configured_resume
+    return materialize_hamburg_execution_plan(
+        output_dir=Path(output_dir),
+        stage_manifests=stage_manifests,
+        stage_feedback=stage_feedback,
+        resume=resume,
+        workflow_id=str(payload.get("workflow_id", HAMBURG_EXECUTION_WORKFLOW_ID)),
+    )
+
+
+def _resolve_config_path(base_dir: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else (base_dir / path).resolve()
 
 
 def materialize_hamburg_w1_topology_handoff(
@@ -949,9 +1018,11 @@ def _stage_sort_key(stage_id: str) -> tuple[int, str]:
 
 
 __all__ = [
+    "HAMBURG_EXECUTION_CONFIG_SCHEMA",
     "HAMBURG_EXECUTION_WORKFLOW_ID",
     "HAMBURG_EXECUTION_WORKFLOW_SCHEMA",
     "HamburgExecutionWorkflowError",
     "materialize_hamburg_w1_topology_handoff",
     "materialize_hamburg_execution_plan",
+    "materialize_hamburg_execution_plan_from_config",
 ]

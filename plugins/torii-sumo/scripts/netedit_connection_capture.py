@@ -255,6 +255,12 @@ def _args() -> argparse.Namespace:
 
 def main() -> int:
     args = _args()
+    if not args.dry_run:
+        raise SystemExit(
+            "Foreground NetEdit screenshots are disabled. Use "
+            "plugins/torii-sumo/scripts/netedit_background_review.py; "
+            "interactive viewing must use the Torii CLI launcher."
+        )
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     screenshot_file = out_dir / args.screenshot_name

@@ -6,6 +6,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import Request
 
+import pytest
+
 from torii_sumo.core.digital_twin import (
     CanonicalCount,
     CountObservation,
@@ -20,7 +22,11 @@ from torii_sumo.core.digital_twin_mapping import (
     aggregate_canonical_counts_to_edges,
     write_route_sampler_edge_counts,
 )
-from torii_sumo.core.hamburg_official import SensorThingsClient, parse_hamburg_count_streams
+from torii_sumo.core.hamburg_official import (
+    SensorThingsClient,
+    fetch_hamburg_count_station_streams,
+    parse_hamburg_count_streams,
+)
 
 
 UTC = timezone.utc
@@ -177,6 +183,134 @@ def test_count_stream_parser_uses_official_thing_location_and_fields() -> None:
     assert streams[0].node_id == "0228"
     assert streams[0].asset_id == "Z.10"
     assert streams[0].longitude == 9.982568439
+
+
+def test_count_station_parser_uses_composition_node_and_thing_asset() -> None:
+    streams = parse_hamburg_count_streams(
+        [
+            {
+                "@iot.id": 27143,
+                "properties": {
+                    "assetID": "0408",
+                    "layerName": "Anzahl_Kfz_Zaehlstelle_15-Min",
+                    "direction": 2,
+                    "knotenarm": 7,
+                    "zusammensetzung": "2394-Z.9,2394-Z.8,2394-Z.4",
+                },
+                "Thing": {
+                    "@iot.id": 12614,
+                    "properties": {"assetID": "0408972", "richtung": "Richtung 2"},
+                    "Locations": [
+                        {
+                            "location": {
+                                "type": "Feature",
+                                "geometry": {"type": "Point", "coordinates": [9.997405, 53.543923]},
+                            }
+                        }
+                    ],
+                },
+            }
+        ]
+    )
+
+    assert streams[0].node_id == "2394"
+    assert streams[0].asset_id == "0408972"
+    assert streams[0].direction_code == "2"
+    assert streams[0].station_arm == "7"
+    assert streams[0].composition == ("2394-Z.9", "2394-Z.8", "2394-Z.4")
+
+
+def test_count_station_parser_rejects_cross_node_composition() -> None:
+    with pytest.raises(ValueError, match="spans multiple official nodes"):
+        parse_hamburg_count_streams(
+            [
+                {
+                    "@iot.id": 1,
+                    "properties": {
+                        "direction": 1,
+                        "knotenarm": 7,
+                        "zusammensetzung": "2394-Z.1,2403-Z.2",
+                    },
+                    "Thing": {
+                        "properties": {"assetID": "station"},
+                        "Locations": [
+                            {
+                                "location": {
+                                    "type": "Feature",
+                                    "geometry": {"type": "Point", "coordinates": [9.99, 53.54]},
+                                }
+                            }
+                        ],
+                    },
+                }
+            ]
+        )
+
+
+def _station_value(stream_id: int, composition: str) -> dict[str, object]:
+    return {
+        "@iot.id": stream_id,
+        "properties": {
+            "layerName": "Anzahl_Kfz_Zaehlstelle_15-Min",
+            "direction": 1,
+            "knotenarm": 7,
+            "zusammensetzung": composition,
+        },
+        "Thing": {
+            "@iot.id": stream_id + 100,
+            "properties": {"assetID": f"station-{stream_id}", "richtung": "Richtung 1"},
+            "Locations": [
+                {
+                    "location": {
+                        "type": "Feature",
+                        "geometry": {"type": "Point", "coordinates": [9.99, 53.54]},
+                    }
+                }
+            ],
+        },
+    }
+
+
+def test_station_fetch_isolates_a_proven_off_scope_inventory_error() -> None:
+    page = {
+        "value": [
+            _station_value(1, "2394-Z.1"),
+            _station_value(2, "2078-Z.1,0810-Z.2"),
+        ]
+    }
+    client = SensorThingsClient(
+        "https://iot.example/v1.1/",
+        transport=lambda _request, _timeout: json.dumps(page).encode("utf-8"),
+    )
+
+    streams, raw = fetch_hamburg_count_station_streams(client, ["2394"])
+
+    assert [stream.stream_id for stream in streams] == [1]
+    assert raw["excluded_off_scope_unsupported_streams"] == [
+        {
+            "stream_id": 2,
+            "composition": "2078-Z.1,0810-Z.2",
+            "composition_node_hints": ["0810", "2078"],
+            "reason": "count station datastream 2 spans multiple official nodes",
+        }
+    ]
+
+
+def test_station_fetch_keeps_target_related_inventory_errors_fail_closed() -> None:
+    page = {"value": [_station_value(1, "2394-Z.1,0810-Z.2")]}
+    client = SensorThingsClient(
+        "https://iot.example/v1.1/",
+        transport=lambda _request, _timeout: json.dumps(page).encode("utf-8"),
+    )
+
+    with pytest.raises(ValueError, match="spans multiple official nodes"):
+        fetch_hamburg_count_station_streams(client, ["2394"])
+
+
+def test_count_station_parser_accepts_official_suffix_field_ids() -> None:
+    streams = parse_hamburg_count_streams([_station_value(1, "2394-Z.1_1,2394-Z.1_2")])
+
+    assert streams[0].composition == ("2394-Z.1_1", "2394-Z.1_2")
 
 
 def test_edge_aggregation_keeps_time_bins_and_uses_count_attribute(tmp_path: Path) -> None:

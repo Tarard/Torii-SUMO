@@ -103,6 +103,12 @@ def _git_bytes(root: Path, *arguments: str) -> bytes:
 
 
 def _file_sha256(path: Path) -> str:
+    # ``git ls-files --others`` may report an untracked nested worktree or
+    # Windows directory junction as one path.  Git itself does not inspect the
+    # nested contents, so producer identity must hash a stable directory marker
+    # instead of trying to open the directory as a regular file.
+    if not path.is_file():
+        return hashlib.sha256(b"untracked-directory\0").hexdigest()
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):

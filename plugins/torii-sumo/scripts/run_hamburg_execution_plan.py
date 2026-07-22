@@ -7,6 +7,7 @@ from pathlib import Path
 from torii_sumo.core.hamburg_execution_workflow import (
     HamburgExecutionWorkflowError,
     materialize_hamburg_execution_plan,
+    materialize_hamburg_execution_plan_from_config,
 )
 
 
@@ -24,7 +25,12 @@ def main() -> int:
             "Existing stage manifests are inputs; no source network is overwritten."
         )
     )
-    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="portable JSON configuration for the complete W0-W5 evidence workflow",
+    )
     parser.add_argument(
         "--stage-manifest",
         action="append",
@@ -44,17 +50,28 @@ def main() -> int:
     )
     parser.add_argument("--no-resume", action="store_true")
     args = parser.parse_args()
+    if args.config is not None and (args.stage_manifest or args.stage_feedback):
+        parser.error("--config cannot be combined with --stage-manifest or --stage-feedback")
+    if args.config is None and args.output_dir is None:
+        parser.error("--output-dir is required unless --config supplies it")
     stage_manifests = dict(args.stage_manifest or ())
     stage_feedback: dict[str, list[Path]] = {}
     for stage_id, path in args.stage_feedback or ():
         stage_feedback.setdefault(stage_id, []).append(path)
     try:
-        report = materialize_hamburg_execution_plan(
-            output_dir=args.output_dir,
-            stage_manifests=stage_manifests,
-            stage_feedback=stage_feedback,
-            resume=not args.no_resume,
-        )
+        if args.config is not None:
+            report = materialize_hamburg_execution_plan_from_config(
+                args.config,
+                output_dir=args.output_dir,
+                resume=False if args.no_resume else None,
+            )
+        else:
+            report = materialize_hamburg_execution_plan(
+                output_dir=args.output_dir,
+                stage_manifests=stage_manifests,
+                stage_feedback=stage_feedback,
+                resume=not args.no_resume,
+            )
     except (OSError, ValueError, HamburgExecutionWorkflowError) as exc:
         print(json.dumps({"status": "error", "automatic_promotion_gate": "blocked", "error": str(exc)}))
         return 2
