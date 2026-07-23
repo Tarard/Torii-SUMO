@@ -18,28 +18,44 @@ from .artifact_io import write_json_atomic
 from .candidate_contracts import file_sha256
 
 
-HAMBURG_EXECUTION_WORKFLOW_SCHEMA = "torii.hamburg-sandtorkai-execution-workflow/v1"
-HAMBURG_EXECUTION_CONFIG_SCHEMA = "torii.hamburg-digital-twin-workflow-config/v1"
+HAMBURG_EXECUTION_WORKFLOW_SCHEMA = "torii.hamburg-sandtorkai-execution-workflow/v2"
+HAMBURG_EXECUTION_CONFIG_SCHEMA = "torii.hamburg-digital-twin-workflow-config/v2"
 HAMBURG_EXECUTION_WORKFLOW_ID = "hamburg_sandtorkai_2349_2394_2403"
 
 STAGE_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
     "W0": (),
     "W1": ("W0",),
+    "W3a": ("W0",),
     "W2": ("W1",),
-    # Counts are independently observable once W0 fixes the named scope.
-    "W3": ("W0",),
-    "W4": ("W1", "W2", "W3"),
-    "W5": ("W0", "W1", "W2", "W3", "W4"),
+    "W3b": ("W1", "W3a"),
+    # Route incidence and demand are still produced inside the existing W4
+    # replay implementation. Split them only when they have real producers.
+    "W4": ("W1", "W2", "W3a", "W3b"),
 }
 
 STAGE_NAMES: Mapping[str, str] = {
     "W0": "scope_and_evidence",
     "W1": "official_road_reconstruction",
+    "W3a": "count_acquisition",
     "W2": "official_signal_binding",
-    "W3": "detectors_and_demand",
-    "W4": "sumo_replay_comparison",
-    "W5": "reusable_product_workflow",
+    "W3b": "detector_binding",
+    "W4": "route_demand_and_sumo_replay",
+    "W5": "workflow_summary",
 }
+
+STAGE_SCHEMAS: Mapping[str, frozenset[str]] = {
+    "W0": frozenset({"torii.hamburg-named-corridor-scope/v1"}),
+    "W1": frozenset({"torii.hamburg-official-corridor-geometry/v1"}),
+    "W3a": frozenset({"torii.hamburg-named-corridor-count-scope/v1"}),
+    "W2": frozenset({"torii.hamburg-named-signal-binding/v1"}),
+    "W3b": frozenset({"torii.hamburg-named-detector-binding/v1"}),
+    "W4": frozenset({"torii.hamburg-named-replay/v2"}),
+}
+
+NETWORK_BOUND_STAGES = frozenset({"W1", "W2", "W3b", "W4"})
+STAGE_ORDER = (*STAGE_DEPENDENCIES, "W5")
+_STAGE_INDEX = {stage_id: index for index, stage_id in enumerate(STAGE_ORDER)}
+_STAGE_ID_BY_CASEFOLD = {stage_id.casefold(): stage_id for stage_id in STAGE_ORDER}
 
 # This is the small, stable design contract for the Codex loop.  It tells a
 # resumed run where to look first and what a stage must verify before adding
@@ -80,27 +96,50 @@ STAGE_CONTRACTS: Mapping[str, Mapping[str, tuple[str, ...]]] = {
         ),
         "verification": ("MAP/OCIT identity", "TLS link coverage", "complete t=0/history"),
     },
-    "W3": {
+    "W3a": {
+        "code_surfaces": ("core/hamburg_named_count_scope.py",),
+        "entrypoints": ("scripts/build_hamburg_named_counts.py",),
+        "verification": ("complete official bins", "explicit time window", "source hashes"),
+    },
+    "W3b": {
         "code_surfaces": (
-            "core/hamburg_named_count_scope.py",
             "core/hamburg_named_detector_bindings.py",
             "core/digital_twin_mapping.py",
         ),
-        "entrypoints": (
-            "scripts/build_hamburg_named_counts.py",
-            "scripts/build_hamburg_named_detector_bindings.py",
+        "entrypoints": ("scripts/build_hamburg_named_detector_bindings.py",),
+        "verification": (
+            "W1 network SHA",
+            "W3a count-stream SHA",
+            "detector-mapping artifact SHA",
+            "explicit CRS",
+            "unique lane binding",
+            "same-location E1/E2",
         ),
-        "verification": ("complete official bins", "explicit CRS", "unique lane binding", "same-location E1/E2"),
     },
     "W4": {
-        "code_surfaces": ("core/hamburg_named_replay.py", "core/route_sampler.py"),
+        "code_surfaces": (
+            "core/hamburg_named_replay.py",
+            "core/route_sampler.py",
+            "core/route_sensor_matrix.py",
+        ),
         "entrypoints": ("scripts/build_hamburg_named_replay.py",),
-        "verification": ("routeability", "zero teleports", "zero collisions", "formal comparison"),
+        "verification": (
+            "W1 network SHA",
+            "selected W2, W3a, and W3b manifest identities",
+            "W3a simulation-count SHA",
+            "approved detector aggregation semantics",
+            "signal-event artifact SHA",
+            "route incidence and demand",
+            "routeability",
+            "zero teleports",
+            "zero collisions",
+            "formal comparison",
+        ),
     },
     "W5": {
         "code_surfaces": ("core/hamburg_execution_workflow.py", "server.py"),
         "entrypoints": ("scripts/run_hamburg_execution_plan.py",),
-        "verification": ("hash-bound rerun", "downstream invalidation", "full regression"),
+        "verification": ("derived capability matrix", "hash-bound rerun", "downstream invalidation"),
     },
 }
 
@@ -109,13 +148,27 @@ class HamburgExecutionWorkflowError(ValueError):
     """Raised when a workflow plan cannot be made hash-safe."""
 
 
+def _canonical_stage_id(value: object) -> str:
+    raw = str(value).strip()
+    if raw.casefold() == "w3":
+        raise HamburgExecutionWorkflowError(
+            "legacy stage W3 was split; provide W3a count acquisition and W3b detector binding manifests"
+        )
+    stage_id = _STAGE_ID_BY_CASEFOLD.get(raw.casefold())
+    if stage_id is None:
+        raise HamburgExecutionWorkflowError(f"unknown workflow stage {raw!r}")
+    if stage_id == "W5":
+        raise HamburgExecutionWorkflowError("W5 is generated automatically and does not accept a manifest")
+    return stage_id
+
+
 def materialize_hamburg_execution_plan_from_config(
     config_file: Path,
     *,
     output_dir: Path | None = None,
     resume: bool | None = None,
 ) -> dict[str, Any]:
-    """Run the existing W0-W5 ledger from one portable JSON configuration.
+    """Run the existing Hamburg stage ledger from one portable JSON configuration.
 
     Paths are resolved relative to the configuration file. Focused Hamburg
     modules remain responsible for producing each stage artifact; this facade
@@ -141,15 +194,15 @@ def materialize_hamburg_execution_plan_from_config(
     stage_manifests: dict[str, Path] = {}
     stage_feedback: dict[str, tuple[Path, ...]] = {}
     for raw_stage_id, raw_stage in raw_stages.items():
-        stage_id = str(raw_stage_id).upper()
-        if stage_id not in STAGE_NAMES:
-            raise HamburgExecutionWorkflowError(f"unknown workflow stage {stage_id!r}")
+        stage_id = _canonical_stage_id(raw_stage_id)
         if not isinstance(raw_stage, Mapping):
             raise HamburgExecutionWorkflowError(f"workflow stage {stage_id} must be an object")
         manifest = raw_stage.get("manifest")
         if manifest is not None:
             if not isinstance(manifest, str) or not manifest.strip():
                 raise HamburgExecutionWorkflowError(f"workflow stage {stage_id} manifest is invalid")
+            if stage_id in stage_manifests:
+                raise HamburgExecutionWorkflowError(f"duplicate workflow stage {stage_id}")
             stage_manifests[stage_id] = _resolve_config_path(base_dir, manifest)
         feedback = raw_stage.get("feedback", ())
         if not isinstance(feedback, Sequence) or isinstance(feedback, (str, bytes)):
@@ -514,10 +567,17 @@ def materialize_hamburg_execution_plan(
         record["contract"] = _stage_contract(stage_id)
         stage_records[stage_id] = record
 
+    _apply_network_binding_contract(stage_records)
+    _apply_stage_dependency_contract(stage_records)
     changed = _changed_stage_ids(previous, stage_records)
-    invalidated = _downstream_closure(changed)
+    invalidated = {
+        stage_id
+        for stage_id in _downstream_closure(changed)
+        if _stage_was_materialized(previous, stage_id)
+    }
+    invalidated.update(_pending_invalidated_stage_ids(previous, changed))
     for stage_id in sorted(invalidated, key=_stage_sort_key):
-        if stage_id == "W0" or stage_id not in stage_records:
+        if stage_id not in stage_records:
             continue
         record = stage_records[stage_id]
         if record["status"] == "not_run":
@@ -530,7 +590,6 @@ def materialize_hamburg_execution_plan(
         if "effective_status" not in record:
             record["effective_status"] = record["status"]
         dependencies = STAGE_DEPENDENCIES[stage_id]
-        dependency_rows = [stage_records[dependency] for dependency in dependencies]
         dependency_decisions = {
             dependency: _stage_gate(stage_records[dependency])
             for dependency in dependencies
@@ -558,11 +617,10 @@ def materialize_hamburg_execution_plan(
             record["blocked_by"] = failed
         else:
             record["readiness"] = "complete"
-        del dependency_rows
 
     next_action = _next_action(stage_records)
     plan_revision = int(previous.get("plan_revision", 0)) + 1 if previous else 1
-    first_invalid_stage = _first_invalid_stage(stage_records)
+    first_invalid_stage = next_action.get("stage_id")
     replan = _replan_summary(
         stage_records,
         next_action=next_action,
@@ -570,6 +628,9 @@ def materialize_hamburg_execution_plan(
         invalidated=invalidated,
         first_invalid_stage=first_invalid_stage,
     )
+    capabilities = _capability_matrix(stage_records)
+    promotion_pass = all(_stage_promotable(record) for record in stage_records.values())
+    stage_records["W5"] = _summary_stage_record(stage_records, capabilities)
     plan: dict[str, Any] = {
         "schema": HAMBURG_EXECUTION_WORKFLOW_SCHEMA,
         "workflow_id": workflow_id,
@@ -591,15 +652,20 @@ def materialize_hamburg_execution_plan(
         "replan": replan,
         "changed_stages": sorted(changed, key=_stage_sort_key),
         "invalidated_downstream_stages": sorted(invalidated, key=_stage_sort_key),
+        "capabilities": capabilities,
         "promotion": {
-            "decision": "pass" if next_action["status"] == "complete" else "blocked",
+            "decision": "pass" if promotion_pass else "blocked",
             "automatic": True,
-            "requires": "W0-W4 all have automatic_promotion_gate=pass",
+            "execution_complete": next_action["status"] == "complete",
+            "requires": (
+                "W0, W1, W2, W3a, W3b, and W4 are materialized with "
+                "execution_gate=pass, decision=pass, and automatic_promotion_gate=pass"
+            ),
         },
         "claim_boundary": {
             "proves": [
                 "which dated Torii stage artifacts are being reused",
-                "that each referenced manifest is byte-hash stable",
+                "that each referenced manifest and network binding is byte-hash stable",
                 "which stage is eligible or blocked next",
             ],
             "does_not_prove": [
@@ -620,9 +686,7 @@ def _normalize_stage_paths(stage_manifests: Mapping[str, Path]) -> dict[str, Pat
         raise HamburgExecutionWorkflowError("stage_manifests must be a mapping")
     result: dict[str, Path] = {}
     for raw_stage, raw_path in stage_manifests.items():
-        stage_id = str(raw_stage).strip().upper()
-        if stage_id not in STAGE_DEPENDENCIES:
-            raise HamburgExecutionWorkflowError(f"unknown stage id: {raw_stage!r}")
+        stage_id = _canonical_stage_id(raw_stage)
         path = Path(raw_path).expanduser().resolve()
         if stage_id in result and result[stage_id] != path:
             raise HamburgExecutionWorkflowError(f"duplicate stage id: {stage_id}")
@@ -642,9 +706,7 @@ def _normalize_feedback_paths(
         raise HamburgExecutionWorkflowError("stage_feedback must be a mapping")
     result: dict[str, tuple[Path, ...]] = {}
     for raw_stage, raw_paths in stage_feedback.items():
-        stage_id = str(raw_stage).strip().upper()
-        if stage_id not in STAGE_DEPENDENCIES:
-            raise HamburgExecutionWorkflowError(f"unknown stage id: {raw_stage!r}")
+        stage_id = _canonical_stage_id(raw_stage)
         if isinstance(raw_paths, (str, bytes, Path)):
             values = (Path(raw_paths),)
         else:
@@ -689,6 +751,7 @@ def _read_stage_record(
     if not isinstance(payload, Mapping):
         base.update({"status": "blocked", "decision": "blocked", "reason": "manifest_not_object"})
         return base
+    reported_schema = payload.get("schema") or payload.get("schema_id")
     raw_status = str(payload.get("status", "unknown"))
     gate = str(payload.get("automatic_promotion_gate", "blocked"))
     decision = _manifest_decision(raw_status, gate)
@@ -707,11 +770,41 @@ def _read_stage_record(
             "execution_gate": execution_gate,
             "manifest_sha256": file_sha256(path),
             "manifest_bytes": path.stat().st_size,
-            "reported_schema": payload.get("schema") or payload.get("schema_id"),
+            "reported_schema": reported_schema,
             "reason": _manifest_reason(payload),
             "feedback": feedback,
         }
     )
+    if stage_id == "W3b":
+        gates = payload.get("gates")
+        base["sensor_aggregation_semantics"] = (
+            gates.get("sensor_aggregation_semantics")
+            if isinstance(gates, Mapping)
+            else None
+        )
+    if reported_schema not in STAGE_SCHEMAS[stage_id]:
+        expected = ", ".join(sorted(STAGE_SCHEMAS[stage_id]))
+        _block_stage_record(
+            base,
+            f"manifest_schema_mismatch: expected {expected}; got {reported_schema!r}",
+        )
+    else:
+        if stage_id in NETWORK_BOUND_STAGES:
+            binding, error = _network_binding_from_manifest(stage_id, payload, path)
+            if binding:
+                base["network_binding"] = binding
+            if error:
+                _block_stage_record(base, error)
+        if stage_id in {"W3a", "W3b"}:
+            bindings, errors = _stage_artifact_bindings_from_manifest(stage_id, payload, path)
+            base["artifact_bindings"] = bindings
+            if errors:
+                _block_stage_record(base, "; ".join(errors))
+        if stage_id in {"W3b", "W4"}:
+            bindings, errors = _stage_dependency_bindings_from_manifest(stage_id, payload, path)
+            base["stage_bindings"] = bindings
+            if errors:
+                _block_stage_record(base, "; ".join(errors))
     for feedback_path in feedback_paths:
         _merge_feedback_manifest(base, feedback_path)
     if not base["reason"]:
@@ -719,6 +812,264 @@ def _read_stage_record(
     if not base["feedback"]:
         base.pop("feedback")
     return base
+
+
+def _network_binding_from_manifest(
+    stage_id: str,
+    payload: Mapping[str, Any],
+    manifest_path: Path,
+) -> tuple[dict[str, Any], str | None]:
+    paths: Mapping[str, tuple[tuple[str, ...], ...]] = {
+        "W1": (("network_binding",), ("network",)),
+        "W2": (("network_binding",), ("source", "candidate_net")),
+        "W3b": (("network_binding",), ("source", "candidate_net"), ("network",)),
+        "W4": (("network_binding",), ("source", "net")),
+    }
+    raw_binding: Mapping[str, Any] | None = None
+    for keys in paths[stage_id]:
+        value: Any = payload
+        for key in keys:
+            value = value.get(key) if isinstance(value, Mapping) else None
+        if isinstance(value, Mapping):
+            raw_binding = value
+            break
+    if raw_binding is None:
+        return {}, "network_binding_missing"
+
+    raw_path = raw_binding.get("path")
+    raw_sha256 = raw_binding.get("sha256")
+    binding: dict[str, Any] = {
+        "path": str(raw_path or ""),
+        "sha256": str(raw_sha256 or "").lower(),
+        "validation": "blocked",
+    }
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return binding, "network_binding_path_missing"
+    if (
+        not isinstance(raw_sha256, str)
+        or len(raw_sha256) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in raw_sha256)
+    ):
+        return binding, "network_binding_sha256_invalid"
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = manifest_path.parent / candidate
+    try:
+        candidate = candidate.resolve(strict=True)
+        actual_sha256 = file_sha256(candidate)
+    except (OSError, RuntimeError) as exc:
+        return binding, f"network_binding_unreadable: {exc}"
+    binding.update(
+        {
+            "path": str(candidate),
+            "actual_sha256": actual_sha256,
+        }
+    )
+    if actual_sha256 != str(raw_sha256).lower():
+        return binding, "network_binding_sha256_mismatch"
+    binding["validation"] = "pass"
+    return binding, None
+
+
+def _apply_network_binding_contract(stages: Mapping[str, dict[str, Any]]) -> None:
+    expected = stages["W1"].get("network_binding")
+    if not isinstance(expected, Mapping) or expected.get("validation") != "pass":
+        return
+    expected_sha256 = str(expected["sha256"])
+    for stage_id in ("W2", "W3b", "W4"):
+        record = stages[stage_id]
+        if record.get("status") == "not_run":
+            continue
+        binding = record.get("network_binding")
+        if not isinstance(binding, dict) or binding.get("validation") != "pass":
+            continue
+        binding["expected_w1_sha256"] = expected_sha256
+        if binding.get("sha256") != expected_sha256:
+            binding["validation"] = "blocked"
+            _block_stage_record(record, "network_binding_does_not_match_W1")
+
+
+def _stage_dependency_bindings_from_manifest(
+    stage_id: str,
+    payload: Mapping[str, Any],
+    manifest_path: Path,
+) -> tuple[dict[str, Any], list[str]]:
+    source = payload.get("source")
+    if not isinstance(source, Mapping):
+        return {}, ["stage_binding_source_missing"]
+    bindings: dict[str, Any] = {}
+    errors: list[str] = []
+    required_names = {
+        "W3b": ("count_stream_snapshot",),
+        "W4": (
+            "signal_binding_manifest",
+            "detector_binding_manifest",
+            "count_scope_manifest",
+            "count_stream_snapshot",
+            "canonical_count_file",
+        ),
+    }[stage_id]
+    for name in required_names:
+        binding, error = _file_identity_from_manifest(
+            source.get(name),
+            manifest_path,
+            label=name,
+        )
+        if binding:
+            bindings[name] = binding
+        if error:
+            errors.append(error)
+    if stage_id == "W4":
+        optional_names = ("signal_observation_manifest", "tls_link_events")
+        present = [name for name in optional_names if source.get(name) is not None]
+        if present and len(present) != len(optional_names):
+            errors.append("stage_binding_signal_history_incomplete")
+        for name in present:
+            binding, error = _file_identity_from_manifest(
+                source.get(name),
+                manifest_path,
+                label=name,
+            )
+            if binding:
+                bindings[name] = binding
+            if error:
+                errors.append(error)
+    return bindings, errors
+
+
+def _stage_artifact_bindings_from_manifest(
+    stage_id: str,
+    payload: Mapping[str, Any],
+    manifest_path: Path,
+) -> tuple[dict[str, Any], list[str]]:
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, Mapping):
+        return {}, ["artifact_binding_source_missing"]
+    names = {
+        "W3a": ("count_streams_raw", "counts_simulation_15min"),
+        "W3b": ("detector_mapping",),
+    }[stage_id]
+    bindings: dict[str, Any] = {}
+    errors: list[str] = []
+    for name in names:
+        binding, error = _file_identity_from_manifest(
+            artifacts.get(name),
+            manifest_path,
+            label=name,
+        )
+        if binding:
+            bindings[name] = binding
+        if error:
+            errors.append(error)
+    return bindings, errors
+
+
+def _file_identity_from_manifest(
+    raw_identity: object,
+    manifest_path: Path,
+    *,
+    label: str,
+) -> tuple[dict[str, Any], str | None]:
+    if not isinstance(raw_identity, Mapping):
+        return {}, f"stage_binding_{label}_missing"
+    raw_path = raw_identity.get("path")
+    raw_sha256 = raw_identity.get("sha256")
+    binding: dict[str, Any] = {
+        "path": str(raw_path or ""),
+        "sha256": str(raw_sha256 or "").lower(),
+        "validation": "blocked",
+    }
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return binding, f"stage_binding_{label}_path_missing"
+    if (
+        not isinstance(raw_sha256, str)
+        or len(raw_sha256) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in raw_sha256)
+    ):
+        return binding, f"stage_binding_{label}_sha256_invalid"
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = manifest_path.parent / path
+    try:
+        path = path.resolve(strict=True)
+        actual_sha256 = file_sha256(path)
+    except (OSError, RuntimeError) as exc:
+        return binding, f"stage_binding_{label}_unreadable: {exc}"
+    binding.update({"path": str(path), "actual_sha256": actual_sha256})
+    if actual_sha256 != raw_sha256.lower():
+        return binding, f"stage_binding_{label}_sha256_mismatch"
+    binding["validation"] = "pass"
+    return binding, None
+
+
+def _apply_stage_dependency_contract(stages: Mapping[str, dict[str, Any]]) -> None:
+    checks = (
+        ("W3b", "count_stream_snapshot", "W3a", "artifact_bindings", "count_streams_raw"),
+        ("W4", "signal_binding_manifest", "W2", None, None),
+        ("W4", "detector_binding_manifest", "W3b", None, None),
+        ("W4", "count_scope_manifest", "W3a", None, None),
+        ("W4", "count_stream_snapshot", "W3a", "artifact_bindings", "count_streams_raw"),
+        (
+            "W4",
+            "canonical_count_file",
+            "W3a",
+            "artifact_bindings",
+            "counts_simulation_15min",
+        ),
+    )
+    for record_id, name, expected_stage_id, expected_container, expected_name in checks:
+        record = stages[record_id]
+        if record.get("status") == "not_run":
+            continue
+        bindings = record.get("stage_bindings")
+        if not isinstance(bindings, Mapping):
+            continue
+        expected_record = stages[expected_stage_id]
+        if expected_container is None:
+            expected_sha256 = expected_record.get("manifest_sha256")
+        else:
+            expected_bindings = expected_record.get(expected_container)
+            expected_binding = (
+                expected_bindings.get(expected_name)
+                if isinstance(expected_bindings, Mapping)
+                else None
+            )
+            expected_sha256 = (
+                expected_binding.get("sha256")
+                if isinstance(expected_binding, Mapping)
+                else None
+            )
+        if not isinstance(expected_sha256, str):
+            continue
+        binding = bindings.get(name)
+        if not isinstance(binding, dict) or binding.get("validation") != "pass":
+            continue
+        binding["expected_stage_id"] = expected_stage_id
+        binding["expected_sha256"] = expected_sha256
+        if binding.get("sha256") != expected_sha256:
+            binding["validation"] = "blocked"
+            _block_stage_record(
+                record,
+                f"stage_binding_{name}_does_not_match_{expected_stage_id}",
+            )
+    w4 = stages["W4"]
+    w3b = stages["W3b"]
+    if (
+        w4.get("status") != "not_run"
+        and isinstance(w3b.get("manifest_sha256"), str)
+        and w3b.get("sensor_aggregation_semantics") != "pass"
+    ):
+        _block_stage_record(w4, "W3b_sensor_aggregation_semantics_not_pass")
+
+
+def _block_stage_record(record: dict[str, Any], reason: str) -> None:
+    existing = record.get("contract_error")
+    if isinstance(existing, str) and existing and reason not in existing.split("; "):
+        reason = f"{existing}; {reason}"
+    record["decision"] = "blocked"
+    record["execution_gate"] = "blocked"
+    record["contract_error"] = reason
+    record["reason"] = reason
 
 
 def _merge_feedback_manifest(record: dict[str, Any], path: Path) -> None:
@@ -798,7 +1149,12 @@ def _manifest_decision(status: str, gate: str) -> str:
 
 
 def _stage_gate(record: Mapping[str, Any]) -> str:
-    return "pass" if record.get("execution_gate") == "pass" else "blocked"
+    return (
+        "pass"
+        if record.get("execution_gate") == "pass"
+        and record.get("effective_status", record.get("status")) != "not_run"
+        else "blocked"
+    )
 
 
 def _manifest_reason(payload: Mapping[str, Any]) -> str | None:
@@ -880,16 +1236,6 @@ def _manifest_feedback(payload: Mapping[str, Any]) -> dict[str, Any]:
     return feedback
 
 
-def _first_invalid_stage(stages: Mapping[str, Mapping[str, Any]]) -> str | None:
-    for stage_id in STAGE_DEPENDENCIES:
-        record = stages[stage_id]
-        if record.get("execution_gate") != "pass":
-            return stage_id
-        if record.get("effective_status") == "not_run":
-            return stage_id
-    return None
-
-
 def _replan_summary(
     stages: Mapping[str, Mapping[str, Any]],
     *,
@@ -921,6 +1267,38 @@ def _read_previous_plan(path: Path) -> Mapping[str, Any] | None:
     return payload
 
 
+def _stage_was_materialized(previous: Mapping[str, Any] | None, stage_id: str) -> bool:
+    if previous is None:
+        return False
+    stages = previous.get("stages")
+    record = stages.get(stage_id) if isinstance(stages, Mapping) else None
+    return (
+        isinstance(record, Mapping)
+        and record.get("manifest") is not None
+        and record.get("effective_status", record.get("status")) != "not_run"
+    )
+
+
+def _pending_invalidated_stage_ids(
+    previous: Mapping[str, Any] | None,
+    changed: set[str],
+) -> set[str]:
+    """Keep invalidation active until the downstream manifest identity changes."""
+
+    if previous is None:
+        return set()
+    stages = previous.get("stages")
+    if not isinstance(stages, Mapping):
+        return set()
+    return {
+        stage_id
+        for stage_id in STAGE_DEPENDENCIES
+        if stage_id not in changed
+        and isinstance(stages.get(stage_id), Mapping)
+        and stages[stage_id].get("resume_decision") == "invalidate_and_rerun"
+    }
+
+
 def _changed_stage_ids(previous: Mapping[str, Any] | None, current: Mapping[str, Mapping[str, Any]]) -> set[str]:
     if previous is None:
         return set()
@@ -937,9 +1315,30 @@ def _changed_stage_ids(previous: Mapping[str, Any] | None, current: Mapping[str,
         if (
             old.get("manifest_sha256") != record.get("manifest_sha256")
             or _feedback_manifest_sha256(old) != _feedback_manifest_sha256(record)
+            or (
+                stage_id == "W1"
+                and old.get("network_binding") != record.get("network_binding")
+            )
+            or old.get("artifact_bindings") != record.get("artifact_bindings")
+            or _w4_signal_history_binding_state(old)
+            != _w4_signal_history_binding_state(record)
         ):
             changed.add(stage_id)
     return changed
+
+
+def _w4_signal_history_binding_state(
+    record: Mapping[str, Any],
+) -> tuple[object, object] | None:
+    if record.get("stage_id") != "W4":
+        return None
+    bindings = record.get("stage_bindings")
+    if not isinstance(bindings, Mapping):
+        return (None, None)
+    return (
+        bindings.get("signal_observation_manifest"),
+        bindings.get("tls_link_events"),
+    )
 
 
 def _feedback_manifest_sha256(
@@ -975,19 +1374,89 @@ def _feedback_manifest_sha256(
     return ((str(feedback_manifest["path"]), str(value) if value else None),)
 
 
+def _capability_matrix(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    stage_by_capability = {
+        "road_topology": "W1",
+        "official_signal_control": "W2",
+        "official_counts": "W3a",
+        "detector_binding": "W3b",
+        "demand_inference_and_replay": "W4",
+    }
+    capabilities = {
+        capability: {
+            "stage_id": stage_id,
+            "status": stages[stage_id].get("effective_status", stages[stage_id].get("status")),
+            "decision": stages[stage_id].get("decision"),
+            "execution_gate": stages[stage_id].get("execution_gate"),
+            "automatic_promotion_gate": stages[stage_id].get("automatic_promotion_gate"),
+        }
+        for capability, stage_id in stage_by_capability.items()
+    }
+    capabilities["field_faithful_digital_twin"] = {
+        "status": "pass" if all(_stage_promotable(record) for record in stages.values()) else "blocked"
+    }
+    return capabilities
+
+
+def _stage_promotable(record: Mapping[str, Any]) -> bool:
+    return (
+        record.get("effective_status", record.get("status")) != "not_run"
+        and record.get("execution_gate") == "pass"
+        and record.get("automatic_promotion_gate") == "pass"
+        and record.get("decision") == "pass"
+    )
+
+
+def _summary_stage_record(
+    stages: Mapping[str, Mapping[str, Any]],
+    capabilities: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "stage_id": "W5",
+        "name": STAGE_NAMES["W5"],
+        "generated": True,
+        "manifest": None,
+        "status": "complete",
+        "effective_status": "complete",
+        "automatic_promotion_gate": "pass",
+        "decision": "pass",
+        "execution_gate": "pass",
+        "readiness": "complete",
+        "dependencies": list(STAGE_DEPENDENCIES),
+        "dependency_gate": {
+            stage_id: _stage_gate(record)
+            for stage_id, record in stages.items()
+        },
+        "summarized_capabilities": list(capabilities),
+        "contract": _stage_contract("W5"),
+    }
+
+
 def _downstream_closure(changed: set[str]) -> set[str]:
-    invalidated = set(changed)
+    invalidated: set[str] = set()
     changed_again = True
     while changed_again:
         changed_again = False
         for stage_id, dependencies in STAGE_DEPENDENCIES.items():
-            if stage_id not in invalidated and any(dependency in invalidated for dependency in dependencies):
+            if (
+                stage_id not in changed
+                and stage_id not in invalidated
+                and any(dependency in changed or dependency in invalidated for dependency in dependencies)
+            ):
                 invalidated.add(stage_id)
                 changed_again = True
     return invalidated
 
 
 def _next_action(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    for stage_id in STAGE_DEPENDENCIES:
+        record = stages[stage_id]
+        if record.get("effective_status") == "not_run" and record.get("readiness") == "ready":
+            return {
+                "stage_id": stage_id,
+                "status": "ready",
+                "action": f"run_{STAGE_NAMES[stage_id]}",
+            }
     for stage_id in STAGE_DEPENDENCIES:
         record = stages[stage_id]
         if record.get("execution_gate") != "pass" and record.get("effective_status") != "not_run":
@@ -998,12 +1467,6 @@ def _next_action(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
                 "blocked_by": record.get("blocked_by", {stage_id: record.get("decision")}),
             }
         if record.get("effective_status") == "not_run":
-            if record.get("readiness") == "ready":
-                return {
-                    "stage_id": stage_id,
-                    "status": "ready",
-                    "action": f"run_{STAGE_NAMES[stage_id]}",
-                }
             return {
                 "stage_id": stage_id,
                 "status": "blocked",
@@ -1014,7 +1477,7 @@ def _next_action(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def _stage_sort_key(stage_id: str) -> tuple[int, str]:
-    return (int(stage_id[1:]), stage_id)
+    return (_STAGE_INDEX.get(stage_id, len(_STAGE_INDEX)), stage_id)
 
 
 __all__ = [

@@ -11,9 +11,13 @@ from torii_sumo.core.hamburg_named_replay import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build a detector-constrained Hamburg SUMO diagnostic replay.")
+    parser = argparse.ArgumentParser(
+        description="Build Hamburg W4 from hash-bound W2 signal, W3a count, and W3b detector inputs."
+    )
     parser.add_argument("--net-file", required=True, type=Path)
     parser.add_argument("--signal-binding-manifest", required=True, type=Path)
+    parser.add_argument("--detector-binding-manifest", required=True, type=Path)
+    parser.add_argument("--count-scope-manifest", required=True, type=Path)
     parser.add_argument("--count-stream-snapshot", required=True, type=Path)
     parser.add_argument("--canonical-count-file", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
@@ -39,6 +43,8 @@ def main() -> int:
         report = materialize_hamburg_named_replay(
             net_file=args.net_file,
             signal_binding_manifest=args.signal_binding_manifest,
+            detector_binding_manifest=args.detector_binding_manifest,
+            count_scope_manifest=args.count_scope_manifest,
             count_stream_snapshot=args.count_stream_snapshot,
             canonical_count_file=args.canonical_count_file,
             output_dir=args.output_dir,

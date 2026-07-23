@@ -248,10 +248,10 @@ def create_server() -> FastMCP:
     server.tool(description="Fetch a declared official Hamburg detector scope for the named Am Sandtorkai corridor, select a complete warm-up plus Saturday two-hour window, and write auditable 15-minute SUMO count inputs; missing detectors and unknown directions remain explicit and block promotion.")(
         sumo_hamburg_named_count_scope
     )
-    server.tool(description="Record and resume the hash-bound Am Sandtorkai W0-W5 execution plan; merge optional diagnostic feedback manifests, reuse unchanged stage manifests, invalidate downstream stages after upstream changes, and fail closed on missing official evidence.")(
+    server.tool(description="Record and resume the hash-bound Am Sandtorkai execution plan; keep count acquisition separate from network-bound detector binding, verify downstream network SHA-256 and stage identities, derive the W5 capability summary automatically, and fail closed on stale or missing official evidence.")(
         sumo_hamburg_sandtorkai_execution_plan
     )
-    server.tool(description="Build the reusable W4 Am Sandtorkai detector-constrained SUMO replay from the exact road, signal-binding, and official count manifests; generate same-location E1/E2 sensors and routes, compare every warm-up-excluded bin, and block automatically on teleports or collisions.")(
+    server.tool(description="Build the reusable W4 Am Sandtorkai detector-constrained SUMO replay from the exact road, W2 signal-binding, W3a count-scope, and W3b detector-binding manifests; require approved aggregation semantics, consume hash-bound mappings/events, and block on teleports or collisions.")(
         sumo_hamburg_sandtorkai_named_replay
     )
     server.tool(description="Fetch official Hamburg primary-signal history for a fixed UTC window from the bound Am Sandtorkai streams, write time-zero/in-window SUMO TLS link events, and fail closed on missing or partial observations.")(

@@ -146,6 +146,10 @@ def test_materialize_signal_history_writes_events_and_keeps_missing_node_blocked
     assert report["event_stats"]["event_count"] == 3
     event_file = Path(report["artifacts"]["tls_link_events"])
     assert event_file.is_file()
+    assert report["artifact_identities"]["tls_link_events"] == {
+        "path": str(event_file),
+        "sha256": file_sha256(event_file),
+    }
     assert "simulation_time" in event_file.read_text(encoding="utf-8").splitlines()[0]
     assert Path(report["manifest_file"]).is_file()
 

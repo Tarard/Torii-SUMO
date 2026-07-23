@@ -1,4 +1,4 @@
-"""Fail-closed W3 detector-to-lane binding for the named Hamburg corridor.
+"""Fail-closed W3b detector-to-lane binding for the named Hamburg corridor.
 
 The official detector service gives WGS84 points, while the official-first
 candidate network is stored in ETRS89 / UTM 32N metres.  This stage performs

@@ -54,9 +54,10 @@ conversation memory.
 | W0 scope/evidence | scope manifest, source catalog snapshots, coordinate and hash ledger | named nodes and road arms are unambiguous; legacy inputs are segregated |
 | W1 road reconstruction | PlainXML + compiled `.net.xml`, road-arm/archetype evidence | every retained movement has one bounded lane path; no introduced focus overlap; routes load |
 | W2 signals | W2a window screen, W2b coverage census, MAP/OCIT bindings, TLS owners/link indices, historical event CSV | census endpoint coverage, screen a candidate Saturday, then require every replayed passenger link to have a complete history and t=0 state; missing 2403 material stays blocked |
-| W3 demand/sensors | same-location E1/E2, 15-minute aggregates, edgeData, routeSampler routes | all official fields mapped or explicitly excluded; route constraints match; two-hour window has warm-up |
-| W4 replay | SUMO config, summary/tripinfo, real-vs-virtual comparison | every expected detector bin is measured; zero SUMO teleports/collisions; comparison metrics are recorded |
-| W5 productization | one resumable MCP/CLI workflow and evidence package | hashes, provenance, failure states, and rerun commands are self-contained |
+| W3a count acquisition | frozen official stream snapshot and 15-minute aggregates | count window, stream identities, completeness, and source hashes are explicit; no SUMO network is required |
+| W3b detector binding | hash-bound detector-to-lane mapping and candidate evidence | exact W1 network and W3a count snapshot are recorded; ambiguous mappings stay visible |
+| W4 route/demand/replay | W3b mapping, same-location E1/E2, routeSampler routes, SUMO config, summary/tripinfo, real-vs-virtual comparison | W1/W2/W3a/W3b identities match; shared-lane aggregation is approved; every expected detector bin is measured; zero SUMO teleports/collisions |
+| W5 workflow summary | derived capability and invalidation record inside the execution plan | hashes, provenance, failure states, and the next rerun action are self-contained |
 
 ## Evidence and claim rules
 
@@ -286,7 +287,8 @@ is recorded in
 complete candidates, with only `07-11` and `07-18` returning any streams
 (8/16 each).
 
-W3 is now implemented in `core/hamburg_named_count_scope.py` with the
+The count-acquisition stage now called W3a was first implemented in
+`core/hamburg_named_count_scope.py` with the
 reproducible entry point `scripts/build_hamburg_named_counts.py`. It reuses the
 existing `SensorThingsClient`, count parsers, Saturday-window ranking, warm-up
 timeline, and canonical-count writer. The real run is
@@ -299,7 +301,7 @@ assigned to `Richtung 1` only by a deterministic nearest-declared-direction
 geometry rule (3.116 m to stream 28466 versus 23.806 m to the next candidate);
 the inference and provenance remain in `sensor-scope.evidence.json`. The
 single compact hand-off is `counts.corridor.aggregate.15min.csv`, grouped by
-official node and direction. The W3 execution gate passes for diagnostics,
+official node and direction. The W3a execution gate passes for diagnostics,
 while full node coverage keeps automatic promotion blocked.
 
 W4 is implemented in `core/hamburg_named_replay.py` with the reproducible
@@ -388,52 +390,50 @@ experiment.
 The Codex loop is now executable through
 `core/hamburg_execution_workflow.py`, the CLI
 `scripts/run_hamburg_execution_plan.py`, and MCP tool
-`sumo_hamburg_sandtorkai_execution_plan`. Pass the dated W0-W5 manifest paths
-as `W0=...`, `W1=...`, and so on. Optional diagnostic artifacts (for example
-the W2b endpoint census) can be attached with `--stage-feedback W2=...`;
-repeat the option to attach several feedback manifests to the same stage.
+`sumo_hamburg_sandtorkai_execution_plan`. The v2 contract accepts dated W0,
+W1, W3a, W2, W3b, and W4 manifests. W3a is official count acquisition and
+depends only on W0; W3b is detector binding and depends on both W1 and W3a.
+The existing W4 producer still owns route incidence, demand, and replay, but
+now consumes the selected W3a count values and W3b mapping instead of accepting
+arbitrary count bytes or remapping count points.
+W5 is the derived capability-summary record and cannot be supplied by the caller.
+Optional diagnostic artifacts (for example the W2b endpoint census) can be
+attached with `--stage-feedback W2=...`; repeat the option to attach several
+feedback manifests to the same stage.
 The ledger records each primary and feedback-manifest SHA-256, stage
 dependencies, readiness, first invalid stage, machine feedback, next action,
-and downstream invalidation set. A changed upstream or feedback manifest makes
-dependent stages `not_run` on the next resume; it never reuses an old
-candidate silently. Feedback manifests are merged in command-line order; they
-can explain a stop, but they cannot change a stage's execution or
-automatic-promotion gate. When several feedback manifests are attached, the
-planner compares the complete ordered `(path, SHA-256)` list, including missing
-file entries, so changing any one audit forces a new re-plan.
+and downstream invalidation set. W1, W2, W3b, and W4 network files are
+re-hashed; W2/W3b/W4 must carry the exact W1 network SHA-256, and W4 must name
+the selected W2, W3a, and W3b manifest identities and exact count values.
+Execution-ready signal history must also bind the selected W2 manifest and the
+exact TLS-event bytes. A changed
+upstream or feedback manifest keeps already-materialized dependants invalid
+until each downstream manifest identity changes; the newly supplied changed
+stage itself is not invalidated. Feedback manifests are merged in command-line
+order; they can explain a stop, but they cannot change a stage's execution or
+automatic-promotion gate.
 
 The W0 scope manifest has two separate meanings in this ledger: its overall
 promotion gate remains blocked when 2403 signal assets are missing, while its
 scope execution gate passes because the three official node identities and
-road-scope links are complete. This allows W1 geometry and W3 count work to
+road-scope links are complete. This allows W1 geometry and W3a count work to
 continue without allowing W2 signal promotion. The latest real ledger run is
 `workflow/w5_execution_plan_v32/execution-plan.manifest.json`; W0, W1, W2, and
-W3 have execution gates that allow downstream diagnostics, while W2 remains
-promotion-blocked by signal publication coverage. W4 is explicitly blocked by
-its teleport quality gate and missing historical signal observations, W5 is not
-run, and overall promotion is blocked.
-The revised ledger is
-`workflow/w5_execution_plan_v32/execution-plan.manifest.json`; it uses the
-blocked W2 observation manifest, the official W2 feedback audits, the W3
-detector-binding audit, and the W4 replay audit. Once W2's execution gate is
-usable, the planner correctly retries W4 and reports `resolve_stage_gate` as
-the next action instead of hiding the replay failure. The separate W2b v3
-census still supplies the reason for the publication gate:
-`resolve_official_signal_publication_gap_or_change_scope`.
-The planner honors an explicit stage `execution_gate` in a manifest while
-keeping `automatic_promotion_gate` separate, so structural readiness cannot be
-mistaken for official-data completeness.
-The v32 ledger now attaches the W2b census, current/archive asset-history,
-official identity refresh, and W4 replay audit as hash-bound feedback: it reports
-`missing_required_node_ids=["2403"]` and
+legacy W3 have execution gates that allow downstream diagnostics, while W2
+remains promotion-blocked by signal publication coverage. That v1 artifact is
+historical evidence and must be regenerated under the v2 split before reuse.
+W4 is explicitly blocked by its teleport quality gate and missing historical
+signal observations; overall promotion remains blocked.
+Historical v1 detail: that same v32 ledger used the blocked W2 observation
+manifest, official W2 feedback audits, a legacy W3 detector-binding audit, and
+the W4 replay audit. It kept explicit `execution_gate` and
+`automatic_promotion_gate` decisions separate and attached the W2b census,
+asset history, identity refresh, and replay audit as hash-bound feedback. It
+reported `missing_required_node_ids=["2403"]` and
 `publication_gap.decision=confirmed_official_node_without_published_tld_binding`
-without promoting or guessing a signal plan. The full regression after the
-detector-section change is `1894 passed in 93.17s`; Ruff also passes on the
-changed Python files.
-`git diff --check` is clean for tracked files.
-Each stage record also carries its declared Torii code surfaces, CLI entry
-points, and verification contract, so the next Codex turn starts from the
-same implementation map rather than inventing a new workflow slice.
+without guessing a signal plan. Those details document the old run only; they
+do not satisfy the current W3a/W3b split, W4 v2 dependency identities, or W5
+summary contract.
 
 The same official catalog and directory resolver was rerun on 2026-07-20 into
 `workflow/w2b_signal_asset_directory_v4/`. It resolved exactly one MAP/KML/

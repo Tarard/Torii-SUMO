@@ -140,9 +140,12 @@ These tools construct and assess detector-constrained demand. Their output is a 
 - `sumo_hamburg_named_count_scope`
 - `sumo_hamburg_sandtorkai_signal_observations`
 - `sumo_hamburg_sandtorkai_named_replay`
-- `sumo_hamburg_sandtorkai_execution_plan` (accepts optional hash-bound
-  `stage_feedback` manifests for diagnostic re-planning; feedback cannot
-  promote a blocked stage)
+- `sumo_hamburg_sandtorkai_execution_plan` (keeps network-independent W3a
+  count acquisition separate from W1-bound W3b detector binding, verifies the
+  W2/W3b/W4 network SHA-256 against W1, validates W4's W2/W3a/W3b manifest identities,
+  derives the W5 capability summary automatically,
+  and accepts optional hash-bound `stage_feedback` for diagnostic re-planning;
+  feedback cannot promote a blocked stage)
 - `sumo_hamburg_2394_archetype_classify`
 - `sumo_hamburg_2394_compound_geometry_first_pass`
 - `sumo_hamburg_2394_tls_topology_materialize`
@@ -163,9 +166,10 @@ These tools construct and assess detector-constrained demand. Their output is a 
 This group binds official Hamburg MAP, OCIT, count, detector, candidate, and replay evidence to a fixed corridor scope. Before the corridor TLS materializer may write a lane connection, it requires a hash-bound road-arm/SUMO binding for the exact candidate source network; every planned lane transition must be covered by exactly one ready intent and retain MAP geometry, official movement/control, and SUMO owner/link-index evidence. The geometry-safe package therefore stops after geometry when that candidate-specific binding is absent. Hamburg-specific orchestration stays separate from generic network and detector primitives.
 
 `sumo_hamburg_sandtorkai_named_replay` is the reusable W4 materializer: it
-combines official count snapshots, same-location virtual sensors, routeSampler,
-SUMO, and the real-vs-virtual E1 audit under one automatic teleport/collision
-and completeness gate.
+consumes the hash-bound W2 signal/events, W3a count values, and W3b detector
+mapping; shared-lane aggregation must already be approved. It then combines
+same-location virtual sensors, routeSampler, SUMO, and the real-vs-virtual E1
+audit under one automatic teleport/collision and completeness gate.
 
 `sumo_hamburg_sandtorkai_signal_observations` is the preceding signal-history
 stage: it consumes the hash-bound W2 primary-stream bindings, queries the
