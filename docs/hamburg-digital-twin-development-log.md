@@ -603,3 +603,22 @@ Next curriculum increment:
 - The report keeps the product boundary explicit: exact route-matrix and
   zero-teleport diagnostics are shown, while missing 2403 MAP/OCIT and
   low-confidence detector-lane identities continue to block promotion.
+
+### 2026-07-23 workflow DAG v2
+
+- Split legacy W3 into real existing producers: W3a count acquisition depends
+  on W0, while W3b detector binding depends on W1 and W3a. Route incidence,
+  demand, and replay remain together in W4 until independent producers exist.
+- Re-hash W1/W2/W3b/W4 network files and reject any downstream SHA-256 that
+  differs from W1. Stage schemas are now explicit instead of accepting any
+  JSON object with a passing status.
+- W4 now consumes the hash-bound W3a count values and W3b detector mapping,
+  verifies its selected W2 binding, rejects unresolved shared-lane aggregation,
+  and rejects mutated or cross-binding TLS event history. Its replay manifest
+  and the hash-bound signal-observation manifest are versioned as v2 because
+  these are breaking input/provenance contracts.
+- W5 is generated as the terminal capability-summary record. Resume now
+  invalidates only already-materialized strict descendants, keeps that
+  invalidation until descendant bytes change, never invalidates the newly
+  supplied changed stage, and checks promotion gates independently of whether
+  execution has another action.

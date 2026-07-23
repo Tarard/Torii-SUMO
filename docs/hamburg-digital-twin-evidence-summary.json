@@ -5,6 +5,13 @@
     "official_node_ids": ["2349", "2394", "2403"],
     "claim_status": "detector-constrained-diagnostic-replay"
   },
+  "workflow_v2_eligibility": {
+    "status": "blocked",
+    "w1_network_sha256": "559a5752c06175e4c3aceb1b2082e5539c0e7ee6728d2bff9030110080eae0cf",
+    "stale_network_sha256": "aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33",
+    "stale_evidence": ["W2", "W3 inverse-problem diagnostic", "W4 pre-v2 dependency provenance"],
+    "next_action": "rebuild W2, W3b, and W4 against W1 so W4 consumes W3a count values, an aggregation-approved detector mapping, and hash-bound signal events; do not edit hashes"
+  },
   "evidence": {
     "W1": {
       "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/official_first_named_corridor_v1/workflow/w1_official_corridor_geometry_v20_lsa_boundary_evidence/hamburg_official_corridor_geometry.manifest.json",

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import csv
 import json
-import math
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
-
-from pyproj import Transformer
+from typing import Any, Callable, Mapping
 
 from .artifact_io import write_json_atomic
 from .cached_detector_demand import (
@@ -25,8 +22,6 @@ from .digital_twin_mapping import (
     DetectorMapping,
     aggregate_virtual_counts_to_complete_edge_sections,
     build_virtual_sensor_aggregation,
-    project_point_to_polyline,
-    read_network_lanes,
     write_detector_mapping,
     write_edge_constraint_audit,
     write_route_sampler_edge_counts,
@@ -38,7 +33,7 @@ from .route_sampler import apply_departure_lane_targets, route_source_edges, run
 from .tls_replay import run_tls_detector_replay
 
 
-NAMED_REPLAY_SCHEMA = "torii.hamburg-named-replay/v1"
+NAMED_REPLAY_SCHEMA = "torii.hamburg-named-replay/v2"
 
 
 class HamburgNamedReplayError(ValueError):
@@ -49,6 +44,8 @@ def materialize_hamburg_named_replay(
     *,
     net_file: Path,
     signal_binding_manifest: Path,
+    detector_binding_manifest: Path,
+    count_scope_manifest: Path,
     count_stream_snapshot: Path,
     canonical_count_file: Path,
     output_dir: Path,
@@ -60,48 +57,68 @@ def materialize_hamburg_named_replay(
     comparison_begin: int = 1800,
     comparison_end: int = 9000,
     interval: int = 900,
-    max_snap_distance_m: float = 50.0,
     timeout_seconds: float = 300.0,
     allow_detector_cross_section_boundaries: bool = False,
     command_runner: Callable[..., object] = run_command,
 ) -> dict[str, Any]:
-    """Write detector, route, SUMO and comparison artifacts without changing inputs."""
+    """Write replay artifacts from selected W2 signal, W3a count, and W3b detector inputs."""
 
     net_path = Path(net_file).expanduser().resolve(strict=True)
     binding_path = Path(signal_binding_manifest).expanduser().resolve(strict=True)
+    detector_binding_path = Path(detector_binding_manifest).expanduser().resolve(strict=True)
+    count_scope_path = Path(count_scope_manifest).expanduser().resolve(strict=True)
     stream_path = Path(count_stream_snapshot).expanduser().resolve(strict=True)
     count_path = Path(canonical_count_file).expanduser().resolve(strict=True)
     if simulation_end <= simulation_begin or interval <= 0 or (simulation_end - simulation_begin) % interval:
         raise HamburgNamedReplayError("simulation window must contain whole positive intervals")
     if not simulation_begin <= comparison_begin < comparison_end <= simulation_end:
         raise HamburgNamedReplayError("comparison window must be inside the simulation window")
-    if not math.isfinite(max_snap_distance_m) or max_snap_distance_m <= 0:
-        raise HamburgNamedReplayError("max_snap_distance_m must be positive")
     destination = Path(output_dir).expanduser().resolve()
     destination.mkdir(parents=True, exist_ok=True)
     if any(destination.iterdir()):
         raise HamburgNamedReplayError("output_dir must be empty; choose a new versioned run")
 
     binding = _load_binding_manifest(binding_path)
+    _validate_binding_network(binding, net_path)
     signal_history = (
-        _load_signal_observation_manifest(Path(signal_observation_manifest).expanduser().resolve(strict=True))
+        _load_signal_observation_manifest(
+            Path(signal_observation_manifest).expanduser().resolve(strict=True),
+            binding_manifest=binding_path,
+        )
         if signal_observation_manifest is not None
         else None
     )
+    _validate_count_scope_manifest(
+        count_scope_path,
+        count_stream_snapshot=stream_path,
+        canonical_count_file=count_path,
+    )
     streams = read_hamburg_count_stream_snapshot(stream_path)
     counts = read_canonical_count_file(count_path)
+    detector_binding, mappings = _load_detector_binding_manifest(
+        detector_binding_path,
+        replay_net=net_path,
+        count_stream_snapshot=stream_path,
+        expected_stream_ids={stream.stream_id for stream in streams},
+    )
     signal_history_scope = _audit_signal_history_scope(
         signal_history,
         counts=counts,
         simulation_begin=simulation_begin,
         simulation_end=simulation_end,
     )
-    _, network_lanes = read_network_lanes(net_path)
-    mappings, mapping_evidence = _snap_count_streams(
-        streams,
-        network_lanes,
-        max_distance_m=max_snap_distance_m,
-    )
+    mapping_evidence = [
+        {
+            "stream_id": mapping.stream_id,
+            "status": mapping.mapping_status,
+            "edge": mapping.sumo_edge,
+            "lane": mapping.sumo_lane,
+            "distance_m": mapping.distance_m,
+            "confidence": mapping.mapping_confidence,
+            "source": "W3b detector binding",
+        }
+        for mapping in mappings
+    ]
     detector_dir = destination / "detectors"
     demand_dir = destination / "demand"
     audit_dir = destination / "audit"
@@ -223,7 +240,7 @@ def materialize_hamburg_named_replay(
             route_file=Path(str(route_sampler.get("demand_route_file", ""))),
             e1_file=e1_file,
             e2_file=e2_file,
-            tls_events_csv=Path(signal_history["artifacts"]["tls_link_events"]),
+            tls_events_csv=Path(signal_history["validated_tls_link_events"]),
             expected_counts_csv=expected_file,
             output_dir=sumo_dir / "dynamic_tls_replay",
             begin=simulation_begin,
@@ -302,9 +319,25 @@ def materialize_hamburg_named_replay(
         "source": {
             "net": {"path": str(net_path), "sha256": file_sha256(net_path)},
             "signal_binding_manifest": {"path": str(binding_path), "sha256": file_sha256(binding_path)},
+            "detector_binding_manifest": {
+                "path": str(detector_binding_path),
+                "sha256": file_sha256(detector_binding_path),
+            },
+            "count_scope_manifest": {
+                "path": str(count_scope_path),
+                "sha256": file_sha256(count_scope_path),
+            },
             "signal_observation_manifest": (
                 {"path": str(signal_observation_manifest), "sha256": file_sha256(signal_observation_manifest)}
                 if signal_observation_manifest is not None
+                else None
+            ),
+            "tls_link_events": (
+                {
+                    "path": signal_history["validated_tls_link_events"],
+                    "sha256": file_sha256(Path(signal_history["validated_tls_link_events"])),
+                }
+                if signal_history is not None
                 else None
             ),
             "count_stream_snapshot": {"path": str(stream_path), "sha256": file_sha256(stream_path)},
@@ -323,7 +356,7 @@ def materialize_hamburg_named_replay(
             "active_count": len(active),
             "virtual_detector_count": len(detectors),
             "low_confidence_count": low_confidence,
-            "method": "nearest_passenger_lane_after_EPSG32632_projection",
+            "method": "hash_bound_W3b_detector_mapping",
             "evidence": mapping_evidence,
         },
         "route_support": route_support,
@@ -338,6 +371,10 @@ def materialize_hamburg_named_replay(
         "comparison": {"status": comparison_status, "summary": comparison_summary, "file": str(comparison_file)},
         "gates": {
             "signal_binding_execution": "pass" if binding.get("execution_gate") == "pass" else "blocked",
+            "detector_binding_execution": (
+                "pass" if detector_binding.get("execution_gate") == "pass" else "blocked"
+            ),
+            "detector_aggregation_semantics": "pass",
             "detector_mapping": "pass" if len(active) == len(streams) else "blocked",
             "route_sampler": route_sampler.get("status", "blocked"),
             "lane_balance": lane_balance.get("status", "not_requested"),
@@ -384,20 +421,205 @@ def _load_binding_manifest(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("schema") != "torii.hamburg-named-signal-binding/v1":
         raise HamburgNamedReplayError("signal binding manifest schema mismatch")
+    if payload.get("execution_gate") != "pass":
+        raise HamburgNamedReplayError("signal binding manifest is not execution-ready")
     return payload
 
 
-def _load_signal_observation_manifest(path: Path) -> dict[str, Any] | None:
+def _validate_binding_network(binding: Mapping[str, Any], replay_net: Path) -> None:
+    source = binding.get("source")
+    candidate = source.get("candidate_net") if isinstance(source, Mapping) else None
+    if not isinstance(candidate, Mapping):
+        raise HamburgNamedReplayError("signal binding manifest has no candidate network binding")
+    try:
+        candidate_path = Path(str(candidate["path"])).expanduser().resolve(strict=True)
+        declared_sha256 = str(candidate["sha256"]).lower()
+    except (KeyError, OSError, RuntimeError) as exc:
+        raise HamburgNamedReplayError("signal binding candidate network binding is invalid") from exc
+    actual_sha256 = file_sha256(candidate_path)
+    if actual_sha256 != declared_sha256:
+        raise HamburgNamedReplayError("signal binding candidate network SHA-256 mismatch")
+    if actual_sha256 != file_sha256(replay_net):
+        raise HamburgNamedReplayError("signal binding network does not match replay network")
+
+
+def _load_detector_binding_manifest(
+    path: Path,
+    *,
+    replay_net: Path,
+    count_stream_snapshot: Path,
+    expected_stream_ids: set[int],
+) -> tuple[dict[str, Any], list[DetectorMapping]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or payload.get("schema") != "torii.hamburg-named-signal-observations/v1":
+    if not isinstance(payload, dict) or payload.get("schema") != "torii.hamburg-named-detector-binding/v1":
+        raise HamburgNamedReplayError("detector binding manifest schema mismatch")
+    if payload.get("execution_gate") != "pass":
+        raise HamburgNamedReplayError("detector binding manifest is not execution-ready")
+    gates = payload.get("gates")
+    if not isinstance(gates, Mapping) or gates.get("sensor_aggregation_semantics") != "pass":
+        raise HamburgNamedReplayError(
+            "detector binding has no approved shared-lane aggregation semantics"
+        )
+    source = payload.get("source")
+    if not isinstance(source, Mapping):
+        raise HamburgNamedReplayError("detector binding manifest has no source identities")
+    _resolve_file_identity(
+        source.get("candidate_net"),
+        base_dir=path.parent,
+        label="detector binding candidate network",
+        expected_file=replay_net,
+    )
+    _resolve_file_identity(
+        source.get("count_stream_snapshot"),
+        base_dir=path.parent,
+        label="detector binding count stream snapshot",
+        expected_file=count_stream_snapshot,
+    )
+    artifacts = payload.get("artifacts")
+    mapping_identity = artifacts.get("detector_mapping") if isinstance(artifacts, Mapping) else None
+    mapping_path = _resolve_file_identity(
+        mapping_identity,
+        base_dir=path.parent,
+        label="detector mapping",
+    )
+    mappings = _read_detector_mapping(mapping_path)
+    actual_stream_ids = {mapping.stream_id for mapping in mappings}
+    if len(actual_stream_ids) != len(mappings):
+        raise HamburgNamedReplayError("detector mapping repeats a stream identity")
+    if actual_stream_ids != expected_stream_ids:
+        raise HamburgNamedReplayError(
+            "detector mapping stream identities do not match the selected count snapshot"
+        )
+    return payload, mappings
+
+
+def _validate_count_scope_manifest(
+    path: Path,
+    *,
+    count_stream_snapshot: Path,
+    canonical_count_file: Path,
+) -> None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema") != "torii.hamburg-named-corridor-count-scope/v1":
+        raise HamburgNamedReplayError("count scope manifest schema mismatch")
+    if payload.get("execution_gate") != "pass":
+        raise HamburgNamedReplayError("count scope manifest is not execution-ready")
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, Mapping):
+        raise HamburgNamedReplayError("count scope manifest has no artifact identities")
+    _resolve_file_identity(
+        artifacts.get("count_streams_raw"),
+        base_dir=path.parent,
+        label="count scope stream snapshot",
+        expected_file=count_stream_snapshot,
+    )
+    _resolve_file_identity(
+        artifacts.get("counts_simulation_15min"),
+        base_dir=path.parent,
+        label="count scope simulation counts",
+        expected_file=canonical_count_file,
+    )
+
+
+def _read_detector_mapping(path: Path) -> list[DetectorMapping]:
+    try:
+        with path.open(encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        return [
+            DetectorMapping(
+                detector_id=row["detector_id"],
+                stream_id=int(row["stream_id"]),
+                node_id=row["node_id"],
+                asset_id=row["asset_id"],
+                real_direction=row["real_direction"],
+                lane_use=row["lane_use"],
+                longitude=float(row["longitude"]),
+                latitude=float(row["latitude"]),
+                official_map_lane=row["official_map_lane"],
+                official_map_distance_m=_optional_float(row["official_map_distance_m"]),
+                sumo_edge=row["sumo_edge"],
+                sumo_lane=row["sumo_lane"],
+                lane_position=float(row["lane_position"]),
+                distance_m=_optional_float(row["distance_m"]),
+                heading_error_deg=_optional_float(row["heading_error_deg"]),
+                period=int(row["period"]),
+                mapping_confidence=row["mapping_confidence"],
+                mapping_status=row["mapping_status"],
+                mapping_reason=row["mapping_reason"],
+            )
+            for row in rows
+        ]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HamburgNamedReplayError("detector mapping CSV is invalid") from exc
+
+
+def _optional_float(value: str) -> float | None:
+    return float(value) if value.strip() else None
+
+
+def _resolve_file_identity(
+    identity: object,
+    *,
+    base_dir: Path,
+    label: str,
+    expected_file: Path | None = None,
+) -> Path:
+    if not isinstance(identity, Mapping):
+        raise HamburgNamedReplayError(f"{label} identity is missing")
+    raw_path = identity.get("path")
+    declared_sha256 = identity.get("sha256")
+    if not isinstance(raw_path, str) or not raw_path.strip() or not isinstance(declared_sha256, str):
+        raise HamburgNamedReplayError(f"{label} identity is invalid")
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = base_dir / candidate
+    try:
+        candidate = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise HamburgNamedReplayError(f"{label} file is unreadable") from exc
+    actual_sha256 = file_sha256(candidate)
+    if actual_sha256 != declared_sha256.lower():
+        raise HamburgNamedReplayError(f"{label} SHA-256 mismatch")
+    if expected_file is not None and actual_sha256 != file_sha256(expected_file):
+        raise HamburgNamedReplayError(f"{label} does not match the selected replay input")
+    return candidate
+
+
+def _load_signal_observation_manifest(
+    path: Path,
+    *,
+    binding_manifest: Path,
+) -> dict[str, Any] | None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema") != "torii.hamburg-named-signal-observations/v2":
         raise HamburgNamedReplayError("signal observation manifest schema mismatch")
     if payload.get("execution_gate") != "pass":
         return None
+    source = payload.get("source")
+    binding_identity = source.get("binding_manifest") if isinstance(source, Mapping) else None
+    _resolve_file_identity(
+        binding_identity,
+        base_dir=path.parent,
+        label="signal observation binding manifest",
+        expected_file=binding_manifest,
+    )
     artifacts = payload.get("artifacts")
     event_path = artifacts.get("tls_link_events") if isinstance(artifacts, dict) else None
-    if not event_path or not Path(str(event_path)).is_file():
+    identities = payload.get("artifact_identities")
+    event_identity = identities.get("tls_link_events") if isinstance(identities, Mapping) else None
+    validated_event_path = _resolve_file_identity(
+        event_identity,
+        base_dir=path.parent,
+        label="TLS link events",
+    )
+    if not isinstance(event_path, str) or not event_path.strip():
         raise HamburgNamedReplayError("execution-ready signal observation manifest has no TLS event file")
-    return payload
+    declared_event_path = Path(event_path).expanduser()
+    if not declared_event_path.is_absolute():
+        declared_event_path = path.parent / declared_event_path
+    if declared_event_path.resolve() != validated_event_path:
+        raise HamburgNamedReplayError("signal observation TLS event artifact identity mismatch")
+    return {**payload, "validated_tls_link_events": str(validated_event_path)}
 
 
 def _audit_signal_history_scope(
@@ -470,83 +692,6 @@ def _audit_signal_history_scope(
         "history_window_seconds": history_window_seconds,
         "replay_window_seconds": replay_window_seconds,
     }
-
-
-def _snap_count_streams(streams: list[Any], network_lanes: list[Any], *, max_distance_m: float) -> tuple[list[DetectorMapping], list[dict[str, Any]]]:
-    transformer = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
-    mappings: list[DetectorMapping] = []
-    evidence: list[dict[str, Any]] = []
-    for stream in streams:
-        x, y = transformer.transform(stream.longitude, stream.latitude)
-        candidates: list[tuple[float, Any, float, float | None]] = []
-        for lane in network_lanes:
-            position, distance, heading = project_point_to_polyline((x, y), lane.shape)
-            candidates.append((distance, lane, position, heading))
-        candidates.sort(key=lambda item: (item[0], item[1].edge_id, item[1].lane_id))
-        if not candidates or candidates[0][0] > max_distance_m:
-            mappings.append(
-                DetectorMapping(
-                    detector_id=stream.detector_id,
-                    stream_id=stream.stream_id,
-                    node_id=stream.node_id,
-                    asset_id=stream.asset_id,
-                    real_direction=stream.direction,
-                    lane_use=stream.lane_use,
-                    longitude=stream.longitude,
-                    latitude=stream.latitude,
-                    official_map_lane="",
-                    official_map_distance_m=None,
-                    sumo_edge="",
-                    sumo_lane="",
-                    lane_position=0.0,
-                    distance_m=candidates[0][0] if candidates else None,
-                    heading_error_deg=None,
-                    period=900,
-                    mapping_confidence="none",
-                    mapping_status="unmapped",
-                    mapping_reason="official detector point is outside the snap radius",
-                )
-            )
-            evidence.append({"stream_id": stream.stream_id, "status": "unmapped"})
-            continue
-        distance, lane, position, _heading = candidates[0]
-        second_distance = candidates[1][0] if len(candidates) > 1 else float("inf")
-        confidence = "high" if distance <= 5 and second_distance - distance >= 1 else "low"
-        mappings.append(
-            DetectorMapping(
-                detector_id=stream.detector_id,
-                stream_id=stream.stream_id,
-                node_id=stream.node_id,
-                asset_id=stream.asset_id,
-                real_direction=stream.direction,
-                lane_use=stream.lane_use,
-                longitude=stream.longitude,
-                latitude=stream.latitude,
-                official_map_lane="",
-                official_map_distance_m=None,
-                sumo_edge=lane.edge_id,
-                sumo_lane=lane.lane_id,
-                lane_position=max(0.0, min(position, lane.length)),
-                distance_m=distance,
-                heading_error_deg=None,
-                period=900,
-                mapping_confidence=confidence,
-                mapping_status="active",
-                mapping_reason="official detector point projected to nearest passenger lane; direction/lane identity remains diagnostic",
-            )
-        )
-        evidence.append(
-            {
-                "stream_id": stream.stream_id,
-                "status": "active",
-                "edge": lane.edge_id,
-                "lane": lane.lane_id,
-                "distance_m": round(distance, 3),
-                "second_distance_m": None if math.isinf(second_distance) else round(second_distance, 3),
-                "confidence": confidence,
-            }
-        )
-    return mappings, evidence
 
 
 def _read_net_lanes_for_detectors(net_file: Path) -> dict[str, Any]:

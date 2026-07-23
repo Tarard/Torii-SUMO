@@ -950,7 +950,7 @@ def sumo_hamburg_named_count_scope(
 ) -> dict[str, Any]:
     """Fetch a declared official Hamburg count scope for the named corridor.
 
-    This is the W3 hand-off. It records missing detectors and never infers a
+    This is the W3a hand-off. It records missing detectors and never infers a
     lane binding or silently substitutes a nearby node.
     """
 
@@ -990,13 +990,13 @@ def sumo_hamburg_sandtorkai_execution_plan(
     stage_feedback: list[str] | None = None,
     resume: bool = True,
 ) -> dict[str, Any]:
-    """Record and resume the named-corridor W0-W5 execution plan.
+    """Record and resume the named-corridor execution plan.
 
     Each entry in ``stage_manifests`` uses ``W0=/absolute/path/manifest.json``
-    syntax.  Optional entries in ``stage_feedback`` use the same syntax and
-    attach bounded diagnostic evidence to a stage without changing its gate.
-    The operation is read-only with respect to source and candidate artifacts;
-    it writes only the plan ledger in ``output_dir``.
+    syntax; W3a count acquisition and W3b detector binding are separate.
+    Optional entries in ``stage_feedback`` use the same syntax and attach
+    bounded diagnostic evidence without changing a stage gate. The W5
+    capability summary is derived automatically. The operation writes only the plan ledger.
     """
 
     try:
@@ -1036,6 +1036,8 @@ def sumo_hamburg_sandtorkai_execution_plan(
 def sumo_hamburg_sandtorkai_named_replay(
     net_file: str,
     signal_binding_manifest: str,
+    detector_binding_manifest: str,
+    count_scope_manifest: str,
     count_stream_snapshot: str,
     canonical_count_file: str,
     output_dir: str,
@@ -1050,12 +1052,17 @@ def sumo_hamburg_sandtorkai_named_replay(
     interval: int = 900,
     allow_detector_cross_section_boundaries: bool = False,
 ) -> dict[str, Any]:
-    """Build and quality-gate the reusable W4 detector-constrained replay."""
+    """Build W4 from the exact W2 signal, W3a count, and W3b detector inputs."""
 
     try:
         return materialize_hamburg_named_replay(
             net_file=_existing_file(net_file, "net_file"),
             signal_binding_manifest=_existing_file(signal_binding_manifest, "signal_binding_manifest"),
+            detector_binding_manifest=_existing_file(
+                detector_binding_manifest,
+                "detector_binding_manifest",
+            ),
+            count_scope_manifest=_existing_file(count_scope_manifest, "count_scope_manifest"),
             count_stream_snapshot=_existing_file(count_stream_snapshot, "count_stream_snapshot"),
             canonical_count_file=_existing_file(canonical_count_file, "canonical_count_file"),
             output_dir=_output_dir(output_dir),
