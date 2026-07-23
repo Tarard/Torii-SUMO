@@ -21,22 +21,22 @@ def _stage_argument(value: str) -> tuple[str, Path]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Record and resume the Hamburg Sandtorkai W0-W5 workflow. "
-            "Existing stage manifests are inputs; no source network is overwritten."
+            "Record and resume the Hamburg Sandtorkai workflow. "
+            "A W5 capability summary is derived from existing stage manifests; no source network is overwritten."
         )
     )
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument(
         "--config",
         type=Path,
-        help="portable JSON configuration for the complete W0-W5 evidence workflow",
+        help="portable JSON configuration for the hash-bound evidence workflow",
     )
     parser.add_argument(
         "--stage-manifest",
         action="append",
         type=_stage_argument,
         metavar="STAGE=PATH",
-        help="repeat for W0..W5; omitted stages remain not_run",
+        help="repeat for W0, W1, W2, W3a, W3b, and W4; omitted stages remain not_run",
     )
     parser.add_argument(
         "--stage-feedback",
