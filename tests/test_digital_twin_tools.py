@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import inspect
+import json
 from pathlib import Path
 
+from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.tools import digital_twin_tools
 from torii_sumo.tools.digital_twin_tools import _torii_network_gate
 
@@ -634,7 +636,8 @@ def test_named_count_scope_tool_validates_identity_and_forwards_window(
 def test_execution_plan_tool_parses_stage_manifest_entries(tmp_path: Path) -> None:
     stage = tmp_path / "w0.json"
     stage.write_text(
-        '{"schema":"fixture","status":"pass","automatic_promotion_gate":"pass"}',
+        '{"schema":"torii.hamburg-named-corridor-scope/v1","status":"pass",'
+        '"automatic_promotion_gate":"pass"}',
         encoding="utf-8",
     )
 
@@ -650,19 +653,88 @@ def test_execution_plan_tool_parses_stage_manifest_entries(tmp_path: Path) -> No
 
 
 def test_execution_plan_tool_attaches_stage_feedback_without_promoting(tmp_path: Path) -> None:
+    network = tmp_path / "candidate.net.xml"
+    network.write_text("<net/>\n", encoding="utf-8")
+    network_binding = {"path": str(network.resolve()), "sha256": file_sha256(network)}
     w0 = tmp_path / "w0.json"
     w0.write_text(
-        '{"schema":"fixture","status":"pass","automatic_promotion_gate":"pass"}',
+        '{"schema":"torii.hamburg-named-corridor-scope/v1","status":"pass",'
+        '"automatic_promotion_gate":"pass"}',
         encoding="utf-8",
     )
     w1 = tmp_path / "w1.json"
     w1.write_text(
-        '{"schema":"fixture","status":"pass","automatic_promotion_gate":"pass"}',
+        json.dumps(
+            {
+                "schema": "torii.hamburg-official-corridor-geometry/v1",
+                "status": "pass",
+                "automatic_promotion_gate": "pass",
+                "network": network_binding,
+            }
+        ),
+        encoding="utf-8",
+    )
+    w3a = tmp_path / "w3a.json"
+    count_streams = tmp_path / "count_streams.raw.json"
+    count_streams.write_text('{"streams":[]}\n', encoding="utf-8")
+    count_stream_binding = {
+        "path": str(count_streams.resolve()),
+        "sha256": file_sha256(count_streams),
+    }
+    simulation_counts = tmp_path / "counts.simulation.15min.csv"
+    simulation_counts.write_text("stream_id,begin,end,total\n", encoding="utf-8")
+    simulation_count_binding = {
+        "path": str(simulation_counts.resolve()),
+        "sha256": file_sha256(simulation_counts),
+    }
+    w3a.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-named-corridor-count-scope/v1",
+                "status": "pass",
+                "automatic_promotion_gate": "pass",
+                "artifacts": {
+                    "count_streams_raw": count_stream_binding,
+                    "counts_simulation_15min": simulation_count_binding,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    detector_mapping = tmp_path / "detector_mapping.csv"
+    detector_mapping.write_text("stream_id,sumo_lane\n", encoding="utf-8")
+    w3b = tmp_path / "w3b.json"
+    w3b.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-named-detector-binding/v1",
+                "status": "pass",
+                "automatic_promotion_gate": "pass",
+                "source": {
+                    "candidate_net": network_binding,
+                    "count_stream_snapshot": count_stream_binding,
+                },
+                "artifacts": {
+                    "detector_mapping": {
+                        "path": str(detector_mapping.resolve()),
+                        "sha256": file_sha256(detector_mapping),
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
     stage = tmp_path / "w2.json"
     stage.write_text(
-        '{"schema":"fixture","status":"blocked","automatic_promotion_gate":"blocked"}',
+        json.dumps(
+            {
+                "schema": "torii.hamburg-named-signal-binding/v1",
+                "status": "blocked",
+                "execution_gate": "blocked",
+                "automatic_promotion_gate": "blocked",
+                "source": {"candidate_net": network_binding},
+            }
+        ),
         encoding="utf-8",
     )
     feedback = tmp_path / "w2b.json"
@@ -673,7 +745,13 @@ def test_execution_plan_tool_attaches_stage_feedback_without_promoting(tmp_path:
 
     report = digital_twin_tools.sumo_hamburg_sandtorkai_execution_plan(
         output_dir=str(tmp_path / "plan"),
-        stage_manifests=[f"W0={w0}", f"W1={w1}", f"W2={stage}"],
+        stage_manifests=[
+            f"W0={w0}",
+            f"W1={w1}",
+            f"W3a={w3a}",
+            f"W2={stage}",
+            f"W3b={w3b}",
+        ],
         stage_feedback=[f"W2={feedback}"],
     )
 
@@ -685,7 +763,15 @@ def test_execution_plan_tool_attaches_stage_feedback_without_promoting(tmp_path:
 
 def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatch) -> None:
     files = {}
-    for name in ("net.xml", "binding.json", "streams.json", "counts.csv", "routeSampler.py"):
+    for name in (
+        "net.xml",
+        "binding.json",
+        "detector-binding.json",
+        "count-scope.json",
+        "streams.json",
+        "counts.csv",
+        "routeSampler.py",
+    ):
         path = tmp_path / name
         path.write_text("fixture", encoding="utf-8")
         files[name] = path
@@ -700,6 +786,8 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
     report = digital_twin_tools.sumo_hamburg_sandtorkai_named_replay(
         net_file=str(files["net.xml"]),
         signal_binding_manifest=str(files["binding.json"]),
+        detector_binding_manifest=str(files["detector-binding.json"]),
+        count_scope_manifest=str(files["count-scope.json"]),
         count_stream_snapshot=str(files["streams.json"]),
         canonical_count_file=str(files["counts.csv"]),
         output_dir=str(tmp_path / "replay"),
@@ -715,6 +803,8 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
     assert report["execution_gate"] == "blocked"
     assert captured["net_file"] == files["net.xml"]
     assert captured["signal_binding_manifest"] == files["binding.json"]
+    assert captured["detector_binding_manifest"] == files["detector-binding.json"]
+    assert captured["count_scope_manifest"] == files["count-scope.json"]
     assert captured["count_stream_snapshot"] == files["streams.json"]
     assert captured["canonical_count_file"] == files["counts.csv"]
     assert captured["route_sampler_script"] == files["routeSampler.py"]

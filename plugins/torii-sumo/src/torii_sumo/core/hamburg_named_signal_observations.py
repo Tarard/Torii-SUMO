@@ -26,7 +26,7 @@ from .hamburg_official import (
 
 
 UTC = timezone.utc
-NAMED_SIGNAL_OBSERVATIONS_SCHEMA = "torii.hamburg-named-signal-observations/v1"
+NAMED_SIGNAL_OBSERVATIONS_SCHEMA = "torii.hamburg-named-signal-observations/v2"
 NAMED_SIGNAL_WINDOW_SCREEN_SCHEMA = "torii.hamburg-signal-window-screen/v1"
 NAMED_SIGNAL_COVERAGE_CENSUS_SCHEMA = "torii.hamburg-named-signal-coverage-census/v1"
 _BINDING_SCHEMA = "torii.hamburg-named-signal-binding/v1"
@@ -420,6 +420,14 @@ def materialize_hamburg_named_signal_observations(
             "raw_observations": str(raw_path),
             "normalized_observations": str(normalized_path),
             "tls_link_events": str(event_path),
+        },
+        "artifact_identities": {
+            "raw_observations": {"path": str(raw_path), "sha256": file_sha256(raw_path)},
+            "normalized_observations": {
+                "path": str(normalized_path),
+                "sha256": file_sha256(normalized_path),
+            },
+            "tls_link_events": {"path": str(event_path), "sha256": file_sha256(event_path)},
         },
         "claim_boundary": {
             "proves": [

@@ -97,38 +97,35 @@ route 复原明确是一个**非唯一解**。Torii 先枚举 58 条可能经过
 
 其中 `y_t` 是汉堡官方计数向量，`x_t_prior` 是 `routeSampler` 生成的一组可行先验。矩阵为 6×58，rank 为 6、nullity 为 52，因此很多不同的 route 组合会产生相同传感器读数。Torii 只返回一组尽量接近先验的可行整数解，再在 SUMO 中排程车辆，并把 E1 残差作为反馈；它不声称恢复了唯一 OD 或每辆现实车辆的轨迹。关闭 TLS 的两行用于验证 estimator/controller 闭环，官方历史信号这一行才是当前面向现实的验收结果，而且仍处于 blocked 状态。
 
+Workflow v2 还会阻止跨路网复用：冻结的 W1/W4 证据绑定 SHA-256 `559a5752…`，旧 W2/W3 诊断证据绑定 `aa1676df…`。W4 虽使用 W1 路网，但其 v2 之前的 manifest 未记录选定的 W3b 映射和准确的信号事件字节。这些运行仍可作为历史诊断；W2、W3b 和 W4 必须重建后，才能被同一个 v2 ledger 接受。
+
 ### 展示内容与仓库内容分层
 
 | 适合在 README/项目页展示 | 直接放入仓库、用于复现 |
 |---|---|
-| 精选航拍、施工图、OSM 输入、Connection Mode 清洗结果、TLS 截图和核心指标。 | W0–W5 编排代码、官方数据 adapter、测试、简要开发日志、schema、来源与 SHA-256 证据摘要。 |
+| 精选航拍、施工图、OSM 输入、Connection Mode 清洗结果、TLS 截图和核心指标。 | 分阶段 workflow 代码、官方数据 adapter、测试、简要开发日志、schema、来源与 SHA-256 证据摘要。 |
 | 人能读懂的结论和明确限制。 | 完整生成网络、API 缓存、E1/E2 XML、route ensemble 和 NetEdit 会话仍放在可重建的 `artifacts/`/`outputs/`，不把数 GB/上百 GB 运行缓存塞进 Git。 |
 
 图片来源与许可见[图片证据说明](docs/assets/hamburg-digital-twin/README.md)，核心机器证据见 [`docs/hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json)，每轮做过什么见[持续开发日志](docs/hamburg-digital-twin-development-log.md)。官方来源包括 [Hamburg LGV DOP](https://metaver.de/trefferanzeige?docuuid=cc0eaed8-cb36-44a0-9bda-153f28d9e7ba) 和 [LSBG 施工图](https://lsbg.hamburg.de/resource/blob/784084/6a06328b36b0de140d75baac9165f8f7/am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-abgestimmte-planung-plan-data.pdf)。
 
-### 可复用 W0–W5 工作流
+### 可复用 Hamburg 工作流
 
 ```text
-W0 冻结范围/证据
- ↓
-W1 OSM 骨架 → estimator/controller/feedback → 审计后的 SUMO 候选
- ├───────────────┐
- ↓               ↓
-W2 MAP/OCIT/TLD  W3 传感器 + route incidence/整数需求
- └───────┬───────┘
-         ↓
-W4 SUMO 回放 + 现实/虚拟 E1 对比
-         ↓
-W5 哈希绑定报告、下游失效传播与产品包
+W0 -> W1
+W1 -> W2
+W0 -> W3a
+(W1, W3a) -> W3b
+(W1, W2, W3a, W3b) -> W4 路线/需求 + SUMO 回放对比
+W0-W4 ledger 状态 -> W5 派生能力摘要
 ```
 
-Torii 复用现有模块，不另造第二套路网算法。复制[配置模板](docs/hamburg-digital-twin-workflow.example.json)，把 `<run>` 替换为真实 stage manifest 路径，然后运行：
+Torii 复用现有模块，不另造第二套路网算法。W3a 不依赖路网；W3b、W2 和 W4 必须绑定 W1 的准确网络 SHA-256。W4 还会消费选定的 W2/W3a/W3b 身份，并拒绝语义未确认的共享车道聚合。W5 是 planner 自动生成的能力摘要，不是真实产品 artifact，也不接受外部 manifest。复制[配置模板](docs/hamburg-digital-twin-workflow.example.json)，把 `<run>` 替换为真实 stage manifest 路径，然后运行：
 
 ```powershell
 python plugins/torii-sumo/scripts/run_hamburg_execution_plan.py --config hamburg-workflow.json
 ```
 
-配置内路径相对配置文件解析；任一上游 manifest/feedback 哈希变化会自动使依赖阶段失效。源路网不被覆盖，缺失官方资产只会形成 blocked gate，不会被模型猜测补齐。
+配置内路径相对配置文件解析；任一上游 manifest/feedback 哈希变化只会使已经生成的依赖阶段失效。源路网不被覆盖，缺失官方资产只会形成 blocked gate，不会被模型猜测补齐。
 
 ### 无 teacher 的小路网自动发现
 
