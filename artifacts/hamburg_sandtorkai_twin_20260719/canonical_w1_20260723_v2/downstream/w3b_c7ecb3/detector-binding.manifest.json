@@ -1,0 +1,139 @@
+{
+  "active_mapping_count": 19,
+  "artifacts": {
+    "detector_lane_candidates": {
+      "path": "detector_lane_candidates.json",
+      "sha256": "3a36fef7d23874d3213332a731c73f1af0997864c49ca62bd31caa52a6b28eee"
+    },
+    "detector_mapping": {
+      "path": "detector_mapping.csv",
+      "sha256": "aed3faa76f7d9f5614dd1d3ec2dc1a46b3983af647a2343ee769091052f4dd32"
+    },
+    "e1_e2_additional": {
+      "reason": "partial or ambiguous bindings must not create same-location SUMO sensors",
+      "status": "withheld_pending_complete_lane_mapping"
+    }
+  },
+  "artifacts_manifest": "detector-binding.manifest.json",
+  "automatic_promotion_gate": "blocked",
+  "automatic_promotion_reason": "E1/E2 materialization is withheld until shared-lane official streams have explicit aggregation semantics",
+  "claim_boundary": {
+    "does_not_prove": [
+      "official MAP lane identity when the MAP cell is absent",
+      "that a Zählfeld asset number is a Hamburg or SUMO lane index",
+      "complete three-node detector coverage",
+      "that SUMO E1/E2 sensors can be materialized before all mappings are active",
+      "that multiple official fields mapped to one lane are additive, redundant, or longitudinally equivalent"
+    ],
+    "proves": [
+      "the explicit WGS84-to-network CRS conversion used for each detector",
+      "official MAP ingress-lane identity for nodes whose MAP file is supplied",
+      "all nearby passenger-lane candidates and the reason for each active or blocked mapping",
+      "that one-to-one serial edge cuts are collapsed while ambiguous parallel lanes remain rejected",
+      "translation-normalized cross-section inference only when official lane-count evidence and strict geometric gates agree"
+    ]
+  },
+  "execution_gate": "pass",
+  "execution_gate_reason": "all detector points have a structurally valid lane candidate",
+  "gates": {
+    "automatic_promotion": "blocked",
+    "candidate_geometry": "pass",
+    "coordinate_projection": "pass",
+    "detector_stream_identity": "pass",
+    "sensor_aggregation_semantics": "blocked",
+    "sumo_sensor_materialization": "blocked",
+    "unique_lane_binding": "pass"
+  },
+  "incomplete_stream_ids": [],
+  "next_action": "resolve_shared_lane_detector_aggregation_semantics",
+  "node_reports": {
+    "2394": {
+      "active_count": 9,
+      "blocked_stream_ids": [],
+      "status": "pass",
+      "stream_count": 9
+    },
+    "2403": {
+      "active_count": 10,
+      "blocked_stream_ids": [],
+      "status": "pass",
+      "stream_count": 10
+    }
+  },
+  "parameters": {
+    "ambiguity_margin_m": 1.0,
+    "constellation_heading_tolerance_deg": 10.0,
+    "max_distance_m": 5.0,
+    "network_projection": "EPSG:25832",
+    "period": 900,
+    "serial_cut_max_gap_m": 2.0
+  },
+  "required_node_ids": [
+    "2394",
+    "2403"
+  ],
+  "schema": "torii.hamburg-named-detector-binding/v1",
+  "shared_lane_stream_groups": [
+    {
+      "asset_ids": [
+        "Z.6",
+        "Z.5"
+      ],
+      "lane_positions": [
+        0.1,
+        0.1
+      ],
+      "node_id": "2394",
+      "stream_ids": [
+        29032,
+        35320
+      ],
+      "sumo_edge": "381540198#1",
+      "sumo_lane": "381540198#1_1"
+    },
+    {
+      "asset_ids": [
+        "Z.1",
+        "Z.2"
+      ],
+      "lane_positions": [
+        97.974,
+        98.14
+      ],
+      "node_id": "2394",
+      "stream_ids": [
+        28495,
+        30208
+      ],
+      "sumo_edge": "9702432#0",
+      "sumo_lane": "9702432#0_0"
+    }
+  ],
+  "source": {
+    "candidate_net": {
+      "path": "../../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+      "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98"
+    },
+    "count_stream_snapshot": {
+      "path": "../../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/count_streams.raw.json",
+      "sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d"
+    },
+    "movement_lane_evidence": {
+      "path": "../../../named_corridor_osm_feedback_loop_v1/iteration_018_2403_official_plan_movement_patch/movement-evidence.json",
+      "sha256": "865030eaccd51fca67bdef0784c9d7871f816bdccfa99fc2dd7e2dea27e73f82"
+    },
+    "official_map_files": [
+      {
+        "path": "../../../official_first_named_corridor_v1/official/signals/assets/2394_map_xml.xml",
+        "sha256": "4b64be3092007bbe04ae9c9f0bc90e529bc549d8c622e6a8ef1e83480c40a922"
+      }
+    ],
+    "w1_manifest": {
+      "path": "../../manifest/hamburg_official_corridor_geometry.manifest.json",
+      "sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc"
+    }
+  },
+  "status": "partial",
+  "stream_count": 19,
+  "unmapped_stream_ids": []
+}

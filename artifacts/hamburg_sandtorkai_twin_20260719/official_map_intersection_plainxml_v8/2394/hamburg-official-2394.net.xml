@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-07-19T23:13:02.146574+01:00 by Eclipse SUMO netconvert 1.27.1
+<netconvertConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+
+    <input>
+        <node-files value="hamburg-official-2394.nod.xml"/>
+        <edge-files value="hamburg-official-2394.edg.xml"/>
+        <connection-files value="hamburg-official-2394.con.xml"/>
+        <tllogic-files value="hamburg-official-2394.tll.xml"/>
+        <type-files value="hamburg-official-2394.typ.xml"/>
+    </input>
+
+    <output>
+        <output-file value="hamburg-official-2394.net.xml"/>
+    </output>
+
+    <processing>
+        <geometry.remove value="false"/>
+    </processing>
+
+    <junctions>
+        <no-turnarounds value="true"/>
+    </junctions>
+
+    <report>
+        <verbose value="true"/>
+        <xml-validation value="local"/>
+    </report>
+
+</netconvertConfiguration>
+-->
+
+<net version="1.20" junctionCornerDetail="5" limitTurnSpeed="5.50" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
+
+    <location netOffset="-565868.19,-5933080.28" convBoundary="0.00,0.00,157.11,144.67" origBoundary="565855.70,5932999.08,566060.76,5933246.58" projParameter="!"/>
+
+    <type id="official-map-vehicle-structural" numLanes="1" speed="13.89" allow="emergency passenger taxi bus coach delivery truck motorcycle" width="3.20"/>
+
+    <edge id=":hh-map-2394-core_0" function="internal">
+        <lane id=":hh-map-2394-core_0_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="36.68" width="3.20" shape="90.01,124.35 72.38,117.36 55.18,113.12"/>
+    </edge>
+    <edge id=":hh-map-2394-core_1" function="internal">
+        <lane id=":hh-map-2394-core_1_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="50.61" width="3.20" shape="90.99,121.07 64.80,110.59 74.27,90.29"/>
+    </edge>
+    <edge id=":hh-map-2394-core_2" function="internal">
+        <lane id=":hh-map-2394-core_2_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="10.73" length="26.89" width="3.20" shape="85.77,94.25 80.97,106.54 93.88,111.12"/>
+        <lane id=":hh-map-2394-core_2_1" index="1" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="11.46" length="30.89" width="3.20" shape="85.77,94.25 79.75,109.71 93.23,114.47"/>
+    </edge>
+    <edge id=":hh-map-2394-core_4" function="internal">
+        <lane id=":hh-map-2394-core_4_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="44.79" width="3.20" shape="82.64,93.04 73.15,117.55 55.18,113.12"/>
+    </edge>
+    <edge id=":hh-map-2394-core_5" function="internal">
+        <lane id=":hh-map-2394-core_5_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="10.64" length="21.37" width="3.20" shape="59.72,98.69 69.38,100.70 74.27,90.29"/>
+    </edge>
+    <edge id=":hh-map-2394-core_6" function="internal">
+        <lane id=":hh-map-2394-core_6_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="36.08" width="3.20" shape="59.02,101.95 82.24,106.99 93.88,111.12"/>
+        <lane id=":hh-map-2394-core_6_1" index="1" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="36.08" width="3.20" shape="58.50,105.10 78.79,109.37 93.23,114.47"/>
+    </edge>
+
+    <edge id="hh-map-2394-a2-in" from="hh-map-2394-a2-boundary" to="hh-map-2394-core" priority="-1" type="official-map-vehicle-structural" spreadType="center" shape="155.73,147.56 75.17,108.96">
+        <lane id="hh-map-2394-a2-in_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="69.85" width="3.20" customShape="1" shape="154.73,150.21 144.37,145.86 90.01,124.35" type="official-map-lane-2"/>
+        <lane id="hh-map-2394-a2-in_1" index="1" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="69.85" width="3.20" customShape="1" shape="155.97,147.13 153.80,146.20 90.99,121.07" type="official-map-lane-3"/>
+    </edge>
+    <edge id="hh-map-2394-a2-out" from="hh-map-2394-core" to="hh-map-2394-a2-boundary" priority="-1" type="official-map-vehicle-structural" spreadType="center" shape="77.94,103.20 158.49,141.78">
+        <lane id="hh-map-2394-a2-out_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="70.75" width="3.20" customShape="1" shape="93.88,111.12 112.36,117.66 160.35,136.27" type="official-map-lane-4"/>
+        <lane id="hh-map-2394-a2-out_1" index="1" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="70.75" width="3.20" customShape="1" shape="93.23,114.47 109.62,120.23 159.20,139.10" type="official-map-lane-5"/>
+    </edge>
+    <edge id="hh-map-2394-a3-in" from="hh-map-2394-a3-boundary" to="hh-map-2394-core" priority="-1" type="official-map-vehicle-structural" spreadType="center" shape="121.64,1.18 79.60,107.39">
+        <lane id="hh-map-2394-a3-in_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="100.93" width="3.20" customShape="1" shape="116.96,-0.78 109.76,19.96 112.59,26.40 111.46,29.22 95.73,68.36 85.77,94.25" type="official-map-lane-6"/>
+        <lane id="hh-map-2394-a3-in_1" index="1" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="100.93" width="3.20" customShape="1" shape="119.89,0.53 110.77,17.08 99.39,49.93 92.59,67.17 82.64,93.04" type="official-map-lane-7"/>
+    </edge>
+    <edge id="hh-map-2394-a3-out" from="hh-map-2394-core" to="hh-map-2394-a3-boundary" priority="-1" type="official-map-vehicle-structural" spreadType="center" shape="75.16,105.56 117.18,-0.59">
+        <lane id="hh-map-2394-a3-out_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="100.58" width="3.20" customShape="1" shape="74.27,90.29 81.12,75.53 116.25,-1.11" type="official-map-lane-9"/>
+    </edge>
+    <edge id="hh-map-2394-a4-in" from="hh-map-2394-a4-boundary" to="hh-map-2394-core" priority="-1" type="official-map-vehicle-structural" spreadType="center" shape="0.74,89.47 77.69,101.44">
+        <lane id="hh-map-2394-a4-in_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="64.29" width="3.20" customShape="1" shape="-11.96,88.50 -10.22,88.78 -6.90,86.30 -5.15,86.57 18.86,90.14 59.72,98.69" type="official-map-lane-10"/>
+        <lane id="hh-map-2394-a4-in_1" index="1" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="64.29" width="3.20" customShape="1" shape="0.52,90.54 24.38,94.43 59.02,101.95" type="official-map-lane-11"/>
+        <lane id="hh-map-2394-a4-in_2" index="2" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="64.29" width="3.20" customShape="1" shape="0.11,93.43 9.33,94.74 58.50,105.10" type="official-map-lane-12"/>
+    </edge>
+    <edge id="hh-map-2394-a4-out" from="hh-map-2394-core" to="hh-map-2394-a4-boundary" priority="-1" type="official-map-vehicle-structural" spreadType="center" shape="76.45,107.72 -0.25,95.79">
+        <lane id="hh-map-2394-a4-out_0" index="0" allow="emergency passenger taxi bus coach delivery truck motorcycle" speed="13.89" length="58.21" width="3.20" customShape="1" shape="55.18,113.12 47.60,111.24 -1.03,97.99" type="official-map-lane-14"/>
+    </edge>
+
+    <tlLogic id="hh-map-2394" type="static" programID="structural-all-red" offset="0">
+        <phase duration="1"  state="rrrrrr"/>
+    </tlLogic>
+
+    <junction id="hh-map-2394-a2-boundary" type="dead_end" x="157.11" y="144.67" incLanes="hh-map-2394-a2-out_0 hh-map-2394-a2-out_1" intLanes="" shape="155.37,148.76 154.16,151.62 160.94,134.79 158.68,140.62" fringe="outer"/>
+    <junction id="hh-map-2394-a3-boundary" type="dead_end" x="118.67" y="0.00" incLanes="hh-map-2394-a3-out_0" intLanes="" shape="121.14,1.08 118.42,-0.11 114.79,-1.78 117.70,-0.44" fringe="outer"/>
+    <junction id="hh-map-2394-a4-boundary" type="dead_end" x="0.00" y="94.21" incLanes="hh-map-2394-a4-out_0" intLanes="" shape="-0.11,95.01 0.75,88.92 -1.45,99.53 -0.61,96.44" fringe="outer"/>
+    <junction id="hh-map-2394-core" type="traffic_light" x="76.66" y="106.13" incLanes="hh-map-2394-a2-in_0 hh-map-2394-a2-in_1 hh-map-2394-a3-in_0 hh-map-2394-a3-in_1 hh-map-2394-a4-in_0 hh-map-2394-a4-in_1 hh-map-2394-a4-in_2" intLanes=":hh-map-2394-core_0_0 :hh-map-2394-core_1_0 :hh-map-2394-core_2_0 :hh-map-2394-core_2_1 :hh-map-2394-core_4_0 :hh-map-2394-core_5_0 :hh-map-2394-core_6_0 :hh-map-2394-core_6_1" shape="58.50,105.10 59.02,101.95 59.72,98.69 74.27,90.29 82.64,93.04 85.77,94.25 93.88,111.12 93.23,114.47 90.99,121.07 90.01,124.35 55.18,113.12" customShape="1">
+        <request index="0" response="00000000" foes="00010000" cont="0"/>
+        <request index="1" response="11100000" foes="11110000" cont="0"/>
+        <request index="2" response="11000000" foes="11000000" cont="0"/>
+        <request index="3" response="11000000" foes="11000000" cont="0"/>
+        <request index="4" response="11000011" foes="11000011" cont="0"/>
+        <request index="5" response="00000000" foes="00000010" cont="0"/>
+        <request index="6" response="00000000" foes="00011110" cont="0"/>
+        <request index="7" response="00000000" foes="00011110" cont="0"/>
+    </junction>
+
+    <connection from="hh-map-2394-a2-in" to="hh-map-2394-a4-out" fromLane="0" toLane="0" shape="90.01,124.35 72.38,117.36 55.18,113.12" via=":hh-map-2394-core_0_0" tl="hh-map-2394" linkIndex="0" dir="s" state="O"/>
+    <connection from="hh-map-2394-a2-in" to="hh-map-2394-a3-out" fromLane="1" toLane="0" shape="90.99,121.07 64.80,110.59 74.27,90.29" via=":hh-map-2394-core_1_0" tl="hh-map-2394" linkIndex="4" dir="l" state="o"/>
+    <connection from="hh-map-2394-a3-in" to="hh-map-2394-a2-out" fromLane="0" toLane="0" shape="85.77,94.25 80.97,106.54 93.88,111.12" via=":hh-map-2394-core_2_0" tl="hh-map-2394" linkIndex="1" dir="r" state="o"/>
+    <connection from="hh-map-2394-a3-in" to="hh-map-2394-a2-out" fromLane="0" toLane="1" shape="85.77,94.25 79.75,109.71 93.23,114.47" via=":hh-map-2394-core_2_1" tl="hh-map-2394" linkIndex="1" dir="r" state="o"/>
+    <connection from="hh-map-2394-a3-in" to="hh-map-2394-a4-out" fromLane="1" toLane="0" shape="82.64,93.04 73.15,117.55 55.18,113.12" via=":hh-map-2394-core_4_0" tl="hh-map-2394" linkIndex="5" dir="l" state="o"/>
+    <connection from="hh-map-2394-a4-in" to="hh-map-2394-a3-out" fromLane="0" toLane="0" shape="59.72,98.69 69.38,100.70 74.27,90.29" via=":hh-map-2394-core_5_0" tl="hh-map-2394" linkIndex="2" dir="r" state="O"/>
+    <connection from="hh-map-2394-a4-in" to="hh-map-2394-a2-out" fromLane="1" toLane="0" shape="59.02,101.95 82.24,106.99 93.88,111.12" via=":hh-map-2394-core_6_0" tl="hh-map-2394" linkIndex="3" dir="s" state="O"/>
+    <connection from="hh-map-2394-a4-in" to="hh-map-2394-a2-out" fromLane="2" toLane="1" shape="58.50,105.10 78.79,109.37 93.23,114.47" via=":hh-map-2394-core_6_1" tl="hh-map-2394" linkIndex="3" dir="s" state="O"/>
+
+    <connection from=":hh-map-2394-core_0" to="hh-map-2394-a4-out" fromLane="0" toLane="0" dir="s" state="M"/>
+    <connection from=":hh-map-2394-core_1" to="hh-map-2394-a3-out" fromLane="0" toLane="0" dir="l" state="M"/>
+    <connection from=":hh-map-2394-core_2" to="hh-map-2394-a2-out" fromLane="0" toLane="0" dir="r" state="M"/>
+    <connection from=":hh-map-2394-core_2" to="hh-map-2394-a2-out" fromLane="1" toLane="1" dir="r" state="M"/>
+    <connection from=":hh-map-2394-core_4" to="hh-map-2394-a4-out" fromLane="0" toLane="0" dir="l" state="M"/>
+    <connection from=":hh-map-2394-core_5" to="hh-map-2394-a3-out" fromLane="0" toLane="0" dir="r" state="M"/>
+    <connection from=":hh-map-2394-core_6" to="hh-map-2394-a2-out" fromLane="0" toLane="0" dir="s" state="M"/>
+    <connection from=":hh-map-2394-core_6" to="hh-map-2394-a2-out" fromLane="1" toLane="1" dir="s" state="M"/>
+
+</net>

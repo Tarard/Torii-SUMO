@@ -764,6 +764,7 @@ def test_execution_plan_tool_attaches_stage_feedback_without_promoting(tmp_path:
 def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatch) -> None:
     files = {}
     for name in (
+        "W1.json",
         "net.xml",
         "binding.json",
         "detector-binding.json",
@@ -784,6 +785,7 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
     monkeypatch.setattr(digital_twin_tools, "materialize_hamburg_named_replay", fake_materialize)
 
     report = digital_twin_tools.sumo_hamburg_sandtorkai_named_replay(
+        w1_manifest_file=str(files["W1.json"]),
         net_file=str(files["net.xml"]),
         signal_binding_manifest=str(files["binding.json"]),
         detector_binding_manifest=str(files["detector-binding.json"]),
@@ -801,6 +803,7 @@ def test_named_replay_tool_forwards_hash_bound_inputs(tmp_path: Path, monkeypatc
     )
 
     assert report["execution_gate"] == "blocked"
+    assert captured["w1_manifest_file"] == files["W1.json"]
     assert captured["net_file"] == files["net.xml"]
     assert captured["signal_binding_manifest"] == files["binding.json"]
     assert captured["detector_binding_manifest"] == files["detector-binding.json"]

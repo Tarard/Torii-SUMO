@@ -1,0 +1,151 @@
+{
+  "schema": "torii.hamburg-movement-authority/v1",
+  "status": "review_required",
+  "authority_id": "hamburg-2403-cad-aerial-osm-turn-lanes-20260723",
+  "generated_from_candidate": false,
+  "source_evidence": [
+    {
+      "evidence_id": "hamburg-construction-cad-2022",
+      "kind": "hamburg_cad",
+      "path": "..\\..\\..\\..\\docs\\assets\\hamburg-digital-twin\\official-construction-plan-2022.png",
+      "sha256": "2dd292e00ee0d522a5c8f0c4e0a4b95b47f4afcc34db12b5d69c47501e70d8ec"
+    },
+    {
+      "evidence_id": "hamburg-official-aerial-2024",
+      "kind": "official_aerial",
+      "path": "..\\..\\..\\..\\docs\\assets\\hamburg-digital-twin\\official-aerial-2024.png",
+      "sha256": "8c65a45c5b86d2a7077c321bb1fff8108651f0f8a7fd3ffc62091c17de5be948"
+    },
+    {
+      "evidence_id": "osm-complete-ways-snapshot",
+      "kind": "osm_turn_lane_tags",
+      "path": "..\\source_complete_ways\\osm\\hamburg_sandtorkai_aerial_cad_complete_ways_bbox.osm.xml.gz",
+      "sha256": "a995b4da61f7c4ba1c03ec4b00478f27fbf7e575f101ae8226a60e6d16e589ca"
+    }
+  ],
+  "movements": [
+    {
+      "movement_key": "2403-north-l0-right",
+      "route_edges": ["-152813965#0", "395272650#0"],
+      "depart_lane": 0,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-north-l0-through",
+      "route_edges": ["-152813965#0", "-554713071", "111747607#1"],
+      "depart_lane": 0,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-north-l1-through",
+      "route_edges": ["-152813965#0", "-554713071", "111747607#1"],
+      "depart_lane": 1,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-north-l2-left",
+      "route_edges": ["-152813965#0", "60578532#0"],
+      "depart_lane": 2,
+      "arrival_lane": 1,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-east-l0-right",
+      "route_edges": ["25444569#2", "152813965#0"],
+      "depart_lane": 0,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-east-l0-through",
+      "route_edges": ["25444569#2", "395272650#0"],
+      "depart_lane": 0,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-east-l1-through",
+      "route_edges": ["25444569#2", "395272650#0"],
+      "depart_lane": 1,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-east-l2-left",
+      "route_edges": ["25444569#2", "-554713071", "111747607#1"],
+      "depart_lane": 2,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-east-l3-left",
+      "route_edges": ["25444569#2", "-554713071", "111747607#1"],
+      "depart_lane": 3,
+      "arrival_lane": 1,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-west-l0-right",
+      "route_edges": ["83075275#2", "-554713071", "111747607#1"],
+      "depart_lane": 0,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-west-l0-through",
+      "route_edges": ["83075275#2", "60578532#0"],
+      "depart_lane": 0,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-west-l1-through",
+      "route_edges": ["83075275#2", "60578532#0"],
+      "depart_lane": 1,
+      "arrival_lane": 1,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-west-l2-left",
+      "route_edges": ["83075275#2", "152813965#0"],
+      "depart_lane": 2,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-south-l0-right",
+      "route_edges": ["554706401#0", "554713071", "60578532#0"],
+      "depart_lane": 0,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-south-l1-through",
+      "route_edges": ["554706401#0", "554713071", "152813965#0"],
+      "depart_lane": 1,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    },
+    {
+      "movement_key": "2403-south-l2-left",
+      "route_edges": ["554706401#0", "554713071", "395272650#0"],
+      "depart_lane": 2,
+      "arrival_lane": 0,
+      "evidence_ids": ["hamburg-construction-cad-2022", "hamburg-official-aerial-2024", "osm-complete-ways-snapshot"]
+    }
+  ],
+  "claim_boundary": {
+    "proves": [
+      "the ledger records 16 lane-level motor movements at the reviewed 2403 physical conflict core and binds them to CAD, aerial, and OSM turn-lane evidence",
+      "no reverse or U-turn movement is authorized"
+    ],
+    "does_not_prove": [
+      "official 2403 signal control or historical signal timing",
+      "movement legality outside the reviewed 2403 physical conflict core",
+      "automatic proof that each declared movement is semantically correct; that relationship remains review-required"
+    ]
+  }
+}

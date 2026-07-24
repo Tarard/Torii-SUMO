@@ -1,0 +1,294 @@
+{
+  "automatic_promotion_gate": "blocked",
+  "available_count_node_ids": [
+    "2394",
+    "2403"
+  ],
+  "claim_boundary": {
+    "does_not_prove": [
+      "SUMO lane binding",
+      "OD matrix or unique route reconstruction",
+      "signal timing or queue length",
+      "full corridor coverage when a requested node is missing"
+    ],
+    "proves": [
+      "official_count_stream_inventory",
+      "declared_detector_to_official_node_geometry",
+      "source_complete_warmup_and_formal_count_window_when_present"
+    ]
+  },
+  "direction_inference": [
+    {
+      "direction": "Richtung 1",
+      "distance_to_reference_m": 3.116,
+      "method": "nearest_same_node_declared_direction",
+      "reference_stream_id": 28466,
+      "second_nearest_distance_m": 23.806,
+      "status": "inferred",
+      "stream_id": 32693
+    }
+  ],
+  "max_distance_m": 250.0,
+  "missing_count_node_ids": [
+    "2349"
+  ],
+  "over_distance_stream_ids": [],
+  "requested_count_node_ids": [
+    "2349",
+    "2394",
+    "2403"
+  ],
+  "schema": "torii.hamburg-named-corridor-count-scope/v1",
+  "status": "partial",
+  "stream_count": 19,
+  "stream_rows": [
+    {
+      "asset_id": "Z.1",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_1_28495",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 20.054,
+      "lane_use": "",
+      "latitude": 53.543615228,
+      "longitude": 9.995369627,
+      "reference_node_id": "2394",
+      "stream_id": 28495
+    },
+    {
+      "asset_id": "Z.2",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_2_30208",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 16.248,
+      "lane_use": "",
+      "latitude": 53.543591864,
+      "longitude": 9.995327365,
+      "reference_node_id": "2394",
+      "stream_id": 30208
+    },
+    {
+      "asset_id": "Z.3",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_3_29127",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 18.809,
+      "lane_use": "",
+      "latitude": 53.543561658,
+      "longitude": 9.995399355,
+      "reference_node_id": "2394",
+      "stream_id": 29127
+    },
+    {
+      "asset_id": "Z.4",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_4_30820",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 23.86,
+      "lane_use": "",
+      "latitude": 53.543317673,
+      "longitude": 9.995314909,
+      "reference_node_id": "2394",
+      "stream_id": 30820
+    },
+    {
+      "asset_id": "Z.5",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_5_35320",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 23.54,
+      "lane_use": "",
+      "latitude": 53.543307766,
+      "longitude": 9.995270753,
+      "reference_node_id": "2394",
+      "stream_id": 35320
+    },
+    {
+      "asset_id": "Z.6",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_6_29032",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 23.603,
+      "lane_use": "",
+      "latitude": 53.543297782,
+      "longitude": 9.995224441,
+      "reference_node_id": "2394",
+      "stream_id": 29032
+    },
+    {
+      "asset_id": "Z.7",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_7_26767",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 20.77,
+      "lane_use": "",
+      "latitude": 53.543360925,
+      "longitude": 9.994928763,
+      "reference_node_id": "2394",
+      "stream_id": 26767
+    },
+    {
+      "asset_id": "Z.8",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_8_27151",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 18.863,
+      "lane_use": "",
+      "latitude": 53.543390688,
+      "longitude": 9.994918918,
+      "reference_node_id": "2394",
+      "stream_id": 27151
+    },
+    {
+      "asset_id": "Z.9",
+      "count_node_id": "2394",
+      "detector_id": "hh_2394_Z_9_32139",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 17.465,
+      "lane_use": "",
+      "latitude": 53.543419405,
+      "longitude": 9.99490913,
+      "reference_node_id": "2394",
+      "stream_id": 32139
+    },
+    {
+      "asset_id": "Z.1",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_1_31912",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 26.158,
+      "lane_use": "",
+      "latitude": 53.54429302,
+      "longitude": 9.998052088,
+      "reference_node_id": "2403",
+      "stream_id": 31912
+    },
+    {
+      "asset_id": "Z.10",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_10_32693",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 26.851,
+      "lane_use": "",
+      "latitude": 53.544320534,
+      "longitude": 9.997695187,
+      "reference_node_id": "2403",
+      "stream_id": 32693
+    },
+    {
+      "asset_id": "Z.2",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_2_28751",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 24.526,
+      "lane_use": "",
+      "latitude": 53.544265788,
+      "longitude": 9.998073409,
+      "reference_node_id": "2403",
+      "stream_id": 28751
+    },
+    {
+      "asset_id": "Z.3",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_3_29224",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 23.377,
+      "lane_use": "",
+      "latitude": 53.544240947,
+      "longitude": 9.998093289,
+      "reference_node_id": "2403",
+      "stream_id": 29224
+    },
+    {
+      "asset_id": "Z.4",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_4_33751",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 22.576,
+      "lane_use": "",
+      "latitude": 53.544216708,
+      "longitude": 9.998112186,
+      "reference_node_id": "2403",
+      "stream_id": 33751
+    },
+    {
+      "asset_id": "Z.5",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_5_26523",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 22.818,
+      "lane_use": "",
+      "latitude": 53.544171723,
+      "longitude": 9.998159045,
+      "reference_node_id": "2403",
+      "stream_id": 26523
+    },
+    {
+      "asset_id": "Z.6",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_6_34490",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 23.117,
+      "lane_use": "",
+      "latitude": 53.544147191,
+      "longitude": 9.998177434,
+      "reference_node_id": "2403",
+      "stream_id": 34490
+    },
+    {
+      "asset_id": "Z.7",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_7_27722",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 22.39,
+      "lane_use": "",
+      "latitude": 53.543914772,
+      "longitude": 9.997989383,
+      "reference_node_id": "2403",
+      "stream_id": 27722
+    },
+    {
+      "asset_id": "Z.8",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_8_30318",
+      "direction": "Richtung 2",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 31.815,
+      "lane_use": "",
+      "latitude": 53.543987705,
+      "longitude": 9.99739337,
+      "reference_node_id": "2403",
+      "stream_id": 30318
+    },
+    {
+      "asset_id": "Z.9",
+      "count_node_id": "2403",
+      "detector_id": "hh_2403_Z_9_28466",
+      "direction": "Richtung 1",
+      "distance_status": "within_declared_scope",
+      "distance_to_reference_m": 27.362,
+      "lane_use": "",
+      "latitude": 53.544313482,
+      "longitude": 9.9976496,
+      "reference_node_id": "2403",
+      "stream_id": 28466
+    }
+  ],
+  "unknown_direction_stream_ids": []
+}

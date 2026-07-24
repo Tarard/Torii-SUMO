@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
+    <input>
+        <node-files value="hamburg-official-2394.nod.xml" />
+        <edge-files value="hamburg-official-2394.edg.xml" />
+        <connection-files value="hamburg-official-2394.con.xml" />
+        <tllogic-files value="hamburg-official-2394.tll.xml" />
+        <type-files value="hamburg-official-2394.typ.xml" />
+    </input>
+    <output>
+        <output-file value="hamburg-official-2394.net.xml" />
+    </output>
+    <processing>
+        <no-turnarounds value="true" />
+        <geometry.remove value="false" />
+    </processing>
+    <report>
+        <verbose value="true" />
+        <xml-validation value="local" />
+    </report>
+</configuration>

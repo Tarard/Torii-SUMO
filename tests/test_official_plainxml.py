@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from torii_sumo.core.hamburg_named_scope import AERIAL_SCOPE, CAD_SCOPE_EVIDENCE
 from torii_sumo.road_network.adapters.hamburg_hh_sib import read_hamburg_hh_sib_snapshot
 from torii_sumo.road_network.official_plainxml import (
     OFFICIAL_CORRIDOR_SCOPE_SCHEMA,
@@ -196,11 +197,18 @@ def test_named_scope_contract_is_recorded_when_supplied(tmp_path: Path) -> None:
     scope_manifest = tmp_path / "named-scope.json"
     scope_manifest.write_text(
         json.dumps(
-                {
-                    "schema": "torii.hamburg-named-corridor-scope/v1",
-                    "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1",
-                    "decision": "blocked",
-                    "nodes": [{"node_id": node_id} for node_id in ("2349", "2394", "2403")],
+            {
+                "schema": "torii.hamburg-named-corridor-scope/v1",
+                "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1",
+                "decision": "blocked",
+                "nodes": [{"node_id": node_id} for node_id in ("2349", "2394", "2403")],
+                "scope_policy": {
+                    "spatial_scope": {
+                        "edge_boundary_policy": "preserve_complete_selected_ways",
+                        "aerial": AERIAL_SCOPE,
+                        "official_cad": CAD_SCOPE_EVIDENCE,
+                    }
+                },
                 "official_road_scope": {
                     "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1"
                 },

@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<additional>
+    <poi id="torii_connection_mode_review_250374290" type="torii.review.connection_mode.review_required" color="255,165,0" layer="1001" x="1580.86" y="919.95" name="Connection review 250374290: review_required">
+        <param key="display_only" value="true" />
+        <param key="junction_id" value="250374290" />
+        <param key="status" value="review_required" />
+        <param key="structural_failures" value="" />
+        <param key="review_findings" value="connection_mode:lane_rank_jump:1977:0.625; connection_mode:ambiguous_target_lane_fanout:1492857123|0|1111806337:0,1,2; connection_mode:ambiguous_target_lane_fanout:1492857123|1|23165591#0:0,1; connection_mode:ambiguous_target_lane_fanout:45519024#1|0|1111806337:0,3; connection_mode:ambiguous_target_lane_fanout:45519024#1|1|1111806337:1,2; connection_mode:crossed_lane_mapping:45519024#1:1111806337:0&gt;3:1&gt;1" />
+        <param key="source_sha256" value="b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98" />
+        <param key="operational_change" value="none" />
+    </poi>
+    <poi id="torii_connection_mode_review_34022712" type="torii.review.connection_mode.review_required" color="255,165,0" layer="1001" x="870.59" y="1101.76" name="Connection review 34022712: review_required">
+        <param key="display_only" value="true" />
+        <param key="junction_id" value="34022712" />
+        <param key="status" value="review_required" />
+        <param key="structural_failures" value="" />
+        <param key="review_findings" value="connection_mode:incoming_motorized_lane_without_connection:142944348#2:1" />
+        <param key="source_sha256" value="b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98" />
+        <param key="operational_change" value="none" />
+    </poi>
+    <poi id="torii_connection_mode_review_7385353793" type="torii.review.connection_mode.review_required" color="255,165,0" layer="1001" x="615.84" y="916.8" name="Connection review 7385353793: review_required">
+        <param key="display_only" value="true" />
+        <param key="junction_id" value="7385353793" />
+        <param key="status" value="review_required" />
+        <param key="structural_failures" value="" />
+        <param key="review_findings" value="connection_mode:lane_rank_jump:2647:0.583; connection_mode:ambiguous_target_lane_fanout:808361510#1|2|43118557#0:0,1; connection_mode:ambiguous_target_lane_fanout:808361510#1|2|43145235#0:2,3" />
+        <param key="source_sha256" value="b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98" />
+        <param key="operational_change" value="none" />
+    </poi>
+    <poi id="torii_connection_mode_review_cluster_249707791_757036954" type="torii.review.connection_mode.review_required" color="255,165,0" layer="1001" x="1280.24" y="545.04" name="Connection review cluster_249707791_757036954: review_required">
+        <param key="display_only" value="true" />
+        <param key="junction_id" value="cluster_249707791_757036954" />
+        <param key="status" value="review_required" />
+        <param key="structural_failures" value="" />
+        <param key="review_findings" value="connection_mode:destination_lane_merge:-152813965#0|-554713071|0:0,1; connection_mode:destination_lane_merge:25444569#2|395272650#0|0:0,1" />
+        <param key="source_sha256" value="b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98" />
+        <param key="operational_change" value="none" />
+    </poi>
+    <poi id="torii_connection_mode_review_cluster_25737304_759714733" type="torii.review.connection_mode.review_required" color="255,165,0" layer="1001" x="988.25" y="449.52" name="Connection review cluster_25737304_759714733: review_required">
+        <param key="display_only" value="true" />
+        <param key="junction_id" value="cluster_25737304_759714733" />
+        <param key="status" value="review_required" />
+        <param key="structural_failures" value="" />
+        <param key="review_findings" value="connection_mode:ambiguous_target_lane_fanout:554713078#2|0|554713075#0:0,1" />
+        <param key="source_sha256" value="b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98" />
+        <param key="operational_change" value="none" />
+    </poi>
+    <poi id="torii_connection_mode_review_cluster_739654528_759714704" type="torii.review.connection_mode.review_required" color="255,165,0" layer="1001" x="974.6" y="447.7" name="Connection review cluster_739654528_759714704: review_required">
+        <param key="display_only" value="true" />
+        <param key="junction_id" value="cluster_739654528_759714704" />
+        <param key="status" value="review_required" />
+        <param key="structural_failures" value="" />
+        <param key="review_findings" value="connection_mode:destination_lane_merge:194672083|127716467#0|0:0,1" />
+        <param key="source_sha256" value="b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98" />
+        <param key="operational_change" value="none" />
+    </poi>
+</additional>

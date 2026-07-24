@@ -1,0 +1,51 @@
+{
+  "artifact_generation_status": "pass",
+  "artifacts": [
+    {
+      "kind": "connection_mode_regression_report",
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\connection_mode\\canonical-w1-connection-mode-regression.json",
+      "sha256": "a72cd0c29dc0d341a8e1dbee4c970f9fa9f869d56ab0db343ae0e4a9929dd09c"
+    },
+    {
+      "kind": "display_only_regression_overlay",
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\connection_mode\\canonical-w1-connection-mode-regression.review.add.xml",
+      "sha256": "5e39b338983b3e0230f33296e607d2fb097951c73145aa46dc9a7204743a3599"
+    }
+  ],
+  "automatic_promotion_gate": "blocked",
+  "blockers": [
+    "new_target_scope_review_findings"
+  ],
+  "candidate_net_file": "../../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+  "candidate_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+  "gate_status": "fail",
+  "outside_scope_new_review_finding_count": 0,
+  "outside_scope_new_structural_finding_count": 0,
+  "outside_scope_regression_junction_ids": [],
+  "requested_target_candidate_junction_ids": [
+    "250374290",
+    "34022712",
+    "7385353793",
+    "8688554173",
+    "cluster_1272392464_2761334292_5241629952_757036853",
+    "cluster_249707791_757036954",
+    "cluster_25737304_759714733",
+    "cluster_739654528_759714704"
+  ],
+  "review_overlay_display_only": true,
+  "schema": "torii.connection_mode_regression_manifest.v1",
+  "source_net_file": "../../canonical_build/sumo/hamburg_sandtorkai_canonical_w1.net.xml",
+  "source_network_mutation": false,
+  "source_sha256": "c8d4e30d6d3bf2e44dc920eb59ceab9663130731b6402047b62a7da622f582fd",
+  "status": "fail",
+  "target_scope_flagged_junction_ids": [
+    "250374290",
+    "34022712",
+    "7385353793",
+    "cluster_249707791_757036954",
+    "cluster_25737304_759714733",
+    "cluster_739654528_759714704"
+  ],
+  "target_scope_new_review_finding_count": 6,
+  "target_scope_new_structural_finding_count": 0
+}

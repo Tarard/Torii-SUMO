@@ -1034,6 +1034,7 @@ def sumo_hamburg_sandtorkai_execution_plan(
 
 
 def sumo_hamburg_sandtorkai_named_replay(
+    w1_manifest_file: str,
     net_file: str,
     signal_binding_manifest: str,
     detector_binding_manifest: str,
@@ -1056,6 +1057,7 @@ def sumo_hamburg_sandtorkai_named_replay(
 
     try:
         return materialize_hamburg_named_replay(
+            w1_manifest_file=_existing_file(w1_manifest_file, "w1_manifest_file"),
             net_file=_existing_file(net_file, "net_file"),
             signal_binding_manifest=_existing_file(signal_binding_manifest, "signal_binding_manifest"),
             detector_binding_manifest=_existing_file(

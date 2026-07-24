@@ -1,0 +1,65 @@
+{
+  "artifacts": {},
+  "automatic_promotion_gate": "blocked",
+  "claim_boundary": {
+    "does_not_prove": [
+      "that routeSampler or SUMO ran",
+      "replay quality, detector agreement, or historical signal fidelity"
+    ],
+    "proves": [
+      "the blocked W4 preflight is bound to the selected W1, W2, W3a, and W3b bytes"
+    ]
+  },
+  "claim_status": "not-executed-upstream-gate-blocked",
+  "execution_gate": "blocked",
+  "execution_gate_reason": "W2 signal binding execution; W3b detector aggregation semantics",
+  "gates": {
+    "automatic_promotion": "blocked",
+    "detector_aggregation_semantics": "blocked",
+    "detector_binding_execution": "pass",
+    "e1_comparison": "not_run",
+    "route_sampler": "not_run",
+    "signal_binding_execution": "blocked",
+    "sumo_quality": "not_run",
+    "sumo_run": "not_run"
+  },
+  "replay_executed": false,
+  "schema": "torii.hamburg-named-replay/v2",
+  "simulation": {
+    "reason": "upstream W2 or W3b gate blocked replay execution",
+    "status": "not_run"
+  },
+  "source": {
+    "canonical_count_file": {
+      "path": "../../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/counts.simulation.15min.csv",
+      "sha256": "25d790794fd9e41c5cf65fbe02ed3c3f544b6817cd35fffd3352549e32c1d3d2"
+    },
+    "count_scope_manifest": {
+      "path": "../../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/sensor-count-scope.manifest.json",
+      "sha256": "7ab56bbfd8f3e7317ce8a2fa9b2ce5aae56e451bb80a0357244f74b945548113"
+    },
+    "count_stream_snapshot": {
+      "path": "../../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/count_streams.raw.json",
+      "sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d"
+    },
+    "detector_binding_manifest": {
+      "path": "../w3b_c7ecb3/detector-binding.manifest.json",
+      "sha256": "42aded90a5858d37d16fc54a9f94adc22607b3a68b6ed3e4be0bf9800e2efd2a"
+    },
+    "net": {
+      "path": "../../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+      "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98"
+    },
+    "signal_binding_manifest": {
+      "path": "../w2_c7ecb3/official-primary-signal-binding.manifest.json",
+      "sha256": "098c51491972faaed0d18b8c27ba4d8f7111a63f50de94766426a89d798653c1"
+    },
+    "signal_observation_manifest": null,
+    "tls_link_events": null,
+    "w1_manifest": {
+      "path": "../../manifest/hamburg_official_corridor_geometry.manifest.json",
+      "sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc"
+    }
+  },
+  "status": "blocked"
+}

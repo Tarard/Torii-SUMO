@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodes>
+    <!-- Hamburg MAP 2349: two 0.20 m OSM seams inside the official conflict core. -->
+    <join nodes="25737304 759714733"/>
+    <join nodes="739654528 759714704"/>
+
+    <!-- Hamburg CAD / aerial 2403: ordinary OSM seams inside two physical conflict cores. -->
+    <join nodes="1272392464 2761334292 5241629952 757036853"/>
+    <join nodes="249707791 757036954"/>
+</nodes>

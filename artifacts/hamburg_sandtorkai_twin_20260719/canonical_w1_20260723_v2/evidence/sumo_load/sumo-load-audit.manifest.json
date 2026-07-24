@@ -1,0 +1,15 @@
+{
+  "artifacts": [
+    {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\candidate\\hamburg_sandtorkai_canonical_w1.net.xml",
+      "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98"
+    },
+    {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\sumo_load\\sumo-load-audit.json",
+      "sha256": "d7d1eaaa158add1524483a6367a2fb0ba63592114b60a8c3d75ff1c2d8a03eda"
+    }
+  ],
+  "schema": "torii.sumo-load-audit-manifest/v1",
+  "source_network_mutation": false,
+  "status": "pass"
+}

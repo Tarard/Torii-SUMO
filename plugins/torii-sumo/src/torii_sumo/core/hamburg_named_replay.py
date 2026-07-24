@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from .artifact_io import write_json_atomic
+from .artifact_io import relative_or_absolute_path, write_json_atomic
 from .cached_detector_demand import (
     _write_route_support,
     read_canonical_count_file,
@@ -29,6 +29,7 @@ from .digital_twin_mapping import (
     write_virtual_e2_additional,
     write_virtual_expected_counts,
 )
+from .hamburg_w1_manifest import resolve_hamburg_w1_network
 from .route_sampler import apply_departure_lane_targets, route_source_edges, run_route_sampler
 from .tls_replay import run_tls_detector_replay
 
@@ -40,9 +41,164 @@ class HamburgNamedReplayError(ValueError):
     """Raised when a diagnostic replay cannot be constructed safely."""
 
 
+def materialize_hamburg_named_replay_preflight(
+    *,
+    w1_manifest_file: Path,
+    signal_binding_manifest: Path,
+    detector_binding_manifest: Path,
+    count_scope_manifest: Path,
+    count_stream_snapshot: Path,
+    canonical_count_file: Path,
+    output_dir: Path,
+    net_file: Path | None = None,
+) -> dict[str, Any]:
+    """Record a hash-bound W4 non-run when W2 or W3b blocks execution."""
+
+    net_path, w1_identity = resolve_hamburg_w1_network(
+        w1_manifest_file=w1_manifest_file,
+        net_file=net_file,
+    )
+    signal_path = Path(signal_binding_manifest).expanduser().resolve(strict=True)
+    detector_path = Path(detector_binding_manifest).expanduser().resolve(strict=True)
+    count_scope_path = Path(count_scope_manifest).expanduser().resolve(strict=True)
+    stream_path = Path(count_stream_snapshot).expanduser().resolve(strict=True)
+    count_path = Path(canonical_count_file).expanduser().resolve(strict=True)
+
+    signal = _read_upstream_manifest(
+        signal_path,
+        schema="torii.hamburg-named-signal-binding/v1",
+        label="signal binding",
+    )
+    detector = _read_upstream_manifest(
+        detector_path,
+        schema="torii.hamburg-named-detector-binding/v1",
+        label="detector binding",
+    )
+    selected_w1 = Path(w1_identity["path"])
+    _validate_dependency_w1_manifest(
+        signal,
+        manifest_path=signal_path,
+        expected_w1_manifest=selected_w1,
+        label="signal binding",
+    )
+    _validate_dependency_w1_manifest(
+        detector,
+        manifest_path=detector_path,
+        expected_w1_manifest=selected_w1,
+        label="detector binding",
+    )
+    _validate_binding_network(signal, net_path, manifest_path=signal_path)
+    detector_source = detector.get("source")
+    if not isinstance(detector_source, Mapping):
+        raise HamburgNamedReplayError("detector binding manifest has no source identities")
+    _resolve_file_identity(
+        detector_source.get("candidate_net"),
+        base_dir=detector_path.parent,
+        label="detector binding candidate network",
+        expected_file=net_path,
+    )
+    _resolve_file_identity(
+        detector_source.get("count_stream_snapshot"),
+        base_dir=detector_path.parent,
+        label="detector binding count stream snapshot",
+        expected_file=stream_path,
+    )
+    _validate_count_scope_manifest(
+        count_scope_path,
+        count_stream_snapshot=stream_path,
+        canonical_count_file=count_path,
+    )
+
+    detector_gates = detector.get("gates")
+    blockers = [
+        name
+        for name, passed in (
+            ("W2 signal binding execution", signal.get("execution_gate") == "pass"),
+            ("W3b detector binding execution", detector.get("execution_gate") == "pass"),
+            (
+                "W3b detector aggregation semantics",
+                isinstance(detector_gates, Mapping) and detector_gates.get("sensor_aggregation_semantics") == "pass",
+            ),
+        )
+        if not passed
+    ]
+    if not blockers:
+        raise HamburgNamedReplayError(
+            "W2 and W3b gates are execution-ready; run the replay instead of a blocked preflight"
+        )
+
+    destination = Path(output_dir).expanduser().resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    if any(destination.iterdir()):
+        raise HamburgNamedReplayError("output_dir must be empty; choose a new versioned run")
+    manifest_file = destination / "hamburg_named_replay.manifest.json"
+
+    def identity(path: Path) -> dict[str, str]:
+        return {
+            "path": relative_or_absolute_path(path, manifest_file.parent),
+            "sha256": file_sha256(path),
+        }
+
+    manifest: dict[str, Any] = {
+        "schema": NAMED_REPLAY_SCHEMA,
+        "status": "blocked",
+        "execution_gate": "blocked",
+        "execution_gate_reason": "; ".join(blockers),
+        "automatic_promotion_gate": "blocked",
+        "claim_status": "not-executed-upstream-gate-blocked",
+        "replay_executed": False,
+        "source": {
+            "w1_manifest": {
+                **w1_identity,
+                "path": relative_or_absolute_path(
+                    Path(w1_identity["path"]),
+                    manifest_file.parent,
+                ),
+            },
+            "net": identity(net_path),
+            "signal_binding_manifest": identity(signal_path),
+            "detector_binding_manifest": identity(detector_path),
+            "count_scope_manifest": identity(count_scope_path),
+            "count_stream_snapshot": identity(stream_path),
+            "canonical_count_file": identity(count_path),
+            "signal_observation_manifest": None,
+            "tls_link_events": None,
+        },
+        "gates": {
+            "signal_binding_execution": signal.get("execution_gate", "blocked"),
+            "detector_binding_execution": detector.get("execution_gate", "blocked"),
+            "detector_aggregation_semantics": (
+                detector_gates.get("sensor_aggregation_semantics", "blocked")
+                if isinstance(detector_gates, Mapping)
+                else "blocked"
+            ),
+            "route_sampler": "not_run",
+            "sumo_run": "not_run",
+            "sumo_quality": "not_run",
+            "e1_comparison": "not_run",
+            "automatic_promotion": "blocked",
+        },
+        "simulation": {
+            "status": "not_run",
+            "reason": "upstream W2 or W3b gate blocked replay execution",
+        },
+        "artifacts": {},
+        "claim_boundary": {
+            "proves": ["the blocked W4 preflight is bound to the selected W1, W2, W3a, and W3b bytes"],
+            "does_not_prove": [
+                "that routeSampler or SUMO ran",
+                "replay quality, detector agreement, or historical signal fidelity",
+            ],
+        },
+    }
+    write_json_atomic(manifest_file, manifest, sort_keys=True)
+    return {**manifest, "manifest_file": str(manifest_file)}
+
+
 def materialize_hamburg_named_replay(
     *,
-    net_file: Path,
+    net_file: Path | None = None,
+    w1_manifest_file: Path,
     signal_binding_manifest: Path,
     detector_binding_manifest: Path,
     count_scope_manifest: Path,
@@ -63,12 +219,20 @@ def materialize_hamburg_named_replay(
 ) -> dict[str, Any]:
     """Write replay artifacts from selected W2 signal, W3a count, and W3b detector inputs."""
 
-    net_path = Path(net_file).expanduser().resolve(strict=True)
+    net_path, w1_manifest_identity = resolve_hamburg_w1_network(
+        w1_manifest_file=w1_manifest_file,
+        net_file=net_file,
+    )
     binding_path = Path(signal_binding_manifest).expanduser().resolve(strict=True)
     detector_binding_path = Path(detector_binding_manifest).expanduser().resolve(strict=True)
     count_scope_path = Path(count_scope_manifest).expanduser().resolve(strict=True)
     stream_path = Path(count_stream_snapshot).expanduser().resolve(strict=True)
     count_path = Path(canonical_count_file).expanduser().resolve(strict=True)
+    signal_observation_path = (
+        Path(signal_observation_manifest).expanduser().resolve(strict=True)
+        if signal_observation_manifest is not None
+        else None
+    )
     if simulation_end <= simulation_begin or interval <= 0 or (simulation_end - simulation_begin) % interval:
         raise HamburgNamedReplayError("simulation window must contain whole positive intervals")
     if not simulation_begin <= comparison_begin < comparison_end <= simulation_end:
@@ -77,15 +241,22 @@ def materialize_hamburg_named_replay(
     destination.mkdir(parents=True, exist_ok=True)
     if any(destination.iterdir()):
         raise HamburgNamedReplayError("output_dir must be empty; choose a new versioned run")
+    manifest_file = destination / "hamburg_named_replay.manifest.json"
+
+    def manifest_path(path: Path | str) -> str:
+        return relative_or_absolute_path(Path(path), manifest_file.parent)
+
+    def identity(path: Path) -> dict[str, str]:
+        return {"path": manifest_path(path), "sha256": file_sha256(path)}
 
     binding = _load_binding_manifest(binding_path)
-    _validate_binding_network(binding, net_path)
+    _validate_binding_network(binding, net_path, manifest_path=binding_path)
     signal_history = (
         _load_signal_observation_manifest(
-            Path(signal_observation_manifest).expanduser().resolve(strict=True),
+            signal_observation_path,
             binding_manifest=binding_path,
         )
-        if signal_observation_manifest is not None
+        if signal_observation_path is not None
         else None
     )
     _validate_count_scope_manifest(
@@ -100,6 +271,18 @@ def materialize_hamburg_named_replay(
         replay_net=net_path,
         count_stream_snapshot=stream_path,
         expected_stream_ids={stream.stream_id for stream in streams},
+    )
+    _validate_dependency_w1_manifest(
+        binding,
+        manifest_path=binding_path,
+        expected_w1_manifest=Path(w1_manifest_identity["path"]),
+        label="signal binding",
+    )
+    _validate_dependency_w1_manifest(
+        detector_binding,
+        manifest_path=detector_binding_path,
+        expected_w1_manifest=Path(w1_manifest_identity["path"]),
+        label="detector binding",
     )
     signal_history_scope = _audit_signal_history_scope(
         signal_history,
@@ -278,7 +461,6 @@ def materialize_hamburg_named_replay(
     comparison_file = audit_dir / "e1-real-vs-virtual-comparison.csv"
     _write_rows(comparison_file, comparison_rows)
     low_confidence = sum(item.mapping_confidence == "low" for item in mappings)
-    manifest_file = destination / "hamburg_named_replay.manifest.json"
     gate_reasons: list[str] = []
     if route_sampler.get("status") != "pass":
         gate_reasons.append("routeSampler did not complete")
@@ -305,6 +487,39 @@ def materialize_hamburg_named_replay(
             1,
             "upstream or downstream demand outside the measured detector cross-sections",
         )
+    for report, path_keys in (
+        (
+            route_support,
+            (
+                "source_sink_manifest",
+                "route_candidate_manifest",
+                "route_detector_incidence",
+            ),
+        ),
+        (
+            route_sampler,
+            (
+                "candidate_route_file",
+                "demand_route_file",
+                "edge_data_file",
+                "mismatch_file",
+                "command_manifest",
+            ),
+        ),
+        (
+            simulation,
+            (
+                "e1_output",
+                "summary_output",
+                "tripinfo_output",
+                "error_log",
+            ),
+        ),
+    ):
+        for key in path_keys:
+            raw_path = report.get(key)
+            if isinstance(raw_path, str) and raw_path:
+                report[key] = manifest_path(raw_path)
     manifest: dict[str, Any] = {
         "schema": NAMED_REPLAY_SCHEMA,
         "status": "partial" if execution_gate == "pass" else "blocked",
@@ -317,31 +532,26 @@ def materialize_hamburg_named_replay(
         "automatic_promotion_gate": "blocked",
         "claim_status": "detector-constrained-diagnostic-replay",
         "source": {
-            "net": {"path": str(net_path), "sha256": file_sha256(net_path)},
-            "signal_binding_manifest": {"path": str(binding_path), "sha256": file_sha256(binding_path)},
-            "detector_binding_manifest": {
-                "path": str(detector_binding_path),
-                "sha256": file_sha256(detector_binding_path),
+            "w1_manifest": {
+                **w1_manifest_identity,
+                "path": manifest_path(w1_manifest_identity["path"]),
             },
-            "count_scope_manifest": {
-                "path": str(count_scope_path),
-                "sha256": file_sha256(count_scope_path),
-            },
+            "net": identity(net_path),
+            "signal_binding_manifest": identity(binding_path),
+            "detector_binding_manifest": identity(detector_binding_path),
+            "count_scope_manifest": identity(count_scope_path),
             "signal_observation_manifest": (
-                {"path": str(signal_observation_manifest), "sha256": file_sha256(signal_observation_manifest)}
-                if signal_observation_manifest is not None
+                identity(signal_observation_path)
+                if signal_observation_path is not None
                 else None
             ),
             "tls_link_events": (
-                {
-                    "path": signal_history["validated_tls_link_events"],
-                    "sha256": file_sha256(Path(signal_history["validated_tls_link_events"])),
-                }
+                identity(Path(signal_history["validated_tls_link_events"]))
                 if signal_history is not None
                 else None
             ),
-            "count_stream_snapshot": {"path": str(stream_path), "sha256": file_sha256(stream_path)},
-            "canonical_count_file": {"path": str(count_path), "sha256": file_sha256(count_path)},
+            "count_stream_snapshot": identity(stream_path),
+            "canonical_count_file": identity(count_path),
         },
         "window": {
             "simulation_begin": simulation_begin,
@@ -368,7 +578,11 @@ def materialize_hamburg_named_replay(
         ),
         "route_sampler": route_sampler,
         "simulation": simulation,
-        "comparison": {"status": comparison_status, "summary": comparison_summary, "file": str(comparison_file)},
+        "comparison": {
+            "status": comparison_status,
+            "summary": comparison_summary,
+            "file": manifest_path(comparison_file),
+        },
         "gates": {
             "signal_binding_execution": "pass" if binding.get("execution_gate") == "pass" else "blocked",
             "detector_binding_execution": (
@@ -397,12 +611,12 @@ def materialize_hamburg_named_replay(
             "automatic_promotion": "blocked_low_confidence_or_incomplete_official_scope",
         },
         "artifacts": {
-            "detector_mapping": str(mapping_file),
-            "virtual_detector_mapping": str(virtual_mapping_file),
-            "e1_additional": str(e1_file),
-            "e2_additional": str(e2_file),
-            "edge_data": str(edge_count_file),
-            "comparison": str(comparison_file),
+            "detector_mapping": manifest_path(mapping_file),
+            "virtual_detector_mapping": manifest_path(virtual_mapping_file),
+            "e1_additional": manifest_path(e1_file),
+            "e2_additional": manifest_path(e2_file),
+            "edge_data": manifest_path(edge_count_file),
+            "comparison": manifest_path(comparison_file),
         },
         "claim_boundary": {
             "proves": [
@@ -426,13 +640,32 @@ def _load_binding_manifest(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _validate_binding_network(binding: Mapping[str, Any], replay_net: Path) -> None:
+def _read_upstream_manifest(path: Path, *, schema: str, label: str) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema") != schema:
+        raise HamburgNamedReplayError(f"{label} manifest schema mismatch")
+    return payload
+
+
+def _validate_binding_network(
+    binding: Mapping[str, Any],
+    replay_net: Path,
+    *,
+    manifest_path: Path | None = None,
+) -> None:
     source = binding.get("source")
     candidate = source.get("candidate_net") if isinstance(source, Mapping) else None
     if not isinstance(candidate, Mapping):
         raise HamburgNamedReplayError("signal binding manifest has no candidate network binding")
     try:
-        candidate_path = Path(str(candidate["path"])).expanduser().resolve(strict=True)
+        candidate_path = Path(str(candidate["path"])).expanduser()
+        if not candidate_path.is_absolute():
+            if manifest_path is None:
+                raise HamburgNamedReplayError(
+                    "signal binding manifest path is required for a relative candidate network"
+                )
+            candidate_path = manifest_path.parent / candidate_path
+        candidate_path = candidate_path.resolve(strict=True)
         declared_sha256 = str(candidate["sha256"]).lower()
     except (KeyError, OSError, RuntimeError) as exc:
         raise HamburgNamedReplayError("signal binding candidate network binding is invalid") from exc
@@ -441,6 +674,25 @@ def _validate_binding_network(binding: Mapping[str, Any], replay_net: Path) -> N
         raise HamburgNamedReplayError("signal binding candidate network SHA-256 mismatch")
     if actual_sha256 != file_sha256(replay_net):
         raise HamburgNamedReplayError("signal binding network does not match replay network")
+
+
+def _validate_dependency_w1_manifest(
+    payload: Mapping[str, Any],
+    *,
+    manifest_path: Path,
+    expected_w1_manifest: Path,
+    label: str,
+) -> None:
+    source = payload.get("source")
+    identity = source.get("w1_manifest") if isinstance(source, Mapping) else None
+    resolved = _resolve_file_identity(
+        identity,
+        base_dir=manifest_path.parent,
+        label=f"{label} W1 manifest",
+        expected_file=expected_w1_manifest,
+    )
+    if resolved != expected_w1_manifest.expanduser().resolve(strict=True):
+        raise HamburgNamedReplayError(f"{label} W1 manifest does not match the selected replay input")
 
 
 def _load_detector_binding_manifest(

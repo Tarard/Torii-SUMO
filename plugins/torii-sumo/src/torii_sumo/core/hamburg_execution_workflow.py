@@ -12,10 +12,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Any, Mapping, Sequence
 
-from .artifact_io import write_json_atomic
+from .artifact_io import relative_or_absolute_path, write_json_atomic
 from .candidate_contracts import file_sha256
+from .complete_way_audit import audit_complete_osm_way_filter
+from .external_micro_junction_audit import audit_external_micro_junctions
 
 
 HAMBURG_EXECUTION_WORKFLOW_SCHEMA = "torii.hamburg-sandtorkai-execution-workflow/v2"
@@ -234,7 +237,11 @@ def materialize_hamburg_w1_topology_handoff(
     *,
     output_dir: Path,
     candidate_net_file: Path,
+    build_spec_file: Path,
     topology_audit_file: Path,
+    scope_ledger_file: Path,
+    turnaround_audit_file: Path,
+    movement_authority_file: Path,
     surface_comparison_file: Path,
     connection_mode_manifest_file: Path,
     sumo_load_report_file: Path,
@@ -247,7 +254,11 @@ def materialize_hamburg_w1_topology_handoff(
     candidate = Path(candidate_net_file).expanduser().resolve(strict=True)
     candidate_hash = file_sha256(candidate)
     evidence_paths = {
+        "build_spec": Path(build_spec_file).expanduser().resolve(strict=True),
         "topology_feedback": Path(topology_audit_file).expanduser().resolve(strict=True),
+        "scope_edge_preservation": Path(scope_ledger_file).expanduser().resolve(strict=True),
+        "turnaround_audit": Path(turnaround_audit_file).expanduser().resolve(strict=True),
+        "movement_authority": Path(movement_authority_file).expanduser().resolve(strict=True),
         "surface_comparison": Path(surface_comparison_file).expanduser().resolve(strict=True),
         "connection_mode": Path(connection_mode_manifest_file).expanduser().resolve(strict=True),
         "sumo_load": Path(sumo_load_report_file).expanduser().resolve(strict=True),
@@ -256,12 +267,30 @@ def materialize_hamburg_w1_topology_handoff(
     evidence = {name: _read_json_mapping(path) for name, path in evidence_paths.items()}
     errors: list[str] = []
 
+    _validate_w1_build_spec(
+        evidence["build_spec"],
+        spec_path=evidence_paths["build_spec"],
+        candidate=candidate,
+        candidate_hash=candidate_hash,
+        errors=errors,
+    )
+
     topology = evidence["topology_feedback"]
     if topology.get("schema") != "torii.junction-aggregation-preservation/v1" or topology.get("status") != "pass":
         errors.append("topology preservation is not pass")
-    _check_candidate_binding(topology, candidate, candidate_hash, errors, prefix="variant")
+    _check_candidate_binding(
+        topology,
+        candidate,
+        candidate_hash,
+        errors,
+        prefix="variant",
+        base_dir=evidence_paths["topology_feedback"].parent,
+    )
     try:
-        topology_source = Path(str(topology.get("source_net_file", ""))).resolve(strict=True)
+        topology_source = Path(str(topology.get("source_net_file", ""))).expanduser()
+        if not topology_source.is_absolute():
+            topology_source = evidence_paths["topology_feedback"].parent / topology_source
+        topology_source = topology_source.resolve(strict=True)
     except (OSError, RuntimeError):
         errors.append("topology preservation source path is invalid")
     else:
@@ -275,65 +304,243 @@ def materialize_hamburg_w1_topology_handoff(
         if topology.get(key) != 0:
             errors.append(f"topology preservation {key} is not zero")
     boundary = topology.get("boundary_movement_preservation")
-    expected_movement_keys: list[str] = []
     if (
         not isinstance(boundary, Mapping)
-        or boundary.get("status") != "pass"
+        or boundary.get("status") not in {"pass", "not_applicable"}
         or boundary.get("lost_boundary_movement_count") != 0
         or boundary.get("added_boundary_movement_count") != 0
     ):
         errors.append("topology boundary-movement preservation is not pass")
+
+    scope_ledger = evidence["scope_edge_preservation"]
+    scope_final = scope_ledger.get("final_candidate")
+    if (
+        scope_ledger.get("schema") != "torii.scope-edge-preservation/v1"
+        or scope_ledger.get("status") != "pass"
+    ):
+        errors.append("scope edge-preservation ledger is not pass")
+    if not isinstance(scope_final, Mapping):
+        errors.append("scope edge-preservation final candidate is missing")
     else:
-        groups = boundary.get("groups")
-        if not isinstance(groups, list) or not groups:
-            errors.append("topology boundary-movement groups are empty")
+        try:
+            scope_final_path = Path(str(scope_final.get("path", ""))).expanduser()
+            if not scope_final_path.is_absolute():
+                scope_final_path = (
+                    evidence_paths["scope_edge_preservation"].parent / scope_final_path
+                )
+            scope_final_path = scope_final_path.resolve()
+        except (OSError, RuntimeError):
+            errors.append("scope edge-preservation final candidate path is invalid")
         else:
-            for group in groups:
-                if not isinstance(group, Mapping):
-                    errors.append("topology boundary-movement group is invalid")
-                    continue
-                movements = group.get("variant_boundary_movements")
-                if not isinstance(movements, list) or len(movements) != group.get("variant_boundary_movement_count"):
-                    errors.append("topology boundary-movement group count mismatch")
-                    continue
-                expected_movement_keys.extend(map(str, movements))
+            if scope_final_path != candidate:
+                errors.append("scope edge-preservation final candidate path mismatch")
+        if scope_final.get("sha256") != candidate_hash:
+            errors.append("scope edge-preservation final candidate hash mismatch")
+    scope_counts = scope_ledger.get("classification_counts")
+    if (
+        scope_ledger.get("unaccounted_edge_count") != 0
+        or not isinstance(scope_counts, Mapping)
+        or scope_counts.get("unaccounted") != 0
+    ):
+        errors.append("scope edge-preservation ledger has unaccounted edges")
+    if scope_ledger.get("empty_exclusion_reason_count") != 0:
+        errors.append("scope edge-preservation ledger has exclusions without reasons")
+    _validate_scope_baseline_binding(
+        evidence["build_spec"],
+        spec_path=evidence_paths["build_spec"],
+        scope_ledger=scope_ledger,
+        scope_path=evidence_paths["scope_edge_preservation"],
+        errors=errors,
+    )
+
+    turnaround = evidence["turnaround_audit"]
+    turnaround_scope = turnaround.get("scope")
+    if (
+        turnaround.get("schema_id") != "torii.external-micro-junction-audit/v2"
+        or turnaround.get("status") != "pass"
+        or turnaround.get("automatic_promotion_gate") != "pass"
+        or not isinstance(turnaround_scope, Mapping)
+        or turnaround_scope.get("mode") != "whole_network"
+        or turnaround_scope.get("junction_ids") != []
+        or turnaround.get("dir_t_turnaround_count") != 0
+        or turnaround.get("dir_t_turnarounds") != []
+        or turnaround.get("unsupported_turnaround_count") != 0
+        or turnaround.get("unused_turnaround_authority_count") != 0
+    ):
+        errors.append("turnaround audit is not a whole-network zero-turnaround pass")
+    try:
+        turnaround_source = Path(str(turnaround.get("source_net_file", ""))).expanduser()
+        if not turnaround_source.is_absolute():
+            turnaround_source = evidence_paths["turnaround_audit"].parent / turnaround_source
+        turnaround_source = turnaround_source.resolve()
+    except (OSError, RuntimeError):
+        errors.append("turnaround audit source path is invalid")
+    else:
+        if turnaround_source != candidate:
+            errors.append("turnaround audit source path mismatch")
+    if turnaround.get("source_net_sha256") != candidate_hash:
+        errors.append("turnaround audit source hash mismatch")
+    try:
+        observed_turnaround = audit_external_micro_junctions(candidate)
+    except (OSError, ValueError):
+        errors.append("independent turnaround rescan failed")
+    else:
+        observed_scope = observed_turnaround.get("scope")
+        if (
+            observed_turnaround.get("schema_id")
+            != "torii.external-micro-junction-audit/v2"
+            or observed_turnaround.get("status") != "pass"
+            or observed_turnaround.get("automatic_promotion_gate") != "pass"
+            or not isinstance(observed_scope, Mapping)
+            or observed_scope.get("mode") != "whole_network"
+            or observed_scope.get("junction_ids") != []
+            or observed_turnaround.get("dir_t_turnaround_count") != 0
+            or observed_turnaround.get("dir_t_turnarounds") != []
+            or observed_turnaround.get("unsupported_turnaround_count") != 0
+            or observed_turnaround.get("unused_turnaround_authority_count") != 0
+        ):
+            errors.append(
+                "independent turnaround rescan is not a whole-network zero-turnaround pass"
+            )
+
+    authority = evidence["movement_authority"]
+    authority_id = authority.get("authority_id")
+    authority_movements = authority.get("movements")
+    authority_evidence = authority.get("source_evidence")
+    if (
+        authority.get("schema") != "torii.hamburg-movement-authority/v1"
+        or authority.get("status") != "review_required"
+        or not isinstance(authority_id, str)
+        or not authority_id.strip()
+        or authority.get("generated_from_candidate") is not False
+    ):
+        errors.append("movement authority is not an independent review-required ledger")
+    evidence_ids: set[str] = set()
+    if not isinstance(authority_evidence, list) or not authority_evidence:
+        errors.append("movement authority source evidence is empty")
+    else:
+        for artifact in authority_evidence:
+            if not isinstance(artifact, Mapping):
+                errors.append("movement authority source evidence artifact is invalid")
+                continue
+            evidence_id = str(artifact.get("evidence_id", "")).strip()
+            if not evidence_id or evidence_id in evidence_ids:
+                errors.append("movement authority source evidence IDs are empty or duplicated")
+                continue
+            evidence_ids.add(evidence_id)
+            try:
+                artifact_path = Path(str(artifact.get("path", ""))).expanduser()
+                if not artifact_path.is_absolute():
+                    artifact_path = evidence_paths["movement_authority"].parent / artifact_path
+                artifact_path = artifact_path.resolve(strict=True)
+            except (OSError, RuntimeError):
+                errors.append(f"movement authority source evidence path is invalid: {evidence_id}")
+                continue
+            if artifact_path == candidate:
+                errors.append(f"movement authority source evidence is the candidate: {evidence_id}")
+            if artifact.get("sha256") != file_sha256(artifact_path):
+                errors.append(f"movement authority source evidence hash mismatch: {evidence_id}")
+
+    expected_movement_keys: list[str] = []
+    if not isinstance(authority_movements, list) or not authority_movements:
+        errors.append("movement authority movements are empty")
+    else:
+        for movement in authority_movements:
+            if not isinstance(movement, Mapping):
+                errors.append("movement authority movement is invalid")
+                continue
+            movement_key = str(movement.get("movement_key", "")).strip()
+            movement_evidence_ids = movement.get("evidence_ids")
+            if not movement_key:
+                errors.append("movement authority movement key is empty")
+            else:
+                expected_movement_keys.append(movement_key)
+            if (
+                not isinstance(movement_evidence_ids, list)
+                or not movement_evidence_ids
+                or any(str(value) not in evidence_ids for value in movement_evidence_ids)
+            ):
+                errors.append(f"movement authority evidence binding is invalid: {movement_key}")
     if not expected_movement_keys or len(set(expected_movement_keys)) != len(expected_movement_keys):
-        errors.append("topology boundary-movement keys are empty or duplicated")
+        errors.append("movement authority keys are empty or duplicated")
 
     surface = evidence["surface_comparison"]
-    if (
-        surface.get("schema") != "torii.sumo-surface-overlap-audit/v1"
-        or surface.get("audit_engine") != "torii.bevel-strip-and-junction-polygon-area/v2"
-        or surface.get("status") != "pass"
-    ):
-        errors.append("surface audit is not pass")
-    _check_candidate_binding(surface, candidate, candidate_hash, errors, prefix="source")
-    if surface.get("source_network_mutation") is not False:
-        errors.append("surface audit did not preserve the candidate")
-    for key in (
+    surface_count_keys = (
         "geometry_error_count",
         "junction_junction_overlap_count",
         "external_lane_non_owner_junction_overlap_count",
+    )
+    surface_counts = [surface.get(key) for key in surface_count_keys]
+    surface_has_findings = any(type(value) is int and value > 0 for value in surface_counts)
+    expected_surface_status = "fail" if surface_has_findings else "pass"
+    if (
+        surface.get("schema") != "torii.sumo-surface-overlap-audit/v1"
+        or surface.get("audit_engine") != "torii.bevel-strip-and-junction-polygon-area/v2"
+        or surface.get("status") != expected_surface_status
+        or surface.get("error")
+        or any(type(value) is not int or value < 0 for value in surface_counts)
     ):
-        if surface.get(key) != 0:
-            errors.append(f"surface audit {key} is not zero")
+        errors.append("surface audit is invalid")
+    _check_candidate_binding(
+        surface,
+        candidate,
+        candidate_hash,
+        errors,
+        prefix="source",
+        base_dir=evidence_paths["surface_comparison"].parent,
+    )
+    if surface.get("source_network_mutation") is not False:
+        errors.append("surface audit did not preserve the candidate")
+    surface_gate = "review_required" if surface_has_findings else "pass"
 
     connection = evidence["connection_mode"]
-    if (
-        connection.get("schema") != "torii.connection_mode_regression_manifest.v1"
-        or connection.get("status") != "pass"
-        or connection.get("gate_status") != "pass"
-        or connection.get("automatic_promotion_gate") != "pass"
-    ):
+    connection_pass = (
+        connection.get("schema") == "torii.connection_mode_regression_manifest.v1"
+        and connection.get("status") == "pass"
+        and connection.get("gate_status") == "pass"
+        and connection.get("automatic_promotion_gate") == "pass"
+    )
+    target_review_only = (
+        connection.get("schema") == "torii.connection_mode_regression_manifest.v1"
+        and connection.get("status") == "fail"
+        and connection.get("gate_status") == "fail"
+        and connection.get("automatic_promotion_gate") == "blocked"
+        and set(connection.get("blockers") or ()) == {"new_target_scope_review_findings"}
+        and not (connection.get("outside_scope_regression_junction_ids") or ())
+        and connection.get("outside_scope_new_structural_finding_count") == 0
+        and connection.get("target_scope_new_structural_finding_count") == 0
+        and connection.get("outside_scope_new_review_finding_count") == 0
+        and isinstance(connection.get("target_scope_new_review_finding_count"), int)
+        and connection.get("target_scope_new_review_finding_count", 0) > 0
+        and set(connection.get("target_scope_flagged_junction_ids") or ()).issubset(
+            set(connection.get("requested_target_candidate_junction_ids") or ())
+        )
+    )
+    if not connection_pass and not target_review_only:
         errors.append("connection-mode regression is not pass")
-    _check_candidate_binding(connection, candidate, candidate_hash, errors, prefix="candidate")
+    _check_candidate_binding(
+        connection,
+        candidate,
+        candidate_hash,
+        errors,
+        prefix="candidate",
+        base_dir=evidence_paths["connection_mode"].parent,
+    )
     if connection.get("source_network_mutation") is not False:
         errors.append("connection-mode regression did not preserve the source")
+    connection_gate = "review_required" if target_review_only else "pass"
 
     load = evidence["sumo_load"]
     if load.get("schema") != "torii.sumo-load-audit/v1" or load.get("status") != "pass":
         errors.append("SUMO load audit is not pass")
-    _check_candidate_binding(load, candidate, candidate_hash, errors, prefix="source")
+    _check_candidate_binding(
+        load,
+        candidate,
+        candidate_hash,
+        errors,
+        prefix="source",
+        base_dir=evidence_paths["sumo_load"].parent,
+    )
     if load.get("source_network_mutation") is not False:
         errors.append("SUMO load audit did not preserve the candidate")
 
@@ -344,6 +551,8 @@ def materialize_hamburg_w1_topology_handoff(
     if (
         smoke.get("schema") != "torii.hamburg-2403-movement-smoke/v1"
         or smoke.get("status") != "pass"
+        or smoke.get("automatic_promotion_gate") != "blocked"
+        or smoke.get("authority_review_status") != "review_required"
         or smoke.get("vehicle_count") != len(expected_movement_keys)
         or smoke.get("movement_count") != len(expected_movement_keys)
         or smoke.get("vehicle_count") != smoke.get("ended")
@@ -354,12 +563,18 @@ def materialize_hamburg_w1_topology_handoff(
         or smoke.get("teleports") != 0
         or smoke.get("collisions") != 0
         or smoke.get("movement_keys_unique") is not True
-        or smoke.get("movement_keys_match_preservation") is not True
         or not isinstance(movement_keys, list)
         or set(map(str, movement_keys or ())) != set(expected_movement_keys)
     ):
-        errors.append("movement smoke is not a complete zero-error preservation run")
-    _check_candidate_binding(smoke, candidate, candidate_hash, errors, prefix="candidate")
+        errors.append("movement smoke is not a complete zero-error authority run")
+    _check_candidate_binding(
+        smoke,
+        candidate,
+        candidate_hash,
+        errors,
+        prefix="candidate",
+        base_dir=evidence_paths["movement_smoke"].parent,
+    )
     inspection = smoke.get("inspection")
     if not isinstance(inspection, Mapping) or inspection.get("status") != "pass":
         errors.append("movement smoke output inspection is not pass")
@@ -384,7 +599,7 @@ def materialize_hamburg_w1_topology_handoff(
     else:
         smoke_artifacts = {
             "route": smoke_inputs.get("route"),
-            "preservation_audit": smoke_inputs.get("preservation_audit"),
+            "movement_authority": smoke_inputs.get("movement_authority"),
             "summary": smoke_outputs.get("summary"),
             "tripinfo": smoke_outputs.get("tripinfo"),
         }
@@ -393,23 +608,29 @@ def materialize_hamburg_w1_topology_handoff(
                 errors.append(f"movement smoke artifact is missing: {name}")
                 continue
             try:
-                artifact_path = Path(str(artifact.get("path", ""))).resolve(strict=True)
+                artifact_path = Path(str(artifact.get("path", ""))).expanduser()
+                if not artifact_path.is_absolute():
+                    artifact_path = evidence_paths["movement_smoke"].parent / artifact_path
+                artifact_path = artifact_path.resolve(strict=True)
             except (OSError, RuntimeError):
                 errors.append(f"movement smoke artifact path is invalid: {name}")
                 continue
             if artifact.get("sha256") != file_sha256(artifact_path):
                 errors.append(f"movement smoke artifact hash mismatch: {name}")
-        preservation_artifact = smoke_artifacts["preservation_audit"]
-        if isinstance(preservation_artifact, Mapping):
+        authority_artifact = smoke_artifacts["movement_authority"]
+        if isinstance(authority_artifact, Mapping):
             try:
-                preservation_path = Path(str(preservation_artifact.get("path", ""))).resolve(strict=True)
+                authority_path = Path(str(authority_artifact.get("path", ""))).expanduser()
+                if not authority_path.is_absolute():
+                    authority_path = evidence_paths["movement_smoke"].parent / authority_path
+                authority_path = authority_path.resolve(strict=True)
             except (OSError, RuntimeError):
-                preservation_path = Path()
+                authority_path = Path()
             if (
-                preservation_path != evidence_paths["topology_feedback"]
-                or preservation_artifact.get("sha256") != file_sha256(evidence_paths["topology_feedback"])
+                authority_path != evidence_paths["movement_authority"]
+                or authority_artifact.get("sha256") != file_sha256(evidence_paths["movement_authority"])
             ):
-                errors.append("movement smoke is not bound to the topology preservation audit")
+                errors.append("movement smoke is not bound to the independent movement authority")
 
     review_paths = tuple(Path(path).expanduser().resolve(strict=True) for path in netedit_review_files)
     expected_ids = {str(value) for value in expected_review_junction_ids if str(value)}
@@ -434,9 +655,12 @@ def materialize_hamburg_w1_topology_handoff(
         ):
             errors.append(f"NetEdit review is not current and non-mutating: {path}")
         try:
-            if Path(str(review.get("candidate_file", ""))).resolve() != candidate:
+            review_candidate = Path(str(review.get("candidate_file", ""))).expanduser()
+            if not review_candidate.is_absolute():
+                review_candidate = path.parent / review_candidate
+            if review_candidate.resolve() != candidate:
                 errors.append(f"NetEdit review candidate path mismatch: {path}")
-        except OSError:
+        except (OSError, RuntimeError):
             errors.append(f"NetEdit review candidate path invalid: {path}")
     if len(review_paths) != len(expected_ids) or set(actual_review_ids) != expected_ids:
         errors.append(
@@ -456,25 +680,40 @@ def materialize_hamburg_w1_topology_handoff(
         "schema": "torii.hamburg-official-corridor-geometry/v1",
         "status": "review_ready",
         "execution_gate": "pass",
-        "execution_gate_reason": "hash-bound topology, SUMO, surface, connection, movement-smoke, and NetEdit-material checks pass",
+        "execution_gate_reason": "hash-bound scope, topology, turnaround, movement-authority, SUMO, connection, movement-smoke, and NetEdit-material checks pass; surface findings remain an explicit review gate",
         "claim_status": "osm-continuous-official-evidence-road-topology-review-candidate",
         "automatic_promotion_gate": "blocked",
-        "network": {"path": str(candidate), "sha256": candidate_hash},
+        "network": {
+            "path": relative_or_absolute_path(candidate, manifest_file.parent),
+            "sha256": candidate_hash,
+        },
         "evidence": {
-            name: {"path": str(path), "sha256": file_sha256(path)}
+            name: {
+                "path": relative_or_absolute_path(path, manifest_file.parent),
+                "sha256": file_sha256(path),
+            }
             for name, path in evidence_paths.items()
         },
         "netedit_review": {
             "status": "review_material_ready",
             "junction_ids": sorted(expected_ids),
             "report_count": len(review_paths),
-            "reports": [{"path": str(path), "sha256": file_sha256(path)} for path in review_paths],
+            "reports": [
+                {
+                    "path": relative_or_absolute_path(path, manifest_file.parent),
+                    "sha256": file_sha256(path),
+                }
+                for path in review_paths
+            ],
             "automatic_promotion_gate": "blocked",
         },
         "gates": {
+            "scope_edge_preservation": "pass",
             "topology_feedback": "pass",
-            "surface_overlap": "pass",
-            "connection_mode": "pass",
+            "unsupported_turnarounds": "pass",
+            "movement_authority": "review_required",
+            "surface_overlap": surface_gate,
+            "connection_mode": connection_gate,
             "sumo_load": "pass",
             "movement_smoke": "pass",
             "netedit_review_material": "pass",
@@ -483,15 +722,24 @@ def materialize_hamburg_w1_topology_handoff(
         },
         "routeability": {
             "status": "pass",
-            "scope": f"{len(expected_movement_keys)} source-authorized 2403 lane-level boundary movements only",
+            "evidence_status": "review_required",
+            "scope": f"{len(expected_movement_keys)} declared evidence-bound lane-level movements",
+            "authority_id": authority_id,
             "movement_count": len(expected_movement_keys),
             "teleports": 0,
             "collisions": 0,
         },
-        "artifacts": {"network": str(candidate), "manifest": str(manifest_file)},
+        "artifacts": {
+            "network": relative_or_absolute_path(candidate, manifest_file.parent),
+            "manifest": manifest_file.name,
+        },
         "claim_boundary": {
             "proves": [
                 "the exact candidate passes the recorded road-topology machine gates",
+                "the candidate is reproducible from the recorded build spec and patch hashes",
+                "every complete-way scope edge is preserved, internalized, or excluded with a reason",
+                "the candidate has no unsupported turnaround or unused turnaround authority",
+                "the smoke routes match a hash-bound movement review ledger",
                 "all declared physical review owners have current non-mutating NetEdit review material",
                 "the candidate may feed fail-closed signal and detector diagnostics",
             ],
@@ -500,11 +748,780 @@ def materialize_hamburg_w1_topology_handoff(
                 "that detector streams sharing a SUMO lane are additive or redundant",
                 "full corridor demand calibration or final digital-twin promotion",
                 "human approval from NetEdit screenshots alone",
+                "that inherited surface-overlap findings are geometrically correct",
+                "that a machine check alone proves the semantic relationship between the CAD/aerial evidence and every declared movement",
+                "movement legality outside the explicitly reviewed 2403 conflict core",
             ],
         },
     }
     write_json_atomic(manifest_file, manifest, ensure_ascii=False, sort_keys=True)
     return {**manifest, "manifest_file": str(manifest_file)}
+
+
+def _validate_w1_build_spec(
+    spec: Mapping[str, Any],
+    *,
+    spec_path: Path,
+    candidate: Path,
+    candidate_hash: str,
+    errors: list[str],
+) -> None:
+    if (
+        spec.get("schema") != "torii.hamburg-canonical-w1-build/v1"
+        or spec.get("status") != "frozen"
+    ):
+        errors.append("canonical W1 build spec is not frozen")
+        return
+    scope_policy = spec.get("scope_policy")
+    required_scope_policy = {
+        "authority": [
+            "Hamburg 2024 aerial imagery",
+            "Hamburg 2022 road CAD",
+        ],
+        "osm_role": "continuous road geometry and base topology",
+        "acquisition_bbox": [
+            9.980106927466423,
+            53.540533691913986,
+            10.003689463043568,
+            53.54865291573397,
+        ],
+        "clip_source_ways_to_bbox": False,
+        "selection_rule": (
+            "retain each complete OSM way intersecting the buffered aerial/CAD scope; "
+            "never truncate a selected way at the bbox"
+        ),
+    }
+    if not isinstance(scope_policy, Mapping):
+        errors.append("canonical W1 build scope policy is missing")
+    else:
+        for name, expected in required_scope_policy.items():
+            if scope_policy.get(name) != expected:
+                errors.append(f"canonical W1 build scope policy {name} mismatch")
+
+    output = spec.get("output")
+    if not isinstance(output, Mapping):
+        errors.append("canonical W1 build spec output is missing")
+    else:
+        _check_build_spec_identity(
+            output,
+            spec_path=spec_path,
+            expected_path=candidate,
+            expected_sha256=candidate_hash,
+            label="output",
+            errors=errors,
+        )
+
+    inputs = spec.get("inputs")
+    if not isinstance(inputs, Mapping) or not inputs:
+        errors.append("canonical W1 build spec inputs are empty")
+    else:
+        for name, identity in inputs.items():
+            if not isinstance(identity, Mapping):
+                errors.append(f"canonical W1 build input is invalid: {name}")
+                continue
+            _check_build_spec_identity(
+                identity,
+                spec_path=spec_path,
+                expected_path=None,
+                expected_sha256=None,
+                label=f"input {name}",
+                errors=errors,
+            )
+        _validate_w1_osm_build_provenance(
+            inputs,
+            scope_policy=scope_policy,
+            spec_path=spec_path,
+            errors=errors,
+        )
+
+    steps = spec.get("materialization")
+    if not isinstance(steps, list) or not steps:
+        errors.append("canonical W1 build materialization steps are empty")
+        return
+    for index, step in enumerate(steps):
+        if not isinstance(step, Mapping):
+            errors.append(f"canonical W1 build step is invalid: {index}")
+            continue
+        command = step.get("command")
+        output_sha256 = step.get("output_sha256")
+        if (
+            not isinstance(command, list)
+            or not all(isinstance(argument, str) for argument in command)
+            or not command
+            or Path(command[0]).name.lower() not in {"netconvert", "netconvert.exe"}
+        ):
+            errors.append(f"canonical W1 build step is not netconvert: {index}")
+            continue
+        required_turnaround_flags = {
+            "--no-turnarounds",
+            "--no-turnarounds.tls",
+            "--no-turnarounds.geometry",
+            "--no-turnarounds.fringe",
+        }
+        missing_turnaround_flags = required_turnaround_flags.difference(command)
+        if missing_turnaround_flags:
+            errors.append(f"canonical W1 build step is missing no-turnaround flags: {index}")
+        crop_options = [
+            argument
+            for argument in command
+            if argument.startswith("--")
+            and ("bbox" in argument.split("=", 1)[0].lower() or "keep-edges" in argument.split("=", 1)[0].lower())
+        ]
+        if crop_options:
+            errors.append(f"canonical W1 build step uses edge-cropping options: {index}")
+        if "--output-file" not in command:
+            errors.append(f"canonical W1 build step has no output: {index}")
+            continue
+        output_index = command.index("--output-file") + 1
+        if output_index >= len(command):
+            errors.append(f"canonical W1 build step has no output path: {index}")
+            continue
+        _check_build_spec_identity(
+            {"path": command[output_index], "sha256": output_sha256},
+            spec_path=spec_path,
+            expected_path=candidate if index == len(steps) - 1 else None,
+            expected_sha256=candidate_hash if index == len(steps) - 1 else None,
+            label=f"step {index} output",
+            errors=errors,
+        )
+
+
+def _validate_w1_osm_build_provenance(
+    inputs: Mapping[str, Any],
+    *,
+    scope_policy: object,
+    spec_path: Path,
+    errors: list[str],
+) -> None:
+    required_inputs = {
+        "source_osm_snapshot",
+        "filtered_complete_ways",
+        "baseline_network",
+        "build_provenance",
+        "complete_way_acquisition",
+    }
+    missing_inputs = required_inputs.difference(inputs)
+    if missing_inputs:
+        errors.append("canonical W1 build provenance inputs are incomplete")
+        return
+    identities = {
+        name: inputs.get(name)
+        for name in required_inputs
+    }
+    if any(not isinstance(identity, Mapping) for identity in identities.values()):
+        errors.append("canonical W1 build provenance input identity is invalid")
+        return
+    provenance_identity = identities["build_provenance"]
+    assert isinstance(provenance_identity, Mapping)
+    provenance_path = _resolve_identity_path(provenance_identity, base_dir=spec_path.parent)
+    if provenance_path is None:
+        errors.append("canonical W1 OSM build provenance path is unreadable")
+        return
+    try:
+        provenance = _read_json_mapping(provenance_path)
+    except HamburgExecutionWorkflowError:
+        errors.append("canonical W1 OSM build provenance is invalid")
+        return
+    if (
+        provenance.get("schema") != "torii.osm-sumo-build-provenance/v1"
+        or provenance.get("status") != "pass"
+    ):
+        errors.append("canonical W1 OSM build provenance is not pass")
+
+    build_scope = provenance.get("build_scope")
+    acquisition_bbox = (
+        scope_policy.get("acquisition_bbox")
+        if isinstance(scope_policy, Mapping)
+        else None
+    )
+    if (
+        not isinstance(build_scope, Mapping)
+        or build_scope.get("clip_source_ways_to_bbox") is not False
+        or build_scope.get("allowed_way_ids_count") is not None
+        or "forced_way_ids_count" not in build_scope
+        or build_scope.get("forced_way_ids_count") is not None
+        or not _same_bbox(build_scope.get("bbox"), acquisition_bbox)
+    ):
+        errors.append("canonical W1 OSM build provenance used a cropped or different scope")
+
+    source_identity = identities["source_osm_snapshot"]
+    assert isinstance(source_identity, Mapping)
+    source_acquisition = provenance.get("source_acquisition")
+    acquisition_query = (
+        source_acquisition.get("query")
+        if isinstance(source_acquisition, Mapping)
+        else None
+    )
+    acquisition_response = (
+        source_acquisition.get("response_snapshot")
+        if isinstance(source_acquisition, Mapping)
+        else None
+    )
+    acquisition_query_path = (
+        _resolve_identity_path(acquisition_query, base_dir=provenance_path.parent)
+        if isinstance(acquisition_query, Mapping)
+        else None
+    )
+    if (
+        not isinstance(source_acquisition, Mapping)
+        or source_acquisition.get("mode") != "provided_snapshot"
+        or source_acquisition.get("overpass") is not None
+        or acquisition_query_path is None
+        or acquisition_query.get("sha256") != file_sha256(acquisition_query_path)
+        or not _is_complete_way_overpass_query(
+            acquisition_query_path,
+            expected_bbox=acquisition_bbox,
+        )
+        or not isinstance(acquisition_response, Mapping)
+        or not _identities_match(
+            acquisition_response,
+            provenance_base=provenance_path.parent,
+            expected=source_identity,
+            expected_base=spec_path.parent,
+        )
+    ):
+        errors.append(
+            "canonical W1 OSM build provenance source acquisition is invalid"
+        )
+
+    for provenance_name, input_name in (
+        ("source_osm_snapshot", "source_osm_snapshot"),
+        ("netconvert_input_osm_snapshot", "filtered_complete_ways"),
+        ("sumo_net_snapshot", "baseline_network"),
+    ):
+        provenance_artifact = provenance.get(provenance_name)
+        input_artifact = identities[input_name]
+        assert isinstance(input_artifact, Mapping)
+        if (
+            not isinstance(provenance_artifact, Mapping)
+            or not _identities_match(
+                provenance_artifact,
+                provenance_base=provenance_path.parent,
+                expected=input_artifact,
+                expected_base=spec_path.parent,
+            )
+        ):
+            errors.append(
+                f"canonical W1 OSM build provenance {provenance_name} mismatch"
+            )
+
+    netconvert = provenance.get("netconvert")
+    command = netconvert.get("command") if isinstance(netconvert, Mapping) else None
+    required_turnaround_flags = {
+        "--no-turnarounds",
+        "--no-turnarounds.tls",
+        "--no-turnarounds.geometry",
+        "--no-turnarounds.fringe",
+    }
+    if (
+        not isinstance(command, list)
+        or not all(isinstance(argument, str) for argument in command)
+        or not command
+        or Path(command[0]).name.lower() not in {"netconvert", "netconvert.exe"}
+        or not required_turnaround_flags.issubset(command)
+        or any(
+            argument.startswith("--")
+            and (
+                "bbox" in argument.split("=", 1)[0].lower()
+                or "keep-edges" in argument.split("=", 1)[0].lower()
+            )
+            for argument in command
+        )
+    ):
+        errors.append("canonical W1 OSM build provenance netconvert command is unsafe")
+    elif not (
+        _command_option_matches_identity(
+            command,
+            "--osm-files",
+            identity=identities["filtered_complete_ways"],
+            identity_base=spec_path.parent,
+            command_base=provenance_path.parent.parent,
+        )
+        and _command_option_matches_identity(
+            command,
+            "--output-file",
+            identity=identities["baseline_network"],
+            identity_base=spec_path.parent,
+            command_base=provenance_path.parent.parent,
+        )
+    ):
+        errors.append(
+            "canonical W1 OSM build provenance command is not bound to the declared baseline"
+        )
+    _validate_complete_way_acquisition(
+        identities,
+        main_provenance=provenance,
+        scope_policy=scope_policy,
+        spec_path=spec_path,
+        errors=errors,
+    )
+
+
+def _validate_scope_baseline_binding(
+    spec: Mapping[str, Any],
+    *,
+    spec_path: Path,
+    scope_ledger: Mapping[str, Any],
+    scope_path: Path,
+    errors: list[str],
+) -> None:
+    inputs = spec.get("inputs")
+    baseline = inputs.get("baseline_network") if isinstance(inputs, Mapping) else None
+    ledger_baseline = scope_ledger.get("full_way_baseline")
+    if (
+        not isinstance(baseline, Mapping)
+        or not isinstance(ledger_baseline, Mapping)
+        or not _identities_match(
+            ledger_baseline,
+            provenance_base=scope_path.parent,
+            expected=baseline,
+            expected_base=spec_path.parent,
+        )
+    ):
+        errors.append(
+            "scope edge-preservation full-way baseline does not match the canonical build"
+        )
+
+
+def _validate_complete_way_acquisition(
+    identities: Mapping[str, object],
+    *,
+    main_provenance: Mapping[str, Any],
+    scope_policy: object,
+    spec_path: Path,
+    errors: list[str],
+) -> None:
+    acquisition_identity = identities.get("complete_way_acquisition")
+    if not isinstance(acquisition_identity, Mapping):
+        errors.append("canonical W1 complete-way acquisition identity is invalid")
+        return
+    acquisition_path = _resolve_identity_path(
+        acquisition_identity,
+        base_dir=spec_path.parent,
+    )
+    if acquisition_path is None:
+        errors.append("canonical W1 complete-way acquisition path is unreadable")
+        return
+    try:
+        acquisition = _read_json_mapping(acquisition_path)
+    except HamburgExecutionWorkflowError:
+        errors.append("canonical W1 complete-way acquisition is invalid")
+        return
+    expected_bbox = (
+        scope_policy.get("acquisition_bbox")
+        if isinstance(scope_policy, Mapping)
+        else None
+    )
+    if (
+        acquisition.get("schema")
+        != "torii.hamburg-complete-way-acquisition/v1"
+        or acquisition.get("status") != "pass"
+        or acquisition.get("authority_review_status") != "review_required"
+        or acquisition.get("acquisition_mode") != "overpass_download"
+        or acquisition.get("clip_source_ways_to_bbox") is not False
+        or acquisition.get("allowed_way_ids_count") is not None
+        or acquisition.get("forced_way_ids_count") is not None
+        or acquisition.get("acquisition_bbox") != expected_bbox
+        or acquisition.get("selection_rule")
+        != (
+            "retain each complete OSM way intersecting the buffered aerial/CAD scope; "
+            "never truncate a selected way at the bbox"
+        )
+    ):
+        errors.append("canonical W1 complete-way acquisition policy is invalid")
+
+    source_identity = identities.get("source_osm_snapshot")
+    filtered_identity = identities.get("filtered_complete_ways")
+    if not isinstance(source_identity, Mapping) or not isinstance(
+        filtered_identity,
+        Mapping,
+    ):
+        errors.append("canonical W1 complete-way source identities are invalid")
+        return
+    for field, expected_identity in (
+        ("source_osm_snapshot", source_identity),
+        ("filtered_osm_snapshot", filtered_identity),
+    ):
+        artifact = acquisition.get(field)
+        if (
+            not isinstance(artifact, Mapping)
+            or not _identities_match(
+                artifact,
+                provenance_base=acquisition_path.parent,
+                expected=expected_identity,
+                expected_base=spec_path.parent,
+            )
+        ):
+            errors.append(f"canonical W1 complete-way acquisition {field} mismatch")
+
+    scope_evidence = acquisition.get("scope_authority_evidence")
+    expected_scope_hashes = {
+        "hamburg_2024_aerial": (
+            "8c65a45c5b86d2a7077c321bb1fff8108651f0f8a7fd3ffc62091c17de5be948"
+        ),
+        "hamburg_2022_road_cad": (
+            "2dd292e00ee0d522a5c8f0c4e0a4b95b47f4afcc34db12b5d69c47501e70d8ec"
+        ),
+    }
+    if not isinstance(scope_evidence, list):
+        errors.append("canonical W1 complete-way scope authority evidence is missing")
+    else:
+        actual_scope_hashes: dict[str, str] = {}
+        for artifact in scope_evidence:
+            if not isinstance(artifact, Mapping):
+                continue
+            evidence_id = str(artifact.get("evidence_id", ""))
+            path = _resolve_identity_path(artifact, base_dir=acquisition_path.parent)
+            if path is not None and artifact.get("sha256") == file_sha256(path):
+                actual_scope_hashes[evidence_id] = str(artifact["sha256"])
+        if actual_scope_hashes != expected_scope_hashes:
+            errors.append(
+                "canonical W1 complete-way scope authority evidence mismatch"
+            )
+
+    query = acquisition.get("overpass_query")
+    query_path = (
+        _resolve_identity_path(query, base_dir=acquisition_path.parent)
+        if isinstance(query, Mapping)
+        else None
+    )
+    if (
+        query_path is None
+        or query.get("sha256") != file_sha256(query_path)
+        or not _is_complete_way_overpass_query(
+            query_path,
+            expected_bbox=expected_bbox,
+        )
+    ):
+        errors.append("canonical W1 complete-way Overpass query is invalid")
+
+    source_build_identity = acquisition.get("source_build_provenance")
+    source_build_path = (
+        _resolve_identity_path(
+            source_build_identity,
+            base_dir=acquisition_path.parent,
+        )
+        if isinstance(source_build_identity, Mapping)
+        else None
+    )
+    source_build: Mapping[str, Any] = {}
+    source_scope: object = None
+    if source_build_path is None:
+        errors.append("canonical W1 complete-way source build provenance is missing")
+    else:
+        try:
+            source_build = _read_json_mapping(source_build_path)
+        except HamburgExecutionWorkflowError:
+            source_build = {}
+        source_scope = source_build.get("build_scope")
+        source_snapshot = source_build.get("source_osm_snapshot")
+        if (
+            source_build.get("schema") != "torii.osm-sumo-build-provenance/v1"
+            or source_build.get("status") != "pass"
+            or not isinstance(source_scope, Mapping)
+            or source_scope.get("clip_source_ways_to_bbox") is not False
+            or source_scope.get("allowed_way_ids_count") is not None
+            or source_scope.get("forced_way_ids_count") is not None
+            or not _same_bbox(source_scope.get("bbox"), expected_bbox)
+            or not isinstance(source_snapshot, Mapping)
+            or not _identities_match(
+                source_snapshot,
+                provenance_base=source_build_path.parent,
+                expected=source_identity,
+                expected_base=spec_path.parent,
+            )
+        ):
+            errors.append(
+                "canonical W1 complete-way source build provenance is invalid"
+            )
+
+    source_acquisition = source_build.get("source_acquisition")
+    source_query = (
+        source_acquisition.get("query")
+        if isinstance(source_acquisition, Mapping)
+        else None
+    )
+    source_response = (
+        source_acquisition.get("response_snapshot")
+        if isinstance(source_acquisition, Mapping)
+        else None
+    )
+    overpass = (
+        source_acquisition.get("overpass")
+        if isinstance(source_acquisition, Mapping)
+        else None
+    )
+    if (
+        not isinstance(source_acquisition, Mapping)
+        or source_acquisition.get("mode") != "overpass_download"
+        or not isinstance(source_query, Mapping)
+        or not _identities_match(
+            source_query,
+            provenance_base=source_build_path.parent if source_build_path else Path(),
+            expected=query,
+            expected_base=acquisition_path.parent,
+        )
+        or not isinstance(source_response, Mapping)
+        or not _identities_match(
+            source_response,
+            provenance_base=source_build_path.parent if source_build_path else Path(),
+            expected=source_identity,
+            expected_base=spec_path.parent,
+        )
+        or not isinstance(overpass, Mapping)
+        or overpass.get("strategy") != "tiled-retry-merge"
+        or type(overpass.get("tile_count")) is not int
+        or overpass.get("tile_count", 0) <= 0
+        or type(overpass.get("retry_count")) is not int
+        or overpass.get("retry_count", -1) < 0
+    ):
+        errors.append(
+            "canonical W1 complete-way source acquisition is not a bound Overpass download"
+        )
+
+    command_identity = acquisition.get("source_command_record")
+    command_path = (
+        _resolve_identity_path(command_identity, base_dir=acquisition_path.parent)
+        if isinstance(command_identity, Mapping)
+        else None
+    )
+    command_record = (
+        _read_key_value_record(command_path)
+        if command_path is not None
+        and command_identity.get("sha256") == file_sha256(command_path)
+        else None
+    )
+    if (
+        command_record is None
+        or not _same_bbox(command_record.get("bbox"), expected_bbox)
+        or command_record.get("source_osm_sha256") != source_identity.get("sha256")
+        or command_record.get("clip_source_ways_to_bbox") != "False"
+        or command_record.get("allowed_way_ids_count") != "not_applied"
+        or command_record.get("overpass_strategy") != "tiled-retry-merge"
+        or not isinstance(overpass, Mapping)
+        or command_record.get("overpass_tile_count")
+        != str(overpass.get("tile_count"))
+        or command_record.get("overpass_retry_count")
+        != str(overpass.get("retry_count"))
+        or any(
+            key.startswith("forced_way_ids_")
+            for key in command_record
+        )
+    ):
+        errors.append(
+            "canonical W1 complete-way source command record is invalid"
+        )
+
+    allowed_highways = acquisition.get("allowed_highways")
+    main_scope = main_provenance.get("build_scope")
+    if (
+        not isinstance(allowed_highways, list)
+        or not allowed_highways
+        or not isinstance(main_scope, Mapping)
+        or sorted(map(str, allowed_highways))
+        != sorted(map(str, main_scope.get("road_classes") or ()))
+        or not isinstance(source_scope, Mapping)
+        or sorted(map(str, allowed_highways))
+        != sorted(map(str, source_scope.get("road_classes") or ()))
+        or command_record is None
+        or command_record.get("allowed_highways")
+        != ",".join(sorted(map(str, allowed_highways)))
+    ):
+        errors.append("canonical W1 complete-way road classes mismatch")
+        return
+    source_path = _resolve_identity_path(source_identity, base_dir=spec_path.parent)
+    filtered_path = _resolve_identity_path(
+        filtered_identity,
+        base_dir=spec_path.parent,
+    )
+    if (
+        source_path is None
+        or filtered_path is None
+        or not isinstance(expected_bbox, list)
+    ):
+        errors.append("canonical W1 complete-way audit inputs are unreadable")
+        return
+    try:
+        observed_audit = audit_complete_osm_way_filter(
+            source_osm_file=source_path,
+            filtered_osm_file=filtered_path,
+            acquisition_bbox=expected_bbox,
+            allowed_highways=allowed_highways,
+        )
+    except (OSError, ValueError):
+        errors.append("canonical W1 complete-way filter audit could not run")
+        return
+    if (
+        observed_audit.get("status") != "pass"
+        or acquisition.get("complete_way_filter_audit") != observed_audit
+    ):
+        errors.append(
+            "canonical W1 complete-way filter audit is not a hash-bound pass"
+        )
+
+
+def _is_complete_way_overpass_query(
+    query_path: Path,
+    *,
+    expected_bbox: object,
+) -> bool:
+    if not isinstance(expected_bbox, list) or len(expected_bbox) != 4:
+        return False
+    try:
+        text = query_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    normalized = re.sub(r"\s+", "", text)
+    try:
+        expected_west, expected_south, expected_east, expected_north = (
+            float(value)
+            for value in expected_bbox
+        )
+    except (TypeError, ValueError):
+        return False
+    overpass_bbox = ",".join(
+        f"{value:g}"
+        for value in (
+            expected_south,
+            expected_west,
+            expected_north,
+            expected_east,
+        )
+    )
+    expected = (
+        f'[out:xml][timeout:300];(way["highway"]({overpass_bbox});'
+        f'relation["type"="restriction"]({overpass_bbox}););'
+        "(._;>;);outbody;"
+    )
+    return normalized == expected
+
+
+def _read_key_value_record(path: Path) -> dict[str, str] | None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    record: dict[str, str] = {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or not key or key in record:
+            return None
+        record[key] = value
+    return record
+
+
+def _identities_match(
+    provenance: Mapping[str, Any],
+    *,
+    provenance_base: Path,
+    expected: Mapping[str, Any],
+    expected_base: Path,
+) -> bool:
+    provenance_path = _resolve_identity_path(provenance, base_dir=provenance_base)
+    expected_path = _resolve_identity_path(expected, base_dir=expected_base)
+    return (
+        provenance_path is not None
+        and expected_path is not None
+        and provenance_path == expected_path
+        and provenance.get("sha256") == expected.get("sha256")
+        and provenance.get("sha256") == file_sha256(provenance_path)
+    )
+
+
+def _resolve_identity_path(
+    identity: Mapping[str, Any],
+    *,
+    base_dir: Path,
+) -> Path | None:
+    raw_path = identity.get("path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    try:
+        return path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+
+
+def _same_bbox(raw_bbox: object, expected_bbox: object) -> bool:
+    if (
+        not isinstance(raw_bbox, str)
+        or not isinstance(expected_bbox, list)
+        or len(expected_bbox) != 4
+    ):
+        return False
+    try:
+        actual = [float(value.strip()) for value in raw_bbox.split(",")]
+        expected = [float(value) for value in expected_bbox]
+    except (TypeError, ValueError):
+        return False
+    return len(actual) == 4 and actual == expected
+
+
+def _command_option_matches_identity(
+    command: list[str],
+    option: str,
+    *,
+    identity: object,
+    identity_base: Path,
+    command_base: Path,
+) -> bool:
+    if not isinstance(identity, Mapping) or option not in command:
+        return False
+    value_index = command.index(option) + 1
+    if value_index >= len(command):
+        return False
+    command_path = Path(command[value_index]).expanduser()
+    if not command_path.is_absolute():
+        command_path = command_base / command_path
+    try:
+        command_path = command_path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    return command_path == _resolve_identity_path(identity, base_dir=identity_base)
+
+
+def _check_build_spec_identity(
+    identity: Mapping[str, Any],
+    *,
+    spec_path: Path,
+    expected_path: Path | None,
+    expected_sha256: str | None,
+    label: str,
+    errors: list[str],
+) -> None:
+    raw_path = identity.get("path")
+    declared_sha256 = identity.get("sha256")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        errors.append(f"canonical W1 build {label} path is missing")
+        return
+    if (
+        not isinstance(declared_sha256, str)
+        or len(declared_sha256) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in declared_sha256)
+    ):
+        errors.append(f"canonical W1 build {label} SHA-256 is invalid")
+        return
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = spec_path.parent / path
+    try:
+        path = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        errors.append(f"canonical W1 build {label} path is unreadable")
+        return
+    actual_sha256 = file_sha256(path)
+    if actual_sha256 != declared_sha256.lower():
+        errors.append(f"canonical W1 build {label} SHA-256 mismatch")
+    if expected_path is not None and path != expected_path:
+        errors.append(f"canonical W1 build {label} path mismatch")
+    if expected_sha256 is not None and actual_sha256 != expected_sha256:
+        errors.append(f"canonical W1 build {label} candidate mismatch")
 
 
 def _read_json_mapping(path: Path) -> Mapping[str, Any]:
@@ -524,9 +1541,13 @@ def _check_candidate_binding(
     errors: list[str],
     *,
     prefix: str,
+    base_dir: Path | None = None,
 ) -> None:
     try:
-        bound_path = Path(str(payload.get(f"{prefix}_net_file", ""))).resolve()
+        bound_path = Path(str(payload.get(f"{prefix}_net_file", ""))).expanduser()
+        if not bound_path.is_absolute() and base_dir is not None:
+            bound_path = base_dir / bound_path
+        bound_path = bound_path.resolve()
     except OSError:
         bound_path = Path()
     if bound_path != candidate or payload.get(f"{prefix}_sha256") != candidate_hash:
@@ -567,6 +1588,7 @@ def materialize_hamburg_execution_plan(
         record["contract"] = _stage_contract(stage_id)
         stage_records[stage_id] = record
 
+    _relative_execution_plan_paths(stage_records, plan_file.parent)
     _apply_network_binding_contract(stage_records)
     _apply_stage_dependency_contract(stage_records)
     changed = _changed_stage_ids(previous, stage_records)
@@ -694,6 +1716,36 @@ def _normalize_stage_paths(stage_manifests: Mapping[str, Path]) -> dict[str, Pat
     return result
 
 
+def _relative_execution_plan_paths(
+    stage_records: Mapping[str, dict[str, Any]],
+    base_dir: Path,
+) -> None:
+    """Keep every plan-owned reference portable from the plan manifest."""
+
+    for record in stage_records.values():
+        manifest = record.get("manifest")
+        manifest_path = Path(manifest) if isinstance(manifest, str) and manifest else None
+        if manifest_path is not None and manifest_path.is_absolute():
+            record["manifest"] = relative_or_absolute_path(manifest_path, base_dir)
+        identities: list[object] = [record.get("network_binding")]
+        for container_name in ("artifact_bindings", "stage_bindings"):
+            container = record.get(container_name)
+            if isinstance(container, Mapping):
+                identities.extend(container.values())
+        feedback_manifests = record.get("feedback_manifests")
+        if isinstance(feedback_manifests, list):
+            identities.extend(feedback_manifests)
+        else:
+            identities.append(record.get("feedback_manifest"))
+        for identity in identities:
+            if not isinstance(identity, dict):
+                continue
+            raw_path = identity.get("path")
+            path = Path(raw_path) if isinstance(raw_path, str) and raw_path else None
+            if path is not None and path.is_absolute():
+                identity["path"] = relative_or_absolute_path(path, base_dir)
+
+
 def _stage_contract(stage_id: str) -> dict[str, list[str]]:
     contract = STAGE_CONTRACTS[stage_id]
     return {key: list(values) for key, values in contract.items()}
@@ -800,7 +1852,7 @@ def _read_stage_record(
             base["artifact_bindings"] = bindings
             if errors:
                 _block_stage_record(base, "; ".join(errors))
-        if stage_id in {"W3b", "W4"}:
+        if stage_id in {"W2", "W3b", "W4"}:
             bindings, errors = _stage_dependency_bindings_from_manifest(stage_id, payload, path)
             base["stage_bindings"] = bindings
             if errors:
@@ -900,8 +1952,10 @@ def _stage_dependency_bindings_from_manifest(
     bindings: dict[str, Any] = {}
     errors: list[str] = []
     required_names = {
-        "W3b": ("count_stream_snapshot",),
+        "W2": ("w1_manifest",),
+        "W3b": ("w1_manifest", "count_stream_snapshot"),
         "W4": (
+            "w1_manifest",
             "signal_binding_manifest",
             "detector_binding_manifest",
             "count_scope_manifest",
@@ -1004,7 +2058,10 @@ def _file_identity_from_manifest(
 
 def _apply_stage_dependency_contract(stages: Mapping[str, dict[str, Any]]) -> None:
     checks = (
+        ("W2", "w1_manifest", "W1", None, None),
+        ("W3b", "w1_manifest", "W1", None, None),
         ("W3b", "count_stream_snapshot", "W3a", "artifact_bindings", "count_streams_raw"),
+        ("W4", "w1_manifest", "W1", None, None),
         ("W4", "signal_binding_manifest", "W2", None, None),
         ("W4", "detector_binding_manifest", "W3b", None, None),
         ("W4", "count_scope_manifest", "W3a", None, None),
@@ -1264,6 +2321,9 @@ def _read_previous_plan(path: Path) -> Mapping[str, Any] | None:
         raise HamburgExecutionWorkflowError(f"cannot read previous execution plan: {path}") from exc
     if not isinstance(payload, Mapping) or payload.get("schema") != HAMBURG_EXECUTION_WORKFLOW_SCHEMA:
         raise HamburgExecutionWorkflowError("previous execution plan has an incompatible schema")
+    stages = payload.get("stages")
+    if isinstance(stages, dict):
+        _relative_execution_plan_paths(stages, path.parent)
     return payload
 
 
@@ -1385,10 +2445,23 @@ def _capability_matrix(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any
     capabilities = {
         capability: {
             "stage_id": stage_id,
-            "status": stages[stage_id].get("effective_status", stages[stage_id].get("status")),
+            "status": _capability_status(capability, stages[stage_id]),
+            "stage_status": stages[stage_id].get(
+                "effective_status",
+                stages[stage_id].get("status"),
+            ),
             "decision": stages[stage_id].get("decision"),
             "execution_gate": stages[stage_id].get("execution_gate"),
             "automatic_promotion_gate": stages[stage_id].get("automatic_promotion_gate"),
+            "promotion_status": (
+                "pass"
+                if _stage_promotable(stages[stage_id])
+                else (
+                    "review_required"
+                    if stages[stage_id].get("execution_gate") == "pass"
+                    else "blocked"
+                )
+            ),
         }
         for capability, stage_id in stage_by_capability.items()
     }
@@ -1396,6 +2469,18 @@ def _capability_matrix(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any
         "status": "pass" if all(_stage_promotable(record) for record in stages.values()) else "blocked"
     }
     return capabilities
+
+
+def _capability_status(capability: str, record: Mapping[str, Any]) -> str:
+    if record.get("execution_gate") != "pass":
+        return "blocked"
+    if _stage_promotable(record):
+        return "pass"
+    if capability == "road_topology":
+        return "pass"
+    if capability in {"official_counts", "demand_inference_and_replay"}:
+        return "diagnostic"
+    return "review_required"
 
 
 def _stage_promotable(record: Mapping[str, Any]) -> bool:

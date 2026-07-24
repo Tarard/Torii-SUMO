@@ -1,39 +1,104 @@
 {
-  "schema": "torii.hamburg-digital-twin-readme-evidence/v1",
+  "schema": "torii.hamburg-digital-twin-readme-evidence/v2",
   "scope": {
     "corridor": "Am Sandtorkai",
     "official_node_ids": ["2349", "2394", "2403"],
-    "claim_status": "detector-constrained-diagnostic-replay"
+    "acceptance_authority": ["Hamburg 2024 aerial", "Hamburg road CAD/construction drawing"],
+    "claim_status": "topology-ready-downstream-blocked"
   },
   "workflow_v2_eligibility": {
     "status": "blocked",
-    "w1_network_sha256": "559a5752c06175e4c3aceb1b2082e5539c0e7ee6728d2bff9030110080eae0cf",
-    "stale_network_sha256": "aa1676df2182026a87d261e633d2cf8bd100c9b2a8c3ee6ac9d9d3dd22d49a33",
-    "stale_evidence": ["W2", "W3 inverse-problem diagnostic", "W4 pre-v2 dependency provenance"],
-    "next_action": "rebuild W2, W3b, and W4 against W1 so W4 consumes W3a count values, an aggregation-approved detector mapping, and hash-bound signal events; do not edit hashes"
+    "w1_manifest": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/manifest/hamburg_official_corridor_geometry.manifest.json",
+    "w1_manifest_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+    "w1_network_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+    "resolver_policy": "CLI, README, W2, W3b, and W4 must resolve this manifest; directory recency is not a resolver.",
+    "next_action": "pass W2 against canonical W1, confirm W3b shared-lane semantics, then rebuild W4"
   },
   "evidence": {
     "W1": {
-      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/official_first_named_corridor_v1/workflow/w1_official_corridor_geometry_v20_lsa_boundary_evidence/hamburg_official_corridor_geometry.manifest.json",
-      "sha256": "e99b12cb123b6bd58fb0dcfa34c27648af2719888721e493b2ce9d81e6d8a1e4"
+      "status": "review_ready",
+      "execution_gate": "pass",
+      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/manifest/hamburg_official_corridor_geometry.manifest.json",
+      "manifest_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+      "network_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+      "source_policy": "retain complete OSM ways intersecting the buffered aerial/CAD scope; do not clip source ways to the bbox",
+      "build_spec_sha256": "1c5139f9c6157ab01b60246df347a89baaf923b0394980c96fe9ed6e77c2b2a1",
+      "complete_way_acquisition": {
+        "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/source_complete_ways/complete-way-acquisition.json",
+        "manifest_sha256": "b29d28542204d91b4fab3611d48240a748c6fc35ae940336255b55bfeac2eb04",
+        "source_selected_ways": 762,
+        "filtered_selected_ways": 762,
+        "ways_extending_outside_bbox": 61,
+        "missing_or_modified_ways": 0
+      },
+      "baseline_external_edges": 1609,
+      "preserved_external_edges": 1602,
+      "internalized_conflict_core_edges": 7,
+      "unexplained_edge_loss": 0,
+      "unsupported_turnarounds": 0,
+      "movement_smoke": {
+        "node": "2403",
+        "authority_status": "review_required",
+        "automatic_promotion_gate": "blocked",
+        "passed": 16,
+        "expected": 16,
+        "teleports": 0,
+        "collisions": 0
+      },
+      "sumo_load": "pass",
+      "surface_overlap": {
+        "raw_status": "fail",
+        "w1_gate": "review_required"
+      },
+      "connection_mode": {
+        "raw_status": "fail",
+        "w1_gate": "review_required"
+      }
     },
     "W2": {
-      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/official_first_named_corridor_v1/workflow/w2_official_signal_binding_v5_iteration027_compound/official-primary-signal-binding.manifest.json",
-      "sha256": "86dedaa40e23bd100b11ec95e80a631f4d47278a5f584a9295a520bbd7c63c7a",
-      "available_nodes": ["2349", "2394"],
-      "missing_nodes": ["2403"]
+      "status": "blocked",
+      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/downstream/w2_c7ecb3/official-primary-signal-binding.manifest.json",
+      "manifest_sha256": "098c51491972faaed0d18b8c27ba4d8f7111a63f50de94766426a89d798653c1",
+      "w1_manifest_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+      "available_official_assets": ["2349", "2394"],
+      "missing_official_assets": ["2403"],
+      "reason": "official controller/linkIndex and physical-movement parity do not pass on canonical W1"
     },
-    "W3": {
-      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/official_first_named_corridor_v1/workflow/w3_route_sensor_matrix_solution_prior73_v1/station-matrix-solution.manifest.json",
-      "sha256": "819f10a681ef6653d7b7967ee81a073b693d1f6f45800dfe748c8b23f0bf9212",
+    "W3b": {
+      "status": "partial",
+      "execution_gate": "pass",
+      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/downstream/w3b_c7ecb3/detector-binding.manifest.json",
+      "manifest_sha256": "42aded90a5858d37d16fc54a9f94adc22607b3a68b6ed3e4be0bf9800e2efd2a",
+      "w1_manifest_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+      "active_mappings": 19,
+      "reason": "shared-lane detector semantics require confirmation against canonical W1"
+    },
+    "W4": {
+      "status": "blocked",
+      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/downstream/w4_c7ecb3/hamburg_named_replay.manifest.json",
+      "manifest_sha256": "64b71e97f105bdf217b871988c4500c2b2e944dcb53238083d431da6afcc947f",
+      "w1_manifest_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+      "replay_executed": false,
+      "reason": "fail-closed preflight: W2 is blocked and W3b aggregation semantics are blocked"
+    }
+  },
+  "canonical_workflow": {
+    "config": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/canonical-workflow.json",
+    "plan": "artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/workflow_plan/execution-plan.manifest.json",
+    "plan_sha256": "e16c725e1e81a66b064b438372d366734a53900b4560119d9eb0aeccbb4984b6",
+    "road_topology": "pass",
+    "field_faithful_digital_twin": "blocked"
+  },
+  "historical_diagnostics": {
+    "status": "not_current",
+    "note": "Earlier 2da03214, 559a5752, and aa1676df network-bound results are retained only as pre-canonical diagnostics.",
+    "inverse_problem": {
       "matrix_shape": [6, 58],
       "rank": 6,
       "nullity": 52,
       "note": "Exact detector fit is a TLS-all-off inverse-problem diagnostic, not a field-signal replay."
     },
-    "W4": {
-      "manifest": "artifacts/hamburg_sandtorkai_twin_20260719/official_first_named_corridor_v1/workflow/w4_named_replay_v19b_exact_official_history_window/hamburg_named_replay.manifest.json",
-      "sha256": "74603785e5eb8998862f529bfcfd276333dc832f91ba0106fde7a6f21f7c1bbb",
+    "official_history_replay": {
       "history_window_seconds": 7200,
       "candidate_routes": 15,
       "constraint_match_fraction": 1.0,

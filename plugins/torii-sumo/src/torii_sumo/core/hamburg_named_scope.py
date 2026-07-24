@@ -22,6 +22,45 @@ OFFICIAL_NODE_IDENTITY_SCHEMA = "torii.hamburg-lsa-node-identity-evidence/v1"
 OFFICIAL_CORRIDOR_SCOPE_SCHEMA = "torii.hamburg-hh-sib-corridor-scope/v1"
 SIGNAL_ASSET_DISCOVERY_SCHEMA = "torii.hamburg-signal-asset-discovery/v1"
 NAMED_SCOPE_ID = "hamburg_sandtorkai_2349_2394_2403_named_entries_v1"
+AERIAL_SCOPE = {
+    "crs": "EPSG:25832",
+    "bbox": [565100.0, 5933000.0, 566350.0, 5933625.0],
+    "wgs84_bbox": [
+        9.982401301697356,
+        53.54186321461625,
+        10.001394056990355,
+        53.547323807731075,
+    ],
+    "osm_acquisition_buffer_m": 150.0,
+    "osm_acquisition_wgs84_bbox": [
+        9.980106927466423,
+        53.540533691913986,
+        10.003689463043568,
+        53.54865291573397,
+    ],
+    "time": "2024",
+    "image": {
+        "repository_path": "docs/assets/hamburg-digital-twin/official-aerial-2024.png",
+        "sha256": "8c65a45c5b86d2a7077c321bb1fff8108651f0f8a7fd3ffc62091c17de5be948",
+    },
+}
+CAD_SCOPE_EVIDENCE = {
+    "title": "Am Sandtorkai / Brooktorkai – Verstetigung Pop-up-Bikelane",
+    "date": "2022-07",
+    "render": {
+        "repository_path": (
+            "docs/assets/hamburg-digital-twin/official-construction-plan-2022.png"
+        ),
+        "sha256": "2dd292e00ee0d522a5c8f0c4e0a4b95b47f4afcc34db12b5d69c47501e70d8ec",
+        "page": 1,
+    },
+    "source_url": (
+        "https://lsbg.hamburg.de/resource/blob/784084/"
+        "6a06328b36b0de140d75baac9165f8f7/"
+        "am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-"
+        "abgestimmte-planung-plan-data.pdf"
+    ),
+}
 
 NAMED_NODE_SPECS: tuple[dict[str, str], ...] = (
     {
@@ -105,7 +144,17 @@ def freeze_hamburg_named_scope(
                     "reason": "diagnostic_baseline_not_named_corridor",
                 }
             ],
-            "osm_role": "topology_hint_only",
+            "osm_role": "continuous_road_geometry_and_base_topology",
+            "spatial_scope": {
+                "selection_rule": (
+                    "select complete OSM ways intersecting the 150 m acquisition envelope "
+                    "around the aerial/CAD review scope; never clip a selected way at the "
+                    "bbox boundary"
+                ),
+                "edge_boundary_policy": "preserve_complete_selected_ways",
+                "aerial": AERIAL_SCOPE,
+                "official_cad": CAD_SCOPE_EVIDENCE,
+            },
         },
         "nodes": nodes,
         "official_road_scope": {
@@ -185,6 +234,17 @@ def validate_hamburg_named_scope_manifest(
     road_scope = payload.get("official_road_scope")
     if not isinstance(road_scope, Mapping) or road_scope.get("scope_id") != NAMED_SCOPE_ID:
         raise HamburgNamedScopeError("named scope manifest official road scope is not the requested scope")
+    scope_policy = payload.get("scope_policy")
+    spatial_scope = scope_policy.get("spatial_scope") if isinstance(scope_policy, Mapping) else None
+    if (
+        not isinstance(spatial_scope, Mapping)
+        or spatial_scope.get("edge_boundary_policy") != "preserve_complete_selected_ways"
+        or spatial_scope.get("aerial") != AERIAL_SCOPE
+        or spatial_scope.get("official_cad") != CAD_SCOPE_EVIDENCE
+    ):
+        raise HamburgNamedScopeError(
+            "named scope manifest must freeze the canonical aerial/CAD complete-way policy"
+        )
     for source in (payload.get("sources") or {},):
         if not isinstance(source, Mapping):
             raise HamburgNamedScopeError("named scope manifest.sources must be an object")

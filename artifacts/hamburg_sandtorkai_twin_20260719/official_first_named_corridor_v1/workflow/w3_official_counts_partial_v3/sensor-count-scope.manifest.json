@@ -1,0 +1,117 @@
+{
+  "aggregate_row_count": 40,
+  "artifacts": {
+    "count_observations_normalized": {
+      "path": "count_observations.normalized.json",
+      "sha256": "f4998391f73b67123a2350ae25df2aefdc184145db851a95834d91451770ef94"
+    },
+    "count_observations_raw": {
+      "path": "count_observations.raw.json",
+      "sha256": "e62e3decbb0313ce7a24fdbab7607b305f247001066f178afe49057282055ced"
+    },
+    "count_streams_normalized": {
+      "path": "count_streams.normalized.json",
+      "sha256": "8e7cbe8838142bb3bb0c0e17e0698e88cf9609e967c34243795074e7b2fd1450"
+    },
+    "count_streams_raw": {
+      "path": "count_streams.raw.json",
+      "sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d"
+    },
+    "count_window_attempts": {
+      "path": "count_window_attempts.json",
+      "sha256": "9a598934047260bdb3ba94382da89bdf28e6e82d3bf09ec01a796c9d3f8dedb2"
+    },
+    "counts_corridor_aggregate_15min": {
+      "path": "counts.corridor.aggregate.15min.csv",
+      "sha256": "50fa437e277fe3896502598d7434d1c26ee103d21a53f7fe73a2544c9ed01187"
+    },
+    "counts_formal_comparison_15min": {
+      "path": "counts.formal_comparison.15min.csv",
+      "sha256": "1012f769f70af8b1fa3d579f5ad9756f7586b88dc0ee409fc28d02212a89b441"
+    },
+    "counts_simulation_15min": {
+      "path": "counts.simulation.15min.csv",
+      "sha256": "25d790794fd9e41c5cf65fbe02ed3c3f544b6817cd35fffd3352549e32c1d3d2"
+    }
+  },
+  "automatic_promotion_gate": "blocked",
+  "execution_gate": "pass",
+  "execution_gate_reason": "official observation window is complete for all available detectors; missing 2349 remains an explicit diagnostic limitation",
+  "formal_comparison_row_count": 152,
+  "gates": {
+    "automatic_promotion": "blocked",
+    "detector_geometry": "pass",
+    "direction_mapping": "pass",
+    "full_named_node_coverage": "blocked",
+    "official_observation_window": "pass"
+  },
+  "parameters": {
+    "formal_duration_seconds": 7200,
+    "max_distance_m": 250.0,
+    "output_bin_seconds": 900,
+    "requested_count_node_ids": [
+      "2349",
+      "2394",
+      "2403"
+    ],
+    "source_bin_seconds": 300,
+    "warmup_seconds": 1800
+  },
+  "schema": "torii.hamburg-named-corridor-count-scope/v1",
+  "scope_evidence": {
+    "path": "sensor-scope.evidence.json",
+    "sha256": "2a17bafcc7cc00b5e48ddf42e0b2339825944a6fadbcceaff93b938f81ca53f0"
+  },
+  "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1",
+  "selected_window": {
+    "formal_window": {
+      "begin_utc": "2026-07-18T14:30:00+00:00",
+      "complete": true,
+      "completeness_ratio": 1.0,
+      "duration_seconds": 7200,
+      "end_utc": "2026-07-18T16:30:00+00:00",
+      "expected_cells": 456,
+      "local_date": "2026-07-18",
+      "missing_cells": [],
+      "present_cells": 456,
+      "score": 5266,
+      "scoring_method": "sum_of_all_lane_field_counts",
+      "source_bin_seconds": 300,
+      "timezone_name": "Europe/Berlin"
+    },
+    "local_date": "2026-07-18",
+    "simulation_window": {
+      "comparison_begin": 1800,
+      "comparison_end": 9000,
+      "formal_window": {
+        "begin_utc": "2026-07-18T14:30:00+00:00",
+        "complete": true,
+        "completeness_ratio": 1.0,
+        "duration_seconds": 7200,
+        "end_utc": "2026-07-18T16:30:00+00:00",
+        "expected_cells": 456,
+        "local_date": "2026-07-18",
+        "missing_cells": [],
+        "present_cells": 456,
+        "score": 5266,
+        "scoring_method": "sum_of_all_lane_field_counts",
+        "source_bin_seconds": 300,
+        "timezone_name": "Europe/Berlin"
+      },
+      "output_bin_seconds": 900,
+      "simulation_begin_utc": "2026-07-18T14:00:00+00:00",
+      "simulation_duration_seconds": 9000,
+      "simulation_end_utc": "2026-07-18T16:30:00+00:00",
+      "warmup_seconds": 1800
+    }
+  },
+  "simulation_row_count": 190,
+  "source": {
+    "api_base": "https://iot.hamburg.de/v1.1/",
+    "layer": "Anzahl_Kfz_Zaehlfeld_5-Min",
+    "service": "HH_STA_Verkehrsdaten_Kfz_Infrarotdetektoren",
+    "system": "Hamburg OGC SensorThings count service"
+  },
+  "status": "partial",
+  "stream_count": 19
+}

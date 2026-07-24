@@ -60,6 +60,7 @@ def test_audit_classifies_matching_reciprocal_micro_edges_without_authorizing_ed
     )
 
     assert report["status"] == "pass"
+    assert report["automatic_promotion_gate"] == "pass"
     assert report["policy"]["automatic_edit_authorization"] == "blocked"
     assert report["reciprocal_micro_pair_count"] == 1
     pair = report["reciprocal_micro_pairs"][0]
@@ -90,9 +91,11 @@ def test_audit_detects_dir_t_turnarounds_and_traversable_two_edge_loop(
 
     report = audit_external_micro_junctions(net_file, junction_ids=("a", "b"))
 
+    assert report["status"] == "review_required"
     assert report["dir_t_turnaround_count"] == 2
+    assert report["unsupported_turnaround_count"] == 2
     assert all(
-        row["audit_disposition"] == "observed_not_authorizing_edit"
+        row["audit_disposition"] == "review_required_unsupported_turnaround"
         for row in report["dir_t_turnarounds"]
     )
     pair = report["reciprocal_micro_pairs"][0]
@@ -104,6 +107,43 @@ def test_audit_detects_dir_t_turnarounds_and_traversable_two_edge_loop(
         "status": "observed",
         "classification_effect": "none_without_independent_protection_evidence",
     }
+
+
+def test_audit_accepts_turnaround_only_with_independent_lane_or_official_evidence(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "turnaround.net.xml"
+    _write_net(
+        net_file,
+        extra_connections="""
+  <connection from="24498193#2" to="-24498193#2" fromLane="0" toLane="0"
+              via=":b_0_0" dir="t" state="M"/>
+""",
+    )
+    authority = [
+        {
+            "from_edge_id": "24498193#2",
+            "to_edge_id": "-24498193#2",
+            "from_lane": 0,
+            "to_lane": 0,
+            "evidence_kind": "turn_lane_reverse_or_uturn",
+            "evidence_ids": ["osm-way-24498193:turn:lanes=reverse"],
+        }
+    ]
+
+    report = audit_external_micro_junctions(
+        net_file,
+        junction_ids=("a", "b"),
+        turnaround_authority=authority,
+    )
+
+    assert report["status"] == "review_required"
+    assert report["automatic_promotion_gate"] == "blocked"
+    assert report["supported_turnaround_count"] == 1
+    assert report["unsupported_turnaround_count"] == 0
+    assert report["dir_t_turnarounds"][0]["authority"]["evidence_ids"] == [
+        "osm-way-24498193:turn:lanes=reverse"
+    ]
 
 
 def test_audit_protects_threshold_disagreement_controller_stopline_and_crossing(

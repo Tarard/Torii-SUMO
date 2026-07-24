@@ -1,0 +1,1238 @@
+{
+  "controller_capacities": {
+    "HH_2349": 6,
+    "HH_2394": 6
+  },
+  "cross_group_path_owners": [
+    {
+      "from_edge": "127716467#0",
+      "from_lane": 0,
+      "owners": [
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_K1__S_NONE"
+        },
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_K6Z__S_K2"
+        }
+      ],
+      "to_edge": "127716467#1",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "193847534#0",
+      "from_lane": 0,
+      "owners": [
+        {
+          "official_node_id": "2394",
+          "signal_group": "P_K3__S_K4"
+        },
+        {
+          "official_node_id": "2394",
+          "signal_group": "P_K7__S_NONE"
+        }
+      ],
+      "to_edge": "193847534#1",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "193847534#0",
+      "from_lane": 1,
+      "owners": [
+        {
+          "official_node_id": "2394",
+          "signal_group": "P_K3__S_K4"
+        },
+        {
+          "official_node_id": "2394",
+          "signal_group": "P_K7__S_NONE"
+        }
+      ],
+      "to_edge": "193847534#1",
+      "to_lane": 1
+    },
+    {
+      "from_edge": "554713075#0",
+      "from_lane": 0,
+      "owners": [
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_K3__S_K2"
+        },
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_K4__S_NONE"
+        }
+      ],
+      "to_edge": "554713075#1",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "554713075#0",
+      "from_lane": 1,
+      "owners": [
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_K3__S_K2"
+        },
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_K4__S_NONE"
+        }
+      ],
+      "to_edge": "554713075#1",
+      "to_lane": 1
+    },
+    {
+      "from_edge": "61649649#0",
+      "from_lane": 0,
+      "owners": [
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_K5Z__S_K1"
+        },
+        {
+          "official_node_id": "2349",
+          "signal_group": "P_NONE__S_K4"
+        }
+      ],
+      "to_edge": "61649649#1",
+      "to_lane": 0
+    }
+  ],
+  "demoted_physical_link_count": 14,
+  "demoted_physical_links": [
+    {
+      "from_edge": "194672083",
+      "from_lane": 1,
+      "to_edge": "127716467#0",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "381540198#1",
+      "from_lane": 0,
+      "to_edge": "193847534#0",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "381540198#1",
+      "from_lane": 0,
+      "to_edge": "193847534#0",
+      "to_lane": 1
+    },
+    {
+      "from_edge": "381540198#1",
+      "from_lane": 1,
+      "to_edge": "554713077",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "554713076#1",
+      "from_lane": 0,
+      "to_edge": "554713076#2",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "554713076#1",
+      "from_lane": 1,
+      "to_edge": "554713076#2",
+      "to_lane": 1
+    },
+    {
+      "from_edge": "554713078#1",
+      "from_lane": 0,
+      "to_edge": "554713078#2",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "554713078#1",
+      "from_lane": 1,
+      "to_edge": "554713078#2",
+      "to_lane": 1
+    },
+    {
+      "from_edge": "554713078#2",
+      "from_lane": 0,
+      "to_edge": "554713075#0",
+      "to_lane": 1
+    },
+    {
+      "from_edge": "60578519",
+      "from_lane": 0,
+      "to_edge": "-381540198#1",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "60578519",
+      "from_lane": 1,
+      "to_edge": "193847534#0",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "60578519",
+      "from_lane": 2,
+      "to_edge": "193847534#0",
+      "to_lane": 1
+    },
+    {
+      "from_edge": "9702432#2",
+      "from_lane": 0,
+      "to_edge": "554713077",
+      "to_lane": 0
+    },
+    {
+      "from_edge": "9702432#2",
+      "from_lane": 1,
+      "to_edge": "-381540198#1",
+      "to_lane": 0
+    }
+  ],
+  "derived_group_count": 12,
+  "derived_physical_link_count": 14,
+  "discovered_source_tls_ids": [
+    "2761334245",
+    "2761334257"
+  ],
+  "hit_repair_count": 14,
+  "movements": [
+    {
+      "candidate_path_count": 1,
+      "connection_id": "9",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "554713078#1",
+          "from_lane": 1,
+          "to_edge": "554713078#2",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "194672083",
+          "from_lane": 1,
+          "to_edge": "127716467#0",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "554713078#0",
+          "from_lane": 1,
+          "to_edge": "554713078#1",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "554713078#1",
+          "from_lane": 1,
+          "to_edge": "554713078#2",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "554713078#2",
+          "from_lane": 1,
+          "to_edge": "194672083",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "194672083",
+          "from_lane": 1,
+          "to_edge": "127716467#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "11",
+      "official_ingress_lane": "6",
+      "official_node_id": "2349",
+      "path_hops": 5,
+      "path_lane_ids": [
+        "554713078#0_1",
+        "554713078#1_1",
+        "554713078#2_1",
+        "194672083_1",
+        "127716467#0_0",
+        "127716467#1_0"
+      ],
+      "path_span_m": 15.15,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "554713078#0",
+          "from_lane": 1,
+          "source_link_index": 1,
+          "source_tls_id": "2761334245",
+          "to_edge": "554713078#1",
+          "to_lane": 1
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K6Z__S_K2",
+      "stream_id": -8,
+      "sumo_egress_lane": "127716467#1_0",
+      "sumo_ingress_lane": "554713078#0_1",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "8",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "554713078#1",
+          "from_lane": 0,
+          "to_edge": "554713078#2",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "554713078#2",
+          "from_lane": 0,
+          "to_edge": "554713075#0",
+          "to_lane": 1
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "554713078#0",
+          "from_lane": 0,
+          "to_edge": "554713078#1",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "554713078#1",
+          "from_lane": 0,
+          "to_edge": "554713078#2",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "554713078#2",
+          "from_lane": 0,
+          "to_edge": "554713075#0",
+          "to_lane": 1
+        }
+      ],
+      "official_egress_lane": "4",
+      "official_ingress_lane": "7",
+      "official_node_id": "2349",
+      "path_hops": 4,
+      "path_lane_ids": [
+        "554713078#0_0",
+        "554713078#1_0",
+        "554713078#2_0",
+        "554713075#0_1",
+        "554713075#1_1"
+      ],
+      "path_span_m": 12.46,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "554713078#0",
+          "from_lane": 0,
+          "source_link_index": 0,
+          "source_tls_id": "2761334245",
+          "to_edge": "554713078#1",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K3__S_K2",
+      "stream_id": -7,
+      "sumo_egress_lane": "554713075#1_1",
+      "sumo_ingress_lane": "554713078#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "7",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "554713078#1",
+          "from_lane": 0,
+          "to_edge": "554713078#2",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "554713078#0",
+          "from_lane": 0,
+          "to_edge": "554713078#1",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "554713078#1",
+          "from_lane": 0,
+          "to_edge": "554713078#2",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "554713078#2",
+          "from_lane": 0,
+          "to_edge": "554713075#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "5",
+      "official_ingress_lane": "7",
+      "official_node_id": "2349",
+      "path_hops": 4,
+      "path_lane_ids": [
+        "554713078#0_0",
+        "554713078#1_0",
+        "554713078#2_0",
+        "554713075#0_0",
+        "554713075#1_0"
+      ],
+      "path_span_m": 12.46,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "554713078#0",
+          "from_lane": 0,
+          "source_link_index": 0,
+          "source_tls_id": "2761334245",
+          "to_edge": "554713078#1",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K3__S_K2",
+      "stream_id": -6,
+      "sumo_egress_lane": "554713075#1_0",
+      "sumo_ingress_lane": "554713078#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "6",
+      "demoted_duplicate_control_links": [],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "61649647#0",
+          "from_lane": 0,
+          "to_edge": "61649649#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "8",
+      "official_ingress_lane": "10",
+      "official_node_id": "2349",
+      "path_hops": 2,
+      "path_lane_ids": [
+        "61649647#0_0",
+        "61649649#0_0",
+        "61649649#1_0"
+      ],
+      "path_span_m": 2.06,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "61649647#0",
+          "from_lane": 0,
+          "source_link_index": 5,
+          "source_tls_id": "HH_2349",
+          "to_edge": "61649649#0",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_NONE__S_K4",
+      "stream_id": -5,
+      "sumo_egress_lane": "61649649#1_0",
+      "sumo_ingress_lane": "61649647#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "5",
+      "demoted_duplicate_control_links": [],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "61649647#0",
+          "from_lane": 0,
+          "to_edge": "59990286",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "59990286",
+          "from_lane": 0,
+          "to_edge": "554713075#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "5",
+      "official_ingress_lane": "10",
+      "official_node_id": "2349",
+      "path_hops": 3,
+      "path_lane_ids": [
+        "61649647#0_0",
+        "59990286_0",
+        "554713075#0_0",
+        "554713075#1_0"
+      ],
+      "path_span_m": 7.17,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "61649647#0",
+          "from_lane": 0,
+          "source_link_index": 2,
+          "source_tls_id": "HH_2349",
+          "to_edge": "59990286",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K4__S_NONE",
+      "stream_id": -4,
+      "sumo_egress_lane": "554713075#1_0",
+      "sumo_ingress_lane": "61649647#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "4",
+      "demoted_duplicate_control_links": [],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "61649647#0",
+          "from_lane": 1,
+          "to_edge": "59990286",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "59990286",
+          "from_lane": 1,
+          "to_edge": "554713075#0",
+          "to_lane": 1
+        }
+      ],
+      "official_egress_lane": "4",
+      "official_ingress_lane": "9",
+      "official_node_id": "2349",
+      "path_hops": 3,
+      "path_lane_ids": [
+        "61649647#0_1",
+        "59990286_1",
+        "554713075#0_1",
+        "554713075#1_1"
+      ],
+      "path_span_m": 7.17,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "61649647#0",
+          "from_lane": 1,
+          "source_link_index": 2,
+          "source_tls_id": "HH_2349",
+          "to_edge": "59990286",
+          "to_lane": 1
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K4__S_NONE",
+      "stream_id": -3,
+      "sumo_egress_lane": "554713075#1_1",
+      "sumo_ingress_lane": "61649647#0_1",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "3",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "554713076#1",
+          "from_lane": 1,
+          "to_edge": "554713076#2",
+          "to_lane": 1
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "554713076#0",
+          "from_lane": 1,
+          "to_edge": "554713076#1",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "554713076#1",
+          "from_lane": 1,
+          "to_edge": "554713076#2",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "554713076#2",
+          "from_lane": 1,
+          "to_edge": "194672083",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "194672083",
+          "from_lane": 1,
+          "to_edge": "61649649#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "8",
+      "official_ingress_lane": "3",
+      "official_node_id": "2349",
+      "path_hops": 5,
+      "path_lane_ids": [
+        "554713076#0_1",
+        "554713076#1_1",
+        "554713076#2_1",
+        "194672083_1",
+        "61649649#0_0",
+        "61649649#1_0"
+      ],
+      "path_span_m": 13.84,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "554713076#0",
+          "from_lane": 1,
+          "source_link_index": 1,
+          "source_tls_id": "2761334257",
+          "to_edge": "554713076#1",
+          "to_lane": 1
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K5Z__S_K1",
+      "stream_id": -2,
+      "sumo_egress_lane": "61649649#1_0",
+      "sumo_ingress_lane": "554713076#0_1",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "2",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "554713076#1",
+          "from_lane": 0,
+          "to_edge": "554713076#2",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "554713076#0",
+          "from_lane": 0,
+          "to_edge": "554713076#1",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "554713076#1",
+          "from_lane": 0,
+          "to_edge": "554713076#2",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "554713076#2",
+          "from_lane": 0,
+          "to_edge": "194672083",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "194672083",
+          "from_lane": 0,
+          "to_edge": "127716467#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "11",
+      "official_ingress_lane": "2",
+      "official_node_id": "2349",
+      "path_hops": 5,
+      "path_lane_ids": [
+        "554713076#0_0",
+        "554713076#1_0",
+        "554713076#2_0",
+        "194672083_0",
+        "127716467#0_0",
+        "127716467#1_0"
+      ],
+      "path_span_m": 20.01,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls",
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "554713076#0",
+          "from_lane": 0,
+          "source_link_index": 0,
+          "source_tls_id": "2761334257",
+          "to_edge": "554713076#1",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K1__S_NONE",
+      "stream_id": -1,
+      "sumo_egress_lane": "127716467#1_0",
+      "sumo_ingress_lane": "554713076#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "9",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "381540198#1",
+          "from_lane": 1,
+          "to_edge": "554713077",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "381540198#0",
+          "from_lane": 1,
+          "to_edge": "381540198#1",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "381540198#1",
+          "from_lane": 1,
+          "to_edge": "554713077",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "14",
+      "official_ingress_lane": "7",
+      "official_node_id": "2394",
+      "path_hops": 2,
+      "path_lane_ids": [
+        "381540198#0_1",
+        "381540198#1_1",
+        "554713077_0"
+      ],
+      "path_span_m": 6.46,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "381540198#0",
+          "from_lane": 1,
+          "source_link_index": null,
+          "source_tls_id": "",
+          "to_edge": "381540198#1",
+          "to_lane": 1
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_NONE__S_K5",
+      "stream_id": -16,
+      "sumo_egress_lane": "554713077_0",
+      "sumo_ingress_lane": "381540198#0_1",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "8",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "381540198#1",
+          "from_lane": 0,
+          "to_edge": "193847534#0",
+          "to_lane": 1
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "381540198#0",
+          "from_lane": 0,
+          "to_edge": "381540198#1",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "381540198#1",
+          "from_lane": 0,
+          "to_edge": "193847534#0",
+          "to_lane": 1
+        }
+      ],
+      "official_egress_lane": "5",
+      "official_ingress_lane": "6",
+      "official_node_id": "2394",
+      "path_hops": 3,
+      "path_lane_ids": [
+        "381540198#0_0",
+        "381540198#1_0",
+        "193847534#0_1",
+        "193847534#1_1"
+      ],
+      "path_span_m": 12.98,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "381540198#0",
+          "from_lane": 0,
+          "source_link_index": null,
+          "source_tls_id": "",
+          "to_edge": "381540198#1",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K3__S_K4",
+      "stream_id": -15,
+      "sumo_egress_lane": "193847534#1_1",
+      "sumo_ingress_lane": "381540198#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "7",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "381540198#1",
+          "from_lane": 0,
+          "to_edge": "193847534#0",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "381540198#0",
+          "from_lane": 0,
+          "to_edge": "381540198#1",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "381540198#1",
+          "from_lane": 0,
+          "to_edge": "193847534#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "4",
+      "official_ingress_lane": "6",
+      "official_node_id": "2394",
+      "path_hops": 3,
+      "path_lane_ids": [
+        "381540198#0_0",
+        "381540198#1_0",
+        "193847534#0_0",
+        "193847534#1_0"
+      ],
+      "path_span_m": 12.98,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "declared_repair",
+            "official_map_stopline"
+          ],
+          "from_edge": "381540198#0",
+          "from_lane": 0,
+          "source_link_index": null,
+          "source_tls_id": "",
+          "to_edge": "381540198#1",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "explicit_official_stopline_control_arc",
+      "signal_group": "P_K3__S_K4",
+      "stream_id": -14,
+      "sumo_egress_lane": "193847534#1_0",
+      "sumo_ingress_lane": "381540198#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "6",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "9702432#2",
+          "from_lane": 1,
+          "to_edge": "-381540198#1",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "9702432#0",
+          "from_lane": 1,
+          "to_edge": "9702432#2",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "9702432#2",
+          "from_lane": 1,
+          "to_edge": "-381540198#1",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "9",
+      "official_ingress_lane": "3",
+      "official_node_id": "2394",
+      "path_hops": 2,
+      "path_lane_ids": [
+        "9702432#0_1",
+        "9702432#2_1",
+        "-381540198#1_0"
+      ],
+      "path_span_m": 5.62,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls"
+          ],
+          "from_edge": "9702432#0",
+          "from_lane": 1,
+          "source_link_index": 4,
+          "source_tls_id": "HH_2394",
+          "to_edge": "9702432#2",
+          "to_lane": 1
+        }
+      ],
+      "selection_policy": "first_private_core_source_tls_arc",
+      "signal_group": "P_NONE__S_K2",
+      "stream_id": -13,
+      "sumo_egress_lane": "-381540198#1_0",
+      "sumo_ingress_lane": "9702432#0_1",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "5",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "9702432#2",
+          "from_lane": 0,
+          "to_edge": "554713077",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "9702432#0",
+          "from_lane": 0,
+          "to_edge": "9702432#2",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "9702432#2",
+          "from_lane": 0,
+          "to_edge": "554713077",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "14",
+      "official_ingress_lane": "2",
+      "official_node_id": "2394",
+      "path_hops": 2,
+      "path_lane_ids": [
+        "9702432#0_0",
+        "9702432#2_0",
+        "554713077_0"
+      ],
+      "path_span_m": 5.62,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls"
+          ],
+          "from_edge": "9702432#0",
+          "from_lane": 0,
+          "source_link_index": 0,
+          "source_tls_id": "HH_2394",
+          "to_edge": "9702432#2",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "first_private_core_source_tls_arc",
+      "signal_group": "P_K1__S_NONE",
+      "stream_id": -12,
+      "sumo_egress_lane": "554713077_0",
+      "sumo_ingress_lane": "9702432#0_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "3",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "60578519",
+          "from_lane": 2,
+          "to_edge": "193847534#0",
+          "to_lane": 1
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "47854310#2",
+          "from_lane": 2,
+          "to_edge": "60578519",
+          "to_lane": 2
+        },
+        {
+          "from_edge": "60578519",
+          "from_lane": 2,
+          "to_edge": "193847534#0",
+          "to_lane": 1
+        }
+      ],
+      "official_egress_lane": "5",
+      "official_ingress_lane": "12",
+      "official_node_id": "2394",
+      "path_hops": 3,
+      "path_lane_ids": [
+        "47854310#2_2",
+        "60578519_2",
+        "193847534#0_1",
+        "193847534#1_1"
+      ],
+      "path_span_m": 15.0,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls"
+          ],
+          "from_edge": "47854310#2",
+          "from_lane": 2,
+          "source_link_index": 3,
+          "source_tls_id": "HH_2394",
+          "to_edge": "60578519",
+          "to_lane": 2
+        }
+      ],
+      "selection_policy": "first_private_core_source_tls_arc",
+      "signal_group": "P_K7__S_NONE",
+      "stream_id": -11,
+      "sumo_egress_lane": "193847534#1_1",
+      "sumo_ingress_lane": "47854310#2_2",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "2",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "60578519",
+          "from_lane": 1,
+          "to_edge": "193847534#0",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "47854310#2",
+          "from_lane": 1,
+          "to_edge": "60578519",
+          "to_lane": 1
+        },
+        {
+          "from_edge": "60578519",
+          "from_lane": 1,
+          "to_edge": "193847534#0",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "4",
+      "official_ingress_lane": "11",
+      "official_node_id": "2394",
+      "path_hops": 3,
+      "path_lane_ids": [
+        "47854310#2_1",
+        "60578519_1",
+        "193847534#0_0",
+        "193847534#1_0"
+      ],
+      "path_span_m": 15.0,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls"
+          ],
+          "from_edge": "47854310#2",
+          "from_lane": 1,
+          "source_link_index": 3,
+          "source_tls_id": "HH_2394",
+          "to_edge": "60578519",
+          "to_lane": 1
+        }
+      ],
+      "selection_policy": "first_private_core_source_tls_arc",
+      "signal_group": "P_K7__S_NONE",
+      "stream_id": -10,
+      "sumo_egress_lane": "193847534#1_0",
+      "sumo_ingress_lane": "47854310#2_1",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    },
+    {
+      "candidate_path_count": 1,
+      "connection_id": "1",
+      "demoted_duplicate_control_links": [
+        {
+          "from_edge": "60578519",
+          "from_lane": 0,
+          "to_edge": "-381540198#1",
+          "to_lane": 0
+        }
+      ],
+      "demoted_shared_boundary_links": [],
+      "movement_core_physical_links": [
+        {
+          "from_edge": "47854310#2",
+          "from_lane": 0,
+          "to_edge": "60578519",
+          "to_lane": 0
+        },
+        {
+          "from_edge": "60578519",
+          "from_lane": 0,
+          "to_edge": "-381540198#1",
+          "to_lane": 0
+        }
+      ],
+      "official_egress_lane": "9",
+      "official_ingress_lane": "10",
+      "official_node_id": "2394",
+      "path_hops": 2,
+      "path_lane_ids": [
+        "47854310#2_0",
+        "60578519_0",
+        "-381540198#1_0"
+      ],
+      "path_span_m": 8.48,
+      "selected_control_arc_core_index": 0,
+      "selected_control_arc_path_index": 0,
+      "selected_physical_links": [
+        {
+          "evidence": [
+            "source_tls"
+          ],
+          "from_edge": "47854310#2",
+          "from_lane": 0,
+          "source_link_index": 2,
+          "source_tls_id": "HH_2394",
+          "to_edge": "60578519",
+          "to_lane": 0
+        }
+      ],
+      "selection_policy": "first_private_core_source_tls_arc",
+      "signal_group": "P_K6__S_K7",
+      "stream_id": -9,
+      "sumo_egress_lane": "-381540198#1_0",
+      "sumo_ingress_lane": "47854310#2_0",
+      "visual_review_reasons": [],
+      "visual_review_required": false
+    }
+  ],
+  "path_policy": {
+    "deterministic_path_requirement": "exactly_one_bounded_lane_path",
+    "max_candidate_paths": 64,
+    "max_hops": 8,
+    "max_span_m": 200.0,
+    "uncontrolled_path_policy": "fail"
+  },
+  "plan_id": "hamburg-sandtorkai-2349-2394-compound-v1",
+  "plan_version": "2026-07-19.v9",
+  "primary_stream_count": 16,
+  "repair_count": 14,
+  "retired_tls_ids": [
+    "2761334245",
+    "2761334257"
+  ],
+  "retired_tls_resolution": "auto_from_selected_source_arcs",
+  "schema_id": "torii.official-tls-plan-derivation.v1",
+  "source_net_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_028_2349_channelized_stopline_geometry\\hamburg_2349_channelized_geometry.net.xml",
+  "status": "pass",
+  "unclaimed_retired_link_policy": "demote_after_complete_official_inventory",
+  "unclaimed_retired_links": [],
+  "unused_repairs": [],
+  "visual_review_required_count": 0
+}

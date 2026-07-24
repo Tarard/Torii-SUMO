@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.core.hamburg_named_signal_binding import (
     HamburgSignalBindingError,
     _load_compound_tls_manifest,
@@ -74,10 +75,27 @@ def _write_inputs(tmp_path: Path, *, mismatch: bool = False) -> tuple[Path, dict
     return net, manifests, [stream_file]
 
 
+def _write_w1_manifest(tmp_path: Path, net: Path) -> Path:
+    manifest = tmp_path / "W1.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-official-corridor-geometry/v1",
+                "status": "review_ready",
+                "execution_gate": "pass",
+                "network": {"path": net.name, "sha256": file_sha256(net)},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest
+
+
 def test_official_streams_bind_to_controller_link_indices(tmp_path: Path) -> None:
     net, manifests, stream_files = _write_inputs(tmp_path)
+    w1_manifest = _write_w1_manifest(tmp_path, net)
     report = materialize_hamburg_named_signal_binding(
-        net_file=net,
+        w1_manifest_file=w1_manifest,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
         output_dir=tmp_path / "out",
@@ -86,9 +104,21 @@ def test_official_streams_bind_to_controller_link_indices(tmp_path: Path) -> Non
     assert report["status"] == "partial"
     assert report["execution_gate"] == "pass"
     assert report["automatic_promotion_gate"] == "blocked"
-    assert len(json.loads(Path(report["binding_artifact"]["path"]).read_text(encoding="utf-8"))["bindings"]) == 2
+    assert report["claim_status"] == "official-available-node-signal-metadata-bound-partial-coverage"
+    assert (
+        "which official MAP movement and SUMO controller linkIndex each available-node stream binds to"
+        in report["claim_boundary"]["proves"]
+    )
+    manifest_dir = Path(report["manifest_file"]).parent
+    binding_path = (manifest_dir / report["binding_artifact"]["path"]).resolve()
+    assert len(json.loads(binding_path.read_text(encoding="utf-8"))["bindings"]) == 2
     assert report["node_reports"]["2349"]["bound_count"] == 1
     assert report["node_reports"]["2349"]["official_movement_physical_key_parity"]["status"] == "pass"
+    assert report["source"]["w1_manifest"] == {
+        "path": "../W1.json",
+        "sha256": file_sha256(w1_manifest),
+    }
+    assert not Path(report["source"]["candidate_net"]["path"]).is_absolute()
 
 
 def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> None:
@@ -164,6 +194,7 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
     )
 
     report = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
@@ -172,14 +203,18 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
     )
 
     assert report["execution_gate"] == "pass"
-    assert report["source"]["compound_tls_manifest"]["path"] == str(compound.resolve())
+    manifest_dir = Path(report["manifest_file"]).parent
+    compound_path = report["source"]["compound_tls_manifest"]["path"]
+    assert not Path(compound_path).is_absolute()
+    assert (manifest_dir / compound_path).resolve() == compound
     parity = report["node_reports"]["2349"]["official_movement_physical_key_parity"]
     assert (parity["evidence_mode"], parity["expected_count"], parity["candidate_count"]) == (
         "compound_osm_tls_plan",
         1,
         1,
     )
-    bindings = json.loads(Path(report["binding_artifact"]["path"]).read_text(encoding="utf-8"))["bindings"]
+    binding_path = (manifest_dir / report["binding_artifact"]["path"]).resolve()
+    bindings = json.loads(binding_path.read_text(encoding="utf-8"))["bindings"]
     binding = next(row for row in bindings if row["node_id"] == "2349")
     assert (binding["controller_id"], binding["link_index"], len(binding["candidate_connections"])) == (
         "HH_2349",
@@ -191,6 +226,7 @@ def test_compound_tls_evidence_binds_final_osm_connections(tmp_path: Path) -> No
     manifest["movements"][0]["topology_control_key"] = "P_WRONG__S_NONE"
     manifests["2349"].write_text(json.dumps(manifest), encoding="utf-8")
     blocked = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
@@ -257,6 +293,7 @@ def test_compound_tls_rejects_one_movement_bound_to_two_physical_links(
 def test_mismatched_lane_identity_blocks_binding(tmp_path: Path) -> None:
     net, manifests, stream_files = _write_inputs(tmp_path, mismatch=True)
     report = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
@@ -265,12 +302,22 @@ def test_mismatched_lane_identity_blocks_binding(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert report["execution_gate"] == "blocked"
+    assert report["claim_status"] == "official-signal-binding-diagnostic-structurally-unresolved"
+    assert (
+        "that any supplied stream is bound to a candidate MAP movement or controller linkIndex"
+        in report["claim_boundary"]["does_not_prove"]
+    )
+    assert not any(
+        "exactly equals the selected official TLS plan" in claim
+        for claim in report["claim_boundary"]["proves"]
+    )
     assert any(error["code"] == "stream_movement_mismatch" for error in report["errors"])
 
 
 def test_missing_2403_is_explicit_non_promoting_partial(tmp_path: Path) -> None:
     net, manifests, stream_files = _write_inputs(tmp_path)
     report = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
@@ -293,6 +340,7 @@ def test_extra_controlled_physical_connection_blocks_exact_parity(tmp_path: Path
     net.write_text(text, encoding="utf-8")
 
     report = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
@@ -318,6 +366,7 @@ def test_duplicate_official_connection_id_blocks_binding(tmp_path: Path) -> None
     stream_files[0].write_text(json.dumps(streams), encoding="utf-8")
 
     report = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
@@ -337,6 +386,7 @@ def test_legacy_manifest_without_candidate_physical_key_is_blocked(tmp_path: Pat
     manifests["2349"].write_text(json.dumps(manifest), encoding="utf-8")
 
     report = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,
@@ -357,6 +407,7 @@ def test_same_candidate_physical_connection_at_extra_link_index_blocks_binding(t
     net.write_text(text, encoding="utf-8")
 
     report = materialize_hamburg_named_signal_binding(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         intersection_manifests=manifests,
         signal_stream_files=stream_files,

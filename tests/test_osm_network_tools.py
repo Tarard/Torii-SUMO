@@ -1,5 +1,6 @@
 import csv
 import gzip
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -1550,6 +1551,62 @@ def test_filter_osm_by_highways_clips_way_nodes_to_bbox(tmp_path: Path) -> None:
     assert stats["dropped_nodes_outside_bbox"] == 2
 
 
+def test_build_osm_network_keeps_complete_way_across_bbox_when_clipping_is_disabled(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lon="10.0" lat="50.0"/>
+  <node id="2" lon="10.5" lat="50.5"/>
+  <node id="3" lon="10.7" lat="50.7"/>
+  <node id="4" lon="12.0" lat="52.0"/>
+  <way id="101">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/>
+    <tag k="highway" v="residential"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+
+    def fake_runner(command, *, cwd: Path, **_kwargs):
+        filtered = cwd / command[command.index("--osm-files") + 1]
+        root = ET.fromstring(gzip.decompress(filtered.read_bytes()))
+        assert [node.attrib["id"] for node in root.findall("node")] == ["1", "2", "3", "4"]
+        assert [node.attrib["ref"] for node in root.find("way").findall("nd")] == [
+            "1",
+            "2",
+            "3",
+            "4",
+        ]
+        output = cwd / command[command.index("--output-file") + 1]
+        output.write_text(
+            """<net>
+  <edge id="101#0" from="1" to="2"><lane id="101#0_0" index="0"/></edge>
+  <edge id="101#1" from="2" to="3"><lane id="101#1_0" index="0"/></edge>
+  <edge id="101#2" from="3" to="4"><lane id="101#2_0" index="0"/></edge>
+</net>""",
+            encoding="utf-8",
+        )
+        return CommandResult(command=command, cwd=str(cwd), status="pass", returncode=0)
+
+    report = build_osm_network(
+        bbox="10.4,50.4,10.8,50.8",
+        output_dir=tmp_path / "build",
+        source_osm_path=source,
+        allowed_highways={"residential"},
+        clip_source_ways_to_bbox=False,
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["filter_stats"]["kept_nodes"] == 4
+    assert report["filter_stats"].get("trimmed_ways", 0) == 0
+    assert {
+        edge.attrib["id"] for edge in ET.parse(report["net_file"]).getroot().findall("edge")
+    } == {"101#0", "101#1", "101#2"}
+
+
 def test_filter_osm_by_highways_limits_to_reference_way_scope(tmp_path: Path) -> None:
     source = tmp_path / "source.osm.xml"
     target = tmp_path / "filtered.osm.xml"
@@ -1670,18 +1727,18 @@ def test_build_osm_network_fails_closed_when_forced_way_is_missing(
         output_dir=tmp_path / "build",
         source_osm_path=source,
         allowed_highways={"primary"},
-        forced_way_ids={"999"},
+        forced_way_ids={"404"},
         clip_source_ways_to_bbox=False,
         command_runner=lambda command, **_kwargs: calls.append(command),
     )
 
     assert report["status"] == "fail"
     assert report["claim_status"] == "construction-invalid"
-    assert report["forced_way_ids_requested"] == ["999"]
+    assert report["forced_way_ids_requested"] == ["404"]
     assert report["forced_way_ids_kept"] == []
-    assert report["forced_way_ids_missing"] == ["999"]
-    assert report["filter_stats"]["forced_way_ids_missing"] == ["999"]
-    assert "not kept inside the requested bbox" in report["error"]
+    assert report["forced_way_ids_missing"] == ["404"]
+    assert report["filter_stats"]["forced_way_ids_missing"] == ["404"]
+    assert "not present in the filtered source selection" in report["error"]
     assert calls == []
 
 
@@ -1861,15 +1918,31 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
     assert Path(report["build_manifest_file"]).is_file()
     assert report["netconvert_output_original_names"]["requested"] is True
     assert report["netconvert_output_original_names"]["netconvert_option"] == "--output.original-names"
-    manifest = json.loads(Path(report["build_manifest_file"]).read_text(encoding="utf-8"))
+    manifest_path = Path(report["build_manifest_file"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["build_scope"] == {
         "allowed_way_ids_count": None,
         "bbox": "13.6000,50.9800,13.9000,51.1500",
         "clip_source_ways_to_bbox": True,
+        "forced_way_ids_count": None,
         "include_railway": False,
         "road_classes": ["primary"],
         "traffic_side": "right",
     }
+    acquisition = manifest["source_acquisition"]
+    assert acquisition["mode"] == "provided_snapshot"
+    assert acquisition["overpass"] is None
+    assert acquisition["response_snapshot"] == manifest["source_osm_snapshot"]
+    response_path = manifest_path.parent / acquisition["response_snapshot"]["path"]
+    assert response_path.resolve() == source.resolve()
+    assert acquisition["response_snapshot"]["sha256"] == hashlib.sha256(
+        source.read_bytes()
+    ).hexdigest()
+    query_path = manifest_path.parent / acquisition["query"]["path"]
+    assert query_path.is_file()
+    assert acquisition["query"]["sha256"] == hashlib.sha256(
+        query_path.read_bytes()
+    ).hexdigest()
     assert manifest["netconvert"]["output_original_names"]["requested"] is True
     assert manifest["netconvert"]["output_original_names"]["expected_parameter_keys"] == [
         "origId",
@@ -1894,6 +1967,9 @@ def test_build_osm_network_from_existing_osm_runs_netconvert_and_records_artifac
             "sumo/demo.net.xml",
             "--proj.utm",
             "--no-turnarounds",
+            "--no-turnarounds.tls",
+            "--no-turnarounds.geometry",
+            "--no-turnarounds.fringe",
             "--osm.all-attributes",
             "--output.original-names",
             "--tls.join",
@@ -2095,6 +2171,83 @@ def test_build_osm_network_uses_robust_downloader_when_no_source_osm(tmp_path: P
     assert report["overpass"]["tile_count"] == len(calls)
     assert report["overpass"]["tile_count"] > 1
     assert Path(report["source_osm_file"]).is_file()
+    manifest_path = Path(report["build_manifest_file"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    acquisition = manifest["source_acquisition"]
+    assert acquisition["mode"] == "injected_download"
+    assert report["source_acquisition_mode"] == "injected_download"
+    assert acquisition["overpass"] == report["overpass"]
+    assert acquisition["response_snapshot"] == manifest["source_osm_snapshot"]
+    response_path = manifest_path.parent / acquisition["response_snapshot"]["path"]
+    assert response_path.resolve() == Path(report["source_osm_file"]).resolve()
+    assert acquisition["response_snapshot"]["sha256"] == hashlib.sha256(
+        response_path.read_bytes()
+    ).hexdigest()
+    query_path = manifest_path.parent / acquisition["query"]["path"]
+    assert query_path.is_file()
+    assert acquisition["query"]["sha256"] == hashlib.sha256(
+        query_path.read_bytes()
+    ).hexdigest()
+
+
+def test_build_osm_network_marks_only_default_transport_as_overpass_download(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    payload = b"""<osm version="0.6">
+  <node id="1" lat="51.0" lon="13.70"/>
+  <node id="2" lat="51.0" lon="13.71"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/>
+    <tag k="highway" v="primary"/>
+  </way>
+</osm>"""
+    overpass_report = {
+        "strategy": "tiled-retry-merge",
+        "tile_count": 1,
+        "retry_count": 0,
+    }
+
+    def fake_robust_download(*_args, **_kwargs):
+        return payload, overpass_report
+
+    def fake_runner(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        timeout_seconds: float = 60.0,
+    ):
+        output = Path(command[command.index("--output-file") + 1])
+        assert cwd is not None
+        (cwd / output).parent.mkdir(parents=True, exist_ok=True)
+        (cwd / output).write_text("<net/>", encoding="utf-8")
+        return CommandResult(
+            command=command,
+            cwd=str(cwd),
+            status="pass",
+            returncode=0,
+        )
+
+    monkeypatch.setattr(
+        "torii_sumo.core.osm_network.robust_download_osm",
+        fake_robust_download,
+    )
+    report = build_osm_network(
+        bbox="13.0,50.0,14.0,51.0",
+        output_dir=tmp_path / "build",
+        prefix="default-transport",
+        allowed_highways={"primary"},
+        command_runner=fake_runner,
+    )
+
+    manifest = json.loads(
+        Path(report["build_manifest_file"]).read_text(encoding="utf-8")
+    )
+    assert report["source_acquisition_mode"] == "overpass_download"
+    assert manifest["source_acquisition"]["mode"] == "overpass_download"
+    assert "source_acquisition_mode=overpass_download" in Path(
+        report["command_record"]
+    ).read_text(encoding="utf-8")
 
 
 def test_sumo_osm_build_network_reports_invalid_bbox_as_construction_invalid(tmp_path: Path) -> None:
@@ -2420,6 +2573,58 @@ def test_extract_largest_passenger_component_core_writes_keep_and_discard_record
     assert command[:2] == ["netconvert", "--sumo-net-file"]
     assert "--keep-edges.input-file" in command
     assert "--keep-edges.postload" in command
+
+
+def test_build_osm_network_forced_way_does_not_reenable_bbox_clipping(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "input.osm.xml"
+    source.write_text(
+        """<osm version="0.6">
+  <node id="1" lat="51.0000" lon="13.7000"/>
+  <node id="2" lat="51.0000" lon="14.1000"/>
+  <way id="10">
+    <nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/>
+  </way>
+</osm>""",
+        encoding="utf-8",
+    )
+
+    def fake_runner(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        timeout_seconds: float = 60.0,
+    ) -> CommandResult:
+        assert cwd is not None
+        output = cwd / command[command.index("--output-file") + 1]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text("<net/>", encoding="utf-8")
+        return CommandResult(
+            command=command,
+            cwd=str(cwd),
+            status="pass",
+            returncode=0,
+        )
+
+    report = build_osm_network(
+        bbox="13.6000,50.9800,13.9000,51.1500",
+        output_dir=tmp_path / "build",
+        source_osm_path=source,
+        allowed_highways={"primary"},
+        forced_way_ids={"10"},
+        clip_source_ways_to_bbox=False,
+        command_runner=fake_runner,
+    )
+
+    assert report["status"] == "pass"
+    assert report["forced_way_ids_count"] == 1
+    filtered = ET.fromstring(
+        gzip.decompress(Path(report["filtered_osm_file"]).read_bytes())
+    )
+    way = filtered.find("way")
+    assert way is not None
+    assert [node.attrib["ref"] for node in way.findall("nd")] == ["1", "2"]
 
 
 def test_extract_largest_passenger_component_core_uses_cwd_relative_paths(

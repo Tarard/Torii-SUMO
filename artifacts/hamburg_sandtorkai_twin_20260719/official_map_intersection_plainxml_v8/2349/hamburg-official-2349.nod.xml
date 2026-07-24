@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/nodes_file.xsd">
+    <node id="hh-map-2349-core" x="565820.593" y="5933162.890" type="traffic_light" tl="hh-map-2349" shape="565791.516,5933162.570 565792.011,5933159.361 565813.159,5933149.374 565824.058,5933151.095 565827.277,5933151.663 565848.213,5933167.355 565847.603,5933170.718 565840.993,5933172.817 565840.515,5933176.193 565780.587,5933167.758" />
+    <node id="hh-map-2349-a1-boundary" x="565891.208" y="5933181.766" type="priority" fringe="outer" />
+    <node id="hh-map-2349-a2-boundary" x="565835.077" y="5933029.017" type="priority" fringe="outer" />
+    <node id="hh-map-2349-a3-boundary" x="565692.985" y="5933151.098" type="priority" fringe="outer" />
+</nodes>

@@ -1,0 +1,52 @@
+<?xml version='1.0' encoding='utf-8'?>
+<routes>
+  <vType id="authorized_movement_passenger" vClass="passenger" accel="2.6" decel="4.5" sigma="0" length="5" maxSpeed="13.9" />
+  <vehicle id="authority_movement_000" type="authorized_movement_passenger" depart="0" departLane="0" arrivalLane="0">
+    <route edges="-152813965#0 395272650#0" />
+  </vehicle>
+  <vehicle id="authority_movement_001" type="authorized_movement_passenger" depart="8" departLane="0" arrivalLane="0">
+    <route edges="-152813965#0 -554713071 111747607#1" />
+  </vehicle>
+  <vehicle id="authority_movement_002" type="authorized_movement_passenger" depart="16" departLane="1" arrivalLane="0">
+    <route edges="-152813965#0 -554713071 111747607#1" />
+  </vehicle>
+  <vehicle id="authority_movement_003" type="authorized_movement_passenger" depart="24" departLane="2" arrivalLane="1">
+    <route edges="-152813965#0 60578532#0" />
+  </vehicle>
+  <vehicle id="authority_movement_004" type="authorized_movement_passenger" depart="32" departLane="0" arrivalLane="0">
+    <route edges="25444569#2 152813965#0" />
+  </vehicle>
+  <vehicle id="authority_movement_005" type="authorized_movement_passenger" depart="40" departLane="0" arrivalLane="0">
+    <route edges="25444569#2 395272650#0" />
+  </vehicle>
+  <vehicle id="authority_movement_006" type="authorized_movement_passenger" depart="48" departLane="1" arrivalLane="0">
+    <route edges="25444569#2 395272650#0" />
+  </vehicle>
+  <vehicle id="authority_movement_007" type="authorized_movement_passenger" depart="56" departLane="2" arrivalLane="0">
+    <route edges="25444569#2 -554713071 111747607#1" />
+  </vehicle>
+  <vehicle id="authority_movement_008" type="authorized_movement_passenger" depart="64" departLane="3" arrivalLane="1">
+    <route edges="25444569#2 -554713071 111747607#1" />
+  </vehicle>
+  <vehicle id="authority_movement_009" type="authorized_movement_passenger" depart="72" departLane="0" arrivalLane="0">
+    <route edges="83075275#2 -554713071 111747607#1" />
+  </vehicle>
+  <vehicle id="authority_movement_010" type="authorized_movement_passenger" depart="80" departLane="0" arrivalLane="0">
+    <route edges="83075275#2 60578532#0" />
+  </vehicle>
+  <vehicle id="authority_movement_011" type="authorized_movement_passenger" depart="88" departLane="1" arrivalLane="1">
+    <route edges="83075275#2 60578532#0" />
+  </vehicle>
+  <vehicle id="authority_movement_012" type="authorized_movement_passenger" depart="96" departLane="2" arrivalLane="0">
+    <route edges="83075275#2 152813965#0" />
+  </vehicle>
+  <vehicle id="authority_movement_013" type="authorized_movement_passenger" depart="104" departLane="0" arrivalLane="0">
+    <route edges="554706401#0 554713071 60578532#0" />
+  </vehicle>
+  <vehicle id="authority_movement_014" type="authorized_movement_passenger" depart="112" departLane="1" arrivalLane="0">
+    <route edges="554706401#0 554713071 152813965#0" />
+  </vehicle>
+  <vehicle id="authority_movement_015" type="authorized_movement_passenger" depart="120" departLane="2" arrivalLane="0">
+    <route edges="554706401#0 554713071 395272650#0" />
+  </vehicle>
+</routes>

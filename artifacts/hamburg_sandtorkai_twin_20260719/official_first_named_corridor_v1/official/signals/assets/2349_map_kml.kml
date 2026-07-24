@@ -1,0 +1,3760 @@
+<?xml version="1.0"?>
+<kml xmlns="http://earth.google.com/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <Style id="laneStyleIn">
+      <LineStyle>
+        <color>ff2257ff</color>
+        <width>6</width>
+        <gx:labelVisibility>1</gx:labelVisibility>
+      </LineStyle>
+      <BalloonStyle>
+        <bgColor>ffb6b6b6</bgColor>
+        <textColor>ff2257ff</textColor>
+      </BalloonStyle>
+    </Style>
+    <Style id="laneStyleOut">
+      <LineStyle>
+        <color>ff9f3f30</color>
+        <width>6</width>
+        <gx:labelVisibility>1</gx:labelVisibility>
+      </LineStyle>
+      <BalloonStyle>
+        <bgColor>ffb6b6b6</bgColor>
+        <textColor>ff9f3f30</textColor>
+      </BalloonStyle>
+    </Style>
+    <Style id="laneStyleInOut">
+      <LineStyle>
+        <color>ff2f2fd3</color>
+        <width>6</width>
+        <gx:labelVisibility>1</gx:labelVisibility>
+      </LineStyle>
+      <BalloonStyle>
+        <bgColor>ffb6b6b6</bgColor>
+        <textColor>ff2f2fd3</textColor>
+      </BalloonStyle>
+    </Style>
+    <Style id="crosswalkStyle">
+      <LineStyle>
+        <color>ff17a819</color>
+        <width>6</width>
+        <gx:labelVisibility>1</gx:labelVisibility>
+      </LineStyle>
+      <BalloonStyle>
+        <bgColor>ffb6b6b6</bgColor>
+        <textColor>ff17a819</textColor>
+      </BalloonStyle>
+    </Style>
+    <Style id="connectionStyle">
+      <LineStyle>
+        <color>ff3ce838</color>
+        <width>1</width>
+        <gx:labelVisibility>1</gx:labelVisibility>
+      </LineStyle>
+      <BalloonStyle>
+        <bgColor>ff616161</bgColor>
+        <textColor>ff3ce838</textColor>
+      </BalloonStyle>
+    </Style>
+    <Style id="driveLineStyle">
+      <LineStyle>
+        <color>ff2dc0fb</color>
+        <width>1</width>
+        <gx:labelVisibility>1</gx:labelVisibility>
+      </LineStyle>
+      <BalloonStyle>
+        <bgColor>ff616161</bgColor>
+        <textColor>ff2dc0fb</textColor>
+      </BalloonStyle>
+    </Style>
+    <Style id="basePointStyle">
+      <LabelStyle>
+        <color>ff4ac38b</color>
+      </LabelStyle>
+      <IconStyle>
+        <color>ff4ac38b</color>
+      </IconStyle>
+    </Style>
+    <Style id="pointAStyle">
+      <LabelStyle>
+        <color>ff9cad00</color>
+      </LabelStyle>
+      <IconStyle>
+        <color>ff9cad00</color>
+      </IconStyle>
+    </Style>
+    <Style id="pointBStyle">
+      <LabelStyle>
+        <color>ff6b7900</color>
+      </LabelStyle>
+      <IconStyle>
+        <color>ff6b7900</color>
+      </IconStyle>
+    </Style>
+    <Folder>
+      <name>MAP</name>
+      <Folder>
+        <name>Base Points</name>
+        <Placemark>
+          <name>Base Point</name>
+          <styleUrl>#basePointStyle</styleUrl>
+          <visibility>1</visibility>
+          <Point>
+            <coordinates>9.99432335210274,53.5432600935683,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Secondary Point</name>
+          <visibility>1</visibility>
+          <Point>
+            <coordinates>9.99262850744089,53.5432446897396,0.0</coordinates>
+          </Point>
+        </Placemark>
+      </Folder>
+      <Folder>
+        <name>Lanes</name>
+        <Placemark>
+          <name>Lane 1</name>
+          <description>Lane with id 1.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleIn</styleUrl>
+          <LineString>
+            <coordinates>9.9936055,53.5433842,0.0
+9.9942311,53.5434408,0.0
+9.9945677,53.5434869,0.0
+9.9946944,53.543508,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 12</name>
+          <description>Lane with id 12.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleOut</styleUrl>
+          <LineString>
+            <coordinates>9.9926997,53.5433192,0.0
+9.9925564,53.5433105,0.0
+9.9923121,53.5432946,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 2</name>
+          <description>Lane with id 2.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleIn</styleUrl>
+          <LineString>
+            <coordinates>9.9936114,53.5433544,0.0
+9.9942682,53.543418,0.0
+9.9945523,53.5434547,0.0
+9.9947089,53.5434785,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 11</name>
+          <description>Lane with id 11.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleOut</styleUrl>
+          <LineString>
+            <coordinates>9.9927054,53.5432861,0.0
+9.9925145,53.5432735,0.0
+9.9923179,53.5432599,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 3</name>
+          <description>Lane with id 3.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleIn</styleUrl>
+          <LineString>
+            <coordinates>9.9936179,53.543324,0.0
+9.994039,53.5433624,0.0
+9.9946038,53.5434311,0.0
+9.9946361,53.543435,0.0
+9.9946768,53.5434737,0.0
+9.9947088,53.5434786,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 8</name>
+          <description>Lane with id 8.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleOut</styleUrl>
+          <LineString>
+            <coordinates>9.993193,53.5431168,0.0
+9.9932012,53.5430671,0.0
+9.993216,53.5429696,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 9</name>
+          <description>Lane with id 9.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleIn</styleUrl>
+          <LineString>
+            <coordinates>9.9928692,53.5432381,0.0
+9.9927859,53.5432326,0.0
+9.9909082,53.5431041,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 4</name>
+          <description>Lane with id 4.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleOut</styleUrl>
+          <LineString>
+            <coordinates>9.9937172,53.5433043,0.0
+9.9938693,53.5433166,0.0
+9.9940387,53.543332,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 10</name>
+          <description>Lane with id 10.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleIn</styleUrl>
+          <LineString>
+            <coordinates>9.992876,53.5432092,0.0
+9.9927927,53.5432037,0.0
+9.9909142,53.543078,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 5</name>
+          <description>Lane with id 5.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleOut</styleUrl>
+          <LineString>
+            <coordinates>9.9937257,53.543274,0.0
+9.9938182,53.5432821,0.0
+9.9940535,53.5433034,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 7</name>
+          <description>Lane with id 7.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleIn</styleUrl>
+          <LineString>
+            <coordinates>9.9934065,53.5431356,0.0
+9.9934533,53.542921,0.0
+9.9934831,53.5427447,0.0
+9.9934922,53.5426913,0.0
+9.9934684,53.5425835,0.0
+9.9934792,53.5425303,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Lane 6</name>
+          <description>Lane with id 6.</description>
+          <visibility>1</visibility>
+          <styleUrl>#laneStyleIn</styleUrl>
+          <LineString>
+            <coordinates>9.9933578,53.5431309,0.0
+9.9934792,53.5425303,0.0
+9.9935207,53.5422577,0.0
+9.9937999,53.5405972,0.0</coordinates>
+          </LineString>
+        </Placemark>
+      </Folder>
+      <Folder>
+        <name>Crosswalks</name>
+        <Placemark>
+          <name>Crosswalk 13</name>
+          <description>Crosswalk with id 13.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9935457,53.5433933,0.0
+9.9935442,53.5434022,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 14</name>
+          <description>Crosswalk with id 14.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9935711,53.5432437,0.0
+9.9935726,53.5432348,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 15</name>
+          <description>Crosswalk with id 15.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929009,53.5433525,0.0
+9.9928992,53.5433614,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 16</name>
+          <description>Crosswalk with id 16.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929141,53.5432836,0.0
+9.9929157,53.5432747,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 17</name>
+          <description>Crosswalk with id 17.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933263,53.5431572,0.0
+9.9933113,53.5431562,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 18</name>
+          <description>Crosswalk with id 18.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934287,53.5431639,0.0
+9.9934437,53.5431649,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 19</name>
+          <description>Crosswalk with id 19.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9931303,53.5431465,0.0
+9.9931151,53.5431462,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 20</name>
+          <description>Crosswalk with id 20.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9932324,53.5431485,0.0
+9.9932475,53.5431487,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 21</name>
+          <description>Crosswalk with id 21.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9931065,53.5431699,0.0
+9.9930913,53.5431696,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 22</name>
+          <description>Crosswalk with id 22.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9932298,53.5431723,0.0
+9.9932449,53.5431726,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 23</name>
+          <description>Crosswalk with id 23.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933213,53.5431768,0.0
+9.9933063,53.5431755,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 24</name>
+          <description>Crosswalk with id 24.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934371,53.5431875,0.0
+9.9934521,53.5431889,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 25</name>
+          <description>Crosswalk with id 25.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9932313,53.5431487,0.0
+9.9932465,53.5431493,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 26</name>
+          <description>Crosswalk with id 26.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9931309,53.5431451,0.0
+9.9931157,53.5431446,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 27</name>
+          <description>Crosswalk with id 27.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934293,53.5431615,0.0
+9.9934443,53.5431626,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 28</name>
+          <description>Crosswalk with id 28.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933275,53.543154,0.0
+9.9933125,53.5431529,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 29</name>
+          <description>Crosswalk with id 29.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929127,53.543284,0.0
+9.9929144,53.5432751,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 30</name>
+          <description>Crosswalk with id 30.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9928994,53.543352,0.0
+9.9928977,53.5433609,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 31</name>
+          <description>Crosswalk with id 31.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929194,53.5432576,0.0
+9.9929177,53.5432665,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 32</name>
+          <description>Crosswalk with id 32.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929313,53.5431953,0.0
+9.992933,53.5431864,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 33</name>
+          <description>Crosswalk with id 33.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929307,53.5431967,0.0
+9.9929321,53.5431877,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 34</name>
+          <description>Crosswalk with id 34.</description>
+          <visibility>1</visibility>
+          <styleUrl>#crosswalkStyle</styleUrl>
+          <LineString>
+            <coordinates>9.992921,53.5432598,0.0
+9.9929197,53.5432688,0.0</coordinates>
+          </LineString>
+        </Placemark>
+      </Folder>
+      <Folder>
+        <name>Connections</name>
+        <visibility>0</visibility>
+        <Placemark>
+          <name>Con. 1: 1 → 12</name>
+          <description>Connection 1 from lane 1 to lane 12.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9936055,53.5433842,0.0
+9.9926997,53.5433192,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 2: 2 → 11</name>
+          <description>Connection 2 from lane 2 to lane 11.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9936114,53.5433544,0.0
+9.9927054,53.5432861,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 3: 3 → 8</name>
+          <description>Connection 3 from lane 3 to lane 8.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9936179,53.543324,0.0
+9.993193,53.5431168,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 4: 9 → 4</name>
+          <description>Connection 4 from lane 9 to lane 4.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9928692,53.5432381,0.0
+9.9937172,53.5433043,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 5: 10 → 5</name>
+          <description>Connection 5 from lane 10 to lane 5.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.992876,53.5432092,0.0
+9.9937257,53.543274,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 6: 10 → 8</name>
+          <description>Connection 6 from lane 10 to lane 8.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.992876,53.5432092,0.0
+9.993193,53.5431168,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 7: 7 → 5</name>
+          <description>Connection 7 from lane 7 to lane 5.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934065,53.5431356,0.0
+9.9937257,53.543274,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 8: 7 → 4</name>
+          <description>Connection 8 from lane 7 to lane 4.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934065,53.5431356,0.0
+9.9937172,53.5433043,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 9: 6 → 11</name>
+          <description>Connection 9 from lane 6 to lane 11.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933578,53.5431309,0.0
+9.9927054,53.5432861,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 10: 13 → 14</name>
+          <description>Connection 10 from lane 13 to lane 14.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9935457,53.5433933,0.0
+9.9935711,53.5432437,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 11: 14 → 13</name>
+          <description>Connection 11 from lane 14 to lane 13.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9935711,53.5432437,0.0
+9.9935457,53.5433933,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 12: 15 → 16</name>
+          <description>Connection 12 from lane 15 to lane 16.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929009,53.5433525,0.0
+9.9929141,53.5432836,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 13: 17 → 18</name>
+          <description>Connection 13 from lane 17 to lane 18.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933263,53.5431572,0.0
+9.9934287,53.5431639,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 14: 19 → 20</name>
+          <description>Connection 14 from lane 19 to lane 20.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9931303,53.5431465,0.0
+9.9932324,53.5431485,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 15: 21 → 22</name>
+          <description>Connection 15 from lane 21 to lane 22.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9931065,53.5431699,0.0
+9.9932298,53.5431723,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 16: 23 → 24</name>
+          <description>Connection 16 from lane 23 to lane 24.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933213,53.5431768,0.0
+9.9934371,53.5431875,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 17: 25 → 26</name>
+          <description>Connection 17 from lane 25 to lane 26.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9932313,53.5431487,0.0
+9.9931309,53.5431451,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 18: 27 → 28</name>
+          <description>Connection 18 from lane 27 to lane 28.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934293,53.5431615,0.0
+9.9933275,53.543154,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 19: 29 → 30</name>
+          <description>Connection 19 from lane 29 to lane 30.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929127,53.543284,0.0
+9.9928994,53.543352,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 20: 31 → 32</name>
+          <description>Connection 20 from lane 31 to lane 32.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929194,53.5432576,0.0
+9.9929313,53.5431953,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>Con. 21: 33 → 34</name>
+          <description>Connection 21 from lane 33 to lane 34.</description>
+          <visibility>0</visibility>
+          <styleUrl>#connectionStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929307,53.5431967,0.0
+9.992921,53.5432598,0.0</coordinates>
+          </LineString>
+        </Placemark>
+      </Folder>
+      <Folder>
+        <name>Drive lines</name>
+        <visibility>1</visibility>
+        <Placemark>
+          <name>DrvLn. 1: 1 → 12</name>
+          <description>Drive line 1 from lane 1 to lane 12.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9942311,53.5434406,0.0
+9.9932759,53.5433542,0.0
+9.9932759,53.5433542,0.0
+9.9925582,53.5433105,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 2: 2 → 11</name>
+          <description>Drive line 2 from lane 2 to lane 11.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9942682,53.5434179,0.0
+9.993341,53.543328,0.0
+9.993341,53.543328,0.0
+9.9925164,53.5432735,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 3: 3 → 8</name>
+          <description>Drive line 3 from lane 3 to lane 8.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9940392,53.5433623,0.0
+9.9931671,53.5432828,0.0
+9.9931671,53.5432828,0.0
+9.9932023,53.5430673,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 4: 9 → 4</name>
+          <description>Drive line 4 from lane 9 to lane 4.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9927876,53.5432326,0.0
+9.9930376,53.5432491,0.0
+9.9930376,53.5432491,0.0
+9.9938698,53.5433166,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 5: 10 → 5</name>
+          <description>Drive line 5 from lane 10 to lane 5.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9927944,53.5432038,0.0
+9.993317,53.5432383,0.0
+9.993317,53.5432383,0.0
+9.9938187,53.5432821,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 6: 10 → 8</name>
+          <description>Drive line 6 from lane 10 to lane 8.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9927944,53.5432038,0.0
+9.9931759,53.543229,0.0
+9.9931759,53.543229,0.0
+9.9932023,53.5430673,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 7: 7 → 5</name>
+          <description>Drive line 7 from lane 7 to lane 5.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934542,53.5429213,0.0
+9.9933838,53.5432441,0.0
+9.9933838,53.5432441,0.0
+9.9938187,53.5432821,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 8: 7 → 4</name>
+          <description>Drive line 8 from lane 7 to lane 4.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934542,53.5429213,0.0
+9.9933768,53.5432766,0.0
+9.9933768,53.5432766,0.0
+9.9938698,53.5433166,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. 9: 6 → 11</name>
+          <description>Drive line 9 from lane 6 to lane 11.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934801,53.542531,0.0
+9.9933193,53.5433266,0.0
+9.9933193,53.5433266,0.0
+9.9925164,53.5432735,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 10: 13 → 14</name>
+          <description>Drive line A 10 from lane 13 to lane 14.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9935464,53.5433932,0.0
+9.9935719,53.5432437,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. B 11: 14 → 13</name>
+          <description>Drive line B 11 from lane 14 to lane 13.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9935719,53.5432437,0.0
+9.9935464,53.5433932,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 12: 15 → 16</name>
+          <description>Drive line A 12 from lane 15 to lane 16.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929024,53.5433524,0.0
+9.9929156,53.5432836,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 13: 17 → 18</name>
+          <description>Drive line A 13 from lane 17 to lane 18.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933273,53.5431573,0.0
+9.9934297,53.543164,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 14: 19 → 20</name>
+          <description>Drive line A 14 from lane 19 to lane 20.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9931315,53.5431466,0.0
+9.9932335,53.5431486,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 15: 21 → 22</name>
+          <description>Drive line A 15 from lane 21 to lane 22.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9931078,53.54317,0.0
+9.9932309,53.5431724,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 16: 23 → 24</name>
+          <description>Drive line A 16 from lane 23 to lane 24.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9933224,53.5431769,0.0
+9.993438,53.5431876,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 17: 25 → 26</name>
+          <description>Drive line A 17 from lane 25 to lane 26.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9932324,53.5431488,0.0
+9.9931322,53.5431452,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 18: 27 → 28</name>
+          <description>Drive line A 18 from lane 27 to lane 28.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9934303,53.5431616,0.0
+9.9933286,53.5431541,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 19: 29 → 30</name>
+          <description>Drive line A 19 from lane 29 to lane 30.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929141,53.543284,0.0
+9.9929009,53.5433519,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 20: 31 → 32</name>
+          <description>Drive line A 20 from lane 31 to lane 32.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929209,53.5432575,0.0
+9.9929328,53.5431954,0.0</coordinates>
+          </LineString>
+        </Placemark>
+        <Placemark>
+          <name>DrvLn. A 21: 33 → 34</name>
+          <description>Drive line A 21 from lane 33 to lane 34.</description>
+          <visibility>1</visibility>
+          <styleUrl>#driveLineStyle</styleUrl>
+          <LineString>
+            <coordinates>9.9929321,53.5431968,0.0
+9.9929225,53.5432598,0.0</coordinates>
+          </LineString>
+        </Placemark>
+      </Folder>
+      <Folder>
+        <name>Points</name>
+        <visibility>0</visibility>
+        <Placemark>
+          <name>Lane 1 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9936055,53.5433842,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 1 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9946944,53.543508,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 12 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9926997,53.5433192,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 12 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9923121,53.5432946,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 2 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9936114,53.5433544,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 2 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9947089,53.5434785,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 11 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9927054,53.5432861,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 11 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9923179,53.5432599,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 3 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9936179,53.543324,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 3 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9947088,53.5434786,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 8 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.993193,53.5431168,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 8 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.993216,53.5429696,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 9 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9928692,53.5432381,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 9 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9909082,53.5431041,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 4 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9937172,53.5433043,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 4 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9940387,53.543332,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 10 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.992876,53.5432092,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 10 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9909142,53.543078,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 5 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9937257,53.543274,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 5 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9940535,53.5433034,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 7 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934065,53.5431356,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 7 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934792,53.5425303,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 6 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9933578,53.5431309,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 6 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9937999,53.5405972,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 13 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9935457,53.5433933,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 13 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9935442,53.5434022,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 14 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9935711,53.5432437,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 14 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9935726,53.5432348,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 15 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929009,53.5433525,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 15 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9928992,53.5433614,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 16 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929141,53.5432836,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 16 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929157,53.5432747,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 17 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9933263,53.5431572,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 17 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9933113,53.5431562,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 18 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934287,53.5431639,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 18 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934437,53.5431649,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 19 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9931303,53.5431465,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 19 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9931151,53.5431462,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 20 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9932324,53.5431485,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 20 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9932475,53.5431487,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 21 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9931065,53.5431699,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 21 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9930913,53.5431696,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 22 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9932298,53.5431723,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 22 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9932449,53.5431726,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 23 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9933213,53.5431768,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 23 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9933063,53.5431755,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 24 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934371,53.5431875,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 24 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934521,53.5431889,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 25 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9932313,53.5431487,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 25 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9932465,53.5431493,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 26 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9931309,53.5431451,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 26 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9931157,53.5431446,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 27 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934293,53.5431615,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 27 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9934443,53.5431626,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 28 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9933275,53.543154,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 28 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9933125,53.5431529,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 29 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929127,53.543284,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 29 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929144,53.5432751,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 30 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9928994,53.543352,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 30 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9928977,53.5433609,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 31 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929194,53.5432576,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 31 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929177,53.5432665,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 32 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929313,53.5431953,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 32 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.992933,53.5431864,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 33 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929307,53.5431967,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 33 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929321,53.5431877,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 34 B</name>
+          <styleUrl>#pointBStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.992921,53.5432598,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Crosswalk 34 A</name>
+          <styleUrl>#pointAStyle</styleUrl>
+          <visibility>0</visibility>
+          <Point>
+            <coordinates>9.9929197,53.5432688,0.0</coordinates>
+          </Point>
+        </Placemark>
+      </Folder>
+      <Folder>
+        <name>Merge points</name>
+        <visibility>0</visibility>
+        <Placemark>
+          <name>Lane 1 Merge</name>
+          <visibility>1</visibility>
+          <Point>
+            <coordinates>9.9946944,53.543508,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 2 Merge</name>
+          <visibility>1</visibility>
+          <Point>
+            <coordinates>9.9947089,53.5434785,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 3 Merge</name>
+          <visibility>1</visibility>
+          <Point>
+            <coordinates>9.9947088,53.5434786,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 7 Merge</name>
+          <visibility>1</visibility>
+          <Point>
+            <coordinates>9.9934792,53.5425303,0.0</coordinates>
+          </Point>
+        </Placemark>
+        <Placemark>
+          <name>Lane 6 Merge</name>
+          <visibility>1</visibility>
+          <Point>
+            <coordinates>9.9934792,53.5425303,0.0</coordinates>
+          </Point>
+        </Placemark>
+      </Folder>
+    </Folder>
+    <Folder>
+      <name>LISA</name>
+      <visibility>0</visibility>
+      <Placemark>
+        <name>LISA object 70 (Shape)</name>
+        <description>Shape of LISA object with id 70.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9947005,53.5434936,0.0 9.9945735,53.5434724,0.0 9.9945735,53.5434724,0.0 9.9942357,53.5434262,0.0 9.9942357,53.5434262,0.0 9.9936099,53.5433696,0.0 9.9936025,53.5433985,0.0 9.9942265,53.5434549,0.0 9.9942265,53.5434549,0.0 9.9945614,53.5435007,0.0 9.9945614,53.5435007,0.0 9.9946873,53.5435217,0.0 9.9947005,53.5434936,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 70 (Stop line)</name>
+        <description>Stop line of LISA object with id 70.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9936099,53.5433696,0.0 9.9936024,53.543369,0.0 9.9935951,53.5433978,0.0 9.9936025,53.5433985,0.0 9.9936099,53.5433696,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 70 (Border)</name>
+        <description>Border of LISA object with id 70.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9947005,53.5434936,0.0 9.9945735,53.5434724,0.0 9.9945735,53.5434724,0.0 9.9942357,53.5434262,0.0 9.9942357,53.5434262,0.0 9.9936099,53.5433696,0.0 9.9936025,53.5433985,0.0 9.9942265,53.5434549,0.0 9.9942265,53.5434549,0.0 9.9945614,53.5435007,0.0 9.9945614,53.5435007,0.0 9.9946873,53.5435217,0.0 9.9947005,53.5434936,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 70 (Center)</name>
+        <description>Center line of LISA object with id 70.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9946939,53.5435077,0.0 9.9945674,53.5434866,0.0 9.9945674,53.5434866,0.0 9.9942311,53.5434406,0.0 9.9942311,53.5434406,0.0 9.9936062,53.5433841,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 82 (Shape)</name>
+        <description>Shape of LISA object with id 82.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>80c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9923116,53.5433091,0.0 9.9925555,53.543325,0.0 9.9925557,53.543325,0.0 9.9926989,53.5433337,0.0 9.9927039,53.5433047,0.0 9.9925607,53.543296,0.0 9.9925609,53.543296,0.0 9.9923169,53.5432801,0.0 9.9923116,53.5433091,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 82 (Stop line)</name>
+        <description>Stop line of LISA object with id 82.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff808080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 82 (Border)</name>
+        <description>Border of LISA object with id 82.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9923116,53.5433091,0.0 9.9925555,53.543325,0.0 9.9925557,53.543325,0.0 9.9926989,53.5433337,0.0 9.9927039,53.5433047,0.0 9.9925607,53.543296,0.0 9.9925609,53.543296,0.0 9.9923169,53.5432801,0.0 9.9923116,53.5433091,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 82 (Center)</name>
+        <description>Center line of LISA object with id 82.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9923143,53.5432946,0.0 9.9925582,53.5433105,0.0 9.9925582,53.5433105,0.0 9.9927014,53.5433192,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 111 (Shape)</name>
+        <description>Shape of LISA object with id 111.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64000080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9942334,53.5434317,0.0 9.9932778,53.5433453,0.0 9.9932778,53.5433453,0.0 9.9925597,53.5433016,0.0 9.9925567,53.5433194,0.0 9.993274,53.5433631,0.0 9.993274,53.5433631,0.0 9.9942289,53.5434494,0.0 9.9942334,53.5434317,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 111 (Stop line)</name>
+        <description>Stop line of LISA object with id 111.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 111 (Border)</name>
+        <description>Border of LISA object with id 111.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9942334,53.5434317,0.0 9.9932778,53.5433453,0.0 9.9932778,53.5433453,0.0 9.9925597,53.5433016,0.0 9.9925567,53.5433194,0.0 9.993274,53.5433631,0.0 9.993274,53.5433631,0.0 9.9942289,53.5434494,0.0 9.9942334,53.5434317,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 111 (Center)</name>
+        <description>Center line of LISA object with id 111.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9942311,53.5434406,0.0 9.9932759,53.5433542,0.0 9.9932759,53.5433542,0.0 9.9925582,53.5433105,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 71 (Shape)</name>
+        <description>Shape of LISA object with id 71.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9947144,53.5434642,0.0 9.9945575,53.5434404,0.0 9.9945575,53.5434404,0.0 9.9942727,53.5434035,0.0 9.9942727,53.5434035,0.0 9.9936161,53.5433399,0.0 9.9936082,53.5433687,0.0 9.9942636,53.5434322,0.0 9.9942636,53.5434322,0.0 9.9945462,53.5434688,0.0 9.9945462,53.5434688,0.0 9.9947023,53.5434925,0.0 9.9947144,53.5434642,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 71 (Stop line)</name>
+        <description>Stop line of LISA object with id 71.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9936161,53.5433399,0.0 9.9936086,53.5433391,0.0 9.9936007,53.543368,0.0 9.9936082,53.5433687,0.0 9.9936161,53.5433399,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 71 (Border)</name>
+        <description>Border of LISA object with id 71.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9947144,53.5434642,0.0 9.9945575,53.5434404,0.0 9.9945575,53.5434404,0.0 9.9942727,53.5434035,0.0 9.9942727,53.5434035,0.0 9.9936161,53.5433399,0.0 9.9936082,53.5433687,0.0 9.9942636,53.5434322,0.0 9.9942636,53.5434322,0.0 9.9945462,53.5434688,0.0 9.9945462,53.5434688,0.0 9.9947023,53.5434925,0.0 9.9947144,53.5434642,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 71 (Center)</name>
+        <description>Center line of LISA object with id 71.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9947084,53.5434784,0.0 9.9945519,53.5434546,0.0 9.9945519,53.5434546,0.0 9.9942682,53.5434179,0.0 9.9942682,53.5434179,0.0 9.9936121,53.5433543,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 81 (Shape)</name>
+        <description>Shape of LISA object with id 81.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>80c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9923171,53.5432744,0.0 9.9925136,53.543288,0.0 9.9925137,53.543288,0.0 9.9927044,53.5433006,0.0 9.9927098,53.5432716,0.0 9.9925191,53.543259,0.0 9.9925192,53.543259,0.0 9.9923228,53.5432454,0.0 9.9923171,53.5432744,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 81 (Stop line)</name>
+        <description>Stop line of LISA object with id 81.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff808080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 81 (Border)</name>
+        <description>Border of LISA object with id 81.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9923171,53.5432744,0.0 9.9925136,53.543288,0.0 9.9925137,53.543288,0.0 9.9927044,53.5433006,0.0 9.9927098,53.5432716,0.0 9.9925191,53.543259,0.0 9.9925192,53.543259,0.0 9.9923228,53.5432454,0.0 9.9923171,53.5432744,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 81 (Center)</name>
+        <description>Center line of LISA object with id 81.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9923199,53.5432599,0.0 9.9925164,53.5432735,0.0 9.9925164,53.5432735,0.0 9.9927071,53.5432861,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 112 (Shape)</name>
+        <description>Shape of LISA object with id 112.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9942706,53.543409,0.0 9.993343,53.5433191,0.0 9.993343,53.5433191,0.0 9.9925181,53.5432646,0.0 9.9925147,53.5432824,0.0 9.9933389,53.5433369,0.0 9.9933389,53.5433369,0.0 9.9942657,53.5434267,0.0 9.9942706,53.543409,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 112 (Stop line)</name>
+        <description>Stop line of LISA object with id 112.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 112 (Border)</name>
+        <description>Border of LISA object with id 112.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9942706,53.543409,0.0 9.993343,53.5433191,0.0 9.993343,53.5433191,0.0 9.9925181,53.5432646,0.0 9.9925147,53.5432824,0.0 9.9933389,53.5433369,0.0 9.9933389,53.5433369,0.0 9.9942657,53.5434267,0.0 9.9942706,53.543409,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 112 (Center)</name>
+        <description>Center line of LISA object with id 112.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9942682,53.5434179,0.0 9.993341,53.543328,0.0 9.993341,53.543328,0.0 9.9925164,53.5432735,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 72 (Shape)</name>
+        <description>Shape of LISA object with id 72.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9946084,53.5434166,0.0 9.9940436,53.5433479,0.0 9.9940436,53.5433479,0.0 9.9936224,53.5433095,0.0 9.993615,53.5433384,0.0 9.9940349,53.5433766,0.0 9.9940349,53.5433766,0.0 9.9945986,53.5434452,0.0 9.9946084,53.5434166,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 72 (Stop line)</name>
+        <description>Stop line of LISA object with id 72.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9936224,53.5433095,0.0 9.993615,53.5433088,0.0 9.9936076,53.5433377,0.0 9.993615,53.5433384,0.0 9.9936224,53.5433095,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 72 (Border)</name>
+        <description>Border of LISA object with id 72.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9946084,53.5434166,0.0 9.9940436,53.5433479,0.0 9.9940436,53.5433479,0.0 9.9936224,53.5433095,0.0 9.993615,53.5433384,0.0 9.9940349,53.5433766,0.0 9.9940349,53.5433766,0.0 9.9945986,53.5434452,0.0 9.9946084,53.5434166,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 72 (Center)</name>
+        <description>Center line of LISA object with id 72.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9946035,53.5434309,0.0 9.9940392,53.5433623,0.0 9.9940392,53.5433623,0.0 9.9936187,53.5433239,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 78 (Shape)</name>
+        <description>Shape of LISA object with id 78.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>80c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9931927,53.5429685,0.0 9.9931779,53.543066,0.0 9.9931779,53.5430659,0.0 9.9931698,53.5431155,0.0 9.9932186,53.5431183,0.0 9.9932267,53.5430687,0.0 9.9932267,53.5430686,0.0 9.9932415,53.5429712,0.0 9.9931927,53.5429685,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 78 (Stop line)</name>
+        <description>Stop line of LISA object with id 78.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff808080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 78 (Border)</name>
+        <description>Border of LISA object with id 78.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9931927,53.5429685,0.0 9.9931779,53.543066,0.0 9.9931779,53.5430659,0.0 9.9931698,53.5431155,0.0 9.9932186,53.5431183,0.0 9.9932267,53.5430687,0.0 9.9932267,53.5430686,0.0 9.9932415,53.5429712,0.0 9.9931927,53.5429685,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 78 (Center)</name>
+        <description>Center line of LISA object with id 78.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9932171,53.5429698,0.0 9.9932023,53.5430673,0.0 9.9932023,53.5430673,0.0 9.9931942,53.5431169,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 113 (Shape)</name>
+        <description>Shape of LISA object with id 113.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9940415,53.5433534,0.0 9.9931835,53.5432752,0.0 9.9931835,53.5432752,0.0 9.9932173,53.5430682,0.0 9.9931873,53.5430664,0.0 9.9931507,53.5432904,0.0 9.9931507,53.5432904,0.0 9.994037,53.5433712,0.0 9.9940415,53.5433534,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 113 (Stop line)</name>
+        <description>Stop line of LISA object with id 113.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 113 (Border)</name>
+        <description>Border of LISA object with id 113.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9940415,53.5433534,0.0 9.9931835,53.5432752,0.0 9.9931835,53.5432752,0.0 9.9932173,53.5430682,0.0 9.9931873,53.5430664,0.0 9.9931507,53.5432904,0.0 9.9931507,53.5432904,0.0 9.994037,53.5433712,0.0 9.9940415,53.5433534,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 113 (Center)</name>
+        <description>Center line of LISA object with id 113.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9940392,53.5433623,0.0 9.9931671,53.5432828,0.0 9.9931671,53.5432828,0.0 9.9932023,53.5430673,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 79 (Shape)</name>
+        <description>Shape of LISA object with id 79.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.990909,53.5431187,0.0 9.9927848,53.5432471,0.0 9.9927849,53.5432472,0.0 9.992868,53.5432526,0.0 9.9928734,53.5432236,0.0 9.9927902,53.5432181,0.0 9.9927903,53.5432181,0.0 9.9909146,53.5430897,0.0 9.990909,53.5431187,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 79 (Stop line)</name>
+        <description>Stop line of LISA object with id 79.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.992868,53.5432526,0.0 9.9928755,53.5432531,0.0 9.9928809,53.5432241,0.0 9.9928734,53.5432236,0.0 9.992868,53.5432526,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 79 (Border)</name>
+        <description>Border of LISA object with id 79.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.990909,53.5431187,0.0 9.9927848,53.5432471,0.0 9.9927849,53.5432472,0.0 9.992868,53.5432526,0.0 9.9928734,53.5432236,0.0 9.9927902,53.5432181,0.0 9.9927903,53.5432181,0.0 9.9909146,53.5430897,0.0 9.990909,53.5431187,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 79 (Center)</name>
+        <description>Center line of LISA object with id 79.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9909118,53.5431042,0.0 9.9927876,53.5432326,0.0 9.9927876,53.5432326,0.0 9.9928707,53.5432381,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 73 (Shape)</name>
+        <description>Shape of LISA object with id 73.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>80c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9940427,53.5433175,0.0 9.9938733,53.5433021,0.0 9.9938733,53.5433021,0.0 9.9937212,53.5432898,0.0 9.9937146,53.5433187,0.0 9.9938663,53.543331,0.0 9.9938663,53.543331,0.0 9.9940353,53.5433464,0.0 9.9940427,53.5433175,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 73 (Stop line)</name>
+        <description>Stop line of LISA object with id 73.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff808080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 73 (Border)</name>
+        <description>Border of LISA object with id 73.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9940427,53.5433175,0.0 9.9938733,53.5433021,0.0 9.9938733,53.5433021,0.0 9.9937212,53.5432898,0.0 9.9937146,53.5433187,0.0 9.9938663,53.543331,0.0 9.9938663,53.543331,0.0 9.9940353,53.5433464,0.0 9.9940427,53.5433175,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 73 (Center)</name>
+        <description>Center line of LISA object with id 73.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.994039,53.5433319,0.0 9.9938698,53.5433166,0.0 9.9938698,53.5433166,0.0 9.9937179,53.5433042,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 114 (Shape)</name>
+        <description>Shape of LISA object with id 114.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9927859,53.5432416,0.0 9.9930357,53.543258,0.0 9.9930357,53.543258,0.0 9.9938677,53.5433255,0.0 9.9938718,53.5433077,0.0 9.9930394,53.5432402,0.0 9.9930394,53.5432402,0.0 9.9927892,53.5432237,0.0 9.9927859,53.5432416,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 114 (Stop line)</name>
+        <description>Stop line of LISA object with id 114.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 114 (Border)</name>
+        <description>Border of LISA object with id 114.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9927859,53.5432416,0.0 9.9930357,53.543258,0.0 9.9930357,53.543258,0.0 9.9938677,53.5433255,0.0 9.9938718,53.5433077,0.0 9.9930394,53.5432402,0.0 9.9930394,53.5432402,0.0 9.9927892,53.5432237,0.0 9.9927859,53.5432416,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 114 (Center)</name>
+        <description>Center line of LISA object with id 114.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9927876,53.5432326,0.0 9.9930376,53.5432491,0.0 9.9930376,53.5432491,0.0 9.9938698,53.5433166,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 80 (Shape)</name>
+        <description>Shape of LISA object with id 80.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9909151,53.5430927,0.0 9.9927918,53.5432183,0.0 9.9927917,53.5432183,0.0 9.9928749,53.5432238,0.0 9.9928803,53.5431948,0.0 9.9927971,53.5431893,0.0 9.9927973,53.5431893,0.0 9.9909206,53.5430637,0.0 9.9909151,53.5430927,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 80 (Stop line)</name>
+        <description>Stop line of LISA object with id 80.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9928749,53.5432238,0.0 9.9928824,53.5432243,0.0 9.9928878,53.5431953,0.0 9.9928803,53.5431948,0.0 9.9928749,53.5432238,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 80 (Border)</name>
+        <description>Border of LISA object with id 80.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9909151,53.5430927,0.0 9.9927918,53.5432183,0.0 9.9927917,53.5432183,0.0 9.9928749,53.5432238,0.0 9.9928803,53.5431948,0.0 9.9927971,53.5431893,0.0 9.9927973,53.5431893,0.0 9.9909206,53.5430637,0.0 9.9909151,53.5430927,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 80 (Center)</name>
+        <description>Center line of LISA object with id 80.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9909178,53.5430782,0.0 9.9927945,53.5432038,0.0 9.9927944,53.5432038,0.0 9.9928776,53.5432093,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 74 (Shape)</name>
+        <description>Shape of LISA object with id 74.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>80c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9940573,53.5432889,0.0 9.9938224,53.5432676,0.0 9.9938222,53.5432676,0.0 9.9937298,53.5432595,0.0 9.9937227,53.5432884,0.0 9.9938151,53.5432965,0.0 9.993815,53.5432965,0.0 9.99405,53.5433178,0.0 9.9940573,53.5432889,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 74 (Stop line)</name>
+        <description>Stop line of LISA object with id 74.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff808080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 74 (Border)</name>
+        <description>Border of LISA object with id 74.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9940573,53.5432889,0.0 9.9938224,53.5432676,0.0 9.9938222,53.5432676,0.0 9.9937298,53.5432595,0.0 9.9937227,53.5432884,0.0 9.9938151,53.5432965,0.0 9.993815,53.5432965,0.0 9.99405,53.5433178,0.0 9.9940573,53.5432889,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 74 (Center)</name>
+        <description>Center line of LISA object with id 74.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff808080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9940537,53.5433033,0.0 9.9938187,53.5432821,0.0 9.9938187,53.5432821,0.0 9.9937262,53.543274,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 115 (Shape)</name>
+        <description>Shape of LISA object with id 115.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9927928,53.5432128,0.0 9.9933151,53.5432472,0.0 9.9933151,53.5432472,0.0 9.9938165,53.543291,0.0 9.9938209,53.5432732,0.0 9.9933189,53.5432293,0.0 9.9933189,53.5432293,0.0 9.9927961,53.5431949,0.0 9.9927928,53.5432128,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 115 (Stop line)</name>
+        <description>Stop line of LISA object with id 115.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 115 (Border)</name>
+        <description>Border of LISA object with id 115.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9927928,53.5432128,0.0 9.9933151,53.5432472,0.0 9.9933151,53.5432472,0.0 9.9938165,53.543291,0.0 9.9938209,53.5432732,0.0 9.9933189,53.5432293,0.0 9.9933189,53.5432293,0.0 9.9927961,53.5431949,0.0 9.9927928,53.5432128,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 115 (Center)</name>
+        <description>Center line of LISA object with id 115.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9927944,53.5432038,0.0 9.993317,53.5432383,0.0 9.993317,53.5432383,0.0 9.9938187,53.5432821,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 117 (Shape)</name>
+        <description>Shape of LISA object with id 117.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9927928,53.5432128,0.0 9.9931894,53.5432389,0.0 9.9931894,53.5432389,0.0 9.9932173,53.5430682,0.0 9.9931873,53.5430664,0.0 9.9931623,53.543219,0.0 9.9931623,53.543219,0.0 9.9927961,53.5431949,0.0 9.9927928,53.5432128,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 117 (Stop line)</name>
+        <description>Stop line of LISA object with id 117.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 117 (Border)</name>
+        <description>Border of LISA object with id 117.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9927928,53.5432128,0.0 9.9931894,53.5432389,0.0 9.9931894,53.5432389,0.0 9.9932173,53.5430682,0.0 9.9931873,53.5430664,0.0 9.9931623,53.543219,0.0 9.9931623,53.543219,0.0 9.9927961,53.5431949,0.0 9.9927928,53.5432128,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 117 (Center)</name>
+        <description>Center line of LISA object with id 117.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9927944,53.5432038,0.0 9.9931759,53.543229,0.0 9.9931759,53.543229,0.0 9.9932023,53.5430673,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 77 (Shape)</name>
+        <description>Shape of LISA object with id 77.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9934597,53.5427438,0.0 9.9934299,53.5429196,0.0 9.9934299,53.5429196,0.0 9.9933832,53.5431339,0.0 9.9934318,53.5431376,0.0 9.9934786,53.542923,0.0 9.9934786,53.542923,0.0 9.9935085,53.5427467,0.0 9.9934597,53.5427438,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 77 (Stop line)</name>
+        <description>Stop line of LISA object with id 77.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9933832,53.5431339,0.0 9.9933822,53.5431383,0.0 9.9934308,53.5431421,0.0 9.9934318,53.5431376,0.0 9.9933832,53.5431339,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 77 (Border)</name>
+        <description>Border of LISA object with id 77.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934597,53.5427438,0.0 9.9934299,53.5429196,0.0 9.9934299,53.5429196,0.0 9.9933832,53.5431339,0.0 9.9934318,53.5431376,0.0 9.9934786,53.542923,0.0 9.9934786,53.542923,0.0 9.9935085,53.5427467,0.0 9.9934597,53.5427438,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 77 (Center)</name>
+        <description>Center line of LISA object with id 77.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934841,53.5427452,0.0 9.9934542,53.5429213,0.0 9.9934542,53.5429213,0.0 9.9934075,53.5431357,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 118 (Shape)</name>
+        <description>Shape of LISA object with id 118.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9934393,53.5429201,0.0 9.993367,53.5432517,0.0 9.993367,53.5432517,0.0 9.9938165,53.543291,0.0 9.9938209,53.5432732,0.0 9.9934007,53.5432365,0.0 9.9934007,53.5432365,0.0 9.9934692,53.5429225,0.0 9.9934393,53.5429201,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 118 (Stop line)</name>
+        <description>Stop line of LISA object with id 118.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 118 (Border)</name>
+        <description>Border of LISA object with id 118.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934393,53.5429201,0.0 9.993367,53.5432517,0.0 9.993367,53.5432517,0.0 9.9938165,53.543291,0.0 9.9938209,53.5432732,0.0 9.9934007,53.5432365,0.0 9.9934007,53.5432365,0.0 9.9934692,53.5429225,0.0 9.9934393,53.5429201,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 118 (Center)</name>
+        <description>Center line of LISA object with id 118.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934542,53.5429213,0.0 9.9933838,53.5432441,0.0 9.9933838,53.5432441,0.0 9.9938187,53.5432821,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 119 (Shape)</name>
+        <description>Shape of LISA object with id 119.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9934393,53.5429201,0.0 9.9933599,53.5432843,0.0 9.9933599,53.5432843,0.0 9.9938677,53.5433255,0.0 9.9938718,53.5433077,0.0 9.9933937,53.5432689,0.0 9.9933937,53.5432689,0.0 9.9934692,53.5429225,0.0 9.9934393,53.5429201,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 119 (Stop line)</name>
+        <description>Stop line of LISA object with id 119.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 119 (Border)</name>
+        <description>Border of LISA object with id 119.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934393,53.5429201,0.0 9.9933599,53.5432843,0.0 9.9933599,53.5432843,0.0 9.9938677,53.5433255,0.0 9.9938718,53.5433077,0.0 9.9933937,53.5432689,0.0 9.9933937,53.5432689,0.0 9.9934692,53.5429225,0.0 9.9934393,53.5429201,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 119 (Center)</name>
+        <description>Center line of LISA object with id 119.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934542,53.5429213,0.0 9.9933768,53.5432766,0.0 9.9933768,53.5432766,0.0 9.9938698,53.5433166,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 75 (Shape)</name>
+        <description>Shape of LISA object with id 75.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.993776,53.5405985,0.0 9.9934971,53.5422574,0.0 9.9934971,53.5422574,0.0 9.9934557,53.5425295,0.0 9.9934557,53.5425295,0.0 9.9933345,53.5431293,0.0 9.9933832,53.5431328,0.0 9.9935045,53.5425325,0.0 9.9935045,53.5425325,0.0 9.9935459,53.5422601,0.0 9.9935459,53.5422601,0.0 9.9938248,53.5406014,0.0 9.993776,53.5405985,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 75 (Stop line)</name>
+        <description>Stop line of LISA object with id 75.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9933345,53.5431293,0.0 9.9933336,53.5431337,0.0 9.9933823,53.5431372,0.0 9.9933832,53.5431328,0.0 9.9933345,53.5431293,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 75 (Border)</name>
+        <description>Border of LISA object with id 75.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.993776,53.5405985,0.0 9.9934971,53.5422574,0.0 9.9934971,53.5422574,0.0 9.9934557,53.5425295,0.0 9.9934557,53.5425295,0.0 9.9933345,53.5431293,0.0 9.9933832,53.5431328,0.0 9.9935045,53.5425325,0.0 9.9935045,53.5425325,0.0 9.9935459,53.5422601,0.0 9.9935459,53.5422601,0.0 9.9938248,53.5406014,0.0 9.993776,53.5405985,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 75 (Center)</name>
+        <description>Center line of LISA object with id 75.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9938004,53.5405999,0.0 9.9935215,53.5422588,0.0 9.9935215,53.5422588,0.0 9.9934801,53.542531,0.0 9.9934801,53.542531,0.0 9.9933588,53.543131,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 120 (Shape)</name>
+        <description>Shape of LISA object with id 120.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64c0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9934651,53.5425299,0.0 9.9933061,53.5433167,0.0 9.9933061,53.5433167,0.0 9.9925181,53.5432646,0.0 9.9925147,53.5432824,0.0 9.9933325,53.5433365,0.0 9.9933325,53.5433365,0.0 9.993495,53.5425321,0.0 9.9934651,53.5425299,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 120 (Stop line)</name>
+        <description>Stop line of LISA object with id 120.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 120 (Border)</name>
+        <description>Border of LISA object with id 120.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934651,53.5425299,0.0 9.9933061,53.5433167,0.0 9.9933061,53.5433167,0.0 9.9925181,53.5432646,0.0 9.9925147,53.5432824,0.0 9.9933325,53.5433365,0.0 9.9933325,53.5433365,0.0 9.993495,53.5425321,0.0 9.9934651,53.5425299,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 120 (Center)</name>
+        <description>Center line of LISA object with id 120.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934801,53.542531,0.0 9.9933193,53.5433266,0.0 9.9933193,53.5433266,0.0 9.9925164,53.5432735,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 93 (Shape)</name>
+        <description>Shape of LISA object with id 93.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9935755,53.5433983,0.0 9.9936054,53.5432498,0.0 9.9935719,53.5432437,0.0 9.9935313,53.5432362,0.0 9.9935,53.5433895,0.0 9.9935464,53.5433932,0.0 9.9935755,53.5433983,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 93 (Stop line)</name>
+        <description>Stop line of LISA object with id 93.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 93 (Border)</name>
+        <description>Border of LISA object with id 93.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9935755,53.5433983,0.0 9.9936054,53.5432498,0.0 9.9935719,53.5432437,0.0 9.9935313,53.5432362,0.0 9.9935,53.5433895,0.0 9.9935464,53.5433932,0.0 9.9935755,53.5433983,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 93 (Center)</name>
+        <description>Center line of LISA object with id 93.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9935464,53.5433932,0.0 9.9935719,53.5432437,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 94 (Shape)</name>
+        <description>Shape of LISA object with id 94.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9929364,53.5433534,0.0 9.9929467,53.5432864,0.0 9.9929156,53.5432836,0.0 9.9928807,53.5432799,0.0 9.9928668,53.54335,0.0 9.9929024,53.5433524,0.0 9.9929364,53.5433534,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 94 (Stop line)</name>
+        <description>Stop line of LISA object with id 94.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 94 (Border)</name>
+        <description>Border of LISA object with id 94.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9929364,53.5433534,0.0 9.9929467,53.5432864,0.0 9.9929156,53.5432836,0.0 9.9928807,53.5432799,0.0 9.9928668,53.54335,0.0 9.9929024,53.5433524,0.0 9.9929364,53.5433534,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 94 (Center)</name>
+        <description>Center line of LISA object with id 94.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9929024,53.5433524,0.0 9.9929156,53.5432836,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 95 (Shape)</name>
+        <description>Shape of LISA object with id 95.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9933222,53.5431661,0.0 9.9934367,53.5431792,0.0 9.9934297,53.543164,0.0 9.9934341,53.5431516,0.0 9.9933291,53.5431448,0.0 9.9933273,53.5431573,0.0 9.9933222,53.5431661,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 95 (Stop line)</name>
+        <description>Stop line of LISA object with id 95.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 95 (Border)</name>
+        <description>Border of LISA object with id 95.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9933222,53.5431661,0.0 9.9934367,53.5431792,0.0 9.9934297,53.543164,0.0 9.9934341,53.5431516,0.0 9.9933291,53.5431448,0.0 9.9933273,53.5431573,0.0 9.9933222,53.5431661,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 95 (Center)</name>
+        <description>Center line of LISA object with id 95.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9933273,53.5431573,0.0 9.9934297,53.543164,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 96 (Shape)</name>
+        <description>Shape of LISA object with id 96.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9931171,53.5431608,0.0 9.9932316,53.543162,0.0 9.9932335,53.5431486,0.0 9.9932361,53.5431372,0.0 9.9931406,53.5431316,0.0 9.9931315,53.5431466,0.0 9.9931171,53.5431608,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 96 (Stop line)</name>
+        <description>Stop line of LISA object with id 96.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 96 (Border)</name>
+        <description>Border of LISA object with id 96.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9931171,53.5431608,0.0 9.9932316,53.543162,0.0 9.9932335,53.5431486,0.0 9.9932361,53.5431372,0.0 9.9931406,53.5431316,0.0 9.9931315,53.5431466,0.0 9.9931171,53.5431608,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 96 (Center)</name>
+        <description>Center line of LISA object with id 96.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9931315,53.5431466,0.0 9.9932335,53.5431486,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 97 (Shape)</name>
+        <description>Shape of LISA object with id 97.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64000080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9930922,53.5431788,0.0 9.9932306,53.5431812,0.0 9.9932309,53.5431724,0.0 9.9932321,53.5431633,0.0 9.9931157,53.5431612,0.0 9.9931078,53.54317,0.0 9.9930922,53.5431788,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 97 (Stop line)</name>
+        <description>Stop line of LISA object with id 97.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 97 (Border)</name>
+        <description>Border of LISA object with id 97.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9930922,53.5431788,0.0 9.9932306,53.5431812,0.0 9.9932309,53.5431724,0.0 9.9932321,53.5431633,0.0 9.9931157,53.5431612,0.0 9.9931078,53.54317,0.0 9.9930922,53.5431788,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 97 (Center)</name>
+        <description>Center line of LISA object with id 97.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9931078,53.54317,0.0 9.9932309,53.5431724,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 98 (Shape)</name>
+        <description>Shape of LISA object with id 98.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64000080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9933213,53.5431885,0.0 9.9934533,53.5432003,0.0 9.993438,53.5431876,0.0 9.9934313,53.5431788,0.0 9.9933222,53.5431681,0.0 9.9933224,53.5431769,0.0 9.9933213,53.5431885,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 98 (Stop line)</name>
+        <description>Stop line of LISA object with id 98.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000080</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 98 (Border)</name>
+        <description>Border of LISA object with id 98.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9933213,53.5431885,0.0 9.9934533,53.5432003,0.0 9.993438,53.5431876,0.0 9.9934313,53.5431788,0.0 9.9933222,53.5431681,0.0 9.9933224,53.5431769,0.0 9.9933213,53.5431885,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 98 (Center)</name>
+        <description>Center line of LISA object with id 98.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000080</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9933224,53.5431769,0.0 9.993438,53.5431876,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 100 (Shape)</name>
+        <description>Shape of LISA object with id 100.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9932355,53.5431364,0.0 9.9931413,53.5431312,0.0 9.9931322,53.5431452,0.0 9.993117,53.543159,0.0 9.993232,53.5431612,0.0 9.9932324,53.5431488,0.0 9.9932355,53.5431364,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 100 (Stop line)</name>
+        <description>Stop line of LISA object with id 100.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 100 (Border)</name>
+        <description>Border of LISA object with id 100.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9932355,53.5431364,0.0 9.9931413,53.5431312,0.0 9.9931322,53.5431452,0.0 9.993117,53.543159,0.0 9.993232,53.5431612,0.0 9.9932324,53.5431488,0.0 9.9932355,53.5431364,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 100 (Center)</name>
+        <description>Center line of LISA object with id 100.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9932324,53.5431488,0.0 9.9931322,53.5431452,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 101 (Shape)</name>
+        <description>Shape of LISA object with id 101.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9934314,53.5431512,0.0 9.9933304,53.5431436,0.0 9.9933286,53.5431541,0.0 9.9933258,53.5431674,0.0 9.9934326,53.5431764,0.0 9.9934303,53.5431616,0.0 9.9934314,53.5431512,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 101 (Stop line)</name>
+        <description>Stop line of LISA object with id 101.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 101 (Border)</name>
+        <description>Border of LISA object with id 101.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934314,53.5431512,0.0 9.9933304,53.5431436,0.0 9.9933286,53.5431541,0.0 9.9933258,53.5431674,0.0 9.9934326,53.5431764,0.0 9.9934303,53.5431616,0.0 9.9934314,53.5431512,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 101 (Center)</name>
+        <description>Center line of LISA object with id 101.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934303,53.5431616,0.0 9.9933286,53.5431541,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 102 (Shape)</name>
+        <description>Shape of LISA object with id 102.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9928771,53.5432812,0.0 9.9928668,53.5433513,0.0 9.9929009,53.5433519,0.0 9.9929342,53.5433543,0.0 9.9929445,53.5432864,0.0 9.9929141,53.543284,0.0 9.9928771,53.5432812,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 102 (Stop line)</name>
+        <description>Stop line of LISA object with id 102.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 102 (Border)</name>
+        <description>Border of LISA object with id 102.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9928771,53.5432812,0.0 9.9928668,53.5433513,0.0 9.9929009,53.5433519,0.0 9.9929342,53.5433543,0.0 9.9929445,53.5432864,0.0 9.9929141,53.543284,0.0 9.9928771,53.5432812,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 102 (Center)</name>
+        <description>Center line of LISA object with id 102.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9929141,53.543284,0.0 9.9929009,53.5433519,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 103 (Shape)</name>
+        <description>Shape of LISA object with id 103.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9929535,53.5432604,0.0 9.9929698,53.5431982,0.0 9.9929328,53.5431954,0.0 9.9928936,53.5431939,0.0 9.9928817,53.5432561,0.0 9.9929209,53.5432575,0.0 9.9929535,53.5432604,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 103 (Stop line)</name>
+        <description>Stop line of LISA object with id 103.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 103 (Border)</name>
+        <description>Border of LISA object with id 103.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9929535,53.5432604,0.0 9.9929698,53.5431982,0.0 9.9929328,53.5431954,0.0 9.9928936,53.5431939,0.0 9.9928817,53.5432561,0.0 9.9929209,53.5432575,0.0 9.9929535,53.5432604,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 103 (Center)</name>
+        <description>Center line of LISA object with id 103.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9929209,53.5432575,0.0 9.9929328,53.5431954,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 104 (Shape)</name>
+        <description>Shape of LISA object with id 104.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>64008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9928929,53.5431936,0.0 9.9928855,53.543257,0.0 9.9929225,53.5432598,0.0 9.9929536,53.5432618,0.0 9.9929691,53.5431987,0.0 9.9929321,53.5431968,0.0 9.9928929,53.5431936,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 104 (Stop line)</name>
+        <description>Stop line of LISA object with id 104.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff008000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 104 (Border)</name>
+        <description>Border of LISA object with id 104.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9928929,53.5431936,0.0 9.9928855,53.543257,0.0 9.9929225,53.5432598,0.0 9.9929536,53.5432618,0.0 9.9929691,53.5431987,0.0 9.9929321,53.5431968,0.0 9.9928929,53.5431936,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 104 (Center)</name>
+        <description>Center line of LISA object with id 104.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff008000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9929321,53.5431968,0.0 9.9929225,53.5432598,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 105 (Shape)</name>
+        <description>Shape of LISA object with id 105.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9934651,53.5425299,0.0 9.9934541,53.5425842,0.0 9.9934541,53.5425842,0.0 9.9934779,53.5426921,0.0 9.9934779,53.5426921,0.0 9.9934691,53.5427443,0.0 9.9934991,53.5427461,0.0 9.9935083,53.5426918,0.0 9.9935083,53.5426918,0.0 9.9934845,53.5425841,0.0 9.9934845,53.5425841,0.0 9.993495,53.5425321,0.0 9.9934651,53.5425299,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 105 (Stop line)</name>
+        <description>Stop line of LISA object with id 105.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 105 (Border)</name>
+        <description>Border of LISA object with id 105.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934651,53.5425299,0.0 9.9934541,53.5425842,0.0 9.9934541,53.5425842,0.0 9.9934779,53.5426921,0.0 9.9934779,53.5426921,0.0 9.9934691,53.5427443,0.0 9.9934991,53.5427461,0.0 9.9935083,53.5426918,0.0 9.9935083,53.5426918,0.0 9.9934845,53.5425841,0.0 9.9934845,53.5425841,0.0 9.993495,53.5425321,0.0 9.9934651,53.5425299,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 105 (Center)</name>
+        <description>Center line of LISA object with id 105.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9934801,53.542531,0.0 9.9934693,53.5425842,0.0 9.9934693,53.5425842,0.0 9.9934931,53.5426919,0.0 9.9934931,53.5426919,0.0 9.9934841,53.5427452,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 110 (Shape)</name>
+        <description>Shape of LISA object with id 110.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.9947121,53.5434697,0.0 9.9946861,53.5434657,0.0 9.9946861,53.5434657,0.0 9.9946451,53.5434268,0.0 9.9946451,53.5434268,0.0 9.9946065,53.5434221,0.0 9.9946005,53.5434397,0.0 9.9946264,53.5434428,0.0 9.9946264,53.5434428,0.0 9.9946669,53.5434813,0.0 9.9946669,53.5434813,0.0 9.9947047,53.5434871,0.0 9.9947121,53.5434697,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 110 (Stop line)</name>
+        <description>Stop line of LISA object with id 110.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 110 (Border)</name>
+        <description>Border of LISA object with id 110.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9947121,53.5434697,0.0 9.9946861,53.5434657,0.0 9.9946861,53.5434657,0.0 9.9946451,53.5434268,0.0 9.9946451,53.5434268,0.0 9.9946065,53.5434221,0.0 9.9946005,53.5434397,0.0 9.9946264,53.5434428,0.0 9.9946264,53.5434428,0.0 9.9946669,53.5434813,0.0 9.9946669,53.5434813,0.0 9.9947047,53.5434871,0.0 9.9947121,53.5434697,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 110 (Center)</name>
+        <description>Center line of LISA object with id 110.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9947084,53.5434784,0.0 9.9946765,53.5434735,0.0 9.9946765,53.5434735,0.0 9.9946358,53.5434348,0.0 9.9946358,53.5434348,0.0 9.9946035,53.5434309,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 116 (Shape)</name>
+        <description>Shape of LISA object with id 116.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ffc0c0c0</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>9.994698,53.543499,0.0 9.9946907,53.5434978,0.0 9.994667,53.5434814,0.0 9.994661,53.5434532,0.0 9.9946139,53.543423,0.0 9.9946065,53.5434221,0.0 9.9946005,53.5434397,0.0 9.9946079,53.5434406,0.0 9.9946311,53.5434555,0.0 9.994637,53.5434837,0.0 9.9946826,53.5435151,0.0 9.9946898,53.5435163,0.0 9.994698,53.543499,0.0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 116 (Stop line)</name>
+        <description>Stop line of LISA object with id 116.</description>
+        <visibility>0</visibility>
+        <Style>
+          <PolyStyle>
+            <color>ff000000</color>
+            <outline>0</outline>
+          </PolyStyle>
+        </Style>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates/>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 116 (Border)</name>
+        <description>Border of LISA object with id 116.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.994698,53.543499,0.0 9.9946907,53.5434978,0.0 9.994667,53.5434814,0.0 9.994661,53.5434532,0.0 9.9946139,53.543423,0.0 9.9946065,53.5434221,0.0 9.9946005,53.5434397,0.0 9.9946079,53.5434406,0.0 9.9946311,53.5434555,0.0 9.994637,53.5434837,0.0 9.9946826,53.5435151,0.0 9.9946898,53.5435163,0.0 9.994698,53.543499,0.0</coordinates>
+        </LineString>
+      </Placemark>
+      <Placemark>
+        <name>LISA object 116 (Center)</name>
+        <description>Center line of LISA object with id 116.</description>
+        <visibility>0</visibility>
+        <Style>
+          <LineStyle>
+            <color>ff000000</color>
+            <width>1</width>
+          </LineStyle>
+        </Style>
+        <LineString>
+          <coordinates>9.9946939,53.5435077,0.0 9.9946866,53.5435064,0.0 9.994652,53.5434825,0.0 9.994646,53.5434544,0.0 9.9946109,53.5434318,0.0 9.9946035,53.5434309,0.0</coordinates>
+        </LineString>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

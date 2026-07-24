@@ -19,6 +19,8 @@ from torii_sumo.core.hamburg_named_replay import (
     _summarize_e1,
     _validate_binding_network,
     _validate_count_scope_manifest,
+    _validate_dependency_w1_manifest,
+    materialize_hamburg_named_replay_preflight,
 )
 
 
@@ -45,23 +47,188 @@ def test_replay_requires_signal_binding_for_the_same_network(tmp_path: Path) -> 
     bound_net = tmp_path / "bound.net.xml"
     replay_net.write_text("<net id=\"replay\"/>\n", encoding="utf-8")
     bound_net.write_text("<net id=\"bound\"/>\n", encoding="utf-8")
+    binding_manifest = tmp_path / "W2.json"
     binding = {
         "source": {
             "candidate_net": {
-                "path": str(bound_net),
+                "path": bound_net.name,
                 "sha256": file_sha256(bound_net),
             }
         }
     }
 
     with pytest.raises(HamburgNamedReplayError, match="does not match replay network"):
-        _validate_binding_network(binding, replay_net)
+        _validate_binding_network(binding, replay_net, manifest_path=binding_manifest)
 
     replay_net.write_bytes(bound_net.read_bytes())
-    _validate_binding_network(binding, replay_net)
+    _validate_binding_network(binding, replay_net, manifest_path=binding_manifest)
     bound_net.write_text("<net id=\"mutated\"/>\n", encoding="utf-8")
     with pytest.raises(HamburgNamedReplayError, match="SHA-256 mismatch"):
-        _validate_binding_network(binding, replay_net)
+        _validate_binding_network(binding, replay_net, manifest_path=binding_manifest)
+
+
+def test_replay_requires_dependencies_from_the_same_w1_manifest(tmp_path: Path) -> None:
+    selected_w1 = tmp_path / "W1.json"
+    selected_w1.write_text('{"w1":"selected"}\n', encoding="utf-8")
+    other_w1 = tmp_path / "other-W1.json"
+    other_w1.write_text('{"w1":"other"}\n', encoding="utf-8")
+    dependency_manifest = tmp_path / "W2.json"
+    dependency_manifest.write_text("{}\n", encoding="utf-8")
+    binding = {
+        "source": {
+            "w1_manifest": {
+                "path": str(selected_w1),
+                "sha256": file_sha256(selected_w1),
+            }
+        }
+    }
+
+    _validate_dependency_w1_manifest(
+        binding,
+        manifest_path=dependency_manifest,
+        expected_w1_manifest=selected_w1,
+        label="signal binding",
+    )
+    copied_w1 = tmp_path / "copied-W1.json"
+    copied_w1.write_bytes(selected_w1.read_bytes())
+    binding["source"]["w1_manifest"] = {
+        "path": str(copied_w1),
+        "sha256": file_sha256(copied_w1),
+    }
+    with pytest.raises(HamburgNamedReplayError, match="does not match the selected replay input"):
+        _validate_dependency_w1_manifest(
+            binding,
+            manifest_path=dependency_manifest,
+            expected_w1_manifest=selected_w1,
+            label="signal binding",
+        )
+    binding["source"]["w1_manifest"] = {
+        "path": str(other_w1),
+        "sha256": file_sha256(other_w1),
+    }
+    with pytest.raises(HamburgNamedReplayError, match="does not match the selected replay input"):
+        _validate_dependency_w1_manifest(
+            binding,
+            manifest_path=dependency_manifest,
+            expected_w1_manifest=selected_w1,
+            label="signal binding",
+        )
+
+
+def test_blocked_preflight_records_exact_upstream_identities_without_running(
+    tmp_path: Path,
+) -> None:
+    network = tmp_path / "candidate.net.xml"
+    network.write_text("<net/>\n", encoding="utf-8")
+    w1 = tmp_path / "W1.json"
+    w1.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-official-corridor-geometry/v1",
+                "status": "review_ready",
+                "execution_gate": "pass",
+                "network_binding": {
+                    "path": str(network),
+                    "sha256": file_sha256(network),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    w1_identity = {"path": str(w1), "sha256": file_sha256(w1)}
+    signal = tmp_path / "W2.json"
+    signal.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-named-signal-binding/v1",
+                "execution_gate": "blocked",
+                "source": {
+                    "w1_manifest": w1_identity,
+                    "candidate_net": {
+                        "path": str(network),
+                        "sha256": file_sha256(network),
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    stream = tmp_path / "streams.json"
+    stream.write_text('{"streams":[]}\n', encoding="utf-8")
+    detector = tmp_path / "W3b.json"
+    detector.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-named-detector-binding/v1",
+                "execution_gate": "pass",
+                "gates": {"sensor_aggregation_semantics": "blocked"},
+                "source": {
+                    "w1_manifest": w1_identity,
+                    "candidate_net": {
+                        "path": str(network),
+                        "sha256": file_sha256(network),
+                    },
+                    "count_stream_snapshot": {
+                        "path": str(stream),
+                        "sha256": file_sha256(stream),
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    counts = tmp_path / "counts.csv"
+    counts.write_text("begin,end,total\n", encoding="utf-8")
+    count_scope = tmp_path / "W3a.json"
+    count_scope.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-named-corridor-count-scope/v1",
+                "execution_gate": "pass",
+                "artifacts": {
+                    "count_streams_raw": {
+                        "path": str(stream),
+                        "sha256": file_sha256(stream),
+                    },
+                    "counts_simulation_15min": {
+                        "path": str(counts),
+                        "sha256": file_sha256(counts),
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = materialize_hamburg_named_replay_preflight(
+        w1_manifest_file=w1,
+        signal_binding_manifest=signal,
+        detector_binding_manifest=detector,
+        count_scope_manifest=count_scope,
+        count_stream_snapshot=stream,
+        canonical_count_file=counts,
+        output_dir=tmp_path / "W4",
+    )
+
+    assert report["schema"] == "torii.hamburg-named-replay/v2"
+    assert report["execution_gate"] == "blocked"
+    assert report["replay_executed"] is False
+    assert report["simulation"]["status"] == "not_run"
+    assert report["source"]["w1_manifest"] == {
+        "path": "../W1.json",
+        "sha256": w1_identity["sha256"],
+    }
+    assert report["source"]["signal_binding_manifest"] == {
+        "path": "../W2.json",
+        "sha256": file_sha256(signal),
+    }
+    assert report["source"]["detector_binding_manifest"] == {
+        "path": "../W3b.json",
+        "sha256": file_sha256(detector),
+    }
+    assert not Path(report["source"]["net"]["path"]).is_absolute()
+    assert report["gates"]["route_sampler"] == "not_run"
+    assert report["gates"]["sumo_run"] == "not_run"
 
 
 def test_replay_rejects_non_executable_signal_binding(tmp_path: Path) -> None:

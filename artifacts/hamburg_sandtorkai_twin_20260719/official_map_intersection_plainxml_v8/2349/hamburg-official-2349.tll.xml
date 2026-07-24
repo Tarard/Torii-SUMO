@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tlLogics xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tllogic_file.xsd">
+    <tlLogic id="hh-map-2349" type="static" programID="structural-all-red" offset="0">
+        <phase duration="1" state="rrrrrr" />
+    </tlLogic>
+    <connection from="hh-map-2349-a1-in" to="hh-map-2349-a3-out" fromLane="0" toLane="0" tl="hh-map-2349" linkIndex="0" />
+    <connection from="hh-map-2349-a1-in" to="hh-map-2349-a2-out" fromLane="1" toLane="0" tl="hh-map-2349" linkIndex="3" />
+    <connection from="hh-map-2349-a3-in" to="hh-map-2349-a1-out" fromLane="1" toLane="1" tl="hh-map-2349" linkIndex="2" />
+    <connection from="hh-map-2349-a3-in" to="hh-map-2349-a1-out" fromLane="0" toLane="0" tl="hh-map-2349" linkIndex="2" />
+    <connection from="hh-map-2349-a3-in" to="hh-map-2349-a2-out" fromLane="0" toLane="0" tl="hh-map-2349" linkIndex="5" />
+    <connection from="hh-map-2349-a2-in" to="hh-map-2349-a1-out" fromLane="0" toLane="0" tl="hh-map-2349" linkIndex="1" />
+    <connection from="hh-map-2349-a2-in" to="hh-map-2349-a1-out" fromLane="0" toLane="1" tl="hh-map-2349" linkIndex="1" />
+    <connection from="hh-map-2349-a2-in" to="hh-map-2349-a3-out" fromLane="1" toLane="0" tl="hh-map-2349" linkIndex="4" />
+</tlLogics>

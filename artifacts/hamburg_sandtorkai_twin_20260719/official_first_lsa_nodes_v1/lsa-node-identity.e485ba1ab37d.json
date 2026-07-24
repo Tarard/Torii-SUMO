@@ -1,0 +1,197 @@
+{
+  "automation_action": "use_frozen_official_node_identities",
+  "claim_boundary": {
+    "does_not_prove": [
+      "map_asset_availability_or_node_binding",
+      "ocit_c_asset_availability_or_node_binding",
+      "tld_datastream_availability_or_node_binding",
+      "sumo_lane_or_signal_group_binding"
+    ],
+    "downstream_signal_materialization_requires": [
+      "unique_node_bound_official_map_asset",
+      "unique_node_bound_official_ocit_c_asset",
+      "nonempty_node_bound_official_tld_datastream_inventory"
+    ],
+    "proves": [
+      "official_lsa_node_identity",
+      "official_lsa_name",
+      "official_lsa_point_geometry"
+    ]
+  },
+  "decision": "pass",
+  "human_action_required": false,
+  "schema": "torii.hamburg-lsa-node-identity-evidence/v1",
+  "selections": [
+    {
+      "automation_action": "use_frozen_official_node_identity",
+      "decision": "pass",
+      "expected_node_id": "2349",
+      "human_action_required": false,
+      "matched_feature_ids": [
+        17251
+      ],
+      "matched_node_ids": [
+        "2349"
+      ],
+      "normalized_road_name_components": [
+        "am sandtorkai",
+        "grosser grasbrook"
+      ],
+      "reason": "unique_bbox_name_and_node_id_match",
+      "selected_node": {
+        "feature_id": 17251,
+        "lsanr": "2349",
+        "node_id": "2349",
+        "normalized_road_name_components": [
+          "am sandtorkai",
+          "grosser grasbrook"
+        ],
+        "official_name": "Am Sandtorkai/Großer Grasbrook",
+        "point_geometry": {
+          "coordinates": [
+            9.993227061979422,
+            53.543320797153804
+          ],
+          "type": "Point"
+        },
+        "signal_type": "K-LSA",
+        "source_geometry_type": "MultiPoint",
+        "source_properties": {
+          "LSA_Name": "Am Sandtorkai/Großer Grasbrook          ",
+          "art": "K-LSA     ",
+          "knoten": 2349
+        }
+      }
+    },
+    {
+      "automation_action": "use_frozen_official_node_identity",
+      "decision": "pass",
+      "expected_node_id": "2394",
+      "human_action_required": false,
+      "matched_feature_ids": [
+        17277
+      ],
+      "matched_node_ids": [
+        "2394"
+      ],
+      "normalized_road_name_components": [
+        "am sandtorkai",
+        "am sandtorpark"
+      ],
+      "reason": "unique_bbox_name_and_node_id_match",
+      "selected_node": {
+        "feature_id": 17277,
+        "lsanr": "2394",
+        "node_id": "2394",
+        "normalized_road_name_components": [
+          "am sandtorkai",
+          "am sandtorpark"
+        ],
+        "official_name": "Am Sandtorkai/Am Sandtorpark",
+        "point_geometry": {
+          "coordinates": [
+            9.995132872689311,
+            53.54350271129165
+          ],
+          "type": "Point"
+        },
+        "signal_type": "K-LSA",
+        "source_geometry_type": "MultiPoint",
+        "source_properties": {
+          "LSA_Name": "Am Sandtorkai/Am Sandtorpark            ",
+          "art": "K-LSA     ",
+          "knoten": 2394
+        }
+      }
+    },
+    {
+      "automation_action": "use_frozen_official_node_identity",
+      "decision": "pass",
+      "expected_node_id": "2403",
+      "human_action_required": false,
+      "matched_feature_ids": [
+        17285
+      ],
+      "matched_node_ids": [
+        "2403"
+      ],
+      "normalized_road_name_components": [
+        "am sandtorkai",
+        "osakaallee"
+      ],
+      "reason": "unique_bbox_name_and_node_id_match",
+      "selected_node": {
+        "feature_id": 17285,
+        "lsanr": "2403",
+        "node_id": "2403",
+        "normalized_road_name_components": [
+          "am sandtorkai",
+          "osakaallee"
+        ],
+        "official_name": "Am Sandtorkai/Osakaallee",
+        "point_geometry": {
+          "coordinates": [
+            9.997839159986002,
+            53.54409500839008
+          ],
+          "type": "Point"
+        },
+        "signal_type": "K-LSA",
+        "source_geometry_type": "MultiPoint",
+        "source_properties": {
+          "LSA_Name": "Am Sandtorkai/Osakaallee",
+          "art": "K-LSA     ",
+          "knoten": 2403
+        }
+      }
+    }
+  ],
+  "source": {
+    "authority": "Free and Hanseatic City of Hamburg",
+    "bbox": [
+      9.978,
+      53.539,
+      10.0005,
+      53.5475
+    ],
+    "collection": "lsa_knotengrunddaten",
+    "dataset": "lichtsignalanlagen",
+    "number_matched": 19,
+    "number_returned": 19,
+    "raw_bytes": 4638,
+    "raw_path": "lsa_knotengrunddaten.e485ba1ab37d.geojson",
+    "raw_sha256": "e485ba1ab37d73846bdc5333d60cf96817056ad57283e972f11adafe33eb2b14",
+    "request_url": "https://api.hamburg.de/datasets/v1/lichtsignalanlagen/collections/lsa_knotengrunddaten/items?f=json&limit=1000&bbox=9.978%2C53.539%2C10.0005%2C53.5475",
+    "response_time_stamp": "2026-07-19T21:09:54Z",
+    "source_schema": {
+      "collection_type": "FeatureCollection",
+      "coordinate_order": [
+        "longitude",
+        "latitude"
+      ],
+      "coordinate_reference_system": "OGC:CRS84",
+      "feature_id_type": "integer",
+      "feature_type": "Feature",
+      "geometry_coordinate_count": 1,
+      "geometry_type": "MultiPoint",
+      "properties": {
+        "LSA_Name": {
+          "json_type": "string",
+          "meaning": "official slash-delimited LSA name; source value may be space padded"
+        },
+        "art": {
+          "json_type": "string",
+          "meaning": "official LSA type; source value may be space padded"
+        },
+        "knoten": {
+          "json_type": "integer",
+          "meaning": "official Hamburg LSA node number",
+          "public_aliases": [
+            "node_id",
+            "lsanr"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<connections>
+    <!-- North approach: SUMO lane 0 is through/right; lane 2 is left-only. -->
+    <delete from="-152813965#0" to="-554713071" fromLane="2" toLane="1"/>
+    <connection from="-152813965#0" to="-554713071" fromLane="0" toLane="0"/>
+
+    <!-- East approach: SUMO lane 0 is through/right. -->
+    <connection from="25444569#2" to="395272650#0" fromLane="0" toLane="0"/>
+</connections>

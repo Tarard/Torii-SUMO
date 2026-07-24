@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<connections xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/connections_file.xsd">
+    <connection from="hh-map-2394-a4-in" to="hh-map-2394-a3-out" fromLane="0" toLane="0" shape="565927.906,5933178.971 565937.567,5933180.986 565942.458,5933170.573" />
+    <connection from="hh-map-2394-a4-in" to="hh-map-2394-a2-out" fromLane="1" toLane="0" shape="565927.204,5933182.233 565950.429,5933187.275 565962.069,5933191.399" />
+    <connection from="hh-map-2394-a4-in" to="hh-map-2394-a2-out" fromLane="2" toLane="1" shape="565926.690,5933185.385 565946.976,5933189.652 565961.419,5933194.750" />
+    <connection from="hh-map-2394-a2-in" to="hh-map-2394-a4-out" fromLane="0" toLane="0" shape="565958.193,5933204.630 565940.562,5933197.641 565923.363,5933193.406" />
+    <connection from="hh-map-2394-a2-in" to="hh-map-2394-a3-out" fromLane="1" toLane="0" shape="565959.173,5933201.350 565932.982,5933190.870 565942.458,5933170.573" />
+    <connection from="hh-map-2394-a3-in" to="hh-map-2394-a2-out" fromLane="0" toLane="0" shape="565953.961,5933174.528 565949.156,5933186.823 565962.069,5933191.399" />
+    <connection from="hh-map-2394-a3-in" to="hh-map-2394-a2-out" fromLane="0" toLane="1" shape="565953.961,5933174.528 565947.939,5933189.988 565961.419,5933194.750" />
+    <connection from="hh-map-2394-a3-in" to="hh-map-2394-a4-out" fromLane="1" toLane="0" shape="565950.830,5933173.327 565941.335,5933197.830 565923.363,5933193.406" />
+</connections>

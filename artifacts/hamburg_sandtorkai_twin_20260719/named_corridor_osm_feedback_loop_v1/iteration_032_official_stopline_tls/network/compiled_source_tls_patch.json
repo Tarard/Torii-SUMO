@@ -1,0 +1,840 @@
+{
+  "claim_status": "official-compiled-source-tls-patch",
+  "connection_delta": {
+    "added": [],
+    "rebuilt_count": 123,
+    "removed": [],
+    "source_count": 123
+  },
+  "edge_lane_signature_match": true,
+  "expected_added_connections": [],
+  "expected_removed_connections": [],
+  "external_lane_geometry_audit": {
+    "invalid_shape_lane_ids": [],
+    "length_violations": [],
+    "location_match": true,
+    "max_allowed_length_deviation_m": 0.0,
+    "max_allowed_shape_deviation_m": 0.0,
+    "maximum_observed_length_deviation_m": 0.0,
+    "maximum_observed_shape_deviation_m": 0.0,
+    "missing_lane_ids": [],
+    "policy": "symmetric maximum vertex-to-polyline distance on every external lane",
+    "rebuilt_lane_count": 117,
+    "rebuilt_location": {
+      "convBoundary": "217.89,132.35,690.98,446.73",
+      "netOffset": "-565479.53,-5932860.64",
+      "origBoundary": "9.988198,53.540502,10.002992,53.544991",
+      "projParameter": "+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+    },
+    "source_lane_count": 117,
+    "source_location": {
+      "convBoundary": "217.89,132.35,690.98,446.73",
+      "netOffset": "-565479.53,-5932860.64",
+      "origBoundary": "9.988198,53.540502,10.002992,53.544991",
+      "projParameter": "+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+    },
+    "status": "pass",
+    "unexpected_lane_ids": [],
+    "violations": []
+  },
+  "official_inventory_routing_prune": {
+    "compiled_net_delete_patch": {
+      "delete_directive_count": 0,
+      "delete_directives": [],
+      "status": "pass"
+    },
+    "declared_forbidden_connection_count": 6,
+    "effective_removal_count": 0,
+    "forbidden_connections_present_after_rebuild": [],
+    "plain_removal": {
+      "reason": "all declared non-official movements were already absent",
+      "removed_count": 0,
+      "status": "pass"
+    }
+  },
+  "owner_application": {
+    "demoted_owner_count": 4,
+    "demoted_owner_ids": [
+      "610506357",
+      "759714737",
+      "cluster_25737304_759714733",
+      "cluster_3847369287_757036909_76463166"
+    ],
+    "node_patch_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls_owner_patch.nod.xml",
+    "signal_owner_by_controller": {
+      "HH_2349": [
+        "2761334245",
+        "2761334257",
+        "cluster_2761334249_610506352_cluster_739654528_759714704"
+      ],
+      "HH_2394": [
+        "3847369288",
+        "759714726",
+        "cluster_2761334279_757036795"
+      ]
+    },
+    "signal_owner_count": 6,
+    "status": "pass"
+  },
+  "phase_capacity_audit": {
+    "controllers": {
+      "HH_2349": {
+        "phase_state_lengths": [
+          6
+        ],
+        "required_state_length": 6,
+        "status": "pass",
+        "used_link_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "HH_2394": {
+        "phase_state_lengths": [
+          6
+        ],
+        "required_state_length": 6,
+        "status": "pass",
+        "used_link_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    "status": "pass"
+  },
+  "plain_application": {
+    "controller_capacities": {
+      "HH_2349": 6,
+      "HH_2394": 6
+    },
+    "demoted_physical_link_count": 14,
+    "demoted_physical_links": [
+      {
+        "from_edge": "194672083",
+        "from_lane": 1,
+        "to_edge": "127716467#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "381540198#1",
+        "from_lane": 0,
+        "to_edge": "193847534#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "381540198#1",
+        "from_lane": 0,
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "381540198#1",
+        "from_lane": 1,
+        "to_edge": "554713077",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713076#1",
+        "from_lane": 0,
+        "to_edge": "554713076#2",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713076#1",
+        "from_lane": 1,
+        "to_edge": "554713076#2",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "554713078#1",
+        "from_lane": 0,
+        "to_edge": "554713078#2",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713078#1",
+        "from_lane": 1,
+        "to_edge": "554713078#2",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "554713078#2",
+        "from_lane": 0,
+        "to_edge": "554713075#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 0,
+        "to_edge": "-381540198#1",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 1,
+        "to_edge": "193847534#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 2,
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "9702432#2",
+        "from_lane": 0,
+        "to_edge": "554713077",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "9702432#2",
+        "from_lane": 1,
+        "to_edge": "-381540198#1",
+        "to_lane": 0
+      }
+    ],
+    "output_tls_binding_count": 47,
+    "physical_controlled_link_count": 14,
+    "physical_link_counts_by_shared_index": {
+      "HH_2349[0]": 1,
+      "HH_2349[1]": 1,
+      "HH_2349[2]": 2,
+      "HH_2349[3]": 1,
+      "HH_2349[4]": 1,
+      "HH_2349[5]": 1,
+      "HH_2394[0]": 1,
+      "HH_2394[1]": 1,
+      "HH_2394[2]": 1,
+      "HH_2394[3]": 2,
+      "HH_2394[4]": 1,
+      "HH_2394[5]": 1
+    },
+    "placeholder_program": "all_red",
+    "plain_node_application": {
+      "status": "not_requested"
+    },
+    "plan_id": "hamburg-sandtorkai-2349-2394-compound-v1",
+    "plan_version": "2026-07-19.v9",
+    "preserved_plain_connection_directive_count": 3,
+    "preserved_tls_binding_count": 33,
+    "removed_or_replaced_tllogics": [
+      "2761334245",
+      "2761334257",
+      "HH_2349",
+      "HH_2394"
+    ],
+    "repair_added_count": 0,
+    "repair_declared_count": 14,
+    "repair_existing_count": 14,
+    "repairs_added": [],
+    "repairs_existing": [
+      {
+        "from_edge": "194672083",
+        "from_lane": 1,
+        "to_edge": "127716467#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "381540198#0",
+        "from_lane": 0,
+        "to_edge": "381540198#1",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "381540198#0",
+        "from_lane": 1,
+        "to_edge": "381540198#1",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "381540198#1",
+        "from_lane": 0,
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "554713076#0",
+        "from_lane": 0,
+        "to_edge": "554713076#1",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713076#0",
+        "from_lane": 1,
+        "to_edge": "554713076#1",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "554713078#0",
+        "from_lane": 0,
+        "to_edge": "554713078#1",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713078#0",
+        "from_lane": 1,
+        "to_edge": "554713078#1",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "554713078#2",
+        "from_lane": 0,
+        "to_edge": "554713075#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 1,
+        "to_edge": "193847534#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 2,
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "61649647#0",
+        "from_lane": 0,
+        "to_edge": "59990286",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "61649647#0",
+        "from_lane": 0,
+        "to_edge": "61649649#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "61649647#0",
+        "from_lane": 1,
+        "to_edge": "59990286",
+        "to_lane": 1
+      }
+    ],
+    "retired_tls_ids": [
+      "2761334245",
+      "2761334257"
+    ],
+    "source_tls_binding_count": 59,
+    "status": "pass"
+  },
+  "plain_export": {
+    "command": [
+      "netconvert",
+      "--sumo-net-file",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_028_2349_channelized_stopline_geometry\\hamburg_2349_channelized_geometry.net.xml",
+      "--plain-output-prefix",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\source_plain",
+      "--plain-output.lanes",
+      "true"
+    ],
+    "result": {
+      "command": [
+        "netconvert",
+        "--sumo-net-file",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_028_2349_channelized_stopline_geometry\\hamburg_2349_channelized_geometry.net.xml",
+        "--plain-output-prefix",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\source_plain",
+        "--plain-output.lanes",
+        "true"
+      ],
+      "cwd": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network",
+      "error": "",
+      "returncode": 0,
+      "status": "pass",
+      "stderr": "",
+      "stdout": "Success.\n"
+    }
+  },
+  "plan": {
+    "demoted_links": [
+      {
+        "from_edge": "194672083",
+        "from_lane": 1,
+        "to_edge": "127716467#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "381540198#1",
+        "from_lane": 0,
+        "to_edge": "193847534#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "381540198#1",
+        "from_lane": 0,
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "381540198#1",
+        "from_lane": 1,
+        "to_edge": "554713077",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713076#1",
+        "from_lane": 0,
+        "to_edge": "554713076#2",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713076#1",
+        "from_lane": 1,
+        "to_edge": "554713076#2",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "554713078#1",
+        "from_lane": 0,
+        "to_edge": "554713078#2",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "554713078#1",
+        "from_lane": 1,
+        "to_edge": "554713078#2",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "554713078#2",
+        "from_lane": 0,
+        "to_edge": "554713075#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 0,
+        "to_edge": "-381540198#1",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 1,
+        "to_edge": "193847534#0",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "60578519",
+        "from_lane": 2,
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "from_edge": "9702432#2",
+        "from_lane": 0,
+        "to_edge": "554713077",
+        "to_lane": 0
+      },
+      {
+        "from_edge": "9702432#2",
+        "from_lane": 1,
+        "to_edge": "-381540198#1",
+        "to_lane": 0
+      }
+    ],
+    "groups": [
+      {
+        "link_index": 0,
+        "official_node_id": "2349",
+        "physical_links": [
+          {
+            "from_edge": "554713076#0",
+            "from_lane": 0,
+            "to_edge": "554713076#1",
+            "to_lane": 0
+          }
+        ],
+        "signal_group": "P_K1__S_NONE",
+        "tls_id": "HH_2349"
+      },
+      {
+        "link_index": 1,
+        "official_node_id": "2349",
+        "physical_links": [
+          {
+            "from_edge": "554713078#0",
+            "from_lane": 0,
+            "to_edge": "554713078#1",
+            "to_lane": 0
+          }
+        ],
+        "signal_group": "P_K3__S_K2",
+        "tls_id": "HH_2349"
+      },
+      {
+        "link_index": 2,
+        "official_node_id": "2349",
+        "physical_links": [
+          {
+            "from_edge": "61649647#0",
+            "from_lane": 0,
+            "to_edge": "59990286",
+            "to_lane": 0
+          },
+          {
+            "from_edge": "61649647#0",
+            "from_lane": 1,
+            "to_edge": "59990286",
+            "to_lane": 1
+          }
+        ],
+        "signal_group": "P_K4__S_NONE",
+        "tls_id": "HH_2349"
+      },
+      {
+        "link_index": 3,
+        "official_node_id": "2349",
+        "physical_links": [
+          {
+            "from_edge": "554713076#0",
+            "from_lane": 1,
+            "to_edge": "554713076#1",
+            "to_lane": 1
+          }
+        ],
+        "signal_group": "P_K5Z__S_K1",
+        "tls_id": "HH_2349"
+      },
+      {
+        "link_index": 4,
+        "official_node_id": "2349",
+        "physical_links": [
+          {
+            "from_edge": "554713078#0",
+            "from_lane": 1,
+            "to_edge": "554713078#1",
+            "to_lane": 1
+          }
+        ],
+        "signal_group": "P_K6Z__S_K2",
+        "tls_id": "HH_2349"
+      },
+      {
+        "link_index": 5,
+        "official_node_id": "2349",
+        "physical_links": [
+          {
+            "from_edge": "61649647#0",
+            "from_lane": 0,
+            "to_edge": "61649649#0",
+            "to_lane": 0
+          }
+        ],
+        "signal_group": "P_NONE__S_K4",
+        "tls_id": "HH_2349"
+      },
+      {
+        "link_index": 0,
+        "official_node_id": "2394",
+        "physical_links": [
+          {
+            "from_edge": "9702432#0",
+            "from_lane": 0,
+            "to_edge": "9702432#2",
+            "to_lane": 0
+          }
+        ],
+        "signal_group": "P_K1__S_NONE",
+        "tls_id": "HH_2394"
+      },
+      {
+        "link_index": 1,
+        "official_node_id": "2394",
+        "physical_links": [
+          {
+            "from_edge": "381540198#0",
+            "from_lane": 0,
+            "to_edge": "381540198#1",
+            "to_lane": 0
+          }
+        ],
+        "signal_group": "P_K3__S_K4",
+        "tls_id": "HH_2394"
+      },
+      {
+        "link_index": 2,
+        "official_node_id": "2394",
+        "physical_links": [
+          {
+            "from_edge": "47854310#2",
+            "from_lane": 0,
+            "to_edge": "60578519",
+            "to_lane": 0
+          }
+        ],
+        "signal_group": "P_K6__S_K7",
+        "tls_id": "HH_2394"
+      },
+      {
+        "link_index": 3,
+        "official_node_id": "2394",
+        "physical_links": [
+          {
+            "from_edge": "47854310#2",
+            "from_lane": 1,
+            "to_edge": "60578519",
+            "to_lane": 1
+          },
+          {
+            "from_edge": "47854310#2",
+            "from_lane": 2,
+            "to_edge": "60578519",
+            "to_lane": 2
+          }
+        ],
+        "signal_group": "P_K7__S_NONE",
+        "tls_id": "HH_2394"
+      },
+      {
+        "link_index": 4,
+        "official_node_id": "2394",
+        "physical_links": [
+          {
+            "from_edge": "9702432#0",
+            "from_lane": 1,
+            "to_edge": "9702432#2",
+            "to_lane": 1
+          }
+        ],
+        "signal_group": "P_NONE__S_K2",
+        "tls_id": "HH_2394"
+      },
+      {
+        "link_index": 5,
+        "official_node_id": "2394",
+        "physical_links": [
+          {
+            "from_edge": "381540198#0",
+            "from_lane": 1,
+            "to_edge": "381540198#1",
+            "to_lane": 1
+          }
+        ],
+        "signal_group": "P_NONE__S_K5",
+        "tls_id": "HH_2394"
+      }
+    ],
+    "plan_id": "hamburg-sandtorkai-2349-2394-compound-v1",
+    "repairs": [
+      {
+        "attributes": [],
+        "evidence": "official_map",
+        "from_edge": "194672083",
+        "from_lane": 1,
+        "official_node_id": "2349",
+        "reason": "official MAP movement 6->11",
+        "to_edge": "127716467#0",
+        "to_lane": 0
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "381540198#0",
+        "from_lane": 0,
+        "official_node_id": "2394",
+        "reason": "official KML ingress lane 6 stop line; anchor 0.527m from mapped lane start",
+        "to_edge": "381540198#1",
+        "to_lane": 0
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "381540198#0",
+        "from_lane": 1,
+        "official_node_id": "2394",
+        "reason": "official KML ingress lane 7 stop line; anchor 0.541m from mapped lane start",
+        "to_edge": "381540198#1",
+        "to_lane": 1
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map",
+        "from_edge": "381540198#1",
+        "from_lane": 0,
+        "official_node_id": "2394",
+        "reason": "official MAP movement 6->5",
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "554713076#0",
+        "from_lane": 0,
+        "official_node_id": "2349",
+        "reason": "official KML ingress lane 2 stop line; anchor 0.100m from mapped lane start",
+        "to_edge": "554713076#1",
+        "to_lane": 0
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "554713076#0",
+        "from_lane": 1,
+        "official_node_id": "2349",
+        "reason": "official KML ingress lane 3 stop line; anchor 0.100m from mapped lane start",
+        "to_edge": "554713076#1",
+        "to_lane": 1
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "554713078#0",
+        "from_lane": 0,
+        "official_node_id": "2349",
+        "reason": "official KML ingress lane 7 stop line; anchor 0.100m from mapped lane start",
+        "to_edge": "554713078#1",
+        "to_lane": 0
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "554713078#0",
+        "from_lane": 1,
+        "official_node_id": "2349",
+        "reason": "official KML ingress lane 6 stop line; anchor 0.100m from mapped lane start",
+        "to_edge": "554713078#1",
+        "to_lane": 1
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map",
+        "from_edge": "554713078#2",
+        "from_lane": 0,
+        "official_node_id": "2349",
+        "reason": "official MAP movement 7->4",
+        "to_edge": "554713075#0",
+        "to_lane": 1
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map",
+        "from_edge": "60578519",
+        "from_lane": 1,
+        "official_node_id": "2394",
+        "reason": "official MAP movement 11->4",
+        "to_edge": "193847534#0",
+        "to_lane": 0
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map",
+        "from_edge": "60578519",
+        "from_lane": 2,
+        "official_node_id": "2394",
+        "reason": "official MAP movement 12->5",
+        "to_edge": "193847534#0",
+        "to_lane": 1
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "61649647#0",
+        "from_lane": 0,
+        "official_node_id": "2349",
+        "reason": "official MAP movement 10->5 at the channelized 2349 stop line",
+        "to_edge": "59990286",
+        "to_lane": 0
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "61649647#0",
+        "from_lane": 0,
+        "official_node_id": "2349",
+        "reason": "official MAP movement 10->8 at the channelized 2349 stop line",
+        "to_edge": "61649649#0",
+        "to_lane": 0
+      },
+      {
+        "attributes": [],
+        "evidence": "official_map_stopline",
+        "from_edge": "61649647#0",
+        "from_lane": 1,
+        "official_node_id": "2349",
+        "reason": "official MAP movement 9->4 at the channelized 2349 stop line",
+        "to_edge": "59990286",
+        "to_lane": 1
+      }
+    ],
+    "retired_tls_ids": [
+      "2761334245",
+      "2761334257"
+    ],
+    "version": "2026-07-19.v9"
+  },
+  "rebuild": {
+    "command": [
+      "netconvert",
+      "--sumo-net-file",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_028_2349_channelized_stopline_geometry\\hamburg_2349_channelized_geometry.net.xml",
+      "--node-files",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls_owner_patch.nod.xml",
+      "--connection-files",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls.con.xml",
+      "--tllogic-files",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls.tll.xml",
+      "--no-turnarounds",
+      "--offset.disable-normalization",
+      "true",
+      "--output-file",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls_compound.net.xml",
+      "--error-log",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\netconvert.log"
+    ],
+    "result": {
+      "command": [
+        "netconvert",
+        "--sumo-net-file",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_028_2349_channelized_stopline_geometry\\hamburg_2349_channelized_geometry.net.xml",
+        "--node-files",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls_owner_patch.nod.xml",
+        "--connection-files",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls.con.xml",
+        "--tllogic-files",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls.tll.xml",
+        "--no-turnarounds",
+        "--offset.disable-normalization",
+        "true",
+        "--output-file",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls_compound.net.xml",
+        "--error-log",
+        "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\netconvert.log"
+      ],
+      "cwd": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network",
+      "error": "",
+      "returncode": 0,
+      "status": "pass",
+      "stderr": "",
+      "stdout": "Success.\n"
+    }
+  },
+  "rebuilt_net_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls_compound.net.xml",
+  "retired_tls_absence_audit": {
+    "retired_connection_tls_ids": [],
+    "retired_tllogic_ids": [],
+    "retired_tls_ids": [
+      "2761334245",
+      "2761334257"
+    ],
+    "status": "pass"
+  },
+  "source_net_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_028_2349_channelized_stopline_geometry\\hamburg_2349_channelized_geometry.net.xml",
+  "source_sha256_after": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+  "source_sha256_before": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+  "source_unchanged": true,
+  "status": "pass"
+}

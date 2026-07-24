@@ -1,0 +1,5552 @@
+{
+  "network_projection": "EPSG:25832",
+  "rows": [
+    {
+      "asset_id": "Z.1",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.015,
+          "edge_id": "9702432#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.015,
+              "edge_id": "9702432#0",
+              "lane_heading_deg": 200.148,
+              "lane_id": "9702432#0_0",
+              "lane_length_m": 98.24,
+              "lane_position_m": 97.974
+            },
+            {
+              "distance_m": 1.049,
+              "edge_id": "9702432#1",
+              "lane_heading_deg": 196.309,
+              "lane_id": "9702432#1_0",
+              "lane_length_m": 2.81,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#0_0",
+            "9702432#1_0"
+          ],
+          "lane_heading_deg": 200.148,
+          "lane_id": "9702432#0_0",
+          "lane_length_m": 98.24,
+          "lane_position_m": 97.974
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.492,
+          "edge_id": "9702432#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.492,
+              "edge_id": "9702432#2",
+              "lane_heading_deg": 196.314,
+              "lane_id": "9702432#2_0",
+              "lane_length_m": 8.97,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#2_0"
+          ],
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_0",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.211,
+          "edge_id": "9702432#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.211,
+              "edge_id": "9702432#0",
+              "lane_heading_deg": 200.161,
+              "lane_id": "9702432#0_1",
+              "lane_length_m": 98.24,
+              "lane_position_m": 98.143
+            },
+            {
+              "distance_m": 4.238,
+              "edge_id": "9702432#1",
+              "lane_heading_deg": 196.113,
+              "lane_id": "9702432#1_1",
+              "lane_length_m": 2.81,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#0_1",
+            "9702432#1_1"
+          ],
+          "lane_heading_deg": 200.161,
+          "lane_id": "9702432#0_1",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.143
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.387,
+          "edge_id": "9702432#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.387,
+              "edge_id": "9702432#2",
+              "lane_heading_deg": 196.314,
+              "lane_id": "9702432#2_1",
+              "lane_length_m": 8.97,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#2_1"
+          ],
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_1",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 13.49,
+          "edge_id": "193847534#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 13.49,
+              "edge_id": "193847534#1",
+              "lane_heading_deg": 19.872,
+              "lane_id": "193847534#1_1",
+              "lane_length_m": 8.83,
+              "lane_position_m": 3.412
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#1_1"
+          ],
+          "lane_heading_deg": 19.872,
+          "lane_id": "193847534#1_1",
+          "lane_length_m": 8.83,
+          "lane_position_m": 3.412
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 13.941,
+          "edge_id": "193847534#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 13.941,
+              "edge_id": "193847534#0",
+              "lane_heading_deg": 14.974,
+              "lane_id": "193847534#0_1",
+              "lane_length_m": 6.1,
+              "lane_position_m": 6.076
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#0_1"
+          ],
+          "lane_heading_deg": 14.974,
+          "lane_id": "193847534#0_1",
+          "lane_length_m": 6.1,
+          "lane_position_m": 6.076
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 16.689,
+          "edge_id": "193847534#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 16.689,
+              "edge_id": "193847534#1",
+              "lane_heading_deg": 19.85,
+              "lane_id": "193847534#1_0",
+              "lane_length_m": 8.83,
+              "lane_position_m": 3.413
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#1_0"
+          ],
+          "lane_heading_deg": 19.85,
+          "lane_id": "193847534#1_0",
+          "lane_length_m": 8.83,
+          "lane_position_m": 3.413
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 16.834,
+          "edge_id": "554713072",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 16.834,
+              "edge_id": "554713072",
+              "lane_heading_deg": 20.54,
+              "lane_id": "554713072_2",
+              "lane_length_m": 30.35,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713072_2"
+          ],
+          "lane_heading_deg": 20.54,
+          "lane_id": "554713072_2",
+          "lane_length_m": 30.35,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_1_28495",
+      "latitude": 53.543615228,
+      "longitude": 9.995369627,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 2.4674173381263564,
+      "official_map_lane": "2",
+      "official_map_to_sumo_distance_m": 1.3807381610590443,
+      "official_map_to_sumo_heading_error_deg": 2.2388357362038676,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 1.015,
+          "edge_id": "9702432#0",
+          "lane_heading_deg": 200.148,
+          "lane_id": "9702432#0_0",
+          "lane_length_m": 98.24,
+          "lane_position_m": 97.974
+        },
+        {
+          "distance_m": 1.049,
+          "edge_id": "9702432#1",
+          "lane_heading_deg": 196.309,
+          "lane_id": "9702432#1_0",
+          "lane_length_m": 2.81,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.492,
+          "edge_id": "9702432#2",
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_0",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.211,
+          "edge_id": "9702432#0",
+          "lane_heading_deg": 200.161,
+          "lane_id": "9702432#0_1",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.143
+        },
+        {
+          "distance_m": 4.238,
+          "edge_id": "9702432#1",
+          "lane_heading_deg": 196.113,
+          "lane_id": "9702432#1_1",
+          "lane_length_m": 2.81,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 5.387,
+          "edge_id": "9702432#2",
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_1",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 13.49,
+          "edge_id": "193847534#1",
+          "lane_heading_deg": 19.872,
+          "lane_id": "193847534#1_1",
+          "lane_length_m": 8.83,
+          "lane_position_m": 3.412
+        },
+        {
+          "distance_m": 13.941,
+          "edge_id": "193847534#0",
+          "lane_heading_deg": 14.974,
+          "lane_id": "193847534#0_1",
+          "lane_length_m": 6.1,
+          "lane_position_m": 6.076
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 3.492,
+      "selected_distance_m": 1.015,
+      "selected_edge": "9702432#0",
+      "selected_lane": "9702432#0_0",
+      "separation_m": 2.477,
+      "stream_id": 28495
+    },
+    {
+      "asset_id": "Z.2",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 0.814,
+          "edge_id": "9702432#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.814,
+              "edge_id": "9702432#1",
+              "lane_heading_deg": 196.309,
+              "lane_id": "9702432#1_0",
+              "lane_length_m": 2.81,
+              "lane_position_m": 2.813
+            },
+            {
+              "distance_m": 0.725,
+              "edge_id": "9702432#2",
+              "lane_heading_deg": 196.314,
+              "lane_id": "9702432#2_0",
+              "lane_length_m": 8.97,
+              "lane_position_m": 0.057
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#1_0",
+            "9702432#2_0"
+          ],
+          "lane_heading_deg": 196.309,
+          "lane_id": "9702432#1_0",
+          "lane_length_m": 2.81,
+          "lane_position_m": 2.813
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 2.492,
+          "edge_id": "9702432#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.492,
+              "edge_id": "9702432#1",
+              "lane_heading_deg": 196.113,
+              "lane_id": "9702432#1_1",
+              "lane_length_m": 2.81,
+              "lane_position_m": 2.81
+            },
+            {
+              "distance_m": 2.474,
+              "edge_id": "9702432#2",
+              "lane_heading_deg": 196.314,
+              "lane_id": "9702432#2_1",
+              "lane_length_m": 8.97,
+              "lane_position_m": 0.059
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#1_1",
+            "9702432#2_1"
+          ],
+          "lane_heading_deg": 196.113,
+          "lane_id": "9702432#1_1",
+          "lane_length_m": 2.81,
+          "lane_position_m": 2.81
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.359,
+          "edge_id": "9702432#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.359,
+              "edge_id": "9702432#0",
+              "lane_heading_deg": 200.148,
+              "lane_id": "9702432#0_0",
+              "lane_length_m": 98.24,
+              "lane_position_m": 98.157
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#0_0"
+          ],
+          "lane_heading_deg": 200.148,
+          "lane_id": "9702432#0_0",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.157
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.27,
+          "edge_id": "9702432#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.27,
+              "edge_id": "9702432#0",
+              "lane_heading_deg": 200.161,
+              "lane_id": "9702432#0_1",
+              "lane_length_m": 98.24,
+              "lane_position_m": 98.328
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#0_1"
+          ],
+          "lane_heading_deg": 200.161,
+          "lane_id": "9702432#0_1",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.328
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 11.9,
+          "edge_id": "193847534#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 11.9,
+              "edge_id": "193847534#0",
+              "lane_heading_deg": 14.974,
+              "lane_id": "193847534#0_1",
+              "lane_length_m": 6.1,
+              "lane_position_m": 5.117
+            },
+            {
+              "distance_m": 11.949,
+              "edge_id": "193847534#1",
+              "lane_heading_deg": 19.872,
+              "lane_id": "193847534#1_1",
+              "lane_length_m": 8.83,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#0_1",
+            "193847534#1_1"
+          ],
+          "lane_heading_deg": 14.974,
+          "lane_id": "193847534#0_1",
+          "lane_length_m": 6.1,
+          "lane_position_m": 5.117
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 13.021,
+          "edge_id": "-9702435",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 13.021,
+              "edge_id": "-9702435",
+              "lane_heading_deg": 112.834,
+              "lane_id": "-9702435_0",
+              "lane_length_m": 0.2,
+              "lane_position_m": 0.206
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-9702435_0"
+          ],
+          "lane_heading_deg": 112.834,
+          "lane_id": "-9702435_0",
+          "lane_length_m": 0.2,
+          "lane_position_m": 0.206
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 15.099,
+          "edge_id": "193847534#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 15.099,
+              "edge_id": "193847534#0",
+              "lane_heading_deg": 14.968,
+              "lane_id": "193847534#0_0",
+              "lane_length_m": 6.1,
+              "lane_position_m": 5.153
+            },
+            {
+              "distance_m": 15.147,
+              "edge_id": "193847534#1",
+              "lane_heading_deg": 19.85,
+              "lane_id": "193847534#1_0",
+              "lane_length_m": 8.83,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#0_0",
+            "193847534#1_0"
+          ],
+          "lane_heading_deg": 14.968,
+          "lane_id": "193847534#0_0",
+          "lane_length_m": 6.1,
+          "lane_position_m": 5.153
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 16.078,
+          "edge_id": "-9702435",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 16.078,
+              "edge_id": "-9702435",
+              "lane_heading_deg": 110.225,
+              "lane_id": "-9702435_1",
+              "lane_length_m": 0.2,
+              "lane_position_m": 0.202
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-9702435_1"
+          ],
+          "lane_heading_deg": 110.225,
+          "lane_id": "-9702435_1",
+          "lane_length_m": 0.2,
+          "lane_position_m": 0.202
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_2_30208",
+      "latitude": 53.543591864,
+      "longitude": 9.995327365,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 4.225165741589472,
+      "official_map_lane": "2",
+      "official_map_to_sumo_distance_m": 1.3807381610590443,
+      "official_map_to_sumo_heading_error_deg": 2.2388357362038676,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.725,
+          "edge_id": "9702432#2",
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_0",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.057
+        },
+        {
+          "distance_m": 0.814,
+          "edge_id": "9702432#1",
+          "lane_heading_deg": 196.309,
+          "lane_id": "9702432#1_0",
+          "lane_length_m": 2.81,
+          "lane_position_m": 2.813
+        },
+        {
+          "distance_m": 2.474,
+          "edge_id": "9702432#2",
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_1",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.059
+        },
+        {
+          "distance_m": 2.492,
+          "edge_id": "9702432#1",
+          "lane_heading_deg": 196.113,
+          "lane_id": "9702432#1_1",
+          "lane_length_m": 2.81,
+          "lane_position_m": 2.81
+        },
+        {
+          "distance_m": 3.359,
+          "edge_id": "9702432#0",
+          "lane_heading_deg": 200.148,
+          "lane_id": "9702432#0_0",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.157
+        },
+        {
+          "distance_m": 4.27,
+          "edge_id": "9702432#0",
+          "lane_heading_deg": 200.161,
+          "lane_id": "9702432#0_1",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.328
+        },
+        {
+          "distance_m": 11.9,
+          "edge_id": "193847534#0",
+          "lane_heading_deg": 14.974,
+          "lane_id": "193847534#0_1",
+          "lane_length_m": 6.1,
+          "lane_position_m": 5.117
+        },
+        {
+          "distance_m": 11.949,
+          "edge_id": "193847534#1",
+          "lane_heading_deg": 19.872,
+          "lane_id": "193847534#1_1",
+          "lane_length_m": 8.83,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 0.814,
+      "selected_distance_m": 3.359,
+      "selected_edge": "9702432#0",
+      "selected_lane": "9702432#0_0",
+      "separation_m": -2.545,
+      "stream_id": 30208
+    },
+    {
+      "asset_id": "Z.3",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 2.066,
+          "edge_id": "9702432#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.066,
+              "edge_id": "9702432#0",
+              "lane_heading_deg": 200.161,
+              "lane_id": "9702432#0_1",
+              "lane_length_m": 98.24,
+              "lane_position_m": 98.26
+            },
+            {
+              "distance_m": 2.107,
+              "edge_id": "9702432#1",
+              "lane_heading_deg": 196.113,
+              "lane_id": "9702432#1_1",
+              "lane_length_m": 2.81,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#0_1",
+            "9702432#1_1"
+          ],
+          "lane_heading_deg": 200.161,
+          "lane_id": "9702432#0_1",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.26
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.172,
+          "edge_id": "9702432#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.172,
+              "edge_id": "9702432#2",
+              "lane_heading_deg": 196.314,
+              "lane_id": "9702432#2_1",
+              "lane_length_m": 8.97,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#2_1"
+          ],
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_1",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 5.261,
+          "edge_id": "9702432#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.261,
+              "edge_id": "9702432#0",
+              "lane_heading_deg": 200.148,
+              "lane_id": "9702432#0_0",
+              "lane_length_m": 98.24,
+              "lane_position_m": 98.089
+            },
+            {
+              "distance_m": 5.27,
+              "edge_id": "9702432#1",
+              "lane_heading_deg": 196.309,
+              "lane_id": "9702432#1_0",
+              "lane_length_m": 2.81,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#0_0",
+            "9702432#1_0"
+          ],
+          "lane_heading_deg": 200.148,
+          "lane_id": "9702432#0_0",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.089
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.38,
+          "edge_id": "9702432#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.38,
+              "edge_id": "9702432#2",
+              "lane_heading_deg": 196.314,
+              "lane_id": "9702432#2_0",
+              "lane_length_m": 8.97,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702432#2_0"
+          ],
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_0",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 7.213,
+          "edge_id": "193847534#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.213,
+              "edge_id": "193847534#1",
+              "lane_heading_deg": 19.872,
+              "lane_id": "193847534#1_1",
+              "lane_length_m": 8.83,
+              "lane_position_m": 3.326
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#1_1"
+          ],
+          "lane_heading_deg": 19.872,
+          "lane_id": "193847534#1_1",
+          "lane_length_m": 8.83,
+          "lane_position_m": 3.326
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 7.996,
+          "edge_id": "193847534#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.996,
+              "edge_id": "193847534#0",
+              "lane_heading_deg": 14.974,
+              "lane_id": "193847534#0_1",
+              "lane_length_m": 6.1,
+              "lane_position_m": 6.076
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#0_1"
+          ],
+          "lane_heading_deg": 14.974,
+          "lane_id": "193847534#0_1",
+          "lane_length_m": 6.1,
+          "lane_position_m": 6.076
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.413,
+          "edge_id": "193847534#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.413,
+              "edge_id": "193847534#1",
+              "lane_heading_deg": 19.85,
+              "lane_id": "193847534#1_0",
+              "lane_length_m": 8.83,
+              "lane_position_m": 3.329
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#1_0"
+          ],
+          "lane_heading_deg": 19.85,
+          "lane_id": "193847534#1_0",
+          "lane_length_m": 8.83,
+          "lane_position_m": 3.329
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 11.045,
+          "edge_id": "193847534#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 11.045,
+              "edge_id": "193847534#0",
+              "lane_heading_deg": 14.968,
+              "lane_id": "193847534#0_0",
+              "lane_length_m": 6.1,
+              "lane_position_m": 6.118
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#0_0"
+          ],
+          "lane_heading_deg": 14.968,
+          "lane_id": "193847534#0_0",
+          "lane_length_m": 6.1,
+          "lane_position_m": 6.118
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_3_29127",
+      "latitude": 53.543561658,
+      "longitude": 9.995399355,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 0.70346904253759,
+      "official_map_lane": "3",
+      "official_map_to_sumo_distance_m": 1.6090994232925186,
+      "official_map_to_sumo_heading_error_deg": 3.984485932609914,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 2.066,
+          "edge_id": "9702432#0",
+          "lane_heading_deg": 200.161,
+          "lane_id": "9702432#0_1",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.26
+        },
+        {
+          "distance_m": 2.107,
+          "edge_id": "9702432#1",
+          "lane_heading_deg": 196.113,
+          "lane_id": "9702432#1_1",
+          "lane_length_m": 2.81,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.172,
+          "edge_id": "9702432#2",
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_1",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 5.261,
+          "edge_id": "9702432#0",
+          "lane_heading_deg": 200.148,
+          "lane_id": "9702432#0_0",
+          "lane_length_m": 98.24,
+          "lane_position_m": 98.089
+        },
+        {
+          "distance_m": 5.27,
+          "edge_id": "9702432#1",
+          "lane_heading_deg": 196.309,
+          "lane_id": "9702432#1_0",
+          "lane_length_m": 2.81,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.38,
+          "edge_id": "9702432#2",
+          "lane_heading_deg": 196.314,
+          "lane_id": "9702432#2_0",
+          "lane_length_m": 8.97,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 7.213,
+          "edge_id": "193847534#1",
+          "lane_heading_deg": 19.872,
+          "lane_id": "193847534#1_1",
+          "lane_length_m": 8.83,
+          "lane_position_m": 3.326
+        },
+        {
+          "distance_m": 7.996,
+          "edge_id": "193847534#0",
+          "lane_heading_deg": 14.974,
+          "lane_id": "193847534#0_1",
+          "lane_length_m": 6.1,
+          "lane_position_m": 6.076
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 4.172,
+      "selected_distance_m": 2.066,
+      "selected_edge": "9702432#0",
+      "selected_lane": "9702432#0_1",
+      "separation_m": 2.106,
+      "stream_id": 29127
+    },
+    {
+      "asset_id": "Z.4",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.558,
+          "edge_id": "381540198#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.558,
+              "edge_id": "381540198#0",
+              "lane_heading_deg": 110.931,
+              "lane_id": "381540198#0_0",
+              "lane_length_m": 40.95,
+              "lane_position_m": 40.952
+            },
+            {
+              "distance_m": 1.565,
+              "edge_id": "381540198#1",
+              "lane_heading_deg": 111.136,
+              "lane_id": "381540198#1_0",
+              "lane_length_m": 6.25,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#0_0",
+            "381540198#1_0"
+          ],
+          "lane_heading_deg": 110.931,
+          "lane_id": "381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.952
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.756,
+          "edge_id": "381540198#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.756,
+              "edge_id": "381540198#0",
+              "lane_heading_deg": 110.936,
+              "lane_id": "381540198#0_1",
+              "lane_length_m": 40.95,
+              "lane_position_m": 40.943
+            },
+            {
+              "distance_m": 4.757,
+              "edge_id": "381540198#1",
+              "lane_heading_deg": 111.103,
+              "lane_id": "381540198#1_1",
+              "lane_length_m": 6.25,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#0_1",
+            "381540198#1_1"
+          ],
+          "lane_heading_deg": 110.936,
+          "lane_id": "381540198#0_1",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.943
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.365,
+          "edge_id": "381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.365,
+              "edge_id": "381540198#2",
+              "lane_heading_deg": 107.354,
+              "lane_id": "381540198#2_0",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#2_0"
+          ],
+          "lane_heading_deg": 107.354,
+          "lane_id": "381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 7.955,
+          "edge_id": "381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.955,
+              "edge_id": "381540198#2",
+              "lane_heading_deg": 108.435,
+              "lane_id": "381540198#2_1",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#2_1"
+          ],
+          "lane_heading_deg": 108.435,
+          "lane_id": "381540198#2_1",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 7.96,
+          "edge_id": "-381540198#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.955,
+              "edge_id": "-381540198#0",
+              "lane_heading_deg": 290.931,
+              "lane_id": "-381540198#0_0",
+              "lane_length_m": 40.95,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 7.96,
+              "edge_id": "-381540198#1",
+              "lane_heading_deg": 291.103,
+              "lane_id": "-381540198#1_0",
+              "lane_length_m": 6.25,
+              "lane_position_m": 6.249
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-381540198#0_0",
+            "-381540198#1_0"
+          ],
+          "lane_heading_deg": 291.103,
+          "lane_id": "-381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 6.249
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.33,
+          "edge_id": "-381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.33,
+              "edge_id": "-381540198#2",
+              "lane_heading_deg": 286.858,
+              "lane_id": "-381540198#2_0",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.345
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-381540198#2_0"
+          ],
+          "lane_heading_deg": 286.858,
+          "lane_id": "-381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.345
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 14.612,
+          "edge_id": "193847534#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 14.612,
+              "edge_id": "193847534#0",
+              "lane_heading_deg": 14.968,
+              "lane_id": "193847534#0_0",
+              "lane_length_m": 6.1,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#0_0"
+          ],
+          "lane_heading_deg": 14.968,
+          "lane_id": "193847534#0_0",
+          "lane_length_m": 6.1,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 17.238,
+          "edge_id": "193847534#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 17.238,
+              "edge_id": "193847534#1",
+              "lane_heading_deg": 19.85,
+              "lane_id": "193847534#1_0",
+              "lane_length_m": 8.83,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#1_0"
+          ],
+          "lane_heading_deg": 19.85,
+          "lane_id": "193847534#1_0",
+          "lane_length_m": 8.83,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_4_30820",
+      "latitude": 53.543317673,
+      "longitude": 9.995314909,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 0.6587659510437655,
+      "official_map_lane": "6",
+      "official_map_to_sumo_distance_m": 2.2204685916943157,
+      "official_map_to_sumo_heading_error_deg": 3.3050750989490894,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 1.558,
+          "edge_id": "381540198#0",
+          "lane_heading_deg": 110.931,
+          "lane_id": "381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.952
+        },
+        {
+          "distance_m": 1.565,
+          "edge_id": "381540198#1",
+          "lane_heading_deg": 111.136,
+          "lane_id": "381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.756,
+          "edge_id": "381540198#0",
+          "lane_heading_deg": 110.936,
+          "lane_id": "381540198#0_1",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.943
+        },
+        {
+          "distance_m": 4.757,
+          "edge_id": "381540198#1",
+          "lane_heading_deg": 111.103,
+          "lane_id": "381540198#1_1",
+          "lane_length_m": 6.25,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.365,
+          "edge_id": "381540198#2",
+          "lane_heading_deg": 107.354,
+          "lane_id": "381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 7.955,
+          "edge_id": "-381540198#0",
+          "lane_heading_deg": 290.931,
+          "lane_id": "-381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 7.955,
+          "edge_id": "381540198#2",
+          "lane_heading_deg": 108.435,
+          "lane_id": "381540198#2_1",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 7.96,
+          "edge_id": "-381540198#1",
+          "lane_heading_deg": 291.103,
+          "lane_id": "-381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 6.249
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 4.756,
+      "selected_distance_m": 1.565,
+      "selected_edge": "381540198#1",
+      "selected_lane": "381540198#1_0",
+      "separation_m": 3.191,
+      "stream_id": 30820
+    },
+    {
+      "asset_id": "Z.5",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.583,
+          "edge_id": "381540198#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.583,
+              "edge_id": "381540198#0",
+              "lane_heading_deg": 110.931,
+              "lane_id": "381540198#0_0",
+              "lane_length_m": 40.95,
+              "lane_position_m": 40.952
+            },
+            {
+              "distance_m": 1.579,
+              "edge_id": "381540198#1",
+              "lane_heading_deg": 111.136,
+              "lane_id": "381540198#1_0",
+              "lane_length_m": 6.25,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#0_0",
+            "381540198#1_0"
+          ],
+          "lane_heading_deg": 110.931,
+          "lane_id": "381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.952
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.632,
+          "edge_id": "381540198#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.632,
+              "edge_id": "381540198#0",
+              "lane_heading_deg": 110.936,
+              "lane_id": "381540198#0_1",
+              "lane_length_m": 40.95,
+              "lane_position_m": 40.943
+            },
+            {
+              "distance_m": 1.637,
+              "edge_id": "381540198#1",
+              "lane_heading_deg": 111.103,
+              "lane_id": "381540198#1_1",
+              "lane_length_m": 6.25,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#0_1",
+            "381540198#1_1"
+          ],
+          "lane_heading_deg": 110.936,
+          "lane_id": "381540198#0_1",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.943
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.835,
+          "edge_id": "-381540198#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.828,
+              "edge_id": "-381540198#0",
+              "lane_heading_deg": 290.931,
+              "lane_id": "-381540198#0_0",
+              "lane_length_m": 40.95,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 4.835,
+              "edge_id": "-381540198#1",
+              "lane_heading_deg": 291.103,
+              "lane_id": "-381540198#1_0",
+              "lane_length_m": 6.25,
+              "lane_position_m": 6.249
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-381540198#0_0",
+            "-381540198#1_0"
+          ],
+          "lane_heading_deg": 291.103,
+          "lane_id": "-381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 6.249
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.377,
+          "edge_id": "381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.377,
+              "edge_id": "381540198#2",
+              "lane_heading_deg": 107.354,
+              "lane_id": "381540198#2_0",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#2_0"
+          ],
+          "lane_heading_deg": 107.354,
+          "lane_id": "381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.595,
+          "edge_id": "381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.595,
+              "edge_id": "381540198#2",
+              "lane_heading_deg": 108.435,
+              "lane_id": "381540198#2_1",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#2_1"
+          ],
+          "lane_heading_deg": 108.435,
+          "lane_id": "381540198#2_1",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 8.179,
+          "edge_id": "-381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 8.179,
+              "edge_id": "-381540198#2",
+              "lane_heading_deg": 286.858,
+              "lane_id": "-381540198#2_0",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.345
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-381540198#2_0"
+          ],
+          "lane_heading_deg": 286.858,
+          "lane_id": "-381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.345
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 15.897,
+          "edge_id": "193847534#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 15.897,
+              "edge_id": "193847534#0",
+              "lane_heading_deg": 14.968,
+              "lane_id": "193847534#0_0",
+              "lane_length_m": 6.1,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "193847534#0_0"
+          ],
+          "lane_heading_deg": 14.968,
+          "lane_id": "193847534#0_0",
+          "lane_length_m": 6.1,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 16.705,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 16.705,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.397,
+              "lane_id": "60578519_0",
+              "lane_length_m": 8.08,
+              "lane_position_m": 8.084
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_0"
+          ],
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 8.084
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_5_35320",
+      "latitude": 53.543307766,
+      "longitude": 9.995270753,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 0.4342117776358464,
+      "official_map_lane": "7",
+      "official_map_to_sumo_distance_m": 2.0660685795333,
+      "official_map_to_sumo_heading_error_deg": 2.385780453306211,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 1.579,
+          "edge_id": "381540198#1",
+          "lane_heading_deg": 111.136,
+          "lane_id": "381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 1.583,
+          "edge_id": "381540198#0",
+          "lane_heading_deg": 110.931,
+          "lane_id": "381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.952
+        },
+        {
+          "distance_m": 1.632,
+          "edge_id": "381540198#0",
+          "lane_heading_deg": 110.936,
+          "lane_id": "381540198#0_1",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.943
+        },
+        {
+          "distance_m": 1.637,
+          "edge_id": "381540198#1",
+          "lane_heading_deg": 111.103,
+          "lane_id": "381540198#1_1",
+          "lane_length_m": 6.25,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.828,
+          "edge_id": "-381540198#0",
+          "lane_heading_deg": 290.931,
+          "lane_id": "-381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.835,
+          "edge_id": "-381540198#1",
+          "lane_heading_deg": 291.103,
+          "lane_id": "-381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 6.249
+        },
+        {
+          "distance_m": 6.377,
+          "edge_id": "381540198#2",
+          "lane_heading_deg": 107.354,
+          "lane_id": "381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.595,
+          "edge_id": "381540198#2",
+          "lane_heading_deg": 108.435,
+          "lane_id": "381540198#2_1",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 1.583,
+      "selected_distance_m": 1.637,
+      "selected_edge": "381540198#1",
+      "selected_lane": "381540198#1_1",
+      "separation_m": -0.054,
+      "stream_id": 35320
+    },
+    {
+      "asset_id": "Z.6",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.575,
+          "edge_id": "-381540198#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.569,
+              "edge_id": "-381540198#0",
+              "lane_heading_deg": 290.931,
+              "lane_id": "-381540198#0_0",
+              "lane_length_m": 40.95,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 1.575,
+              "edge_id": "-381540198#1",
+              "lane_heading_deg": 291.103,
+              "lane_id": "-381540198#1_0",
+              "lane_length_m": 6.25,
+              "lane_position_m": 6.249
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-381540198#0_0",
+            "-381540198#1_0"
+          ],
+          "lane_heading_deg": 291.103,
+          "lane_id": "-381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 6.249
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.645,
+          "edge_id": "381540198#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.645,
+              "edge_id": "381540198#0",
+              "lane_heading_deg": 110.936,
+              "lane_id": "381540198#0_1",
+              "lane_length_m": 40.95,
+              "lane_position_m": 40.943
+            },
+            {
+              "distance_m": 1.642,
+              "edge_id": "381540198#1",
+              "lane_heading_deg": 111.103,
+              "lane_id": "381540198#1_1",
+              "lane_length_m": 6.25,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#0_1",
+            "381540198#1_1"
+          ],
+          "lane_heading_deg": 110.936,
+          "lane_id": "381540198#0_1",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.943
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.843,
+          "edge_id": "381540198#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.843,
+              "edge_id": "381540198#0",
+              "lane_heading_deg": 110.931,
+              "lane_id": "381540198#0_0",
+              "lane_length_m": 40.95,
+              "lane_position_m": 40.952
+            },
+            {
+              "distance_m": 4.836,
+              "edge_id": "381540198#1",
+              "lane_heading_deg": 111.136,
+              "lane_id": "381540198#1_0",
+              "lane_length_m": 6.25,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#0_0",
+            "381540198#1_0"
+          ],
+          "lane_heading_deg": 110.931,
+          "lane_id": "381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.952
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.569,
+          "edge_id": "381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.569,
+              "edge_id": "381540198#2",
+              "lane_heading_deg": 108.435,
+              "lane_id": "381540198#2_1",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#2_1"
+          ],
+          "lane_heading_deg": 108.435,
+          "lane_id": "381540198#2_1",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.757,
+          "edge_id": "-381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.757,
+              "edge_id": "-381540198#2",
+              "lane_heading_deg": 286.858,
+              "lane_id": "-381540198#2_0",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.345
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-381540198#2_0"
+          ],
+          "lane_heading_deg": 286.858,
+          "lane_id": "-381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.345
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 7.821,
+          "edge_id": "381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.821,
+              "edge_id": "381540198#2",
+              "lane_heading_deg": 107.354,
+              "lane_id": "381540198#2_0",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "381540198#2_0"
+          ],
+          "lane_heading_deg": 107.354,
+          "lane_id": "381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 14.809,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 14.809,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.397,
+              "lane_id": "60578519_0",
+              "lane_length_m": 8.08,
+              "lane_position_m": 8.084
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_0"
+          ],
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 8.084
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 17.479,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 17.479,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.466,
+              "lane_id": "60578519_1",
+              "lane_length_m": 8.08,
+              "lane_position_m": 8.086
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_1"
+          ],
+          "lane_heading_deg": 14.466,
+          "lane_id": "60578519_1",
+          "lane_length_m": 8.08,
+          "lane_position_m": 8.086
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_6_29032",
+      "latitude": 53.543297782,
+      "longitude": 9.995224441,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 3.6903242170621966,
+      "official_map_lane": "7",
+      "official_map_to_sumo_distance_m": 2.0660685795333,
+      "official_map_to_sumo_heading_error_deg": 2.385780453306211,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 1.569,
+          "edge_id": "-381540198#0",
+          "lane_heading_deg": 290.931,
+          "lane_id": "-381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 1.575,
+          "edge_id": "-381540198#1",
+          "lane_heading_deg": 291.103,
+          "lane_id": "-381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 6.249
+        },
+        {
+          "distance_m": 1.642,
+          "edge_id": "381540198#1",
+          "lane_heading_deg": 111.103,
+          "lane_id": "381540198#1_1",
+          "lane_length_m": 6.25,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 1.645,
+          "edge_id": "381540198#0",
+          "lane_heading_deg": 110.936,
+          "lane_id": "381540198#0_1",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.943
+        },
+        {
+          "distance_m": 4.836,
+          "edge_id": "381540198#1",
+          "lane_heading_deg": 111.136,
+          "lane_id": "381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.843,
+          "edge_id": "381540198#0",
+          "lane_heading_deg": 110.931,
+          "lane_id": "381540198#0_0",
+          "lane_length_m": 40.95,
+          "lane_position_m": 40.952
+        },
+        {
+          "distance_m": 6.569,
+          "edge_id": "381540198#2",
+          "lane_heading_deg": 108.435,
+          "lane_id": "381540198#2_1",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.757,
+          "edge_id": "-381540198#2",
+          "lane_heading_deg": 286.858,
+          "lane_id": "-381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.345
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 1.575,
+      "selected_distance_m": 1.642,
+      "selected_edge": "381540198#1",
+      "selected_lane": "381540198#1_1",
+      "separation_m": -0.067,
+      "stream_id": 29032
+    },
+    {
+      "asset_id": "Z.7",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.446,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.446,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_0",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_0"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_0",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.601,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.601,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.397,
+              "lane_id": "60578519_0",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_0"
+          ],
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.617,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.617,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_1",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_1"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_1",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.635,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.635,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.466,
+              "lane_id": "60578519_1",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_1"
+          ],
+          "lane_heading_deg": 14.466,
+          "lane_id": "60578519_1",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.814,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.814,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_2",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_2"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_2",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.822,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.822,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.484,
+              "lane_id": "60578519_2",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_2"
+          ],
+          "lane_heading_deg": 14.484,
+          "lane_id": "60578519_2",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 15.778,
+          "edge_id": "-381540198#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 15.981,
+              "edge_id": "-381540198#1",
+              "lane_heading_deg": 291.103,
+              "lane_id": "-381540198#1_0",
+              "lane_length_m": 6.25,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 15.778,
+              "edge_id": "-381540198#2",
+              "lane_heading_deg": 286.858,
+              "lane_id": "-381540198#2_0",
+              "lane_length_m": 0.34,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-381540198#1_0",
+            "-381540198#2_0"
+          ],
+          "lane_heading_deg": 286.858,
+          "lane_id": "-381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 17.037,
+          "edge_id": "554713077",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 17.037,
+              "edge_id": "554713077",
+              "lane_heading_deg": 195.453,
+              "lane_id": "554713077_0",
+              "lane_length_m": 20.79,
+              "lane_position_m": 10.4
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713077_0"
+          ],
+          "lane_heading_deg": 195.453,
+          "lane_id": "554713077_0",
+          "lane_length_m": 20.79,
+          "lane_position_m": 10.4
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_7_26767",
+      "latitude": 53.543360925,
+      "longitude": 9.994928763,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 0.861471621791116,
+      "official_map_lane": "10",
+      "official_map_to_sumo_distance_m": 0.5847646405141897,
+      "official_map_to_sumo_heading_error_deg": 3.752610047618134,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.446,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_0",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 0.601,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.617,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_1",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 3.635,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.466,
+          "lane_id": "60578519_1",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.814,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_2",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 6.822,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.484,
+          "lane_id": "60578519_2",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 15.778,
+          "edge_id": "-381540198#2",
+          "lane_heading_deg": 286.858,
+          "lane_id": "-381540198#2_0",
+          "lane_length_m": 0.34,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 15.981,
+          "edge_id": "-381540198#1",
+          "lane_heading_deg": 291.103,
+          "lane_id": "-381540198#1_0",
+          "lane_length_m": 6.25,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 0.601,
+      "selected_distance_m": 0.446,
+      "selected_edge": "47854310#2",
+      "selected_lane": "47854310#2_0",
+      "separation_m": 0.155,
+      "stream_id": 26767
+    },
+    {
+      "asset_id": "Z.8",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.288,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.288,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_1",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_1"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_1",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.368,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.368,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.466,
+              "lane_id": "60578519_1",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_1"
+          ],
+          "lane_heading_deg": 14.466,
+          "lane_id": "60578519_1",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 2.965,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.965,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_0",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_0"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_0",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 2.968,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.968,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.397,
+              "lane_id": "60578519_0",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_0"
+          ],
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.441,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.441,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_2",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_2"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_2",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.449,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.449,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.484,
+              "lane_id": "60578519_2",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_2"
+          ],
+          "lane_heading_deg": 14.484,
+          "lane_id": "60578519_2",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 13.668,
+          "edge_id": "554713077",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 13.668,
+              "edge_id": "554713077",
+              "lane_heading_deg": 195.453,
+              "lane_id": "554713077_0",
+              "lane_length_m": 20.79,
+              "lane_position_m": 10.193
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713077_0"
+          ],
+          "lane_heading_deg": 195.453,
+          "lane_id": "554713077_0",
+          "lane_length_m": 20.79,
+          "lane_position_m": 10.193
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 16.102,
+          "edge_id": "9702435",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 16.102,
+              "edge_id": "9702435",
+              "lane_heading_deg": 290.225,
+              "lane_id": "9702435_0",
+              "lane_length_m": 0.2,
+              "lane_position_m": 0.202
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702435_0"
+          ],
+          "lane_heading_deg": 290.225,
+          "lane_id": "9702435_0",
+          "lane_length_m": 0.2,
+          "lane_position_m": 0.202
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_8_27151",
+      "latitude": 53.543390688,
+      "longitude": 9.994918918,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 0.8400535457923756,
+      "official_map_lane": "11",
+      "official_map_to_sumo_distance_m": 0.7098723921650147,
+      "official_map_to_sumo_heading_error_deg": 1.0917277406342691,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.288,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_1",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 0.368,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.466,
+          "lane_id": "60578519_1",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 2.965,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_0",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 2.968,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.441,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_2",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 3.449,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.484,
+          "lane_id": "60578519_2",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 13.668,
+          "edge_id": "554713077",
+          "lane_heading_deg": 195.453,
+          "lane_id": "554713077_0",
+          "lane_length_m": 20.79,
+          "lane_position_m": 10.193
+        },
+        {
+          "distance_m": 16.102,
+          "edge_id": "9702435",
+          "lane_heading_deg": 290.225,
+          "lane_id": "9702435_0",
+          "lane_length_m": 0.2,
+          "lane_position_m": 0.202
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 0.368,
+      "selected_distance_m": 0.288,
+      "selected_edge": "47854310#2",
+      "selected_lane": "47854310#2_1",
+      "separation_m": 0.08,
+      "stream_id": 27151
+    },
+    {
+      "asset_id": "Z.9",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.226,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.226,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_2",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_2"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_2",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.244,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.244,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.484,
+              "lane_id": "60578519_2",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_2"
+          ],
+          "lane_heading_deg": 14.484,
+          "lane_id": "60578519_2",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.024,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.024,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.466,
+              "lane_id": "60578519_1",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_1"
+          ],
+          "lane_heading_deg": 14.466,
+          "lane_id": "60578519_1",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.025,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.025,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_1",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_1"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_1",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.214,
+          "edge_id": "60578519",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.214,
+              "edge_id": "60578519",
+              "lane_heading_deg": 14.397,
+              "lane_id": "60578519_0",
+              "lane_length_m": 8.08,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578519_0"
+          ],
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.222,
+          "edge_id": "47854310#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.222,
+              "edge_id": "47854310#2",
+              "lane_heading_deg": 11.899,
+              "lane_id": "47854310#2_0",
+              "lane_length_m": 21.92,
+              "lane_position_m": 21.921
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "47854310#2_0"
+          ],
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_0",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.413,
+          "edge_id": "554713077",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.413,
+              "edge_id": "554713077",
+              "lane_heading_deg": 195.453,
+              "lane_id": "554713077_0",
+              "lane_length_m": 20.79,
+              "lane_position_m": 10.013
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713077_0"
+          ],
+          "lane_heading_deg": 195.453,
+          "lane_id": "554713077_0",
+          "lane_length_m": 20.79,
+          "lane_position_m": 10.013
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 14.478,
+          "edge_id": "9702435",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 14.478,
+              "edge_id": "9702435",
+              "lane_heading_deg": 290.225,
+              "lane_id": "9702435_0",
+              "lane_length_m": 0.2,
+              "lane_position_m": 0.202
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "9702435_0"
+          ],
+          "lane_heading_deg": 290.225,
+          "lane_id": "9702435_0",
+          "lane_length_m": 0.2,
+          "lane_position_m": 0.202
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2394_Z_9_32139",
+      "latitude": 53.543419405,
+      "longitude": 9.99490913,
+      "node_id": "2394",
+      "official_detector_to_map_distance_m": 0.7831271821015157,
+      "official_map_lane": "12",
+      "official_map_to_sumo_distance_m": 0.7990573932921701,
+      "official_map_to_sumo_heading_error_deg": 1.0931098050490675,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.226,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_2",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 0.244,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.484,
+          "lane_id": "60578519_2",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.024,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.466,
+          "lane_id": "60578519_1",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.025,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_1",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 6.214,
+          "edge_id": "60578519",
+          "lane_heading_deg": 14.397,
+          "lane_id": "60578519_0",
+          "lane_length_m": 8.08,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.222,
+          "edge_id": "47854310#2",
+          "lane_heading_deg": 11.899,
+          "lane_id": "47854310#2_0",
+          "lane_length_m": 21.92,
+          "lane_position_m": 21.921
+        },
+        {
+          "distance_m": 10.413,
+          "edge_id": "554713077",
+          "lane_heading_deg": 195.453,
+          "lane_id": "554713077_0",
+          "lane_length_m": 20.79,
+          "lane_position_m": 10.013
+        },
+        {
+          "distance_m": 14.478,
+          "edge_id": "9702435",
+          "lane_heading_deg": 290.225,
+          "lane_id": "9702435_0",
+          "lane_length_m": 0.2,
+          "lane_position_m": 0.202
+        }
+      ],
+      "reason": "official MAP ingress-lane identity + detector-point projection onto the frozen SUMO lane",
+      "runner_up_distance_m": 0.244,
+      "selected_distance_m": 0.226,
+      "selected_edge": "47854310#2",
+      "selected_lane": "47854310#2_2",
+      "separation_m": 0.018,
+      "stream_id": 32139
+    },
+    {
+      "asset_id": "Z.1",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.128,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.128,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_1",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.205
+            },
+            {
+              "distance_m": 1.1,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.124,
+              "lane_id": "25444569#1_1",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_1",
+            "25444569#1_1"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_1",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 2.127,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.127,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.494,
+              "lane_id": "25444569#0_2",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.196
+            },
+            {
+              "distance_m": 2.121,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.048,
+              "lane_id": "25444569#1_2",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_2",
+            "25444569#1_2"
+          ],
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.307,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.307,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.463,
+              "lane_id": "25444569#0_0",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.201
+            },
+            {
+              "distance_m": 4.295,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.124,
+              "lane_id": "25444569#1_0",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_0",
+            "25444569#1_0"
+          ],
+          "lane_heading_deg": 206.463,
+          "lane_id": "25444569#0_0",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.201
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.349,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.349,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.298,
+              "lane_id": "25444569#2_1",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_1"
+          ],
+          "lane_heading_deg": 210.298,
+          "lane_id": "25444569#2_1",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.701,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.701,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.262,
+              "lane_id": "25444569#2_2",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_2"
+          ],
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 5.316,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.316,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_3",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.205
+            },
+            {
+              "distance_m": 5.308,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.256,
+              "lane_id": "25444569#1_3",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_3",
+            "25444569#1_3"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.015,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.015,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.299,
+              "lane_id": "25444569#2_0",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_0"
+          ],
+          "lane_heading_deg": 210.299,
+          "lane_id": "25444569#2_0",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.764,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.764,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.296,
+              "lane_id": "25444569#2_3",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_3"
+          ],
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": {
+        "assignment_score_m": 0.445,
+        "basis": "official_lane_count_plus_translation_normalized_point_constellation",
+        "claim_boundary": "geometric cross-section inference; Z.n is not treated as a lane index",
+        "direction": "Richtung 1",
+        "edge_stem": "25444569",
+        "heading_error_deg": 0.561,
+        "lane_ids": [
+          "25444569#0_1",
+          "25444569#0_2",
+          "25444569#0_0",
+          "25444569#0_3"
+        ],
+        "maximum_residual_m": 0.21,
+        "node_id": "2403",
+        "official_source_sha256": [
+          "86e80a29ee554449c8b0eab6217fb59e353953f4a671703f2cc4e415d4cd6052",
+          "941c717986f4ce35a1cc910c487f48577e7013f990904369805e877c688dc222"
+        ],
+        "runner_up_margin_m": 5.941,
+        "selected_edge": "25444569#0",
+        "stream_ids": [
+          28751,
+          29224,
+          31912,
+          33751
+        ],
+        "translation_m": 4.287,
+        "translation_xy_m": [
+          1.609,
+          -3.974
+        ]
+      },
+      "detector_id": "hh_2403_Z_1_31912",
+      "latitude": 53.54429302,
+      "longitude": 9.998052088,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 1.1,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.124,
+          "lane_id": "25444569#1_1",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 1.128,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_1",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "distance_m": 2.121,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.048,
+          "lane_id": "25444569#1_2",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 2.127,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "distance_m": 4.295,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.124,
+          "lane_id": "25444569#1_0",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.307,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.463,
+          "lane_id": "25444569#0_0",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.201
+        },
+        {
+          "distance_m": 4.349,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.298,
+          "lane_id": "25444569#2_1",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.701,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "official engineering-plan lane count + translation-normalized detector constellation; geometric inference, not an official Z-to-lane identity",
+      "runner_up_distance_m": 1.128,
+      "selected_distance_m": 4.307,
+      "selected_edge": "25444569#0",
+      "selected_lane": "25444569#0_0",
+      "separation_m": -3.179,
+      "stream_id": 31912
+    },
+    {
+      "asset_id": "Z.10",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 0.345,
+          "edge_id": "152813965#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.345,
+              "edge_id": "152813965#1",
+              "lane_heading_deg": 105.575,
+              "lane_id": "152813965#1_0",
+              "lane_length_m": 3.62,
+              "lane_position_m": 3.613
+            },
+            {
+              "distance_m": 0.24,
+              "edge_id": "152813965#2",
+              "lane_heading_deg": 105.632,
+              "lane_id": "152813965#2_0",
+              "lane_length_m": 17.07,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "152813965#1_0",
+            "152813965#2_0"
+          ],
+          "lane_heading_deg": 105.575,
+          "lane_id": "152813965#1_0",
+          "lane_length_m": 3.62,
+          "lane_position_m": 3.613
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 2.967,
+          "edge_id": "-152813965#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.978,
+              "edge_id": "-152813965#1",
+              "lane_heading_deg": 285.575,
+              "lane_id": "-152813965#1_2",
+              "lane_length_m": 3.62,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 2.967,
+              "edge_id": "-152813965#2",
+              "lane_heading_deg": 285.623,
+              "lane_id": "-152813965#2_2",
+              "lane_length_m": 17.07,
+              "lane_position_m": 17.081
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#1_2",
+            "-152813965#2_2"
+          ],
+          "lane_heading_deg": 285.623,
+          "lane_id": "-152813965#2_2",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.081
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.94,
+          "edge_id": "152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.94,
+              "edge_id": "152813965#0",
+              "lane_heading_deg": 107.819,
+              "lane_id": "152813965#0_0",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.294
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "152813965#0_0"
+          ],
+          "lane_heading_deg": 107.819,
+          "lane_id": "152813965#0_0",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.294
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.993,
+          "edge_id": "-152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.993,
+              "edge_id": "-152813965#0",
+              "lane_heading_deg": 287.819,
+              "lane_id": "-152813965#0_2",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#0_2"
+          ],
+          "lane_heading_deg": 287.819,
+          "lane_id": "-152813965#0_2",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 6.164,
+          "edge_id": "-152813965#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.167,
+              "edge_id": "-152813965#1",
+              "lane_heading_deg": 285.533,
+              "lane_id": "-152813965#1_1",
+              "lane_length_m": 3.62,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 6.164,
+              "edge_id": "-152813965#2",
+              "lane_heading_deg": 285.632,
+              "lane_id": "-152813965#2_1",
+              "lane_length_m": 17.07,
+              "lane_position_m": 17.071
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#1_1",
+            "-152813965#2_1"
+          ],
+          "lane_heading_deg": 285.632,
+          "lane_id": "-152813965#2_1",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.071
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 7.413,
+          "edge_id": "-152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.413,
+              "edge_id": "-152813965#0",
+              "lane_heading_deg": 287.819,
+              "lane_id": "-152813965#0_1",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#0_1"
+          ],
+          "lane_heading_deg": 287.819,
+          "lane_id": "-152813965#0_1",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 9.372,
+          "edge_id": "-152813965#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 9.373,
+              "edge_id": "-152813965#1",
+              "lane_heading_deg": 285.685,
+              "lane_id": "-152813965#1_0",
+              "lane_length_m": 3.62,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 9.372,
+              "edge_id": "-152813965#2",
+              "lane_heading_deg": 285.6,
+              "lane_id": "-152813965#2_0",
+              "lane_length_m": 17.07,
+              "lane_position_m": 17.069
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#1_0",
+            "-152813965#2_0"
+          ],
+          "lane_heading_deg": 285.6,
+          "lane_id": "-152813965#2_0",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.069
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.257,
+          "edge_id": "-152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.257,
+              "edge_id": "-152813965#0",
+              "lane_heading_deg": 285.945,
+              "lane_id": "-152813965#0_0",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#0_0"
+          ],
+          "lane_heading_deg": 285.945,
+          "lane_id": "-152813965#0_0",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2403_Z_10_32693",
+      "latitude": 53.544320534,
+      "longitude": 9.997695187,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.24,
+          "edge_id": "152813965#2",
+          "lane_heading_deg": 105.632,
+          "lane_id": "152813965#2_0",
+          "lane_length_m": 17.07,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 0.345,
+          "edge_id": "152813965#1",
+          "lane_heading_deg": 105.575,
+          "lane_id": "152813965#1_0",
+          "lane_length_m": 3.62,
+          "lane_position_m": 3.613
+        },
+        {
+          "distance_m": 2.967,
+          "edge_id": "-152813965#2",
+          "lane_heading_deg": 285.623,
+          "lane_id": "-152813965#2_2",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.081
+        },
+        {
+          "distance_m": 2.978,
+          "edge_id": "-152813965#1",
+          "lane_heading_deg": 285.575,
+          "lane_id": "-152813965#1_2",
+          "lane_length_m": 3.62,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.94,
+          "edge_id": "152813965#0",
+          "lane_heading_deg": 107.819,
+          "lane_id": "152813965#0_0",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.294
+        },
+        {
+          "distance_m": 4.993,
+          "edge_id": "-152813965#0",
+          "lane_heading_deg": 287.819,
+          "lane_id": "-152813965#0_2",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.164,
+          "edge_id": "-152813965#2",
+          "lane_heading_deg": 285.632,
+          "lane_id": "-152813965#2_1",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.071
+        },
+        {
+          "distance_m": 6.167,
+          "edge_id": "-152813965#1",
+          "lane_heading_deg": 285.533,
+          "lane_id": "-152813965#1_1",
+          "lane_length_m": 3.62,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "strict geometry-only binding; serial SUMO edge cuts collapsed to the upstream lane; explicit EPSG:25832 conversion; no official MAP lane identity",
+      "runner_up_distance_m": 2.967,
+      "selected_distance_m": 0.345,
+      "selected_edge": "152813965#1",
+      "selected_lane": "152813965#1_0",
+      "separation_m": 2.622,
+      "stream_id": 32693
+    },
+    {
+      "asset_id": "Z.2",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.279,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.279,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.494,
+              "lane_id": "25444569#0_2",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.196
+            },
+            {
+              "distance_m": 1.218,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.048,
+              "lane_id": "25444569#1_2",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.098
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_2",
+            "25444569#1_2"
+          ],
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.992,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.992,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_3",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.205
+            },
+            {
+              "distance_m": 1.972,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.256,
+              "lane_id": "25444569#1_3",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.094
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_3",
+            "25444569#1_3"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.13,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.13,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.262,
+              "lane_id": "25444569#2_2",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_2"
+          ],
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.407,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.407,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.296,
+              "lane_id": "25444569#2_3",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_3"
+          ],
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.446,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.446,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_1",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.205
+            },
+            {
+              "distance_m": 4.422,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.124,
+              "lane_id": "25444569#1_1",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.097
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_1",
+            "25444569#1_1"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_1",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.939,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.939,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.298,
+              "lane_id": "25444569#2_1",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_1"
+          ],
+          "lane_heading_deg": 210.298,
+          "lane_id": "25444569#2_1",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 7.647,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.647,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.463,
+              "lane_id": "25444569#0_0",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.201
+            },
+            {
+              "distance_m": 7.626,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.124,
+              "lane_id": "25444569#1_0",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.095
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_0",
+            "25444569#1_0"
+          ],
+          "lane_heading_deg": 206.463,
+          "lane_id": "25444569#0_0",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.201
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 8.593,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 8.593,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.299,
+              "lane_id": "25444569#2_0",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_0"
+          ],
+          "lane_heading_deg": 210.299,
+          "lane_id": "25444569#2_0",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": {
+        "assignment_score_m": 0.445,
+        "basis": "official_lane_count_plus_translation_normalized_point_constellation",
+        "claim_boundary": "geometric cross-section inference; Z.n is not treated as a lane index",
+        "direction": "Richtung 1",
+        "edge_stem": "25444569",
+        "heading_error_deg": 0.561,
+        "lane_ids": [
+          "25444569#0_1",
+          "25444569#0_2",
+          "25444569#0_0",
+          "25444569#0_3"
+        ],
+        "maximum_residual_m": 0.21,
+        "node_id": "2403",
+        "official_source_sha256": [
+          "86e80a29ee554449c8b0eab6217fb59e353953f4a671703f2cc4e415d4cd6052",
+          "941c717986f4ce35a1cc910c487f48577e7013f990904369805e877c688dc222"
+        ],
+        "runner_up_margin_m": 5.941,
+        "selected_edge": "25444569#0",
+        "stream_ids": [
+          28751,
+          29224,
+          31912,
+          33751
+        ],
+        "translation_m": 4.287,
+        "translation_xy_m": [
+          1.609,
+          -3.974
+        ]
+      },
+      "detector_id": "hh_2403_Z_2_28751",
+      "latitude": 53.544265788,
+      "longitude": 9.998073409,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 1.218,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.048,
+          "lane_id": "25444569#1_2",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.098
+        },
+        {
+          "distance_m": 1.279,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "distance_m": 1.972,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.256,
+          "lane_id": "25444569#1_3",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.094
+        },
+        {
+          "distance_m": 1.992,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "distance_m": 4.13,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.407,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.422,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.124,
+          "lane_id": "25444569#1_1",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.097
+        },
+        {
+          "distance_m": 4.446,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_1",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        }
+      ],
+      "reason": "official engineering-plan lane count + translation-normalized detector constellation; geometric inference, not an official Z-to-lane identity",
+      "runner_up_distance_m": 1.279,
+      "selected_distance_m": 4.446,
+      "selected_edge": "25444569#0",
+      "selected_lane": "25444569#0_1",
+      "separation_m": -3.167,
+      "stream_id": 28751
+    },
+    {
+      "asset_id": "Z.3",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 1.145,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 1.145,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_3",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.205
+            },
+            {
+              "distance_m": 1.082,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.256,
+              "lane_id": "25444569#1_3",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.306
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_3",
+            "25444569#1_3"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.887,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.887,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.296,
+              "lane_id": "25444569#2_3",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_3"
+          ],
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.311,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.311,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.494,
+              "lane_id": "25444569#0_2",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.196
+            },
+            {
+              "distance_m": 4.273,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.048,
+              "lane_id": "25444569#1_2",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.299
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_2",
+            "25444569#1_2"
+          ],
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.68,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.68,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.262,
+              "lane_id": "25444569#2_2",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_2"
+          ],
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 7.503,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.503,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_1",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.205
+            },
+            {
+              "distance_m": 7.477,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.124,
+              "lane_id": "25444569#1_1",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.302
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_1",
+            "25444569#1_1"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_1",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 8.309,
+          "edge_id": "60578532#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 8.309,
+              "edge_id": "60578532#1",
+              "lane_heading_deg": 26.301,
+              "lane_id": "60578532#1_1",
+              "lane_length_m": 6.79,
+              "lane_position_m": 3.662
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#1_1"
+          ],
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_1",
+          "lane_length_m": 6.79,
+          "lane_position_m": 3.662
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 8.371,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 8.371,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.298,
+              "lane_id": "25444569#2_1",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_1"
+          ],
+          "lane_heading_deg": 210.298,
+          "lane_id": "25444569#2_1",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 9.212,
+          "edge_id": "60578532#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 9.212,
+              "edge_id": "60578532#0",
+              "lane_heading_deg": 27.643,
+              "lane_id": "60578532#0_1",
+              "lane_length_m": 7.84,
+              "lane_position_m": 7.846
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#0_1"
+          ],
+          "lane_heading_deg": 27.643,
+          "lane_id": "60578532#0_1",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.846
+        }
+      ],
+      "constellation_inference": {
+        "assignment_score_m": 0.445,
+        "basis": "official_lane_count_plus_translation_normalized_point_constellation",
+        "claim_boundary": "geometric cross-section inference; Z.n is not treated as a lane index",
+        "direction": "Richtung 1",
+        "edge_stem": "25444569",
+        "heading_error_deg": 0.561,
+        "lane_ids": [
+          "25444569#0_1",
+          "25444569#0_2",
+          "25444569#0_0",
+          "25444569#0_3"
+        ],
+        "maximum_residual_m": 0.21,
+        "node_id": "2403",
+        "official_source_sha256": [
+          "86e80a29ee554449c8b0eab6217fb59e353953f4a671703f2cc4e415d4cd6052",
+          "941c717986f4ce35a1cc910c487f48577e7013f990904369805e877c688dc222"
+        ],
+        "runner_up_margin_m": 5.941,
+        "selected_edge": "25444569#0",
+        "stream_ids": [
+          28751,
+          29224,
+          31912,
+          33751
+        ],
+        "translation_m": 4.287,
+        "translation_xy_m": [
+          1.609,
+          -3.974
+        ]
+      },
+      "detector_id": "hh_2403_Z_3_29224",
+      "latitude": 53.544240947,
+      "longitude": 9.998093289,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 1.082,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.256,
+          "lane_id": "25444569#1_3",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.306
+        },
+        {
+          "distance_m": 1.145,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "distance_m": 3.887,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 4.273,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.048,
+          "lane_id": "25444569#1_2",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.299
+        },
+        {
+          "distance_m": 4.311,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "distance_m": 5.68,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 7.477,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.124,
+          "lane_id": "25444569#1_1",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.302
+        },
+        {
+          "distance_m": 7.503,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_1",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        }
+      ],
+      "reason": "official engineering-plan lane count + translation-normalized detector constellation; geometric inference, not an official Z-to-lane identity",
+      "runner_up_distance_m": 1.145,
+      "selected_distance_m": 4.311,
+      "selected_edge": "25444569#0",
+      "selected_lane": "25444569#0_2",
+      "separation_m": -3.166,
+      "stream_id": 29224
+    },
+    {
+      "asset_id": "Z.4",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.086,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.086,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_3",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.205
+            },
+            {
+              "distance_m": 4.046,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.256,
+              "lane_id": "25444569#1_3",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.541
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_3",
+            "25444569#1_3"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.336,
+          "edge_id": "60578532#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.336,
+              "edge_id": "60578532#1",
+              "lane_heading_deg": 26.301,
+              "lane_id": "60578532#1_1",
+              "lane_length_m": 6.79,
+              "lane_position_m": 3.631
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#1_1"
+          ],
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_1",
+          "lane_length_m": 6.79,
+          "lane_position_m": 3.631
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.351,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.351,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.296,
+              "lane_id": "25444569#2_3",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_3"
+          ],
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.635,
+          "edge_id": "60578532#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.635,
+              "edge_id": "60578532#0",
+              "lane_heading_deg": 27.643,
+              "lane_id": "60578532#0_1",
+              "lane_length_m": 7.84,
+              "lane_position_m": 7.846
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#0_1"
+          ],
+          "lane_heading_deg": 27.643,
+          "lane_id": "60578532#0_1",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.846
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 7.281,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.281,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.494,
+              "lane_id": "25444569#0_2",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.196
+            },
+            {
+              "distance_m": 7.238,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.048,
+              "lane_id": "25444569#1_2",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.524
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_2",
+            "25444569#1_2"
+          ],
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 8.046,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 8.046,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.262,
+              "lane_id": "25444569#2_2",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_2"
+          ],
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 8.538,
+          "edge_id": "60578532#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 8.538,
+              "edge_id": "60578532#1",
+              "lane_heading_deg": 26.301,
+              "lane_id": "60578532#1_0",
+              "lane_length_m": 6.79,
+              "lane_position_m": 3.63
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#1_0"
+          ],
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_0",
+          "lane_length_m": 6.79,
+          "lane_position_m": 3.63
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 9.368,
+          "edge_id": "60578532#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 9.368,
+              "edge_id": "60578532#0",
+              "lane_heading_deg": 27.742,
+              "lane_id": "60578532#0_0",
+              "lane_length_m": 7.84,
+              "lane_position_m": 7.841
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#0_0"
+          ],
+          "lane_heading_deg": 27.742,
+          "lane_id": "60578532#0_0",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.841
+        }
+      ],
+      "constellation_inference": {
+        "assignment_score_m": 0.445,
+        "basis": "official_lane_count_plus_translation_normalized_point_constellation",
+        "claim_boundary": "geometric cross-section inference; Z.n is not treated as a lane index",
+        "direction": "Richtung 1",
+        "edge_stem": "25444569",
+        "heading_error_deg": 0.561,
+        "lane_ids": [
+          "25444569#0_1",
+          "25444569#0_2",
+          "25444569#0_0",
+          "25444569#0_3"
+        ],
+        "maximum_residual_m": 0.21,
+        "node_id": "2403",
+        "official_source_sha256": [
+          "86e80a29ee554449c8b0eab6217fb59e353953f4a671703f2cc4e415d4cd6052",
+          "941c717986f4ce35a1cc910c487f48577e7013f990904369805e877c688dc222"
+        ],
+        "runner_up_margin_m": 5.941,
+        "selected_edge": "25444569#0",
+        "stream_ids": [
+          28751,
+          29224,
+          31912,
+          33751
+        ],
+        "translation_m": 4.287,
+        "translation_xy_m": [
+          1.609,
+          -3.974
+        ]
+      },
+      "detector_id": "hh_2403_Z_4_33751",
+      "latitude": 53.544216708,
+      "longitude": 9.998112186,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 4.046,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.256,
+          "lane_id": "25444569#1_3",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.541
+        },
+        {
+          "distance_m": 4.086,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.205
+        },
+        {
+          "distance_m": 5.336,
+          "edge_id": "60578532#1",
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_1",
+          "lane_length_m": 6.79,
+          "lane_position_m": 3.631
+        },
+        {
+          "distance_m": 5.351,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.635,
+          "edge_id": "60578532#0",
+          "lane_heading_deg": 27.643,
+          "lane_id": "60578532#0_1",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.846
+        },
+        {
+          "distance_m": 7.238,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.048,
+          "lane_id": "25444569#1_2",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.524
+        },
+        {
+          "distance_m": 7.281,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.494,
+          "lane_id": "25444569#0_2",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.196
+        },
+        {
+          "distance_m": 8.046,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.262,
+          "lane_id": "25444569#2_2",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "official engineering-plan lane count + translation-normalized detector constellation; geometric inference, not an official Z-to-lane identity",
+      "runner_up_distance_m": 5.336,
+      "selected_distance_m": 4.086,
+      "selected_edge": "25444569#0",
+      "selected_lane": "25444569#0_3",
+      "separation_m": 1.25,
+      "stream_id": 33751
+    },
+    {
+      "asset_id": "Z.5",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.518,
+          "edge_id": "60578532#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.518,
+              "edge_id": "60578532#1",
+              "lane_heading_deg": 26.301,
+              "lane_id": "60578532#1_1",
+              "lane_length_m": 6.79,
+              "lane_position_m": 4.279
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#1_1"
+          ],
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_1",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.279
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 2.684,
+          "edge_id": "60578532#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.684,
+              "edge_id": "60578532#1",
+              "lane_heading_deg": 26.301,
+              "lane_id": "60578532#1_0",
+              "lane_length_m": 6.79,
+              "lane_position_m": 4.278
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#1_0"
+          ],
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_0",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.278
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.612,
+          "edge_id": "60578532#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.612,
+              "edge_id": "60578532#0",
+              "lane_heading_deg": 27.643,
+              "lane_id": "60578532#0_1",
+              "lane_length_m": 7.84,
+              "lane_position_m": 7.846
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#0_1"
+          ],
+          "lane_heading_deg": 27.643,
+          "lane_id": "60578532#0_1",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.846
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.247,
+          "edge_id": "60578532#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.247,
+              "edge_id": "60578532#0",
+              "lane_heading_deg": 27.742,
+              "lane_id": "60578532#0_0",
+              "lane_length_m": 7.84,
+              "lane_position_m": 7.841
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#0_0"
+          ],
+          "lane_heading_deg": 27.742,
+          "lane_id": "60578532#0_0",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.841
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 9.925,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 9.925,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_3",
+              "lane_length_m": 25.2,
+              "lane_position_m": 24.948
+            },
+            {
+              "distance_m": 9.931,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.256,
+              "lane_id": "25444569#1_3",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.298
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_3",
+            "25444569#1_3"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 24.948
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.549,
+          "edge_id": "554713069",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.549,
+              "edge_id": "554713069",
+              "lane_heading_deg": 24.796,
+              "lane_id": "554713069_1",
+              "lane_length_m": 25.49,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713069_1"
+          ],
+          "lane_heading_deg": 24.796,
+          "lane_id": "554713069_1",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.616,
+          "edge_id": "25444569#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.616,
+              "edge_id": "25444569#2",
+              "lane_heading_deg": 210.296,
+              "lane_id": "25444569#2_3",
+              "lane_length_m": 8.04,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#2_3"
+          ],
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.752,
+          "edge_id": "554713069",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.752,
+              "edge_id": "554713069",
+              "lane_heading_deg": 24.766,
+              "lane_id": "554713069_2",
+              "lane_length_m": 25.49,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713069_2"
+          ],
+          "lane_heading_deg": 24.766,
+          "lane_id": "554713069_2",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2403_Z_5_26523",
+      "latitude": 53.544171723,
+      "longitude": 9.998159045,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.518,
+          "edge_id": "60578532#1",
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_1",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.279
+        },
+        {
+          "distance_m": 2.684,
+          "edge_id": "60578532#1",
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_0",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.278
+        },
+        {
+          "distance_m": 4.612,
+          "edge_id": "60578532#0",
+          "lane_heading_deg": 27.643,
+          "lane_id": "60578532#0_1",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.846
+        },
+        {
+          "distance_m": 5.247,
+          "edge_id": "60578532#0",
+          "lane_heading_deg": 27.742,
+          "lane_id": "60578532#0_0",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.841
+        },
+        {
+          "distance_m": 9.925,
+          "edge_id": "25444569#0",
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 24.948
+        },
+        {
+          "distance_m": 9.931,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.256,
+          "lane_id": "25444569#1_3",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.298
+        },
+        {
+          "distance_m": 10.549,
+          "edge_id": "554713069",
+          "lane_heading_deg": 24.796,
+          "lane_id": "554713069_1",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 10.616,
+          "edge_id": "25444569#2",
+          "lane_heading_deg": 210.296,
+          "lane_id": "25444569#2_3",
+          "lane_length_m": 8.04,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "strict geometry-only binding; explicit EPSG:25832 conversion; no official MAP lane identity",
+      "runner_up_distance_m": 2.684,
+      "selected_distance_m": 0.518,
+      "selected_edge": "60578532#1",
+      "selected_lane": "60578532#1_1",
+      "separation_m": 2.166,
+      "stream_id": 26523
+    },
+    {
+      "asset_id": "Z.6",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.305,
+          "edge_id": "60578532#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.305,
+              "edge_id": "60578532#1",
+              "lane_heading_deg": 26.301,
+              "lane_id": "60578532#1_0",
+              "lane_length_m": 6.79,
+              "lane_position_m": 4.203
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#1_0"
+          ],
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_0",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.203
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.507,
+          "edge_id": "60578532#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.507,
+              "edge_id": "60578532#1",
+              "lane_heading_deg": 26.301,
+              "lane_id": "60578532#1_1",
+              "lane_length_m": 6.79,
+              "lane_position_m": 4.204
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#1_1"
+          ],
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_1",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.204
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.446,
+          "edge_id": "60578532#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.446,
+              "edge_id": "60578532#0",
+              "lane_heading_deg": 27.742,
+              "lane_id": "60578532#0_0",
+              "lane_length_m": 7.84,
+              "lane_position_m": 7.841
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#0_0"
+          ],
+          "lane_heading_deg": 27.742,
+          "lane_id": "60578532#0_0",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.841
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.708,
+          "edge_id": "60578532#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.708,
+              "edge_id": "60578532#0",
+              "lane_heading_deg": 27.643,
+              "lane_id": "60578532#0_1",
+              "lane_length_m": 7.84,
+              "lane_position_m": 7.846
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "60578532#0_1"
+          ],
+          "lane_heading_deg": 27.643,
+          "lane_id": "60578532#0_1",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.846
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.566,
+          "edge_id": "554713069",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.566,
+              "edge_id": "554713069",
+              "lane_heading_deg": 24.775,
+              "lane_id": "554713069_0",
+              "lane_length_m": 25.49,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713069_0"
+          ],
+          "lane_heading_deg": 24.775,
+          "lane_id": "554713069_0",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.709,
+          "edge_id": "554713069",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.709,
+              "edge_id": "554713069",
+              "lane_heading_deg": 24.796,
+              "lane_id": "554713069_1",
+              "lane_length_m": 25.49,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713069_1"
+          ],
+          "lane_heading_deg": 24.796,
+          "lane_id": "554713069_1",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 11.755,
+          "edge_id": "554713069",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 11.755,
+              "edge_id": "554713069",
+              "lane_heading_deg": 24.766,
+              "lane_id": "554713069_2",
+              "lane_length_m": 25.49,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713069_2"
+          ],
+          "lane_heading_deg": 24.766,
+          "lane_id": "554713069_2",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 12.913,
+          "edge_id": "25444569#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 12.913,
+              "edge_id": "25444569#0",
+              "lane_heading_deg": 206.484,
+              "lane_id": "25444569#0_3",
+              "lane_length_m": 25.2,
+              "lane_position_m": 25.032
+            },
+            {
+              "distance_m": 12.907,
+              "edge_id": "25444569#1",
+              "lane_heading_deg": 210.256,
+              "lane_id": "25444569#1_3",
+              "lane_length_m": 3.75,
+              "lane_position_m": 0.579
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "25444569#0_3",
+            "25444569#1_3"
+          ],
+          "lane_heading_deg": 206.484,
+          "lane_id": "25444569#0_3",
+          "lane_length_m": 25.2,
+          "lane_position_m": 25.032
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2403_Z_6_34490",
+      "latitude": 53.544147191,
+      "longitude": 9.998177434,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.305,
+          "edge_id": "60578532#1",
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_0",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.203
+        },
+        {
+          "distance_m": 3.507,
+          "edge_id": "60578532#1",
+          "lane_heading_deg": 26.301,
+          "lane_id": "60578532#1_1",
+          "lane_length_m": 6.79,
+          "lane_position_m": 4.204
+        },
+        {
+          "distance_m": 4.446,
+          "edge_id": "60578532#0",
+          "lane_heading_deg": 27.742,
+          "lane_id": "60578532#0_0",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.841
+        },
+        {
+          "distance_m": 5.708,
+          "edge_id": "60578532#0",
+          "lane_heading_deg": 27.643,
+          "lane_id": "60578532#0_1",
+          "lane_length_m": 7.84,
+          "lane_position_m": 7.846
+        },
+        {
+          "distance_m": 10.566,
+          "edge_id": "554713069",
+          "lane_heading_deg": 24.775,
+          "lane_id": "554713069_0",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 10.709,
+          "edge_id": "554713069",
+          "lane_heading_deg": 24.796,
+          "lane_id": "554713069_1",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 11.755,
+          "edge_id": "554713069",
+          "lane_heading_deg": 24.766,
+          "lane_id": "554713069_2",
+          "lane_length_m": 25.49,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 12.907,
+          "edge_id": "25444569#1",
+          "lane_heading_deg": 210.256,
+          "lane_id": "25444569#1_3",
+          "lane_length_m": 3.75,
+          "lane_position_m": 0.579
+        }
+      ],
+      "reason": "strict geometry-only binding; explicit EPSG:25832 conversion; no official MAP lane identity",
+      "runner_up_distance_m": 3.507,
+      "selected_distance_m": 0.305,
+      "selected_edge": "60578532#1",
+      "selected_lane": "60578532#1_0",
+      "separation_m": 3.202,
+      "stream_id": 34490
+    },
+    {
+      "asset_id": "Z.7",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 0.362,
+          "edge_id": "554706401#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.362,
+              "edge_id": "554706401#0",
+              "lane_heading_deg": 110.005,
+              "lane_id": "554706401#0_1",
+              "lane_length_m": 51.04,
+              "lane_position_m": 49.569
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554706401#0_1"
+          ],
+          "lane_heading_deg": 110.005,
+          "lane_id": "554706401#0_1",
+          "lane_length_m": 51.04,
+          "lane_position_m": 49.569
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 2.838,
+          "edge_id": "554706401#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 2.838,
+              "edge_id": "554706401#0",
+              "lane_heading_deg": 110.013,
+              "lane_id": "554706401#0_2",
+              "lane_length_m": 51.04,
+              "lane_position_m": 49.662
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554706401#0_2"
+          ],
+          "lane_heading_deg": 110.013,
+          "lane_id": "554706401#0_2",
+          "lane_length_m": 51.04,
+          "lane_position_m": 49.662
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 3.56,
+          "edge_id": "554706401#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.56,
+              "edge_id": "554706401#0",
+              "lane_heading_deg": 110.01,
+              "lane_id": "554706401#0_0",
+              "lane_length_m": 51.04,
+              "lane_position_m": 49.468
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554706401#0_0"
+          ],
+          "lane_heading_deg": 110.01,
+          "lane_id": "554706401#0_0",
+          "lane_length_m": 51.04,
+          "lane_position_m": 49.468
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 7.368,
+          "edge_id": "111747607#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.368,
+              "edge_id": "111747607#1",
+              "lane_heading_deg": 273.029,
+              "lane_id": "111747607#1_1",
+              "lane_length_m": 129.5,
+              "lane_position_m": 1.453
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "111747607#1_1"
+          ],
+          "lane_heading_deg": 273.029,
+          "lane_id": "111747607#1_1",
+          "lane_length_m": 129.5,
+          "lane_position_m": 1.453
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.564,
+          "edge_id": "111747607#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.564,
+              "edge_id": "111747607#1",
+              "lane_heading_deg": 273.451,
+              "lane_id": "111747607#1_0",
+              "lane_length_m": 129.5,
+              "lane_position_m": 1.5
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "111747607#1_0"
+          ],
+          "lane_heading_deg": 273.451,
+          "lane_id": "111747607#1_0",
+          "lane_length_m": 129.5,
+          "lane_position_m": 1.5
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.629,
+          "edge_id": "554713071",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.629,
+              "edge_id": "554713071",
+              "lane_heading_deg": 112.543,
+              "lane_id": "554713071_1",
+              "lane_length_m": 0.58,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713071_1"
+          ],
+          "lane_heading_deg": 112.543,
+          "lane_id": "554713071_1",
+          "lane_length_m": 0.58,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 11.051,
+          "edge_id": "554713071",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 11.051,
+              "edge_id": "554713071",
+              "lane_heading_deg": 112.543,
+              "lane_id": "554713071_2",
+              "lane_length_m": 0.58,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713071_2"
+          ],
+          "lane_heading_deg": 112.543,
+          "lane_id": "554713071_2",
+          "lane_length_m": 0.58,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 11.147,
+          "edge_id": "554713071",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 11.147,
+              "edge_id": "554713071",
+              "lane_heading_deg": 112.543,
+              "lane_id": "554713071_0",
+              "lane_length_m": 0.58,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "554713071_0"
+          ],
+          "lane_heading_deg": 112.543,
+          "lane_id": "554713071_0",
+          "lane_length_m": 0.58,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2403_Z_7_27722",
+      "latitude": 53.543914772,
+      "longitude": 9.997989383,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.362,
+          "edge_id": "554706401#0",
+          "lane_heading_deg": 110.005,
+          "lane_id": "554706401#0_1",
+          "lane_length_m": 51.04,
+          "lane_position_m": 49.569
+        },
+        {
+          "distance_m": 2.838,
+          "edge_id": "554706401#0",
+          "lane_heading_deg": 110.013,
+          "lane_id": "554706401#0_2",
+          "lane_length_m": 51.04,
+          "lane_position_m": 49.662
+        },
+        {
+          "distance_m": 3.56,
+          "edge_id": "554706401#0",
+          "lane_heading_deg": 110.01,
+          "lane_id": "554706401#0_0",
+          "lane_length_m": 51.04,
+          "lane_position_m": 49.468
+        },
+        {
+          "distance_m": 7.368,
+          "edge_id": "111747607#1",
+          "lane_heading_deg": 273.029,
+          "lane_id": "111747607#1_1",
+          "lane_length_m": 129.5,
+          "lane_position_m": 1.453
+        },
+        {
+          "distance_m": 10.564,
+          "edge_id": "111747607#1",
+          "lane_heading_deg": 273.451,
+          "lane_id": "111747607#1_0",
+          "lane_length_m": 129.5,
+          "lane_position_m": 1.5
+        },
+        {
+          "distance_m": 10.629,
+          "edge_id": "554713071",
+          "lane_heading_deg": 112.543,
+          "lane_id": "554713071_1",
+          "lane_length_m": 0.58,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 11.051,
+          "edge_id": "554713071",
+          "lane_heading_deg": 112.543,
+          "lane_id": "554713071_2",
+          "lane_length_m": 0.58,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 11.147,
+          "edge_id": "554713071",
+          "lane_heading_deg": 112.543,
+          "lane_id": "554713071_0",
+          "lane_length_m": 0.58,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "strict geometry-only binding; explicit EPSG:25832 conversion; no official MAP lane identity",
+      "runner_up_distance_m": 2.838,
+      "selected_distance_m": 0.362,
+      "selected_edge": "554706401#0",
+      "selected_lane": "554706401#0_1",
+      "separation_m": 2.476,
+      "stream_id": 27722
+    },
+    {
+      "asset_id": "Z.8",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 0.919,
+          "edge_id": "83075275#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.919,
+              "edge_id": "83075275#0",
+              "lane_heading_deg": 22.587,
+              "lane_id": "83075275#0_2",
+              "lane_length_m": 82.56,
+              "lane_position_m": 82.553
+            },
+            {
+              "distance_m": 0.893,
+              "edge_id": "83075275#1",
+              "lane_heading_deg": 25.549,
+              "lane_id": "83075275#1_2",
+              "lane_length_m": 4.29,
+              "lane_position_m": 0.193
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "83075275#0_2",
+            "83075275#1_2"
+          ],
+          "lane_heading_deg": 22.587,
+          "lane_id": "83075275#0_2",
+          "lane_length_m": 82.56,
+          "lane_position_m": 82.553
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 4.103,
+          "edge_id": "83075275#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.103,
+              "edge_id": "83075275#0",
+              "lane_heading_deg": 22.587,
+              "lane_id": "83075275#0_1",
+              "lane_length_m": 82.56,
+              "lane_position_m": 82.553
+            },
+            {
+              "distance_m": 4.096,
+              "edge_id": "83075275#1",
+              "lane_heading_deg": 25.549,
+              "lane_id": "83075275#1_1",
+              "lane_length_m": 4.29,
+              "lane_position_m": 0.194
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "83075275#0_1",
+            "83075275#1_1"
+          ],
+          "lane_heading_deg": 22.587,
+          "lane_id": "83075275#0_1",
+          "lane_length_m": 82.56,
+          "lane_position_m": 82.553
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.476,
+          "edge_id": "83075275#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.476,
+              "edge_id": "83075275#2",
+              "lane_heading_deg": 28.118,
+              "lane_id": "83075275#2_2",
+              "lane_length_m": 12.53,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "83075275#2_2"
+          ],
+          "lane_heading_deg": 28.118,
+          "lane_id": "83075275#2_2",
+          "lane_length_m": 12.53,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 6.101,
+          "edge_id": "83075275#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.101,
+              "edge_id": "83075275#2",
+              "lane_heading_deg": 28.14,
+              "lane_id": "83075275#2_1",
+              "lane_length_m": 12.53,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "83075275#2_1"
+          ],
+          "lane_heading_deg": 28.14,
+          "lane_id": "83075275#2_1",
+          "lane_length_m": 12.53,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 7.307,
+          "edge_id": "83075275#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.307,
+              "edge_id": "83075275#0",
+              "lane_heading_deg": 22.571,
+              "lane_id": "83075275#0_0",
+              "lane_length_m": 82.56,
+              "lane_position_m": 82.553
+            },
+            {
+              "distance_m": 7.299,
+              "edge_id": "83075275#1",
+              "lane_heading_deg": 25.549,
+              "lane_id": "83075275#1_0",
+              "lane_length_m": 4.29,
+              "lane_position_m": 0.196
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "83075275#0_0",
+            "83075275#1_0"
+          ],
+          "lane_heading_deg": 22.571,
+          "lane_id": "83075275#0_0",
+          "lane_length_m": 82.56,
+          "lane_position_m": 82.553
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 8.653,
+          "edge_id": "83075275#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 8.653,
+              "edge_id": "83075275#2",
+              "lane_heading_deg": 28.099,
+              "lane_id": "83075275#2_0",
+              "lane_length_m": 12.53,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "83075275#2_0"
+          ],
+          "lane_heading_deg": 28.099,
+          "lane_id": "83075275#2_0",
+          "lane_length_m": 12.53,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 9.003,
+          "edge_id": "395272650#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 9.003,
+              "edge_id": "395272650#1",
+              "lane_heading_deg": 205.407,
+              "lane_id": "395272650#1_0",
+              "lane_length_m": 31.64,
+              "lane_position_m": 4.588
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "395272650#1_0"
+          ],
+          "lane_heading_deg": 205.407,
+          "lane_id": "395272650#1_0",
+          "lane_length_m": 31.64,
+          "lane_position_m": 4.588
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 10.105,
+          "edge_id": "395272650#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 10.105,
+              "edge_id": "395272650#0",
+              "lane_heading_deg": 208.053,
+              "lane_id": "395272650#0_0",
+              "lane_length_m": 11.89,
+              "lane_position_m": 11.886
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "395272650#0_0"
+          ],
+          "lane_heading_deg": 208.053,
+          "lane_id": "395272650#0_0",
+          "lane_length_m": 11.89,
+          "lane_position_m": 11.886
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2403_Z_8_30318",
+      "latitude": 53.543987705,
+      "longitude": 9.99739337,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.893,
+          "edge_id": "83075275#1",
+          "lane_heading_deg": 25.549,
+          "lane_id": "83075275#1_2",
+          "lane_length_m": 4.29,
+          "lane_position_m": 0.193
+        },
+        {
+          "distance_m": 0.919,
+          "edge_id": "83075275#0",
+          "lane_heading_deg": 22.587,
+          "lane_id": "83075275#0_2",
+          "lane_length_m": 82.56,
+          "lane_position_m": 82.553
+        },
+        {
+          "distance_m": 4.096,
+          "edge_id": "83075275#1",
+          "lane_heading_deg": 25.549,
+          "lane_id": "83075275#1_1",
+          "lane_length_m": 4.29,
+          "lane_position_m": 0.194
+        },
+        {
+          "distance_m": 4.103,
+          "edge_id": "83075275#0",
+          "lane_heading_deg": 22.587,
+          "lane_id": "83075275#0_1",
+          "lane_length_m": 82.56,
+          "lane_position_m": 82.553
+        },
+        {
+          "distance_m": 4.476,
+          "edge_id": "83075275#2",
+          "lane_heading_deg": 28.118,
+          "lane_id": "83075275#2_2",
+          "lane_length_m": 12.53,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 6.101,
+          "edge_id": "83075275#2",
+          "lane_heading_deg": 28.14,
+          "lane_id": "83075275#2_1",
+          "lane_length_m": 12.53,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 7.299,
+          "edge_id": "83075275#1",
+          "lane_heading_deg": 25.549,
+          "lane_id": "83075275#1_0",
+          "lane_length_m": 4.29,
+          "lane_position_m": 0.196
+        },
+        {
+          "distance_m": 7.307,
+          "edge_id": "83075275#0",
+          "lane_heading_deg": 22.571,
+          "lane_id": "83075275#0_0",
+          "lane_length_m": 82.56,
+          "lane_position_m": 82.553
+        }
+      ],
+      "reason": "strict geometry-only binding; serial SUMO edge cuts collapsed to the upstream lane; explicit EPSG:25832 conversion; no official MAP lane identity",
+      "runner_up_distance_m": 4.103,
+      "selected_distance_m": 0.919,
+      "selected_edge": "83075275#0",
+      "selected_lane": "83075275#0_2",
+      "separation_m": 3.184,
+      "stream_id": 30318
+    },
+    {
+      "asset_id": "Z.9",
+      "candidate_status": "active",
+      "candidates": [
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 0.158,
+          "edge_id": "-152813965#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 0.311,
+              "edge_id": "-152813965#1",
+              "lane_heading_deg": 285.575,
+              "lane_id": "-152813965#1_2",
+              "lane_length_m": 3.62,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 0.158,
+              "edge_id": "-152813965#2",
+              "lane_heading_deg": 285.623,
+              "lane_id": "-152813965#2_2",
+              "lane_length_m": 17.07,
+              "lane_position_m": 17.081
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#1_2",
+            "-152813965#2_2"
+          ],
+          "lane_heading_deg": 285.623,
+          "lane_id": "-152813965#2_2",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.081
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 3.043,
+          "edge_id": "-152813965#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.052,
+              "edge_id": "-152813965#1",
+              "lane_heading_deg": 285.533,
+              "lane_id": "-152813965#1_1",
+              "lane_length_m": 3.62,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 3.043,
+              "edge_id": "-152813965#2",
+              "lane_heading_deg": 285.632,
+              "lane_id": "-152813965#2_1",
+              "lane_length_m": 17.07,
+              "lane_position_m": 17.071
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#1_1",
+            "-152813965#2_1"
+          ],
+          "lane_heading_deg": 285.632,
+          "lane_id": "-152813965#2_1",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.071
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 3.363,
+          "edge_id": "152813965#1",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 3.363,
+              "edge_id": "152813965#1",
+              "lane_heading_deg": 105.575,
+              "lane_id": "152813965#1_0",
+              "lane_length_m": 3.62,
+              "lane_position_m": 3.613
+            },
+            {
+              "distance_m": 3.356,
+              "edge_id": "152813965#2",
+              "lane_heading_deg": 105.632,
+              "lane_id": "152813965#2_0",
+              "lane_length_m": 17.07,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "152813965#1_0",
+            "152813965#2_0"
+          ],
+          "lane_heading_deg": 105.575,
+          "lane_id": "152813965#1_0",
+          "lane_length_m": 3.62,
+          "lane_position_m": 3.613
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 4.031,
+          "edge_id": "-152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 4.031,
+              "edge_id": "-152813965#0",
+              "lane_heading_deg": 287.819,
+              "lane_id": "-152813965#0_2",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#0_2"
+          ],
+          "lane_heading_deg": 287.819,
+          "lane_id": "-152813965#0_2",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.126,
+          "edge_id": "-152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.126,
+              "edge_id": "-152813965#0",
+              "lane_heading_deg": 287.819,
+              "lane_id": "-152813965#0_1",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#0_1"
+          ],
+          "lane_heading_deg": 287.819,
+          "lane_id": "-152813965#0_1",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 5.178,
+          "edge_id": "152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 5.178,
+              "edge_id": "152813965#0",
+              "lane_heading_deg": 107.819,
+              "lane_id": "152813965#0_0",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.294
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "152813965#0_0"
+          ],
+          "lane_heading_deg": 107.819,
+          "lane_id": "152813965#0_0",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.294
+        },
+        {
+          "candidate_basis": "same_osm_way_one_to_one_serial_cut",
+          "distance_m": 6.251,
+          "edge_id": "-152813965#2",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 6.254,
+              "edge_id": "-152813965#1",
+              "lane_heading_deg": 285.685,
+              "lane_id": "-152813965#1_0",
+              "lane_length_m": 3.62,
+              "lane_position_m": 0.0
+            },
+            {
+              "distance_m": 6.251,
+              "edge_id": "-152813965#2",
+              "lane_heading_deg": 285.6,
+              "lane_id": "-152813965#2_0",
+              "lane_length_m": 17.07,
+              "lane_position_m": 17.069
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#1_0",
+            "-152813965#2_0"
+          ],
+          "lane_heading_deg": 285.6,
+          "lane_id": "-152813965#2_0",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.069
+        },
+        {
+          "candidate_basis": "single_sumo_lane_segment",
+          "distance_m": 7.525,
+          "edge_id": "-152813965#0",
+          "equivalent_segment_candidates": [
+            {
+              "distance_m": 7.525,
+              "edge_id": "-152813965#0",
+              "lane_heading_deg": 285.945,
+              "lane_id": "-152813965#0_0",
+              "lane_length_m": 0.29,
+              "lane_position_m": 0.0
+            }
+          ],
+          "equivalent_segment_lane_ids": [
+            "-152813965#0_0"
+          ],
+          "lane_heading_deg": 285.945,
+          "lane_id": "-152813965#0_0",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        }
+      ],
+      "constellation_inference": null,
+      "detector_id": "hh_2403_Z_9_28466",
+      "latitude": 53.544313482,
+      "longitude": 9.9976496,
+      "node_id": "2403",
+      "official_detector_to_map_distance_m": null,
+      "official_map_lane": "",
+      "official_map_to_sumo_distance_m": null,
+      "official_map_to_sumo_heading_error_deg": null,
+      "raw_segment_candidates": [
+        {
+          "distance_m": 0.158,
+          "edge_id": "-152813965#2",
+          "lane_heading_deg": 285.623,
+          "lane_id": "-152813965#2_2",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.081
+        },
+        {
+          "distance_m": 0.311,
+          "edge_id": "-152813965#1",
+          "lane_heading_deg": 285.575,
+          "lane_id": "-152813965#1_2",
+          "lane_length_m": 3.62,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.043,
+          "edge_id": "-152813965#2",
+          "lane_heading_deg": 285.632,
+          "lane_id": "-152813965#2_1",
+          "lane_length_m": 17.07,
+          "lane_position_m": 17.071
+        },
+        {
+          "distance_m": 3.052,
+          "edge_id": "-152813965#1",
+          "lane_heading_deg": 285.533,
+          "lane_id": "-152813965#1_1",
+          "lane_length_m": 3.62,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.356,
+          "edge_id": "152813965#2",
+          "lane_heading_deg": 105.632,
+          "lane_id": "152813965#2_0",
+          "lane_length_m": 17.07,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 3.363,
+          "edge_id": "152813965#1",
+          "lane_heading_deg": 105.575,
+          "lane_id": "152813965#1_0",
+          "lane_length_m": 3.62,
+          "lane_position_m": 3.613
+        },
+        {
+          "distance_m": 4.031,
+          "edge_id": "-152813965#0",
+          "lane_heading_deg": 287.819,
+          "lane_id": "-152813965#0_2",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        },
+        {
+          "distance_m": 5.126,
+          "edge_id": "-152813965#0",
+          "lane_heading_deg": 287.819,
+          "lane_id": "-152813965#0_1",
+          "lane_length_m": 0.29,
+          "lane_position_m": 0.0
+        }
+      ],
+      "reason": "strict geometry-only binding; serial SUMO edge cuts collapsed to the upstream lane; explicit EPSG:25832 conversion; no official MAP lane identity",
+      "runner_up_distance_m": 3.043,
+      "selected_distance_m": 0.158,
+      "selected_edge": "-152813965#2",
+      "selected_lane": "-152813965#2_2",
+      "separation_m": 2.885,
+      "stream_id": 28466
+    }
+  ],
+  "schema": "torii.hamburg-named-detector-binding/v1/candidates",
+  "thresholds": {
+    "ambiguity_margin_m": 1.0,
+    "constellation_heading_tolerance_deg": 10.0,
+    "max_distance_m": 5.0,
+    "serial_cut_max_gap_m": 2.0
+  }
+}

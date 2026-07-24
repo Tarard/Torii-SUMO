@@ -18,7 +18,8 @@ def main() -> int:
             "rejecting distance and parallel-lane ambiguity automatically."
         )
     )
-    parser.add_argument("--net-file", required=True, type=Path)
+    parser.add_argument("--net-file", type=Path)
+    parser.add_argument("--w1-manifest", required=True, type=Path)
     parser.add_argument("--count-stream-file", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--network-projection", default=DEFAULT_NETWORK_PROJECTION)
@@ -28,10 +29,10 @@ def main() -> int:
     parser.add_argument("--map-file", action="append", default=[], type=Path)
     parser.add_argument("--movement-evidence-file", type=Path)
     args = parser.parse_args()
-
     try:
         report = materialize_hamburg_named_detector_bindings(
             net_file=args.net_file,
+            w1_manifest_file=args.w1_manifest,
             count_stream_file=args.count_stream_file,
             output_dir=args.output_dir,
             network_projection=args.network_projection,

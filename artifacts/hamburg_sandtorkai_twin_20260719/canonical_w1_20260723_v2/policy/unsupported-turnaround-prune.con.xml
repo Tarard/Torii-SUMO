@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<connections>
+    <!-- No official movement allowlist or reverse/uturn lane evidence exists for these. -->
+    <delete from="-142944246#0" to="142944246#0" fromLane="0" toLane="0"/>
+    <delete from="26923040" to="-26923040" fromLane="0" toLane="0"/>
+
+    <!-- MAP/OCIT 2349 contains no turnaround movements. -->
+    <delete from="194672083" to="59990286" fromLane="1" toLane="1"/>
+    <delete from="59990286" to="194672083" fromLane="1" toLane="1"/>
+
+    <!-- CAD/aerial 2403: suppress the three compound turnarounds exposed by the joins. -->
+    <delete from="25444569#2" to="60578532#0" fromLane="3" toLane="1"/>
+    <delete from="83075275#2" to="395272650#0" fromLane="2" toLane="0"/>
+    <delete from="554706401#0" to="111747607#1" fromLane="2" toLane="0"/>
+    <delete from="554706401#0" to="111747607#1" fromLane="2" toLane="1"/>
+</connections>

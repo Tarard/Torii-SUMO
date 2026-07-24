@@ -583,6 +583,43 @@ def test_junction_aggregation_preservation_accepts_join_absorption_and_via_renum
     assert report["boundary_movement_preservation"]["status"] == "pass"
 
 
+def test_preservation_accepts_only_explicitly_authorized_connection_removal(
+    tmp_path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    variant = tmp_path / "variant.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="a" to="b"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="back" from="b" to="a"><lane id="back_0" index="0" length="20"/></edge>
+  <connection from="in" to="back" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+    variant.write_text(
+        """<net>
+  <edge id="in" from="a" to="b"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="back" from="b" to="a"><lane id="back_0" index="0" length="20"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    signature = "in|back|0|0||"
+
+    blocked = audit_junction_aggregation_preservation(source, variant)
+    accepted = audit_junction_aggregation_preservation(
+        source,
+        variant,
+        authorized_removed_connections=(signature,),
+    )
+
+    assert blocked["status"] == "review"
+    assert blocked["lost_shared_connections"] == [signature]
+    assert accepted["status"] == "pass"
+    assert accepted["lost_shared_connection_count"] == 0
+    assert accepted["authorized_removed_connections"] == [signature]
+    assert accepted["unused_authorized_removed_connection_count"] == 0
+
+
 def test_junction_aggregation_preservation_flags_new_join_boundary_movement(tmp_path) -> None:
     source = tmp_path / "source.net.xml"
     variant = tmp_path / "variant.net.xml"
@@ -615,6 +652,74 @@ def test_junction_aggregation_preservation_flags_new_join_boundary_movement(tmp_
     assert boundary["lost_boundary_movement_count"] == 0
     assert boundary["added_boundary_movement_count"] == 1
     assert boundary["groups"][0]["added_boundary_movements"] == ["in|0|extra|0"]
+
+
+def test_junction_aggregation_preservation_uses_explicit_boundary_authority(tmp_path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="outside" to="a"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="seam" from="a" to="b"><lane id="seam_0" index="0" length="0.2"/></edge>
+  <edge id="out" from="b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <edge id="wrong" from="b" to="outside3"><lane id="wrong_0" index="0" length="20"/></edge>
+  <connection from="in" to="seam" fromLane="0" toLane="0"/>
+  <connection from="seam" to="wrong" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    authority = {"cluster_a_b": ["in|0|out|0"]}
+
+    def write_variant(name: str, connections: str) -> Path:
+        path = tmp_path / name
+        path.write_text(
+            f"""<net>
+  <edge id="in" from="outside" to="cluster_a_b"><lane id="in_0" index="0" length="20"/></edge>
+  <edge id="out" from="cluster_a_b" to="outside2"><lane id="out_0" index="0" length="20"/></edge>
+  <edge id="wrong" from="cluster_a_b" to="outside3"><lane id="wrong_0" index="0" length="20"/></edge>
+  {connections}
+</net>""",
+            encoding="utf-8",
+        )
+        return path
+
+    exact = audit_junction_aggregation_preservation(
+        source,
+        write_variant("exact.net.xml", '<connection from="in" to="out" fromLane="0" toLane="0"/>'),
+        join_groups=(("a", "b"),),
+        authoritative_boundary_movements=authority,
+    )
+    missing = audit_junction_aggregation_preservation(
+        source,
+        write_variant("missing.net.xml", ""),
+        join_groups=(("a", "b"),),
+        authoritative_boundary_movements=authority,
+    )
+    extra = audit_junction_aggregation_preservation(
+        source,
+        write_variant(
+            "extra.net.xml",
+            '<connection from="in" to="out" fromLane="0" toLane="0"/>'
+            '<connection from="in" to="wrong" fromLane="0" toLane="0"/>',
+        ),
+        join_groups=(("a", "b"),),
+        authoritative_boundary_movements=authority,
+    )
+
+    assert exact["status"] == "pass"
+    boundary = exact["boundary_movement_preservation"]
+    assert boundary["authority_mode"] == "explicit_authority"
+    assert boundary["source_not_authorized_movement_count"] == 1
+    assert boundary["authority_not_in_source_movement_count"] == 1
+    assert boundary["groups"][0]["source_not_authorized_movements"] == ["in|0|wrong|0"]
+    assert boundary["groups"][0]["authority_not_in_source_movements"] == ["in|0|out|0"]
+    assert missing["status"] == "review"
+    assert missing["boundary_movement_preservation"]["groups"][0]["lost_boundary_movements"] == [
+        "in|0|out|0"
+    ]
+    assert extra["status"] == "review"
+    assert extra["boundary_movement_preservation"]["groups"][0]["added_boundary_movements"] == [
+        "in|0|wrong|0"
+    ]
 
 
 def test_join_collapse_audit_flags_residual_nodes_edges_and_connections(tmp_path) -> None:
@@ -737,6 +842,7 @@ def test_junction_aggregation_variant_runs_netconvert_with_cwd_relative_outputs(
         assert kwargs["cwd"] == Path("out").resolve()
         assert Path(command[2]).is_absolute()
         assert command[command.index("--node-files") + 1] == "junction_aggregation_junction_join.nod.xml"
+        assert "--no-turnarounds" in command
         output_file = _command_path(command, "--output-file", kwargs["cwd"])
         assert command[command.index("--output-file") + 1] == "junction_aggregation_junction_aggregated.net.xml"
         output_file.write_text('<net><junction id="cluster_a_b" x="0" y="0"/></net>', encoding="utf-8")

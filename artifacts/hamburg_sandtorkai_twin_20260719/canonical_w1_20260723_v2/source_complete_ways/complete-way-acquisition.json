@@ -1,0 +1,179 @@
+{
+  "acquisition_bbox": [
+    9.980106927466423,
+    53.540533691913986,
+    10.003689463043568,
+    53.54865291573397
+  ],
+  "acquisition_mode": "overpass_download",
+  "allowed_highways": [
+    "living_street",
+    "motorway",
+    "motorway_link",
+    "primary",
+    "primary_link",
+    "residential",
+    "road",
+    "secondary",
+    "secondary_link",
+    "service",
+    "tertiary",
+    "tertiary_link",
+    "trunk",
+    "trunk_link",
+    "unclassified"
+  ],
+  "allowed_way_ids_count": null,
+  "authority_review_status": "review_required",
+  "claim_boundary": {
+    "does_not_prove": [
+      "that every OSM road fact agrees with the aerial or CAD authority",
+      "legal movements, lane semantics, signal control, or field-faithful topology",
+      "road coverage beyond the bound source snapshot"
+    ],
+    "proves": [
+      "every allowed-highway way in the bound source snapshot is retained with unchanged node references and tags in the bound filtered snapshot",
+      "selected ways may extend outside the acquisition bbox without being truncated"
+    ]
+  },
+  "clip_source_ways_to_bbox": false,
+  "complete_way_filter_audit": {
+    "acquisition_bbox": [
+      9.980106927466423,
+      53.540533691913986,
+      10.003689463043568,
+      53.54865291573397
+    ],
+    "allowed_highways": [
+      "living_street",
+      "motorway",
+      "motorway_link",
+      "primary",
+      "primary_link",
+      "residential",
+      "road",
+      "secondary",
+      "secondary_link",
+      "service",
+      "tertiary",
+      "tertiary_link",
+      "trunk",
+      "trunk_link",
+      "unclassified"
+    ],
+    "extra_way_count": 0,
+    "extra_way_ids": [],
+    "filtered_missing_node_ref_count": 0,
+    "filtered_missing_node_refs": [],
+    "filtered_selected_way_count": 762,
+    "missing_way_count": 0,
+    "missing_way_ids": [],
+    "modified_way_count": 0,
+    "modified_way_ids": [],
+    "schema": "torii.complete-osm-way-filter-audit/v1",
+    "source_missing_node_ref_count": 0,
+    "source_missing_node_refs": [],
+    "source_selected_way_count": 762,
+    "status": "pass",
+    "ways_with_nodes_outside_bbox_count": 61,
+    "ways_with_nodes_outside_bbox_ids": [
+      "4424928",
+      "19643597",
+      "22649706",
+      "22729789",
+      "22731325",
+      "22744583",
+      "22910977",
+      "23179673",
+      "26781181",
+      "27471775",
+      "37071241",
+      "37071273",
+      "43118549",
+      "43145232",
+      "45352830",
+      "46239724",
+      "59626572",
+      "59990287",
+      "123342665",
+      "141137047",
+      "142944224",
+      "142944240",
+      "142944246",
+      "142944348",
+      "142944441",
+      "142944452",
+      "146276277",
+      "158325336",
+      "186274566",
+      "208440384",
+      "217557693",
+      "217558040",
+      "220387886",
+      "220387887",
+      "249741911",
+      "331478122",
+      "368992361",
+      "381556754",
+      "392816620",
+      "407193801",
+      "525949274",
+      "598851768",
+      "606439147",
+      "649304012",
+      "660916751",
+      "711952925",
+      "745514552",
+      "756934408",
+      "776599711",
+      "776599712",
+      "1041935240",
+      "1126340328",
+      "1324085298",
+      "1371844659",
+      "1396569784",
+      "1410448393",
+      "1412222476",
+      "1426912452",
+      "1442584905",
+      "1471590900",
+      "1492857121"
+    ]
+  },
+  "filtered_osm_snapshot": {
+    "path": "../canonical_build/osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz",
+    "sha256": "5c6aa03657052979dbaa0c9dbb06d6f9a3bed321ea759d884714f616bcb0cb40"
+  },
+  "forced_way_ids_count": null,
+  "overpass_query": {
+    "path": "logs/hamburg_sandtorkai_aerial_cad_complete_ways_overpass_query.ql",
+    "sha256": "2bcf672cb99416581834a526fced21f0f59e4bd130a394a77251d388ff90ab20"
+  },
+  "schema": "torii.hamburg-complete-way-acquisition/v1",
+  "scope_authority_evidence": [
+    {
+      "evidence_id": "hamburg_2024_aerial",
+      "path": "../../../../docs/assets/hamburg-digital-twin/official-aerial-2024.png",
+      "sha256": "8c65a45c5b86d2a7077c321bb1fff8108651f0f8a7fd3ffc62091c17de5be948"
+    },
+    {
+      "evidence_id": "hamburg_2022_road_cad",
+      "path": "../../../../docs/assets/hamburg-digital-twin/official-construction-plan-2022.png",
+      "sha256": "2dd292e00ee0d522a5c8f0c4e0a4b95b47f4afcc34db12b5d69c47501e70d8ec"
+    }
+  ],
+  "selection_rule": "retain each complete OSM way intersecting the buffered aerial/CAD scope; never truncate a selected way at the bbox",
+  "source_build_provenance": {
+    "path": "logs/hamburg_sandtorkai_aerial_cad_complete_ways_build_manifest.json",
+    "sha256": "91dd66ec2a603403c693122e05b09d08c75e3f864701223dcd411982572b1be1"
+  },
+  "source_command_record": {
+    "path": "logs/hamburg_sandtorkai_aerial_cad_complete_ways_commands.txt",
+    "sha256": "ffa6c08de36f385bbe821858f459adc3c3e8320f1815697952986821ea5f131f"
+  },
+  "source_osm_snapshot": {
+    "path": "osm/hamburg_sandtorkai_aerial_cad_complete_ways_bbox.osm.xml.gz",
+    "sha256": "a995b4da61f7c4ba1c03ec4b00478f27fbf7e575f101ae8226a60e6d16e589ca"
+  },
+  "status": "pass"
+}

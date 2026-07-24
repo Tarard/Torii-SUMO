@@ -1,0 +1,182 @@
+{
+  "derived_repairs": [
+    {
+      "attributes": [],
+      "evidence": "official_map_stopline",
+      "from_edge": "554713076#0",
+      "from_lane": 0,
+      "official_node_id": "2349",
+      "reason": "official KML ingress lane 2 stop line; anchor 0.100m from mapped lane start",
+      "to_edge": "554713076#1",
+      "to_lane": 0
+    },
+    {
+      "attributes": [],
+      "evidence": "official_map_stopline",
+      "from_edge": "554713076#0",
+      "from_lane": 1,
+      "official_node_id": "2349",
+      "reason": "official KML ingress lane 3 stop line; anchor 0.100m from mapped lane start",
+      "to_edge": "554713076#1",
+      "to_lane": 1
+    },
+    {
+      "attributes": [],
+      "evidence": "official_map_stopline",
+      "from_edge": "554713078#0",
+      "from_lane": 0,
+      "official_node_id": "2349",
+      "reason": "official KML ingress lane 7 stop line; anchor 0.100m from mapped lane start",
+      "to_edge": "554713078#1",
+      "to_lane": 0
+    },
+    {
+      "attributes": [],
+      "evidence": "official_map_stopline",
+      "from_edge": "554713078#0",
+      "from_lane": 1,
+      "official_node_id": "2349",
+      "reason": "official KML ingress lane 6 stop line; anchor 0.100m from mapped lane start",
+      "to_edge": "554713078#1",
+      "to_lane": 1
+    },
+    {
+      "attributes": [],
+      "evidence": "official_map_stopline",
+      "from_edge": "381540198#0",
+      "from_lane": 0,
+      "official_node_id": "2394",
+      "reason": "official KML ingress lane 6 stop line; anchor 0.527m from mapped lane start",
+      "to_edge": "381540198#1",
+      "to_lane": 0
+    },
+    {
+      "attributes": [],
+      "evidence": "official_map_stopline",
+      "from_edge": "381540198#0",
+      "from_lane": 1,
+      "official_node_id": "2394",
+      "reason": "official KML ingress lane 7 stop line; anchor 0.541m from mapped lane start",
+      "to_edge": "381540198#1",
+      "to_lane": 1
+    }
+  ],
+  "evidence": [
+    {
+      "adjusted_sumo_edge": "554713076#0",
+      "adjusted_sumo_lane": "554713076#0_0",
+      "anchor_to_lane_start_m": 0.1,
+      "connection_repair_evidence": "official_map_stopline",
+      "connection_repair_key": [
+        "554713076#0",
+        0,
+        "554713076#1",
+        0
+      ],
+      "map_lane_id": "2",
+      "node_id": "2349",
+      "original_sumo_edge": "554713076#1",
+      "original_sumo_lane": "554713076#1_0",
+      "reason": "unique external predecessor proves the physical stop-line boundary",
+      "source_net_sha256": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+      "status": "pass"
+    },
+    {
+      "adjusted_sumo_edge": "554713076#0",
+      "adjusted_sumo_lane": "554713076#0_1",
+      "anchor_to_lane_start_m": 0.1,
+      "connection_repair_evidence": "official_map_stopline",
+      "connection_repair_key": [
+        "554713076#0",
+        1,
+        "554713076#1",
+        1
+      ],
+      "map_lane_id": "3",
+      "node_id": "2349",
+      "original_sumo_edge": "554713076#1",
+      "original_sumo_lane": "554713076#1_1",
+      "reason": "unique external predecessor proves the physical stop-line boundary",
+      "source_net_sha256": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+      "status": "pass"
+    },
+    {
+      "adjusted_sumo_edge": "554713078#0",
+      "adjusted_sumo_lane": "554713078#0_0",
+      "anchor_to_lane_start_m": 0.1,
+      "connection_repair_evidence": "official_map_stopline",
+      "connection_repair_key": [
+        "554713078#0",
+        0,
+        "554713078#1",
+        0
+      ],
+      "map_lane_id": "7",
+      "node_id": "2349",
+      "original_sumo_edge": "554713078#1",
+      "original_sumo_lane": "554713078#1_0",
+      "reason": "unique external predecessor proves the physical stop-line boundary",
+      "source_net_sha256": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+      "status": "pass"
+    },
+    {
+      "adjusted_sumo_edge": "554713078#0",
+      "adjusted_sumo_lane": "554713078#0_1",
+      "anchor_to_lane_start_m": 0.1,
+      "connection_repair_evidence": "official_map_stopline",
+      "connection_repair_key": [
+        "554713078#0",
+        1,
+        "554713078#1",
+        1
+      ],
+      "map_lane_id": "6",
+      "node_id": "2349",
+      "original_sumo_edge": "554713078#1",
+      "original_sumo_lane": "554713078#1_1",
+      "reason": "unique external predecessor proves the physical stop-line boundary",
+      "source_net_sha256": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+      "status": "pass"
+    },
+    {
+      "adjusted_sumo_edge": "381540198#0",
+      "adjusted_sumo_lane": "381540198#0_0",
+      "anchor_to_lane_start_m": 0.5274841785965302,
+      "connection_repair_evidence": "official_map_stopline",
+      "connection_repair_key": [
+        "381540198#0",
+        0,
+        "381540198#1",
+        0
+      ],
+      "map_lane_id": "6",
+      "node_id": "2394",
+      "original_sumo_edge": "381540198#1",
+      "original_sumo_lane": "381540198#1_0",
+      "reason": "unique external predecessor proves the physical stop-line boundary",
+      "source_net_sha256": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+      "status": "pass"
+    },
+    {
+      "adjusted_sumo_edge": "381540198#0",
+      "adjusted_sumo_lane": "381540198#0_1",
+      "anchor_to_lane_start_m": 0.54077193342969,
+      "connection_repair_evidence": "official_map_stopline",
+      "connection_repair_key": [
+        "381540198#0",
+        1,
+        "381540198#1",
+        1
+      ],
+      "map_lane_id": "7",
+      "node_id": "2394",
+      "original_sumo_edge": "381540198#1",
+      "original_sumo_lane": "381540198#1_1",
+      "reason": "unique external predecessor proves the physical stop-line boundary",
+      "source_net_sha256": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+      "status": "pass"
+    }
+  ],
+  "source_net_sha256": "49a4831b0d3ef8731ecc648143b16fc072ae557dfc098375c452c67769056a09",
+  "status": "pass"
+}

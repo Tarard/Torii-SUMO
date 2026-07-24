@@ -1,0 +1,241 @@
+{
+  "audit_engine": "static_net_xml_connection_graph_delta",
+  "automatic_promotion_gate": "blocked",
+  "blockers": [
+    "new_target_scope_review_findings"
+  ],
+  "candidate_audit_summary": {
+    "direct_movement_count": 2783,
+    "fail_count": 0,
+    "finding_category_counts": {
+      "ambiguous_target_lane_fanout": 78,
+      "crossed_lane_mapping": 1,
+      "destination_lane_merge": 3,
+      "incoming_motorized_lane_without_connection": 20,
+      "lane_rank_jump": 2,
+      "left_turn_not_innermost_lane": 1,
+      "outgoing_motorized_lane_without_connection": 5
+    },
+    "junction_count": 838,
+    "pass_count": 744,
+    "review_finding_count": 110,
+    "review_required_count": 94,
+    "status": "review_required",
+    "structural_failure_count": 0,
+    "verified_internal_path_count": 2783
+  },
+  "candidate_net_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\candidate\\hamburg_sandtorkai_canonical_w1.net.xml",
+  "candidate_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+  "candidate_traffic_side": "right",
+  "claim_status": "construction-invalid",
+  "manifest_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\connection_mode\\canonical-w1-connection-mode-regression.manifest.json",
+  "netedit_required_for_gate": false,
+  "outside_scope_added_junction_ids": [],
+  "outside_scope_compared_junction_count": 830,
+  "outside_scope_missing_junction_ids": [],
+  "outside_scope_new_review_finding_count": 0,
+  "outside_scope_new_structural_finding_count": 0,
+  "outside_scope_regression_junction_ids": [],
+  "outside_scope_resolved_review_finding_count": 0,
+  "outside_scope_resolved_structural_finding_count": 0,
+  "outside_scope_review_category_regressions": [],
+  "outside_scope_review_regressions": [],
+  "outside_scope_structural_category_regressions": [],
+  "outside_scope_structural_regressions": [],
+  "report_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\connection_mode\\canonical-w1-connection-mode-regression.json",
+  "requested_target_candidate_junction_ids": [
+    "250374290",
+    "34022712",
+    "7385353793",
+    "8688554173",
+    "cluster_1272392464_2761334292_5241629952_757036853",
+    "cluster_249707791_757036954",
+    "cluster_25737304_759714733",
+    "cluster_739654528_759714704"
+  ],
+  "requested_target_source_junction_ids": [
+    "1272392464",
+    "249707791",
+    "250374290",
+    "25737304",
+    "2761334292",
+    "34022712",
+    "5241629952",
+    "7385353793",
+    "739654528",
+    "757036853",
+    "757036954",
+    "759714704",
+    "759714733",
+    "8688554173"
+  ],
+  "review_overlay_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\connection_mode\\canonical-w1-connection-mode-regression.review.add.xml",
+  "schema": "torii.connection_mode_regression_audit.v1",
+  "source_audit_summary": {
+    "direct_movement_count": 2800,
+    "fail_count": 0,
+    "finding_category_counts": {
+      "ambiguous_target_lane_fanout": 77,
+      "crossed_lane_mapping": 1,
+      "incoming_motorized_lane_without_connection": 20,
+      "lane_rank_jump": 2,
+      "left_turn_not_innermost_lane": 1,
+      "outgoing_motorized_lane_without_connection": 5
+    },
+    "junction_count": 844,
+    "pass_count": 753,
+    "review_finding_count": 106,
+    "review_required_count": 91,
+    "status": "review_required",
+    "structural_failure_count": 0,
+    "verified_internal_path_count": 2800
+  },
+  "source_net_file": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\canonical_build\\sumo\\hamburg_sandtorkai_canonical_w1.net.xml",
+  "source_network_mutation": false,
+  "source_sha256": "c8d4e30d6d3bf2e44dc920eb59ceab9663130731b6402047b62a7da622f582fd",
+  "source_traffic_side": "right",
+  "status": "fail",
+  "target_candidate_junction_ids": [
+    "1272392464",
+    "249707791",
+    "250374290",
+    "25737304",
+    "2761334292",
+    "34022712",
+    "5241629952",
+    "7385353793",
+    "739654528",
+    "757036853",
+    "757036954",
+    "759714704",
+    "759714733",
+    "8688554173",
+    "cluster_1272392464_2761334292_5241629952_757036853",
+    "cluster_249707791_757036954",
+    "cluster_25737304_759714733",
+    "cluster_739654528_759714704"
+  ],
+  "target_scope_flagged_junction_ids": [
+    "250374290",
+    "34022712",
+    "7385353793",
+    "cluster_249707791_757036954",
+    "cluster_25737304_759714733",
+    "cluster_739654528_759714704"
+  ],
+  "target_scope_new_review_finding_count": 6,
+  "target_scope_new_structural_finding_count": 0,
+  "target_scope_review_category_regressions": [
+    {
+      "candidate_count": 7,
+      "category": "ambiguous_target_lane_fanout",
+      "delta": 1,
+      "source_count": 6
+    },
+    {
+      "candidate_count": 3,
+      "category": "destination_lane_merge",
+      "delta": 3,
+      "source_count": 0
+    }
+  ],
+  "target_scope_review_finding_count": 14,
+  "target_scope_review_regressions": [
+    {
+      "candidate_count": 1,
+      "category": "ambiguous_target_lane_fanout",
+      "delta": 1,
+      "examples": [
+        "connection_mode:ambiguous_target_lane_fanout:554713078#2|0|554713075#0:0,1"
+      ],
+      "finding_witness": "connection_mode:ambiguous_target_lane_fanout:554713078#2|0|554713075#0:0,1",
+      "junction_id": "target-scope",
+      "source_count": 0
+    },
+    {
+      "candidate_count": 1,
+      "category": "destination_lane_merge",
+      "delta": 1,
+      "examples": [
+        "connection_mode:destination_lane_merge:-152813965#0|-554713071|0:0,1"
+      ],
+      "finding_witness": "connection_mode:destination_lane_merge:-152813965#0|-554713071|0:0,1",
+      "junction_id": "target-scope",
+      "source_count": 0
+    },
+    {
+      "candidate_count": 1,
+      "category": "destination_lane_merge",
+      "delta": 1,
+      "examples": [
+        "connection_mode:destination_lane_merge:194672083|127716467#0|0:0,1"
+      ],
+      "finding_witness": "connection_mode:destination_lane_merge:194672083|127716467#0|0:0,1",
+      "junction_id": "target-scope",
+      "source_count": 0
+    },
+    {
+      "candidate_count": 1,
+      "category": "destination_lane_merge",
+      "delta": 1,
+      "examples": [
+        "connection_mode:destination_lane_merge:25444569#2|395272650#0|0:0,1"
+      ],
+      "finding_witness": "connection_mode:destination_lane_merge:25444569#2|395272650#0|0:0,1",
+      "junction_id": "target-scope",
+      "source_count": 0
+    },
+    {
+      "candidate_count": 1,
+      "category": "lane_rank_jump",
+      "delta": 1,
+      "examples": [
+        "connection_mode:lane_rank_jump:1977:0.625"
+      ],
+      "finding_witness": "connection_mode:lane_rank_jump:1977:0.625",
+      "junction_id": "target-scope",
+      "source_count": 0
+    },
+    {
+      "candidate_count": 1,
+      "category": "lane_rank_jump",
+      "delta": 1,
+      "examples": [
+        "connection_mode:lane_rank_jump:2647:0.583"
+      ],
+      "finding_witness": "connection_mode:lane_rank_jump:2647:0.583",
+      "junction_id": "target-scope",
+      "source_count": 0
+    }
+  ],
+  "target_scope_source_review_finding_count": 10,
+  "target_scope_source_structural_finding_count": 0,
+  "target_scope_structural_category_regressions": [],
+  "target_scope_structural_finding_count": 0,
+  "target_scope_structural_regressions": [],
+  "target_source_junction_ids": [
+    "1272392464",
+    "249707791",
+    "250374290",
+    "25737304",
+    "2761334292",
+    "34022712",
+    "5241629952",
+    "7385353793",
+    "739654528",
+    "757036853",
+    "757036954",
+    "759714704",
+    "759714733",
+    "8688554173",
+    "cluster_1272392464_2761334292_5241629952_757036853",
+    "cluster_249707791_757036954",
+    "cluster_25737304_759714733",
+    "cluster_739654528_759714704"
+  ],
+  "tls_controller_scope_expansion_applied": true,
+  "warnings": [
+    "new target-scope review findings require review and block automatic promotion",
+    "raw finding witnesses can contain unstable connection indices; use the stable corridor exact-semantic audit for promotion"
+  ]
+}

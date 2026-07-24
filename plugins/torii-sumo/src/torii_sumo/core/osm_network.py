@@ -13,7 +13,7 @@ from urllib import error, parse, request
 import unicodedata
 import xml.etree.ElementTree as ET
 
-from .artifact_io import write_json_atomic
+from .artifact_io import relative_or_absolute_path, write_json_atomic
 from .command_runner import run_command
 
 
@@ -744,7 +744,7 @@ def build_osm_network(
     max_retries: int = 2,
     retry_pause_seconds: float = 5.0,
     command_runner: Callable[..., Any] = run_command,
-    download_func: Callable[..., bytes] = download_osm,
+    download_func: Callable[..., bytes] | None = None,
     netconvert_profile: str | None = "vehicle_core",
     allowed_way_ids: set[str] | None = None,
     forced_way_ids: set[str] | None = None,
@@ -787,6 +787,14 @@ def build_osm_network(
     sumo_dir.mkdir(parents=True, exist_ok=True)
     _write_text(query_file, query)
     overpass_report: dict[str, Any] | None = None
+    source_acquisition_mode = (
+        "provided_snapshot"
+        if source_osm_path is not None
+        else "injected_download"
+        if download_func is not None
+        else "overpass_download"
+    )
+    effective_download_func = download_osm if download_func is None else download_func
 
     try:
         if source_osm_path is None:
@@ -799,7 +807,7 @@ def build_osm_network(
                 max_tile_area_km2=max_tile_area_km2,
                 max_retries=max_retries,
                 retry_pause_seconds=retry_pause_seconds,
-                download_func=download_func,
+                download_func=effective_download_func,
                 include_railway=include_railway,
             )
             _write_payload(raw_osm, payload)
@@ -816,11 +824,7 @@ def build_osm_network(
             source_osm,
             filtered_osm,
             allowed,
-            bbox=(
-                parsed_bbox
-                if clip_source_ways_to_bbox or forced_way_ids is not None
-                else None
-            ),
+            bbox=parsed_bbox if clip_source_ways_to_bbox else None,
             allowed_way_ids=allowed_way_ids,
             forced_way_ids=forced_way_ids,
             include_railway=include_railway,
@@ -846,7 +850,7 @@ def build_osm_network(
         )
         if missing_forced_way_ids:
             return _failure(
-                "forced OSM way ids were not kept inside the requested bbox: "
+                "forced OSM way ids were not present in the filtered source selection: "
                 + ", ".join(missing_forced_way_ids),
                 artifacts={
                     "source_osm_file": str(source_osm),
@@ -860,7 +864,12 @@ def build_osm_network(
         turnaround_options = (
             []
             if normalized_profile in REFERENCE_VISUAL_PROFILES
-            else ["--no-turnarounds"]
+            else [
+                "--no-turnarounds",
+                "--no-turnarounds.tls",
+                "--no-turnarounds.geometry",
+                "--no-turnarounds.fringe",
+            ]
         )
         type_options, type_warnings = (
             _reference_visual_type_options(
@@ -957,6 +966,7 @@ def build_osm_network(
                     f"traffic_side={normalized_traffic_side}",
                     "allowed_railways="
                     + ("all" if allowed_railways is None else ",".join(sorted(allowed_railways))),
+                    f"source_acquisition_mode={source_acquisition_mode}",
                     f"overpass_strategy={overpass_report['strategy'] if overpass_report else 'source-osm'}",
                     f"overpass_tile_count={overpass_report['tile_count'] if overpass_report else 0}",
                     f"overpass_retry_count={overpass_report['retry_count'] if overpass_report else 0}",
@@ -997,6 +1007,7 @@ def build_osm_network(
     if not net_file.exists():
         warnings.append(f"net file was not created: {net_file}")
     origin_name_output = _origin_name_output_summary(net_file)
+    manifest_base = build_manifest_file.parent
     build_manifest = {
         "schema": OSM_BUILD_PROVENANCE_SCHEMA,
         "status": status,
@@ -1006,22 +1017,38 @@ def build_osm_network(
             "clip_source_ways_to_bbox": clip_source_ways_to_bbox,
             "road_classes": sorted(allowed),
             "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
+            "forced_way_ids_count": None if forced_way_ids is None else len(forced_way_ids),
             "include_railway": include_railway,
             "traffic_side": normalized_traffic_side,
         },
+        "source_acquisition": {
+            "mode": source_acquisition_mode,
+            "query": {
+                "path": relative_or_absolute_path(query_file, manifest_base),
+                "sha256": _file_sha256(query_file),
+            },
+            "response_snapshot": {
+                "path": relative_or_absolute_path(source_osm, manifest_base),
+                "sha256": source_osm_sha256,
+            },
+            "overpass": overpass_report,
+        },
         "source_osm_snapshot": {
-            "path": str(source_osm.resolve()),
+            "path": relative_or_absolute_path(source_osm, manifest_base),
             "sha256": source_osm_sha256,
         },
         "netconvert_input_osm_snapshot": {
-            "path": str(filtered_osm.resolve()),
+            "path": relative_or_absolute_path(filtered_osm, manifest_base),
             "sha256": filtered_osm_sha256,
             "derivation": "filtered_from_source_osm_by_declared_build_scope",
         },
         "sumo_road_snapshot_import_contract": {
             "imported_from": "osm",
             "imported_source_sha256": filtered_osm_sha256,
-            "source_snapshot_path": str(filtered_osm.resolve()),
+            "source_snapshot_path": relative_or_absolute_path(
+                filtered_osm,
+                manifest_base,
+            ),
             "status": "pass",
             "claim_boundary": (
                 "This declares the exact filtered OSM bytes consumed by netconvert. "
@@ -1030,7 +1057,7 @@ def build_osm_network(
             ),
         },
         "sumo_net_snapshot": {
-            "path": str(net_file.resolve()),
+            "path": relative_or_absolute_path(net_file, manifest_base),
             "sha256": _file_sha256(net_file) if net_file.is_file() else None,
         },
         "netconvert": {
@@ -1042,8 +1069,14 @@ def build_osm_network(
             "output_original_names": origin_name_output,
         },
         "artifacts": {
-            "command_record": str(command_record.resolve()),
-            "netconvert_log": str(netconvert_log.resolve()),
+            "command_record": relative_or_absolute_path(
+                command_record,
+                manifest_base,
+            ),
+            "netconvert_log": relative_or_absolute_path(
+                netconvert_log,
+                manifest_base,
+            ),
         },
         "claim_boundary": (
             "The original-name option requests explicit source-ID metadata in SUMO output. "
@@ -1070,11 +1103,13 @@ def build_osm_network(
         "bbox": bbox,
         "road_classes": sorted(allowed),
         "allowed_way_ids_count": None if allowed_way_ids is None else len(allowed_way_ids),
+        "forced_way_ids_count": None if forced_way_ids is None else len(forced_way_ids),
         **forced_way_report,
         "include_railway": include_railway,
         "clip_source_ways_to_bbox": clip_source_ways_to_bbox,
         "traffic_side": normalized_traffic_side,
         "allowed_railways": None if allowed_railways is None else sorted(allowed_railways),
+        "source_acquisition_mode": source_acquisition_mode,
         "source_osm_file": str(source_osm),
         "filtered_osm_file": str(filtered_osm),
         "net_file": str(net_file),

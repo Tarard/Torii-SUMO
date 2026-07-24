@@ -1,0 +1,118 @@
+{
+  "catalog": {
+    "catalog_api_url": "https://suche.transparenz.hamburg.de/api/3/action/package_show?id=traffic-lights-data-hamburg6",
+    "dataset_id": "traffic-lights-data-hamburg6",
+    "map_resource_id": "2bf34851-3db2-428c-9e4c-4b60c348d1f4",
+    "metadata_modified": "2026-05-20T21:04:30.634036",
+    "ocit_c_resource_id": "63974950-555b-49a9-8b4c-1dfc7196bbd6",
+    "package_id": "247b868e-b947-488f-8bc5-ac902b00976f",
+    "raw_sha256": "42fd5c0e9798ea6554e3657b0cf33e22fb852ebe80a295e68cd9531a771e7d1d"
+  },
+  "decision": "review_required",
+  "directory_snapshots": {
+    "map": {
+      "bytes": 388570,
+      "href_count": 1509,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_signal_assets_v1\\directory\\hamburg-signal-map-directory.75af40f1bd0a.html",
+      "sha256": "75af40f1bd0a9ba158700208401a3938eaddf6be7a26c71e13c657e27bae1d2c",
+      "url": "https://daten-hamburg.de/tlf_public/"
+    },
+    "ocit_c": {
+      "bytes": 125703,
+      "href_count": 552,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_signal_assets_v1\\directory\\hamburg-signal-ocit_c-directory.a6e8905a3925.html",
+      "sha256": "a6e8905a392536d76d051ff67f78010fdc16a98930e5dc6f07123e38a4721a95",
+      "url": "https://daten-hamburg.de/tlf_public/OCIT-C/"
+    }
+  },
+  "fetched_at_utc": "2026-07-19T20:52:18Z",
+  "insufficient_evidence_action": "autonomous_abstention_no_materialization",
+  "requested_node_ids": [
+    "2349",
+    "2394",
+    "2403"
+  ],
+  "resolutions": [
+    {
+      "asset": {
+        "map_kml": "MAP_ITS_23_2349_7.4_R4_Quelle_ETRS89.kml",
+        "map_xml": "MAP_ITS_23_2349_7.4_R4_Quelle_ETRS89.xml",
+        "ocit_xml": "OCIT-C/MAP_ITS_23_2349_7.4.xml",
+        "urls": {
+          "map_kml": "https://daten-hamburg.de/tlf_public/MAP_ITS_23_2349_7.4_R4_Quelle_ETRS89.kml",
+          "map_xml": "https://daten-hamburg.de/tlf_public/MAP_ITS_23_2349_7.4_R4_Quelle_ETRS89.xml",
+          "ocit_xml": "https://daten-hamburg.de/tlf_public/OCIT-C/MAP_ITS_23_2349_7.4.xml"
+        }
+      },
+      "complete_triplet_count": 1,
+      "decision": "pass",
+      "directory_matches": {
+        "map": [
+          "MAP_ITS_23_2349_7.4_R4_Quelle_ETRS89.kml",
+          "MAP_ITS_23_2349_7.4_R4_Quelle_ETRS89.xml"
+        ],
+        "ocit_c": [
+          "MAP_ITS_23_2349_7.4.xml"
+        ]
+      },
+      "node_id": "2349",
+      "normalized_node_id": "2349",
+      "reason_codes": [
+        "official_directory_asset_triplet_resolved"
+      ]
+    },
+    {
+      "asset": {
+        "map_kml": "MAP_ITS_23_2394_9.3_R3_Quelle_ETRS89.kml",
+        "map_xml": "MAP_ITS_23_2394_9.3_R3_Quelle_ETRS89.xml",
+        "ocit_xml": "OCIT-C/MAP_ITS_23_2394_9.3.xml",
+        "urls": {
+          "map_kml": "https://daten-hamburg.de/tlf_public/MAP_ITS_23_2394_9.3_R3_Quelle_ETRS89.kml",
+          "map_xml": "https://daten-hamburg.de/tlf_public/MAP_ITS_23_2394_9.3_R3_Quelle_ETRS89.xml",
+          "ocit_xml": "https://daten-hamburg.de/tlf_public/OCIT-C/MAP_ITS_23_2394_9.3.xml"
+        }
+      },
+      "complete_triplet_count": 1,
+      "decision": "pass",
+      "directory_matches": {
+        "map": [
+          "MAP_ITS_23_2394_9.3_R3_Quelle_ETRS89.kml",
+          "MAP_ITS_23_2394_9.3_R3_Quelle_ETRS89.xml"
+        ],
+        "ocit_c": [
+          "MAP_ITS_23_2394_9.3.xml"
+        ]
+      },
+      "node_id": "2394",
+      "normalized_node_id": "2394",
+      "reason_codes": [
+        "official_directory_asset_triplet_resolved"
+      ]
+    },
+    {
+      "autonomous_action": "abstain_no_signal_materialization",
+      "complete_triplet_count": 0,
+      "complete_triplets": [],
+      "decision": "review_required",
+      "directory_matches": {
+        "map": [],
+        "ocit_c": []
+      },
+      "node_id": "2403",
+      "normalized_node_id": "2403",
+      "reason_codes": [
+        "official_directory_has_no_map_assets",
+        "official_directory_has_no_ocit_c_asset"
+      ]
+    }
+  ],
+  "resolved_node_ids": [
+    "2349",
+    "2394"
+  ],
+  "schema": "torii.hamburg-signal-asset-discovery/v1",
+  "source": "official_hamburg_catalog_directory_resources",
+  "unresolved_node_ids": [
+    "2403"
+  ]
+}

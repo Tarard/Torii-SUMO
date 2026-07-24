@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- generated on 2026-07-24T01:03:50.433985+01:00 by Eclipse SUMO sumo 1.27.1
+<sumoConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="../../candidate/hamburg_sandtorkai_canonical_w1.net.xml"/>
+        <route-files value="authorized-movements.rou.xml"/>
+    </input>
+
+    <output>
+        <summary-output value="summary.xml"/>
+        <tripinfo-output value="tripinfo.xml"/>
+    </output>
+
+    <time>
+        <begin value="0"/>
+        <end value="600"/>
+    </time>
+
+    <processing>
+        <collision.check-junctions value="true"/>
+    </processing>
+
+    <report>
+        <duration-log.statistics value="true"/>
+    </report>
+
+    <gui_only>
+        <quit-on-end value="true"/>
+    </gui_only>
+
+</sumoConfiguration>
+-->
+
+<tripinfos xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/tripinfo_file.xsd">
+    <tripinfo id="authority_movement_000" depart="0.00" departLane="-152813965#0_0" departPos="0.29" departSpeed="0.00" departDelay="0.00" arrival="5.00" arrivalLane="395272650#0_0" arrivalPos="11.89" arrivalSpeed="12.19" duration="5.00" routeLength="27.68" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.81" rerouteNo="0" devices="tripinfo_authority_movement_000" vType="authorized_movement_passenger" speedFactor="1.06" vaporized=""/>
+    <tripinfo id="authority_movement_001" depart="8.00" departLane="-152813965#0_0" departPos="0.29" departSpeed="0.00" departDelay="0.00" arrival="24.00" arrivalLane="111747607#1_0" arrivalPos="129.50" arrivalSpeed="13.03" duration="16.00" routeLength="170.97" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="2.01" rerouteNo="0" devices="tripinfo_authority_movement_001" vType="authorized_movement_passenger" speedFactor="0.94" vaporized=""/>
+    <tripinfo id="authority_movement_003" depart="24.00" departLane="-152813965#0_2" departPos="0.29" departSpeed="0.00" departDelay="0.00" arrival="30.00" arrivalLane="60578532#0_1" arrivalPos="7.84" arrivalSpeed="13.90" duration="6.00" routeLength="39.94" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.97" rerouteNo="0" devices="tripinfo_authority_movement_003" vType="authorized_movement_passenger" speedFactor="1.08" vaporized=""/>
+    <tripinfo id="authority_movement_002" depart="16.00" departLane="-152813965#0_1" departPos="0.29" departSpeed="0.00" departDelay="0.00" arrival="31.00" arrivalLane="111747607#1_0" arrivalPos="129.50" arrivalSpeed="13.90" duration="15.00" routeLength="170.97" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="2.19" rerouteNo="0" devices="tripinfo_authority_movement_002" vType="authorized_movement_passenger" speedFactor="1.01" vaporized=""/>
+    <tripinfo id="authority_movement_004" depart="32.00" departLane="25444569#2_0" departPos="5.10" departSpeed="7.00" departDelay="0.00" arrival="35.00" arrivalLane="152813965#0_0" arrivalPos="0.29" arrivalSpeed="7.00" duration="3.00" routeLength="14.88" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="0.50" rerouteNo="0" devices="tripinfo_authority_movement_004" vType="authorized_movement_passenger" speedFactor="1.03" vaporized=""/>
+    <tripinfo id="authority_movement_005" depart="40.00" departLane="25444569#2_0" departPos="5.10" departSpeed="2.94" departDelay="0.00" arrival="45.00" arrivalLane="395272650#0_0" arrivalPos="11.89" arrivalSpeed="11.54" duration="5.00" routeLength="40.45" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="0.89" rerouteNo="0" devices="tripinfo_authority_movement_005" vType="authorized_movement_passenger" speedFactor="0.83" vaporized=""/>
+    <tripinfo id="authority_movement_006" depart="48.00" departLane="25444569#2_1" departPos="5.10" departSpeed="13.89" departDelay="0.00" arrival="51.00" arrivalLane="395272650#0_0" arrivalPos="11.89" arrivalSpeed="13.90" duration="3.00" routeLength="40.45" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="0.00" rerouteNo="0" devices="tripinfo_authority_movement_006" vType="authorized_movement_passenger" speedFactor="1.05" vaporized=""/>
+    <tripinfo id="authority_movement_007" depart="56.00" departLane="25444569#2_2" departPos="5.10" departSpeed="2.94" departDelay="0.00" arrival="72.00" arrivalLane="111747607#1_0" arrivalPos="129.50" arrivalSpeed="12.31" duration="16.00" routeLength="170.59" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.47" rerouteNo="0" devices="tripinfo_authority_movement_007" vType="authorized_movement_passenger" speedFactor="0.89" vaporized=""/>
+    <tripinfo id="authority_movement_008" depart="64.00" departLane="25444569#2_3" departPos="5.10" departSpeed="2.94" departDelay="0.00" arrival="79.00" arrivalLane="111747607#1_1" arrivalPos="129.50" arrivalSpeed="13.03" duration="15.00" routeLength="165.83" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="0.97" rerouteNo="0" devices="tripinfo_authority_movement_008" vType="authorized_movement_passenger" speedFactor="0.94" vaporized=""/>
+    <tripinfo id="authority_movement_010" depart="80.00" departLane="83075275#2_0" departPos="5.10" departSpeed="13.89" departDelay="0.00" arrival="83.00" arrivalLane="60578532#0_0" arrivalPos="7.84" arrivalSpeed="13.90" duration="3.00" routeLength="40.45" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="0.00" rerouteNo="0" devices="tripinfo_authority_movement_010" vType="authorized_movement_passenger" speedFactor="1.09" vaporized=""/>
+    <tripinfo id="authority_movement_009" depart="72.00" departLane="83075275#2_0" departPos="5.10" departSpeed="11.90" departDelay="0.00" arrival="87.00" arrivalLane="111747607#1_0" arrivalPos="129.50" arrivalSpeed="11.90" duration="15.00" routeLength="153.81" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.30" rerouteNo="0" devices="tripinfo_authority_movement_009" vType="authorized_movement_passenger" speedFactor="0.86" vaporized=""/>
+    <tripinfo id="authority_movement_011" depart="88.00" departLane="83075275#2_1" departPos="5.10" departSpeed="13.89" departDelay="0.00" arrival="91.00" arrivalLane="60578532#0_1" arrivalPos="7.84" arrivalSpeed="13.90" duration="3.00" routeLength="40.45" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="0.00" rerouteNo="0" devices="tripinfo_authority_movement_011" vType="authorized_movement_passenger" speedFactor="1.03" vaporized=""/>
+    <tripinfo id="authority_movement_012" depart="96.00" departLane="83075275#2_2" departPos="5.10" departSpeed="5.96" departDelay="0.00" arrival="101.00" arrivalLane="152813965#0_0" arrivalPos="0.29" arrivalSpeed="10.05" duration="5.00" routeLength="36.94" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.91" rerouteNo="0" devices="tripinfo_authority_movement_012" vType="authorized_movement_passenger" speedFactor="1.05" vaporized=""/>
+    <tripinfo id="authority_movement_013" depart="104.00" departLane="554706401#0_0" departPos="5.10" departSpeed="13.89" departDelay="0.00" arrival="112.00" arrivalLane="60578532#0_0" arrivalPos="7.84" arrivalSpeed="10.65" duration="8.00" routeLength="73.89" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.76" rerouteNo="0" devices="tripinfo_authority_movement_013" vType="authorized_movement_passenger" speedFactor="1.12" vaporized=""/>
+    <tripinfo id="authority_movement_014" depart="112.00" departLane="554706401#0_1" departPos="5.10" departSpeed="13.77" departDelay="0.00" arrival="121.00" arrivalLane="152813965#0_0" arrivalPos="0.29" arrivalSpeed="13.77" duration="9.00" routeLength="89.78" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.81" rerouteNo="0" devices="tripinfo_authority_movement_014" vType="authorized_movement_passenger" speedFactor="0.99" vaporized=""/>
+    <tripinfo id="authority_movement_015" depart="120.00" departLane="554706401#0_2" departPos="5.10" departSpeed="12.87" departDelay="0.00" arrival="130.00" arrivalLane="395272650#0_0" arrivalPos="11.89" arrivalSpeed="12.87" duration="10.00" routeLength="98.04" waitingTime="0.00" waitingCount="0" stopTime="0.00" timeLoss="1.17" rerouteNo="0" devices="tripinfo_authority_movement_015" vType="authorized_movement_passenger" speedFactor="0.93" vaporized=""/>
+</tripinfos>

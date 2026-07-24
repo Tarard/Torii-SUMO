@@ -1,0 +1,550 @@
+{
+  "capabilities": {
+    "demand_inference_and_replay": {
+      "automatic_promotion_gate": "blocked",
+      "decision": "blocked",
+      "execution_gate": "blocked",
+      "promotion_status": "blocked",
+      "stage_id": "W4",
+      "stage_status": "blocked",
+      "status": "blocked"
+    },
+    "detector_binding": {
+      "automatic_promotion_gate": "blocked",
+      "decision": "blocked",
+      "execution_gate": "pass",
+      "promotion_status": "review_required",
+      "stage_id": "W3b",
+      "stage_status": "partial",
+      "status": "review_required"
+    },
+    "field_faithful_digital_twin": {
+      "status": "blocked"
+    },
+    "official_counts": {
+      "automatic_promotion_gate": "blocked",
+      "decision": "blocked",
+      "execution_gate": "pass",
+      "promotion_status": "review_required",
+      "stage_id": "W3a",
+      "stage_status": "partial",
+      "status": "diagnostic"
+    },
+    "official_signal_control": {
+      "automatic_promotion_gate": "blocked",
+      "decision": "blocked",
+      "execution_gate": "blocked",
+      "promotion_status": "blocked",
+      "stage_id": "W2",
+      "stage_status": "blocked",
+      "status": "blocked"
+    },
+    "road_topology": {
+      "automatic_promotion_gate": "blocked",
+      "decision": "blocked",
+      "execution_gate": "pass",
+      "promotion_status": "review_required",
+      "stage_id": "W1",
+      "stage_status": "review_ready",
+      "status": "pass"
+    }
+  },
+  "changed_stages": [
+    "W1",
+    "W2",
+    "W3b",
+    "W4"
+  ],
+  "claim_boundary": {
+    "does_not_prove": [
+      "road, signal, demand, or field correctness by a manifest existing",
+      "historical signal timing when official observations are absent",
+      "a unique OD matrix from detector counts"
+    ],
+    "proves": [
+      "which dated Torii stage artifacts are being reused",
+      "that each referenced manifest and network binding is byte-hash stable",
+      "which stage is eligible or blocked next"
+    ]
+  },
+  "execution_mode": "resumable_fail_closed",
+  "first_invalid_stage": "W2",
+  "invalidated_downstream_stages": [],
+  "loop": [
+    "plan",
+    "inspect_existing_torii_code_and_sources",
+    "implement_minimally",
+    "unit_test",
+    "run_real_inputs",
+    "audit",
+    "revise_plan_on_failure",
+    "rerun_from_first_invalid_stage"
+  ],
+  "next_action": {
+    "action": "resolve_stage_gate",
+    "blocked_by": {
+      "W2": "blocked"
+    },
+    "stage_id": "W2",
+    "status": "blocked"
+  },
+  "plan_revision": 2,
+  "promotion": {
+    "automatic": true,
+    "decision": "blocked",
+    "execution_complete": false,
+    "requires": "W0, W1, W2, W3a, W3b, and W4 are materialized with execution_gate=pass, decision=pass, and automatic_promotion_gate=pass"
+  },
+  "replan": {
+    "changed_stages": [
+      "W1",
+      "W2",
+      "W3b",
+      "W4"
+    ],
+    "feedback": {
+      "execution_gate_reason": "one or more official signal bindings are structurally unresolved"
+    },
+    "first_invalid_stage": "W2",
+    "invalidated_downstream_stages": [],
+    "required": true,
+    "resume_action": "resolve_stage_gate"
+  },
+  "schema": "torii.hamburg-sandtorkai-execution-workflow/v2",
+  "stages": {
+    "W0": {
+      "automatic_promotion_gate": "blocked",
+      "contract": {
+        "code_surfaces": [
+          "core/hamburg_named_scope.py",
+          "core/hamburg_official.py"
+        ],
+        "entrypoints": [
+          "scripts/freeze_hamburg_named_scope.py"
+        ],
+        "verification": [
+          "official identity",
+          "road-arm scope",
+          "source hashes"
+        ]
+      },
+      "decision": "blocked",
+      "dependencies": [],
+      "dependency_gate": {},
+      "effective_status": "partial",
+      "execution_gate": "pass",
+      "manifest": "../downstream/w0/named-corridor-scope.manifest.json",
+      "manifest_bytes": 5988,
+      "manifest_sha256": "ea434c01c07c27f45c5b0659e76c952f2ecf9a32f254e7b40796d96c9ae6d64c",
+      "name": "scope_and_evidence",
+      "readiness": "complete",
+      "reason": "signal_assets.decision=blocked",
+      "reported_schema": "torii.hamburg-named-corridor-scope/v1",
+      "stage_id": "W0",
+      "status": "partial"
+    },
+    "W1": {
+      "automatic_promotion_gate": "blocked",
+      "contract": {
+        "code_surfaces": [
+          "core/hamburg_official_corridor_geometry.py",
+          "core/road_network/official_plainxml.py",
+          "core/road_network/official_lane_stitch.py",
+          "core/road_network/official_splice_plan.py",
+          "core/connection_mode_audit.py"
+        ],
+        "entrypoints": [
+          "scripts/build_hamburg_official_corridor_geometry.py"
+        ],
+        "verification": [
+          "official MAP/HH-SIB lane-axis match",
+          "official merge-point splice plan",
+          "netconvert",
+          "SUMO load",
+          "lane-surface overlap",
+          "connection graph"
+        ]
+      },
+      "decision": "blocked",
+      "dependencies": [
+        "W0"
+      ],
+      "dependency_gate": {
+        "W0": "pass"
+      },
+      "effective_status": "review_ready",
+      "execution_gate": "pass",
+      "feedback": {
+        "execution_gate_reason": "hash-bound scope, topology, turnaround, movement-authority, SUMO, connection, movement-smoke, and NetEdit-material checks pass; surface findings remain an explicit review gate"
+      },
+      "manifest": "../manifest/hamburg_official_corridor_geometry.manifest.json",
+      "manifest_bytes": 5377,
+      "manifest_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+      "name": "official_road_reconstruction",
+      "network_binding": {
+        "actual_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "path": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+        "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "validation": "pass"
+      },
+      "readiness": "complete",
+      "reason": "hash-bound scope, topology, turnaround, movement-authority, SUMO, connection, movement-smoke, and NetEdit-material checks pass; surface findings remain an explicit review gate",
+      "reported_schema": "torii.hamburg-official-corridor-geometry/v1",
+      "stage_id": "W1",
+      "status": "review_ready"
+    },
+    "W2": {
+      "automatic_promotion_gate": "blocked",
+      "blocked_by": {
+        "W2": "blocked"
+      },
+      "contract": {
+        "code_surfaces": [
+          "core/hamburg_named_signal_binding.py",
+          "core/hamburg_named_signal_observations.py",
+          "core/ocit_c.py"
+        ],
+        "entrypoints": [
+          "scripts/build_hamburg_named_signal_binding.py",
+          "scripts/build_hamburg_named_signal_observations.py"
+        ],
+        "verification": [
+          "MAP/OCIT identity",
+          "TLS link coverage",
+          "complete t=0/history"
+        ]
+      },
+      "decision": "blocked",
+      "dependencies": [
+        "W1"
+      ],
+      "dependency_gate": {
+        "W1": "pass"
+      },
+      "effective_status": "blocked",
+      "execution_gate": "blocked",
+      "feedback": {
+        "execution_gate_reason": "one or more official signal bindings are structurally unresolved"
+      },
+      "manifest": "../downstream/w2_c7ecb3/official-primary-signal-binding.manifest.json",
+      "manifest_bytes": 19564,
+      "manifest_sha256": "098c51491972faaed0d18b8c27ba4d8f7111a63f50de94766426a89d798653c1",
+      "name": "official_signal_binding",
+      "network_binding": {
+        "actual_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "expected_w1_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "path": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+        "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "validation": "pass"
+      },
+      "readiness": "blocked",
+      "reason": "one or more official signal bindings are structurally unresolved",
+      "reported_schema": "torii.hamburg-named-signal-binding/v1",
+      "stage_bindings": {
+        "w1_manifest": {
+          "actual_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "expected_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "expected_stage_id": "W1",
+          "path": "../manifest/hamburg_official_corridor_geometry.manifest.json",
+          "sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "validation": "pass"
+        }
+      },
+      "stage_id": "W2",
+      "status": "blocked"
+    },
+    "W3a": {
+      "artifact_bindings": {
+        "count_streams_raw": {
+          "actual_sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "path": "../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/count_streams.raw.json",
+          "sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "validation": "pass"
+        },
+        "counts_simulation_15min": {
+          "actual_sha256": "25d790794fd9e41c5cf65fbe02ed3c3f544b6817cd35fffd3352549e32c1d3d2",
+          "path": "../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/counts.simulation.15min.csv",
+          "sha256": "25d790794fd9e41c5cf65fbe02ed3c3f544b6817cd35fffd3352549e32c1d3d2",
+          "validation": "pass"
+        }
+      },
+      "automatic_promotion_gate": "blocked",
+      "contract": {
+        "code_surfaces": [
+          "core/hamburg_named_count_scope.py"
+        ],
+        "entrypoints": [
+          "scripts/build_hamburg_named_counts.py"
+        ],
+        "verification": [
+          "complete official bins",
+          "explicit time window",
+          "source hashes"
+        ]
+      },
+      "decision": "blocked",
+      "dependencies": [
+        "W0"
+      ],
+      "dependency_gate": {
+        "W0": "pass"
+      },
+      "effective_status": "partial",
+      "execution_gate": "pass",
+      "feedback": {
+        "execution_gate_reason": "official observation window is complete for all available detectors; missing 2349 remains an explicit diagnostic limitation"
+      },
+      "manifest": "../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/sensor-count-scope.manifest.json",
+      "manifest_bytes": 4210,
+      "manifest_sha256": "7ab56bbfd8f3e7317ce8a2fa9b2ce5aae56e451bb80a0357244f74b945548113",
+      "name": "count_acquisition",
+      "readiness": "complete",
+      "reason": "official observation window is complete for all available detectors; missing 2349 remains an explicit diagnostic limitation",
+      "reported_schema": "torii.hamburg-named-corridor-count-scope/v1",
+      "stage_id": "W3a",
+      "status": "partial"
+    },
+    "W3b": {
+      "artifact_bindings": {
+        "detector_mapping": {
+          "actual_sha256": "aed3faa76f7d9f5614dd1d3ec2dc1a46b3983af647a2343ee769091052f4dd32",
+          "path": "../downstream/w3b_c7ecb3/detector_mapping.csv",
+          "sha256": "aed3faa76f7d9f5614dd1d3ec2dc1a46b3983af647a2343ee769091052f4dd32",
+          "validation": "pass"
+        }
+      },
+      "automatic_promotion_gate": "blocked",
+      "contract": {
+        "code_surfaces": [
+          "core/hamburg_named_detector_bindings.py",
+          "core/digital_twin_mapping.py"
+        ],
+        "entrypoints": [
+          "scripts/build_hamburg_named_detector_bindings.py"
+        ],
+        "verification": [
+          "W1 network SHA",
+          "W3a count-stream SHA",
+          "detector-mapping artifact SHA",
+          "explicit CRS",
+          "unique lane binding",
+          "same-location E1/E2"
+        ]
+      },
+      "decision": "blocked",
+      "dependencies": [
+        "W1",
+        "W3a"
+      ],
+      "dependency_gate": {
+        "W1": "pass",
+        "W3a": "pass"
+      },
+      "effective_status": "partial",
+      "execution_gate": "pass",
+      "feedback": {
+        "execution_gate_reason": "all detector points have a structurally valid lane candidate",
+        "next_action": "resolve_shared_lane_detector_aggregation_semantics"
+      },
+      "manifest": "../downstream/w3b_c7ecb3/detector-binding.manifest.json",
+      "manifest_bytes": 4677,
+      "manifest_sha256": "42aded90a5858d37d16fc54a9f94adc22607b3a68b6ed3e4be0bf9800e2efd2a",
+      "name": "detector_binding",
+      "network_binding": {
+        "actual_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "expected_w1_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "path": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+        "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "validation": "pass"
+      },
+      "readiness": "complete",
+      "reason": "all detector points have a structurally valid lane candidate",
+      "reported_schema": "torii.hamburg-named-detector-binding/v1",
+      "sensor_aggregation_semantics": "blocked",
+      "stage_bindings": {
+        "count_stream_snapshot": {
+          "actual_sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "expected_sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "expected_stage_id": "W3a",
+          "path": "../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/count_streams.raw.json",
+          "sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "validation": "pass"
+        },
+        "w1_manifest": {
+          "actual_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "expected_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "expected_stage_id": "W1",
+          "path": "../manifest/hamburg_official_corridor_geometry.manifest.json",
+          "sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "validation": "pass"
+        }
+      },
+      "stage_id": "W3b",
+      "status": "partial"
+    },
+    "W4": {
+      "automatic_promotion_gate": "blocked",
+      "blocked_by": {
+        "W4": "blocked"
+      },
+      "contract": {
+        "code_surfaces": [
+          "core/hamburg_named_replay.py",
+          "core/route_sampler.py",
+          "core/route_sensor_matrix.py"
+        ],
+        "entrypoints": [
+          "scripts/build_hamburg_named_replay.py"
+        ],
+        "verification": [
+          "W1 network SHA",
+          "selected W2, W3a, and W3b manifest identities",
+          "W3a simulation-count SHA",
+          "approved detector aggregation semantics",
+          "signal-event artifact SHA",
+          "route incidence and demand",
+          "routeability",
+          "zero teleports",
+          "zero collisions",
+          "formal comparison"
+        ]
+      },
+      "contract_error": "W3b_sensor_aggregation_semantics_not_pass",
+      "decision": "blocked",
+      "dependencies": [
+        "W1",
+        "W2",
+        "W3a",
+        "W3b"
+      ],
+      "dependency_gate": {
+        "W1": "pass",
+        "W2": "blocked",
+        "W3a": "pass",
+        "W3b": "pass"
+      },
+      "effective_status": "blocked",
+      "execution_gate": "blocked",
+      "feedback": {
+        "execution_gate_reason": "W2 signal binding execution; W3b detector aggregation semantics"
+      },
+      "manifest": "../downstream/w4_c7ecb3/hamburg_named_replay.manifest.json",
+      "manifest_bytes": 2622,
+      "manifest_sha256": "64b71e97f105bdf217b871988c4500c2b2e944dcb53238083d431da6afcc947f",
+      "name": "route_demand_and_sumo_replay",
+      "network_binding": {
+        "actual_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "expected_w1_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "path": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+        "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+        "validation": "pass"
+      },
+      "readiness": "blocked",
+      "reason": "W3b_sensor_aggregation_semantics_not_pass",
+      "reported_schema": "torii.hamburg-named-replay/v2",
+      "stage_bindings": {
+        "canonical_count_file": {
+          "actual_sha256": "25d790794fd9e41c5cf65fbe02ed3c3f544b6817cd35fffd3352549e32c1d3d2",
+          "expected_sha256": "25d790794fd9e41c5cf65fbe02ed3c3f544b6817cd35fffd3352549e32c1d3d2",
+          "expected_stage_id": "W3a",
+          "path": "../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/counts.simulation.15min.csv",
+          "sha256": "25d790794fd9e41c5cf65fbe02ed3c3f544b6817cd35fffd3352549e32c1d3d2",
+          "validation": "pass"
+        },
+        "count_scope_manifest": {
+          "actual_sha256": "7ab56bbfd8f3e7317ce8a2fa9b2ce5aae56e451bb80a0357244f74b945548113",
+          "expected_sha256": "7ab56bbfd8f3e7317ce8a2fa9b2ce5aae56e451bb80a0357244f74b945548113",
+          "expected_stage_id": "W3a",
+          "path": "../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/sensor-count-scope.manifest.json",
+          "sha256": "7ab56bbfd8f3e7317ce8a2fa9b2ce5aae56e451bb80a0357244f74b945548113",
+          "validation": "pass"
+        },
+        "count_stream_snapshot": {
+          "actual_sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "expected_sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "expected_stage_id": "W3a",
+          "path": "../../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/count_streams.raw.json",
+          "sha256": "46ab404bfed6af15bc376e282816875f42950f914f6a0d7d446bbb014da5fd0d",
+          "validation": "pass"
+        },
+        "detector_binding_manifest": {
+          "actual_sha256": "42aded90a5858d37d16fc54a9f94adc22607b3a68b6ed3e4be0bf9800e2efd2a",
+          "expected_sha256": "42aded90a5858d37d16fc54a9f94adc22607b3a68b6ed3e4be0bf9800e2efd2a",
+          "expected_stage_id": "W3b",
+          "path": "../downstream/w3b_c7ecb3/detector-binding.manifest.json",
+          "sha256": "42aded90a5858d37d16fc54a9f94adc22607b3a68b6ed3e4be0bf9800e2efd2a",
+          "validation": "pass"
+        },
+        "signal_binding_manifest": {
+          "actual_sha256": "098c51491972faaed0d18b8c27ba4d8f7111a63f50de94766426a89d798653c1",
+          "expected_sha256": "098c51491972faaed0d18b8c27ba4d8f7111a63f50de94766426a89d798653c1",
+          "expected_stage_id": "W2",
+          "path": "../downstream/w2_c7ecb3/official-primary-signal-binding.manifest.json",
+          "sha256": "098c51491972faaed0d18b8c27ba4d8f7111a63f50de94766426a89d798653c1",
+          "validation": "pass"
+        },
+        "w1_manifest": {
+          "actual_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "expected_sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "expected_stage_id": "W1",
+          "path": "../manifest/hamburg_official_corridor_geometry.manifest.json",
+          "sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc",
+          "validation": "pass"
+        }
+      },
+      "stage_id": "W4",
+      "status": "blocked"
+    },
+    "W5": {
+      "automatic_promotion_gate": "pass",
+      "contract": {
+        "code_surfaces": [
+          "core/hamburg_execution_workflow.py",
+          "server.py"
+        ],
+        "entrypoints": [
+          "scripts/run_hamburg_execution_plan.py"
+        ],
+        "verification": [
+          "derived capability matrix",
+          "hash-bound rerun",
+          "downstream invalidation"
+        ]
+      },
+      "decision": "pass",
+      "dependencies": [
+        "W0",
+        "W1",
+        "W3a",
+        "W2",
+        "W3b",
+        "W4"
+      ],
+      "dependency_gate": {
+        "W0": "pass",
+        "W1": "pass",
+        "W2": "blocked",
+        "W3a": "pass",
+        "W3b": "pass",
+        "W4": "blocked"
+      },
+      "effective_status": "complete",
+      "execution_gate": "pass",
+      "generated": true,
+      "manifest": null,
+      "name": "workflow_summary",
+      "readiness": "complete",
+      "stage_id": "W5",
+      "status": "complete",
+      "summarized_capabilities": [
+        "road_topology",
+        "official_signal_control",
+        "official_counts",
+        "detector_binding",
+        "demand_inference_and_replay",
+        "field_faithful_digital_twin"
+      ]
+    }
+  },
+  "workflow_id": "hamburg_sandtorkai_2349_2394_2403"
+}

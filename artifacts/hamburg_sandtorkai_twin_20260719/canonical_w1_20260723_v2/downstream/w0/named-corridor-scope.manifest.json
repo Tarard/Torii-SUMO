@@ -1,0 +1,171 @@
+{
+  "automatic_action": "allow_scope_only_and_abstain_from_incomplete_signal_materialization",
+  "claim_boundary": {
+    "does_not_prove": [
+      "SUMO lane geometry or junction topology",
+      "MAP-to-lane or OCIT-to-movement binding",
+      "historical signal timing",
+      "vehicle demand reconstruction"
+    ],
+    "proves": [
+      "the requested three-node named corridor scope",
+      "official LSA identity and point geometry for each named node",
+      "the selected official HH-SIB link selectors",
+      "which official signal asset triplets are currently available"
+    ]
+  },
+  "decision": "blocked",
+  "nodes": [
+    {
+      "coordinates": [
+        9.993227061979422,
+        53.543320797153804
+      ],
+      "feature_id": 17251,
+      "node_id": "2349",
+      "official_name": "Am Sandtorkai/Großer Grasbrook",
+      "role": "west",
+      "signal_type": "K-LSA"
+    },
+    {
+      "coordinates": [
+        9.995132872689311,
+        53.54350271129165
+      ],
+      "feature_id": 17277,
+      "node_id": "2394",
+      "official_name": "Am Sandtorkai/Am Sandtorpark",
+      "role": "middle",
+      "signal_type": "K-LSA"
+    },
+    {
+      "coordinates": [
+        9.997839159986002,
+        53.54409500839008
+      ],
+      "feature_id": 17285,
+      "node_id": "2403",
+      "official_name": "Am Sandtorkai/Osakaallee",
+      "role": "east",
+      "signal_type": "K-LSA"
+    }
+  ],
+  "official_road_scope": {
+    "link_count": 7,
+    "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\road_skeleton\\corridor_scope.json",
+    "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1",
+    "sha256": "cbf361f600b784c484a108ad4af53fc2f855995598562359b956f6245fbabc9c"
+  },
+  "schema": "torii.hamburg-named-corridor-scope/v1",
+  "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1",
+  "scope_policy": {
+    "legacy_presets_rejected": [
+      {
+        "node_ids": [
+          "0228",
+          "2421",
+          "2394"
+        ],
+        "reason": "diagnostic_baseline_not_named_corridor",
+        "scope_id": "hamburg_sandtorkai_0228_2421_2394_legacy"
+      }
+    ],
+    "official_main_axis": "Am Sandtorkai",
+    "ordered_node_ids": [
+      "2349",
+      "2394",
+      "2403"
+    ],
+    "osm_role": "continuous_road_geometry_and_base_topology",
+    "retained_side_arms": [
+      "Großer Grasbrook",
+      "Am Sandtorpark",
+      "Osakaallee/Singapurstraße"
+    ],
+    "roles": {
+      "2349": "west",
+      "2394": "middle",
+      "2403": "east"
+    },
+    "spatial_scope": {
+      "aerial": {
+        "bbox": [
+          565100.0,
+          5933000.0,
+          566350.0,
+          5933625.0
+        ],
+        "crs": "EPSG:25832",
+        "image": {
+          "repository_path": "docs/assets/hamburg-digital-twin/official-aerial-2024.png",
+          "sha256": "8c65a45c5b86d2a7077c321bb1fff8108651f0f8a7fd3ffc62091c17de5be948"
+        },
+        "osm_acquisition_buffer_m": 150.0,
+        "osm_acquisition_wgs84_bbox": [
+          9.980106927466423,
+          53.540533691913986,
+          10.003689463043568,
+          53.54865291573397
+        ],
+        "time": "2024",
+        "wgs84_bbox": [
+          9.982401301697356,
+          53.54186321461625,
+          10.001394056990355,
+          53.547323807731075
+        ]
+      },
+      "edge_boundary_policy": "preserve_complete_selected_ways",
+      "official_cad": {
+        "date": "2022-07",
+        "render": {
+          "page": 1,
+          "repository_path": "docs/assets/hamburg-digital-twin/official-construction-plan-2022.png",
+          "sha256": "2dd292e00ee0d522a5c8f0c4e0a4b95b47f4afcc34db12b5d69c47501e70d8ec"
+        },
+        "source_url": "https://lsbg.hamburg.de/resource/blob/784084/6a06328b36b0de140d75baac9165f8f7/am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-abgestimmte-planung-plan-data.pdf",
+        "title": "Am Sandtorkai / Brooktorkai – Verstetigung Pop-up-Bikelane"
+      },
+      "selection_rule": "select complete OSM ways intersecting the 150 m acquisition envelope around the aerial/CAD review scope; never clip a selected way at the bbox boundary"
+    }
+  },
+  "signal_assets": {
+    "decision": "blocked",
+    "missing_triplet_action": "autonomous_abstention_no_materialization",
+    "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_signal_assets_v1\\directory\\hamburg-signal-asset-discovery.6c32dc0ebcbb.json",
+    "requested_node_ids": [
+      "2349",
+      "2394",
+      "2403"
+    ],
+    "resolved_node_ids": [
+      "2349",
+      "2394"
+    ],
+    "sha256": "11401e83214eb307e7646ee3b69ba1bdb7af15d2fb5671654f62e2f977867623",
+    "unresolved_node_ids": [
+      "2403"
+    ]
+  },
+  "sources": {
+    "lsa_identity": {
+      "bytes": 5700,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_lsa_nodes_v1\\lsa-node-identity.e485ba1ab37d.json",
+      "schema": "torii.hamburg-lsa-node-identity-evidence/v1",
+      "sha256": "5f95a3187430bed10243f83de5cfc71180bf4f6f9dade9b31413aa6b9ddf5a6e"
+    },
+    "official_road_scope": {
+      "bytes": 1412,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\road_skeleton\\corridor_scope.json",
+      "schema": "torii.hamburg-hh-sib-corridor-scope/v1",
+      "sha256": "cbf361f600b784c484a108ad4af53fc2f855995598562359b956f6245fbabc9c"
+    },
+    "signal_asset_discovery": {
+      "bytes": 4253,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_signal_assets_v1\\directory\\hamburg-signal-asset-discovery.6c32dc0ebcbb.json",
+      "schema": "torii.hamburg-signal-asset-discovery/v1",
+      "sha256": "11401e83214eb307e7646ee3b69ba1bdb7af15d2fb5671654f62e2f977867623"
+    }
+  },
+  "status": "partial"
+}

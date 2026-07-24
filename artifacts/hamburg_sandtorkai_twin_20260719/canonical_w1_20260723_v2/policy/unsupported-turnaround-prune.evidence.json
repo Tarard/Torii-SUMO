@@ -1,0 +1,41 @@
+{
+  "schema": "torii.hamburg-unsupported-turnaround-prune/v1",
+  "source_network_sha256": "c8d4e30d6d3bf2e44dc920eb59ceab9663130731b6402047b62a7da622f582fd",
+  "policy": "A compiled dir=t connection is removed unless an independent official movement allowlist or OSM turn:lanes reverse/u_turn value supports it.",
+  "removals": [
+    {
+      "from_edge_id": "-142944246#0",
+      "from_lane": 0,
+      "to_edge_id": "142944246#0",
+      "to_lane": 0,
+      "osm_way_id": "142944246",
+      "osm_tags_checked": [
+        "lanes",
+        "lanes:backward",
+        "lanes:forward"
+      ],
+      "missing_required_evidence": [
+        "official_movement_allowlist",
+        "turn:lanes=reverse",
+        "turn:lanes=u_turn"
+      ]
+    },
+    {
+      "from_edge_id": "26923040",
+      "from_lane": 0,
+      "to_edge_id": "-26923040",
+      "to_lane": 0,
+      "osm_way_id": "26923040",
+      "osm_tags_checked": [
+        "lanes",
+        "lane_markings",
+        "oneway"
+      ],
+      "missing_required_evidence": [
+        "official_movement_allowlist",
+        "turn:lanes=reverse",
+        "turn:lanes=u_turn"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "torii.hamburg-digital-twin-workflow-config/v2",
+  "workflow_id": "hamburg_sandtorkai_2349_2394_2403",
+  "output_dir": "workflow_plan",
+  "resume": true,
+  "stages": {
+    "W0": {
+      "manifest": "downstream/w0/named-corridor-scope.manifest.json",
+      "feedback": []
+    },
+    "W1": {
+      "manifest": "manifest/hamburg_official_corridor_geometry.manifest.json",
+      "feedback": []
+    },
+    "W3a": {
+      "manifest": "../official_first_named_corridor_v1/workflow/w3_official_counts_partial_v3/sensor-count-scope.manifest.json",
+      "feedback": []
+    },
+    "W2": {
+      "manifest": "downstream/w2_c7ecb3/official-primary-signal-binding.manifest.json",
+      "feedback": []
+    },
+    "W3b": {
+      "manifest": "downstream/w3b_c7ecb3/detector-binding.manifest.json",
+      "feedback": []
+    },
+    "W4": {
+      "manifest": "downstream/w4_c7ecb3/hamburg_named_replay.manifest.json",
+      "feedback": []
+    }
+  }
+}

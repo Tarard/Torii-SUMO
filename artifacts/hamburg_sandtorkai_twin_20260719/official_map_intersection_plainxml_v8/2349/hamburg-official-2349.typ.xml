@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<types xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/types_file.xsd">
+    <type id="official-map-vehicle-structural" numLanes="1" speed="13.890" width="3.200" allow="passenger taxi bus coach delivery truck motorcycle emergency" />
+</types>

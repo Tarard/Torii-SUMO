@@ -1,0 +1,1197 @@
+{
+  "api_base_url": "https://tld.iot.hamburg.de/v1.0/",
+  "node_ids": [
+    "2349",
+    "2394"
+  ],
+  "raw": {
+    "api_base_url": "https://tld.iot.hamburg.de/v1.0/",
+    "failed_node_ids": [
+      "2349"
+    ],
+    "node_results": {
+      "2349": {
+        "api_base_url": "https://tld.iot.hamburg.de/v1.0/",
+        "errors": [
+          {
+            "attempt_errors": [
+              {
+                "attempt": 1,
+                "exception_type": "TimeoutError",
+                "message": "The read operation timed out"
+              }
+            ],
+            "attempts": 1,
+            "exception_type": "TimeoutError",
+            "message": "The read operation timed out",
+            "stage": "node_datastreams"
+          }
+        ],
+        "node_id": "2349",
+        "status": "error",
+        "strategy": "failed",
+        "stream_count": 0
+      },
+      "2394": {
+        "api_base_url": "https://tld.iot.hamburg.de/v1.0/",
+        "attempts": 1,
+        "cache_hit": false,
+        "errors": [],
+        "node_id": "2394",
+        "retry_errors": [],
+        "status": "ok",
+        "strategy": "datastream_filter",
+        "stream_count": 8
+      }
+    },
+    "pages_by_node": {
+      "2349": [],
+      "2394": [
+        {
+          "value": [
+            {
+              "@iot.id": 67952,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(67952)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(67952)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(67952)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(67952)/Sensor",
+              "Thing": {
+                "@iot.id": 17846,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(17846)",
+                "Locations": [
+                  {
+                    "@iot.id": 17805,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(17805)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.995393,
+                              53.5435952
+                            ],
+                            [
+                              9.9962178,
+                              53.5437817
+                            ],
+                            [
+                              9.9965684,
+                              53.5438661
+                            ],
+                            [
+                              9.9969493,
+                              53.5439593
+                            ]
+                          ],
+                          [
+                            [
+                              9.9962158,
+                              53.5437812
+                            ],
+                            [
+                              9.9951255,
+                              53.5435346
+                            ],
+                            [
+                              9.9951255,
+                              53.5435346
+                            ],
+                            [
+                              9.99475,
+                              53.5434825
+                            ]
+                          ],
+                          [
+                            [
+                              9.9948651,
+                              53.5434987
+                            ],
+                            [
+                              9.9947504,
+                              53.5434827
+                            ],
+                            [
+                              9.9945809,
+                              53.5434567
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_5"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_5",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "5",
+                  "egressLaneID": "14",
+                  "infoLastUpdate": "2022-07-27T16:18:07.737587Z",
+                  "ingressLaneID": "2",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(67952)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_5",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.995393,
+                  53.5435952
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-02T09:11:04Z/2026-07-07T13:38:54Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K1"
+              },
+              "resultTime": "2022-04-02T09:11:05.896Z/2026-07-07T13:38:56.026947Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            },
+            {
+              "@iot.id": 68005,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68005)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68005)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68005)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68005)/Sensor",
+              "Thing": {
+                "@iot.id": 17875,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(17875)",
+                "Locations": [
+                  {
+                    "@iot.id": 17834,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(17834)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.9953228,
+                              53.5433252
+                            ],
+                            [
+                              9.9954675,
+                              53.5430913
+                            ],
+                            [
+                              9.9956966,
+                              53.5427376
+                            ],
+                            [
+                              9.9957131,
+                              53.5427121
+                            ],
+                            [
+                              9.9956691,
+                              53.5426546
+                            ],
+                            [
+                              9.9956835,
+                              53.5426286
+                            ]
+                          ],
+                          [
+                            [
+                              9.9954663,
+                              53.5430914
+                            ],
+                            [
+                              9.9952529,
+                              53.5434363
+                            ],
+                            [
+                              9.9952529,
+                              53.5434363
+                            ],
+                            [
+                              9.9957274,
+                              53.543532
+                            ]
+                          ],
+                          [
+                            [
+                              9.9954487,
+                              53.5434758
+                            ],
+                            [
+                              9.9957289,
+                              53.5435323
+                            ],
+                            [
+                              9.9958783,
+                              53.5435654
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_7"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_7",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "7",
+                  "egressLaneID": "4",
+                  "infoLastUpdate": "2022-07-27T16:18:07.749199Z",
+                  "ingressLaneID": "6",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68005)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_7",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.9953228,
+                  53.5433252
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-02T09:10:56Z/2026-07-19T21:01:12Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K4"
+              },
+              "resultTime": "2022-04-02T09:10:57.879Z/2026-07-19T21:01:14.240353Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            },
+            {
+              "@iot.id": 68006,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68006)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68006)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68006)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68006)/Sensor",
+              "Thing": {
+                "@iot.id": 17870,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(17870)",
+                "Locations": [
+                  {
+                    "@iot.id": 17829,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(17829)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.9949207,
+                              53.5433978
+                            ],
+                            [
+                              9.9943965,
+                              53.5433346
+                            ],
+                            [
+                              9.9938469,
+                              53.5432858
+                            ]
+                          ],
+                          [
+                            [
+                              9.9943966,
+                              53.5433346
+                            ],
+                            [
+                              9.9952722,
+                              53.5434402
+                            ],
+                            [
+                              9.9952722,
+                              53.5434402
+                            ],
+                            [
+                              9.9957274,
+                              53.543532
+                            ]
+                          ],
+                          [
+                            [
+                              9.9954487,
+                              53.5434758
+                            ],
+                            [
+                              9.9957289,
+                              53.5435323
+                            ],
+                            [
+                              9.9958783,
+                              53.5435654
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_2"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_2",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "2",
+                  "egressLaneID": "4",
+                  "infoLastUpdate": "2022-07-27T16:18:07.716472Z",
+                  "ingressLaneID": "11",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68006)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_2",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.9949207,
+                  53.5433978
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-02T09:11:02Z/2026-07-19T21:01:16Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K7"
+              },
+              "resultTime": "2022-04-02T09:11:03.949Z/2026-07-19T21:01:20.412835Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            },
+            {
+              "@iot.id": 68841,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68841)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68841)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68841)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68841)/Sensor",
+              "Thing": {
+                "@iot.id": 17843,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(17843)",
+                "Locations": [
+                  {
+                    "@iot.id": 17802,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(17802)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.9952753,
+                              53.5433148
+                            ],
+                            [
+                              9.9954199,
+                              53.543081
+                            ],
+                            [
+                              9.9955189,
+                              53.5429252
+                            ],
+                            [
+                              9.9956837,
+                              53.5426286
+                            ],
+                            [
+                              9.9959035,
+                              53.5423829
+                            ],
+                            [
+                              9.996108,
+                              53.5421367
+                            ],
+                            [
+                              9.9963889,
+                              53.5417392
+                            ]
+                          ],
+                          [
+                            [
+                              9.9954187,
+                              53.5430812
+                            ],
+                            [
+                              9.9951372,
+                              53.5435362
+                            ],
+                            [
+                              9.9951372,
+                              53.5435362
+                            ],
+                            [
+                              9.99475,
+                              53.5434825
+                            ]
+                          ],
+                          [
+                            [
+                              9.9948651,
+                              53.5434987
+                            ],
+                            [
+                              9.9947504,
+                              53.5434827
+                            ],
+                            [
+                              9.9945809,
+                              53.5434567
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_9"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_9",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "9",
+                  "egressLaneID": "14",
+                  "infoLastUpdate": "2022-07-27T16:18:07.762673Z",
+                  "ingressLaneID": "7",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68841)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_9",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.9952753,
+                  53.5433148
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-02T09:10:56Z/2026-07-19T21:01:12Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K5"
+              },
+              "resultTime": "2022-04-02T09:10:57.881Z/2026-07-19T21:01:14.296907Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            },
+            {
+              "@iot.id": 68904,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68904)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68904)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68904)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68904)/Sensor",
+              "Thing": {
+                "@iot.id": 17853,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(17853)",
+                "Locations": [
+                  {
+                    "@iot.id": 17812,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(17812)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.9953228,
+                              53.5433252
+                            ],
+                            [
+                              9.9954675,
+                              53.5430913
+                            ],
+                            [
+                              9.9956966,
+                              53.5427376
+                            ],
+                            [
+                              9.9957131,
+                              53.5427121
+                            ],
+                            [
+                              9.9956691,
+                              53.5426546
+                            ],
+                            [
+                              9.9956835,
+                              53.5426286
+                            ]
+                          ],
+                          [
+                            [
+                              9.9954663,
+                              53.5430914
+                            ],
+                            [
+                              9.9952352,
+                              53.5434649
+                            ],
+                            [
+                              9.9952352,
+                              53.5434649
+                            ],
+                            [
+                              9.9956867,
+                              53.5435554
+                            ]
+                          ],
+                          [
+                            [
+                              9.9954396,
+                              53.543506
+                            ],
+                            [
+                              9.9956881,
+                              53.5435557
+                            ],
+                            [
+                              9.9958622,
+                              53.5435936
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_8"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_8",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "8",
+                  "egressLaneID": "5",
+                  "infoLastUpdate": "2022-07-27T16:18:07.755941Z",
+                  "ingressLaneID": "6",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(68904)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_8",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.9953228,
+                  53.5433252
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-02T09:10:56Z/2026-07-07T13:39:21Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K4"
+              },
+              "resultTime": "2022-04-02T09:10:57.875Z/2026-07-07T13:39:23.004725Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            },
+            {
+              "@iot.id": 69184,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(69184)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(69184)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(69184)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(69184)/Sensor",
+              "Thing": {
+                "@iot.id": 18252,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(18252)",
+                "Locations": [
+                  {
+                    "@iot.id": 18211,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(18211)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.9949136,
+                              53.5434262
+                            ],
+                            [
+                              9.9941694,
+                              53.5433392
+                            ],
+                            [
+                              9.9938396,
+                              53.5433141
+                            ]
+                          ],
+                          [
+                            [
+                              9.9941696,
+                              53.5433392
+                            ],
+                            [
+                              9.9952206,
+                              53.543462
+                            ],
+                            [
+                              9.9952206,
+                              53.543462
+                            ],
+                            [
+                              9.9956867,
+                              53.5435554
+                            ]
+                          ],
+                          [
+                            [
+                              9.9954396,
+                              53.543506
+                            ],
+                            [
+                              9.9956881,
+                              53.5435557
+                            ],
+                            [
+                              9.9958622,
+                              53.5435936
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_3"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_3",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "3",
+                  "egressLaneID": "5",
+                  "infoLastUpdate": "2022-07-27T16:18:07.724098Z",
+                  "ingressLaneID": "12",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(69184)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_3",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.9949136,
+                  53.5434262
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-02T09:11:02Z/2026-07-19T21:01:16Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K7"
+              },
+              "resultTime": "2022-04-02T09:11:03.943Z/2026-07-19T21:01:20.694014Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            },
+            {
+              "@iot.id": 71446,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71446)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71446)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71446)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71446)/Sensor",
+              "Thing": {
+                "@iot.id": 17869,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(17869)",
+                "Locations": [
+                  {
+                    "@iot.id": 17827,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(17827)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.9949306,
+                              53.5433684
+                            ],
+                            [
+                              9.9943123,
+                              53.5432967
+                            ],
+                            [
+                              9.9939493,
+                              53.5432676
+                            ],
+                            [
+                              9.9939228,
+                              53.5432654
+                            ],
+                            [
+                              9.9938732,
+                              53.5432881
+                            ],
+                            [
+                              9.9938469,
+                              53.5432858
+                            ]
+                          ],
+                          [
+                            [
+                              9.9943122,
+                              53.5432968
+                            ],
+                            [
+                              9.9950768,
+                              53.5433853
+                            ],
+                            [
+                              9.9950768,
+                              53.5433853
+                            ],
+                            [
+                              9.9952475,
+                              53.5431577
+                            ]
+                          ],
+                          [
+                            [
+                              9.9951484,
+                              53.5432911
+                            ],
+                            [
+                              9.9952486,
+                              53.5431576
+                            ],
+                            [
+                              9.9953252,
+                              53.5430544
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_1"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_1",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "1",
+                  "egressLaneID": "9",
+                  "infoLastUpdate": "2022-07-27T16:18:07.710525Z",
+                  "ingressLaneID": "10",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71446)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_1",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.9949306,
+                  53.5433684
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-06T08:33:06Z/2026-07-19T21:01:16Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K7"
+              },
+              "resultTime": "2022-04-06T08:33:07.825Z/2026-07-19T21:01:20.409457Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            },
+            {
+              "@iot.id": 71448,
+              "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71448)",
+              "Observations@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71448)/Observations",
+              "ObservedProperty@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71448)/ObservedProperty",
+              "Sensor@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71448)/Sensor",
+              "Thing": {
+                "@iot.id": 17862,
+                "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Things(17862)",
+                "Locations": [
+                  {
+                    "@iot.id": 17821,
+                    "@iot.selfLink": "https://tld.iot.hamburg.de/v1.0/Locations(17821)",
+                    "description": "The given geometry composed out of ingress lane, egress lane and the real route represents the location of the lane connection.",
+                    "encodingType": "application/vnd.geo+json",
+                    "location": {
+                      "geometry": {
+                        "coordinates": [
+                          [
+                            [
+                              9.9954071,
+                              53.5435656
+                            ],
+                            [
+                              9.9963602,
+                              53.5437836
+                            ],
+                            [
+                              9.9968917,
+                              53.543914
+                            ],
+                            [
+                              9.9969138,
+                              53.5439194
+                            ],
+                            [
+                              9.9969273,
+                              53.5439539
+                            ],
+                            [
+                              9.9969494,
+                              53.5439593
+                            ]
+                          ],
+                          [
+                            [
+                              9.996358,
+                              53.5437831
+                            ],
+                            [
+                              9.9950097,
+                              53.5434747
+                            ],
+                            [
+                              9.9950097,
+                              53.5434747
+                            ],
+                            [
+                              9.9952475,
+                              53.5431577
+                            ]
+                          ],
+                          [
+                            [
+                              9.9951484,
+                              53.5432911
+                            ],
+                            [
+                              9.9952486,
+                              53.5431576
+                            ],
+                            [
+                              9.9953252,
+                              53.5430544
+                            ]
+                          ]
+                        ],
+                        "type": "MultiLineString"
+                      },
+                      "properties": {},
+                      "type": "Feature"
+                    },
+                    "name": "2394_6"
+                  }
+                ],
+                "description": "Connection of lanes subject to the individual signal heads",
+                "name": "2394_6",
+                "properties": {
+                  "assetID": "Connection name in the traffic control center",
+                  "connectionID": "6",
+                  "egressLaneID": "9",
+                  "infoLastUpdate": "2022-07-27T16:18:07.743659Z",
+                  "ingressLaneID": "3",
+                  "keywords": [
+                    "TLF",
+                    "LSA",
+                    "Hamburg"
+                  ],
+                  "laneType": "KFZ",
+                  "language": "EN",
+                  "ownerThing": "Free and Hanseatic City of Hamburg",
+                  "topic": "Transportation and traffic",
+                  "trafficLightsID": "2394"
+                }
+              },
+              "Thing@iot.navigationLink": "https://tld.iot.hamburg.de/v1.0/Datastreams(71448)/Thing",
+              "description": "Datastream to broadcast the lane connection's signal value of a signal group",
+              "name": "Primary signal heads at 2394_6",
+              "observationType": "http://www.opengis.net/def/ogc-om/OM_CategoryObservation",
+              "observedArea": {
+                "coordinates": [
+                  9.9954071,
+                  53.5435656
+                ],
+                "type": "Point"
+              },
+              "phenomenonTime": "2022-04-06T08:34:18Z/2026-07-07T13:37:21Z",
+              "properties": {
+                "layerName": "primary_signal",
+                "mediaMonitored": "Transport",
+                "metadata": "https://registry.gdi-de.org/id/de.hh/fa5588ec-bc36-4070-8871-6bf69365fe79",
+                "ownerData": "Free and Hanseatic City of Hamburg",
+                "resultsNature": "Primary",
+                "serviceName": "HH_STA_traffic_lights",
+                "signalGroupID": "K2"
+              },
+              "resultTime": "2022-04-06T08:34:19.795Z/2026-07-07T13:37:22.858701Z",
+              "unitOfMeasurement": {
+                "definition": "0=dark,1=red,2=amber,3=green,4=red-amber,5=amber-flashing,6=green-flashing,9=unknown",
+                "name": "Signal Status ",
+                "symbol": "[0-6,9]"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "partial_node_ids": [],
+    "request_urls": [
+      "https://tld.iot.hamburg.de/v1.0/Datastreams?%24top=100&%24expand=Thing%28%24expand%3DLocations%29&%24filter=Thing%2Fproperties%2FtrafficLightsID+eq+%272394%27+and+properties%2FserviceName+eq+%27HH_STA_traffic_lights%27+and+%28properties%2FlayerName+eq+%27primary_signal%27%29+and+Thing%2Fproperties%2FlaneType+eq+%27KFZ%27"
+    ]
+  },
+  "schema": "torii.hamburg-tld-metadata-bundle/v1",
+  "stream_count": 8,
+  "streams": [
+    {
+      "connection_id": "1",
+      "egress_lane_id": "9",
+      "ingress_lane_id": "10",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_1",
+      "node_id": "2394",
+      "signal_group": "K7",
+      "stream_id": 71446,
+      "thing_id": 17869
+    },
+    {
+      "connection_id": "2",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "11",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_2",
+      "node_id": "2394",
+      "signal_group": "K7",
+      "stream_id": 68006,
+      "thing_id": 17870
+    },
+    {
+      "connection_id": "3",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "12",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_3",
+      "node_id": "2394",
+      "signal_group": "K7",
+      "stream_id": 69184,
+      "thing_id": 18252
+    },
+    {
+      "connection_id": "5",
+      "egress_lane_id": "14",
+      "ingress_lane_id": "2",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_5",
+      "node_id": "2394",
+      "signal_group": "K1",
+      "stream_id": 67952,
+      "thing_id": 17846
+    },
+    {
+      "connection_id": "6",
+      "egress_lane_id": "9",
+      "ingress_lane_id": "3",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_6",
+      "node_id": "2394",
+      "signal_group": "K2",
+      "stream_id": 71448,
+      "thing_id": 17862
+    },
+    {
+      "connection_id": "7",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "6",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_7",
+      "node_id": "2394",
+      "signal_group": "K4",
+      "stream_id": 68005,
+      "thing_id": 17875
+    },
+    {
+      "connection_id": "8",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "6",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_8",
+      "node_id": "2394",
+      "signal_group": "K4",
+      "stream_id": 68904,
+      "thing_id": 17853
+    },
+    {
+      "connection_id": "9",
+      "egress_lane_id": "14",
+      "ingress_lane_id": "7",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2394_9",
+      "node_id": "2394",
+      "signal_group": "K5",
+      "stream_id": 68841,
+      "thing_id": 17843
+    }
+  ]
+}

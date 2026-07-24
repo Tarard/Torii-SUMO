@@ -17,7 +17,7 @@ from itertools import permutations
 from pathlib import Path
 from typing import Any, Mapping
 
-from .artifact_io import write_json_atomic
+from .artifact_io import relative_or_absolute_path, write_json_atomic
 from .cached_detector_demand import read_hamburg_count_stream_snapshot
 from .candidate_contracts import file_sha256
 from .digital_twin import parse_mapem
@@ -32,6 +32,7 @@ from .digital_twin_mapping import (
     read_network_lanes,
     write_detector_mapping,
 )
+from .hamburg_w1_manifest import resolve_hamburg_w1_network
 
 
 DETECTOR_BINDING_SCHEMA = "torii.hamburg-named-detector-binding/v1"
@@ -47,7 +48,8 @@ class HamburgDetectorBindingError(ValueError):
 
 def materialize_hamburg_named_detector_bindings(
     *,
-    net_file: Path,
+    net_file: Path | None = None,
+    w1_manifest_file: Path,
     count_stream_file: Path,
     output_dir: Path,
     network_projection: str = DEFAULT_NETWORK_PROJECTION,
@@ -74,7 +76,10 @@ def materialize_hamburg_named_detector_bindings(
     if not math.isfinite(ambiguity_margin_m) or ambiguity_margin_m < 0:
         raise HamburgDetectorBindingError("ambiguity_margin_m must be finite and non-negative")
 
-    net_path = Path(net_file).expanduser().resolve(strict=True)
+    net_path, w1_manifest_identity = resolve_hamburg_w1_network(
+        w1_manifest_file=w1_manifest_file,
+        net_file=net_file,
+    )
     stream_path = Path(count_stream_file).expanduser().resolve(strict=True)
     destination = Path(output_dir).expanduser().resolve()
     destination.mkdir(parents=True, exist_ok=True)
@@ -342,14 +347,34 @@ def materialize_hamburg_named_detector_bindings(
         "unmapped_stream_ids": unmapped,
         "shared_lane_stream_groups": shared_lane_stream_groups,
         "source": {
-            "candidate_net": {"path": str(net_path), "sha256": file_sha256(net_path)},
-            "count_stream_snapshot": {"path": str(stream_path), "sha256": file_sha256(stream_path)},
+            "w1_manifest": {
+                **w1_manifest_identity,
+                "path": relative_or_absolute_path(
+                    Path(w1_manifest_identity["path"]),
+                    manifest_file.parent,
+                ),
+            },
+            "candidate_net": {
+                "path": relative_or_absolute_path(net_path, manifest_file.parent),
+                "sha256": file_sha256(net_path),
+            },
+            "count_stream_snapshot": {
+                "path": relative_or_absolute_path(stream_path, manifest_file.parent),
+                "sha256": file_sha256(stream_path),
+            },
             "official_map_files": [
-                {"path": str(path), "sha256": file_sha256(path)} for path in official_map_paths
+                {
+                    "path": relative_or_absolute_path(path, manifest_file.parent),
+                    "sha256": file_sha256(path),
+                }
+                for path in official_map_paths
             ],
             "movement_lane_evidence": (
                 {
-                    "path": str(movement_evidence_path),
+                    "path": relative_or_absolute_path(
+                        movement_evidence_path,
+                        manifest_file.parent,
+                    ),
                     "sha256": file_sha256(movement_evidence_path),
                 }
                 if movement_evidence_path is not None
@@ -366,8 +391,14 @@ def materialize_hamburg_named_detector_bindings(
         },
         "node_reports": node_reports,
         "artifacts": {
-            "detector_mapping": {"path": str(mapping_file), "sha256": file_sha256(mapping_file)},
-            "detector_lane_candidates": {"path": str(candidate_file), "sha256": file_sha256(candidate_file)},
+            "detector_mapping": {
+                "path": relative_or_absolute_path(mapping_file, manifest_file.parent),
+                "sha256": file_sha256(mapping_file),
+            },
+            "detector_lane_candidates": {
+                "path": relative_or_absolute_path(candidate_file, manifest_file.parent),
+                "sha256": file_sha256(candidate_file),
+            },
             "e1_e2_additional": {
                 "status": "withheld_pending_complete_lane_mapping",
                 "reason": "partial or ambiguous bindings must not create same-location SUMO sensors",
@@ -405,7 +436,7 @@ def materialize_hamburg_named_detector_bindings(
             if shared_lane_stream_groups
             else "repair_official_first_lane_geometry_or_supply_official_map_lane_identity"
         ),
-        "artifacts_manifest": str(manifest_file),
+        "artifacts_manifest": relative_or_absolute_path(manifest_file, manifest_file.parent),
     }
     write_json_atomic(manifest_file, manifest, ensure_ascii=False, sort_keys=True)
     return {**manifest, "manifest_file": str(manifest_file)}

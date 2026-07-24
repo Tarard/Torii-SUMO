@@ -1,0 +1,35 @@
+{
+  "schema": "torii.hamburg-bounded-movement-evidence/v1",
+  "status": "review_required",
+  "product_scope": "hamburg-am-sandtorkai-2349-2394-2403",
+  "official_node_id": "2403",
+  "claim_boundary": "Legal road movement evidence only; no signal controller ownership or timing claim.",
+  "source_network": {
+    "path": "../iteration_016_2403_authorized_shape_repair/hamburg_2403_authorized_shape_repair.net.xml",
+    "sha256": "9e4ba2580f7f1ff2e0cb5be5d453f88d6075f50d100364139ac8eb275069b11a"
+  },
+  "official_sources": [
+    {
+      "title": "Brandstwiete/Bei St. Annen - Ad-hoc-Massnahme Radverkehr, abgestimmte Planung, Stand Maerz 2024",
+      "url": "https://lsbg.hamburg.de/resource/blob/948892/a3cf4f2f67f17bd7f8320b3d7e6a9fd4/brandstwiete-bei-st-annen-ad-hoc-massnahme-radverkehr-abgestimmte-planung-plan-data.pdf",
+      "sha256": "86e80a29ee554449c8b0eab6217fb59e353953f4a671703f2cc4e415d4cd6052"
+    },
+    {
+      "title": "Am Sandtorkai/Brooktorkai - Pop-up-Bikelane Verstetigung, abgestimmte Planung, Stand Juli 2022",
+      "url": "https://lsbg.hamburg.de/resource/blob/784084/6a06328b36b0de140d75baac9165f8f7/am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-abgestimmte-planung-plan-data.pdf",
+      "sha256": "941c717986f4ce35a1cc910c487f48577e7013f990904369805e877c688dc222"
+    }
+  ],
+  "lane_policy": {
+    "motor_lane_count": 4,
+    "sumo_right_to_left": ["through;right", "through", "left", "left"],
+    "rejected_osm_interpretation": "The five turn:lanes tokens do not authorize a fifth motor lane."
+  },
+  "authorized_addition": {
+    "from_edge": "25444569#2",
+    "from_lane": 0,
+    "to_edge": "395272650#0",
+    "to_lane": 0
+  },
+  "automatic_promotion_gate": "blocked_until_machine_and_netedit_audits_pass"
+}

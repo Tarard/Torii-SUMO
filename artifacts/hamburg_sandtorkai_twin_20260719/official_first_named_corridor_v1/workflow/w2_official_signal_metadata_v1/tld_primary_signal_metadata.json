@@ -1,0 +1,102 @@
+{
+  "api_base_url": "https://tld.iot.hamburg.de/v1.1/",
+  "schema": "torii.hamburg-tld-primary-signal-streams/v1",
+  "streams": [
+    {
+      "connection_id": "2",
+      "egress_lane_id": "11",
+      "ingress_lane_id": "2",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_2",
+      "node_id": "2349",
+      "signal_group": "K1",
+      "stream_id": 72940,
+      "thing_id": 19322
+    },
+    {
+      "connection_id": "3",
+      "egress_lane_id": "8",
+      "ingress_lane_id": "3",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_3",
+      "node_id": "2349",
+      "signal_group": "K1",
+      "stream_id": 72946,
+      "thing_id": 19324
+    },
+    {
+      "connection_id": "4",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "9",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_4",
+      "node_id": "2349",
+      "signal_group": "K4",
+      "stream_id": 72962,
+      "thing_id": 19325
+    },
+    {
+      "connection_id": "5",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "10",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_5",
+      "node_id": "2349",
+      "signal_group": "K4",
+      "stream_id": 81474,
+      "thing_id": 21369
+    },
+    {
+      "connection_id": "6",
+      "egress_lane_id": "8",
+      "ingress_lane_id": "10",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_6",
+      "node_id": "2349",
+      "signal_group": "K4",
+      "stream_id": 72961,
+      "thing_id": 19327
+    },
+    {
+      "connection_id": "7",
+      "egress_lane_id": "5",
+      "ingress_lane_id": "7",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_7",
+      "node_id": "2349",
+      "signal_group": "K2",
+      "stream_id": 72983,
+      "thing_id": 19332
+    },
+    {
+      "connection_id": "8",
+      "egress_lane_id": "4",
+      "ingress_lane_id": "7",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_8",
+      "node_id": "2349",
+      "signal_group": "K2",
+      "stream_id": 73039,
+      "thing_id": 19330
+    },
+    {
+      "connection_id": "9",
+      "egress_lane_id": "11",
+      "ingress_lane_id": "6",
+      "lane_type": "KFZ",
+      "layer_name": "primary_signal",
+      "name": "Primary signal heads at 2349_9",
+      "node_id": "2349",
+      "signal_group": "K2",
+      "stream_id": 72971,
+      "thing_id": 19329
+    }
+  ]
+}

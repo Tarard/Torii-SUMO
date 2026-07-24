@@ -1,0 +1,131 @@
+{
+  "artifacts": {
+    "command_record": "hamburg_sandtorkai_canonical_w1_commands.txt",
+    "netconvert_log": "hamburg_sandtorkai_canonical_w1_netconvert.log"
+  },
+  "build_scope": {
+    "allowed_way_ids_count": null,
+    "bbox": "9.980106927466423,53.540533691913986,10.003689463043568,53.54865291573397",
+    "clip_source_ways_to_bbox": false,
+    "forced_way_ids_count": null,
+    "include_railway": false,
+    "road_classes": [
+      "living_street",
+      "motorway",
+      "motorway_link",
+      "primary",
+      "primary_link",
+      "residential",
+      "road",
+      "secondary",
+      "secondary_link",
+      "service",
+      "tertiary",
+      "tertiary_link",
+      "trunk",
+      "trunk_link",
+      "unclassified"
+    ],
+    "traffic_side": "right"
+  },
+  "source_acquisition": {
+    "mode": "provided_snapshot",
+    "query": {
+      "path": "hamburg_sandtorkai_canonical_w1_overpass_query.ql",
+      "sha256": "2bcf672cb99416581834a526fced21f0f59e4bd130a394a77251d388ff90ab20"
+    },
+    "response_snapshot": {
+      "path": "../../source_complete_ways/osm/hamburg_sandtorkai_aerial_cad_complete_ways_bbox.osm.xml.gz",
+      "sha256": "a995b4da61f7c4ba1c03ec4b00478f27fbf7e575f101ae8226a60e6d16e589ca"
+    },
+    "overpass": null
+  },
+  "claim_boundary": "The original-name option requests explicit source-ID metadata in SUMO output. It does not establish complete OSM-to-SUMO conflation or authorize topology, lane, movement, or signal changes.",
+  "claim_status": "diagnostic-demo",
+  "netconvert": {
+    "command": [
+      "netconvert",
+      "--osm-files",
+      "osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz",
+      "--output-file",
+      "sumo/hamburg_sandtorkai_canonical_w1.net.xml",
+      "--proj.utm",
+      "--no-turnarounds",
+      "--no-turnarounds.tls",
+      "--no-turnarounds.geometry",
+      "--no-turnarounds.fringe",
+      "--osm.all-attributes",
+      "--output.original-names",
+      "--tls.join",
+      "--tls.join-dist",
+      "35",
+      "--verbose"
+    ],
+    "output_original_names": {
+      "claim_boundary": "An origId/origID parameter is observed output metadata only. It does not prove direction, lane, legal-turn, or traffic-light correspondence.",
+      "expected_parameter_keys": [
+        "origId",
+        "origID"
+      ],
+      "netconvert_option": "--output.original-names",
+      "observed_orig_id_parameter_count": 2289,
+      "observed_orig_id_token_count": 762,
+      "reason": "all_external_road_edges_have_observed_orig_id",
+      "requested": true,
+      "road_edge_count": 1609,
+      "road_edge_with_observed_orig_id_count": 1609,
+      "status": "pass"
+    },
+    "profile": "vehicle_core",
+    "profile_options": [],
+    "result": {
+      "command": [
+        "netconvert",
+        "--osm-files",
+        "osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz",
+        "--output-file",
+        "sumo/hamburg_sandtorkai_canonical_w1.net.xml",
+        "--proj.utm",
+        "--no-turnarounds",
+        "--no-turnarounds.tls",
+        "--no-turnarounds.geometry",
+        "--no-turnarounds.fringe",
+        "--osm.all-attributes",
+        "--output.original-names",
+        "--tls.join",
+        "--tls.join-dist",
+        "35",
+        "--verbose"
+      ],
+      "cwd": "artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\canonical_build",
+      "error": "",
+      "returncode": 0,
+      "status": "pass",
+      "stderr": "Warning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|highway.secondary' (first occurrence for edge '4313743').\nWarning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|highway.unclassified' (first occurrence for edge '4424928').\nWarning: Discarding unknown compound 'cycleway.track' in type 'cycleway.track|highway.secondary' (first occurrence for edge '23925229').\nWarning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|cycleway.track|highway.secondary' (first occurrence for edge '46239724').\nWarning: Discarding unknown compound 'cycleway.track' in type 'cycleway.lane|cycleway.track|highway.secondary' (first occurrence for edge '46239724').\nWarning: Ignoring placement for edge '554713082#0' because lane index '2' is out of range [1, 1].\nWarning: No way found for reference '19199911' in relation '7922511'\nWarning: Ignoring restriction relation '7922511' with unknown from-way.\nWarning: direction of restriction relation could not be determined\nWarning: Ignoring restriction relation '9684235'.\nWarning: direction of restriction relation could not be determined\nWarning: Ignoring restriction relation '9684236'.\nWarning: direction of restriction relation could not be determined\nWarning: Ignoring restriction relation '9898118'.\nWarning: direction of restriction relation could not be determined\nWarning: Ignoring restriction relation '9898119'.\nWarning: direction of restriction relation could not be determined\nWarning: Ignoring restriction relation '9966454'.\nWarning: Ambiguity in turnarounds computation at junction '3685836714'.\nWarning: Ambiguity in turnarounds computation at junction '3960117024'.\nWarning: Ambiguity in turnarounds computation at junction '6203394198'.\nWarning: Ambiguity in turnarounds computation at junction '6203394201'.\nWarning: Found sharp turn with radius 7.66 at the start of edge '-1158277219#0'.\nWarning: Found sharp turn with radius 7.66 at the end of edge '1158277219#0'.\nWarning: Found sharp turn with radius 6.36 at the start of edge '22661122'.\nWarning: The traffic light '371188597' does not control any links; it will not be build.\nWarning: Could not build program '0' for traffic light '371188597'\nWarning: The traffic light '8827659753' does not control any links; it will not be build.\nWarning: Could not build program '0' for traffic light '8827659753'\nWarning: The traffic light 'joinedS_11517550896_11517550902_1217212991_1217213006_#13more' cannot be adapted to a cycle time of 90.00.\nWarning: The traffic light 'joinedS_11517550896_11517550902_1217212991_1217213006_#13more' has a high cycle time of 442.00.\nWarning: Speed of straight connection '1410160494_1->8060333_1' reduced by 7.93 due to turning radius of 6.46 (length=1.21, angle=27.27).\nWarning: Speed of straight connection '724567326_0->60578527_0' reduced by 5.56 due to turning radius of 12.62 (length=11.60, angle=71.21).\nWarning: Speed of straight connection '307556942_1->9702439#0_1' reduced by 8.38 due to turning radius of 5.52 (length=1.57, angle=33.99).\nWarning: Speed of straight connection '-10620500#1_0->-10620500#0_0' reduced by 7.36 due to turning radius of 7.75 (length=7.59, angle=77.50).\nWarning: Speed of straight connection '10620500#0_0->10620500#1_0' reduced by 6.26 due to turning radius of 10.57 (length=8.97, angle=67.62).\nWarning: 14 total messages of type: Discarding unknown compound '%' in type '%' (first occurrence for edge '%').\nWarning: 11 total messages of type: Ignoring restriction relation '%'.\nWarning: 7 total messages of type: Speed of % connection '%' reduced by % due to turning radius of % (length=%, angle=%).\nWarning: 11 total messages of type: direction of restriction relation could not be determined%\n",
+      "stdout": "Parsing types from 'C:\\Users\\Danial\\AppData\\Local\\Programs\\Eclipse SUMO\\sumo-1.27.1/data/typemap/osmNetconvert.typ.xml' ... done.\nParsing nodes from osm-file 'osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz' ... done (12ms).\nParsing edges from osm-file 'osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz' ... done (36ms).\nRemoving duplicate edges ... done.\nParsing relations from osm-file 'osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz' ...\n done (1ms).\n Import done:\n   981 nodes loaded.\n   38 types loaded.\n   1609 edges loaded.\nProj projection parameters used: '+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs'.\nRemoving self-loops ... done (0ms).\nProcessing public transport stops ... done (1ms).\nAlign pt stop id signs with corresponding edge id signs ... done (0ms).\nRemoving empty nodes ... done (1ms).\n   0 nodes removed.\nMoving network to origin ... done (3ms).\nComputing turning directions ...\n done (0ms).\nAssigning nodes to traffic lights ... done (1ms).\nSorting nodes' edges ... done (1ms).\nComputing node shapes ... done (21ms).\nComputing edge shapes ... done (9ms).\nComputing node types ... done (1ms).\nComputing priorities ... done (0ms).\nComputing approached edges ... done (1ms).\nGuessing and setting roundabouts ... done (1ms).\nComputing approaching lanes ... done (3ms).\nDividing of lanes on approached lanes ... done (4ms).\nProcessing turnarounds ... done (1ms).\nRechecking of lane endings ... done (1ms).\nJoining traffic light nodes ... done (1ms).\nComputing traffic light control information ... done (1ms).\nComputing node logics ... done (5ms).\nComputing traffic light logics ...\n done (10ms).\n 218 traffic light(s) computed.\nBuilding inner edges ...\n done (14ms).\nFind accesses for pt rail stops ... done (4ms).\n-----------------------------------------------------\nSummary:\n Node type statistics:\n  Unregulated junctions       : 0\n  Dead-end junctions          : 137\n  Priority junctions          : 548\n  Right-before-left junctions : 46\n  Traffic light junctions      : 250\n Network boundaries:\n  Original boundary  : 9.98,53.54,10.01,53.55\n  Applied offset     : -564835.27,-5932720.29\n  Converted boundary : 0.00,0.00,1854.82,1113.40\n-----------------------------------------------------\nWriting network ... done (153ms).\nSuccess.\n"
+    },
+    "type_options": []
+  },
+  "netconvert_input_osm_snapshot": {
+    "derivation": "filtered_from_source_osm_by_declared_build_scope",
+    "path": "../osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz",
+    "sha256": "5c6aa03657052979dbaa0c9dbb06d6f9a3bed321ea759d884714f616bcb0cb40"
+  },
+  "schema": "torii.osm-sumo-build-provenance/v1",
+  "source_osm_snapshot": {
+    "path": "../../source_complete_ways/osm/hamburg_sandtorkai_aerial_cad_complete_ways_bbox.osm.xml.gz",
+    "sha256": "a995b4da61f7c4ba1c03ec4b00478f27fbf7e575f101ae8226a60e6d16e589ca"
+  },
+  "status": "pass",
+  "sumo_net_snapshot": {
+    "path": "../sumo/hamburg_sandtorkai_canonical_w1.net.xml",
+    "sha256": "c8d4e30d6d3bf2e44dc920eb59ceab9663130731b6402047b62a7da622f582fd"
+  },
+  "sumo_road_snapshot_import_contract": {
+    "claim_boundary": "This declares the exact filtered OSM bytes consumed by netconvert. It must be combined with parsed origId/origID output evidence before a specific SUMO edge is treated as observed OSM lineage.",
+    "imported_from": "osm",
+    "imported_source_sha256": "5c6aa03657052979dbaa0c9dbb06d6f9a3bed321ea759d884714f616bcb0cb40",
+    "source_snapshot_path": "../osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz",
+    "status": "pass"
+  }
+}

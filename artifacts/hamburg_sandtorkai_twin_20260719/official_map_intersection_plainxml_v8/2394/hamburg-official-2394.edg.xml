@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edges xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/edges_file.xsd">
+    <edge id="hh-map-2394-a2-out" from="hh-map-2394-core" to="hh-map-2394-a2-boundary" type="official-map-vehicle-structural" numLanes="2" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565962.069,5933191.399 565980.548,5933197.944 565990.396,5933201.764" type="official-map-lane-4" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565961.419,5933194.750 565977.808,5933200.509 565989.285,5933204.887" type="official-map-lane-5" />
+    </edge>
+    <edge id="hh-map-2394-a2-in" from="hh-map-2394-a2-boundary" to="hh-map-2394-core" type="official-map-vehicle-structural" numLanes="2" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="566060.749,5933246.577 566035.655,5933235.856 566012.555,5933226.142 565958.193,5933204.630" type="official-map-lane-2" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="566060.755,5933246.577 566059.299,5933245.956 566058.458,5933242.106 566057.002,5933241.484 566021.988,5933226.485 565959.173,5933201.350" type="official-map-lane-3" />
+    </edge>
+    <edge id="hh-map-2394-a3-out" from="hh-map-2394-core" to="hh-map-2394-a3-boundary" type="official-map-vehicle-structural" numLanes="1" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565942.458,5933170.573 565949.305,5933155.815 565954.541,5933144.405" type="official-map-lane-9" />
+    </edge>
+    <edge id="hh-map-2394-a3-in" from="hh-map-2394-a3-boundary" to="hh-map-2394-core" type="official-map-vehicle-structural" numLanes="2" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565978.945,5933097.368 565977.950,5933100.247 565980.776,5933106.684 565979.643,5933109.506 565963.913,5933148.642 565953.961,5933174.528" type="official-map-lane-6" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="566027.071,5932999.078 566007.839,5933043.038 565993.905,5933070.238 565978.958,5933097.368 565967.577,5933130.211 565960.775,5933147.452 565950.830,5933173.327" type="official-map-lane-7" />
+    </edge>
+    <edge id="hh-map-2394-a4-out" from="hh-map-2394-core" to="hh-map-2394-a4-boundary" type="official-map-vehicle-structural" numLanes="1" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565923.363,5933193.406 565915.788,5933191.520 565904.597,5933188.471" type="official-map-lane-14" />
+    </edge>
+    <edge id="hh-map-2394-a4-in" from="hh-map-2394-a4-boundary" to="hh-map-2394-core" type="official-map-vehicle-structural" numLanes="3" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565856.226,5933168.780 565857.965,5933169.060 565861.287,5933166.580 565863.039,5933166.850 565887.047,5933170.423 565927.906,5933178.971" type="official-map-lane-10" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565856.226,5933168.780 565892.568,5933174.717 565927.204,5933182.233" type="official-map-lane-11" />
+        <lane index="2" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565855.698,5933171.921 565877.513,5933175.018 565926.690,5933185.385" type="official-map-lane-12" />
+    </edge>
+</edges>

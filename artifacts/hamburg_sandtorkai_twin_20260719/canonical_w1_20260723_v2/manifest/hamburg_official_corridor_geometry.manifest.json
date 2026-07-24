@@ -1,0 +1,125 @@
+{
+  "artifacts": {
+    "manifest": "hamburg_official_corridor_geometry.manifest.json",
+    "network": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml"
+  },
+  "automatic_promotion_gate": "blocked",
+  "claim_boundary": {
+    "does_not_prove": [
+      "official 2403 signal topology or historical signal timing",
+      "that detector streams sharing a SUMO lane are additive or redundant",
+      "full corridor demand calibration or final digital-twin promotion",
+      "human approval from NetEdit screenshots alone",
+      "that inherited surface-overlap findings are geometrically correct",
+      "that a machine check alone proves the semantic relationship between the CAD/aerial evidence and every declared movement",
+      "movement legality outside the explicitly reviewed 2403 conflict core"
+    ],
+    "proves": [
+      "the exact candidate passes the recorded road-topology machine gates",
+      "the candidate is reproducible from the recorded build spec and patch hashes",
+      "every complete-way scope edge is preserved, internalized, or excluded with a reason",
+      "the candidate has no unsupported turnaround or unused turnaround authority",
+      "the smoke routes match a hash-bound movement review ledger",
+      "all declared physical review owners have current non-mutating NetEdit review material",
+      "the candidate may feed fail-closed signal and detector diagnostics"
+    ]
+  },
+  "claim_status": "osm-continuous-official-evidence-road-topology-review-candidate",
+  "evidence": {
+    "build_spec": {
+      "path": "../canonical-w1-build-spec.json",
+      "sha256": "1c5139f9c6157ab01b60246df347a89baaf923b0394980c96fe9ed6e77c2b2a1"
+    },
+    "connection_mode": {
+      "path": "../evidence/connection_mode/canonical-w1-connection-mode-regression.manifest.json",
+      "sha256": "6724481f64b2e3554edf2a8e2691950c42f7a5d7e0fdae4199c3d1d8403a94ba"
+    },
+    "movement_authority": {
+      "path": "../evidence/movement-authority.json",
+      "sha256": "2c2fcf52dae974c09810d6d7aaa45c6ac0cbac0d3aa1927a07360f2bcca6f3fc"
+    },
+    "movement_smoke": {
+      "path": "../evidence/movement_smoke/authorized-movements.report.json",
+      "sha256": "c33baba729abbc5d63adea9c53a9513aadf9b71188d970ee5086e27bf216d1d4"
+    },
+    "scope_edge_preservation": {
+      "path": "../evidence/scope-edge-preservation.json",
+      "sha256": "3fbbdd07fa9165d43ecd6fc23ff794ecca7a121cbf1728521edcee3c841d8277"
+    },
+    "sumo_load": {
+      "path": "../evidence/sumo_load/sumo-load-audit.json",
+      "sha256": "f820cffd7a67f093bfc4856b49c6f7106f656e679c0e05ec14ff946c36826bd9"
+    },
+    "surface_comparison": {
+      "path": "../evidence/surface-overlap.json",
+      "sha256": "c5bd380a4ce49f74e98ea79f36f127bfef67136c7fd33385f4aa6ef0bc88835e"
+    },
+    "topology_feedback": {
+      "path": "../evidence/topology-preservation.json",
+      "sha256": "730dbfc8276b16ea835ed1c05bf6863104987016725ac9da0c41167e0f7b1ae6"
+    },
+    "turnaround_audit": {
+      "path": "../evidence/turnaround-audit.json",
+      "sha256": "ff0b0147d112c1c623086abb0999b5b957b5d0e691be8234e1dca40961c47e64"
+    }
+  },
+  "execution_gate": "pass",
+  "execution_gate_reason": "hash-bound scope, topology, turnaround, movement-authority, SUMO, connection, movement-smoke, and NetEdit-material checks pass; surface findings remain an explicit review gate",
+  "gates": {
+    "automatic_promotion": "blocked",
+    "connection_mode": "review_required",
+    "movement_authority": "review_required",
+    "movement_smoke": "pass",
+    "netedit_review_material": "pass",
+    "official_2403_signal_assets": "blocked",
+    "scope_edge_preservation": "pass",
+    "sumo_load": "pass",
+    "surface_overlap": "review_required",
+    "topology_feedback": "pass",
+    "unsupported_turnarounds": "pass"
+  },
+  "netedit_review": {
+    "automatic_promotion_gate": "blocked",
+    "junction_ids": [
+      "cluster_1272392464_2761334292_5241629952_757036853",
+      "cluster_249707791_757036954",
+      "cluster_25737304_759714733",
+      "cluster_739654528_759714704"
+    ],
+    "report_count": 4,
+    "reports": [
+      {
+        "path": "../evidence/netedit/2349-east/review-428aaf80b6.json",
+        "sha256": "6bf09a0e022e9facda884cd82d6c8fdbe8cc52fd821d7106dcca659fea3c795a"
+      },
+      {
+        "path": "../evidence/netedit/2349-west/review-7855cefba7.json",
+        "sha256": "1f8ae11bce9ea09e07fc8faac6bac76f3e5922304b5d29e0719614e3768bffeb"
+      },
+      {
+        "path": "../evidence/netedit/2403-north/review-dd701117af.json",
+        "sha256": "4fd2405814d48a992595cb6e568bfb8f657e05a4bd50a42536b3869add32e1c1"
+      },
+      {
+        "path": "../evidence/netedit/2403-south/review-f0d04fc131.json",
+        "sha256": "6d1b11115f4cc6cea388d9e1dff8e6fcc8d636b6b485f5686a4395eda0bfecc6"
+      }
+    ],
+    "status": "review_material_ready"
+  },
+  "network": {
+    "path": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+    "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98"
+  },
+  "routeability": {
+    "authority_id": "hamburg-2403-cad-aerial-osm-turn-lanes-20260723",
+    "collisions": 0,
+    "evidence_status": "review_required",
+    "movement_count": 16,
+    "scope": "16 declared evidence-bound lane-level movements",
+    "status": "pass",
+    "teleports": 0
+  },
+  "schema": "torii.hamburg-official-corridor-geometry/v1",
+  "status": "review_ready"
+}

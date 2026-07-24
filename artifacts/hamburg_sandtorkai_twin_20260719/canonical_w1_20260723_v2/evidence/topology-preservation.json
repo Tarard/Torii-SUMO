@@ -1,0 +1,363 @@
+{
+  "absorbed_join_edge_count": 7,
+  "absorbed_join_edge_ids": [
+    "-60578489",
+    "111747607#0",
+    "554706401#1",
+    "554706401#2",
+    "59626578",
+    "60578489",
+    "61649650"
+  ],
+  "authority_sources": [
+    {
+      "kind": "hamburg_2349_map_ocit",
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_009_2349_2394_official_inventory_prune\\evidence\\official_movement_paths.json"
+    },
+    {
+      "kind": "hamburg_2403_cad_aerial_osm",
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\movement-authority.json"
+    }
+  ],
+  "authorized_new_dangling_shared_normal_edge_count": 0,
+  "authorized_new_dangling_shared_normal_edge_ids": [],
+  "authorized_removed_connection_count": 3,
+  "authorized_removed_connections": [
+    "-142944246#0|142944246#0|0|0||",
+    "26923040|-26923040|0|0||",
+    "554713078#2|554713075#0|1|1||"
+  ],
+  "boundary_movement_preservation": {
+    "added_boundary_movement_count": 0,
+    "authoritative_joined_junction_count": 4,
+    "authoritative_joined_junction_ids": [
+      "cluster_1272392464_2761334292_5241629952_757036853",
+      "cluster_249707791_757036954",
+      "cluster_25737304_759714733",
+      "cluster_739654528_759714704"
+    ],
+    "authority_mode": "explicit_authority",
+    "authority_not_in_source_movement_count": 5,
+    "groups": [
+      {
+        "added_boundary_movement_count": 0,
+        "added_boundary_movements": [],
+        "authoritative_boundary_movement_count": 7,
+        "authoritative_boundary_movements": [
+          "554713076#2|0|194672083|0",
+          "554713076#2|1|194672083|1",
+          "554713078#2|0|554713075#0|0",
+          "554713078#2|0|554713075#0|1",
+          "554713078#2|1|194672083|1",
+          "59990286|0|554713075#0|0",
+          "59990286|1|554713075#0|1"
+        ],
+        "authority_mode": "explicit_authority",
+        "authority_not_in_source_movement_count": 1,
+        "authority_not_in_source_movements": [
+          "554713078#2|0|554713075#0|1"
+        ],
+        "incoming_edge_ids": [
+          "554713076#2",
+          "554713078#2",
+          "59990286"
+        ],
+        "internal_edge_ids": [
+          "61649650"
+        ],
+        "joined_junction_id": "cluster_25737304_759714733",
+        "lost_boundary_movement_count": 0,
+        "lost_boundary_movements": [],
+        "node_ids": [
+          "25737304",
+          "759714733"
+        ],
+        "outgoing_edge_ids": [
+          "194672083",
+          "554713075#0"
+        ],
+        "source_boundary_movement_count": 8,
+        "source_boundary_movements": [
+          "554713076#2|0|194672083|0",
+          "554713076#2|1|194672083|1",
+          "554713078#2|0|554713075#0|0",
+          "554713078#2|1|194672083|1",
+          "554713078#2|1|554713075#0|1",
+          "59990286|0|554713075#0|0",
+          "59990286|1|194672083|1",
+          "59990286|1|554713075#0|1"
+        ],
+        "source_not_authorized_movement_count": 2,
+        "source_not_authorized_movements": [
+          "554713078#2|1|554713075#0|1",
+          "59990286|1|194672083|1"
+        ],
+        "variant_boundary_movement_count": 7,
+        "variant_boundary_movements": [
+          "554713076#2|0|194672083|0",
+          "554713076#2|1|194672083|1",
+          "554713078#2|0|554713075#0|0",
+          "554713078#2|0|554713075#0|1",
+          "554713078#2|1|194672083|1",
+          "59990286|0|554713075#0|0",
+          "59990286|1|554713075#0|1"
+        ]
+      },
+      {
+        "added_boundary_movement_count": 0,
+        "added_boundary_movements": [],
+        "authoritative_boundary_movement_count": 6,
+        "authoritative_boundary_movements": [
+          "194672083|0|127716467#0|0",
+          "194672083|1|127716467#0|0",
+          "194672083|1|61649649#0|0",
+          "61649647#2|0|59990286|0",
+          "61649647#2|0|61649649#0|0",
+          "61649647#2|1|59990286|1"
+        ],
+        "authority_mode": "explicit_authority",
+        "authority_not_in_source_movement_count": 1,
+        "authority_not_in_source_movements": [
+          "194672083|1|127716467#0|0"
+        ],
+        "incoming_edge_ids": [
+          "194672083",
+          "61649647#2"
+        ],
+        "internal_edge_ids": [
+          "59626578"
+        ],
+        "joined_junction_id": "cluster_739654528_759714704",
+        "lost_boundary_movement_count": 0,
+        "lost_boundary_movements": [],
+        "node_ids": [
+          "739654528",
+          "759714704"
+        ],
+        "outgoing_edge_ids": [
+          "127716467#0",
+          "59990286",
+          "61649649#0"
+        ],
+        "source_boundary_movement_count": 6,
+        "source_boundary_movements": [
+          "194672083|0|127716467#0|0",
+          "194672083|1|59990286|1",
+          "194672083|1|61649649#0|0",
+          "61649647#2|0|59990286|0",
+          "61649647#2|0|61649649#0|0",
+          "61649647#2|1|59990286|1"
+        ],
+        "source_not_authorized_movement_count": 1,
+        "source_not_authorized_movements": [
+          "194672083|1|59990286|1"
+        ],
+        "variant_boundary_movement_count": 6,
+        "variant_boundary_movements": [
+          "194672083|0|127716467#0|0",
+          "194672083|1|127716467#0|0",
+          "194672083|1|61649649#0|0",
+          "61649647#2|0|59990286|0",
+          "61649647#2|0|61649649#0|0",
+          "61649647#2|1|59990286|1"
+        ]
+      },
+      {
+        "added_boundary_movement_count": 0,
+        "added_boundary_movements": [],
+        "authoritative_boundary_movement_count": 5,
+        "authoritative_boundary_movements": [
+          "-554713071|0|111747607#1|0",
+          "-554713071|1|111747607#1|1",
+          "554706401#0|0|554713071|0",
+          "554706401#0|1|554713071|1",
+          "554706401#0|2|554713071|2"
+        ],
+        "authority_mode": "explicit_authority",
+        "authority_not_in_source_movement_count": 0,
+        "authority_not_in_source_movements": [],
+        "incoming_edge_ids": [
+          "-554713071",
+          "554706401#0"
+        ],
+        "internal_edge_ids": [
+          "111747607#0",
+          "554706401#1",
+          "554706401#2"
+        ],
+        "joined_junction_id": "cluster_1272392464_2761334292_5241629952_757036853",
+        "lost_boundary_movement_count": 0,
+        "lost_boundary_movements": [],
+        "node_ids": [
+          "1272392464",
+          "2761334292",
+          "5241629952",
+          "757036853"
+        ],
+        "outgoing_edge_ids": [
+          "111747607#1",
+          "554713071"
+        ],
+        "source_boundary_movement_count": 6,
+        "source_boundary_movements": [
+          "-554713071|0|111747607#1|0",
+          "-554713071|1|111747607#1|1",
+          "554706401#0|0|554713071|0",
+          "554706401#0|1|554713071|1",
+          "554706401#0|2|111747607#1|1",
+          "554706401#0|2|554713071|2"
+        ],
+        "source_not_authorized_movement_count": 1,
+        "source_not_authorized_movements": [
+          "554706401#0|2|111747607#1|1"
+        ],
+        "variant_boundary_movement_count": 5,
+        "variant_boundary_movements": [
+          "-554713071|0|111747607#1|0",
+          "-554713071|1|111747607#1|1",
+          "554706401#0|0|554713071|0",
+          "554706401#0|1|554713071|1",
+          "554706401#0|2|554713071|2"
+        ]
+      },
+      {
+        "added_boundary_movement_count": 0,
+        "added_boundary_movements": [],
+        "authoritative_boundary_movement_count": 16,
+        "authoritative_boundary_movements": [
+          "-152813965#0|0|-554713071|0",
+          "-152813965#0|0|395272650#0|0",
+          "-152813965#0|1|-554713071|0",
+          "-152813965#0|2|60578532#0|1",
+          "25444569#2|0|152813965#0|0",
+          "25444569#2|0|395272650#0|0",
+          "25444569#2|1|395272650#0|0",
+          "25444569#2|2|-554713071|0",
+          "25444569#2|3|-554713071|1",
+          "554713071|0|60578532#0|0",
+          "554713071|1|152813965#0|0",
+          "554713071|2|395272650#0|0",
+          "83075275#2|0|-554713071|0",
+          "83075275#2|0|60578532#0|0",
+          "83075275#2|1|60578532#0|1",
+          "83075275#2|2|152813965#0|0"
+        ],
+        "authority_mode": "explicit_authority",
+        "authority_not_in_source_movement_count": 3,
+        "authority_not_in_source_movements": [
+          "-152813965#0|0|-554713071|0",
+          "25444569#2|0|395272650#0|0",
+          "83075275#2|2|152813965#0|0"
+        ],
+        "incoming_edge_ids": [
+          "-152813965#0",
+          "25444569#2",
+          "554713071",
+          "83075275#2"
+        ],
+        "internal_edge_ids": [
+          "-60578489",
+          "60578489"
+        ],
+        "joined_junction_id": "cluster_249707791_757036954",
+        "lost_boundary_movement_count": 0,
+        "lost_boundary_movements": [],
+        "node_ids": [
+          "249707791",
+          "757036954"
+        ],
+        "outgoing_edge_ids": [
+          "-554713071",
+          "152813965#0",
+          "395272650#0",
+          "60578532#0"
+        ],
+        "source_boundary_movement_count": 16,
+        "source_boundary_movements": [
+          "-152813965#0|0|395272650#0|0",
+          "-152813965#0|1|-554713071|0",
+          "-152813965#0|2|-554713071|1",
+          "-152813965#0|2|60578532#0|1",
+          "25444569#2|0|152813965#0|0",
+          "25444569#2|1|395272650#0|0",
+          "25444569#2|2|-554713071|0",
+          "25444569#2|3|-554713071|1",
+          "25444569#2|3|60578532#0|1",
+          "554713071|0|60578532#0|0",
+          "554713071|1|152813965#0|0",
+          "554713071|2|395272650#0|0",
+          "83075275#2|0|-554713071|0",
+          "83075275#2|0|60578532#0|0",
+          "83075275#2|1|60578532#0|1",
+          "83075275#2|2|395272650#0|0"
+        ],
+        "source_not_authorized_movement_count": 3,
+        "source_not_authorized_movements": [
+          "-152813965#0|2|-554713071|1",
+          "25444569#2|3|60578532#0|1",
+          "83075275#2|2|395272650#0|0"
+        ],
+        "variant_boundary_movement_count": 16,
+        "variant_boundary_movements": [
+          "-152813965#0|0|-554713071|0",
+          "-152813965#0|0|395272650#0|0",
+          "-152813965#0|1|-554713071|0",
+          "-152813965#0|2|60578532#0|1",
+          "25444569#2|0|152813965#0|0",
+          "25444569#2|0|395272650#0|0",
+          "25444569#2|1|395272650#0|0",
+          "25444569#2|2|-554713071|0",
+          "25444569#2|3|-554713071|1",
+          "554713071|0|60578532#0|0",
+          "554713071|1|152813965#0|0",
+          "554713071|2|395272650#0|0",
+          "83075275#2|0|-554713071|0",
+          "83075275#2|0|60578532#0|0",
+          "83075275#2|1|60578532#0|1",
+          "83075275#2|2|152813965#0|0"
+        ]
+      }
+    ],
+    "lost_boundary_movement_count": 0,
+    "source_not_authorized_movement_count": 7,
+    "status": "pass",
+    "unused_authoritative_joined_junction_count": 0,
+    "unused_authoritative_joined_junction_ids": []
+  },
+  "claim_status": "diagnostic-demo",
+  "lost_shared_connection_count": 0,
+  "lost_shared_connections": [],
+  "new_dangling_shared_normal_edge_count": 0,
+  "new_dangling_shared_normal_edge_ids": [],
+  "observed_removed_connection_count": 3,
+  "observed_removed_connections": [
+    "-142944246#0|142944246#0|0|0||",
+    "26923040|-26923040|0|0||",
+    "554713078#2|554713075#0|1|1||"
+  ],
+  "removed_normal_edge_count": 7,
+  "removed_normal_edge_ids": [
+    "-60578489",
+    "111747607#0",
+    "554706401#1",
+    "554706401#2",
+    "59626578",
+    "60578489",
+    "61649650"
+  ],
+  "removed_normal_edge_mode_counts": {},
+  "removed_normal_edge_type_counts": {
+    "highway.residential": 2,
+    "highway.secondary": 5
+  },
+  "schema": "torii.junction-aggregation-preservation/v1",
+  "source_net_file": "../canonical_build/sumo/hamburg_sandtorkai_canonical_w1.net.xml",
+  "source_sha256": "c8d4e30d6d3bf2e44dc920eb59ceab9663130731b6402047b62a7da622f582fd",
+  "status": "pass",
+  "unexpected_removed_normal_edge_count": 0,
+  "unexpected_removed_normal_edge_ids": [],
+  "unused_authorized_removed_connection_count": 0,
+  "unused_authorized_removed_connections": [],
+  "variant_net_file": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+  "variant_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98"
+}

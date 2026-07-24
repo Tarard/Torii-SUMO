@@ -6,10 +6,10 @@ import re
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 
-SCHEMA_ID = "torii.external-micro-junction-audit/v1"
+SCHEMA_ID = "torii.external-micro-junction-audit/v2"
 CLASSIFICATIONS = {
     "geometry_fragment_candidate",
     "protected_or_review",
@@ -22,6 +22,10 @@ _PROTECTED_JUNCTION_TYPES = {
     "rail_crossing",
 }
 _ROUNDABOUT_VALUES = {"roundabout", "mini_roundabout", "circular"}
+_TURNAROUND_EVIDENCE_KINDS = {
+    "official_movement_allowlist",
+    "turn_lane_reverse_or_uturn",
+}
 
 
 class ExternalMicroJunctionAuditError(ValueError):
@@ -33,6 +37,7 @@ def audit_external_micro_junctions(
     *,
     micro_edge_threshold_m: float = 1.0,
     junction_ids: Sequence[str] = (),
+    turnaround_authority: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Classify reciprocal external micro edges without authorizing an edit.
 
@@ -41,8 +46,10 @@ def audit_external_micro_junctions(
     possible only when both directions are below the threshold by both
     measurements, have compatible road/lane lineage, and carry no controller,
     stop-line, crossing, or roundabout protection evidence.  ``dir='t'`` is
-    recorded as a netconvert-output/small-loop symptom, not as deletion or
-    preservation authority by itself.
+    recorded as a netconvert-output/small-loop symptom.  A compiled turnaround
+    is supported only by an explicit official allowlist record or source
+    ``turn:lanes`` reverse/u-turn evidence supplied independently of the
+    candidate network.
     """
 
     if not math.isfinite(micro_edge_threshold_m) or micro_edge_threshold_m <= 0:
@@ -92,6 +99,7 @@ def audit_external_micro_junctions(
         )
 
     connections = _connection_records(root, external_edges)
+    authority_by_signature = _turnaround_authority_by_signature(turnaround_authority)
     roundabout_edge_ids, roundabout_node_ids = _explicit_roundabout_members(root)
     crossing_by_junction = _crossing_evidence(junctions, special_edges)
 
@@ -155,15 +163,24 @@ def audit_external_micro_junctions(
         )
 
     turnarounds = []
+    observed_turnaround_signatures: set[tuple[str, str, str, str]] = set()
     for row in connections:
         if row["dir"] != "t":
             continue
         if scope and row["owner_junction_id"] not in scope:
             continue
+        signature = _turnaround_signature(row)
+        observed_turnaround_signatures.add(signature)
+        authority = authority_by_signature.get(signature)
         turnarounds.append(
             {
                 **row,
-                "audit_disposition": "observed_not_authorizing_edit",
+                "audit_disposition": (
+                    "supported_by_independent_authority"
+                    if authority is not None
+                    else "review_required_unsupported_turnaround"
+                ),
+                "authority": authority,
                 "covered_by_micro_pair_record": (
                     _turnaround_signature(row) in covered_turnaround_signatures
                 ),
@@ -173,13 +190,32 @@ def audit_external_micro_junctions(
                 ),
             }
         )
+    unsupported_turnarounds = [
+        row for row in turnarounds if row["audit_disposition"] == "review_required_unsupported_turnaround"
+    ]
+    unused_authority = [
+        authority
+        for signature, authority in authority_by_signature.items()
+        if signature not in observed_turnaround_signatures
+    ]
 
     counts = {name: 0 for name in sorted(CLASSIFICATIONS)}
     for row in pair_records:
         counts[row["classification"]] += 1
     payload = {
         "schema_id": SCHEMA_ID,
-        "status": "pass",
+        # Independent evidence may explain a turnaround, but this classifier
+        # cannot prove the semantic relationship between an evidence record
+        # and a compiled SUMO connection.  Therefore only a zero-turnaround,
+        # zero-unused-authority result can pass automatically.
+        "status": (
+            "review_required"
+            if turnarounds or unused_authority
+            else "pass"
+        ),
+        "automatic_promotion_gate": (
+            "blocked" if turnarounds or unused_authority else "pass"
+        ),
         "source_net_file": str(source),
         "source_net_sha256": _file_sha256(source),
         "scope": {
@@ -192,14 +228,31 @@ def audit_external_micro_junctions(
                 "every lane in both reciprocal directions must have positive declared and "
                 "rendered lengths at or below the threshold"
             ),
-            "classification_only": True,
+            "classification_only": False,
             "automatic_edit_authorization": "blocked",
+            "turnaround_support_rule": (
+                "every dir='t' connection must match independent official movement "
+                "allowlist or turn:lanes reverse/u-turn evidence"
+            ),
+            "accepted_turnaround_evidence_kinds": sorted(_TURNAROUND_EVIDENCE_KINDS),
             "source_mutation": "none",
         },
         "reciprocal_micro_pair_count": len(pair_records),
         "classification_counts": counts,
         "reciprocal_micro_pairs": pair_records,
         "dir_t_turnaround_count": len(turnarounds),
+        "supported_turnaround_count": len(turnarounds) - len(unsupported_turnarounds),
+        "unsupported_turnaround_count": len(unsupported_turnarounds),
+        "unused_turnaround_authority_count": len(unused_authority),
+        "unused_turnaround_authority": sorted(
+            unused_authority,
+            key=lambda row: (
+                _natural_key(str(row["from_edge_id"])),
+                _natural_key(str(row["to_edge_id"])),
+                str(row["from_lane"]),
+                str(row["to_lane"]),
+            ),
+        ),
         "dir_t_turnarounds": sorted(
             turnarounds,
             key=lambda row: (
@@ -212,7 +265,9 @@ def audit_external_micro_junctions(
         ),
         "claim_boundary": (
             "geometry_fragment_candidate is a review classification only; this audit never "
-            "authorizes deletion, node joining, connection rewriting, or promotion"
+            "authorizes deletion, node joining, connection rewriting, or automatic "
+            "promotion. Every compiled turnaround requires human review even when "
+            "an independent evidence record explains it."
         ),
     }
     return payload
@@ -661,6 +716,46 @@ def _turnaround_signature(row: dict[str, Any]) -> tuple[str, str, str, str]:
         str(row["from_lane"]),
         str(row["to_lane"]),
     )
+
+
+def _turnaround_authority_by_signature(
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str, str, str], dict[str, Any]]:
+    result: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for index, raw in enumerate(rows):
+        evidence_kind = str(raw.get("evidence_kind", ""))
+        evidence_ids = raw.get("evidence_ids")
+        if evidence_kind not in _TURNAROUND_EVIDENCE_KINDS:
+            raise ExternalMicroJunctionAuditError(
+                f"turnaround authority {index} has unsupported evidence_kind: {evidence_kind!r}"
+            )
+        if (
+            not isinstance(evidence_ids, Sequence)
+            or isinstance(evidence_ids, (str, bytes))
+            or not all(str(value).strip() for value in evidence_ids)
+        ):
+            raise ExternalMicroJunctionAuditError(
+                f"turnaround authority {index} must have non-empty evidence_ids"
+            )
+        row = {
+            "from_edge_id": str(raw.get("from_edge_id", "")),
+            "to_edge_id": str(raw.get("to_edge_id", "")),
+            "from_lane": str(raw.get("from_lane", "")),
+            "to_lane": str(raw.get("to_lane", "")),
+            "evidence_kind": evidence_kind,
+            "evidence_ids": [str(value) for value in evidence_ids],
+        }
+        if not row["from_edge_id"] or not row["to_edge_id"]:
+            raise ExternalMicroJunctionAuditError(
+                f"turnaround authority {index} must identify both edges"
+            )
+        signature = _turnaround_signature(row)
+        if signature in result:
+            raise ExternalMicroJunctionAuditError(
+                f"duplicate turnaround authority signature: {signature}"
+            )
+        result[signature] = row
+    return result
 
 
 def _pair_key(endpoints: tuple[str, str]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edges xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/edges_file.xsd">
+    <edge id="hh-map-2349-a1-out" from="hh-map-2349-core" to="hh-map-2349-a1-boundary" type="official-map-vehicle-structural" numLanes="2" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565848.213,5933167.355 565854.330,5933168.341 565869.888,5933170.929" type="official-map-lane-5" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565847.603,5933170.718 565857.662,5933172.227 565868.863,5933174.097" type="official-map-lane-4" />
+    </edge>
+    <edge id="hh-map-2349-a1-in" from="hh-map-2349-a1-boundary" to="hh-map-2349-core" type="official-map-vehicle-structural" numLanes="2" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565913.044,5933191.014 565902.705,5933188.222 565883.937,5933183.876 565840.515,5933176.193" type="official-map-lane-2" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565913.038,5933191.025 565910.925,5933190.450 565908.288,5933186.108 565906.154,5933185.644 565868.836,5933177.479 565840.993,5933172.817" type="official-map-lane-3" />
+    </edge>
+    <edge id="hh-map-2349-a2-out" from="hh-map-2349-core" to="hh-map-2349-a2-boundary" type="official-map-vehicle-structural" numLanes="1" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565813.159,5933149.374 565813.780,5933143.853 565814.912,5933133.020" type="official-map-lane-8" />
+    </edge>
+    <edge id="hh-map-2349-a2-in" from="hh-map-2349-a2-boundary" to="hh-map-2349-core" type="official-map-vehicle-structural" numLanes="2" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565833.034,5933084.393 565832.236,5933090.301 565833.645,5933102.315 565832.959,5933108.247 565830.711,5933127.833 565827.277,5933151.663" type="official-map-lane-7" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565857.285,5932869.637 565836.207,5933054.105 565833.034,5933084.393 565824.058,5933151.095" type="official-map-lane-6" />
+    </edge>
+    <edge id="hh-map-2349-a3-out" from="hh-map-2349-core" to="hh-map-2349-a3-boundary" type="official-map-vehicle-structural" numLanes="1" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565780.587,5933167.758 565767.958,5933166.180 565754.952,5933164.486" type="official-map-lane-11" />
+    </edge>
+    <edge id="hh-map-2349-a3-in" from="hh-map-2349-a3-boundary" to="hh-map-2349-core" type="official-map-vehicle-structural" numLanes="2" spreadType="center" allow="passenger taxi bus coach delivery truck motorcycle emergency">
+        <lane index="0" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565662.221,5933142.955 565786.500,5933158.672 565792.011,5933159.361" type="official-map-lane-10" />
+        <lane index="1" allow="passenger taxi bus coach delivery truck motorcycle emergency" speed="13.890" width="3.200" shape="565661.783,5933145.853 565786.004,5933161.881 565791.516,5933162.570" type="official-map-lane-9" />
+    </edge>
+</edges>

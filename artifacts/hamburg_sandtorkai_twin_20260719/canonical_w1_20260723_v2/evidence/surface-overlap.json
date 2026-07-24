@@ -1,0 +1,3045 @@
+{
+  "audit_engine": "torii.bevel-strip-and-junction-polygon-area/v2",
+  "audited_external_lane_count": 2275,
+  "audited_junction_count": 805,
+  "default_lane_width_m": 3.2,
+  "external_lane_non_owner_junction_overlap_count": 177,
+  "external_lane_non_owner_junction_overlaps": [
+    {
+      "edge_id": "-1027809198#0",
+      "from_junction_id": "6694197254",
+      "lane_id": "-1027809198#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188583",
+      "overlap_area_m2": 17.73941,
+      "to_junction_id": "371188556"
+    },
+    {
+      "edge_id": "-1027809198#0",
+      "from_junction_id": "6694197254",
+      "lane_id": "-1027809198#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 9.801098,
+      "to_junction_id": "371188556"
+    },
+    {
+      "edge_id": "-1027809198#0",
+      "from_junction_id": "6694197254",
+      "lane_id": "-1027809198#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188583",
+      "overlap_area_m2": 18.75959,
+      "to_junction_id": "371188556"
+    },
+    {
+      "edge_id": "-1027809198#0",
+      "from_junction_id": "6694197254",
+      "lane_id": "-1027809198#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 9.872447,
+      "to_junction_id": "371188556"
+    },
+    {
+      "edge_id": "-1111806336",
+      "from_junction_id": "371188583",
+      "lane_id": "-1111806336_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188556",
+      "overlap_area_m2": 31.900826,
+      "to_junction_id": "6151332858"
+    },
+    {
+      "edge_id": "-1111806336",
+      "from_junction_id": "371188583",
+      "lane_id": "-1111806336_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188556",
+      "overlap_area_m2": 31.742952,
+      "to_junction_id": "6151332858"
+    },
+    {
+      "edge_id": "-1206973906",
+      "from_junction_id": "3687318279",
+      "lane_id": "-1206973906_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "3687318267",
+      "overlap_area_m2": 0.296931,
+      "to_junction_id": "3687318278"
+    },
+    {
+      "edge_id": "-125742555#3",
+      "from_junction_id": "1758886194",
+      "lane_id": "-125742555#3_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "242891799",
+      "overlap_area_m2": 7.33387,
+      "to_junction_id": "13084120038"
+    },
+    {
+      "edge_id": "-1423533998",
+      "from_junction_id": "13084120041",
+      "lane_id": "-1423533998_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "13084120036",
+      "overlap_area_m2": 0.399708,
+      "to_junction_id": "13084120042"
+    },
+    {
+      "edge_id": "-1423533999",
+      "from_junction_id": "13084120042",
+      "lane_id": "-1423533999_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "13084120035",
+      "overlap_area_m2": 0.113454,
+      "to_junction_id": "13084120039"
+    },
+    {
+      "edge_id": "-152813986",
+      "from_junction_id": "277631527",
+      "lane_id": "-152813986_0",
+      "lane_width_m": 6.0,
+      "non_owner_junction_id": "77777630",
+      "overlap_area_m2": 2.366228,
+      "to_junction_id": "77846400"
+    },
+    {
+      "edge_id": "-174284968#2",
+      "from_junction_id": "748827262",
+      "lane_id": "-174284968#2_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4051376234",
+      "overlap_area_m2": 2.507597,
+      "to_junction_id": "4051376236"
+    },
+    {
+      "edge_id": "-217557693#0",
+      "from_junction_id": "11459958870",
+      "lane_id": "-217557693#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "1957119216",
+      "overlap_area_m2": 1.178058,
+      "to_junction_id": "2268419477"
+    },
+    {
+      "edge_id": "-22911254#1",
+      "from_junction_id": "6695848649",
+      "lane_id": "-22911254#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192474",
+      "overlap_area_m2": 4.327484,
+      "to_junction_id": "6695848646"
+    },
+    {
+      "edge_id": "-22911254#7",
+      "from_junction_id": "240310307",
+      "lane_id": "-22911254#7_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "2076312612",
+      "overlap_area_m2": 1.374746,
+      "to_junction_id": "5812153238"
+    },
+    {
+      "edge_id": "-23947626#1",
+      "from_junction_id": "3760062585",
+      "lane_id": "-23947626#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6544316839",
+      "overlap_area_m2": 9.761206,
+      "to_junction_id": "196958428"
+    },
+    {
+      "edge_id": "-364683970",
+      "from_junction_id": "3687318278",
+      "lane_id": "-364683970_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "3687318267",
+      "overlap_area_m2": 11.230011,
+      "to_junction_id": "3687318277"
+    },
+    {
+      "edge_id": "-364683970",
+      "from_junction_id": "3687318278",
+      "lane_id": "-364683970_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "3687318269",
+      "overlap_area_m2": 6.680478,
+      "to_junction_id": "3687318277"
+    },
+    {
+      "edge_id": "-364683970",
+      "from_junction_id": "3687318278",
+      "lane_id": "-364683970_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "3687318279",
+      "overlap_area_m2": 22.936502,
+      "to_junction_id": "3687318277"
+    },
+    {
+      "edge_id": "-402878726",
+      "from_junction_id": "3687317498",
+      "lane_id": "-402878726_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4052816592",
+      "overlap_area_m2": 2.095739,
+      "to_junction_id": "308838174"
+    },
+    {
+      "edge_id": "-402878726",
+      "from_junction_id": "3687317498",
+      "lane_id": "-402878726_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4052816593",
+      "overlap_area_m2": 0.565494,
+      "to_junction_id": "308838174"
+    },
+    {
+      "edge_id": "-458320758#0",
+      "from_junction_id": "607907603",
+      "lane_id": "-458320758#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540492553",
+      "overlap_area_m2": 12.284548,
+      "to_junction_id": "17209211"
+    },
+    {
+      "edge_id": "-59845721",
+      "from_junction_id": "25075702",
+      "lane_id": "-59845721_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "742228361",
+      "overlap_area_m2": 0.573469,
+      "to_junction_id": "742754575"
+    },
+    {
+      "edge_id": "-647842957",
+      "from_junction_id": "3687318296",
+      "lane_id": "-647842957_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "759714713",
+      "overlap_area_m2": 0.637356,
+      "to_junction_id": "5420059034"
+    },
+    {
+      "edge_id": "-647842957",
+      "from_junction_id": "3687318296",
+      "lane_id": "-647842957_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "759714713",
+      "overlap_area_m2": 0.593846,
+      "to_junction_id": "5420059034"
+    },
+    {
+      "edge_id": "-688085054",
+      "from_junction_id": "6451192809",
+      "lane_id": "-688085054_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192467",
+      "overlap_area_m2": 5.79514,
+      "to_junction_id": "6451192811"
+    },
+    {
+      "edge_id": "-688091185#0",
+      "from_junction_id": "6493229181",
+      "lane_id": "-688091185#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "18130092",
+      "overlap_area_m2": 0.346133,
+      "to_junction_id": "6148339020"
+    },
+    {
+      "edge_id": "-688091185#0",
+      "from_junction_id": "6493229181",
+      "lane_id": "-688091185#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "18130092",
+      "overlap_area_m2": 0.373181,
+      "to_junction_id": "6148339020"
+    },
+    {
+      "edge_id": "-688091185#1",
+      "from_junction_id": "18130092",
+      "lane_id": "-688091185#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 0.621328,
+      "to_junction_id": "6493229181"
+    },
+    {
+      "edge_id": "-688091185#1",
+      "from_junction_id": "18130092",
+      "lane_id": "-688091185#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 0.64,
+      "to_junction_id": "6493229181"
+    },
+    {
+      "edge_id": "-696849337#1",
+      "from_junction_id": "4027558846",
+      "lane_id": "-696849337#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6544316821",
+      "overlap_area_m2": 1.531301,
+      "to_junction_id": "6544316822"
+    },
+    {
+      "edge_id": "-697038433",
+      "from_junction_id": "757037184",
+      "lane_id": "-697038433_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6090999718",
+      "overlap_area_m2": 1.992482,
+      "to_junction_id": "6546138039"
+    },
+    {
+      "edge_id": "-801313070",
+      "from_junction_id": "7494459752",
+      "lane_id": "-801313070_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "9610870172",
+      "overlap_area_m2": 6.157364,
+      "to_junction_id": "7494459753"
+    },
+    {
+      "edge_id": "-8320141#0",
+      "from_junction_id": "265759897",
+      "lane_id": "-8320141#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "18130092",
+      "overlap_area_m2": 9.879504,
+      "to_junction_id": "77843518"
+    },
+    {
+      "edge_id": "-937824436",
+      "from_junction_id": "8688554172",
+      "lane_id": "-937824436_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "240314058",
+      "overlap_area_m2": 0.208688,
+      "to_junction_id": "8688554173"
+    },
+    {
+      "edge_id": "-937824436",
+      "from_junction_id": "8688554172",
+      "lane_id": "-937824436_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "242891802",
+      "overlap_area_m2": 4.78477,
+      "to_junction_id": "8688554173"
+    },
+    {
+      "edge_id": "1027809198#0",
+      "from_junction_id": "371188556",
+      "lane_id": "1027809198#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188583",
+      "overlap_area_m2": 17.349037,
+      "to_junction_id": "6694197254"
+    },
+    {
+      "edge_id": "1027809198#0",
+      "from_junction_id": "371188556",
+      "lane_id": "1027809198#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 8.033407,
+      "to_junction_id": "6694197254"
+    },
+    {
+      "edge_id": "1027809198#0",
+      "from_junction_id": "371188556",
+      "lane_id": "1027809198#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188583",
+      "overlap_area_m2": 17.816534,
+      "to_junction_id": "6694197254"
+    },
+    {
+      "edge_id": "1027809198#0",
+      "from_junction_id": "371188556",
+      "lane_id": "1027809198#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 10.04134,
+      "to_junction_id": "6694197254"
+    },
+    {
+      "edge_id": "1027809198#0",
+      "from_junction_id": "371188556",
+      "lane_id": "1027809198#0_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188583",
+      "overlap_area_m2": 18.310119,
+      "to_junction_id": "6694197254"
+    },
+    {
+      "edge_id": "1027809198#0",
+      "from_junction_id": "371188556",
+      "lane_id": "1027809198#0_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 9.969962,
+      "to_junction_id": "6694197254"
+    },
+    {
+      "edge_id": "1111806336",
+      "from_junction_id": "6151332858",
+      "lane_id": "1111806336_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188556",
+      "overlap_area_m2": 30.472885,
+      "to_junction_id": "371188583"
+    },
+    {
+      "edge_id": "1111806336",
+      "from_junction_id": "6151332858",
+      "lane_id": "1111806336_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188556",
+      "overlap_area_m2": 31.399803,
+      "to_junction_id": "371188583"
+    },
+    {
+      "edge_id": "1111806336",
+      "from_junction_id": "6151332858",
+      "lane_id": "1111806336_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "371188556",
+      "overlap_area_m2": 31.558035,
+      "to_junction_id": "371188583"
+    },
+    {
+      "edge_id": "1217274012",
+      "from_junction_id": "580083139",
+      "lane_id": "1217274012_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540492553",
+      "overlap_area_m2": 9.089349,
+      "to_junction_id": "265613767"
+    },
+    {
+      "edge_id": "1217274012",
+      "from_junction_id": "580083139",
+      "lane_id": "1217274012_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "607907603",
+      "overlap_area_m2": 0.242567,
+      "to_junction_id": "265613767"
+    },
+    {
+      "edge_id": "1217274012",
+      "from_junction_id": "580083139",
+      "lane_id": "1217274012_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540492553",
+      "overlap_area_m2": 28.816234,
+      "to_junction_id": "265613767"
+    },
+    {
+      "edge_id": "1217274012",
+      "from_junction_id": "580083139",
+      "lane_id": "1217274012_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "607907603",
+      "overlap_area_m2": 1.179835,
+      "to_junction_id": "265613767"
+    },
+    {
+      "edge_id": "1217274012",
+      "from_junction_id": "580083139",
+      "lane_id": "1217274012_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540492553",
+      "overlap_area_m2": 31.322275,
+      "to_junction_id": "265613767"
+    },
+    {
+      "edge_id": "1217274012",
+      "from_junction_id": "580083139",
+      "lane_id": "1217274012_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "607907603",
+      "overlap_area_m2": 0.973852,
+      "to_junction_id": "265613767"
+    },
+    {
+      "edge_id": "1231234769#0",
+      "from_junction_id": "199170572",
+      "lane_id": "1231234769#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "199166130",
+      "overlap_area_m2": 9.349445,
+      "to_junction_id": "243175302"
+    },
+    {
+      "edge_id": "125742555#3",
+      "from_junction_id": "13084120038",
+      "lane_id": "125742555#3_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "242891799",
+      "overlap_area_m2": 6.767561,
+      "to_junction_id": "1758886194"
+    },
+    {
+      "edge_id": "1374943744",
+      "from_junction_id": "12730509755",
+      "lane_id": "1374943744_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4578101948",
+      "overlap_area_m2": 1.462126,
+      "to_junction_id": "3127482718"
+    },
+    {
+      "edge_id": "1374943795#0",
+      "from_junction_id": "1738598209",
+      "lane_id": "1374943795#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "76463165",
+      "overlap_area_m2": 5.587239,
+      "to_junction_id": "5331966075"
+    },
+    {
+      "edge_id": "1374943795#0",
+      "from_junction_id": "1738598209",
+      "lane_id": "1374943795#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "76463165",
+      "overlap_area_m2": 5.542727,
+      "to_junction_id": "5331966075"
+    },
+    {
+      "edge_id": "1410160494",
+      "from_junction_id": "12957103066",
+      "lane_id": "1410160494_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "21765918",
+      "overlap_area_m2": 0.647951,
+      "to_junction_id": "1217213006"
+    },
+    {
+      "edge_id": "1410160495",
+      "from_junction_id": "12957103066",
+      "lane_id": "1410160495_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212360",
+      "overlap_area_m2": 0.55593,
+      "to_junction_id": "243175300"
+    },
+    {
+      "edge_id": "1410160495",
+      "from_junction_id": "12957103066",
+      "lane_id": "1410160495_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212360",
+      "overlap_area_m2": 0.541897,
+      "to_junction_id": "243175300"
+    },
+    {
+      "edge_id": "1410508946",
+      "from_junction_id": "21765918",
+      "lane_id": "1410508946_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "12957103066",
+      "overlap_area_m2": 0.647951,
+      "to_junction_id": "1217213006"
+    },
+    {
+      "edge_id": "1410508946",
+      "from_junction_id": "21765918",
+      "lane_id": "1410508946_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "12957103066",
+      "overlap_area_m2": 0.631139,
+      "to_junction_id": "1217213006"
+    },
+    {
+      "edge_id": "141137045#1",
+      "from_junction_id": "3259870976",
+      "lane_id": "141137045#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "295538425",
+      "overlap_area_m2": 0.148771,
+      "to_junction_id": "2480236561"
+    },
+    {
+      "edge_id": "1423533994",
+      "from_junction_id": "13084120036",
+      "lane_id": "1423533994_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "13084120041",
+      "overlap_area_m2": 2.304985,
+      "to_junction_id": "13084120037"
+    },
+    {
+      "edge_id": "1423533995",
+      "from_junction_id": "13084120035",
+      "lane_id": "1423533995_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "13084120042",
+      "overlap_area_m2": 0.125446,
+      "to_junction_id": "13084120036"
+    },
+    {
+      "edge_id": "1423533996",
+      "from_junction_id": "13084120038",
+      "lane_id": "1423533996_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "13084120039",
+      "overlap_area_m2": 0.120143,
+      "to_junction_id": "13084120035"
+    },
+    {
+      "edge_id": "142944441",
+      "from_junction_id": "726137948",
+      "lane_id": "142944441_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "240310308",
+      "overlap_area_m2": 0.537001,
+      "to_junction_id": "6695848660"
+    },
+    {
+      "edge_id": "152813986",
+      "from_junction_id": "77846400",
+      "lane_id": "152813986_0",
+      "lane_width_m": 6.0,
+      "non_owner_junction_id": "77777630",
+      "overlap_area_m2": 5.605305,
+      "to_junction_id": "277631527"
+    },
+    {
+      "edge_id": "158068425#0",
+      "from_junction_id": "259406385",
+      "lane_id": "158068425#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "3228504539",
+      "overlap_area_m2": 0.197045,
+      "to_junction_id": "1816064778"
+    },
+    {
+      "edge_id": "205199627",
+      "from_junction_id": "21765918",
+      "lane_id": "205199627_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "1217213006",
+      "overlap_area_m2": 0.659697,
+      "to_junction_id": "12957103066"
+    },
+    {
+      "edge_id": "205199627",
+      "from_junction_id": "21765918",
+      "lane_id": "205199627_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "1217213006",
+      "overlap_area_m2": 0.446807,
+      "to_junction_id": "12957103066"
+    },
+    {
+      "edge_id": "217557693#0",
+      "from_junction_id": "2268419477",
+      "lane_id": "217557693#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "1957119216",
+      "overlap_area_m2": 1.13348,
+      "to_junction_id": "11459958870"
+    },
+    {
+      "edge_id": "22649707#1",
+      "from_junction_id": "5353106776",
+      "lane_id": "22649707#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "268809865",
+      "overlap_area_m2": 0.486013,
+      "to_junction_id": "1703191982"
+    },
+    {
+      "edge_id": "22653479#1",
+      "from_junction_id": "6695848611",
+      "lane_id": "22653479#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "29547207",
+      "overlap_area_m2": 0.019826,
+      "to_junction_id": "25075695"
+    },
+    {
+      "edge_id": "22729790#1",
+      "from_junction_id": "6442436250",
+      "lane_id": "22729790#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "243813317",
+      "overlap_area_m2": 0.223646,
+      "to_junction_id": "5835942403"
+    },
+    {
+      "edge_id": "22729790#1",
+      "from_junction_id": "6442436250",
+      "lane_id": "22729790#1_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "243813317",
+      "overlap_area_m2": 2.718128,
+      "to_junction_id": "5835942403"
+    },
+    {
+      "edge_id": "22821532",
+      "from_junction_id": "245558508",
+      "lane_id": "22821532_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "242891778",
+      "overlap_area_m2": 7.436378,
+      "to_junction_id": "245558510"
+    },
+    {
+      "edge_id": "22911254#1",
+      "from_junction_id": "6695848646",
+      "lane_id": "22911254#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192474",
+      "overlap_area_m2": 4.486102,
+      "to_junction_id": "6695848649"
+    },
+    {
+      "edge_id": "22911254#7",
+      "from_junction_id": "5812153238",
+      "lane_id": "22911254#7_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "2076312612",
+      "overlap_area_m2": 1.356205,
+      "to_junction_id": "240310307"
+    },
+    {
+      "edge_id": "23165591#0",
+      "from_junction_id": "250374290",
+      "lane_id": "23165591#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "203902488",
+      "overlap_area_m2": 11.05006,
+      "to_junction_id": "250385406"
+    },
+    {
+      "edge_id": "23165591#0",
+      "from_junction_id": "250374290",
+      "lane_id": "23165591#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "203902488",
+      "overlap_area_m2": 13.068483,
+      "to_junction_id": "250385406"
+    },
+    {
+      "edge_id": "23179553",
+      "from_junction_id": "250385407",
+      "lane_id": "23179553_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "203902488",
+      "overlap_area_m2": 0.55066,
+      "to_junction_id": "250385909"
+    },
+    {
+      "edge_id": "23947626#1",
+      "from_junction_id": "196958428",
+      "lane_id": "23947626#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6544316839",
+      "overlap_area_m2": 10.148271,
+      "to_junction_id": "3760062585"
+    },
+    {
+      "edge_id": "239479767#1",
+      "from_junction_id": "2761334928",
+      "lane_id": "239479767#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "2472541060",
+      "overlap_area_m2": 0.815692,
+      "to_junction_id": "2472541061"
+    },
+    {
+      "edge_id": "239479767#1",
+      "from_junction_id": "2761334928",
+      "lane_id": "239479767#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "2472541060",
+      "overlap_area_m2": 0.758489,
+      "to_junction_id": "2472541061"
+    },
+    {
+      "edge_id": "239479767#1",
+      "from_junction_id": "2761334928",
+      "lane_id": "239479767#1_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "2472541060",
+      "overlap_area_m2": 0.715436,
+      "to_junction_id": "2472541061"
+    },
+    {
+      "edge_id": "239479767#1",
+      "from_junction_id": "2761334928",
+      "lane_id": "239479767#1_3",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "2472541060",
+      "overlap_area_m2": 0.686935,
+      "to_junction_id": "2472541061"
+    },
+    {
+      "edge_id": "30390248#1",
+      "from_junction_id": "5353176695",
+      "lane_id": "30390248#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "76463205",
+      "overlap_area_m2": 1.227533,
+      "to_junction_id": "759714760"
+    },
+    {
+      "edge_id": "32958574",
+      "from_junction_id": "371188583",
+      "lane_id": "32958574_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "5749762300",
+      "overlap_area_m2": 2.479252,
+      "to_junction_id": "684857772"
+    },
+    {
+      "edge_id": "364683970",
+      "from_junction_id": "3687318277",
+      "lane_id": "364683970_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "3687318279",
+      "overlap_area_m2": 22.917916,
+      "to_junction_id": "3687318278"
+    },
+    {
+      "edge_id": "37071220",
+      "from_junction_id": "3838847867",
+      "lane_id": "37071220_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "34023088",
+      "overlap_area_m2": 8.029059,
+      "to_junction_id": "34023087"
+    },
+    {
+      "edge_id": "381540198#1",
+      "from_junction_id": "3847369288",
+      "lane_id": "381540198#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "757036909",
+      "overlap_area_m2": 0.76376,
+      "to_junction_id": "3847369287"
+    },
+    {
+      "edge_id": "381540198#1",
+      "from_junction_id": "3847369288",
+      "lane_id": "381540198#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "757036909",
+      "overlap_area_m2": 0.136378,
+      "to_junction_id": "3847369287"
+    },
+    {
+      "edge_id": "39978006#0",
+      "from_junction_id": "243175300",
+      "lane_id": "39978006#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212360",
+      "overlap_area_m2": 3.836375,
+      "to_junction_id": "5622279922"
+    },
+    {
+      "edge_id": "39978006#0",
+      "from_junction_id": "243175300",
+      "lane_id": "39978006#0_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212360",
+      "overlap_area_m2": 9.495245,
+      "to_junction_id": "5622279922"
+    },
+    {
+      "edge_id": "39978006#1",
+      "from_junction_id": "5622279922",
+      "lane_id": "39978006#1_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "5622279923",
+      "overlap_area_m2": 0.303463,
+      "to_junction_id": "6695848614"
+    },
+    {
+      "edge_id": "39978008",
+      "from_junction_id": "243175300",
+      "lane_id": "39978008_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "12957103066",
+      "overlap_area_m2": 0.086345,
+      "to_junction_id": "540212360"
+    },
+    {
+      "edge_id": "402732222",
+      "from_junction_id": "4051376234",
+      "lane_id": "402732222_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "748827262",
+      "overlap_area_m2": 6.086247,
+      "to_junction_id": "4051376209"
+    },
+    {
+      "edge_id": "402732223",
+      "from_junction_id": "4051376221",
+      "lane_id": "402732223_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "748827240",
+      "overlap_area_m2": 0.625188,
+      "to_junction_id": "4051376235"
+    },
+    {
+      "edge_id": "402878726",
+      "from_junction_id": "308838174",
+      "lane_id": "402878726_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4052816592",
+      "overlap_area_m2": 0.407321,
+      "to_junction_id": "3687317498"
+    },
+    {
+      "edge_id": "402878726",
+      "from_junction_id": "308838174",
+      "lane_id": "402878726_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4052816593",
+      "overlap_area_m2": 0.131853,
+      "to_junction_id": "3687317498"
+    },
+    {
+      "edge_id": "402878730",
+      "from_junction_id": "3687317498",
+      "lane_id": "402878730_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4052812586",
+      "overlap_area_m2": 0.143482,
+      "to_junction_id": "308838175"
+    },
+    {
+      "edge_id": "402878730",
+      "from_junction_id": "3687317498",
+      "lane_id": "402878730_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4052816592",
+      "overlap_area_m2": 0.560823,
+      "to_junction_id": "308838175"
+    },
+    {
+      "edge_id": "43118557#1",
+      "from_junction_id": "11517550902",
+      "lane_id": "43118557#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "7385353793",
+      "overlap_area_m2": 0.935198,
+      "to_junction_id": "5622279923"
+    },
+    {
+      "edge_id": "43118557#1",
+      "from_junction_id": "11517550902",
+      "lane_id": "43118557#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "7385353793",
+      "overlap_area_m2": 2.488179,
+      "to_junction_id": "5622279923"
+    },
+    {
+      "edge_id": "43118557#2",
+      "from_junction_id": "5622279923",
+      "lane_id": "43118557#2_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "5622279922",
+      "overlap_area_m2": 0.790381,
+      "to_junction_id": "540212360"
+    },
+    {
+      "edge_id": "43118560",
+      "from_junction_id": "27140876",
+      "lane_id": "43118560_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212344",
+      "overlap_area_m2": 0.300858,
+      "to_junction_id": "540212352"
+    },
+    {
+      "edge_id": "43118560",
+      "from_junction_id": "27140876",
+      "lane_id": "43118560_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212344",
+      "overlap_area_m2": 0.637595,
+      "to_junction_id": "540212352"
+    },
+    {
+      "edge_id": "43118561#0",
+      "from_junction_id": "540212352",
+      "lane_id": "43118561#0_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212344",
+      "overlap_area_m2": 1.027018,
+      "to_junction_id": "577489668"
+    },
+    {
+      "edge_id": "43118563",
+      "from_junction_id": "540212352",
+      "lane_id": "43118563_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "27140876",
+      "overlap_area_m2": 0.647951,
+      "to_junction_id": "540212344"
+    },
+    {
+      "edge_id": "43118567",
+      "from_junction_id": "540212344",
+      "lane_id": "43118567_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540212352",
+      "overlap_area_m2": 0.430584,
+      "to_junction_id": "27140876"
+    },
+    {
+      "edge_id": "43118570",
+      "from_junction_id": "540212360",
+      "lane_id": "43118570_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "243175300",
+      "overlap_area_m2": 0.652674,
+      "to_junction_id": "12957103066"
+    },
+    {
+      "edge_id": "43118570",
+      "from_junction_id": "540212360",
+      "lane_id": "43118570_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "243175300",
+      "overlap_area_m2": 0.652674,
+      "to_junction_id": "12957103066"
+    },
+    {
+      "edge_id": "43145235#1",
+      "from_junction_id": "8126709844",
+      "lane_id": "43145235#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "27140876",
+      "overlap_area_m2": 0.080407,
+      "to_junction_id": "5622279924"
+    },
+    {
+      "edge_id": "43145235#1",
+      "from_junction_id": "8126709844",
+      "lane_id": "43145235#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "27140876",
+      "overlap_area_m2": 0.080897,
+      "to_junction_id": "5622279924"
+    },
+    {
+      "edge_id": "43145235#1",
+      "from_junction_id": "8126709844",
+      "lane_id": "43145235#1_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "27140876",
+      "overlap_area_m2": 0.060391,
+      "to_junction_id": "5622279924"
+    },
+    {
+      "edge_id": "43145235#1",
+      "from_junction_id": "8126709844",
+      "lane_id": "43145235#1_3",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "27140876",
+      "overlap_area_m2": 0.060835,
+      "to_junction_id": "5622279924"
+    },
+    {
+      "edge_id": "448538449#1",
+      "from_junction_id": "4455431388",
+      "lane_id": "448538449#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "25075695",
+      "overlap_area_m2": 2.743029,
+      "to_junction_id": "6695848612"
+    },
+    {
+      "edge_id": "448538449#1",
+      "from_junction_id": "4455431388",
+      "lane_id": "448538449#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4455431689",
+      "overlap_area_m2": 0.18946,
+      "to_junction_id": "6695848612"
+    },
+    {
+      "edge_id": "451597113#0",
+      "from_junction_id": "4484215636",
+      "lane_id": "451597113#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "271454734",
+      "overlap_area_m2": 1.582493,
+      "to_junction_id": "6367224492"
+    },
+    {
+      "edge_id": "45519020",
+      "from_junction_id": "540492559",
+      "lane_id": "45519020_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "17209211",
+      "overlap_area_m2": 6.823307,
+      "to_junction_id": "6566235119"
+    },
+    {
+      "edge_id": "45519020",
+      "from_junction_id": "540492559",
+      "lane_id": "45519020_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "244424020",
+      "overlap_area_m2": 30.12972,
+      "to_junction_id": "6566235119"
+    },
+    {
+      "edge_id": "458320758#0",
+      "from_junction_id": "17209211",
+      "lane_id": "458320758#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540492553",
+      "overlap_area_m2": 11.697158,
+      "to_junction_id": "607907603"
+    },
+    {
+      "edge_id": "458320758#0",
+      "from_junction_id": "17209211",
+      "lane_id": "458320758#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "580083139",
+      "overlap_area_m2": 0.060616,
+      "to_junction_id": "607907603"
+    },
+    {
+      "edge_id": "458320758#0",
+      "from_junction_id": "17209211",
+      "lane_id": "458320758#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540492553",
+      "overlap_area_m2": 11.88185,
+      "to_junction_id": "607907603"
+    },
+    {
+      "edge_id": "458320758#0",
+      "from_junction_id": "17209211",
+      "lane_id": "458320758#0_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "540492553",
+      "overlap_area_m2": 12.066542,
+      "to_junction_id": "607907603"
+    },
+    {
+      "edge_id": "458320759",
+      "from_junction_id": "4543515186",
+      "lane_id": "458320759_3",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "243508389",
+      "overlap_area_m2": 0.609297,
+      "to_junction_id": "26729256"
+    },
+    {
+      "edge_id": "487411728#2",
+      "from_junction_id": "4578101950",
+      "lane_id": "487411728#2_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "76463165",
+      "overlap_area_m2": 1.471459,
+      "to_junction_id": "4578101949"
+    },
+    {
+      "edge_id": "554713082#0",
+      "from_junction_id": "5353176697",
+      "lane_id": "554713082#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "5118994666",
+      "overlap_area_m2": 1.509659,
+      "to_junction_id": "2761334241"
+    },
+    {
+      "edge_id": "59726405",
+      "from_junction_id": "741321836",
+      "lane_id": "59726405_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "739766681",
+      "overlap_area_m2": 0.014085,
+      "to_junction_id": "741321917"
+    },
+    {
+      "edge_id": "59726407",
+      "from_junction_id": "741321962",
+      "lane_id": "59726407_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "741321885",
+      "overlap_area_m2": 0.010876,
+      "to_junction_id": "741321797"
+    },
+    {
+      "edge_id": "59726433",
+      "from_junction_id": "741321879",
+      "lane_id": "59726433_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "741321882",
+      "overlap_area_m2": 0.213427,
+      "to_junction_id": "741321872"
+    },
+    {
+      "edge_id": "59845721",
+      "from_junction_id": "742754575",
+      "lane_id": "59845721_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "742228361",
+      "overlap_area_m2": 1.150281,
+      "to_junction_id": "25075702"
+    },
+    {
+      "edge_id": "59845721",
+      "from_junction_id": "742754575",
+      "lane_id": "59845721_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "742228361",
+      "overlap_area_m2": 1.638798,
+      "to_junction_id": "25075702"
+    },
+    {
+      "edge_id": "60260767",
+      "from_junction_id": "748827192",
+      "lane_id": "60260767_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "4051376221",
+      "overlap_area_m2": 5.008087,
+      "to_junction_id": "748827240"
+    },
+    {
+      "edge_id": "60578547#1",
+      "from_junction_id": "2472541082",
+      "lane_id": "60578547#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "757037075",
+      "overlap_area_m2": 5.691659,
+      "to_junction_id": "295299537"
+    },
+    {
+      "edge_id": "60578547#1",
+      "from_junction_id": "2472541082",
+      "lane_id": "60578547#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "757037075",
+      "overlap_area_m2": 6.110394,
+      "to_junction_id": "295299537"
+    },
+    {
+      "edge_id": "606439147#1",
+      "from_junction_id": "18130104",
+      "lane_id": "606439147#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "259406385",
+      "overlap_area_m2": 0.873389,
+      "to_junction_id": "243491807"
+    },
+    {
+      "edge_id": "606439147#1",
+      "from_junction_id": "18130104",
+      "lane_id": "606439147#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "259406385",
+      "overlap_area_m2": 1.305576,
+      "to_junction_id": "243491807"
+    },
+    {
+      "edge_id": "647842957",
+      "from_junction_id": "5420059034",
+      "lane_id": "647842957_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "759714713",
+      "overlap_area_m2": 0.585337,
+      "to_junction_id": "3687318296"
+    },
+    {
+      "edge_id": "688085054",
+      "from_junction_id": "6451192811",
+      "lane_id": "688085054_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192467",
+      "overlap_area_m2": 5.195148,
+      "to_junction_id": "6451192809"
+    },
+    {
+      "edge_id": "688085054",
+      "from_junction_id": "6451192811",
+      "lane_id": "688085054_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192467",
+      "overlap_area_m2": 5.49564,
+      "to_junction_id": "6451192809"
+    },
+    {
+      "edge_id": "688085079#1",
+      "from_junction_id": "6451192812",
+      "lane_id": "688085079#1_3",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192468",
+      "overlap_area_m2": 0.042537,
+      "to_junction_id": "6451192810"
+    },
+    {
+      "edge_id": "688085079#2",
+      "from_junction_id": "6451192810",
+      "lane_id": "688085079#2_3",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192468",
+      "overlap_area_m2": 0.28637,
+      "to_junction_id": "6451192814"
+    },
+    {
+      "edge_id": "688085080",
+      "from_junction_id": "684857772",
+      "lane_id": "688085080_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "5749762300",
+      "overlap_area_m2": 0.012967,
+      "to_junction_id": "6451192813"
+    },
+    {
+      "edge_id": "688091185#0",
+      "from_junction_id": "6148339020",
+      "lane_id": "688091185#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "18130092",
+      "overlap_area_m2": 0.364856,
+      "to_junction_id": "6493229181"
+    },
+    {
+      "edge_id": "688091185#0",
+      "from_junction_id": "6148339020",
+      "lane_id": "688091185#0_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "18130092",
+      "overlap_area_m2": 0.346133,
+      "to_junction_id": "6493229181"
+    },
+    {
+      "edge_id": "688091185#1",
+      "from_junction_id": "6493229181",
+      "lane_id": "688091185#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 0.621328,
+      "to_junction_id": "18130092"
+    },
+    {
+      "edge_id": "688091185#1",
+      "from_junction_id": "6493229181",
+      "lane_id": "688091185#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6148339020",
+      "overlap_area_m2": 0.64,
+      "to_junction_id": "18130092"
+    },
+    {
+      "edge_id": "690060439#1",
+      "from_junction_id": "1694667630",
+      "lane_id": "690060439#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "26729253",
+      "overlap_area_m2": 0.487779,
+      "to_junction_id": "3673432857"
+    },
+    {
+      "edge_id": "696849327#2",
+      "from_junction_id": "6544314275",
+      "lane_id": "696849327#2_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "9183841342",
+      "overlap_area_m2": 1.294905,
+      "to_junction_id": "18130094"
+    },
+    {
+      "edge_id": "696849337#1",
+      "from_junction_id": "6544316822",
+      "lane_id": "696849337#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6544316821",
+      "overlap_area_m2": 1.531299,
+      "to_junction_id": "4027558846"
+    },
+    {
+      "edge_id": "696849337#1",
+      "from_junction_id": "6544316822",
+      "lane_id": "696849337#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6544316821",
+      "overlap_area_m2": 1.531301,
+      "to_junction_id": "4027558846"
+    },
+    {
+      "edge_id": "697038433",
+      "from_junction_id": "6546138039",
+      "lane_id": "697038433_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6090999718",
+      "overlap_area_m2": 2.021824,
+      "to_junction_id": "757037184"
+    },
+    {
+      "edge_id": "699239998",
+      "from_junction_id": "6451192469",
+      "lane_id": "699239998_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192468",
+      "overlap_area_m2": 3.134822,
+      "to_junction_id": "6451192817"
+    },
+    {
+      "edge_id": "711952911",
+      "from_junction_id": "6451192467",
+      "lane_id": "711952911_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192814",
+      "overlap_area_m2": 0.652674,
+      "to_junction_id": "6451192468"
+    },
+    {
+      "edge_id": "711952912",
+      "from_junction_id": "6451192814",
+      "lane_id": "711952912_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192468",
+      "overlap_area_m2": 0.237566,
+      "to_junction_id": "6451192467"
+    },
+    {
+      "edge_id": "711952912",
+      "from_junction_id": "6451192814",
+      "lane_id": "711952912_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192468",
+      "overlap_area_m2": 0.659697,
+      "to_junction_id": "6451192467"
+    },
+    {
+      "edge_id": "711952913",
+      "from_junction_id": "6451192468",
+      "lane_id": "711952913_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192467",
+      "overlap_area_m2": 0.530096,
+      "to_junction_id": "6451192814"
+    },
+    {
+      "edge_id": "711952913",
+      "from_junction_id": "6451192468",
+      "lane_id": "711952913_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6451192467",
+      "overlap_area_m2": 0.64716,
+      "to_junction_id": "6451192814"
+    },
+    {
+      "edge_id": "711952920",
+      "from_junction_id": "250385909",
+      "lane_id": "711952920_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "203902488",
+      "overlap_area_m2": 0.636374,
+      "to_junction_id": "250385394"
+    },
+    {
+      "edge_id": "711952920",
+      "from_junction_id": "250385909",
+      "lane_id": "711952920_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "203902488",
+      "overlap_area_m2": 0.643988,
+      "to_junction_id": "250385394"
+    },
+    {
+      "edge_id": "711952921",
+      "from_junction_id": "203902488",
+      "lane_id": "711952921_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "250385909",
+      "overlap_area_m2": 0.643988,
+      "to_junction_id": "250385394"
+    },
+    {
+      "edge_id": "711952921",
+      "from_junction_id": "203902488",
+      "lane_id": "711952921_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "250385909",
+      "overlap_area_m2": 0.043222,
+      "to_junction_id": "250385394"
+    },
+    {
+      "edge_id": "711952926#1",
+      "from_junction_id": "3838645661",
+      "lane_id": "711952926#1_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "26729259",
+      "overlap_area_m2": 6.171395,
+      "to_junction_id": "371188545"
+    },
+    {
+      "edge_id": "711952926#1",
+      "from_junction_id": "3838645661",
+      "lane_id": "711952926#1_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "26729259",
+      "overlap_area_m2": 7.70728,
+      "to_junction_id": "371188545"
+    },
+    {
+      "edge_id": "711952926#1",
+      "from_junction_id": "3838645661",
+      "lane_id": "711952926#1_2",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "26729259",
+      "overlap_area_m2": 9.226747,
+      "to_junction_id": "371188545"
+    },
+    {
+      "edge_id": "711952926#1",
+      "from_junction_id": "3838645661",
+      "lane_id": "711952926#1_3",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "26729259",
+      "overlap_area_m2": 10.720477,
+      "to_junction_id": "371188545"
+    },
+    {
+      "edge_id": "711952927",
+      "from_junction_id": "250385909",
+      "lane_id": "711952927_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "250385394",
+      "overlap_area_m2": 0.630327,
+      "to_junction_id": "203902488"
+    },
+    {
+      "edge_id": "711952927",
+      "from_junction_id": "250385909",
+      "lane_id": "711952927_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "250385394",
+      "overlap_area_m2": 0.260563,
+      "to_junction_id": "203902488"
+    },
+    {
+      "edge_id": "768674699",
+      "from_junction_id": "6694260492",
+      "lane_id": "768674699_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "6694260498",
+      "overlap_area_m2": 0.557954,
+      "to_junction_id": "6694260502"
+    },
+    {
+      "edge_id": "778723852",
+      "from_junction_id": "35131333",
+      "lane_id": "778723852_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "7270759242",
+      "overlap_area_m2": 29.530026,
+      "to_junction_id": "7270814308"
+    },
+    {
+      "edge_id": "801313070",
+      "from_junction_id": "7494459753",
+      "lane_id": "801313070_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "9610870172",
+      "overlap_area_m2": 0.233677,
+      "to_junction_id": "7494459752"
+    },
+    {
+      "edge_id": "8060333",
+      "from_junction_id": "1217213006",
+      "lane_id": "8060333_1",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "12957103066",
+      "overlap_area_m2": 0.17013,
+      "to_junction_id": "243180247"
+    },
+    {
+      "edge_id": "8320141#0",
+      "from_junction_id": "77843518",
+      "lane_id": "8320141#0_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "18130092",
+      "overlap_area_m2": 9.883805,
+      "to_junction_id": "265759897"
+    },
+    {
+      "edge_id": "882966133",
+      "from_junction_id": "4051376235",
+      "lane_id": "882966133_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "748827240",
+      "overlap_area_m2": 0.864473,
+      "to_junction_id": "4051376237"
+    },
+    {
+      "edge_id": "937824436",
+      "from_junction_id": "8688554173",
+      "lane_id": "937824436_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "240314058",
+      "overlap_area_m2": 0.278629,
+      "to_junction_id": "8688554172"
+    },
+    {
+      "edge_id": "937824436",
+      "from_junction_id": "8688554173",
+      "lane_id": "937824436_0",
+      "lane_width_m": 3.2,
+      "non_owner_junction_id": "242891802",
+      "overlap_area_m2": 3.261663,
+      "to_junction_id": "8688554172"
+    }
+  ],
+  "geometry_error_count": 4,
+  "geometry_errors": [
+    {
+      "error": "junction polygon is self-intersecting (1 proper segment crossings)",
+      "junction_id": "29547210",
+      "kind": "invalid_junction_polygon"
+    },
+    {
+      "error": "junction polygon is self-intersecting (3 proper segment crossings)",
+      "junction_id": "3127482712",
+      "kind": "invalid_junction_polygon"
+    },
+    {
+      "error": "junction polygon is self-intersecting (8 proper segment crossings)",
+      "junction_id": "6367224492",
+      "kind": "invalid_junction_polygon"
+    },
+    {
+      "error": "junction polygon is self-intersecting (1 proper segment crossings)",
+      "junction_id": "6795317492",
+      "kind": "invalid_junction_polygon"
+    }
+  ],
+  "junction_junction_overlap_count": 145,
+  "junction_junction_overlaps": [
+    {
+      "first_junction_id": "11517550902",
+      "overlap_area_m2": 3.11445,
+      "second_junction_id": "7385353793"
+    },
+    {
+      "first_junction_id": "1217213006",
+      "overlap_area_m2": 111.742406,
+      "second_junction_id": "12957103066"
+    },
+    {
+      "first_junction_id": "1217213006",
+      "overlap_area_m2": 87.639203,
+      "second_junction_id": "21765918"
+    },
+    {
+      "first_junction_id": "12867102688",
+      "overlap_area_m2": 15.097462,
+      "second_junction_id": "5188636932"
+    },
+    {
+      "first_junction_id": "12957103066",
+      "overlap_area_m2": 168.438604,
+      "second_junction_id": "21765918"
+    },
+    {
+      "first_junction_id": "12957103066",
+      "overlap_area_m2": 46.35619,
+      "second_junction_id": "243175300"
+    },
+    {
+      "first_junction_id": "12957103066",
+      "overlap_area_m2": 2.269759,
+      "second_junction_id": "540212344"
+    },
+    {
+      "first_junction_id": "12957103066",
+      "overlap_area_m2": 34.138024,
+      "second_junction_id": "540212360"
+    },
+    {
+      "first_junction_id": "13084120035",
+      "overlap_area_m2": 0.309899,
+      "second_junction_id": "13084120042"
+    },
+    {
+      "first_junction_id": "13084120038",
+      "overlap_area_m2": 31.866792,
+      "second_junction_id": "13084120039"
+    },
+    {
+      "first_junction_id": "1369986479",
+      "overlap_area_m2": 28.210795,
+      "second_junction_id": "76463178"
+    },
+    {
+      "first_junction_id": "13937986806",
+      "overlap_area_m2": 18.930335,
+      "second_junction_id": "77777637"
+    },
+    {
+      "first_junction_id": "1554293195",
+      "overlap_area_m2": 37.228945,
+      "second_junction_id": "76463179"
+    },
+    {
+      "first_junction_id": "1703191914",
+      "overlap_area_m2": 7.067183,
+      "second_junction_id": "1703360304"
+    },
+    {
+      "first_junction_id": "1703191982",
+      "overlap_area_m2": 1.43566,
+      "second_junction_id": "268809865"
+    },
+    {
+      "first_junction_id": "1703191999",
+      "overlap_area_m2": 1.227839,
+      "second_junction_id": "25911514"
+    },
+    {
+      "first_junction_id": "1704096409",
+      "overlap_area_m2": 0.315122,
+      "second_junction_id": "242891817"
+    },
+    {
+      "first_junction_id": "1705496742",
+      "overlap_area_m2": 45.02754,
+      "second_junction_id": "18653539"
+    },
+    {
+      "first_junction_id": "1705496764",
+      "overlap_area_m2": 37.854022,
+      "second_junction_id": "240314058"
+    },
+    {
+      "first_junction_id": "17209211",
+      "overlap_area_m2": 0.5296,
+      "second_junction_id": "540492559"
+    },
+    {
+      "first_junction_id": "1732944538",
+      "overlap_area_m2": 3.812177,
+      "second_junction_id": "1748899195"
+    },
+    {
+      "first_junction_id": "1732944538",
+      "overlap_area_m2": 15.326449,
+      "second_junction_id": "249708187"
+    },
+    {
+      "first_junction_id": "1748899195",
+      "overlap_area_m2": 6.71974,
+      "second_junction_id": "2495455368"
+    },
+    {
+      "first_junction_id": "1758886194",
+      "overlap_area_m2": 1.13525,
+      "second_junction_id": "242891799"
+    },
+    {
+      "first_junction_id": "18130092",
+      "overlap_area_m2": 1.7428,
+      "second_junction_id": "265759897"
+    },
+    {
+      "first_junction_id": "18130092",
+      "overlap_area_m2": 10.065224,
+      "second_junction_id": "6148339020"
+    },
+    {
+      "first_junction_id": "18130092",
+      "overlap_area_m2": 3.8394,
+      "second_junction_id": "6493229181"
+    },
+    {
+      "first_junction_id": "18130092",
+      "overlap_area_m2": 1.163374,
+      "second_junction_id": "77843518"
+    },
+    {
+      "first_junction_id": "18130098",
+      "overlap_area_m2": 12.520479,
+      "second_junction_id": "347973493"
+    },
+    {
+      "first_junction_id": "18130104",
+      "overlap_area_m2": 1.6,
+      "second_junction_id": "259406385"
+    },
+    {
+      "first_junction_id": "1816064778",
+      "overlap_area_m2": 0.048042,
+      "second_junction_id": "3228504539"
+    },
+    {
+      "first_junction_id": "18653539",
+      "overlap_area_m2": 1.065962,
+      "second_junction_id": "5835942401"
+    },
+    {
+      "first_junction_id": "18653564",
+      "overlap_area_m2": 47.997061,
+      "second_junction_id": "575676564"
+    },
+    {
+      "first_junction_id": "1957119216",
+      "overlap_area_m2": 1.89585,
+      "second_junction_id": "2268419477"
+    },
+    {
+      "first_junction_id": "196958428",
+      "overlap_area_m2": 1.46235,
+      "second_junction_id": "6544316839"
+    },
+    {
+      "first_junction_id": "199166130",
+      "overlap_area_m2": 0.80335,
+      "second_junction_id": "243175302"
+    },
+    {
+      "first_junction_id": "2036844804",
+      "overlap_area_m2": 38.255852,
+      "second_junction_id": "243886709"
+    },
+    {
+      "first_junction_id": "203902488",
+      "overlap_area_m2": 89.162474,
+      "second_junction_id": "250385394"
+    },
+    {
+      "first_junction_id": "203902488",
+      "overlap_area_m2": 155.385537,
+      "second_junction_id": "250385398"
+    },
+    {
+      "first_junction_id": "203902488",
+      "overlap_area_m2": 4.31625,
+      "second_junction_id": "250385406"
+    },
+    {
+      "first_junction_id": "203902488",
+      "overlap_area_m2": 22.478576,
+      "second_junction_id": "250385407"
+    },
+    {
+      "first_junction_id": "203902488",
+      "overlap_area_m2": 187.79281,
+      "second_junction_id": "250385909"
+    },
+    {
+      "first_junction_id": "2076312612",
+      "overlap_area_m2": 1.9302,
+      "second_junction_id": "5812153238"
+    },
+    {
+      "first_junction_id": "21765918",
+      "overlap_area_m2": 16.927766,
+      "second_junction_id": "540212344"
+    },
+    {
+      "first_junction_id": "240310308",
+      "overlap_area_m2": 0.386956,
+      "second_junction_id": "726137948"
+    },
+    {
+      "first_junction_id": "240314058",
+      "overlap_area_m2": 1.8903,
+      "second_junction_id": "8688554172"
+    },
+    {
+      "first_junction_id": "242891778",
+      "overlap_area_m2": 0.9438,
+      "second_junction_id": "245558508"
+    },
+    {
+      "first_junction_id": "242891782",
+      "overlap_area_m2": 6.923405,
+      "second_junction_id": "576419143"
+    },
+    {
+      "first_junction_id": "242891782",
+      "overlap_area_m2": 7.102558,
+      "second_junction_id": "577363535"
+    },
+    {
+      "first_junction_id": "242891802",
+      "overlap_area_m2": 13.017162,
+      "second_junction_id": "8688554173"
+    },
+    {
+      "first_junction_id": "242891821",
+      "overlap_area_m2": 2.432108,
+      "second_junction_id": "347973493"
+    },
+    {
+      "first_junction_id": "243050656",
+      "overlap_area_m2": 15.85906,
+      "second_junction_id": "5679482150"
+    },
+    {
+      "first_junction_id": "243175300",
+      "overlap_area_m2": 146.189511,
+      "second_junction_id": "540212360"
+    },
+    {
+      "first_junction_id": "243508389",
+      "overlap_area_m2": 17.634573,
+      "second_junction_id": "26729256"
+    },
+    {
+      "first_junction_id": "243813317",
+      "overlap_area_m2": 9.812137,
+      "second_junction_id": "6442436250"
+    },
+    {
+      "first_junction_id": "244424020",
+      "overlap_area_m2": 1.08735,
+      "second_junction_id": "6566235119"
+    },
+    {
+      "first_junction_id": "2467961358",
+      "overlap_area_m2": 1.676683,
+      "second_junction_id": "76463179"
+    },
+    {
+      "first_junction_id": "2472541060",
+      "overlap_area_m2": 3.8921,
+      "second_junction_id": "2472541061"
+    },
+    {
+      "first_junction_id": "2472541060",
+      "overlap_area_m2": 12.546963,
+      "second_junction_id": "7270759242"
+    },
+    {
+      "first_junction_id": "2472541060",
+      "overlap_area_m2": 43.636223,
+      "second_junction_id": "757037075"
+    },
+    {
+      "first_junction_id": "2472541082",
+      "overlap_area_m2": 1.53205,
+      "second_junction_id": "757037075"
+    },
+    {
+      "first_junction_id": "2480236561",
+      "overlap_area_m2": 17.377154,
+      "second_junction_id": "295538425"
+    },
+    {
+      "first_junction_id": "2495455368",
+      "overlap_area_m2": 3.080968,
+      "second_junction_id": "249708187"
+    },
+    {
+      "first_junction_id": "250385394",
+      "overlap_area_m2": 74.05066,
+      "second_junction_id": "250385909"
+    },
+    {
+      "first_junction_id": "250385407",
+      "overlap_area_m2": 24.059008,
+      "second_junction_id": "250385909"
+    },
+    {
+      "first_junction_id": "250387799",
+      "overlap_area_m2": 12.086219,
+      "second_junction_id": "6151332858"
+    },
+    {
+      "first_junction_id": "25075695",
+      "overlap_area_m2": 1.33765,
+      "second_junction_id": "4455431388"
+    },
+    {
+      "first_junction_id": "25075702",
+      "overlap_area_m2": 10.290215,
+      "second_junction_id": "348097986"
+    },
+    {
+      "first_junction_id": "25075702",
+      "overlap_area_m2": 42.412056,
+      "second_junction_id": "742228361"
+    },
+    {
+      "first_junction_id": "25075703",
+      "overlap_area_m2": 9.001434,
+      "second_junction_id": "7761508280"
+    },
+    {
+      "first_junction_id": "26729253",
+      "overlap_area_m2": 2.59063,
+      "second_junction_id": "3673432857"
+    },
+    {
+      "first_junction_id": "26729259",
+      "overlap_area_m2": 12.2052,
+      "second_junction_id": "3838645661"
+    },
+    {
+      "first_junction_id": "27140876",
+      "overlap_area_m2": 89.11614,
+      "second_junction_id": "540212344"
+    },
+    {
+      "first_junction_id": "27140876",
+      "overlap_area_m2": 138.263592,
+      "second_junction_id": "540212352"
+    },
+    {
+      "first_junction_id": "27140876",
+      "overlap_area_m2": 6.006634,
+      "second_junction_id": "540212360"
+    },
+    {
+      "first_junction_id": "27140876",
+      "overlap_area_m2": 3.8241,
+      "second_junction_id": "5622279924"
+    },
+    {
+      "first_junction_id": "277297662",
+      "overlap_area_m2": 2.020444,
+      "second_junction_id": "5353171699"
+    },
+    {
+      "first_junction_id": "277631527",
+      "overlap_area_m2": 6.50145,
+      "second_junction_id": "77777630"
+    },
+    {
+      "first_junction_id": "29547207",
+      "overlap_area_m2": 24.980484,
+      "second_junction_id": "4455431689"
+    },
+    {
+      "first_junction_id": "29547207",
+      "overlap_area_m2": 22.956857,
+      "second_junction_id": "60270008"
+    },
+    {
+      "first_junction_id": "29547207",
+      "overlap_area_m2": 0.269445,
+      "second_junction_id": "6695848611"
+    },
+    {
+      "first_junction_id": "308838174",
+      "overlap_area_m2": 76.322765,
+      "second_junction_id": "4052816593"
+    },
+    {
+      "first_junction_id": "308838175",
+      "overlap_area_m2": 25.917439,
+      "second_junction_id": "4052812586"
+    },
+    {
+      "first_junction_id": "3127482718",
+      "overlap_area_m2": 30.287772,
+      "second_junction_id": "4578101948"
+    },
+    {
+      "first_junction_id": "3127482718",
+      "overlap_area_m2": 0.121234,
+      "second_junction_id": "4578101949"
+    },
+    {
+      "first_junction_id": "3127482718",
+      "overlap_area_m2": 9.848844,
+      "second_junction_id": "76463165"
+    },
+    {
+      "first_junction_id": "3204391004",
+      "overlap_area_m2": 1.682092,
+      "second_junction_id": "6187857425"
+    },
+    {
+      "first_junction_id": "34023088",
+      "overlap_area_m2": 0.92015,
+      "second_junction_id": "3838847867"
+    },
+    {
+      "first_junction_id": "348097986",
+      "overlap_area_m2": 0.019167,
+      "second_junction_id": "742228361"
+    },
+    {
+      "first_junction_id": "35131333",
+      "overlap_area_m2": 15.412505,
+      "second_junction_id": "7270759242"
+    },
+    {
+      "first_junction_id": "3687317498",
+      "overlap_area_m2": 2.288257,
+      "second_junction_id": "4052816592"
+    },
+    {
+      "first_junction_id": "3687318267",
+      "overlap_area_m2": 0.09663,
+      "second_junction_id": "3687318278"
+    },
+    {
+      "first_junction_id": "3687318267",
+      "overlap_area_m2": 48.469707,
+      "second_junction_id": "3687318279"
+    },
+    {
+      "first_junction_id": "3687318278",
+      "overlap_area_m2": 1.928677,
+      "second_junction_id": "3687318279"
+    },
+    {
+      "first_junction_id": "371188556",
+      "overlap_area_m2": 11.496905,
+      "second_junction_id": "371188583"
+    },
+    {
+      "first_junction_id": "3827677957",
+      "overlap_area_m2": 14.285486,
+      "second_junction_id": "3829214321"
+    },
+    {
+      "first_junction_id": "3847369274",
+      "overlap_area_m2": 27.688066,
+      "second_junction_id": "76463167"
+    },
+    {
+      "first_junction_id": "3847369287",
+      "overlap_area_m2": 2.378342,
+      "second_junction_id": "757036909"
+    },
+    {
+      "first_junction_id": "389949643",
+      "overlap_area_m2": 47.281279,
+      "second_junction_id": "747890047"
+    },
+    {
+      "first_junction_id": "4027558846",
+      "overlap_area_m2": 2.8434,
+      "second_junction_id": "6544316821"
+    },
+    {
+      "first_junction_id": "4051376209",
+      "overlap_area_m2": 0.069088,
+      "second_junction_id": "748827262"
+    },
+    {
+      "first_junction_id": "4051376209",
+      "overlap_area_m2": 20.323026,
+      "second_junction_id": "759714744"
+    },
+    {
+      "first_junction_id": "4051376235",
+      "overlap_area_m2": 0.057146,
+      "second_junction_id": "748827240"
+    },
+    {
+      "first_junction_id": "4455431689",
+      "overlap_area_m2": 18.157927,
+      "second_junction_id": "4455431690"
+    },
+    {
+      "first_junction_id": "4455431689",
+      "overlap_area_m2": 0.8926,
+      "second_junction_id": "6695848612"
+    },
+    {
+      "first_junction_id": "4455431690",
+      "overlap_area_m2": 0.696179,
+      "second_junction_id": "60270008"
+    },
+    {
+      "first_junction_id": "4578101948",
+      "overlap_area_m2": 8.90356,
+      "second_junction_id": "4578101949"
+    },
+    {
+      "first_junction_id": "4578101948",
+      "overlap_area_m2": 0.184579,
+      "second_junction_id": "76463165"
+    },
+    {
+      "first_junction_id": "4578101949",
+      "overlap_area_m2": 42.344424,
+      "second_junction_id": "76463165"
+    },
+    {
+      "first_junction_id": "5118994666",
+      "overlap_area_m2": 0.952086,
+      "second_junction_id": "5353176697"
+    },
+    {
+      "first_junction_id": "5331966075",
+      "overlap_area_m2": 1.9261,
+      "second_junction_id": "76463165"
+    },
+    {
+      "first_junction_id": "5353176695",
+      "overlap_area_m2": 0.34505,
+      "second_junction_id": "76463205"
+    },
+    {
+      "first_junction_id": "540212344",
+      "overlap_area_m2": 57.014082,
+      "second_junction_id": "540212352"
+    },
+    {
+      "first_junction_id": "540492553",
+      "overlap_area_m2": 3.58295,
+      "second_junction_id": "607907603"
+    },
+    {
+      "first_junction_id": "5420059034",
+      "overlap_area_m2": 2.8941,
+      "second_junction_id": "759714713"
+    },
+    {
+      "first_junction_id": "5749762300",
+      "overlap_area_m2": 28.277889,
+      "second_junction_id": "684857772"
+    },
+    {
+      "first_junction_id": "576419143",
+      "overlap_area_m2": 20.71085,
+      "second_junction_id": "577363535"
+    },
+    {
+      "first_junction_id": "577363535",
+      "overlap_area_m2": 4.09725,
+      "second_junction_id": "7389336551"
+    },
+    {
+      "first_junction_id": "60269990",
+      "overlap_area_m2": 33.63108,
+      "second_junction_id": "759714764"
+    },
+    {
+      "first_junction_id": "6090999718",
+      "overlap_area_m2": 1.94235,
+      "second_junction_id": "6546138039"
+    },
+    {
+      "first_junction_id": "6090999718",
+      "overlap_area_m2": 15.882045,
+      "second_junction_id": "77777643"
+    },
+    {
+      "first_junction_id": "6148339020",
+      "overlap_area_m2": 4.443231,
+      "second_junction_id": "6694197254"
+    },
+    {
+      "first_junction_id": "6203394203",
+      "overlap_area_m2": 5.439015,
+      "second_junction_id": "6203394204"
+    },
+    {
+      "first_junction_id": "6311572135",
+      "overlap_area_m2": 0.302491,
+      "second_junction_id": "8892116778"
+    },
+    {
+      "first_junction_id": "6451192467",
+      "overlap_area_m2": 86.552344,
+      "second_junction_id": "6451192468"
+    },
+    {
+      "first_junction_id": "6451192467",
+      "overlap_area_m2": 2.4604,
+      "second_junction_id": "6451192809"
+    },
+    {
+      "first_junction_id": "6451192467",
+      "overlap_area_m2": 139.418409,
+      "second_junction_id": "6451192814"
+    },
+    {
+      "first_junction_id": "6451192468",
+      "overlap_area_m2": 0.9341,
+      "second_junction_id": "6451192469"
+    },
+    {
+      "first_junction_id": "6451192468",
+      "overlap_area_m2": 0.101942,
+      "second_junction_id": "6451192810"
+    },
+    {
+      "first_junction_id": "6451192468",
+      "overlap_area_m2": 130.912224,
+      "second_junction_id": "6451192814"
+    },
+    {
+      "first_junction_id": "6451192474",
+      "overlap_area_m2": 1.85765,
+      "second_junction_id": "6695848646"
+    },
+    {
+      "first_junction_id": "6544314278",
+      "overlap_area_m2": 14.10181,
+      "second_junction_id": "6544314279"
+    },
+    {
+      "first_junction_id": "6544316821",
+      "overlap_area_m2": 79.884801,
+      "second_junction_id": "6544316839"
+    },
+    {
+      "first_junction_id": "6694260498",
+      "overlap_area_m2": 29.41334,
+      "second_junction_id": "6694260502"
+    },
+    {
+      "first_junction_id": "7270759242",
+      "overlap_area_m2": 2.024207,
+      "second_junction_id": "7270814308"
+    },
+    {
+      "first_junction_id": "7270759242",
+      "overlap_area_m2": 14.842607,
+      "second_junction_id": "757037075"
+    },
+    {
+      "first_junction_id": "739766681",
+      "overlap_area_m2": 28.066685,
+      "second_junction_id": "741321836"
+    },
+    {
+      "first_junction_id": "741321879",
+      "overlap_area_m2": 35.521282,
+      "second_junction_id": "741321882"
+    },
+    {
+      "first_junction_id": "741321885",
+      "overlap_area_m2": 30.63012,
+      "second_junction_id": "741321962"
+    },
+    {
+      "first_junction_id": "7494459752",
+      "overlap_area_m2": 52.044865,
+      "second_junction_id": "9610870172"
+    },
+    {
+      "first_junction_id": "757036909",
+      "overlap_area_m2": 7.046869,
+      "second_junction_id": "76463166"
+    },
+    {
+      "first_junction_id": "757036947",
+      "overlap_area_m2": 14.393134,
+      "second_junction_id": "76463193"
+    },
+    {
+      "first_junction_id": "759714713",
+      "overlap_area_m2": 6.761915,
+      "second_junction_id": "76463158"
+    },
+    {
+      "first_junction_id": "77777643",
+      "overlap_area_m2": 45.106499,
+      "second_junction_id": "77804688"
+    },
+    {
+      "first_junction_id": "9130337895",
+      "overlap_area_m2": 2.712017,
+      "second_junction_id": "9591956383"
+    }
+  ],
+  "junction_pair_candidate_count": 323610,
+  "lane_face_model": "effective lane width centred on each SUMO lane shape; segment rectangles plus non-overlapping outer bevel triangles at polyline bends; butt end caps",
+  "minimum_overlap_area_m2": 0.01,
+  "non_area_junction_exclusion_count": 166,
+  "non_area_junction_exclusions": [
+    {
+      "junction_id": "10303071557",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "10670114050",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "10771831834",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "10771849511",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "10771849512",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "10771849514",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "10939485616",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "10939485617",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11030490266",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11061528129",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11110373717",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11407245523",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11423019818",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11459958871",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11517550898",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11517550901",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11684406799",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11684406802",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1185481025",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11974779724",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "11974779730",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12055983307",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12055983308",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12099983494",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12099983495",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12153557129",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12155577055",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12155577056",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12155577057",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12162052653",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "122347",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12252663830",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12365992168",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12745570160",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12867102689",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "12960168985",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "13084120037",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "13084120040",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1318484544",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "13388093061",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "13909790425",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "13909865350",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "13909865352",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "14012630057",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "14012630062",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1693213426",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1712852368",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1712852390",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1732944611",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1747120465",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1748899203",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "18130103",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "18653556",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "18653561",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "1986389048",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "203889773",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "203892925",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2076289284",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2076312608",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2149668653",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "232522208",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "243172613",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "243886740",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "245449712",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "246655902",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "246663021",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "246663022",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2467961353",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "25075708",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2516080625",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2592319850",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "265633800",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2712382567",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "276829334",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "276829360",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "277381141",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2989375542",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "2989375543",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "308718201",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3224771252",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687317512",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687318265",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687318266",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687318268",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687318270",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687318272",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687318277",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3687318286",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "371188597",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3748379169",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3748379170",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3827677049",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "3827677958",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4092289256",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4092289279",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4092317406",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4095019230",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "439649703",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4426707966",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4455431371",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4487355329",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4532846228",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4638362742",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4741196824",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "4890533390",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "5021512545",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "5118994665",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "5129098767",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "5188636937",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "540173373",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "569677236",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "5749762294",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "575764584",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "576403493",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "576552380",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "580880547",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "59752649",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6093955220",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6151332855",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6203394209",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6203431035",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6343329116",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6544314277",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6571097423",
+      "reason": "zero_area_shape"
+    },
+    {
+      "junction_id": "6695848609",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6695848660",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6713049560",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6723701451",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6723745221",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6732240629",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6732240632",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6847314019",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "6978467468",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "715614590",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7245989107",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "725040093",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7269527179",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7286512413",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7286512430",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "738484927",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "741321797",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "741321821",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "741321872",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "741321917",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "741321923",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "741321958",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "743152091",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "745744188",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "745759189",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "746302097",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7494459753",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7503868100",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "757037187",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "76463169",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7709567150",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7709567151",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "7709567152",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "8016389872",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "80405249",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "8719031308",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "8719085325",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "8827659753",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "8856852422",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "8892116793",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "9111282223",
+      "reason": "fewer_than_three_distinct_shape_points"
+    },
+    {
+      "junction_id": "9610870173",
+      "reason": "fewer_than_three_distinct_shape_points"
+    }
+  ],
+  "schema": "torii.sumo-surface-overlap-audit/v1",
+  "scope": {
+    "excluded_as_expected_sumo_geometry": [
+      "external lane face versus its from/to owner junction",
+      "internal lane faces inside junction polygons",
+      "internal junction polygons"
+    ],
+    "included": [
+      "non-internal junction polygon self-intersection",
+      "non-internal junction polygon versus non-internal junction polygon",
+      "reconstructed external lane face versus non-owner, non-internal junction polygon"
+    ],
+    "not_claimed": [
+      "GPU-pixel identity with a particular Netedit build",
+      "internal movement conflict freedom",
+      "external edge-to-edge overlap already covered by netconvert --geometry.check-overlap"
+    ]
+  },
+  "source_net_file": "../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+  "source_network_mutation": false,
+  "source_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+  "status": "fail"
+}

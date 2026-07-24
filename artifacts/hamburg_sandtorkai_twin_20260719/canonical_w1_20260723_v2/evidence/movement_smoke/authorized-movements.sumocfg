@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<configuration>
+  <input>
+    <net-file value="../../candidate/hamburg_sandtorkai_canonical_w1.net.xml" />
+    <route-files value="authorized-movements.rou.xml" />
+  </input>
+  <time>
+    <begin value="0" />
+    <end value="600" />
+  </time>
+  <output>
+    <summary-output value="summary.xml" />
+    <tripinfo-output value="tripinfo.xml" />
+  </output>
+</configuration>

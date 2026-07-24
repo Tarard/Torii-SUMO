@@ -1,0 +1,15 @@
+{
+  "artifacts": [
+    {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\network\\official_tls_compound.net.xml",
+      "sha256": "0ffb5d3259e2f76a0c9d9451ff2e91f381ae242989fb72b2d1de1fd862142354"
+    },
+    {
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\named_corridor_osm_feedback_loop_v1\\iteration_032_official_stopline_tls\\sumo_load\\sumo-load-audit.json",
+      "sha256": "c4abde26359d4ba8d5eb540675ad1d8d321a34f9a83baa70a6c221ef3eab4dd3"
+    }
+  ],
+  "schema": "torii.sumo-load-audit-manifest/v1",
+  "source_network_mutation": false,
+  "status": "pass"
+}

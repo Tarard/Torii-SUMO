@@ -86,6 +86,10 @@ def build_reference_bbox_variant(
         "--keep-edges.in-boundary",
         boundary_text,
         "--keep-edges.postload",
+        "--no-turnarounds",
+        "--no-turnarounds.tls",
+        "--no-turnarounds.geometry",
+        "--no-turnarounds.fringe",
         "--output-file",
         str(variant_file),
     ]

@@ -108,6 +108,8 @@ def audit_junction_aggregation_preservation(
     variant_net_file: Path,
     *,
     join_groups: Sequence[Sequence[str]] = (),
+    authorized_removed_connections: Sequence[str] = (),
+    authoritative_boundary_movements: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, Any]:
     if not source_net_file.exists():
         return {**_failure(f"source net file does not exist: {source_net_file}"), "removed_normal_edge_count": 0}
@@ -139,11 +141,29 @@ def audit_junction_aggregation_preservation(
     shared_edge_ids = set(source_edges) & set(variant_edges)
     source_connection_signatures = _shared_connection_signatures(source_root, shared_edge_ids)
     variant_connection_signatures = _shared_connection_signatures(variant_root, shared_edge_ids)
-    lost_shared_connections = sorted(source_connection_signatures - variant_connection_signatures)
-    boundary_movements = _audit_join_boundary_movements(source_root, variant_root, join_groups)
+    observed_removed_connections = source_connection_signatures - variant_connection_signatures
+    authorized_removals = {str(value) for value in authorized_removed_connections}
+    accepted_removed_connections = sorted(observed_removed_connections & authorized_removals)
+    lost_shared_connections = sorted(observed_removed_connections - authorized_removals)
+    unused_authorized_removed_connections = sorted(
+        authorized_removals - observed_removed_connections
+    )
+    boundary_movements = _audit_join_boundary_movements(
+        source_root,
+        variant_root,
+        join_groups,
+        authoritative_boundary_movements=authoritative_boundary_movements,
+    )
     source_dangling = _dangling_plain_edge_ids(source_root, shared_edge_ids)
     variant_dangling = _dangling_plain_edge_ids(variant_root, shared_edge_ids)
-    new_dangling = sorted(variant_dangling - source_dangling)
+    observed_new_dangling = variant_dangling - source_dangling
+    authorized_dangling_edges = {
+        edge_id
+        for signature in accepted_removed_connections
+        for edge_id in signature.split("|", 2)[:2]
+    }
+    accepted_new_dangling = sorted(observed_new_dangling & authorized_dangling_edges)
+    new_dangling = sorted(observed_new_dangling - authorized_dangling_edges)
 
     return {
         "schema": "torii.junction-aggregation-preservation/v1",
@@ -151,6 +171,7 @@ def audit_junction_aggregation_preservation(
             "review"
             if unexpected_removed_edge_ids
             or lost_shared_connections
+            or unused_authorized_removed_connections
             or new_dangling
             or boundary_movements["status"] not in {"pass", "not_applicable"}
             else "pass"
@@ -172,9 +193,21 @@ def audit_junction_aggregation_preservation(
         ),
         "lost_shared_connection_count": len(lost_shared_connections),
         "lost_shared_connections": lost_shared_connections,
+        "observed_removed_connection_count": len(observed_removed_connections),
+        "observed_removed_connections": sorted(observed_removed_connections),
+        "authorized_removed_connection_count": len(accepted_removed_connections),
+        "authorized_removed_connections": accepted_removed_connections,
+        "unused_authorized_removed_connection_count": len(
+            unused_authorized_removed_connections
+        ),
+        "unused_authorized_removed_connections": unused_authorized_removed_connections,
         "boundary_movement_preservation": boundary_movements,
         "new_dangling_shared_normal_edge_count": len(new_dangling),
         "new_dangling_shared_normal_edge_ids": new_dangling,
+        "authorized_new_dangling_shared_normal_edge_count": len(
+            accepted_new_dangling
+        ),
+        "authorized_new_dangling_shared_normal_edge_ids": accepted_new_dangling,
     }
 
 
@@ -289,6 +322,10 @@ def build_junction_aggregation_variant(
         ),
         "--junctions.join-output",
         _command_path(joined_junctions_file, output_dir),
+        "--no-turnarounds",
+        "--no-turnarounds.tls",
+        "--no-turnarounds.geometry",
+        "--no-turnarounds.fringe",
         "--output-file",
         _command_path(variant_file, output_dir),
     ]
@@ -640,12 +677,24 @@ def _audit_join_boundary_movements(
     source_root: ET.Element,
     variant_root: ET.Element,
     join_groups: Sequence[Sequence[str]],
+    *,
+    authoritative_boundary_movements: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, Any]:
+    authorities = {
+        str(joined_id): {
+            str(movement)
+            for movement in ((raw_movements,) if isinstance(raw_movements, str) else raw_movements)
+            if str(movement)
+        }
+        for joined_id, raw_movements in (authoritative_boundary_movements or {}).items()
+        if str(joined_id)
+    }
     groups = []
     for raw_group in join_groups:
         node_ids = {str(node_id) for node_id in raw_group if str(node_id)}
         if len(node_ids) < 2:
             continue
+        joined_junction_id = _sumo_joined_cluster_id(sorted(node_ids))
         source_edges = _plain_edges_by_id(source_root)
         internal = {
             edge_id
@@ -668,17 +717,28 @@ def _audit_join_boundary_movements(
             for connection in variant_root.findall("connection")
             if connection.attrib.get("from", "") in incoming and connection.attrib.get("to", "") in outgoing
         }
-        lost = sorted(source_movements - variant_movements)
-        added = sorted(variant_movements - source_movements)
+        authority = authorities.get(joined_junction_id)
+        expected_movements = source_movements if authority is None else authority
+        lost = sorted(expected_movements - variant_movements)
+        added = sorted(variant_movements - expected_movements)
+        source_not_authorized = sorted(source_movements - authority) if authority is not None else []
+        authority_not_in_source = sorted(authority - source_movements) if authority is not None else []
         groups.append(
             {
                 "node_ids": sorted(node_ids),
-                "joined_junction_id": _sumo_joined_cluster_id(sorted(node_ids)),
+                "joined_junction_id": joined_junction_id,
+                "authority_mode": "source_preservation" if authority is None else "explicit_authority",
                 "internal_edge_ids": sorted(internal),
                 "incoming_edge_ids": sorted(incoming),
                 "outgoing_edge_ids": sorted(outgoing),
                 "source_boundary_movement_count": len(source_movements),
                 "source_boundary_movements": sorted(source_movements),
+                "authoritative_boundary_movement_count": len(authority or ()),
+                "authoritative_boundary_movements": sorted(authority or ()),
+                "source_not_authorized_movement_count": len(source_not_authorized),
+                "source_not_authorized_movements": source_not_authorized,
+                "authority_not_in_source_movement_count": len(authority_not_in_source),
+                "authority_not_in_source_movements": authority_not_in_source,
                 "variant_boundary_movement_count": len(variant_movements),
                 "variant_boundary_movements": sorted(variant_movements),
                 "lost_boundary_movement_count": len(lost),
@@ -689,15 +749,39 @@ def _audit_join_boundary_movements(
         )
     if not groups:
         return {
-            "status": "not_applicable",
+            "status": "review" if authorities else "not_applicable",
+            "authority_mode": "explicit_authority" if authorities else "source_preservation",
+            "authoritative_joined_junction_count": len(authorities),
+            "authoritative_joined_junction_ids": sorted(authorities),
+            "unused_authoritative_joined_junction_count": len(authorities),
+            "unused_authoritative_joined_junction_ids": sorted(authorities),
             "lost_boundary_movement_count": 0,
             "added_boundary_movement_count": 0,
             "groups": [],
         }
     lost_count = sum(group["lost_boundary_movement_count"] for group in groups)
     added_count = sum(group["added_boundary_movement_count"] for group in groups)
+    used_authority_ids = {
+        group["joined_junction_id"]
+        for group in groups
+        if group["authority_mode"] == "explicit_authority"
+    }
+    unused_authority_ids = sorted(set(authorities) - used_authority_ids)
+    authority_modes = {group["authority_mode"] for group in groups}
+    authority_mode = next(iter(authority_modes)) if len(authority_modes) == 1 else "mixed"
     return {
-        "status": "pass" if not lost_count and not added_count else "review",
+        "status": "pass" if not lost_count and not added_count and not unused_authority_ids else "review",
+        "authority_mode": authority_mode,
+        "authoritative_joined_junction_count": len(authorities),
+        "authoritative_joined_junction_ids": sorted(authorities),
+        "unused_authoritative_joined_junction_count": len(unused_authority_ids),
+        "unused_authoritative_joined_junction_ids": unused_authority_ids,
+        "source_not_authorized_movement_count": sum(
+            group["source_not_authorized_movement_count"] for group in groups
+        ),
+        "authority_not_in_source_movement_count": sum(
+            group["authority_not_in_source_movement_count"] for group in groups
+        ),
         "lost_boundary_movement_count": lost_count,
         "added_boundary_movement_count": added_count,
         "groups": groups,

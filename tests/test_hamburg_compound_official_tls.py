@@ -30,7 +30,11 @@ SCRIPT = Path("plugins/torii-sumo/scripts/build_hamburg_compound_official_tls.py
 def test_compound_routing_prune_reuses_2394_inventory_and_adds_2349() -> None:
     expected = {
         item.key for item in ROUTING_REMOVALS
-    } | {("554713078#2", 1, "554713075#0", 1)}
+    } | {
+        ("554713078#2", 1, "554713075#0", 1),
+        ("194672083", 1, "59990286", 1),
+        ("59990286", 1, "194672083", 1),
+    }
 
     assert {item.key for item in COMPOUND_ROUTING_REMOVALS} == expected
 
@@ -53,7 +57,7 @@ def test_compound_routing_prune_writes_explicit_compiled_net_deletes(tmp_path: P
         for element in ET.parse(patch).getroot().findall("delete")
     }
 
-    assert report["delete_directive_count"] == 6
+    assert report["delete_directive_count"] == 8
     assert delete_keys == {item.key for item in COMPOUND_ROUTING_REMOVALS}
 
 

@@ -1,0 +1,407 @@
+{
+  "authority_id": "hamburg-2403-cad-aerial-osm-turn-lanes-20260723",
+  "authority_review_status": "review_required",
+  "automatic_promotion_gate": "blocked",
+  "candidate_net_file": "../../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+  "candidate_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+  "checks": {
+    "all_ended": true,
+    "all_inserted": true,
+    "all_loaded": true,
+    "candidate_immutable": true,
+    "command": true,
+    "inspection": true,
+    "none_running_or_waiting": true,
+    "zero_teleports_or_collisions": true
+  },
+  "collisions": 0,
+  "command": [
+    "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\sumo.exe",
+    "-c",
+    "authorized-movements.sumocfg",
+    "--collision.check-junctions",
+    "true",
+    "--duration-log.statistics",
+    "--quit-on-end"
+  ],
+  "command_result": {
+    "command": [
+      "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\sumo.exe",
+      "-c",
+      "authorized-movements.sumocfg",
+      "--collision.check-junctions",
+      "true",
+      "--duration-log.statistics",
+      "--quit-on-end"
+    ],
+    "cwd": ".",
+    "error": "",
+    "returncode": 0,
+    "status": "pass",
+    "stderr": "",
+    "stdout": "Loading net-file from '../../candidate/hamburg_sandtorkai_canonical_w1.net.xml' ... done (172ms).\nLoading route-files incrementally from 'authorized-movements.rou.xml'\nLoading done.\nSimulation version 1.27.1 started with time: 0.00.\nStep #0.00 (0ms ?*RT. ?UPS, vehicles TOT 1 ACT 1 BUF 0)                                   \nStep #100.00 (0ms ?*RT. ?UPS, vehicles TOT 13 ACT 1 BUF 0)                                \nStep #200.00 (0ms ?*RT. ?UPS, vehicles TOT 16 ACT 0 BUF 0)                                \nStep #300.00 (0ms ?*RT. ?UPS, vehicles TOT 16 ACT 0 BUF 0)                                \nStep #400.00 (0ms ?*RT. ?UPS, vehicles TOT 16 ACT 0 BUF 0)                                \nStep #500.00 (0ms ?*RT. ?UPS, vehicles TOT 16 ACT 0 BUF 0)                                \nStep #600.00 (0ms ?*RT. ?UPS, vehicles TOT 16 ACT 0 BUF 0)                                \n\nSimulation ended at time: 600.00.\nReason: The final simulation step has been reached.\nPerformance:\n Duration: 0.01s\n Real time factor: 54545.5\n UPS: 12454.545455\nVehicles:\n Inserted: 16\n Running: 0\n Waiting: 0\nStatistics (avg of 16):\n RouteLength: 85.95\n Speed: 9.76\n Duration: 8.56\n WaitingTime: 0.00\n TimeLoss: 1.23\n DepartDelay: 0.00\n"
+  },
+  "ended": 16,
+  "inputs": {
+    "config": {
+      "path": "authorized-movements.sumocfg",
+      "sha256": "a79415490a99c33edf2fc46929f830b68a7771af2a2f72a3aa20ad4c152fff48"
+    },
+    "movement_authority": {
+      "path": "../movement-authority.json",
+      "sha256": "2c2fcf52dae974c09810d6d7aaa45c6ac0cbac0d3aa1927a07360f2bcca6f3fc"
+    },
+    "route": {
+      "path": "authorized-movements.rou.xml",
+      "sha256": "7313c3101dc63ee9bbcad9224c3fe3c4072f7a7af09ad7940fa4a8e027590dda"
+    }
+  },
+  "inserted": 16,
+  "inspection": {
+    "role": "hamburg-authorized-movement-smoke",
+    "status": "pass",
+    "summary": {
+      "arrived": 16,
+      "collisions": 0,
+      "completion_ratio": 1.0,
+      "exists": true,
+      "inserted": 16,
+      "last_time": 599.0,
+      "loaded": 16,
+      "path": "summary.xml",
+      "running": 0,
+      "teleports": 0,
+      "valid_xml": true,
+      "waiting": 0,
+      "warnings": []
+    },
+    "tripinfo": {
+      "exists": true,
+      "mean_duration": 8.5625,
+      "mean_time_loss": 1.2349999999999999,
+      "mean_waiting_time": 0.0,
+      "path": "tripinfo.xml",
+      "trip_count": 16,
+      "valid_xml": true,
+      "warnings": []
+    },
+    "warnings": []
+  },
+  "loaded": 16,
+  "movement_count": 16,
+  "movement_keys": [
+    "2403-north-l0-right",
+    "2403-north-l0-through",
+    "2403-north-l1-through",
+    "2403-north-l2-left",
+    "2403-east-l0-right",
+    "2403-east-l0-through",
+    "2403-east-l1-through",
+    "2403-east-l2-left",
+    "2403-east-l3-left",
+    "2403-west-l0-right",
+    "2403-west-l0-through",
+    "2403-west-l1-through",
+    "2403-west-l2-left",
+    "2403-south-l0-right",
+    "2403-south-l1-through",
+    "2403-south-l2-left"
+  ],
+  "movement_keys_unique": true,
+  "outputs": {
+    "summary": {
+      "path": "summary.xml",
+      "sha256": "e216dda81c15274ae64218b4667287245cdbf58bf1c67083ad00a95e2cbc0287"
+    },
+    "tripinfo": {
+      "path": "tripinfo.xml",
+      "sha256": "638d2e2019b3be9302d740eca1a1483a280172e19c255223b5f4f6bff0f66479"
+    }
+  },
+  "running": 0,
+  "schema": "torii.hamburg-2403-movement-smoke/v1",
+  "status": "pass",
+  "teleports": 0,
+  "validation": {
+    "authority_file": "../movement-authority.json",
+    "authority_id": "hamburg-2403-cad-aerial-osm-turn-lanes-20260723",
+    "authority_review_status": "review_required",
+    "authority_sha256": "2c2fcf52dae974c09810d6d7aaa45c6ac0cbac0d3aa1927a07360f2bcca6f3fc",
+    "candidate_net_file": "../../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+    "candidate_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+    "errors": [],
+    "movement_count": 16,
+    "movement_keys": [
+      "2403-north-l0-right",
+      "2403-north-l0-through",
+      "2403-north-l1-through",
+      "2403-north-l2-left",
+      "2403-east-l0-right",
+      "2403-east-l0-through",
+      "2403-east-l1-through",
+      "2403-east-l2-left",
+      "2403-east-l3-left",
+      "2403-west-l0-right",
+      "2403-west-l0-through",
+      "2403-west-l1-through",
+      "2403-west-l2-left",
+      "2403-south-l0-right",
+      "2403-south-l1-through",
+      "2403-south-l2-left"
+    ],
+    "movements": [
+      {
+        "arrival_lane": 0,
+        "depart_lane": 0,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-north-l0-right",
+        "route_edges": [
+          "-152813965#0",
+          "395272650#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 0,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-north-l0-through",
+        "route_edges": [
+          "-152813965#0",
+          "-554713071",
+          "111747607#1"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 1,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-north-l1-through",
+        "route_edges": [
+          "-152813965#0",
+          "-554713071",
+          "111747607#1"
+        ]
+      },
+      {
+        "arrival_lane": 1,
+        "depart_lane": 2,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-north-l2-left",
+        "route_edges": [
+          "-152813965#0",
+          "60578532#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 0,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-east-l0-right",
+        "route_edges": [
+          "25444569#2",
+          "152813965#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 0,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-east-l0-through",
+        "route_edges": [
+          "25444569#2",
+          "395272650#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 1,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-east-l1-through",
+        "route_edges": [
+          "25444569#2",
+          "395272650#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 2,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-east-l2-left",
+        "route_edges": [
+          "25444569#2",
+          "-554713071",
+          "111747607#1"
+        ]
+      },
+      {
+        "arrival_lane": 1,
+        "depart_lane": 3,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-east-l3-left",
+        "route_edges": [
+          "25444569#2",
+          "-554713071",
+          "111747607#1"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 0,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-west-l0-right",
+        "route_edges": [
+          "83075275#2",
+          "-554713071",
+          "111747607#1"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 0,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-west-l0-through",
+        "route_edges": [
+          "83075275#2",
+          "60578532#0"
+        ]
+      },
+      {
+        "arrival_lane": 1,
+        "depart_lane": 1,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-west-l1-through",
+        "route_edges": [
+          "83075275#2",
+          "60578532#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 2,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-west-l2-left",
+        "route_edges": [
+          "83075275#2",
+          "152813965#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 0,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-south-l0-right",
+        "route_edges": [
+          "554706401#0",
+          "554713071",
+          "60578532#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 1,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-south-l1-through",
+        "route_edges": [
+          "554706401#0",
+          "554713071",
+          "152813965#0"
+        ]
+      },
+      {
+        "arrival_lane": 0,
+        "depart_lane": 2,
+        "evidence_ids": [
+          "hamburg-construction-cad-2022",
+          "hamburg-official-aerial-2024",
+          "osm-complete-ways-snapshot"
+        ],
+        "includes_candidate_turnaround": false,
+        "movement_key": "2403-south-l2-left",
+        "route_edges": [
+          "554706401#0",
+          "554713071",
+          "395272650#0"
+        ]
+      }
+    ],
+    "schema": "torii.hamburg-movement-authority-validation/v1",
+    "status": "pass"
+  },
+  "vehicle_count": 16,
+  "waiting": 0
+}

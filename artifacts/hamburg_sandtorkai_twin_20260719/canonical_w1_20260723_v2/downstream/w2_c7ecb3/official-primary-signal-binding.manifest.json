@@ -1,0 +1,726 @@
+{
+  "artifacts": {
+    "bindings": "official-primary-signal-bindings.json",
+    "manifest": "official-primary-signal-binding.manifest.json"
+  },
+  "automatic_promotion_gate": "blocked",
+  "available_map_node_ids": [
+    "2349",
+    "2394"
+  ],
+  "binding_artifact": {
+    "path": "official-primary-signal-bindings.json",
+    "sha256": "58b438c95f95ad5a3997e107fd12ac451678ddf2da02ba73b165cdd8eb0053f7"
+  },
+  "claim_boundary": {
+    "does_not_prove": [
+      "that any supplied stream is bound to a candidate MAP movement or controller linkIndex",
+      "that the candidate controlled physical connection set equals the selected official TLS plan",
+      "historical signal phases or cycle timing",
+      "a complete required-node signal controller"
+    ],
+    "proves": [
+      "which exact W1, official MAP/TLD inputs, and optional compound TLS plan were checked",
+      "which movement, physical-connection, controller, or linkIndex discrepancies block binding",
+      "that missing required-node signal data is explicit rather than guessed"
+    ]
+  },
+  "claim_status": "official-signal-binding-diagnostic-structurally-unresolved",
+  "errors": [
+    {
+      "code": "candidate_official_movement_physical_key_mismatch",
+      "controller_id": "HH_2349",
+      "missing_physical_keys": [
+        {
+          "from": "554713076#0",
+          "fromLane": 0,
+          "to": "554713076#1",
+          "toLane": 0
+        },
+        {
+          "from": "554713076#0",
+          "fromLane": 1,
+          "to": "554713076#1",
+          "toLane": 1
+        },
+        {
+          "from": "554713078#0",
+          "fromLane": 0,
+          "to": "554713078#1",
+          "toLane": 0
+        },
+        {
+          "from": "554713078#0",
+          "fromLane": 1,
+          "to": "554713078#1",
+          "toLane": 1
+        },
+        {
+          "from": "61649647#0",
+          "fromLane": 0,
+          "to": "59990286",
+          "toLane": 0
+        },
+        {
+          "from": "61649647#0",
+          "fromLane": 0,
+          "to": "61649649#0",
+          "toLane": 0
+        },
+        {
+          "from": "61649647#0",
+          "fromLane": 1,
+          "to": "59990286",
+          "toLane": 1
+        }
+      ],
+      "node_id": "2349",
+      "unexpected_physical_keys": []
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "2",
+      "controller_id": "HH_2349",
+      "link_index": 0,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "3",
+      "controller_id": "HH_2349",
+      "link_index": 3,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "4",
+      "controller_id": "HH_2349",
+      "link_index": 2,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "5",
+      "controller_id": "HH_2349",
+      "link_index": 2,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "6",
+      "controller_id": "HH_2349",
+      "link_index": 5,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "7",
+      "controller_id": "HH_2349",
+      "link_index": 1,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "8",
+      "controller_id": "HH_2349",
+      "link_index": 1,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "9",
+      "controller_id": "HH_2349",
+      "link_index": 4,
+      "node_id": "2349"
+    },
+    {
+      "code": "official_vehicle_movement_without_signal_stream",
+      "connection_ids": [
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "node_id": "2349"
+    },
+    {
+      "code": "candidate_official_movement_physical_key_mismatch",
+      "controller_id": "HH_2394",
+      "missing_physical_keys": [
+        {
+          "from": "381540198#0",
+          "fromLane": 0,
+          "to": "381540198#1",
+          "toLane": 0
+        },
+        {
+          "from": "381540198#0",
+          "fromLane": 1,
+          "to": "381540198#1",
+          "toLane": 1
+        },
+        {
+          "from": "47854310#2",
+          "fromLane": 0,
+          "to": "60578519",
+          "toLane": 0
+        },
+        {
+          "from": "47854310#2",
+          "fromLane": 1,
+          "to": "60578519",
+          "toLane": 1
+        },
+        {
+          "from": "47854310#2",
+          "fromLane": 2,
+          "to": "60578519",
+          "toLane": 2
+        },
+        {
+          "from": "9702432#0",
+          "fromLane": 0,
+          "to": "9702432#2",
+          "toLane": 0
+        },
+        {
+          "from": "9702432#0",
+          "fromLane": 1,
+          "to": "9702432#2",
+          "toLane": 1
+        }
+      ],
+      "node_id": "2394",
+      "unexpected_physical_keys": []
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "1",
+      "controller_id": "HH_2394",
+      "link_index": 2,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "2",
+      "controller_id": "HH_2394",
+      "link_index": 3,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "3",
+      "controller_id": "HH_2394",
+      "link_index": 3,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "5",
+      "controller_id": "HH_2394",
+      "link_index": 0,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "6",
+      "controller_id": "HH_2394",
+      "link_index": 4,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "7",
+      "controller_id": "HH_2394",
+      "link_index": 1,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "8",
+      "controller_id": "HH_2394",
+      "link_index": 1,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_link_index_not_in_candidate",
+      "connection_id": "9",
+      "controller_id": "HH_2394",
+      "link_index": 5,
+      "node_id": "2394"
+    },
+    {
+      "code": "official_vehicle_movement_without_signal_stream",
+      "connection_ids": [
+        "1",
+        "2",
+        "3",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "node_id": "2394"
+    }
+  ],
+  "execution_gate": "blocked",
+  "execution_gate_reason": "one or more official signal bindings are structurally unresolved",
+  "gates": {
+    "2403_official_signal_asset": "blocked",
+    "automatic_promotion": "blocked",
+    "candidate_controller_link_indices": "blocked",
+    "historical_signal_replay": "blocked_pending_official_observations",
+    "map_movement_identity": "blocked",
+    "official_movement_physical_key_parity": "blocked",
+    "official_source_hashes": "pass"
+  },
+  "historical_signal_replay": {
+    "reason": "metadata identifies controlled movements but does not contain the requested Saturday history",
+    "status": "blocked_pending_official_observations"
+  },
+  "missing_official_signal_node_ids": [
+    "2403"
+  ],
+  "node_reports": {
+    "2349": {
+      "bound_count": 0,
+      "errors": [
+        {
+          "code": "candidate_official_movement_physical_key_mismatch",
+          "controller_id": "HH_2349",
+          "missing_physical_keys": [
+            {
+              "from": "554713076#0",
+              "fromLane": 0,
+              "to": "554713076#1",
+              "toLane": 0
+            },
+            {
+              "from": "554713076#0",
+              "fromLane": 1,
+              "to": "554713076#1",
+              "toLane": 1
+            },
+            {
+              "from": "554713078#0",
+              "fromLane": 0,
+              "to": "554713078#1",
+              "toLane": 0
+            },
+            {
+              "from": "554713078#0",
+              "fromLane": 1,
+              "to": "554713078#1",
+              "toLane": 1
+            },
+            {
+              "from": "61649647#0",
+              "fromLane": 0,
+              "to": "59990286",
+              "toLane": 0
+            },
+            {
+              "from": "61649647#0",
+              "fromLane": 0,
+              "to": "61649649#0",
+              "toLane": 0
+            },
+            {
+              "from": "61649647#0",
+              "fromLane": 1,
+              "to": "59990286",
+              "toLane": 1
+            }
+          ],
+          "node_id": "2349",
+          "unexpected_physical_keys": []
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "2",
+          "controller_id": "HH_2349",
+          "link_index": 0,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "3",
+          "controller_id": "HH_2349",
+          "link_index": 3,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "4",
+          "controller_id": "HH_2349",
+          "link_index": 2,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "5",
+          "controller_id": "HH_2349",
+          "link_index": 2,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "6",
+          "controller_id": "HH_2349",
+          "link_index": 5,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "7",
+          "controller_id": "HH_2349",
+          "link_index": 1,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "8",
+          "controller_id": "HH_2349",
+          "link_index": 1,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "9",
+          "controller_id": "HH_2349",
+          "link_index": 4,
+          "node_id": "2349"
+        },
+        {
+          "code": "official_vehicle_movement_without_signal_stream",
+          "connection_ids": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9"
+          ],
+          "node_id": "2349"
+        }
+      ],
+      "expected_vehicle_movement_count": 8,
+      "official_movement_physical_key_parity": {
+        "candidate_count": 0,
+        "candidate_unique_count": 0,
+        "controller_id": "HH_2349",
+        "duplicate_physical_connections": [],
+        "evidence_mode": "compound_osm_tls_plan",
+        "expected_count": 7,
+        "missing_physical_keys": [
+          {
+            "from": "554713076#0",
+            "fromLane": 0,
+            "to": "554713076#1",
+            "toLane": 0
+          },
+          {
+            "from": "554713076#0",
+            "fromLane": 1,
+            "to": "554713076#1",
+            "toLane": 1
+          },
+          {
+            "from": "554713078#0",
+            "fromLane": 0,
+            "to": "554713078#1",
+            "toLane": 0
+          },
+          {
+            "from": "554713078#0",
+            "fromLane": 1,
+            "to": "554713078#1",
+            "toLane": 1
+          },
+          {
+            "from": "61649647#0",
+            "fromLane": 0,
+            "to": "59990286",
+            "toLane": 0
+          },
+          {
+            "from": "61649647#0",
+            "fromLane": 0,
+            "to": "61649649#0",
+            "toLane": 0
+          },
+          {
+            "from": "61649647#0",
+            "fromLane": 1,
+            "to": "59990286",
+            "toLane": 1
+          }
+        ],
+        "status": "blocked",
+        "unexpected_physical_keys": []
+      },
+      "status": "blocked",
+      "stream_count": 8,
+      "unbound_connection_ids": [
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    },
+    "2394": {
+      "bound_count": 0,
+      "errors": [
+        {
+          "code": "candidate_official_movement_physical_key_mismatch",
+          "controller_id": "HH_2394",
+          "missing_physical_keys": [
+            {
+              "from": "381540198#0",
+              "fromLane": 0,
+              "to": "381540198#1",
+              "toLane": 0
+            },
+            {
+              "from": "381540198#0",
+              "fromLane": 1,
+              "to": "381540198#1",
+              "toLane": 1
+            },
+            {
+              "from": "47854310#2",
+              "fromLane": 0,
+              "to": "60578519",
+              "toLane": 0
+            },
+            {
+              "from": "47854310#2",
+              "fromLane": 1,
+              "to": "60578519",
+              "toLane": 1
+            },
+            {
+              "from": "47854310#2",
+              "fromLane": 2,
+              "to": "60578519",
+              "toLane": 2
+            },
+            {
+              "from": "9702432#0",
+              "fromLane": 0,
+              "to": "9702432#2",
+              "toLane": 0
+            },
+            {
+              "from": "9702432#0",
+              "fromLane": 1,
+              "to": "9702432#2",
+              "toLane": 1
+            }
+          ],
+          "node_id": "2394",
+          "unexpected_physical_keys": []
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "1",
+          "controller_id": "HH_2394",
+          "link_index": 2,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "2",
+          "controller_id": "HH_2394",
+          "link_index": 3,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "3",
+          "controller_id": "HH_2394",
+          "link_index": 3,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "5",
+          "controller_id": "HH_2394",
+          "link_index": 0,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "6",
+          "controller_id": "HH_2394",
+          "link_index": 4,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "7",
+          "controller_id": "HH_2394",
+          "link_index": 1,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "8",
+          "controller_id": "HH_2394",
+          "link_index": 1,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_link_index_not_in_candidate",
+          "connection_id": "9",
+          "controller_id": "HH_2394",
+          "link_index": 5,
+          "node_id": "2394"
+        },
+        {
+          "code": "official_vehicle_movement_without_signal_stream",
+          "connection_ids": [
+            "1",
+            "2",
+            "3",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9"
+          ],
+          "node_id": "2394"
+        }
+      ],
+      "expected_vehicle_movement_count": 8,
+      "official_movement_physical_key_parity": {
+        "candidate_count": 0,
+        "candidate_unique_count": 0,
+        "controller_id": "HH_2394",
+        "duplicate_physical_connections": [],
+        "evidence_mode": "compound_osm_tls_plan",
+        "expected_count": 7,
+        "missing_physical_keys": [
+          {
+            "from": "381540198#0",
+            "fromLane": 0,
+            "to": "381540198#1",
+            "toLane": 0
+          },
+          {
+            "from": "381540198#0",
+            "fromLane": 1,
+            "to": "381540198#1",
+            "toLane": 1
+          },
+          {
+            "from": "47854310#2",
+            "fromLane": 0,
+            "to": "60578519",
+            "toLane": 0
+          },
+          {
+            "from": "47854310#2",
+            "fromLane": 1,
+            "to": "60578519",
+            "toLane": 1
+          },
+          {
+            "from": "47854310#2",
+            "fromLane": 2,
+            "to": "60578519",
+            "toLane": 2
+          },
+          {
+            "from": "9702432#0",
+            "fromLane": 0,
+            "to": "9702432#2",
+            "toLane": 0
+          },
+          {
+            "from": "9702432#0",
+            "fromLane": 1,
+            "to": "9702432#2",
+            "toLane": 1
+          }
+        ],
+        "status": "blocked",
+        "unexpected_physical_keys": []
+      },
+      "status": "blocked",
+      "stream_count": 8,
+      "unbound_connection_ids": [
+        "1",
+        "2",
+        "3",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    },
+    "2403": {
+      "bound_count": 0,
+      "expected_vehicle_movement_count": 0,
+      "status": "missing_official_map_cell",
+      "stream_count": 0
+    }
+  },
+  "required_node_ids": [
+    "2349",
+    "2394",
+    "2403"
+  ],
+  "schema": "torii.hamburg-named-signal-binding/v1",
+  "source": {
+    "candidate_net": {
+      "path": "../../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+      "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98"
+    },
+    "compound_tls_manifest": {
+      "path": "../../../named_corridor_osm_feedback_loop_v1/iteration_032_official_stopline_tls/hamburg_compound_official_tls.manifest.json",
+      "sha256": "5812bb7b2647c4311f0bb7516e58fbad3b18a848d0597d061e24a1af1e5e2771"
+    },
+    "intersection_manifests": {
+      "2349": {
+        "path": "../../../official_map_intersection_plainxml_v8/2349/hamburg-official-2349.manifest.json",
+        "sha256": "c46b3f7258d3741f0dc5445ec5b572226dba131c1adfc269e1a5c8ae134e68a4"
+      },
+      "2394": {
+        "path": "../../../official_map_intersection_plainxml_v8/2394/hamburg-official-2394.manifest.json",
+        "sha256": "d092f94b305cfc97c8bc9afb66815559bf05a133744aaffa4a5316e5dc0b873f"
+      }
+    },
+    "signal_stream_files": [
+      {
+        "api_base_url": "https://tld.iot.hamburg.de/v1.1/",
+        "path": "../../../official_first_named_corridor_v1/workflow/w2_official_signal_metadata_v1/tld_primary_signal_metadata.json",
+        "schema": "torii.hamburg-tld-primary-signal-streams/v1",
+        "sha256": "f0466e78286523f7694c36c1bccc486b816444ac32afa595f01a660efd60490e"
+      },
+      {
+        "api_base_url": "https://tld.iot.hamburg.de/v1.0/",
+        "path": "../../../official_first_named_corridor_v1/official/signals/tld_metadata/tld_2349_2394_primary_signal_metadata.json",
+        "schema": "torii.hamburg-tld-metadata-bundle/v1",
+        "sha256": "6b30fda512ef6e6df696d4ff691f81620ab429338481b3d46bf325f5a67aad77"
+      }
+    ],
+    "w1_manifest": {
+      "path": "../../manifest/hamburg_official_corridor_geometry.manifest.json",
+      "sha256": "c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc"
+    }
+  },
+  "status": "blocked"
+}

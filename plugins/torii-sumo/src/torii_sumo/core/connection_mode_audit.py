@@ -553,6 +553,28 @@ def build_connection_mode_regression_audit(
         "candidate_sha256": candidate_sha256,
         "source_network_mutation": False,
         "review_overlay_display_only": True,
+        "blockers": report.get("blockers", []),
+        "outside_scope_regression_junction_ids": report.get(
+            "outside_scope_regression_junction_ids", []
+        ),
+        "target_scope_flagged_junction_ids": report.get(
+            "target_scope_flagged_junction_ids", []
+        ),
+        "requested_target_candidate_junction_ids": report.get(
+            "requested_target_candidate_junction_ids", []
+        ),
+        "outside_scope_new_structural_finding_count": report.get(
+            "outside_scope_new_structural_finding_count", 0
+        ),
+        "target_scope_new_structural_finding_count": report.get(
+            "target_scope_new_structural_finding_count", 0
+        ),
+        "outside_scope_new_review_finding_count": report.get(
+            "outside_scope_new_review_finding_count", 0
+        ),
+        "target_scope_new_review_finding_count": report.get(
+            "target_scope_new_review_finding_count", 0
+        ),
         "artifacts": [
             {
                 "kind": "connection_mode_regression_report",

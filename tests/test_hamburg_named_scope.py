@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from torii_sumo.core.hamburg_named_scope import (
+    AERIAL_SCOPE,
+    CAD_SCOPE_EVIDENCE,
     HamburgNamedScopeError,
     NAMED_SCOPE_ID,
     freeze_hamburg_named_scope,
@@ -72,6 +74,10 @@ def test_freeze_named_scope_is_partial_and_blocks_incomplete_signal_materializat
     assert report["decision"] == "blocked"
     assert report["nodes"][0]["node_id"] == "2349"
     assert report["signal_assets"]["unresolved_node_ids"] == ["2403"]
+    spatial_scope = report["scope_policy"]["spatial_scope"]
+    assert spatial_scope["aerial"] == AERIAL_SCOPE
+    assert spatial_scope["official_cad"] == CAD_SCOPE_EVIDENCE
+    assert spatial_scope["edge_boundary_policy"] == "preserve_complete_selected_ways"
     assert validate_hamburg_named_scope_manifest(output)["scope_id"] == NAMED_SCOPE_ID
     with pytest.raises(HamburgNamedScopeError, match="signal-complete"):
         validate_hamburg_named_scope_manifest(output, require_signal_assets=True)
@@ -102,3 +108,20 @@ def test_named_scope_rejects_legacy_or_mismatched_official_scope(tmp_path: Path)
             signal_asset_discovery_file=discovery,
             output_file=tmp_path / "named-scope.json",
         )
+
+
+def test_named_scope_manifest_rejects_changed_complete_way_policy(tmp_path: Path) -> None:
+    lsa, scope, discovery = _write_inputs(tmp_path)
+    output = tmp_path / "named-scope.json"
+    freeze_hamburg_named_scope(
+        lsa_identity_file=lsa,
+        corridor_scope_file=scope,
+        signal_asset_discovery_file=discovery,
+        output_file=output,
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload["scope_policy"]["spatial_scope"]["edge_boundary_policy"] = "clip_at_bbox"
+    output.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(HamburgNamedScopeError, match="complete-way policy"):
+        validate_hamburg_named_scope_manifest(output)

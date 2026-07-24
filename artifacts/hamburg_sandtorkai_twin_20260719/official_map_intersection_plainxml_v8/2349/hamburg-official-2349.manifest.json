@@ -1,0 +1,1418 @@
+{
+  "artifacts": {
+    "connections": {
+      "bytes": 1550,
+      "path": "hamburg-official-2349.con.xml",
+      "sha256": "646efecbabe80641346f66922c63a491eadbf64f7d522e8260fb11d019b2060c"
+    },
+    "edges": {
+      "bytes": 4099,
+      "path": "hamburg-official-2349.edg.xml",
+      "sha256": "4b8e5e0eed02de8d3688ccd490eca425cac4a4ae326dd7ad5f72e9fef3302a02"
+    },
+    "netconvert_config": {
+      "bytes": 855,
+      "path": "hamburg-official-2349.netccfg",
+      "sha256": "fe69e7fdd3d9c763018768bea46df39bcae7aed8b9a2343666dcc0dfb2031673"
+    },
+    "network": {
+      "bytes": 12150,
+      "path": "hamburg-official-2349.net.xml",
+      "sha256": "5c140baffeaae0dd01c1073bfe43e5cf9aa1dd99385cf96f77e3196d193f5785"
+    },
+    "nodes": {
+      "bytes": 834,
+      "path": "hamburg-official-2349.nod.xml",
+      "sha256": "f051e975046947fd9b0701711dcd6ec2678c621a1c5d4e2cec85dcfecfeef82c"
+    },
+    "tllogic": {
+      "bytes": 1320,
+      "path": "hamburg-official-2349.tll.xml",
+      "sha256": "6cc6349762e806727971896b5204342dd03661e58d956630a44dd53a0474e072"
+    },
+    "types": {
+      "bytes": 341,
+      "path": "hamburg-official-2349.typ.xml",
+      "sha256": "a08663a7b3a17009c19c8b9370f7b34d6ad557b4389b39a67fff95a96043f7ba"
+    }
+  },
+  "automatic_promotion_gate": "blocked",
+  "candidate_id": "hamburg-official-map-2349-7773f7ee0cb4cb016b78",
+  "claim_boundary": "The candidate transcribes official MAP vehicle lane geometry, OCIT-C-vetted lane-to-lane topology, and primary/secondary control-expression grouping for one intersection. It excludes bike/pedestrian topology and makes no field claim about lane width, speed, priority, signal phase timing, detector actuation, coordination, or simulation readiness.",
+  "claim_status": "official_vehicle_topology_structural_candidate_only",
+  "compiled_network_audit": {
+    "connections": [
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.008185025419110635,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.007671722648077139,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.008184848986694988,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.007346447897991864,
+        "connection_id": "2",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.008185025419110635,
+        "via_lane_id": ":hh-map-2349-core_0_0"
+      },
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.010938996401863984,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.010938861312946056,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.0036957870015346477,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.00877982895719917,
+        "connection_id": "3",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.010938996401863984,
+        "via_lane_id": ":hh-map-2349-core_1_0"
+      },
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.005616675125509981,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.004549937146749588,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.005616765377644284,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.002715092735471999,
+        "connection_id": "4",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.005616675125509981,
+        "via_lane_id": ":hh-map-2349-core_6_1"
+      },
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.006195946838450213,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.006196130159677664,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.002036618495086652,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.005673512284518799,
+        "connection_id": "5",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.006195946838450213,
+        "via_lane_id": ":hh-map-2349-core_6_0"
+      },
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.010938996401863984,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.010938861312946056,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.002036618495086652,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.008793750689602666,
+        "connection_id": "6",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.010938996401863984,
+        "via_lane_id": ":hh-map-2349-core_5_0"
+      },
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.009960026147690986,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.006196130159677664,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.009959848327075319,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.006243692525431532,
+        "connection_id": "7",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.009960026147690986,
+        "via_lane_id": ":hh-map-2349-core_2_0"
+      },
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.009960026147690986,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.004549937146749588,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.009959848327075319,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.006237220931300544,
+        "connection_id": "8",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.009960026147690986,
+        "via_lane_id": ":hh-map-2349-core_2_1"
+      },
+      {
+        "actual_point_count": 3,
+        "compiled_declared_point_count": 3,
+        "compiled_declared_shape_deviation_m": 0.008908340548633552,
+        "compiled_egress_near_b_validation_length_m": 10.0,
+        "compiled_egress_to_official_lane_deviation_m": 0.007671722648077139,
+        "compiled_ingress_near_b_validation_length_m": 10.0,
+        "compiled_ingress_to_official_lane_deviation_m": 0.00890839091407408,
+        "compiled_via_to_official_three_part_union_deviation_m": 0.006896143202953409,
+        "connection_id": "9",
+        "official_clipped_point_count": 3,
+        "operational_internal_lane_to_clipped_shape_deviation_m": 0.008908340548633552,
+        "via_lane_id": ":hh-map-2349-core_4_0"
+      }
+    ],
+    "direct_connection_count": 8,
+    "distinct_link_index_count": 6,
+    "external_lane_endpoints": [
+      {
+        "endpoint_b_deviation_m": 0.008184848986694988,
+        "lane_id": "2",
+        "sumo_lane_id": "hh-map-2349-a1-in_0"
+      },
+      {
+        "endpoint_b_deviation_m": 0.0036957870015346477,
+        "lane_id": "3",
+        "sumo_lane_id": "hh-map-2349-a1-in_1"
+      },
+      {
+        "endpoint_b_deviation_m": 0.003852626742044414,
+        "lane_id": "4",
+        "sumo_lane_id": "hh-map-2349-a1-out_1"
+      },
+      {
+        "endpoint_b_deviation_m": 0.006196130159677664,
+        "lane_id": "5",
+        "sumo_lane_id": "hh-map-2349-a1-out_0"
+      },
+      {
+        "endpoint_b_deviation_m": 0.00890839091407408,
+        "lane_id": "6",
+        "sumo_lane_id": "hh-map-2349-a2-in_1"
+      },
+      {
+        "endpoint_b_deviation_m": 0.009959848327075319,
+        "lane_id": "7",
+        "sumo_lane_id": "hh-map-2349-a2-in_0"
+      },
+      {
+        "endpoint_b_deviation_m": 0.010938861312946056,
+        "lane_id": "8",
+        "sumo_lane_id": "hh-map-2349-a2-out_0"
+      },
+      {
+        "endpoint_b_deviation_m": 0.005616765377644284,
+        "lane_id": "9",
+        "sumo_lane_id": "hh-map-2349-a3-in_1"
+      },
+      {
+        "endpoint_b_deviation_m": 0.00130136750465196,
+        "lane_id": "10",
+        "sumo_lane_id": "hh-map-2349-a3-in_0"
+      },
+      {
+        "endpoint_b_deviation_m": 0.007671722648077139,
+        "lane_id": "11",
+        "sumo_lane_id": "hh-map-2349-a3-out_0"
+      }
+    ],
+    "geometry_tolerance_m": 0.5,
+    "max_connection_shape_deviation_m": 0.010938996401863984,
+    "max_stopline_deviation_m": 0.010938861312946056,
+    "net_offset": [
+      -565692.98,
+      -5933029.02
+    ],
+    "network_sha256": "5c140baffeaae0dd01c1073bfe43e5cf9aa1dd99385cf96f77e3196d193f5785",
+    "status": "pass"
+  },
+  "control": {
+    "control_key_to_link_index": {
+      "P_K1__S_NONE": 0,
+      "P_K3__S_K2": 1,
+      "P_K4__S_NONE": 2,
+      "P_K5Z__S_K1": 3,
+      "P_K6Z__S_K2": 4,
+      "P_NONE__S_K4": 5
+    },
+    "inventory_policy": "one_sumo_link_index_per_distinct_primary_secondary_control_expression",
+    "policy": "one-link-index-per-distinct-primary-secondary-expression/v1",
+    "program": {
+      "duration_seconds": 1,
+      "program_id": "structural-all-red",
+      "semantics": "compiler-only all-red placeholder; no phase sequence, green split, cycle, offset, or Saturday timing is inferred",
+      "state": "rrrrrr"
+    }
+  },
+  "controller_id": "hh-map-2349",
+  "counts": {
+    "approach_count": 3,
+    "distinct_control_expression_count": 6,
+    "edge_count": 6,
+    "excluded_connection_count": 13,
+    "excluded_lane_count": 24,
+    "vehicle_lane_count": 10,
+    "vehicle_movement_count": 8
+  },
+  "excluded_inputs": [
+    "OpenStreetMap",
+    "Google Maps",
+    "manual geometry tracing"
+  ],
+  "excluded_modal_features": {
+    "connections": [
+      {
+        "connection_id": "1",
+        "egress_lane_id": "12",
+        "ingress_lane_id": "1",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "10",
+        "egress_lane_id": "14",
+        "ingress_lane_id": "13",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "11",
+        "egress_lane_id": "13",
+        "ingress_lane_id": "14",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "12",
+        "egress_lane_id": "16",
+        "ingress_lane_id": "15",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "13",
+        "egress_lane_id": "18",
+        "ingress_lane_id": "17",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "14",
+        "egress_lane_id": "20",
+        "ingress_lane_id": "19",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "15",
+        "egress_lane_id": "22",
+        "ingress_lane_id": "21",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "16",
+        "egress_lane_id": "24",
+        "ingress_lane_id": "23",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "17",
+        "egress_lane_id": "26",
+        "ingress_lane_id": "25",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "18",
+        "egress_lane_id": "28",
+        "ingress_lane_id": "27",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "19",
+        "egress_lane_id": "30",
+        "ingress_lane_id": "29",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "20",
+        "egress_lane_id": "32",
+        "ingress_lane_id": "31",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      },
+      {
+        "connection_id": "21",
+        "egress_lane_id": "34",
+        "ingress_lane_id": "33",
+        "reason": "non_vehicle_or_not_ocit_vehicle_vetted"
+      }
+    ],
+    "lanes": [
+      {
+        "lane_id": "1",
+        "lane_type": "bikeLane",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "12",
+        "lane_type": "bikeLane",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "13",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "14",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "15",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "16",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "17",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "18",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "19",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "20",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "21",
+        "lane_type": "bikeLane",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "22",
+        "lane_type": "bikeLane",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "23",
+        "lane_type": "bikeLane",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "24",
+        "lane_type": "bikeLane",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "25",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "26",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "27",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "28",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "29",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "30",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "31",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "32",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "33",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      },
+      {
+        "lane_id": "34",
+        "lane_type": "crosswalk",
+        "reason": "v1_vehicle_only"
+      }
+    ],
+    "ocit_excluded_non_vehicle_movement_count": 1,
+    "ocit_source_movement_count": 9,
+    "policy": "exclude bicycle and pedestrian lanes/movements from v1 without substitution"
+  },
+  "gates": {
+    "automatic_promotion": "blocked",
+    "compiled_network_geometry": "pass",
+    "distinct_control_expression_link_indices": "pass",
+    "exact_kml_mapem_connection_identity": "pass",
+    "exact_kml_mapem_lane_identity": "pass",
+    "explicit_lane_to_lane_connections": "pass",
+    "field_signal_timing": "blocked",
+    "netconvert": "pass",
+    "ocit_vetted_vehicle_movements": "pass",
+    "official_drive_line_clipping": "pass",
+    "official_lane_orientation": "pass",
+    "single_official_node": "pass",
+    "source_hashes": "pass"
+  },
+  "geometry": {
+    "connection_shape_rule": "project ingress endpoint B, retain de-duplicated Drive-line control points whose arc positions lie strictly between the B projections, then project egress endpoint B",
+    "geometry_tolerance_m": 0.25,
+    "junction_shape_rule": "simple angular polygon through the official vehicle-lane B endpoints; this prevents netconvert from moving the external lane ends away from the official stop-line boundary",
+    "lane_index_rule": "SUMO index 0 is the geometry-derived rightmost lane at endpoint B in traffic direction",
+    "lane_orientation_rule": "ingress A-to-B; egress B-to-A, validated against official KML endpoint placemarks",
+    "movement_geometry": [
+      {
+        "clipped_length_m": 60.53548979805174,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565840.514842,
+            5933176.193401
+          ],
+          [
+            565822.638581,
+            5933173.006576
+          ],
+          [
+            565780.587451,
+            5933167.758173
+          ]
+        ],
+        "connection_id": "2",
+        "egress_b_projection_distance_m": 0.011939655141106441,
+        "ingress_b_projection_distance_m": 0.01994364795532231,
+        "raw_drive_line_end_to_egress_b_m": 12.602946221041055,
+        "raw_drive_line_end_to_egress_lane_m": 0.013867686715826834,
+        "raw_drive_line_start_to_ingress_b_m": 44.094668784021856,
+        "raw_drive_line_start_to_ingress_lane_m": 0.010981621237144166,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      },
+      {
+        "clipped_length_m": 48.77181785047651,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565840.992721,
+            5933172.817499
+          ],
+          [
+            565811.185741,
+            5933167.817527
+          ],
+          [
+            565813.159424,
+            5933149.374446
+          ]
+        ],
+        "connection_id": "3",
+        "egress_b_projection_distance_m": 0.08011487968887966,
+        "ingress_b_projection_distance_m": 0.01150015110103011,
+        "raw_drive_line_end_to_egress_b_m": 5.541641029729823,
+        "raw_drive_line_end_to_egress_lane_m": 0.07472245326716451,
+        "raw_drive_line_start_to_ingress_b_m": 28.24217658857803,
+        "raw_drive_line_start_to_ingress_lane_m": 0.013552713194908516,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      },
+      {
+        "clipped_length_m": 56.67939095539158,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565791.515602,
+            5933162.569593
+          ],
+          [
+            565802.657077,
+            5933163.948863
+          ],
+          [
+            565847.603107,
+            5933170.717722
+          ]
+        ],
+        "connection_id": "4",
+        "egress_b_projection_distance_m": 0.008486655825272393,
+        "ingress_b_projection_distance_m": 0.0126439587334097,
+        "raw_drive_line_end_to_egress_b_m": 10.204734013912304,
+        "raw_drive_line_end_to_egress_lane_m": 0.004999322277962438,
+        "raw_drive_line_start_to_ingress_b_m": 5.442024343758389,
+        "raw_drive_line_start_to_ingress_lane_m": 0.012412166784967716,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      },
+      {
+        "clipped_length_m": 56.77685086308761,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565792.010999,
+            5933159.360834
+          ],
+          [
+            565821.187454,
+            5933163.005538
+          ],
+          [
+            565848.21336,
+            5933167.354794
+          ]
+        ],
+        "connection_id": "5",
+        "egress_b_projection_distance_m": 0.002094721277642919,
+        "ingress_b_projection_distance_m": 0.0014302621157609773,
+        "raw_drive_line_end_to_egress_b_m": 6.228507866130353,
+        "raw_drive_line_end_to_egress_lane_m": 0.004978572994655889,
+        "raw_drive_line_start_to_ingress_b_m": 5.440788215435803,
+        "raw_drive_line_start_to_ingress_lane_m": 0.0013541129298221032,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      },
+      {
+        "clipped_length_m": 32.530117900845156,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565792.010999,
+            5933159.360834
+          ],
+          [
+            565811.852299,
+            5933161.840566
+          ],
+          [
+            565813.159424,
+            5933149.374446
+          ]
+        ],
+        "connection_id": "6",
+        "egress_b_projection_distance_m": 0.08036192408499238,
+        "ingress_b_projection_distance_m": 0.0010840503783305768,
+        "raw_drive_line_end_to_egress_b_m": 5.541641029729823,
+        "raw_drive_line_end_to_egress_lane_m": 0.07472245326716451,
+        "raw_drive_line_start_to_ingress_b_m": 5.440788215435803,
+        "raw_drive_line_start_to_ingress_lane_m": 0.0013541129298221032,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      },
+      {
+        "clipped_length_m": 35.06495651139605,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565827.277251,
+            5933151.663172
+          ],
+          [
+            565825.604762,
+            5933163.712499
+          ],
+          [
+            565848.21336,
+            5933167.354794
+          ]
+        ],
+        "connection_id": "7",
+        "egress_b_projection_distance_m": 0.0028474485789868973,
+        "ingress_b_projection_distance_m": 0.06328939838737607,
+        "raw_drive_line_end_to_egress_b_m": 6.228507866130353,
+        "raw_drive_line_end_to_egress_lane_m": 0.004978572994655889,
+        "raw_drive_line_start_to_ingress_b_m": 24.051190872213176,
+        "raw_drive_line_start_to_ingress_lane_m": 0.06344468080572227,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      },
+      {
+        "clipped_length_m": 38.5776706265181,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565827.277251,
+            5933151.663172
+          ],
+          [
+            565825.090505,
+            5933167.32156
+          ],
+          [
+            565847.603107,
+            5933170.717722
+          ]
+        ],
+        "connection_id": "8",
+        "egress_b_projection_distance_m": 0.008941908587053007,
+        "ingress_b_projection_distance_m": 0.06678023247981894,
+        "raw_drive_line_end_to_egress_b_m": 10.204734013912304,
+        "raw_drive_line_end_to_egress_lane_m": 0.004999322277962438,
+        "raw_drive_line_start_to_ingress_b_m": 24.051190872213176,
+        "raw_drive_line_start_to_ingress_lane_m": 0.06344468080572227,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      },
+      {
+        "clipped_length_m": 62.853095854152386,
+        "clipped_shape_point_count": 3,
+        "clipped_shape_xy": [
+          [
+            565824.057572,
+            5933151.095307
+          ],
+          [
+            565821.202869,
+            5933172.830778
+          ],
+          [
+            565780.587451,
+            5933167.758173
+          ]
+        ],
+        "connection_id": "9",
+        "egress_b_projection_distance_m": 0.01105101269095424,
+        "ingress_b_projection_distance_m": 0.06933270041944538,
+        "raw_drive_line_end_to_egress_b_m": 12.602946221041055,
+        "raw_drive_line_end_to_egress_lane_m": 0.013867686715826834,
+        "raw_drive_line_start_to_ingress_b_m": 67.23387192804775,
+        "raw_drive_line_start_to_ingress_lane_m": 0.06852430454281487,
+        "retained_drive_line_control_point_count": 1,
+        "source_drive_line_point_count": 4
+      }
+    ],
+    "policy": "official-map-kml-lane-bounded-drive-line/v1"
+  },
+  "human_review_required": false,
+  "lane_groups": [
+    {
+      "approach": "1",
+      "boundary_node_id": "hh-map-2349-a1-boundary",
+      "direction": "egress",
+      "edge_id": "hh-map-2349-a1-out",
+      "lane_bindings": [
+        {
+          "approach": "1",
+          "direction": "egress",
+          "edge_id": "hh-map-2349-a1-out",
+          "endpoint_a_xy": [
+            565869.888407,
+            5933170.928535
+          ],
+          "endpoint_b_xy": [
+            565848.21336,
+            5933167.354794
+          ],
+          "lane_index": 0,
+          "sumo_lane_id": "hh-map-2349-a1-out_0",
+          "traffic_shape_xy": [
+            [
+              565848.21336,
+              5933167.354794
+            ],
+            [
+              565854.330025,
+              5933168.341409
+            ],
+            [
+              565869.888407,
+              5933170.928535
+            ]
+          ]
+        },
+        {
+          "approach": "1",
+          "direction": "egress",
+          "edge_id": "hh-map-2349-a1-out",
+          "endpoint_a_xy": [
+            565868.863328,
+            5933174.096515
+          ],
+          "endpoint_b_xy": [
+            565847.603107,
+            5933170.717722
+          ],
+          "lane_index": 1,
+          "sumo_lane_id": "hh-map-2349-a1-out_1",
+          "traffic_shape_xy": [
+            [
+              565847.603107,
+              5933170.717722
+            ],
+            [
+              565857.662461,
+              5933172.226676
+            ],
+            [
+              565868.863328,
+              5933174.096515
+            ]
+          ]
+        }
+      ],
+      "official_lane_ids_right_to_left": [
+        "5",
+        "4"
+      ]
+    },
+    {
+      "approach": "1",
+      "boundary_node_id": "hh-map-2349-a1-boundary",
+      "direction": "ingress",
+      "edge_id": "hh-map-2349-a1-in",
+      "lane_bindings": [
+        {
+          "approach": "1",
+          "direction": "ingress",
+          "edge_id": "hh-map-2349-a1-in",
+          "endpoint_a_xy": [
+            565913.044479,
+            5933191.014162
+          ],
+          "endpoint_b_xy": [
+            565840.514842,
+            5933176.193401
+          ],
+          "lane_index": 0,
+          "sumo_lane_id": "hh-map-2349-a1-in_0",
+          "traffic_shape_xy": [
+            [
+              565913.044479,
+              5933191.014162
+            ],
+            [
+              565902.704865,
+              5933188.221586
+            ],
+            [
+              565883.936895,
+              5933183.876008
+            ],
+            [
+              565840.514842,
+              5933176.193401
+            ]
+          ]
+        },
+        {
+          "approach": "1",
+          "direction": "ingress",
+          "edge_id": "hh-map-2349-a1-in",
+          "endpoint_a_xy": [
+            565913.037697,
+            5933191.025194
+          ],
+          "endpoint_b_xy": [
+            565840.992721,
+            5933172.817499
+          ],
+          "lane_index": 1,
+          "sumo_lane_id": "hh-map-2349-a1-in_1",
+          "traffic_shape_xy": [
+            [
+              565913.037697,
+              5933191.025194
+            ],
+            [
+              565910.924935,
+              5933190.450474
+            ],
+            [
+              565908.288202,
+              5933186.107554
+            ],
+            [
+              565906.154005,
+              5933185.643804
+            ],
+            [
+              565868.836011,
+              5933177.478702
+            ],
+            [
+              565840.992721,
+              5933172.817499
+            ]
+          ]
+        }
+      ],
+      "official_lane_ids_right_to_left": [
+        "2",
+        "3"
+      ]
+    },
+    {
+      "approach": "2",
+      "boundary_node_id": "hh-map-2349-a2-boundary",
+      "direction": "egress",
+      "edge_id": "hh-map-2349-a2-out",
+      "lane_bindings": [
+        {
+          "approach": "2",
+          "direction": "egress",
+          "edge_id": "hh-map-2349-a2-out",
+          "endpoint_a_xy": [
+            565814.911796,
+            5933133.020131
+          ],
+          "endpoint_b_xy": [
+            565813.159424,
+            5933149.374446
+          ],
+          "lane_index": 0,
+          "sumo_lane_id": "hh-map-2349-a2-out_0",
+          "traffic_shape_xy": [
+            [
+              565813.159424,
+              5933149.374446
+            ],
+            [
+              565813.779869,
+              5933143.853044
+            ],
+            [
+              565814.911796,
+              5933133.020131
+            ]
+          ]
+        }
+      ],
+      "official_lane_ids_right_to_left": [
+        "8"
+      ]
+    },
+    {
+      "approach": "2",
+      "boundary_node_id": "hh-map-2349-a2-boundary",
+      "direction": "ingress",
+      "edge_id": "hh-map-2349-a2-in",
+      "lane_bindings": [
+        {
+          "approach": "2",
+          "direction": "ingress",
+          "edge_id": "hh-map-2349-a2-in",
+          "endpoint_a_xy": [
+            565833.033716,
+            5933084.392524
+          ],
+          "endpoint_b_xy": [
+            565827.277251,
+            5933151.663172
+          ],
+          "lane_index": 0,
+          "sumo_lane_id": "hh-map-2349-a2-in_0",
+          "traffic_shape_xy": [
+            [
+              565833.033716,
+              5933084.392524
+            ],
+            [
+              565832.235528,
+              5933090.300885
+            ],
+            [
+              565833.645323,
+              5933102.315312
+            ],
+            [
+              565832.959473,
+              5933108.247493
+            ],
+            [
+              565830.711295,
+              5933127.832806
+            ],
+            [
+              565827.277251,
+              5933151.663172
+            ]
+          ]
+        },
+        {
+          "approach": "2",
+          "direction": "ingress",
+          "edge_id": "hh-map-2349-a2-in",
+          "endpoint_a_xy": [
+            565857.284687,
+            5932869.637355
+          ],
+          "endpoint_b_xy": [
+            565824.057572,
+            5933151.095307
+          ],
+          "lane_index": 1,
+          "sumo_lane_id": "hh-map-2349-a2-in_1",
+          "traffic_shape_xy": [
+            [
+              565857.284687,
+              5932869.637355
+            ],
+            [
+              565836.206626,
+              5933054.104937
+            ],
+            [
+              565833.033716,
+              5933084.392524
+            ],
+            [
+              565824.057572,
+              5933151.095307
+            ]
+          ]
+        }
+      ],
+      "official_lane_ids_right_to_left": [
+        "7",
+        "6"
+      ]
+    },
+    {
+      "approach": "3",
+      "boundary_node_id": "hh-map-2349-a3-boundary",
+      "direction": "egress",
+      "edge_id": "hh-map-2349-a3-out",
+      "lane_bindings": [
+        {
+          "approach": "3",
+          "direction": "egress",
+          "edge_id": "hh-map-2349-a3-out",
+          "endpoint_a_xy": [
+            565754.951526,
+            5933164.485722
+          ],
+          "endpoint_b_xy": [
+            565780.587451,
+            5933167.758173
+          ],
+          "lane_index": 0,
+          "sumo_lane_id": "hh-map-2349-a3-out_0",
+          "traffic_shape_xy": [
+            [
+              565780.587451,
+              5933167.758173
+            ],
+            [
+              565767.957565,
+              5933166.180185
+            ],
+            [
+              565754.951526,
+              5933164.485722
+            ]
+          ]
+        }
+      ],
+      "official_lane_ids_right_to_left": [
+        "11"
+      ]
+    },
+    {
+      "approach": "3",
+      "boundary_node_id": "hh-map-2349-a3-boundary",
+      "direction": "ingress",
+      "edge_id": "hh-map-2349-a3-in",
+      "lane_bindings": [
+        {
+          "approach": "3",
+          "direction": "ingress",
+          "edge_id": "hh-map-2349-a3-in",
+          "endpoint_a_xy": [
+            565662.220985,
+            5933142.955013
+          ],
+          "endpoint_b_xy": [
+            565792.010999,
+            5933159.360834
+          ],
+          "lane_index": 0,
+          "sumo_lane_id": "hh-map-2349-a3-in_0",
+          "traffic_shape_xy": [
+            [
+              565662.220985,
+              5933142.955013
+            ],
+            [
+              565786.499892,
+              5933158.672039
+            ],
+            [
+              565792.010999,
+              5933159.360834
+            ]
+          ]
+        },
+        {
+          "approach": "3",
+          "direction": "ingress",
+          "edge_id": "hh-map-2349-a3-in",
+          "endpoint_a_xy": [
+            565661.783018,
+            5933145.853031
+          ],
+          "endpoint_b_xy": [
+            565791.515602,
+            5933162.569593
+          ],
+          "lane_index": 1,
+          "sumo_lane_id": "hh-map-2349-a3-in_1",
+          "traffic_shape_xy": [
+            [
+              565661.783018,
+              5933145.853031
+            ],
+            [
+              565786.004498,
+              5933161.880799
+            ],
+            [
+              565791.515602,
+              5933162.569593
+            ]
+          ]
+        }
+      ],
+      "official_lane_ids_right_to_left": [
+        "10",
+        "9"
+      ]
+    }
+  ],
+  "movements": [
+    {
+      "connection_id": "2",
+      "connection_shape_xy": [
+        [
+          565840.514842,
+          5933176.193401
+        ],
+        [
+          565822.638581,
+          5933173.006576
+        ],
+        [
+          565780.587451,
+          5933167.758173
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "11",
+      "from_edge": "hh-map-2349-a1-in",
+      "from_lane": 0,
+      "ingress_lane_id": "2",
+      "link_index": 0,
+      "map_signal_group": "1",
+      "primary_motor_groups": [
+        "K1"
+      ],
+      "secondary_motor_groups": [],
+      "to_edge": "hh-map-2349-a3-out",
+      "to_lane": 0,
+      "topology_control_key": "P_K1__S_NONE"
+    },
+    {
+      "connection_id": "3",
+      "connection_shape_xy": [
+        [
+          565840.992721,
+          5933172.817499
+        ],
+        [
+          565811.185741,
+          5933167.817527
+        ],
+        [
+          565813.159424,
+          5933149.374446
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "8",
+      "from_edge": "hh-map-2349-a1-in",
+      "from_lane": 1,
+      "ingress_lane_id": "3",
+      "link_index": 3,
+      "map_signal_group": "2",
+      "primary_motor_groups": [
+        "K5Z"
+      ],
+      "secondary_motor_groups": [
+        "K1"
+      ],
+      "to_edge": "hh-map-2349-a2-out",
+      "to_lane": 0,
+      "topology_control_key": "P_K5Z__S_K1"
+    },
+    {
+      "connection_id": "4",
+      "connection_shape_xy": [
+        [
+          565791.515602,
+          5933162.569593
+        ],
+        [
+          565802.657077,
+          5933163.948863
+        ],
+        [
+          565847.603107,
+          5933170.717722
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "4",
+      "from_edge": "hh-map-2349-a3-in",
+      "from_lane": 1,
+      "ingress_lane_id": "9",
+      "link_index": 2,
+      "map_signal_group": "3",
+      "primary_motor_groups": [
+        "K4"
+      ],
+      "secondary_motor_groups": [],
+      "to_edge": "hh-map-2349-a1-out",
+      "to_lane": 1,
+      "topology_control_key": "P_K4__S_NONE"
+    },
+    {
+      "connection_id": "5",
+      "connection_shape_xy": [
+        [
+          565792.010999,
+          5933159.360834
+        ],
+        [
+          565821.187454,
+          5933163.005538
+        ],
+        [
+          565848.21336,
+          5933167.354794
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "5",
+      "from_edge": "hh-map-2349-a3-in",
+      "from_lane": 0,
+      "ingress_lane_id": "10",
+      "link_index": 2,
+      "map_signal_group": "3",
+      "primary_motor_groups": [
+        "K4"
+      ],
+      "secondary_motor_groups": [],
+      "to_edge": "hh-map-2349-a1-out",
+      "to_lane": 0,
+      "topology_control_key": "P_K4__S_NONE"
+    },
+    {
+      "connection_id": "6",
+      "connection_shape_xy": [
+        [
+          565792.010999,
+          5933159.360834
+        ],
+        [
+          565811.852299,
+          5933161.840566
+        ],
+        [
+          565813.159424,
+          5933149.374446
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "8",
+      "from_edge": "hh-map-2349-a3-in",
+      "from_lane": 0,
+      "ingress_lane_id": "10",
+      "link_index": 5,
+      "map_signal_group": "6",
+      "primary_motor_groups": [],
+      "secondary_motor_groups": [
+        "K4"
+      ],
+      "to_edge": "hh-map-2349-a2-out",
+      "to_lane": 0,
+      "topology_control_key": "P_NONE__S_K4"
+    },
+    {
+      "connection_id": "7",
+      "connection_shape_xy": [
+        [
+          565827.277251,
+          5933151.663172
+        ],
+        [
+          565825.604762,
+          5933163.712499
+        ],
+        [
+          565848.21336,
+          5933167.354794
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "5",
+      "from_edge": "hh-map-2349-a2-in",
+      "from_lane": 0,
+      "ingress_lane_id": "7",
+      "link_index": 1,
+      "map_signal_group": "4",
+      "primary_motor_groups": [
+        "K3"
+      ],
+      "secondary_motor_groups": [
+        "K2"
+      ],
+      "to_edge": "hh-map-2349-a1-out",
+      "to_lane": 0,
+      "topology_control_key": "P_K3__S_K2"
+    },
+    {
+      "connection_id": "8",
+      "connection_shape_xy": [
+        [
+          565827.277251,
+          5933151.663172
+        ],
+        [
+          565825.090505,
+          5933167.32156
+        ],
+        [
+          565847.603107,
+          5933170.717722
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "4",
+      "from_edge": "hh-map-2349-a2-in",
+      "from_lane": 0,
+      "ingress_lane_id": "7",
+      "link_index": 1,
+      "map_signal_group": "4",
+      "primary_motor_groups": [
+        "K3"
+      ],
+      "secondary_motor_groups": [
+        "K2"
+      ],
+      "to_edge": "hh-map-2349-a1-out",
+      "to_lane": 1,
+      "topology_control_key": "P_K3__S_K2"
+    },
+    {
+      "connection_id": "9",
+      "connection_shape_xy": [
+        [
+          565824.057572,
+          5933151.095307
+        ],
+        [
+          565821.202869,
+          5933172.830778
+        ],
+        [
+          565780.587451,
+          5933167.758173
+        ]
+      ],
+      "drive_line_variant": null,
+      "egress_lane_id": "11",
+      "from_edge": "hh-map-2349-a2-in",
+      "from_lane": 1,
+      "ingress_lane_id": "6",
+      "link_index": 4,
+      "map_signal_group": "7",
+      "primary_motor_groups": [
+        "K6Z"
+      ],
+      "secondary_motor_groups": [
+        "K2"
+      ],
+      "to_edge": "hh-map-2349-a3-out",
+      "to_lane": 0,
+      "topology_control_key": "P_K6Z__S_K2"
+    }
+  ],
+  "netconvert": {
+    "command": [
+      "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\netconvert.exe",
+      "-c",
+      "hamburg-official-2349.netccfg"
+    ],
+    "result": {
+      "command": [
+        "C:\\Program Files (x86)\\Eclipse\\Sumo\\bin\\netconvert.exe",
+        "-c",
+        "hamburg-official-2349.netccfg"
+      ],
+      "cwd": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_map_intersection_plainxml_v8\\2349",
+      "error": "",
+      "returncode": 0,
+      "status": "pass",
+      "stderr": "",
+      "stdout": "Parsing types from 'hamburg-official-2349.typ.xml' ... done.\nParsing nodes from 'hamburg-official-2349.nod.xml' ... done.\nParsing edges from 'hamburg-official-2349.edg.xml' ... done.\nParsing connections from 'hamburg-official-2349.con.xml' ... done.\nParsing traffic lights from 'hamburg-official-2349.tll.xml' ... done.\n Import done:\n   4 nodes loaded.\n   1 types loaded.\n   6 edges loaded.\nRemoving self-loops ... done (0ms).\nRemoving empty nodes ... done (0ms).\n   0 nodes removed.\nMoving network to origin ... done (0ms).\nComputing turning directions ... done (0ms).\nAssigning nodes to traffic lights ... done (0ms).\nSorting nodes' edges ... done (0ms).\nComputing node shapes ... done (0ms).\nComputing edge shapes ... done (0ms).\nComputing node types ... done (0ms).\nComputing priorities ... done (0ms).\nComputing approached edges ... done (0ms).\nGuessing and setting roundabouts ... done (0ms).\nComputing approaching lanes ... done (0ms).\nDividing of lanes on approached lanes ... done (0ms).\nProcessing turnarounds ... done (0ms).\nRechecking of lane endings ... done (0ms).\nComputing traffic light control information ... done (0ms).\nComputing node logics ... done (0ms).\nComputing traffic light logics ... done (0ms).\n 1 traffic light(s) computed.\nBuilding inner edges ... done (1ms).\n-----------------------------------------------------\nSummary:\n Node type statistics:\n  Unregulated junctions       : 0\n  Dead-end junctions          : 3\n  Priority junctions          : 0\n  Right-before-left junctions : 0\n  Traffic light junctions      : 1\n Network boundaries:\n  Original boundary  : 565661.78,5932869.64,565913.04,5933191.03\n  Applied offset     : -565692.98,-5933029.02\n  Converted boundary : 0.00,0.00,198.22,152.75\n-----------------------------------------------------\nWriting network ... done (2ms).\nSuccess.\n"
+    },
+    "status": "pass"
+  },
+  "node_id": "2349",
+  "official_references": [
+    "https://sumo.dlr.de/docs/Networks/PlainXML.html#lane-specific-definitions",
+    "https://sumo.dlr.de/docs/Networks/PlainXML.html#lane-to-lane-connectivity",
+    "https://sumo.dlr.de/docs/Networks/PlainXML.html#controlled-connections",
+    "https://sumo.dlr.de/docs/Simulation/Traffic_Lights.html#signal-state-definitions"
+  ],
+  "projection": {
+    "always_xy": true,
+    "coordinate_policy": "project official KML longitude/latitude directly",
+    "source_crs": "EPSG:4326",
+    "target_crs": "EPSG:25832"
+  },
+  "schema": "torii.hamburg-official-map-ocit-intersection-plainxml/v1",
+  "sources": {
+    "map_kml": {
+      "bytes": 139899,
+      "expected_hash_supplied": false,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\official\\signals\\assets\\2349_map_kml.kml",
+      "sha256": "8f2b47656ebf3295f86448b1d3bd9faacc41f75e40446ae099c9a6de6c82c7f6"
+    },
+    "map_xml": {
+      "bytes": 60253,
+      "expected_hash_supplied": false,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\official\\signals\\assets\\2349_map_xml.xml",
+      "sha256": "a7f2633a7248fd31ead4fcb62fc441784798b13f2a550a8ef82344d20dc45d03"
+    },
+    "ocit_c": {
+      "bytes": 303720,
+      "expected_hash_supplied": false,
+      "path": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\official_first_named_corridor_v1\\official\\signals\\assets\\2349_ocit_xml.xml",
+      "sha256": "42ccb6100222a61eed8d6e97ce6441a64240ce01541791e3e74aab2d74a81537"
+    }
+  },
+  "status": "pass",
+  "structural_compiler_defaults": {
+    "claim": "compilation_only",
+    "field_evidence": "not_available_in_MAP_KML_or_OCIT-C",
+    "lane_width_m": 3.2,
+    "speed_mps": 13.89
+  }
+}

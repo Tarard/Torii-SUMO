@@ -1,0 +1,41 @@
+{
+  "command": [
+    "sumo",
+    "-n",
+    "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\candidate\\hamburg_sandtorkai_canonical_w1.net.xml",
+    "--no-step-log",
+    "true",
+    "--duration-log.disable",
+    "true",
+    "--begin",
+    "0",
+    "--end",
+    "1"
+  ],
+  "command_result": {
+    "command": [
+      "sumo",
+      "-n",
+      "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\candidate\\hamburg_sandtorkai_canonical_w1.net.xml",
+      "--no-step-log",
+      "true",
+      "--duration-log.disable",
+      "true",
+      "--begin",
+      "0",
+      "--end",
+      "1"
+    ],
+    "cwd": "E:\\CODE\\VS-Code-Backup\\Torii-SUMO-html-branch\\artifacts\\hamburg_sandtorkai_twin_20260719\\canonical_w1_20260723_v2\\evidence\\sumo_load",
+    "error": "",
+    "returncode": 0,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "schema": "torii.sumo-load-audit/v1",
+  "source_net_file": "../../candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+  "source_network_mutation": false,
+  "source_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+  "status": "pass"
+}

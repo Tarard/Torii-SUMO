@@ -1,0 +1,97 @@
+Parsing types from 'C:\Users\Danial\AppData\Local\Programs\Eclipse SUMO\sumo-1.27.1/data/typemap/osmNetconvert.typ.xml' ... done.
+Parsing nodes from osm-file 'osm/hamburg_sandtorkai_aerial_cad_complete_ways_filtered.osm.xml.gz' ... done (14ms).
+Parsing edges from osm-file 'osm/hamburg_sandtorkai_aerial_cad_complete_ways_filtered.osm.xml.gz' ... done (40ms).
+Removing duplicate edges ... done.
+Parsing relations from osm-file 'osm/hamburg_sandtorkai_aerial_cad_complete_ways_filtered.osm.xml.gz' ...
+ done (2ms).
+ Import done:
+   981 nodes loaded.
+   38 types loaded.
+   1609 edges loaded.
+Proj projection parameters used: '+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs'.
+Removing self-loops ... done (0ms).
+Processing public transport stops ... done (1ms).
+Align pt stop id signs with corresponding edge id signs ... done (0ms).
+Removing empty nodes ... done (1ms).
+   0 nodes removed.
+Moving network to origin ... done (3ms).
+Computing turning directions ...
+ done (1ms).
+Assigning nodes to traffic lights ... done (0ms).
+Sorting nodes' edges ... done (1ms).
+Computing node shapes ... done (21ms).
+Computing edge shapes ... done (8ms).
+Computing node types ... done (0ms).
+Computing priorities ... done (1ms).
+Computing approached edges ... done (1ms).
+Guessing and setting roundabouts ... done (1ms).
+Computing approaching lanes ... done (3ms).
+Dividing of lanes on approached lanes ... done (5ms).
+Processing turnarounds ... done (0ms).
+Rechecking of lane endings ... done (1ms).
+Joining traffic light nodes ... done (1ms).
+Computing traffic light control information ... done (1ms).
+Computing node logics ... done (4ms).
+Computing traffic light logics ...
+ done (9ms).
+ 218 traffic light(s) computed.
+Building inner edges ...
+ done (12ms).
+Find accesses for pt rail stops ... done (4ms).
+-----------------------------------------------------
+Summary:
+ Node type statistics:
+  Unregulated junctions       : 0
+  Dead-end junctions          : 137
+  Priority junctions          : 548
+  Right-before-left junctions : 46
+  Traffic light junctions      : 250
+ Network boundaries:
+  Original boundary  : 9.98,53.54,10.01,53.55
+  Applied offset     : -564835.27,-5932720.29
+  Converted boundary : 0.00,0.00,1854.82,1113.40
+-----------------------------------------------------
+Writing network ... done (142ms).
+Success.
+
+Warning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|highway.secondary' (first occurrence for edge '4313743').
+Warning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|highway.unclassified' (first occurrence for edge '4424928').
+Warning: Discarding unknown compound 'cycleway.track' in type 'cycleway.track|highway.secondary' (first occurrence for edge '23925229').
+Warning: Discarding unknown compound 'cycleway.lane' in type 'cycleway.lane|cycleway.track|highway.secondary' (first occurrence for edge '46239724').
+Warning: Discarding unknown compound 'cycleway.track' in type 'cycleway.lane|cycleway.track|highway.secondary' (first occurrence for edge '46239724').
+Warning: Ignoring placement for edge '554713082#0' because lane index '2' is out of range [1, 1].
+Warning: No way found for reference '19199911' in relation '7922511'
+Warning: Ignoring restriction relation '7922511' with unknown from-way.
+Warning: direction of restriction relation could not be determined
+Warning: Ignoring restriction relation '9684235'.
+Warning: direction of restriction relation could not be determined
+Warning: Ignoring restriction relation '9684236'.
+Warning: direction of restriction relation could not be determined
+Warning: Ignoring restriction relation '9898118'.
+Warning: direction of restriction relation could not be determined
+Warning: Ignoring restriction relation '9898119'.
+Warning: direction of restriction relation could not be determined
+Warning: Ignoring restriction relation '9966454'.
+Warning: Ambiguity in turnarounds computation at junction '3685836714'.
+Warning: Ambiguity in turnarounds computation at junction '3960117024'.
+Warning: Ambiguity in turnarounds computation at junction '6203394198'.
+Warning: Ambiguity in turnarounds computation at junction '6203394201'.
+Warning: Found sharp turn with radius 7.66 at the start of edge '-1158277219#0'.
+Warning: Found sharp turn with radius 7.66 at the end of edge '1158277219#0'.
+Warning: Found sharp turn with radius 6.36 at the start of edge '22661122'.
+Warning: The traffic light '371188597' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '371188597'
+Warning: The traffic light '8827659753' does not control any links; it will not be build.
+Warning: Could not build program '0' for traffic light '8827659753'
+Warning: The traffic light 'joinedS_11517550896_11517550902_1217212991_1217213006_#13more' cannot be adapted to a cycle time of 90.00.
+Warning: The traffic light 'joinedS_11517550896_11517550902_1217212991_1217213006_#13more' has a high cycle time of 442.00.
+Warning: Speed of straight connection '1410160494_1->8060333_1' reduced by 7.93 due to turning radius of 6.46 (length=1.21, angle=27.27).
+Warning: Speed of straight connection '724567326_0->60578527_0' reduced by 5.56 due to turning radius of 12.62 (length=11.60, angle=71.21).
+Warning: Speed of straight connection '307556942_1->9702439#0_1' reduced by 8.38 due to turning radius of 5.52 (length=1.57, angle=33.99).
+Warning: Speed of straight connection '-10620500#1_0->-10620500#0_0' reduced by 7.36 due to turning radius of 7.75 (length=7.59, angle=77.50).
+Warning: Speed of straight connection '10620500#0_0->10620500#1_0' reduced by 6.26 due to turning radius of 10.57 (length=8.97, angle=67.62).
+Warning: 14 total messages of type: Discarding unknown compound '%' in type '%' (first occurrence for edge '%').
+Warning: 11 total messages of type: Ignoring restriction relation '%'.
+Warning: 7 total messages of type: Speed of % connection '%' reduced by % due to turning radius of % (length=%, angle=%).
+Warning: 11 total messages of type: direction of restriction relation could not be determined%
+

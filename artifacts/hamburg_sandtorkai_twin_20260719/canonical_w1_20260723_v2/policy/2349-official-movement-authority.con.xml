@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<connections>
+    <!-- Hamburg MAP/OCIT 2349 movement inventory, connection 8. -->
+    <connection from="554713078#2" to="554713075#0" fromLane="0" toLane="1"/>
+    <delete from="554713078#2" to="554713075#0" fromLane="1" toLane="1"/>
+
+    <!-- Hamburg MAP/OCIT 2349 movement inventory, connection 9 continuation. -->
+    <connection from="194672083" to="127716467#0" fromLane="1" toLane="0"/>
+</connections>

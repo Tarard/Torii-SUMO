@@ -1,0 +1,38 @@
+{
+  "links": [
+    {
+      "geometry_order": "auto",
+      "link_object_id": "strassennetz_gesamt:242500211:242500071:A326:295:ast-0:len-986",
+      "station_from_m": 660,
+      "station_to_m": 986
+    },
+    {
+      "geometry_order": "source_order_is_with_stationing",
+      "link_object_id": "strassennetz_gesamt:242510300:242514481:G485:8568:ast-0:len-176"
+    },
+    {
+      "geometry_order": "source_order_is_against_stationing",
+      "link_object_id": "strassennetz_gesamt:242516613:242514393:A709:9914:ast-0:len-152"
+    },
+    {
+      "geometry_order": "source_order_is_against_stationing",
+      "link_object_id": "strassennetz_gesamt:242613918:242500071:O219:9924:ast-0:len-346",
+      "station_from_m": 191,
+      "station_to_m": 346
+    },
+    {
+      "geometry_order": "source_order_is_against_stationing",
+      "link_object_id": "strassennetz_gesamt:242500071:242615095:B623:1124:ast-0:len-225"
+    },
+    {
+      "geometry_order": "source_order_is_against_stationing",
+      "link_object_id": "strassennetz_gesamt:242516617:242514394:S942:9919:ast-0:len-138"
+    },
+    {
+      "geometry_order": "source_order_is_against_stationing",
+      "link_object_id": "strassennetz_gesamt:242514393:242514394:T235:9920:ast-0:len-68"
+    }
+  ],
+  "schema": "torii.hamburg-hh-sib-corridor-scope/v1",
+  "scope_id": "hamburg_sandtorkai_2349_2394_2403_named_entries_v1"
+}

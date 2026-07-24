@@ -59,27 +59,29 @@ Torii 有两层：
 
 <p><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="清洗前 OSM 派生拓扑" width="100%"></p>
 
-**Torii 清洗走廊——完整 Connection Mode**
+**Torii 清洗走廊——历史 Connection Mode 总览**
 
-<p><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="NetEdit Connection Mode 中完整的汉堡修复走廊" width="100%"></p>
+<p><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="NetEdit Connection Mode 中的汉堡历史走廊总览" width="100%"></p>
 
-最后一张图是刚重新生成的**完整修正版路网 Connection Mode**，不是局部截图，绑定网络 SHA-256 `2da03214…f5c559`。另外的 `NeteditTargetSession` 已真实点击 2403 网络对象并确认左侧显示 `Net: junction`、不是 polygon；该局部证明保留为仓库证据，但不作为报告主图。该 2403 单核心探针保留 18/18 条边界 movement，表面重叠为 0，可被 SUMO 加载，18/18 条 movement smoke 全部到达，碰撞和 teleport 均为 0；但由于官方尚未发布可绑定的 2403 MAP/OCIT，它仍是审核候选，不是最终官方信号模型。
+上图只保留为历史总览，不能证明旧 `2da03214…` compact candidate 完整保留了航拍范围内的道路。唯一 canonical W1 是 [`canonical_w1_20260723_v2/manifest/hamburg_official_corridor_geometry.manifest.json`](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/manifest/hamburg_official_corridor_geometry.manifest.json)，其 manifest SHA-256 为 `c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc`，绑定网络 SHA-256 `b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98`；准确的两阶段 PlainXML/netconvert 命令及输入哈希冻结在 [canonical build spec](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/canonical-w1-build-spec.json)。
+
+验收标准以汉堡 2024 航拍和汉堡道路 CAD/施工图为准。W1 先选择与其 buffered scope 相交的完整 OSM ways，再物化 SUMO graph；source ways 不按 bbox 边界截断。[完整 way 获取审计](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/source_complete_ways/complete-way-acquisition.json) 证明 762/762 条选中 way 原样保留，其中 61 条含 bbox 外节点。preservation ledger 将 1,609 条 baseline external edge 全部解释为 1,602 条保留和 7 条 conflict-core internalized，无法解释的丢失为 0；无证据掉头为 0。与 canonical W1 SHA 哈希绑定、需复核的 2403 账本生成 16/16 条全部通过的 movement smoke 路线，teleport/collision 均为 0；账本与航拍/CAD 的语义证据绑定仍为 `review_required`。SUMO load 通过；surface 与目标范围 Connection Mode 仍为 `review_required`，因此当前结论是 topology-ready W1，不是已验收的现场等价数字孪生。
 
 ### 信号灯、传感器和 route 复原
 
 <p><img src="docs/assets/hamburg-digital-twin/torii-2403-junction-connection.png" alt="NetEdit Connection Mode 中的 2403 局部路口" width="100%"></p>
 
-| 层 | 已实现证据 | 当前边界 |
+| 层 | canonical W1 证据 | 当前边界 |
 |---|---|---|
-| 信号灯 | 2349、2394 的 TLD 主信号流已绑定到官方 MAP movement 和实际 SUMO controller `linkIndex`。 | 2403 只有官方 LSA 身份，没有公开 MAP/OCIT 包；Torii 不猜控制器。 |
-| 传感器 | 方向站点已通过 composition 绑定到物理 field；E1 用于计数，E2 只用于排队/占有率诊断。 | 19 条映射流中 11 条车道身份为低置信度，因此自动晋级继续阻断。 |
-| 路线逆问题 | 使用非负整数约束 `H x_t = y_t`；诊断矩阵为 6×58、rank 6、nullity 52。 | 多条 route 对传感器不可区分，只能得到一个可行解。 |
-| 精确矩阵诊断 | 关闭 TLS 时，60/60 个站点时间桶、5,928 辆计数完全一致。 | 只证明需求反演器，不证明现场信号回放。 |
-| 官方历史严格窗口 | 15 条候选路线、7 条受测道路、8 个 15 分钟片；route 约束匹配 100%，7,200 秒内零碰撞、零 teleport。 | E1 MAE 仍为 26.47，且 2403/车道证据门禁未过；状态为 `detector-constrained-diagnostic-replay`。 |
+| 道路拓扑 | 完整保留相交的 OSM ways；1,602 条 external edge 保留、7 条 conflict-core edge internalized；无无理由支路丢失，无证据掉头为 0。 | `pass`；surface 与目标范围 Connection Mode 仍为 `review_required`。 |
+| 2403 movements | 与 canonical W1 SHA 哈希绑定、需复核的 CAD/航拍/OSM 账本生成 smoke 路线，16/16 通过，teleport/collision 均为 0。 | 语义绑定仍为 `review_required`，只证明拓扑可运行；不猜未公开的 2403 控制器。 |
+| 信号灯（W2） | 2349/2394 的历史 MAP/TLD 证据仍可用于重绑。 | `blocked`，直到对 canonical W1 SHA 的绑定通过。 |
+| 传感器（W3b） | 方向站点和物理 field 可对新 W1 重绑。 | `partial`/`review_required`，等待共享车道语义确认。 |
+| 回放（W4） | 较早的逆需求和官方历史运行只保留为历史诊断。 | `blocked`；旧回放不能作为 canonical W1 结果晋级。 |
 
 #### 汉堡官方计数与 SUMO E1 读数对比
 
-下表是对应“站点 × 15 分钟”比较桶的计数总和，来自 [`hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json) 所绑定的 W3/W4 冻结证据。
+下表是对应“站点 × 15 分钟”比较桶的计数总和，属于 [`hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json) 记录的 pre-canonical W3/W4 冻结诊断，不是 canonical W1 的已验收输出。
 
 | 回放场景 | 有效比较桶 | 汉堡官方计数 | SUMO E1 计数 | 差值 | 每桶 MAE | 单桶最大误差 | 结论 |
 |---|---:|---:|---:|---:|---:|---:|---|
@@ -95,16 +97,16 @@ route 复原明确是一个**非唯一解**。Torii 先枚举 58 条可能经过
           x_t >= 0 且为整数
 ```
 
-其中 `y_t` 是汉堡官方计数向量，`x_t_prior` 是 `routeSampler` 生成的一组可行先验。矩阵为 6×58，rank 为 6、nullity 为 52，因此很多不同的 route 组合会产生相同传感器读数。Torii 只返回一组尽量接近先验的可行整数解，再在 SUMO 中排程车辆，并把 E1 残差作为反馈；它不声称恢复了唯一 OD 或每辆现实车辆的轨迹。关闭 TLS 的两行用于验证 estimator/controller 闭环，官方历史信号这一行才是当前面向现实的验收结果，而且仍处于 blocked 状态。
+其中 `y_t` 是汉堡官方计数向量，`x_t_prior` 是 `routeSampler` 生成的一组可行先验。矩阵为 6×58，rank 为 6、nullity 为 52，因此很多不同的 route 组合会产生相同传感器读数。Torii 只返回一组尽量接近先验的可行整数解，再在 SUMO 中排程车辆，并把 E1 残差作为反馈；它不声称恢复了唯一 OD 或每辆现实车辆的轨迹。关闭 TLS 的两行用于验证 estimator/controller 闭环；官方历史信号这一行只是 blocked 的 pre-canonical 现场诊断。
 
-Workflow v2 还会阻止跨路网复用：冻结的 W1/W4 证据绑定 SHA-256 `559a5752…`，旧 W2/W3 诊断证据绑定 `aa1676df…`。W4 虽使用 W1 路网，但其 v2 之前的 manifest 未记录选定的 W3b 映射和准确的信号事件字节。这些运行仍可作为历史诊断；W2、W3b 和 W4 必须重建后，才能被同一个 v2 ledger 接受。
+Workflow v2 会阻止跨路网复用。CLI、README、W2、W3b、W4 必须解析上面的 canonical W1 manifest 及其准确的 `b7b58b1…7fa98` 网络 SHA，不能按目录新旧猜测。当前 W2、W4 为 blocked，W3b 因共享车道语义待确认而为 partial；`2da03214…`、`559a5752…`、`aa1676df…` 只保留为历史诊断。
 
 ### 展示内容与仓库内容分层
 
 | 适合在 README/项目页展示 | 直接放入仓库、用于复现 |
 |---|---|
 | 精选航拍、施工图、OSM 输入、Connection Mode 清洗结果、TLS 截图和核心指标。 | 分阶段 workflow 代码、官方数据 adapter、测试、简要开发日志、schema、来源与 SHA-256 证据摘要。 |
-| 人能读懂的结论和明确限制。 | 完整生成网络、API 缓存、E1/E2 XML、route ensemble 和 NetEdit 会话仍放在可重建的 `artifacts/`/`outputs/`，不把数 GB/上百 GB 运行缓存塞进 Git。 |
+| 人能读懂的结论和明确限制。 | 冻结的 canonical 验收切片可把准确路网、source snapshot 和审计纳入 Git；大批 API 缓存、重复运行、route ensemble 以及大型 E1/E2/NetEdit 会话仍放在可重建的 `artifacts/`/`outputs/`。 |
 
 图片来源与许可见[图片证据说明](docs/assets/hamburg-digital-twin/README.md)，核心机器证据见 [`docs/hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json)，每轮做过什么见[持续开发日志](docs/hamburg-digital-twin-development-log.md)。官方来源包括 [Hamburg LGV DOP](https://metaver.de/trefferanzeige?docuuid=cc0eaed8-cb36-44a0-9bda-153f28d9e7ba) 和 [LSBG 施工图](https://lsbg.hamburg.de/resource/blob/784084/6a06328b36b0de140d75baac9165f8f7/am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-abgestimmte-planung-plan-data.pdf)。
 
@@ -119,13 +121,13 @@ W0 -> W3a
 W0-W4 ledger 状态 -> W5 派生能力摘要
 ```
 
-Torii 复用现有模块，不另造第二套路网算法。W3a 不依赖路网；W3b、W2 和 W4 必须绑定 W1 的准确网络 SHA-256。W4 还会消费选定的 W2/W3a/W3b 身份，并拒绝语义未确认的共享车道聚合。W5 是 planner 自动生成的能力摘要，不是真实产品 artifact，也不接受外部 manifest。复制[配置模板](docs/hamburg-digital-twin-workflow.example.json)，把 `<run>` 替换为真实 stage manifest 路径，然后运行：
+Torii 复用现有模块，不另造第二套路网算法。W3a 不依赖路网；W3b、W2 和 W4 必须绑定 W1 的准确网络 SHA-256。W4 还会消费选定的 W2/W3a/W3b 身份，并拒绝语义未确认的共享车道聚合。W5 是 planner 自动生成的能力摘要，不是真实产品 artifact，也不接受外部 manifest。[canonical workflow 配置](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/canonical-workflow.json) 会直接解析当前 W0–W4，不按目录新旧猜测；[配置模板](docs/hamburg-digital-twin-workflow.example.json) 仍用于后续运行。
 
 ```powershell
-python plugins/torii-sumo/scripts/run_hamburg_execution_plan.py --config hamburg-workflow.json
+python plugins/torii-sumo/scripts/run_hamburg_execution_plan.py --config artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/canonical-workflow.json
 ```
 
-配置内路径相对配置文件解析；任一上游 manifest/feedback 哈希变化只会使已经生成的依赖阶段失效。源路网不被覆盖，缺失官方资产只会形成 blocked gate，不会被模型猜测补齐。
+仅 workflow config/stage paths 相对配置文件解析；这不表示所有证据文件都可独立移植。任一上游 manifest/feedback 哈希变化只会使已经生成的依赖阶段失效。源路网不被覆盖，缺失官方资产只会形成 blocked gate，不会被模型猜测补齐。
 
 ### 无 teacher 的小路网自动发现
 

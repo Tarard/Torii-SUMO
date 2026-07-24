@@ -19,7 +19,8 @@ def _manifest(value: str) -> tuple[str, Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bind official Hamburg TLD signal streams to MAP/SUMO movements.")
-    parser.add_argument("--net-file", required=True, type=Path)
+    parser.add_argument("--net-file", type=Path)
+    parser.add_argument("--w1-manifest", required=True, type=Path)
     parser.add_argument("--intersection-manifest", required=True, action="append", type=_manifest)
     parser.add_argument("--signal-stream-file", required=True, action="append", type=Path)
     parser.add_argument("--compound-tls-manifest", type=Path)
@@ -29,6 +30,7 @@ def main() -> int:
     try:
         report = materialize_hamburg_named_signal_binding(
             net_file=args.net_file,
+            w1_manifest_file=args.w1_manifest,
             intersection_manifests=dict(args.intersection_manifest),
             signal_stream_files=args.signal_stream_file,
             output_dir=args.output_dir,

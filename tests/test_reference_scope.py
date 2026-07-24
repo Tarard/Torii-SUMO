@@ -186,6 +186,7 @@ def test_reference_bbox_variant_projects_bbox_and_keeps_source_unchanged(tmp_pat
     assert report["reference_xy_boundary"]["min_y"] < report["reference_xy_boundary"]["max_y"]
     assert calls[0][calls[0].index("--keep-edges.in-boundary") + 1] == "4935.864,3442.882,6476.162,5712.616"
     assert "--keep-edges.postload" in calls[0]
+    assert "--no-turnarounds" in calls[0]
     assert reference_net.read_text(encoding="utf-8").startswith("<net>")
     assert Path(report["variant_file"]).is_file()
 

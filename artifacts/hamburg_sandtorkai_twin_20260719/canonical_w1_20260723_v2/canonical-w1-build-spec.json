@@ -1,0 +1,133 @@
+{
+  "schema": "torii.hamburg-canonical-w1-build/v1",
+  "status": "frozen",
+  "scope_policy": {
+    "authority": [
+      "Hamburg 2024 aerial imagery",
+      "Hamburg 2022 road CAD"
+    ],
+    "osm_role": "continuous road geometry and base topology",
+    "acquisition_bbox": [
+      9.980106927466423,
+      53.540533691913986,
+      10.003689463043568,
+      53.54865291573397
+    ],
+    "clip_source_ways_to_bbox": false,
+    "selection_rule": "retain each complete OSM way intersecting the buffered aerial/CAD scope; never truncate a selected way at the bbox"
+  },
+  "inputs": {
+    "build_provenance": {
+      "path": "canonical_build/logs/hamburg_sandtorkai_canonical_w1_build_manifest.json",
+      "sha256": "bedbc13270d96777539472a5424b712732880ad676adf248111d25fe5fd66313"
+    },
+    "complete_way_acquisition": {
+      "path": "source_complete_ways/complete-way-acquisition.json",
+      "sha256": "b29d28542204d91b4fab3611d48240a748c6fc35ae940336255b55bfeac2eb04"
+    },
+    "source_osm_snapshot": {
+      "path": "source_complete_ways/osm/hamburg_sandtorkai_aerial_cad_complete_ways_bbox.osm.xml.gz",
+      "sha256": "a995b4da61f7c4ba1c03ec4b00478f27fbf7e575f101ae8226a60e6d16e589ca"
+    },
+    "filtered_complete_ways": {
+      "path": "canonical_build/osm/hamburg_sandtorkai_canonical_w1_filtered.osm.xml.gz",
+      "sha256": "5c6aa03657052979dbaa0c9dbb06d6f9a3bed321ea759d884714f616bcb0cb40"
+    },
+    "baseline_network": {
+      "path": "canonical_build/sumo/hamburg_sandtorkai_canonical_w1.net.xml",
+      "sha256": "c8d4e30d6d3bf2e44dc920eb59ceab9663130731b6402047b62a7da622f582fd",
+      "external_edge_count": 1609
+    },
+    "physical_conflict_core_joins": {
+      "path": "policy/physical-conflict-core-joins.nod.xml",
+      "sha256": "487957aba79730655c8730c4a5e4195eda24034780a0c8d67394a879f10d09e1"
+    },
+    "unsupported_turnaround_prune": {
+      "path": "policy/unsupported-turnaround-prune.con.xml",
+      "sha256": "54a962518081f93f8c226425125c635969971b31b5ac939730a91cb4d375cec7"
+    },
+    "official_2349_movements": {
+      "path": "policy/2349-official-movement-authority.con.xml",
+      "sha256": "b8ed38bd5cb4fbf2274ec9df0c82f060cf409cc0af74a48ea3e6d22c5bbd56e6"
+    },
+    "cad_2403_movements": {
+      "path": "policy/2403-cad-movement-authority.con.xml",
+      "sha256": "d4fca42fc49641de8cf34fcfd4cb5a6d82fbd205393f5ceecd344fa4800ab5d6"
+    }
+  },
+  "materialization": [
+    {
+      "step": "join_physical_conflict_cores",
+      "command": [
+        "netconvert",
+        "--sumo-net-file",
+        "canonical_build/sumo/hamburg_sandtorkai_canonical_w1.net.xml",
+        "--node-files",
+        "policy/physical-conflict-core-joins.nod.xml",
+        "--output-file",
+        "candidate/hamburg_sandtorkai_canonical_w1_joined-unpruned.net.xml",
+        "--junctions.join-output",
+        "evidence/physical-conflict-core-joins.xml",
+        "--offset.disable-normalization",
+        "--no-turnarounds",
+        "--no-turnarounds.tls",
+        "--no-turnarounds.geometry",
+        "--no-turnarounds.fringe"
+      ],
+      "output_sha256": "63d0bbc701e68e298c4365c20cc819dd3f6f2aed3d8eaf02412cd96ee93ac3dd"
+    },
+    {
+      "step": "apply_evidence_authorized_connections",
+      "command": [
+        "netconvert",
+        "--sumo-net-file",
+        "candidate/hamburg_sandtorkai_canonical_w1_joined-unpruned.net.xml",
+        "--connection-files",
+        "policy/unsupported-turnaround-prune.con.xml,policy/2349-official-movement-authority.con.xml,policy/2403-cad-movement-authority.con.xml",
+        "--output-file",
+        "candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+        "--offset.disable-normalization",
+        "--no-turnarounds",
+        "--no-turnarounds.tls",
+        "--no-turnarounds.geometry",
+        "--no-turnarounds.fringe"
+      ],
+      "output_sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98"
+    }
+  ],
+  "output": {
+    "path": "candidate/hamburg_sandtorkai_canonical_w1.net.xml",
+    "sha256": "b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98",
+    "external_edge_count": 1602,
+    "internalized_edge_count": 7,
+    "excluded_edge_count": 0,
+    "unsupported_turnaround_count": 0,
+    "named_boundary_regression": {
+      "status": "pass",
+      "missing_edge_ids": [],
+      "present_edge_ids": [
+        "1167614257#1",
+        "957130878#0",
+        "127716468#1",
+        "61649649#2",
+        "10620500#4",
+        "-10620500#4",
+        "10620500#5",
+        "-10620500#5",
+        "554713073",
+        "-554713073",
+        "9702436",
+        "-9702436",
+        "25400603",
+        "-25400603",
+        "825710900",
+        "554713070",
+        "152813966",
+        "554713069",
+        "152813986",
+        "-152813986"
+      ]
+    }
+  },
+  "claim_boundary": "This freezes the exact topology candidate and its build inputs. It does not promote unresolved surface, signal-control, detector-aggregation, or replay capabilities."
+}

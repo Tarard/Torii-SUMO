@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pyproj import Transformer
 
+from torii_sumo.core.candidate_contracts import file_sha256
 from torii_sumo.core.hamburg_named_detector_bindings import (
     materialize_hamburg_named_detector_bindings,
 )
@@ -35,6 +36,22 @@ def _write_network(path: Path, *, parallel: bool) -> tuple[float, float]:
         encoding="utf-8",
     )
     return transformer.transform(x, y)
+
+
+def _write_w1_manifest(tmp_path: Path, net: Path) -> Path:
+    manifest = tmp_path / "W1.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": "torii.hamburg-official-corridor-geometry/v1",
+                "status": "review_ready",
+                "execution_gate": "pass",
+                "network": {"path": net.name, "sha256": file_sha256(net)},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest
 
 
 def _write_stream_snapshot(path: Path, longitude: float, latitude: float) -> None:
@@ -190,17 +207,21 @@ def _write_movement_evidence(path: Path) -> None:
 def test_projection_fallback_promotes_unique_geometry_binding_and_withholds_no_sensor(tmp_path: Path) -> None:
     net = tmp_path / "candidate.net.xml"
     lon, lat = _write_network(net, parallel=False)
+    w1_manifest = _write_w1_manifest(tmp_path, net)
     streams = tmp_path / "streams.raw.json"
     _write_stream_snapshot(streams, lon, lat)
 
     report = materialize_hamburg_named_detector_bindings(
-        net_file=net,
+        w1_manifest_file=w1_manifest,
         count_stream_file=streams,
         output_dir=tmp_path / "bindings",
     )
 
     assert report["automatic_promotion_gate"] == "pass"
     assert report["gates"]["coordinate_projection"] == "pass"
+    assert report["source"]["w1_manifest"]["sha256"] == file_sha256(w1_manifest)
+    assert not Path(report["source"]["w1_manifest"]["path"]).is_absolute()
+    assert not Path(report["artifacts"]["detector_mapping"]["path"]).is_absolute()
     assert report["artifacts"]["e1_e2_additional"]["status"] == "withheld_pending_complete_lane_mapping"
     with (tmp_path / "bindings" / "detector_mapping.csv").open(encoding="utf-8", newline="") as handle:
         row = next(csv.DictReader(handle))
@@ -215,6 +236,7 @@ def test_parallel_lane_tie_is_rejected_without_manual_override(tmp_path: Path) -
     _write_stream_snapshot(streams, lon, lat)
 
     report = materialize_hamburg_named_detector_bindings(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         count_stream_file=streams,
         output_dir=tmp_path / "bindings",
@@ -243,6 +265,7 @@ def test_shared_lane_streams_withhold_sensor_materialization_without_aggregation
     streams.write_text(json.dumps(snapshot), encoding="utf-8")
 
     report = materialize_hamburg_named_detector_bindings(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         count_stream_file=streams,
         output_dir=tmp_path / "bindings",
@@ -272,6 +295,7 @@ def test_serial_edge_cut_is_one_lane_hypothesis_and_uses_upstream_segment(tmp_pa
     _write_stream_snapshot(streams, lon, lat)
 
     report = materialize_hamburg_named_detector_bindings(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         count_stream_file=streams,
         output_dir=tmp_path / "bindings",
@@ -297,6 +321,7 @@ def test_official_map_lane_identity_resolves_parallel_geometry_tie(tmp_path: Pat
     _write_map_lane(map_file)
 
     report = materialize_hamburg_named_detector_bindings(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         count_stream_file=streams,
         output_dir=tmp_path / "bindings",
@@ -319,6 +344,7 @@ def test_official_lane_count_and_detector_constellation_resolve_common_geometry_
     _write_movement_evidence(evidence)
 
     report = materialize_hamburg_named_detector_bindings(
+        w1_manifest_file=_write_w1_manifest(tmp_path, net),
         net_file=net,
         count_stream_file=streams,
         output_dir=tmp_path / "bindings",

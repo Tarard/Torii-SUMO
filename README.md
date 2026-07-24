@@ -60,27 +60,29 @@ The product target is the three-node **Am Sandtorkai 2349 → 2394 → 2403** co
 
 <p><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="OSM-derived Hamburg topology before corridor cleanup" width="100%"></p>
 
-**Torii cleaned corridor — full Connection Mode**
+**Torii cleaned corridor — historical Connection Mode overview**
 
-<p><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Complete repaired Hamburg corridor in NetEdit Connection Mode" width="100%"></p>
+<p><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Historical Hamburg corridor overview in NetEdit Connection Mode" width="100%"></p>
 
-The final image is a background capture of the **complete repaired network in Connection Mode**, not a local crop. It binds to network SHA-256 `2da03214…f5c559`. A separate `NeteditTargetSession` check clicked the real 2403 network object and verified that the left pane says `Net: junction`, not polygon; that local proof is retained as repository evidence but is not used as the report's main image. The bounded 2403 single-core probe preserves all 18 boundary movements, has zero surface overlaps, loads in SUMO, and completes 18/18 movement smoke trips without collision or teleport. It remains review-only because Hamburg has not published a bindable 2403 MAP/OCIT package.
+The image above is retained as a historical overview; it is not evidence that the old `2da03214…` compact candidate preserved every road visible in the aerial scope. The only canonical W1 is [`canonical_w1_20260723_v2/manifest/hamburg_official_corridor_geometry.manifest.json`](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/manifest/hamburg_official_corridor_geometry.manifest.json), with manifest SHA-256 `c7ecb325fae05b6110379e81f144e03afef3009ee40f52ad035131538cf0fefc`, and it binds network SHA-256 `b7b58b1c41c20a69aab98daf1e6675f93d5c4d69e4ab323d72aef2921af7fa98`; its exact two-step PlainXML/netconvert recipe and input hashes are frozen in the [canonical build spec](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/canonical-w1-build-spec.json).
+
+The 2024 Hamburg aerial and Hamburg road CAD/construction drawing are the acceptance authority. W1 selects complete OSM ways intersecting their buffered scope before SUMO graph materialization; source ways are not clipped at the bbox boundary. The [complete-way acquisition audit](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/source_complete_ways/complete-way-acquisition.json) retains 762/762 selected ways unchanged, including 61 ways with nodes outside the bbox. The preservation ledger accounts for all 1,609 baseline external edges as 1,602 preserved and seven internalized conflict-core edges, with zero unexplained loss. Unsupported turnarounds are zero. The canonical-W1-hash-bound, review-required 2403 ledger generates 16/16 passing movement-smoke routes with zero teleports and collisions; its semantic evidence binding remains `review_required`. SUMO load passes; surface and target-scope Connection Mode findings remain `review_required`, so this is a topology-ready W1, not an accepted field-faithful digital twin.
 
 ### Signals, detectors, and reconstructed routes
 
 <p><img src="docs/assets/hamburg-digital-twin/torii-2403-junction-connection.png" alt="Hamburg node 2403 local junction in NetEdit Connection Mode" width="100%"></p>
 
-| Layer | Implemented evidence | Current claim boundary |
+| Layer | Canonical-W1 evidence | Current claim boundary |
 |---|---|---|
-| Traffic signals | Nodes 2349 and 2394 bind official TLD primary-signal streams to official MAP movements and concrete SUMO controller `linkIndex` values. | Node 2403 has an official LSA identity but no published MAP/OCIT bundle; its controller is not guessed. |
-| Sensors | Processed directional stations are joined to their component physical fields; SUMO E1 is used for counts and E2 only for queue/occupancy diagnostics. | 19 mapped streams include 11 low-confidence lane identities, so automatic promotion remains blocked. |
-| Route inverse problem | `H x_t = y_t`, with non-negative integer route allocations. The diagnostic matrix is 6×58, rank 6, nullity 52: many routes are observationally equivalent. | The solution is one plausible realization, not unique trajectories or a unique OD matrix. |
-| Exact matrix diagnostic | With TLS disabled, 60/60 station bins and 5,928 vehicles match exactly. | This proves the inverse-demand machinery, not field signal replay. |
-| Strict official-history replay | 15 candidate routes, seven measured edges, eight 15-minute bins, route constraint match 100%, zero collision and zero teleport over the 7,200-second official history window. | Sensor MAE is 26.47 and 2403/lane-evidence gates remain blocked; status is `detector-constrained-diagnostic-replay`. |
+| Road topology | Complete intersecting OSM ways; 1,602 external edges preserved and seven conflict-core edges internalized; no unexplained branch loss; unsupported turnarounds zero. | `pass`; surface and target-scope Connection Mode findings remain `review_required`. |
+| 2403 movements | The canonical-W1-hash-bound, review-required CAD/aerial/OSM ledger generates 16/16 passing movement-smoke routes with zero teleports and collisions. | `review_required` semantic binding and topology evidence only; no unpublished 2403 controller is guessed. |
+| Traffic signals (W2) | Historical 2349/2394 MAP/TLD evidence exists. | `blocked` until a signal binding passes against the canonical W1 SHA. |
+| Sensors (W3b) | Directional stations and physical fields remain available for rebinding. | `partial`/`review_required` until shared-lane semantics are confirmed against canonical W1. |
+| Replay (W4) | Earlier inverse-demand and official-history runs remain historical diagnostics. | `blocked`; no earlier replay is promoted as a canonical-W1 result. |
 
 #### Official Hamburg counts vs SUMO E1 readings
 
-Counts below are sums over the stated station × 15-minute comparison bins. They come from the frozen W3/W4 evidence referenced in [`hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json).
+Counts below are sums over the stated station × 15-minute comparison bins. They are frozen pre-canonical W3/W4 diagnostics referenced in [`hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json), not accepted outputs of the canonical W1.
 
 | Replay case | Comparison bins | Hamburg official count | SUMO E1 count | Difference | MAE per bin | Maximum bin error | Interpretation |
 |---|---:|---:|---:|---:|---:|---:|---|
@@ -96,16 +98,16 @@ subject to H x_t = y_t
            x_t >= 0 and integer
 ```
 
-where `y_t` is the official Hamburg count vector and `x_t_prior` is a feasible `routeSampler` realization. The matrix is 6×58 with rank 6 and nullity 52, so many different route vectors produce the same sensor readings. Torii therefore returns one prior-preserving feasible solution, schedules it in SUMO, and uses the resulting E1 residuals as feedback; it does not claim unique OD flows or individual vehicle trajectories. The exact TLS-off rows validate the estimator/controller loop, while the strict-history row is the current field-facing acceptance result and remains blocked.
+where `y_t` is the official Hamburg count vector and `x_t_prior` is a feasible `routeSampler` realization. The matrix is 6×58 with rank 6 and nullity 52, so many different route vectors produce the same sensor readings. Torii therefore returns one prior-preserving feasible solution, schedules it in SUMO, and uses the resulting E1 residuals as feedback; it does not claim unique OD flows or individual vehicle trajectories. The exact TLS-off rows validate the estimator/controller loop; the strict-history row is a blocked pre-canonical field-facing diagnostic.
 
-Workflow v2 also blocks reuse across network builds: the frozen W1/W4 evidence binds SHA-256 `559a5752…`, while the older W2/W3 diagnostic evidence binds `aa1676df…`. Although W4 uses the W1 network, its pre-v2 manifest does not identify the selected W3b mapping or exact signal-event bytes. These runs remain historical diagnostics; W2, W3b, and W4 must be rebuilt before one v2 ledger can accept them.
+Workflow v2 blocks reuse across network builds. CLI, README, W2, W3b, and W4 must resolve the canonical W1 manifest above and its exact `b7b58b1…7fa98` network SHA; directory recency is not a resolver. Current W2 and W4 are blocked, while W3b is partial pending shared-lane semantics. Earlier `2da03214…`, `559a5752…`, and `aa1676df…` results are historical diagnostics only.
 
 ### What is shown vs what belongs in the repository
 
 | Suitable for the project page | Kept in the repository for reproduction |
 |---|---|
 | Curated aerial, construction-plan excerpt, OSM input, Connection Mode cleanup, TLS view, headline detector/route metrics. | Staged workflow code, source adapters, tests, concise development log, provenance, hashes, schemas, and a compact evidence summary. |
-| Human-readable conclusions and explicit limitations. | Full generated networks, raw API caches, E1/E2 XML, route ensembles, NetEdit sessions, and repeated experiments stay rebuild-only under `artifacts/` or `outputs/`; they are too large and machine-specific for Git. |
+| Human-readable conclusions and explicit limitations. | A frozen canonical acceptance slice may track its exact network, source snapshot, and audits. Bulk API caches, repeated runs, route ensembles, and large E1/E2 or NetEdit sessions remain rebuild-only under `artifacts/` or `outputs/`. |
 
 Sources and attribution are recorded in the [image provenance](docs/assets/hamburg-digital-twin/README.md). The official sources are the [Hamburg LGV DOP service](https://metaver.de/trefferanzeige?docuuid=cc0eaed8-cb36-44a0-9bda-153f28d9e7ba) and the [LSBG construction plan](https://lsbg.hamburg.de/resource/blob/784084/6a06328b36b0de140d75baac9165f8f7/am-sandtorkai-brooktorkai-pop-up-bikelane-verstetigung-abgestimmte-planung-plan-data.pdf). Machine-readable headline evidence is frozen in [`docs/hamburg-digital-twin-evidence-summary.json`](docs/hamburg-digital-twin-evidence-summary.json); the iteration history is in the [development log](docs/hamburg-digital-twin-development-log.md).
 
@@ -122,13 +124,13 @@ W0 -> W3a
 W0-W4 ledger state -> W5 derived capability record
 ```
 
-One portable JSON config drives the resumable ledger. W3a is network-independent; W3b, W2, and W4 must bind the exact W1 network SHA-256. W4 also consumes the selected W2/W3a/W3b identities and rejects unresolved shared-lane aggregation. W5 is a derived capability summary generated by the planner, not a product artifact or caller input. Copy [the example](docs/hamburg-digital-twin-workflow.example.json), replace the `<run>` paths with stage manifests, then run:
+One JSON config, using portable config-relative workflow stage paths, drives the resumable ledger. W3a is network-independent; W3b, W2, and W4 must bind the exact W1 network SHA-256. W4 also consumes the selected W2/W3a/W3b identities and rejects unresolved shared-lane aggregation. W5 is a derived capability summary generated by the planner, not a product artifact or caller input. The [canonical workflow config](artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/canonical-workflow.json) resolves the current W0–W4 artifacts without directory guessing; [the example](docs/hamburg-digital-twin-workflow.example.json) remains the reusable template.
 
 ```powershell
-python plugins/torii-sumo/scripts/run_hamburg_execution_plan.py --config hamburg-workflow.json
+python plugins/torii-sumo/scripts/run_hamburg_execution_plan.py --config artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/canonical-workflow.json
 ```
 
-Every path is resolved relative to the config file. A changed upstream manifest or feedback hash invalidates only already-materialized dependent stages; no source network is overwritten, and a missing official asset remains a blocked gate rather than an inferred fact.
+Workflow config and stage paths are resolved relative to the config file; this does not claim that every evidence file is independently portable. A changed upstream manifest or feedback hash invalidates only already-materialized dependent stages; no source network is overwritten, and a missing official asset remains a blocked gate rather than an inferred fact.
 
 ### Teacher-free small-network discovery
 

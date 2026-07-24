@@ -12,8 +12,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .artifact_io import write_json_atomic
+from .artifact_io import relative_or_absolute_path, write_json_atomic
 from .candidate_contracts import file_sha256
+from .hamburg_w1_manifest import resolve_hamburg_w1_network
 
 
 SIGNAL_BINDING_SCHEMA = "torii.hamburg-named-signal-binding/v1"
@@ -28,7 +29,8 @@ class HamburgSignalBindingError(ValueError):
 
 def materialize_hamburg_named_signal_binding(
     *,
-    net_file: Path,
+    net_file: Path | None = None,
+    w1_manifest_file: Path,
     intersection_manifests: Mapping[str, Path],
     signal_stream_files: Sequence[Path],
     output_dir: Path,
@@ -42,7 +44,10 @@ def materialize_hamburg_named_signal_binding(
     they are never filled with guessed streams or phases.
     """
 
-    net_path = Path(net_file).expanduser().resolve(strict=True)
+    net_path, w1_manifest_identity = resolve_hamburg_w1_network(
+        w1_manifest_file=w1_manifest_file,
+        net_file=net_file,
+    )
     required = tuple(dict.fromkeys(str(node).strip() for node in required_node_ids if str(node).strip()))
     if not required:
         raise HamburgSignalBindingError("at least one required node is needed")
@@ -349,13 +354,50 @@ def materialize_hamburg_named_signal_binding(
     status = "partial" if complete_available and missing_nodes else ("pass" if complete_available else "blocked")
     execution_gate = "pass" if complete_available else "blocked"
     promotion_gate = "pass" if complete_available and not missing_nodes else "blocked"
+    if complete_available:
+        claim_status = (
+            "official-available-node-signal-metadata-bound-partial-coverage"
+            if missing_nodes
+            else "official-tld-primary-signal-metadata-bound-to-map-movements"
+        )
+        claim_proves = [
+            "which official TLD primary-signal streams were used",
+            "which official MAP movement and SUMO controller linkIndex each available-node stream binds to",
+            "that each available-node candidate controlled physical connection set exactly equals the selected official TLS plan",
+            "that missing required-node signal data is explicit rather than guessed",
+        ]
+        claim_does_not_prove = [
+            "historical signal phases or cycle timing",
+            "a complete required-node signal controller while an official asset is missing",
+        ]
+    else:
+        claim_status = "official-signal-binding-diagnostic-structurally-unresolved"
+        claim_proves = [
+            "which exact W1, official MAP/TLD inputs, and optional compound TLS plan were checked",
+            "which movement, physical-connection, controller, or linkIndex discrepancies block binding",
+            "that missing required-node signal data is explicit rather than guessed",
+        ]
+        claim_does_not_prove = [
+            "that any supplied stream is bound to a candidate MAP movement or controller linkIndex",
+            "that the candidate controlled physical connection set equals the selected official TLS plan",
+            "historical signal phases or cycle timing",
+            "a complete required-node signal controller",
+        ]
     binding_file = destination / "official-primary-signal-bindings.json"
     manifest_file = destination / "official-primary-signal-binding.manifest.json"
     write_json_atomic(binding_file, {"schema": SIGNAL_BINDING_SCHEMA, "bindings": bindings}, sort_keys=True)
     source_records = [
-        {"path": str(path), "sha256": file_sha256(path), **metadata}
+        {
+            "path": relative_or_absolute_path(path, manifest_file.parent),
+            "sha256": file_sha256(path),
+            **metadata,
+        }
         for path, metadata in stream_sources
     ]
+    for error in errors:
+        raw_path = error.get("path")
+        if isinstance(raw_path, str) and raw_path:
+            error["path"] = relative_or_absolute_path(Path(raw_path), manifest_file.parent)
     manifest: dict[str, Any] = {
         "schema": SIGNAL_BINDING_SCHEMA,
         "status": status,
@@ -366,16 +408,32 @@ def materialize_hamburg_named_signal_binding(
             else "one or more official signal bindings are structurally unresolved"
         ),
         "automatic_promotion_gate": promotion_gate,
-        "claim_status": "official-tld-primary-signal-metadata-bound-to-map-movements",
+        "claim_status": claim_status,
         "source": {
-            "candidate_net": {"path": str(net_path), "sha256": file_sha256(net_path)},
+            "w1_manifest": {
+                **w1_manifest_identity,
+                "path": relative_or_absolute_path(
+                    Path(w1_manifest_identity["path"]),
+                    manifest_file.parent,
+                ),
+            },
+            "candidate_net": {
+                "path": relative_or_absolute_path(net_path, manifest_file.parent),
+                "sha256": file_sha256(net_path),
+            },
             "intersection_manifests": {
-                node_id: {"path": str(path), "sha256": file_sha256(path)}
+                node_id: {
+                    "path": relative_or_absolute_path(path, manifest_file.parent),
+                    "sha256": file_sha256(path),
+                }
                 for node_id, path in manifest_paths.items()
             },
             "signal_stream_files": source_records,
             "compound_tls_manifest": (
-                {"path": str(compound_path), "sha256": file_sha256(compound_path)}
+                {
+                    "path": relative_or_absolute_path(compound_path, manifest_file.parent),
+                    "sha256": file_sha256(compound_path),
+                }
                 if compound_path is not None
                 else None
             ),
@@ -384,7 +442,10 @@ def materialize_hamburg_named_signal_binding(
         "available_map_node_ids": sorted(local),
         "missing_official_signal_node_ids": missing_nodes,
         "node_reports": node_reports,
-        "binding_artifact": {"path": str(binding_file), "sha256": file_sha256(binding_file)},
+        "binding_artifact": {
+            "path": relative_or_absolute_path(binding_file, manifest_file.parent),
+            "sha256": file_sha256(binding_file),
+        },
         "historical_signal_replay": {
             "status": "blocked_pending_official_observations",
             "reason": "metadata identifies controlled movements but does not contain the requested Saturday history",
@@ -400,18 +461,13 @@ def materialize_hamburg_named_signal_binding(
             "automatic_promotion": promotion_gate,
         },
         "claim_boundary": {
-            "proves": [
-                "which official TLD primary-signal streams were used",
-                "which official MAP movement and SUMO controller linkIndex each stream binds to",
-                "that the candidate controlled physical connection set exactly equals the selected official TLS plan",
-                "that missing 2403 signal data is explicit rather than guessed",
-            ],
-            "does_not_prove": [
-                "historical Saturday signal phases or cycle timing",
-                "a complete three-node signal controller while a required node is missing",
-            ],
+            "proves": claim_proves,
+            "does_not_prove": claim_does_not_prove,
         },
-        "artifacts": {"bindings": str(binding_file), "manifest": str(manifest_file)},
+        "artifacts": {
+            "bindings": relative_or_absolute_path(binding_file, manifest_file.parent),
+            "manifest": relative_or_absolute_path(manifest_file, manifest_file.parent),
+        },
     }
     write_json_atomic(manifest_file, manifest, sort_keys=True)
     return {**manifest, "manifest_file": str(manifest_file)}

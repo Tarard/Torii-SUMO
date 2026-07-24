@@ -5,7 +5,7 @@
   "resume": true,
   "stages": {
     "W0": {"manifest": "../artifacts/<run>/w0-scope.manifest.json", "feedback": []},
-    "W1": {"manifest": "../artifacts/<run>/w1-network.manifest.json", "feedback": []},
+    "W1": {"manifest": "../artifacts/hamburg_sandtorkai_twin_20260719/canonical_w1_20260723_v2/manifest/hamburg_official_corridor_geometry.manifest.json", "feedback": []},
     "W3a": {"manifest": "../artifacts/<run>/w3a-counts.manifest.json", "feedback": []},
     "W2": {"manifest": "../artifacts/<run>/w2-signal.manifest.json", "feedback": []},
     "W3b": {"manifest": "../artifacts/<run>/w3b-detector-binding.manifest.json", "feedback": []},
