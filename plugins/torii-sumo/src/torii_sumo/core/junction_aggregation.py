@@ -11,6 +11,10 @@ from .candidate_contracts import file_sha256
 from .command_runner import run_command
 from .junction_join_definition import build_junction_join_definition
 from .modal_aggregation_policy import classify_edge_modal_role
+from .surface_overlap_audit import (
+    audit_sumo_lane_junction_surface_overlaps,
+    compare_sumo_surface_overlap_reports,
+)
 
 SHORT_MODAL_SUPPORT_EDGE_MAX_LENGTH_M = 10.0
 
@@ -245,6 +249,7 @@ def build_junction_aggregation_variant(
     collapse_audit_file = output_dir / f"{prefix}_collapse_audit.json"
     join_output_audit_file = output_dir / f"{prefix}_join_output_audit.json"
     preservation_audit_file = output_dir / f"{prefix}_preservation_audit.json"
+    surface_comparison_file = output_dir / f"{prefix}_surface_overlap_comparison.json"
     join_definition = build_junction_join_definition(candidates, output_dir=output_dir, prefix=prefix)
     remove_edges_file = output_dir / f"{prefix}_modal_support_remove_edges.txt"
     remove_edge_ids = _short_modal_support_edges(
@@ -359,6 +364,22 @@ def build_junction_aggregation_variant(
         if netconvert_ok
         else {}
     )
+    surface_comparison = {}
+    if netconvert_ok and join_groups:
+        baseline_surface = audit_sumo_lane_junction_surface_overlaps(net_file)
+        candidate_surface = audit_sumo_lane_junction_surface_overlaps(variant_file)
+        focus_junction_ids = {
+            node_id
+            for group in join_groups
+            for node_id in [*group, _sumo_joined_cluster_id(group)]
+            if node_id
+        }
+        surface_comparison = compare_sumo_surface_overlap_reports(
+            baseline_surface,
+            candidate_surface,
+            focus_junction_ids=focus_junction_ids,
+            report_file=surface_comparison_file,
+        )
     if collapse_audit:
         collapse_audit_file.write_text(json.dumps(collapse_audit, indent=2, ensure_ascii=False), encoding="utf-8")
     if join_output_audit:
@@ -370,6 +391,8 @@ def build_junction_aggregation_variant(
         if netconvert_ok
         and collapse_audit.get("status") == "pass"
         and join_output_audit.get("status") == "pass"
+        and preservation_audit.get("status") == "pass"
+        and surface_comparison.get("status") == "pass"
         else "fail"
     )
     warnings = [
@@ -381,10 +404,15 @@ def build_junction_aggregation_variant(
         warnings.append("junction aggregation variant still contains uncollapsed core-node topology")
     elif join_output_audit.get("status") != "pass":
         warnings.append("junction aggregation variant is missing one or more planned joined junctions")
+    elif preservation_audit.get("status") != "pass":
+        warnings.append("junction aggregation variant did not preserve bounded edges or movements")
+    elif surface_comparison.get("status") != "pass":
+        warnings.append("junction aggregation variant did not clear bounded surface overlaps")
     return {
         "status": status,
-        "claim_status": "blocked" if status == "pass" else "construction-invalid",
-        "junction_aggregation_status": "variant_created_for_review" if status == "pass" else "failed",
+        "claim_status": "diagnostic-demo" if status == "pass" else "construction-invalid",
+        "junction_aggregation_status": "promoted" if status == "pass" else "failed",
+        "junction_aggregation_promotion_status": "pass" if status == "pass" else "blocked",
         "junction_aggregation_candidate_count": len(candidates),
         "junction_aggregation_plan_file": str(plan_file),
         "junction_aggregation_candidates_file": str(candidates_file),
@@ -415,6 +443,18 @@ def build_junction_aggregation_variant(
         "junction_aggregation_new_dangling_shared_normal_edge_count": int(
             preservation_audit.get("new_dangling_shared_normal_edge_count", 0)
         ),
+        "junction_aggregation_surface_overlap_comparison_file": (
+            str(surface_comparison_file) if surface_comparison else ""
+        ),
+        "junction_aggregation_surface_overlap_status": str(
+            surface_comparison.get("status", "not_run")
+        ),
+        "junction_aggregation_surface_overlap_introduced_finding_count": int(
+            surface_comparison.get("introduced_finding_count", 0)
+        ),
+        "junction_aggregation_surface_overlap_candidate_focus_finding_count": int(
+            surface_comparison.get("candidate_focus_finding_count", 0)
+        ),
         "junction_join_nodes_patch_file": join_definition["nodes_patch_file"],
         "junction_join_definition_file": join_definition["definition_file"],
         "junction_join_definition_csv": join_definition["definition_csv"],
@@ -436,6 +476,11 @@ def _aggregation_candidates(
     overlapping_junction_audit_report: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
+    if overlapping_junction_audit_report is not None:
+        for group in overlapping_junction_audit_report.get("compound_core_candidates", []) or []:
+            candidate = _candidate_from_overlapping_group(group)
+            if candidate is not None:
+                candidates.append(candidate)
     if reference_join_audit_report is not None:
         for case in reference_join_audit_report.get("matched_cases", []) or []:
             target_evidence_confirmed = (

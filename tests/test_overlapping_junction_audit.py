@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from torii_sumo.core.overlapping_junction_audit import audit_overlapping_junctions
+from torii_sumo.core.surface_overlap_audit import audit_sumo_lane_junction_surface_overlaps
 
 
 def test_overlapping_junction_audit_flags_close_top_level_junctions(tmp_path: Path) -> None:
@@ -174,3 +175,68 @@ def test_overlapping_junction_audit_skips_plain_vehicle_pairs_without_review_sig
     )
 
     assert report["overlapping_junction_group_count"] == 0
+
+
+def test_compound_core_requires_micro_edge_exact_overlap_and_explicit_authority(
+    tmp_path: Path,
+) -> None:
+    net_file = tmp_path / "compound.net.xml"
+    net_file.write_text(
+        """<net>
+  <edge id="micro" from="a" to="b"><lane id="micro_0" length="0.2" shape="0,0 0.2,0"/></edge>
+  <edge id="in_w" from="w" to="a"><lane id="in_w_0" length="20" shape="-20,0 0,0"/></edge>
+  <edge id="out_e" from="b" to="e"><lane id="out_e_0" length="20" shape="0.2,0 20,0"/></edge>
+  <edge id="in_n" from="n" to="a"><lane id="in_n_0" length="20" shape="0,20 0,0"/></edge>
+  <edge id="out_s" from="b" to="s"><lane id="out_s_0" length="20" shape="0.2,0 0,-20"/></edge>
+  <junction id="a" x="0" y="0" type="traffic_light" shape="-1,-1 1,-1 1,1 -1,1"/>
+  <junction id="b" x="0.2" y="0" type="traffic_light" shape="-0.8,-1 1.2,-1 1.2,1 -0.8,1"/>
+  <junction id="w" x="-20" y="0" type="priority"/>
+  <junction id="e" x="20" y="0" type="priority"/>
+  <junction id="n" x="0" y="20" type="priority"/>
+  <junction id="s" x="0" y="-20" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    topology = {
+        "suspicious_clusters": [
+            {
+                "cluster_id": "C001",
+                "node_count": 6,
+                "traffic_light_node_count": 2,
+                "approach_count": 4,
+                "physical_intersection_shape": "cross",
+            }
+        ]
+    }
+    reference = {
+        "all_cases": [
+            {
+                "reference_id": "cluster_a_b",
+                "match_status": "matched",
+                "matched_candidate_cluster_id": "C001",
+                "matched_reference_source_junction_ids": ["a", "b"],
+                "reference_joined_source_node_count": 2,
+                "reference_source_identity_complete": True,
+                "matched_reference_source_internal_edge_count": 1,
+                "matched_reference_source_boundary_edge_count": 4,
+            }
+        ]
+    }
+    surface = audit_sumo_lane_junction_surface_overlaps(net_file)
+
+    report = audit_overlapping_junctions(
+        net_file=net_file,
+        output_dir=tmp_path / "audit",
+        topology_audit_report=topology,
+        surface_overlap_audit_report=surface,
+        reference_join_audit_report=reference,
+        reference_is_authority=True,
+        authorized_reference_ids={"cluster_a_b"},
+    )
+
+    assert report["compound_core_candidate_count"] == 1
+    candidate = report["compound_core_candidates"][0]
+    assert candidate["micro_exact_overlap_edge_ids"] == ["micro"]
+    assert candidate["target_evidence_status"] == "pass"
+    assert candidate["transfer_gate_status"] == "pass"
+    assert candidate["reference_join_node_ids"] == ["a", "b"]

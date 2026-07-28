@@ -43,6 +43,33 @@ def test_corridor_detector_rejects_different_road_names(tmp_path: Path) -> None:
     assert find_removable_corridor_geometry_nodes(candidate) == []
 
 
+def test_corridor_detector_accepts_whitelisted_unnamed_osm_split(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    _write_net(candidate)
+    text = candidate.read_text(encoding="utf-8")
+    for edge_id, replacement in {
+        "f0": "816133980#3",
+        "f1": "816133980#4",
+        "r0": "-816133980#4",
+        "r1": "-816133980#3",
+    }.items():
+        text = text.replace(f'id="{edge_id}"', f'id="{replacement}"')
+        text = text.replace(f'from="{edge_id}"', f'from="{replacement}"')
+        text = text.replace(f'to="{edge_id}"', f'to="{replacement}"')
+    text = text.replace('<param key="name" value="Ringstrasse"/>', "")
+    candidate.write_text(text, encoding="utf-8")
+
+    candidates = find_removable_corridor_geometry_nodes(
+        candidate,
+        candidate_node_ids={"micro"},
+    )
+
+    assert [row["node_id"] for row in candidates] == ["micro"]
+    assert candidates[0]["proof"] == (
+        "same_osm_lineage_same_semantics_lane_preserving_micro_segment"
+    )
+
+
 def test_corridor_detector_rejects_controlled_local_connection(tmp_path: Path) -> None:
     candidate = tmp_path / "candidate.net.xml"
     _write_net(candidate)

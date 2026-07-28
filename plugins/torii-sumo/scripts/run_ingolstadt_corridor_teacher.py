@@ -115,6 +115,8 @@ def _reference_matched_workflow_kwargs(
         "run_reference_join_audit_after_build": True,
         "reference_join_audit_structural_only": False,
         "run_reference_join_aggregation_after_build": True,
+        "reference_is_authority": True,
+        "use_reference_source_way_scope": False,
         "run_reference_hierarchy_audit_after_build": True,
         "run_reference_scope_audit_after_build": True,
         "run_scope_pruning_after_build": False,
@@ -156,7 +158,11 @@ def _reference_matched_summary(workflow: dict[str, Any]) -> dict[str, Any]:
         "reference_join_audit_report_file",
         "reference_join_audit_cases_file",
         "reference_join_aggregation_status",
+        "reference_join_aggregation_promotion_status",
+        "reference_join_compound_core_candidate_count",
         "reference_join_aggregation_variant_file",
+        "reference_join_aggregation_preservation_status",
+        "reference_join_aggregation_surface_overlap_status",
         "teacher_guided_repair_queue_status",
         "teacher_guided_repair_run_status",
         "teacher_guided_repair_promotion_gate_status",
@@ -211,11 +217,32 @@ def _build_teacher_action_contracts(
     family_counts: dict[str, int] = {}
     for case in report.get("all_cases", []):
         teacher_nodes = sorted(str(value) for value in case.get("reference_joined_source_nodes", []))
-        present_nodes = sorted(str(value) for value in case.get("matched_reference_source_node_ids", []))
+        joinable_nodes = sorted(
+            str(value)
+            for value in (
+                case.get("matched_reference_source_junction_ids")
+                or case.get("matched_reference_source_node_ids", [])
+            )
+        )
+        geometry_nodes = sorted(
+            str(value) for value in case.get("matched_reference_source_geometry_node_ids", [])
+        )
+        present_nodes = sorted({*joinable_nodes, *geometry_nodes})
+        scope_omitted_nodes = sorted(
+            str(value) for value in case.get("scope_omitted_reference_source_node_ids", [])
+        )
+        scope_omitted_way_ids = sorted(
+            str(value) for value in case.get("scope_omitted_reference_source_way_ids", [])
+        )
         candidate_nodes = sorted(str(value) for value in case.get("matched_candidate_node_ids", []))
         missing_nodes = sorted(set(teacher_nodes) - set(present_nodes))
         extra_candidate_nodes = sorted(set(candidate_nodes) - set(teacher_nodes))
-        identity_complete = bool(teacher_nodes) and not missing_nodes
+        identity_complete = bool(
+            case.get(
+                "reference_source_identity_complete",
+                bool(teacher_nodes) and not missing_nodes,
+            )
+        )
         internal_edges = sorted(
             str(value) for value in case.get("matched_reference_source_internal_edge_ids", [])
         )
@@ -224,6 +251,8 @@ def _build_teacher_action_contracts(
         )
         if case.get("match_status") != "matched":
             family = "abstain_unmatched_reference_case"
+        elif scope_omitted_nodes:
+            family = "bounded_source_scope_reimport"
         elif not identity_complete:
             family = "abstain_incomplete_source_identity"
         elif internal_edges and len(boundary_edges) >= 2 and not extra_candidate_nodes:
@@ -232,6 +261,8 @@ def _build_teacher_action_contracts(
             family = "source_identity_join_review"
 
         blockers = []
+        if scope_omitted_nodes:
+            blockers.append("bounded OSM ways must be re-imported before junction materialization")
         if not identity_complete:
             blockers.append("teacher source-node identity is incomplete in the same-bbox OSM network")
         if not internal_edges:
@@ -250,9 +281,10 @@ def _build_teacher_action_contracts(
                 "status": "review_required" if family.startswith(("bounded_", "source_")) else "blocked",
                 "action_family": family,
                 "teacher_action": {
-                    "absorbed_source_node_ids": teacher_nodes,
+                    "absorbed_source_node_ids": joinable_nodes,
                     "absorbed_internal_edge_ids": internal_edges,
                     "retained_boundary_edge_ids": boundary_edges,
+                    "required_source_way_ids": scope_omitted_way_ids,
                     "reference_approach_edge_ids": sorted(
                         str(value) for value in case.get("reference_approach_edge_ids", [])
                     ),
@@ -260,12 +292,14 @@ def _build_teacher_action_contracts(
                 "applicability_evidence": {
                     "reference_type": str(case.get("reference_type", "")),
                     "source_identity_complete": identity_complete,
+                    "source_geometry_node_ids": geometry_nodes,
                     "source_node_match_ratio": case.get("reference_source_node_match_ratio", 0.0),
                     "same_source_internal_edge_count": len(internal_edges),
                     "retained_boundary_edge_count": len(boundary_edges),
                 },
                 "counterexample_evidence": {
                     "missing_teacher_source_node_ids": missing_nodes,
+                    "scope_omitted_source_node_ids": scope_omitted_nodes,
                     "candidate_nodes_outside_teacher_core": extra_candidate_nodes,
                     "candidate_risk_flags": sorted(
                         str(value) for value in case.get("matched_candidate_risk_flags", [])
@@ -281,7 +315,12 @@ def _build_teacher_action_contracts(
 
     source_evidence = source_osm
     if source_evidence is None:
-        filtered_osm = str(workflow.get("filtered_osm_file", "")).strip()
+        visual_build = workflow.get("reference_visual_detail_build", {})
+        filtered_osm = (
+            str(visual_build.get("filtered_osm_file", "")).strip()
+            if isinstance(visual_build, dict)
+            else ""
+        ) or str(workflow.get("filtered_osm_file", "")).strip()
         source_evidence = Path(filtered_osm) if filtered_osm else None
     provenance_paths = {
         "source_osm": source_evidence,

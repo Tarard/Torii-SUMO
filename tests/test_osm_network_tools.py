@@ -623,15 +623,9 @@ def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path
     def fake_reference_join_audit(**_kwargs):
         return {
             "status": "pass",
-            "audit_mode": "structural_only",
-            "junction_pattern_mismatch_field_counts": {"movement_signature_counts": 1},
-            "junction_pattern_comparisons": [
-                {
-                    "junction_id": "j1",
-                    "status": "fail",
-                    "mismatch_fields": ["movement_signature_counts"],
-                }
-            ],
+            "audit_mode": "full",
+            "junction_pattern_mismatch_field_counts": {},
+            "junction_pattern_comparisons": [],
             "network_structural_missing_counts": {},
             "network_structural_extra_counts": {},
             "warnings": [],
@@ -776,6 +770,7 @@ def test_osm_cleanup_workflow_reports_teacher_guided_probe_matrix(tmp_path: Path
     assert matrix_kwargs["raw_edge_file"] == raw_edge_file
     assert matrix_kwargs["raw_connection_file"] == raw_connection_file
     assert matrix_kwargs["queue_base_dir"] == captured["repair_queue_base_dir"]
+    assert matrix_kwargs["plain_exporter"] is fake_plain_export
     assert report["teacher_guided_probe_matrix_status"] == "pass"
     assert report["teacher_guided_probe_matrix_probe_count"] == 1
     assert report["teacher_guided_probe_matrix_all_parity_gate_pass"] is True

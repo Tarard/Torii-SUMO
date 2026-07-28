@@ -84,6 +84,25 @@ def test_self_intersecting_junction_polygon_is_a_geometry_error(tmp_path: Path) 
     assert "self-intersecting" in report["geometry_errors"][0]["error"]
 
 
+def test_invalid_external_lane_geometry_records_both_boundary_junctions(
+    tmp_path: Path,
+) -> None:
+    net_file = _write_net(
+        tmp_path / "invalid-lane.net.xml",
+        '<edge id="road" from="west" to="east">'
+        '<lane id="road_0" index="0" shape="0,0"/>'
+        "</edge>"
+        '<junction id="west" type="priority" shape="-1,-1 1,-1 1,1 -1,1"/>'
+        '<junction id="east" type="priority" shape="9,-1 11,-1 11,1 9,1"/>',
+    )
+
+    report = audit_sumo_lane_junction_surface_overlaps(net_file)
+
+    assert report["status"] == "fail"
+    assert report["geometry_errors"][0]["from_junction_id"] == "west"
+    assert report["geometry_errors"][0]["to_junction_id"] == "east"
+
+
 def test_internal_lane_and_internal_junction_are_excluded(tmp_path: Path) -> None:
     net_file = _write_net(
         tmp_path / "internal.net.xml",
@@ -226,3 +245,29 @@ def test_bounded_comparison_fails_on_new_focus_overlap(tmp_path: Path) -> None:
     assert comparison["status"] == "fail"
     assert comparison["introduced_finding_count"] == 1
     assert comparison["candidate_focus_finding_count"] == 1
+
+
+def test_bounded_comparison_allows_inherited_out_of_scope_geometry_error(
+    tmp_path: Path,
+) -> None:
+    body = (
+        '<junction id="focus" type="priority" shape="0,0 2,0 2,2 0,2"/>'
+        '<junction id="outside" type="priority" shape="10,0 12,2 10,2 12,0"/>'
+    )
+    baseline = audit_sumo_lane_junction_surface_overlaps(
+        _write_net(tmp_path / "baseline-errors.net.xml", body)
+    )
+    candidate = audit_sumo_lane_junction_surface_overlaps(
+        _write_net(tmp_path / "candidate-errors.net.xml", body)
+    )
+
+    comparison = compare_sumo_surface_overlap_reports(
+        baseline,
+        candidate,
+        focus_junction_ids={"focus"},
+    )
+
+    assert comparison["status"] == "pass"
+    assert comparison["candidate_geometry_error_count"] == 1
+    assert comparison["introduced_geometry_error_count"] == 0
+    assert comparison["candidate_focus_geometry_error_count"] == 0

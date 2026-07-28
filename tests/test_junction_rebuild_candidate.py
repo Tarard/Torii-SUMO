@@ -1,12 +1,17 @@
 import csv
+import hashlib
 import json
 from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
 
+from shapely.geometry import Polygon
+
+import torii_sumo.core.junction_rebuild_candidate as rebuild_candidate_module
 from torii_sumo.core.junction_rebuild_candidate import (
     _approach_endpoint_rebuild_plan,
     _augment_candidate_edge_map_from_tls_approach_pairs,
+    _boundary_vehicle_connectivity,
     _candidate_connection_mode_scope_ids,
     _expand_fragmented_tls_join_scope_candidate,
     _compare_teacher_models,
@@ -16,6 +21,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _hybrid_osm_approach_authority_policy,
     _netedit_review_actions,
     _remove_teacher_non_tls_tllogics,
+    _reference_teacher_turnaround_authority,
     _limit_ready_repair_candidates,
     _restore_false_traffic_light_junction_types,
     _restore_existing_edge_geometry,
@@ -23,13 +29,16 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _restore_replayed_geometry_attrs,
     _road_continuity_probe_summary,
     _semantic_layer_gates,
+    _sumo_allowed_classes,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
     _target_internal_replay_input_file,
     _write_teacher_guided_promotion_gate,
     _write_joined_endpoint_edge_file,
+    _write_partition_aware_joined_junction_shapes,
     _warp_anchor_shape_to_teacher_endpoint,
     _stage_file,
+    _target_surface_overlap_gate,
     _teacher_guided_candidate_sort_key,
     build_rebuild_candidate,
     build_scoped_teacher_tls_cell_replay_plan,
@@ -59,10 +68,179 @@ from torii_sumo.core.junction_rebuild_candidate import (
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
 
 
-def test_restore_existing_edge_geometry_recomputes_operational_lane_length() -> None:
-    edge = ET.fromstring(
-        '<edge id="e" from="a" to="b"><lane id="e_0" index="0" length="999" shape="0,0 1,0"/></edge>'
+class _PassingCommandResult:
+    def __init__(self, command, cwd):
+        self.command = command
+        self.cwd = cwd
+
+    def to_dict(self):
+        return {
+            "command": self.command,
+            "cwd": str(self.cwd),
+            "status": "pass",
+            "returncode": 0,
+        }
+
+
+def _passing_sumo_runner(command, *, cwd=None, timeout_seconds=60.0):
+    assert Path(command[0]).stem == "sumo"
+    return _PassingCommandResult(command, cwd)
+
+
+def _with_passing_sumo(runner):
+    def wrapped(command, *, cwd=None, timeout_seconds=60.0):
+        if Path(command[0]).stem == "sumo":
+            return _PassingCommandResult(command, cwd)
+        return runner(command, cwd=cwd, timeout_seconds=timeout_seconds)
+
+    return wrapped
+
+
+def test_sumo_allowed_classes_preserves_absent_allow_and_disallow_semantics() -> None:
+    all_classes = _sumo_allowed_classes({})
+
+    assert _sumo_allowed_classes({"allow": "passenger"}) == {"passenger"}
+    assert _sumo_allowed_classes({"allow": "passenger", "disallow": ""}) == {"passenger"}
+    assert _sumo_allowed_classes({"disallow": "passenger"}) == all_classes - {"passenger"}
+    assert _sumo_allowed_classes({"allow": "", "disallow": ""}) == all_classes
+    assert _sumo_allowed_classes({"disallow": "all"}) == set()
+
+
+def _passing_surface_audit(net_file, *, report_file=None, **_kwargs):
+    source = Path(net_file).resolve()
+    report = {
+        "schema": rebuild_candidate_module.SURFACE_OVERLAP_AUDIT_SCHEMA,
+        "status": "pass",
+        "source_net_file": str(source),
+        "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "source_network_mutation": False,
+        "non_area_junction_exclusions": [],
+        "geometry_errors": [],
+        "junction_junction_overlaps": [],
+        "external_lane_non_owner_junction_overlaps": [],
+    }
+    if report_file is not None:
+        destination = Path(report_file).resolve()
+        destination.write_text(json.dumps(report), encoding="utf-8")
+        report["report_file"] = str(destination)
+        report["report_sha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
+    return report
+
+
+def _bound_surface_report(
+    tmp_path: Path,
+    name: str,
+    **overrides,
+) -> tuple[dict[str, object], Path, Path]:
+    net_file = tmp_path / f"{name}.net.xml"
+    net_file.write_text("<net/>", encoding="utf-8")
+    report_file = tmp_path / f"{name}.json"
+    _passing_surface_audit(net_file, report_file=report_file)
+    payload = json.loads(report_file.read_text(encoding="utf-8"))
+    payload.update(overrides)
+    report_file.write_text(json.dumps(payload), encoding="utf-8")
+    return (
+        {
+            **payload,
+            "report_file": str(report_file.resolve()),
+            "report_sha256": hashlib.sha256(report_file.read_bytes()).hexdigest(),
+        },
+        report_file,
+        net_file,
     )
+
+
+def test_partition_aware_joined_shapes_keep_teacher_partitions_separate(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.nod.xml"
+    joined = tmp_path / "joined.nod.xml"
+    output = tmp_path / "partitioned.nod.xml"
+    source.write_text(
+        """<nodes>
+  <node id="a" x="0" y="0"/><node id="b" x="10" y="0"/><node id="c" x="5" y="8"/>
+  <node id="d" x="20" y="0"/><node id="e" x="22" y="0"/><node id="f" x="21" y="2"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    joined.write_text(
+        """<nodes>
+  <node id="cluster_a_b_c" x="5" y="2" shape="-20,-20 30,-20 30,20 -20,20"/>
+  <node id="cluster_d_e_f" x="21" y="1" shape="-20,-20 30,-20 30,20 -20,20"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    source_before = source.read_bytes()
+    joined_before = joined.read_bytes()
+
+    report = _write_partition_aware_joined_junction_shapes(
+        joined_node_file=joined,
+        source_node_file=source,
+        join_groups=[["a", "b", "c"], ["d", "e", "f"]],
+        output_file=output,
+        margin_m=1.0,
+    )
+
+    assert report["status"] == "pass"
+    assert report["repair_count"] == 2
+    assert report["source_network_mutation"] is False
+    assert source.read_bytes() == source_before
+    assert joined.read_bytes() == joined_before
+    root = ET.parse(output).getroot()
+    polygons = []
+    for node_id in ("cluster_a_b_c", "cluster_d_e_f"):
+        node = root.find(f"node[@id='{node_id}']")
+        assert node is not None
+        assert "customShape" not in node.attrib
+        polygon = Polygon(
+            tuple(float(value) for value in token.split(",")[:2]) for token in node.attrib["shape"].split()
+        )
+        assert polygon.is_valid
+        polygons.append(polygon)
+    assert polygons[0].intersection(polygons[1]).area == 0
+
+
+def test_partition_aware_joined_shapes_keep_osm_partition_geometry_with_reference(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.nod.xml"
+    joined = tmp_path / "joined.nod.xml"
+    reference = tmp_path / "reference.net.xml"
+    output = tmp_path / "partitioned.nod.xml"
+    source.write_text(
+        '<nodes><node id="a" x="0" y="0"/><node id="b" x="2" y="0"/></nodes>',
+        encoding="utf-8",
+    )
+    joined.write_text(
+        '<nodes><node id="cluster_a_b" x="1" y="0" shape="-5,-5 5,-5 5,5 -5,5"/></nodes>',
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_a_b" x="10" y="10"
+            shape="0,0 20,0 20,20 0,20"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = _write_partition_aware_joined_junction_shapes(
+        joined_node_file=joined,
+        source_node_file=source,
+        reference_net_file=reference,
+        join_groups=[["a", "b"]],
+        output_file=output,
+    )
+
+    node = ET.parse(output).getroot().find("node")
+    assert report["status"] == "pass"
+    assert report["repairs"][0]["shape_authority"] == ("current_osm_joined_partition_shape")
+    assert node is not None
+    polygon = Polygon(tuple(float(value) for value in token.split(",")) for token in node.attrib["shape"].split())
+    assert polygon.bounds == (-9.0, -10.0, 11.0, 10.0)
+
+
+def test_restore_existing_edge_geometry_recomputes_operational_lane_length() -> None:
+    edge = ET.fromstring('<edge id="e" from="a" to="b"><lane id="e_0" index="0" length="999" shape="0,0 1,0"/></edge>')
     source = ET.fromstring(
         '<edge id="e" from="a" to="b" shape="0,0 3,4"><lane id="e_0" index="0" length="1" shape="0,0 3,4"/></edge>'
     )
@@ -246,10 +424,7 @@ def test_authorized_compound_junction_shape_copy_changes_only_selected_shapes(
     assert repaired_root.find("junction[@id='j2']").attrib["shape"] == "19,-1 21,-1 21,1 19,1"
     assert repaired_root.find("junction[@id='j1']").attrib["customShape"] == "true"
     assert repaired_root.find("junction[@id='j2']").attrib["customShape"] == "true"
-    assert (
-        repaired_root.find("junction[@id='a']").attrib
-        == candidate_root_before.find("junction[@id='a']").attrib
-    )
+    assert repaired_root.find("junction[@id='a']").attrib == candidate_root_before.find("junction[@id='a']").attrib
     assert [edge.attrib for edge in repaired_root.findall("edge")] == [
         edge.attrib for edge in candidate_root_before.findall("edge")
     ]
@@ -346,29 +521,22 @@ def test_target_internal_replay_input_file_keeps_vehicle_attrs_when_target_exist
 def test_teacher_candidate_edge_map_can_use_expanded_scope_bearing_delta() -> None:
     teacher_model = {
         "approaches": {
-            "incoming": [
-                {"edge_id": "teacher_in", "bearing": 0.0, "lane_count": 1, "type": "highway.tertiary"}
-            ],
+            "incoming": [{"edge_id": "teacher_in", "bearing": 0.0, "lane_count": 1, "type": "highway.tertiary"}],
             "outgoing": [],
         }
     }
     candidate_model = {
         "approaches": {
-            "incoming": [
-                {"edge_id": "candidate_in", "bearing": 40.0, "lane_count": 1, "type": "highway.tertiary"}
-            ],
+            "incoming": [{"edge_id": "candidate_in", "bearing": 40.0, "lane_count": 1, "type": "highway.tertiary"}],
             "outgoing": [],
         }
     }
 
-    assert (
-        _teacher_candidate_edge_map(
-            teacher_model,
-            candidate_model,
-            max_bearing_delta=45.0,
-        )
-        == {"teacher_in": "candidate_in"}
-    )
+    assert _teacher_candidate_edge_map(
+        teacher_model,
+        candidate_model,
+        max_bearing_delta=45.0,
+    ) == {"teacher_in": "candidate_in"}
 
 
 def test_teacher_candidate_edge_map_prefers_exact_edge_id_before_bearing() -> None:
@@ -795,7 +963,10 @@ def test_build_tls_connection_repair_variant_can_add_green_phase_for_padded_link
         add_green_phases_for_padded_links=True,
     )
 
-    states = [phase.attrib["state"] for phase in ET.parse(report["variant_file"]).getroot().findall("tlLogic[@id='aggTls']/phase")]
+    states = [
+        phase.attrib["state"]
+        for phase in ET.parse(report["variant_file"]).getroot().findall("tlLogic[@id='aggTls']/phase")
+    ]
     assert states == ["rrr", "rrG"]
     assert report["added_green_phase_count"] == 1
     assert report["added_green_phase_tllogic_count"] == 1
@@ -840,7 +1011,10 @@ def test_build_tls_connection_repair_variant_can_add_yellow_phase_after_generate
         add_yellow_phases_for_generated_green=True,
     )
 
-    states = [phase.attrib["state"] for phase in ET.parse(report["variant_file"]).getroot().findall("tlLogic[@id='aggTls']/phase")]
+    states = [
+        phase.attrib["state"]
+        for phase in ET.parse(report["variant_file"]).getroot().findall("tlLogic[@id='aggTls']/phase")
+    ]
     assert states == ["rrr", "rrG", "rry"]
     assert report["added_green_phase_count"] == 1
     assert report["added_yellow_phase_count"] == 1
@@ -936,7 +1110,9 @@ def test_build_rebuild_candidate_emits_only_high_confidence_vehicle_connections(
         encoding="utf-8",
     )
 
-    report = build_rebuild_candidate(net_file=net_file, junction_id="j", output_dir=tmp_path / "candidate", prefix="demo")
+    report = build_rebuild_candidate(
+        net_file=net_file, junction_id="j", output_dir=tmp_path / "candidate", prefix="demo"
+    )
 
     assert report["status"] == "pass"
     assert report["emitted_connection_count"] == 2
@@ -1061,7 +1237,9 @@ def test_rebuild_candidate_writes_connection_signature(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    report = build_rebuild_candidate(net_file=net_file, junction_id="j", output_dir=tmp_path / "candidate", prefix="demo")
+    report = build_rebuild_candidate(
+        net_file=net_file, junction_id="j", output_dir=tmp_path / "candidate", prefix="demo"
+    )
 
     assert Path(report["connection_signature"]["signature_file"]).is_file()
     assert report["connection_signature"]["status"] == "pass"
@@ -2070,6 +2248,34 @@ def test_joined_endpoint_edge_file_keeps_join_source_endpoints_for_join_patch(tm
     assert root.find("edge[@id='out']").attrib == {"id": "out", "from": "frag_b", "to": "outside", "shape": "10,0 20,0"}
 
 
+def test_joined_endpoint_edge_file_keeps_edges_between_distinct_join_groups(tmp_path: Path) -> None:
+    edge_file = tmp_path / "scope.edg.xml"
+    edge_file.write_text(
+        """<edges>
+  <edge id="inside_a" from="a1" to="a2"/>
+  <edge id="bridge" from="a2" to="b1"/>
+  <edge id="inside_b" from="b1" to="b2"/>
+</edges>""",
+        encoding="utf-8",
+    )
+    join_file = tmp_path / "join.nod.xml"
+    join_file.write_text(
+        '<nodes><join nodes="a1 a2"/><join nodes="b1 b2"/></nodes>',
+        encoding="utf-8",
+    )
+
+    written_file, _, dropped_self_loops, _ = _write_joined_endpoint_edge_file(
+        edge_file,
+        join_file,
+        ["cluster_a1_a2", "cluster_b1_b2"],
+        tmp_path / "replay.edg.xml",
+    )
+
+    root = ET.parse(written_file).getroot()
+    assert dropped_self_loops == ["inside_a", "inside_b"]
+    assert root.find("edge[@id='bridge']").attrib == {"id": "bridge", "from": "a2", "to": "b1"}
+
+
 def test_build_teacher_guided_repair_queue_marks_copyable_missing_boundary_edge_ready(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text(
@@ -3012,6 +3218,273 @@ def test_fragmented_tls_join_scope_expands_compact_shared_controller(
     assert expanded["tls_join_scope_expansion"]["controller_span_m"] == 20.0
 
 
+def test_join_candidate_absorbs_shared_controller_satellites_without_dropping_core(
+    tmp_path: Path,
+) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    edges = tmp_path / "raw.edg.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="core" x="0" y="0" type="priority"/>
+  <node id="signal_a" x="10" y="0" type="traffic_light" tl="tls"/>
+  <node id="signal_b" x="20" y="0" type="traffic_light" tl="tls"/>
+  <node id="signal_c" x="30" y="0" type="traffic_light" tl="tls"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    edges.write_text(
+        """<edges><edge id="direct" from="signal_c" to="core"/></edges>""",
+        encoding="utf-8",
+    )
+    candidate = {
+        "learned_rule": "tum_like_join_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": ["core", "signal_a", "signal_b"],
+            "join_junction_ids": ["core", "signal_a", "signal_b"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=edges,
+    )
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == [
+        "core",
+        "signal_a",
+        "signal_b",
+        "signal_c",
+    ]
+    assert expanded["tls_join_scope_expansion"]["automatic_expansion_applied"] is True
+
+
+def test_join_candidate_does_not_expand_from_one_incidental_controller_node(
+    tmp_path: Path,
+) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="core" x="0" y="0" type="priority"/>
+  <node id="signal_a" x="10" y="0" type="traffic_light" tl="tls"/>
+  <node id="signal_b" x="20" y="0" type="traffic_light" tl="tls"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    candidate = {
+        "learned_rule": "tum_like_join_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": ["core", "signal_a"],
+            "join_junction_ids": ["core", "signal_a"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=tmp_path / "missing.edg.xml",
+    )
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == [
+        "core",
+        "signal_a",
+    ]
+    assert expanded["tls_join_scope_expansion"]["status"] == "review"
+    assert expanded["tls_join_scope_expansion"]["automatic_expansion_applied"] is False
+
+
+def test_join_candidate_absorbs_only_controller_nodes_directly_adjacent_to_teacher_core(
+    tmp_path: Path,
+) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    edges = tmp_path / "raw.edg.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="core_a" x="0" y="0" type="traffic_light" tl="tls"/>
+  <node id="core_b" x="20" y="0" type="traffic_light" tl="tls"/>
+  <node id="direct_signal" x="24" y="0" type="traffic_light" tl="tls"/>
+  <node id="near_but_remote_signal" x="25" y="0" type="traffic_light" tl="tls"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    edges.write_text(
+        """<edges>
+  <edge id="direct" from="direct_signal" to="core_b"/>
+  <edge id="remote" from="near_but_remote_signal" to="outside"/>
+</edges>""",
+        encoding="utf-8",
+    )
+    candidate = {
+        "learned_rule": "tum_like_join_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": ["core_a", "core_b"],
+            "join_junction_ids": ["core_a", "core_b"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=edges,
+    )
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == [
+        "core_a",
+        "core_b",
+        "direct_signal",
+    ]
+    assert expanded["tls_join_scope_expansion"]["directly_adjacent_controller_node_ids"] == ["direct_signal"]
+
+
+def test_join_candidate_blocks_expansion_above_final_node_cap(tmp_path: Path) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    edges = tmp_path / "raw.edg.xml"
+    core_ids = [f"core_{index}" for index in range(11)]
+    satellites = [f"signal_{index}" for index in range(10)]
+    nodes.write_text(
+        "<nodes>"
+        '<node id="core_0" x="0" y="0" type="traffic_light" tl="tls"/>'
+        '<node id="core_1" x="1" y="0" type="traffic_light" tl="tls"/>'
+        + "".join(
+            f'<node id="{node_id}" x="{index + 2}" y="0" type="priority"/>'
+            for index, node_id in enumerate(core_ids[2:])
+        )
+        + "".join(
+            f'<node id="{node_id}" x="{index + 20}" y="0" type="traffic_light" tl="tls"/>'
+            for index, node_id in enumerate(satellites)
+        )
+        + "</nodes>",
+        encoding="utf-8",
+    )
+    edges.write_text(
+        "<edges>"
+        + "".join(f'<edge id="edge_{index}" from="{node_id}" to="core_0"/>' for index, node_id in enumerate(satellites))
+        + "</edges>",
+        encoding="utf-8",
+    )
+    candidate = {
+        "learned_rule": "tum_like_join_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": core_ids,
+            "join_junction_ids": core_ids,
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=edges,
+    )
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == core_ids
+    assert expanded["tls_join_scope_expansion"]["status"] == "review"
+    assert expanded["tls_join_scope_expansion"]["expanded_join_node_count"] == 21
+
+
+def test_join_candidate_never_crosses_another_reference_partition(
+    tmp_path: Path,
+) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    edges = tmp_path / "raw.edg.xml"
+    reference = tmp_path / "reference.net.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="1" x="0" y="0" type="traffic_light" tl="tls"/>
+  <node id="2" x="1" y="0" type="traffic_light" tl="tls"/>
+  <node id="3" x="2" y="0" type="traffic_light" tl="tls"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    edges.write_text(
+        '<edges><edge id="direct" from="3" to="1"/></edges>',
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_1_2"/>
+  <junction id="cluster_3_4"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate = {
+        "reference_id": "cluster_1_2",
+        "learned_rule": "tum_like_join_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": ["1", "2"],
+            "join_junction_ids": ["1", "2"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=edges,
+        reference_net_file=reference,
+    )
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == [
+        "1",
+        "2",
+    ]
+    assert expanded["tls_join_scope_expansion"]["excluded_other_reference_partition_node_ids"] == ["3"]
+
+
+def test_join_candidate_recreates_exact_adjacent_teacher_partition_as_separate_join(
+    tmp_path: Path,
+) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    edges = tmp_path / "raw.edg.xml"
+    reference = tmp_path / "reference.net.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="1" x="0" y="0" type="traffic_light" tl="tls"/>
+  <node id="2" x="2" y="0" type="traffic_light" tl="tls"/>
+  <node id="3" x="8" y="0" type="traffic_light" tl="tls"/>
+  <node id="4" x="10" y="0" type="traffic_light" tl="tls"/>
+  <node id="5" x="9" y="1" type="traffic_light" tl="tls"/>
+  <node id="6" x="8" y="3" type="traffic_light" tl="tls"/>
+  <node id="7" x="10" y="3" type="traffic_light" tl="tls"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    edges.write_text(
+        """<edges>
+  <edge id="partition_to_core" from="3" to="1"/>
+  <edge id="fringe_to_partition" from="5" to="3"/>
+  <edge id="unconfirmed_partition_to_core" from="6" to="1"/>
+</edges>""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_1_2"/>
+  <junction id="cluster_3_4"/>
+  <junction id="cluster_6_7"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate = {
+        "reference_id": "cluster_1_2",
+        "learned_rule": "tum_like_join_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": ["1", "2"],
+            "join_junction_ids": ["1", "2"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=edges,
+        reference_net_file=reference,
+    )
+
+    assert expanded["expanded_rebuild_scope"]["join_junction_ids"] == ["1", "2"]
+    assert "cluster_3_4" in expanded["expanded_rebuild_scope"]["junction_ids"]
+    assert "cluster_3_4_5" not in expanded["expanded_rebuild_scope"]["junction_ids"]
+    assert expanded["tls_join_scope_expansion"]["adjacent_teacher_partition_cluster_ids"] == ["cluster_3_4"]
+
+
 def test_tls_approach_pairs_augment_full_cell_edge_map() -> None:
     candidate = _augment_candidate_edge_map_from_tls_approach_pairs(
         {
@@ -3109,6 +3582,7 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
     for path in (raw_nodes, raw_edges, raw_connections, teacher_net, candidate_net):
         path.write_text("<xml/>", encoding="utf-8")
     calls = []
+    plain_exporter = object()
 
     def fake_queue_runner(**kwargs):
         calls.append(kwargs)
@@ -3165,6 +3639,7 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
         output_dir=tmp_path / "matrix",
         queue_base_dir=tmp_path / "queue_base",
         repair_queue_runner=fake_queue_runner,
+        plain_exporter=plain_exporter,
         sequential_accept_passed_variants=True,
     )
 
@@ -3175,8 +3650,12 @@ def test_run_teacher_guided_repair_matrix_executes_selected_junctions(tmp_path: 
     assert [call["queue_report"]["repair_candidates"][0]["junction_id"] for call in calls] == ["j2", "j1"]
     assert [call["queue_base_dir"] for call in calls] == [tmp_path / "queue_base", tmp_path / "queue_base"]
     assert [call["sequential_accept_passed_variants"] for call in calls] == [True, True]
+    assert [call["plain_exporter"] for call in calls] == [plain_exporter, plain_exporter]
     assert [item["junction_id"] for item in report["probes"]] == ["j2", "j1"]
-    assert [Path(item["composite_net_file"]).name for item in report["probes"]] == ["composite.net.xml", "composite.net.xml"]
+    assert [Path(item["composite_net_file"]).name for item in report["probes"]] == [
+        "composite.net.xml",
+        "composite.net.xml",
+    ]
     assert report["all_road_continuity_gate_pass"] is True
     assert [item["road_continuity_gate_status"] for item in report["probes"]] == ["pass", "pass"]
     assert report["probes"][0]["road_continuity_counts"] == {
@@ -3206,6 +3685,31 @@ def test_road_continuity_probe_summary_does_not_block_on_turnaround_boundary_cle
 
     assert report["road_continuity_gate_status"] == "fail"
     assert report["road_continuity_failure_counts"] == {"removed_stale_boundary_edge_connection_count": 1}
+
+
+def test_road_continuity_probe_summary_accepts_structural_boundary_preservation() -> None:
+    report = _road_continuity_probe_summary(
+        {
+            "variant_reports": [
+                {
+                    "approach_authority_policy": {
+                        "status": "pass",
+                        "policy": "osm_boundary_teacher_vehicle_movements",
+                    },
+                    "boundary_edge_preservation": {
+                        "status": "pass",
+                        "source_boundary_edge_count": 33,
+                        "final_boundary_edge_count": 33,
+                        "missing_boundary_edge_ids": [],
+                    },
+                }
+            ]
+        }
+    )
+
+    assert report["road_continuity_gate_status"] == "pass"
+    assert report["road_continuity_counts"] == {"preserved_boundary_edge_count": 33}
+    assert report["road_continuity_failure_counts"] == {}
 
 
 def test_run_teacher_guided_repair_queue_replays_same_id_internal_mismatch_candidate(tmp_path: Path) -> None:
@@ -3398,6 +3902,7 @@ def test_run_teacher_guided_repair_queue_sequentially_reuses_passed_variant_plai
         sequential_accept_passed_variants=True,
         plain_exporter=fake_plain_exporter,
         variant_builder=fake_variant,
+        command_runner=_passing_sumo_runner,
     )
 
     first_final = Path(report["variant_reports"][0]["final_net_file"])
@@ -3497,6 +4002,7 @@ def test_run_teacher_guided_repair_queue_refreshes_stale_sequential_candidate_ed
         sequential_accept_passed_variants=True,
         plain_exporter=fake_plain_exporter,
         variant_builder=fake_variant,
+        command_runner=_passing_sumo_runner,
     )
 
     assert report["status"] == "pass"
@@ -3574,6 +4080,7 @@ def test_run_teacher_guided_repair_queue_allows_adjacent_boundary_edge_overlap(
         sequential_accept_passed_variants=True,
         plain_exporter=fake_plain_exporter,
         variant_builder=fake_variant,
+        command_runner=_passing_sumo_runner,
     )
 
     assert report["status"] == "pass"
@@ -3676,7 +4183,7 @@ def test_run_teacher_guided_repair_queue_restores_accepted_internal_replays_afte
         plain_exporter=fake_plain_exporter,
         variant_builder=fake_variant,
         final_internal_replay_writer=fake_restore,
-        command_runner=fake_runner,
+        command_runner=_with_passing_sumo(fake_runner),
     )
 
     assert [call["junction_id"] for call in restore_calls] == ["j1", "j2"]
@@ -3758,7 +4265,7 @@ def test_run_teacher_guided_repair_queue_replays_unrestored_normalized_variants_
         sequential_accept_passed_variants=True,
         variant_builder=fake_variant,
         final_internal_replay_writer=fake_restore,
-        command_runner=fake_runner,
+        command_runner=_with_passing_sumo(fake_runner),
     )
 
     assert report["final_internal_replay_status"] == "pass"
@@ -3833,7 +4340,7 @@ def test_run_teacher_guided_repair_queue_uses_composite_base_for_joined_unrestor
         sequential_accept_passed_variants=True,
         variant_builder=fake_variant,
         final_internal_replay_writer=fake_restore,
-        command_runner=fake_runner,
+        command_runner=_with_passing_sumo(fake_runner),
     )
 
     assert report["final_internal_replay_status"] == "pass"
@@ -3866,9 +4373,7 @@ def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_par
                 "parity_gate_status": "fail",
                 "semantic_replay_gate": {
                     "status": "fail",
-                    "failures": [
-                        {"report": "parity", "field": "vehicle_movement_matrix_missing_count", "count": 1}
-                    ],
+                    "failures": [{"report": "parity", "field": "vehicle_movement_matrix_missing_count", "count": 1}],
                 },
                 "semantic_layer_gates": {
                     "topology": {"status": "pass", "failure_count": 0, "failures": []},
@@ -3920,6 +4425,7 @@ def test_run_teacher_guided_repair_queue_sequentially_adopts_composite_after_par
         output_dir=tmp_path / "run",
         sequential_accept_passed_variants=True,
         variant_builder=fake_variant,
+        command_runner=_passing_sumo_runner,
     )
 
     assert report["status"] == "pass"
@@ -4049,7 +4555,7 @@ def test_run_teacher_guided_repair_queue_fails_when_final_composite_request_matr
         sequential_accept_passed_variants=True,
         variant_builder=fake_variant,
         final_internal_replay_writer=fake_restore,
-        command_runner=fake_runner,
+        command_runner=_with_passing_sumo(fake_runner),
     )
 
     assert report["final_composite_parity"]["status"] == "fail"
@@ -4160,7 +4666,7 @@ def test_run_teacher_guided_repair_queue_restores_requests_after_final_canonical
         sequential_accept_passed_variants=True,
         variant_builder=fake_variant,
         final_internal_replay_writer=fake_restore,
-        command_runner=fake_runner,
+        command_runner=_with_passing_sumo(fake_runner),
     )
 
     root = ET.parse(report["composite_net_file"]).getroot()
@@ -4387,7 +4893,7 @@ def test_run_teacher_guided_repair_queue_demotes_teacher_absent_context_tls(
         sequential_accept_passed_variants=True,
         variant_builder=fake_variant,
         final_internal_replay_writer=fake_restore,
-        command_runner=fake_runner,
+        command_runner=_with_passing_sumo(fake_runner),
     )
 
     assert report["final_composite_parity"]["status"] == "pass"
@@ -4727,9 +5233,7 @@ def test_run_teacher_guided_repair_queue_emits_followup_scope_for_unsafe_interna
                 "status": "pass",
                 "skipped_connection_count": 0,
                 "removed_stale_replaced_edge_connection_count": 1,
-                "removed_stale_replaced_edge_connections": [
-                    {"from": "main", "to": "neighbor_out", "via": ":n_0_0"}
-                ],
+                "removed_stale_replaced_edge_connections": [{"from": "main", "to": "neighbor_out", "via": ":n_0_0"}],
             },
             "semantic_replay_gate": {
                 "status": "fail",
@@ -4822,9 +5326,7 @@ def test_run_teacher_guided_repair_queue_expands_followup_scope_after_expanded_r
                 "status": "pass",
                 "skipped_connection_count": 0,
                 "removed_stale_replaced_edge_connection_count": 1,
-                "removed_stale_replaced_edge_connections": [
-                    {"from": "neighbor_out", "to": "far_out", "via": ":q_0_0"}
-                ],
+                "removed_stale_replaced_edge_connections": [{"from": "neighbor_out", "to": "far_out", "via": ":q_0_0"}],
             },
             "semantic_replay_gate": {
                 "status": "fail",
@@ -4909,9 +5411,7 @@ def test_expanded_scope_followup_excludes_non_raw_teacher_cluster_from_join_scop
         {
             "target_internal_replay": {
                 "removed_stale_replaced_edge_connection_count": 1,
-                "removed_stale_replaced_edge_connections": [
-                    {"from": "neighbor_out", "to": "far_out", "via": ":q_0_0"}
-                ],
+                "removed_stale_replaced_edge_connections": [{"from": "neighbor_out", "to": "far_out", "via": ":q_0_0"}],
             }
         },
         raw_edges,
@@ -4931,6 +5431,7 @@ def test_teacher_guided_promotion_gate_keeps_applied_followup_report(tmp_path: P
         claim_status="diagnostic-demo",
         parity_gate_status="pass",
         approach_integrity_status="pass",
+        final_composite_sumo_load_status="pass",
         variant_reports=[
             {
                 "junction_id": "cluster_a_b",
@@ -4985,6 +5486,33 @@ def test_teacher_guided_promotion_gate_prefers_global_candidate_over_local_scope
     assert gate["items"][0]["final_net_file"] == "global.net.xml"
     assert gate["items"][0]["candidate_scope_status"] == "full_network"
     assert gate["items"][0]["global_candidate_eligible"] is True
+
+
+def test_teacher_guided_promotion_gate_requires_final_composite_sumo_load(
+    tmp_path: Path,
+) -> None:
+    gate = _write_teacher_guided_promotion_gate(
+        output_file=tmp_path / "promotion.json",
+        status="pass",
+        claim_status="diagnostic-demo",
+        parity_gate_status="pass",
+        approach_integrity_status="pass",
+        final_composite_sumo_load_required=True,
+        final_composite_sumo_load_status="skipped",
+        variant_reports=[
+            {
+                "junction_id": "j",
+                "teacher_junction_id": "teacher_j",
+                "status": "pass",
+                "parity_gate_status": "pass",
+                "composite_applied": True,
+                "final_net_file": "candidate.net.xml",
+            }
+        ],
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["final_composite_sumo_load_required"] is True
 
 
 def test_run_teacher_guided_repair_queue_replays_expanded_scope_followup_in_same_call(
@@ -5059,7 +5587,7 @@ def test_run_teacher_guided_repair_queue_replays_expanded_scope_followup_in_same
             }
         final_net = Path(kwargs["output_dir"]) / "final.net.xml"
         final_net.parent.mkdir(parents=True, exist_ok=True)
-        final_net.write_text("<net><junction id=\"cluster_a_j_n_q\"/></net>", encoding="utf-8")
+        final_net.write_text('<net><junction id="cluster_a_j_n_q"/></net>', encoding="utf-8")
         return {
             "status": "pass",
             "claim_status": "diagnostic-demo",
@@ -5144,13 +5672,15 @@ def test_run_teacher_guided_repair_queue_replays_overlapping_followup_after_acce
     teacher_net = tmp_path / "teacher.net.xml"
     candidate_net = tmp_path / "candidate.net.xml"
     teacher_net.write_text("<net/>\n", encoding="utf-8")
-    candidate_net.write_text("<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>\n", encoding="utf-8")
+    candidate_net.write_text(
+        '<net><junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/></net>\n', encoding="utf-8"
+    )
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
         if command[0] == "netconvert-test":
             output_file = Path(cwd) / command[command.index("--output-file") + 1]
             output_file.write_text(
-                "<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>",
+                '<net><junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/></net>',
                 encoding="utf-8",
             )
         return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
@@ -5158,7 +5688,7 @@ def test_run_teacher_guided_repair_queue_replays_overlapping_followup_after_acce
     def fake_final_internal_replay(**kwargs):
         output_file = kwargs["output_file"]
         output_file.write_text(
-            "<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>",
+            '<net><junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/></net>',
             encoding="utf-8",
         )
         return {"status": "pass", "net_file": str(output_file)}
@@ -5170,7 +5700,7 @@ def test_run_teacher_guided_repair_queue_replays_overlapping_followup_after_acce
         final_net = Path(kwargs["output_dir"]) / f"final_{len(variant_calls)}.net.xml"
         final_net.parent.mkdir(parents=True, exist_ok=True)
         final_net.write_text(
-            "<net><junction id=\"j\" type=\"priority\" x=\"0\" y=\"0\" incLanes=\"\" intLanes=\"\"/></net>",
+            '<net><junction id="j" type="priority" x="0" y="0" incLanes="" intLanes=""/></net>',
             encoding="utf-8",
         )
         replay = {
@@ -5182,9 +5712,7 @@ def test_run_teacher_guided_repair_queue_replays_overlapping_followup_after_acce
             replay = {
                 **replay,
                 "removed_stale_replaced_edge_connection_count": 1,
-                "removed_stale_replaced_edge_connections": [
-                    {"from": "main", "to": "neighbor_out", "via": ":n_0_0"}
-                ],
+                "removed_stale_replaced_edge_connections": [{"from": "main", "to": "neighbor_out", "via": ":n_0_0"}],
             }
         return {
             "status": "pass",
@@ -5444,6 +5972,8 @@ def test_run_teacher_guided_repair_queue_replays_joined_expanded_scope_on_full_n
     assert variant_calls[0]["raw_connection_file"] == raw_connections
     assert variant_calls[0]["raw_edge_file"] == raw_edges
     assert variant_calls[0]["preserve_teacher_lane_shapes"] is False
+    assert variant_calls[0]["structural_osm_boundary_authority"] is True
+    assert variant_calls[0]["safety_junction_ids"] == ["cluster_a_b"]
     assert variant_calls[0]["emit_teacher_crossings"] is False
     assert '<join nodes="a b"' in variant_calls[0]["raw_node_file"].read_text(encoding="utf-8")
 
@@ -5721,6 +6251,7 @@ def test_run_teacher_guided_repair_queue_filters_join_scope_dead_end_connections
         if command[0] == "netconvert-test":
             output_file = Path(cwd) / command[command.index("--output-file") + 1]
             if output_file.name == "full_network_join_replay.net.xml":
+                assert command[command.index("--offset.disable-normalization") + 1] == "true"
                 connection_arg = command[command.index("--connection-files") + 1]
                 seed_connection_files.append(Path(cwd) / connection_arg)
             output_file.write_text(
@@ -5738,7 +6269,12 @@ def test_run_teacher_guided_repair_queue_filters_join_scope_dead_end_connections
         final_net = kwargs["output_dir"] / "final.net.xml"
         final_net.parent.mkdir(parents=True, exist_ok=True)
         final_net.write_text("<net/>", encoding="utf-8")
-        return {"status": "pass", "claim_status": "diagnostic-demo", "parity_gate_status": "pass", "final_net_file": str(final_net)}
+        return {
+            "status": "pass",
+            "claim_status": "diagnostic-demo",
+            "parity_gate_status": "pass",
+            "final_net_file": str(final_net),
+        }
 
     report = run_teacher_guided_repair_queue(
         queue_report={
@@ -7144,6 +7680,7 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
     teacher_net.write_text("<net/>", encoding="utf-8")
     candidate_net.write_text('<net><junction id="cluster_a_b"/></net>', encoding="utf-8")
     full_network_seed_checked = False
+    materialized_plain_checked = False
     variant_calls = []
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
@@ -7155,6 +7692,11 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
             if output_file.name == "full_network_join_replay.net.xml":
                 scope_nodes = ET.parse(node_file).getroot()
                 assert scope_nodes.find("node[@id='cluster_a_b']") is None
+                assert scope_nodes.find("join[@nodes='a b']") is not None
+                edge_arg = command[command.index("--edge-files") + 1]
+                scope_edges = ET.parse(Path(cwd) / edge_arg).getroot()
+                assert scope_edges.find("edge[@id='west']").attrib["to"] == "a"
+                assert scope_edges.find("edge[@id='east']").attrib["from"] == "b"
                 full_network_seed_checked = True
             output_file.write_text(
                 """<net>
@@ -7164,8 +7706,40 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
             )
         return {"command": command, "cwd": str(cwd), "status": "pass", "returncode": 0}
 
+    def fake_plain_exporter(**kwargs):
+        output_dir = kwargs["output_dir"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        node_file = output_dir / "joined.nod.xml"
+        edge_file = output_dir / "joined.edg.xml"
+        connection_file = output_dir / "joined.con.xml"
+        node_file.write_text(
+            '<nodes><node id="cluster_a_b" x="0" y="0"/></nodes>',
+            encoding="utf-8",
+        )
+        edge_file.write_text(
+            """<edges>
+  <edge id="west" from="w" to="cluster_a_b"><lane index="0"/></edge>
+  <edge id="east" from="cluster_a_b" to="e"><lane index="0"/></edge>
+</edges>""",
+            encoding="utf-8",
+        )
+        connection_file.write_text("<connections/>", encoding="utf-8")
+        return {
+            "status": "pass",
+            "raw_node_file": str(node_file),
+            "raw_edge_file": str(edge_file),
+            "raw_connection_file": str(connection_file),
+            "raw_type_file": "",
+            "raw_tllogic_file": "",
+        }
+
     def fake_variant(**kwargs):
+        nonlocal materialized_plain_checked
         variant_calls.append(kwargs)
+        joined_edges = ET.parse(kwargs["raw_edge_file"]).getroot()
+        assert joined_edges.find("edge[@id='west']").attrib["to"] == "cluster_a_b"
+        assert joined_edges.find("edge[@id='east']").attrib["from"] == "cluster_a_b"
+        materialized_plain_checked = True
         final_net = kwargs["output_dir"] / "final.net.xml"
         final_net.write_text(
             """<net>
@@ -7190,6 +7764,8 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
                     "reference_id": "cluster_a_b",
                     "junction_id": "cluster_a_b",
                     "candidate_status": "needs_expanded_rebuild_scope",
+                    "learned_rule": "tum_like_join_candidate",
+                    "teacher_pattern_key": "four_way|control=traffic_light|veh=2",
                     "edge_map": {"teacher_west": "west", "teacher_east": "east"},
                     "expanded_rebuild_scope": {
                         "status": "review",
@@ -7209,13 +7785,16 @@ def test_run_teacher_guided_repair_queue_replaces_stale_joined_node_with_join_pa
         netconvert_binary="netconvert-test",
         sumo_binary="sumo-test",
         command_runner=fake_runner,
+        plain_exporter=fake_plain_exporter,
         variant_builder=fake_variant,
     )
 
     assert report["skipped_candidate_count"] == 0
     assert report["attempted_candidate_count"] == 1
     assert variant_calls[0]["junction_id"] == "cluster_a_b"
+    assert variant_calls[0]["replay_target_internal_subgraph"] is False
     assert full_network_seed_checked is True
+    assert materialized_plain_checked is True
 
 
 def test_run_teacher_guided_repair_queue_refreshes_stale_edge_map_after_join_patch(
@@ -8669,6 +9248,208 @@ def test_write_teacher_connection_plan_uses_join_member_for_plain_crossing_node(
     assert report["crossing_node_rewrite_count"] == 1
 
 
+def test_write_teacher_connection_plan_leaves_joined_scope_for_netconvert_generation(
+    tmp_path: Path,
+) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        """<connections>
+  <connection from="other_in" to="other_out" fromLane="0" toLane="0"/>
+  <connection from="cand_in"/>
+  <connection from="cand_in" to="cand_out" fromLane="0" toLane="0"/>
+  <connection from="healthy_in" to="cand_out" fromLane="0" toLane="0"/>
+</connections>""",
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="other_in" from="o" to="x"><lane index="0" allow="passenger"/></edge>
+  <edge id="other_out" from="x" to="p"><lane index="0" allow="passenger"/></edge>
+  <edge id="cand_in" from="a" to="j">
+    <lane index="0" allow="bicycle"/>
+    <lane index="1" allow="passenger"/>
+  </edge>
+  <edge id="healthy_in" from="h" to="j"><lane index="0" allow="passenger"/></edge>
+  <edge id="cand_out" from="j" to="b"><lane index="0" allow="passenger"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "structural.con.xml",
+        junction_id="j",
+        teacher_model={
+            "vehicle_connections": [
+                {
+                    "from": "teacher_in",
+                    "to": "teacher_out",
+                    "fromLane": "1",
+                    "toLane": "0",
+                }
+            ],
+            "crossings": [],
+        },
+        candidate_model={
+            "approaches": {
+                "incoming": [
+                    {"edge_id": "cand_in", "lane_count": 2},
+                    {"edge_id": "healthy_in", "lane_count": 1},
+                ],
+                "outgoing": [{"edge_id": "cand_out", "lane_count": 1}],
+            }
+        },
+        edge_map={
+            "teacher_in": "cand_in",
+            "teacher_out": "cand_out",
+        },
+        candidate_edge_file=candidate_edges,
+        generate_structural_connections=True,
+    )
+
+    root = ET.parse(report["connection_file"]).getroot()
+    assert [row.attrib for row in root.findall("connection")] == [
+        {
+            "from": "other_in",
+            "to": "other_out",
+            "fromLane": "0",
+            "toLane": "0",
+        },
+        {
+            "from": "cand_in",
+            "to": "cand_out",
+            "fromLane": "0",
+            "toLane": "0",
+        },
+        {
+            "from": "healthy_in",
+            "to": "cand_out",
+            "fromLane": "0",
+            "toLane": "0",
+        },
+        {
+            "from": "cand_in",
+            "to": "cand_out",
+            "fromLane": "1",
+            "toLane": "0",
+            "uncontrolled": "true",
+        },
+    ]
+    assert root.findall("delete") == []
+    assert report["structural_connection_generation"] is True
+    assert report["structural_regenerated_source_edge_ids"] == ["cand_in"]
+
+
+def test_structural_connection_plan_does_not_count_raw_turnaround_as_connectivity(
+    tmp_path: Path,
+) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        '<connections><connection from="in" to="-in" fromLane="0" toLane="0"/></connections>',
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="in" from="a" to="j"><lane index="0" allow="passenger"/></edge>
+  <edge id="-in" from="j" to="a"><lane index="0" allow="passenger"/></edge>
+  <edge id="out" from="j" to="b"><lane index="0" allow="passenger"/></edge>
+</edges>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "structural.con.xml",
+        junction_id="j",
+        teacher_model={
+            "vehicle_connections": [
+                {
+                    "from": "teacher_in",
+                    "to": "teacher_out",
+                    "fromLane": "0",
+                    "toLane": "0",
+                }
+            ],
+            "crossings": [],
+        },
+        candidate_model={
+            "approaches": {
+                "incoming": [{"edge_id": "in", "lane_count": 1}],
+                "outgoing": [
+                    {"edge_id": "-in", "lane_count": 1},
+                    {"edge_id": "out", "lane_count": 1},
+                ],
+            }
+        },
+        edge_map={"teacher_in": "in", "teacher_out": "out"},
+        candidate_edge_file=candidate_edges,
+        generate_structural_connections=True,
+    )
+
+    connections = [
+        (row.attrib["from"], row.attrib["to"])
+        for row in ET.parse(report["connection_file"]).getroot().findall("connection")
+    ]
+    assert ("in", "out") in connections
+    assert report["structural_missing_lanes_by_source"] == {"in": [0]}
+
+
+def test_structural_connection_plan_fills_unreached_outgoing_vehicle_lane(
+    tmp_path: Path,
+) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        '<connections><connection from="in" to="out" fromLane="0" toLane="1"/></connections>',
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="in" from="a" to="j"><lane index="0" allow="passenger"/></edge>
+  <edge id="out" from="j" to="b">
+    <lane index="0" allow="passenger"/>
+    <lane index="1" allow="passenger"/>
+  </edge>
+</edges>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "structural.con.xml",
+        junction_id="j",
+        teacher_model={
+            "vehicle_connections": [
+                {
+                    "from": "teacher_in",
+                    "to": "teacher_out",
+                    "fromLane": "0",
+                    "toLane": "0",
+                }
+            ],
+            "crossings": [],
+        },
+        candidate_model={
+            "approaches": {
+                "incoming": [{"edge_id": "in", "lane_count": 1}],
+                "outgoing": [{"edge_id": "out", "lane_count": 2}],
+            }
+        },
+        edge_map={"teacher_in": "in", "teacher_out": "out"},
+        candidate_edge_file=candidate_edges,
+        generate_structural_connections=True,
+    )
+
+    connections = [
+        (row.attrib["fromLane"], row.attrib["toLane"])
+        for row in ET.parse(report["connection_file"]).getroot().findall("connection[@from='in'][@to='out']")
+    ]
+    assert connections == [("0", "1"), ("0", "0")]
+    assert report["structural_missing_lanes_by_target"] == {"out": [0]}
+
+
 def test_write_teacher_connection_plan_preserves_neighbor_connections_on_shared_boundary_edges(tmp_path: Path) -> None:
     raw_connections = tmp_path / "raw.con.xml"
     raw_connections.write_text(
@@ -8798,7 +9579,9 @@ def test_write_teacher_connection_plan_skips_teacher_connections_via_other_inter
     assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [
         ("cand_in", "cand_out")
     ]
-    assert ("cand_out", "cand_back") not in [(item.attrib["from"], item.attrib["to"]) for item in root.findall("delete")]
+    assert ("cand_out", "cand_back") not in [
+        (item.attrib["from"], item.attrib["to"]) for item in root.findall("delete")
+    ]
     assert report["skipped_off_scope_internal_connection_count"] == 1
 
 
@@ -8889,7 +9672,9 @@ def test_write_teacher_connection_plan_ignores_edges_missing_from_patched_edge_f
     )
 
     root = ET.parse(report["connection_file"]).getroot()
-    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [("cand_in", "cand_out")]
+    assert [(item.attrib["from"], item.attrib["to"]) for item in root.findall("connection")] == [
+        ("cand_in", "cand_out")
+    ]
     assert root.findall("delete") == []
     assert report["removed_target_children"] == 2
 
@@ -9052,6 +9837,42 @@ def test_write_teacher_lane_patch_edges_copies_lane_permissions_and_geometry_wit
     assert "outlineShape" not in lanes[1].attrib
     assert report["patched_edge_count"] == 1
     assert report["lane_shape_translation_applied"] is True
+
+
+def test_write_teacher_lane_patch_edges_can_preserve_complete_osm_profile(
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "raw.edg.xml"
+    teacher = tmp_path / "teacher.net.xml"
+    output = tmp_path / "patched.edg.xml"
+    raw.write_text(
+        """<edges>
+  <edge id="current" from="a" to="b" numLanes="1" speed="7">
+    <lane index="0" allow="bicycle" width="1.5" shape="0,0 5,0"/>
+  </edge>
+</edges>""",
+        encoding="utf-8",
+    )
+    teacher.write_text(
+        """<net>
+  <edge id="old" from="x" to="y" numLanes="3" speed="20">
+    <lane index="0"/><lane index="1"/><lane index="2"/>
+  </edge>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_lane_patch_edges(
+        raw_edge_file=raw,
+        teacher_edge_file=teacher,
+        output_file=output,
+        edge_map={"old": "current"},
+        preserve_osm_lane_profiles=True,
+    )
+
+    assert output.read_bytes() == raw.read_bytes()
+    assert report["patched_edge_count"] == 0
+    assert report["preserve_osm_lane_profiles"] is True
 
 
 def test_teacher_target_replay_uses_geometry_from_anchor_file(tmp_path: Path) -> None:
@@ -9741,9 +10562,27 @@ def test_write_teacher_pedestrian_ring_net_replays_teacher_ring_and_removes_extr
         ],
         "pedestrian_connections": [
             {"from": ":j_c0", "to": ":j_w0", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
-            {"from": ":j_w1", "to": ":j_c0", "fromLane": "0", "toLane": "0", "tl": "j", "linkIndex": "1", "dir": "s", "state": "M"},
+            {
+                "from": ":j_w1",
+                "to": ":j_c0",
+                "fromLane": "0",
+                "toLane": "0",
+                "tl": "j",
+                "linkIndex": "1",
+                "dir": "s",
+                "state": "M",
+            },
             {"from": ":j_c1", "to": ":j_w1", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
-            {"from": ":j_w0", "to": ":j_c1", "fromLane": "0", "toLane": "0", "tl": "j", "linkIndex": "2", "dir": "s", "state": "M"},
+            {
+                "from": ":j_w0",
+                "to": ":j_c1",
+                "fromLane": "0",
+                "toLane": "0",
+                "tl": "j",
+                "linkIndex": "2",
+                "dir": "s",
+                "state": "M",
+            },
             {"from": "teacher_ped", "to": ":j_w0", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
         ],
     }
@@ -9791,7 +10630,14 @@ def test_write_teacher_pedestrian_ring_net_skips_connections_with_missing_mapped
             }
         ],
         "pedestrian_connections": [
-            {"from": "teacher_missing", "to": ":teacher_j_w0", "fromLane": "0", "toLane": "0", "dir": "s", "state": "M"},
+            {
+                "from": "teacher_missing",
+                "to": ":teacher_j_w0",
+                "fromLane": "0",
+                "toLane": "0",
+                "dir": "s",
+                "state": "M",
+            },
         ],
     }
 
@@ -10052,8 +10898,15 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
         """<net>
   <edge id="cand_in"><lane id="cand_in_0" index="0"/></edge>
   <edge id="cand_out"><lane id="cand_out_0" index="0"/></edge>
+  <edge id="extra_out"><lane id="extra_out_0" index="0"/></edge>
+  <edge id="bike_in"><lane id="bike_in_0" index="0" allow="bicycle"/></edge>
+  <edge id="bike_out"><lane id="bike_out_0" index="0" allow="bicycle"/></edge>
   <junction id="candidate_tls" x="10" y="20"/>
   <connection from="cand_in" to="cand_out" fromLane="0" toLane="0"/>
+  <connection from="cand_in" to="extra_out" fromLane="0" toLane="0"
+              tl="candidate_tls" linkIndex="4"/>
+  <connection from="bike_in" to="bike_out" fromLane="0" toLane="0"
+              tl="candidate_tls" linkIndex="5"/>
 </net>
 """,
         encoding="utf-8",
@@ -10077,7 +10930,13 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
                 "keepClear": "0",
                 "contPos": "43.00",
                 "shape": "100,200 101,201",
-            }
+            },
+            {
+                "from": "teacher_bike_in",
+                "to": "teacher_bike_out",
+                "fromLane": "0",
+                "toLane": "0",
+            },
         ],
         "junction": {"x": "100", "y": "200"},
     }
@@ -10087,10 +10946,16 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
         output_file=tmp_path / "attrs.net.xml",
         junction_id="candidate_tls",
         teacher_model=teacher_model,
-        edge_map={"teacher_in": "cand_in", "teacher_out": "cand_out"},
+        edge_map={
+            "teacher_in": "cand_in",
+            "teacher_out": "cand_out",
+            "teacher_bike_in": "bike_in",
+            "teacher_bike_out": "bike_out",
+        },
     )
 
-    connection = ET.parse(report["net_file"]).getroot().find("connection")
+    root = ET.parse(report["net_file"]).getroot()
+    connection = root.find("connection[@to='cand_out']")
     assert connection.attrib["tl"] == "candidate_tls"
     assert connection.attrib["linkIndex"] == "3"
     assert connection.attrib["linkIndex2"] == "12"
@@ -10103,6 +10968,15 @@ def test_write_teacher_vehicle_connection_attrs_net_preserves_teacher_connection
     assert connection.attrib["keepClear"] == "0"
     assert connection.attrib["contPos"] == "43.00"
     assert connection.attrib["shape"] == "10.00,20.00 11.00,21.00"
+    extra = root.find("connection[@to='extra_out']")
+    assert "tl" not in extra.attrib
+    assert "linkIndex" not in extra.attrib
+    assert extra.attrib["uncontrolled"] == "true"
+    bike = root.find("connection[@from='bike_in']")
+    assert "tl" not in bike.attrib
+    assert "linkIndex" not in bike.attrib
+    assert bike.attrib["uncontrolled"] == "true"
+    assert report["detached_unmapped_controlled_vehicle_connection_count"] == 1
 
 
 def test_teacher_parity_counts_only_target_tls_controlled_links() -> None:
@@ -10260,18 +11134,14 @@ def test_teacher_parity_fails_on_main_junction_signature_mismatch_after_translat
     gate = _teacher_guided_semantics_gate(parity)
 
     assert parity["teacher"]["junction_signature"] == (
-        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|"
-        "intLanes=:candidate_j_0_0|shape=-1.00,-1.00 1.00,-1.00"
+        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|intLanes=:candidate_j_0_0|shape=-1.00,-1.00 1.00,-1.00"
     )
     assert parity["candidate"]["junction_signature"] == (
-        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|"
-        "intLanes=:candidate_j_0_0|shape=-2.00,-2.00 2.00,-2.00"
+        "type=traffic_light|incLanes=cand_in_0 :candidate_j_0_0|intLanes=:candidate_j_0_0|shape=-2.00,-2.00 2.00,-2.00"
     )
     assert parity["delta"]["junction_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "junction_signature_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "junction_signature_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> None:
@@ -10280,12 +11150,12 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
         "summary": {},
         "approaches": {
             "incoming": [
-                    {
-                        "edge_id": "teacher_in",
-                        "from": "shared_source",
-                        "to": "teacher_j",
-                        "type": "highway.primary",
-                        "function": "",
+                {
+                    "edge_id": "teacher_in",
+                    "from": "shared_source",
+                    "to": "teacher_j",
+                    "type": "highway.primary",
+                    "function": "",
                     "lanes": [
                         {
                             "index": "0",
@@ -10310,12 +11180,12 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
         "summary": {},
         "approaches": {
             "incoming": [
-                    {
-                        "edge_id": "cand_in",
-                        "from": "shared_source",
-                        "to": "candidate_j",
-                        "type": "highway.primary",
-                        "function": "",
+                {
+                    "edge_id": "cand_in",
+                    "from": "shared_source",
+                    "to": "candidate_j",
+                    "type": "highway.primary",
+                    "function": "",
                     "lanes": [
                         {
                             "index": "0",
@@ -10354,9 +11224,7 @@ def test_teacher_parity_fails_on_mapped_approach_lane_signature_mismatch() -> No
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
     assert "approach_endpoint_signature_mismatch_count" not in parity["delta"]
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "approach_edge_signature_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "approach_edge_signature_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_normalizes_mapped_approach_shape_by_junction_origin() -> None:
@@ -10538,8 +11406,12 @@ def test_teacher_parity_fails_on_mapped_approach_endpoint_mismatch() -> None:
     assert parity["candidate"]["approach_edge_signatures"]["incoming:cand_in"].startswith(
         "from=candidate_boundary|to=candidate_j|"
     )
-    assert parity["teacher"]["approach_endpoint_signatures"] == {"incoming:cand_in": "from=teacher_boundary|to=candidate_j"}
-    assert parity["candidate"]["approach_endpoint_signatures"] == {"incoming:cand_in": "from=candidate_boundary|to=candidate_j"}
+    assert parity["teacher"]["approach_endpoint_signatures"] == {
+        "incoming:cand_in": "from=teacher_boundary|to=candidate_j"
+    }
+    assert parity["candidate"]["approach_endpoint_signatures"] == {
+        "incoming:cand_in": "from=candidate_boundary|to=candidate_j"
+    }
     assert parity["delta"]["approach_endpoint_signature_mismatch_count"] == 1
     assert parity["delta"]["approach_edge_signature_mismatch_count"] == 1
 
@@ -10599,9 +11471,7 @@ def test_teacher_parity_fails_on_tls_phase_state_mismatch() -> None:
     assert parity["candidate"]["tl_phase_signatures"] == ["state=rG|duration=30|minDur=|maxDur=|next="]
     assert parity["delta"]["tl_phase_signatures_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "tl_phase_signatures_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "tl_phase_signatures_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_fails_on_request_matrix_mismatch() -> None:
@@ -10629,9 +11499,7 @@ def test_teacher_parity_fails_on_request_matrix_mismatch() -> None:
     assert parity["candidate"]["request_signatures"] == ["index=0|response=0|foes=01|cont=0"]
     assert parity["delta"]["request_signatures_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "request_signatures_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "request_signatures_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_fails_on_mapped_controlled_link_signature_mismatch() -> None:
@@ -11009,9 +11877,7 @@ def test_teacher_parity_fails_on_mapped_crossing_edge_set_mismatch() -> None:
     assert parity["candidate"]["crossing_signatures"] == {":candidate_j_c0": "edges=cand_in cand_wrong"}
     assert parity["delta"]["crossing_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "crossing_signature_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "crossing_signature_mismatch_count", "count": 1}]
 
 
 def test_semantic_layer_gates_route_crossing_and_walkingarea_to_pedestrian_bike() -> None:
@@ -11063,7 +11929,13 @@ def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -
                 "function": "crossing",
                 "crossingEdges": ["teacher_in", "teacher_out"],
                 "lanes": [
-                    {"index": "0", "allow": "pedestrian", "width": "4.00", "shape": "0,0 1,1", "outlineShape": "0,0 1,0"}
+                    {
+                        "index": "0",
+                        "allow": "pedestrian",
+                        "width": "4.00",
+                        "shape": "0,0 1,1",
+                        "outlineShape": "0,0 1,0",
+                    }
                 ],
             }
         ],
@@ -11080,7 +11952,13 @@ def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -
                 "function": "crossing",
                 "crossingEdges": ["cand_in", "cand_out"],
                 "lanes": [
-                    {"index": "0", "allow": "pedestrian", "width": "2.00", "shape": "0,0 2,2", "outlineShape": "0,0 2,0"}
+                    {
+                        "index": "0",
+                        "allow": "pedestrian",
+                        "width": "2.00",
+                        "shape": "0,0 2,2",
+                        "outlineShape": "0,0 2,0",
+                    }
                 ],
             }
         ],
@@ -11104,9 +11982,7 @@ def test_teacher_parity_fails_on_mapped_crossing_geometry_signature_mismatch() -
     }
     assert parity["delta"]["crossing_geometry_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "crossing_geometry_signature_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "crossing_geometry_signature_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_normalizes_internal_pedestrian_geometry_by_junction_origin() -> None:
@@ -11270,9 +12146,7 @@ def test_teacher_parity_fails_on_mapped_internal_edge_signature_mismatch() -> No
     }
     assert parity["delta"]["internal_edge_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "internal_edge_signature_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "internal_edge_signature_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_fails_on_mapped_internal_junction_signature_mismatch() -> None:
@@ -11328,9 +12202,7 @@ def test_teacher_parity_fails_on_mapped_internal_junction_signature_mismatch() -
     }
     assert parity["delta"]["internal_junction_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "internal_junction_signature_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "internal_junction_signature_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_fails_on_mapped_walking_area_signature_mismatch() -> None:
@@ -11344,7 +12216,13 @@ def test_teacher_parity_fails_on_mapped_walking_area_signature_mismatch() -> Non
                 "edge_id": ":teacher_j_w0",
                 "function": "walkingarea",
                 "lanes": [
-                    {"index": "0", "allow": "pedestrian", "width": "4.00", "shape": "0,0 1,1", "outlineShape": "0,0 1,0"}
+                    {
+                        "index": "0",
+                        "allow": "pedestrian",
+                        "width": "4.00",
+                        "shape": "0,0 1,1",
+                        "outlineShape": "0,0 1,0",
+                    }
                 ],
             }
         ],
@@ -11360,7 +12238,13 @@ def test_teacher_parity_fails_on_mapped_walking_area_signature_mismatch() -> Non
                 "edge_id": ":candidate_j_w0",
                 "function": "walkingarea",
                 "lanes": [
-                    {"index": "0", "allow": "pedestrian", "width": "2.00", "shape": "0,0 2,2", "outlineShape": "0,0 2,0"}
+                    {
+                        "index": "0",
+                        "allow": "pedestrian",
+                        "width": "2.00",
+                        "shape": "0,0 2,2",
+                        "outlineShape": "0,0 2,0",
+                    }
                 ],
             }
         ],
@@ -11384,9 +12268,7 @@ def test_teacher_parity_fails_on_mapped_walking_area_signature_mismatch() -> Non
     }
     assert parity["delta"]["walking_area_signature_mismatch_count"] == 1
     assert gate["status"] == "fail"
-    assert gate["failures"] == [
-        {"report": "parity", "field": "walking_area_signature_mismatch_count", "count": 1}
-    ]
+    assert gate["failures"] == [{"report": "parity", "field": "walking_area_signature_mismatch_count", "count": 1}]
 
 
 def test_teacher_parity_fails_on_mapped_internal_connection_signature_mismatch() -> None:
@@ -11519,8 +12401,7 @@ def _hybrid_authority_fixture() -> dict[str, object]:
         "status": "pass",
         "preserve_lane_shapes": False,
         "patched_edges": [
-            {"teacher_edge_id": teacher, "candidate_edge_id": candidate}
-            for teacher, candidate in edge_map.items()
+            {"teacher_edge_id": teacher, "candidate_edge_id": candidate} for teacher, candidate in edge_map.items()
         ],
         "added_missing_mapped_edge_count": 0,
         "rebased_missing_mapped_edge_count": 0,
@@ -11535,9 +12416,7 @@ def _hybrid_authority_fixture() -> dict[str, object]:
         "preserve_mapped_boundary_endpoints": True,
         "blend_geometry_anchor_at_target": True,
         "copied_boundary_edge_count": 2,
-        "preserved_mapped_boundary_endpoints": [
-            {"candidate_edge_id": candidate} for candidate in edge_map.values()
-        ],
+        "preserved_mapped_boundary_endpoints": [{"candidate_edge_id": candidate} for candidate in edge_map.values()],
         "blended_geometry_anchor_edge_ids": list(edge_map.values()),
     }
     return {
@@ -11571,9 +12450,7 @@ def test_hybrid_osm_approach_authority_waives_only_expected_remote_signature_del
 
 def test_hybrid_osm_approach_authority_keeps_tls_or_boundary_regressions_blocked() -> None:
     fixture = _hybrid_authority_fixture()
-    fixture["target_internal_replay"]["preserved_mapped_boundary_endpoints"] = [
-        {"candidate_edge_id": "candidate_in"}
-    ]
+    fixture["target_internal_replay"]["preserved_mapped_boundary_endpoints"] = [{"candidate_edge_id": "candidate_in"}]
 
     report = _hybrid_osm_approach_authority_policy(
         fixture["raw_gate"],
@@ -11593,6 +12470,24 @@ def test_hybrid_osm_approach_authority_keeps_tls_or_boundary_regressions_blocked
     ]
 
 
+def test_hybrid_osm_approach_authority_blocks_missing_internal_replay() -> None:
+    fixture = _hybrid_authority_fixture()
+
+    report = _hybrid_osm_approach_authority_policy(
+        fixture["raw_gate"],
+        replay_target_internal_subgraph=True,
+        preserve_teacher_lane_shapes=False,
+        edge_map=fixture["edge_map"],
+        lane_patch=fixture["lane_patch"],
+        target_internal_replay=None,
+        tls_movement_parity={"status": "pass"},
+        pedestrian_crossing_parity={"status": "pass"},
+    )
+
+    assert report["status"] == "fail"
+    assert "target_internal_replay_not_pass" in report["invariant_failures"]
+
+
 def test_hybrid_osm_approach_authority_does_not_change_strict_mode() -> None:
     fixture = _hybrid_authority_fixture()
 
@@ -11610,6 +12505,690 @@ def test_hybrid_osm_approach_authority_does_not_change_strict_mode() -> None:
     assert report["status"] == "not_applied"
     assert report["policy"] == "strict_teacher_parity"
     assert report["effective_semantic_gate"] == fixture["raw_gate"]
+
+
+def test_hybrid_osm_approach_authority_accepts_preserved_boundary_structural_replay() -> None:
+    report = _hybrid_osm_approach_authority_policy(
+        {
+            "status": "fail",
+            "failures": [
+                {"report": "parity", "field": "approach_edge_signature_mismatch_count", "count": 13},
+                {"report": "pedestrian_ring", "field": "skipped_pedestrian_connection_count", "count": 1},
+            ],
+        },
+        replay_target_internal_subgraph=False,
+        preserve_teacher_lane_shapes=True,
+        structural_osm_boundary_authority=True,
+        edge_map={"teacher_in": "candidate_in"},
+        lane_patch={
+            "status": "pass",
+            "pruned_boundary_edge_count": 0,
+            "preserve_lane_shapes": True,
+            "preserve_osm_lane_profiles": True,
+        },
+        target_internal_replay=None,
+        tls_movement_parity={"status": "fail", "tl_logic_phase_states_equal": True},
+        pedestrian_crossing_parity={"status": "fail"},
+        connection_plan={
+            "status": "pass",
+            "structural_connection_generation": True,
+        },
+        vehicle_connection_attrs={
+            "status": "pass",
+            "skipped_vehicle_connection_count": 2,
+            "skipped_motorized_vehicle_connection_count": 0,
+        },
+        boundary_edge_preservation={"status": "pass"},
+        boundary_vehicle_connectivity={"status": "pass"},
+        target_surface_overlap_gate={"status": "pass"},
+        turnaround_audit={"automatic_promotion_gate": "pass"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["policy"] == "osm_boundary_teacher_vehicle_movements"
+    assert report["capabilities"] == {
+        "topology": "pass",
+        "vehicle_movements": "pass",
+        "signal_control": "review_required",
+        "pedestrian_crossings": "review_required",
+    }
+    assert report["effective_semantic_gate"] == {"status": "pass", "failures": []}
+
+
+def test_boundary_vehicle_connectivity_ignores_bike_edges_and_blocks_vehicle_dead_ends(
+    tmp_path: Path,
+) -> None:
+    net = tmp_path / "candidate.net.xml"
+    net.write_text(
+        """<net>
+  <edge id="vehicle_in" from="a" to="j"><lane id="vehicle_in_0" index="0"/></edge>
+  <edge id="vehicle_out" from="j" to="b"><lane id="vehicle_out_0" index="0"/></edge>
+  <edge id="bike_in" from="c" to="j"><lane id="bike_in_0" index="0" allow="bicycle"/></edge>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = _boundary_vehicle_connectivity(net, "j")
+
+    assert report["status"] == "fail"
+    assert report["unconnected_incoming_vehicle_lane_ids"] == ["vehicle_in_0"]
+    assert report["unconnected_outgoing_vehicle_lane_ids"] == ["vehicle_out_0"]
+
+
+def test_target_surface_overlap_gate_blocks_only_target_related_findings(
+    tmp_path: Path,
+) -> None:
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        geometry_errors=[{"junction_id": "other", "kind": "invalid_junction_polygon"}],
+        junction_junction_overlaps=[
+            {
+                "first_junction_id": "target",
+                "second_junction_id": "neighbor",
+                "overlap_area_m2": 1.0,
+            }
+        ],
+    )
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["geometry_error_count"] == 0
+    assert gate["junction_overlap_count"] == 1
+
+
+def test_target_surface_overlap_gate_ignores_target_owned_lane_at_remote_junction(
+    tmp_path: Path,
+) -> None:
+    inherited_finding = {
+        "lane_id": "target_out_0",
+        "from_junction_id": "target",
+        "to_junction_id": "remote",
+        "non_owner_junction_id": "far_junction",
+        "overlap_area_m2": 1.0,
+    }
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        external_lane_non_owner_junction_overlaps=[inherited_finding],
+    )
+    baseline, baseline_file, baseline_net_file = _bound_surface_report(
+        tmp_path,
+        "baseline-surface",
+        external_lane_non_owner_junction_overlaps=[inherited_finding],
+    )
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        baseline_report=baseline,
+        baseline_report_file=baseline_file,
+        baseline_expected_net_file=baseline_net_file,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["lane_non_owner_overlap_count"] == 0
+    assert gate["lane_target_owner_inherited_count"] == 1
+    assert gate["lane_target_owner_regression_count"] == 0
+
+
+def test_target_surface_overlap_gate_blocks_new_target_owned_lane_overlap(
+    tmp_path: Path,
+) -> None:
+    finding = {
+        "lane_id": "target_out_0",
+        "from_junction_id": "target",
+        "to_junction_id": "remote",
+        "non_owner_junction_id": "far_junction",
+        "overlap_area_m2": 1.0,
+    }
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        external_lane_non_owner_junction_overlaps=[finding],
+    )
+    baseline, baseline_file, baseline_net_file = _bound_surface_report(
+        tmp_path,
+        "baseline-surface",
+    )
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        baseline_report=baseline,
+        baseline_report_file=baseline_file,
+        baseline_expected_net_file=baseline_net_file,
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["lane_target_owner_regression_count"] == 1
+
+
+def test_target_surface_overlap_gate_ignores_sub_square_centimeter_roundtrip_noise(
+    tmp_path: Path,
+) -> None:
+    baseline_finding = {
+        "lane_id": "target_out_0",
+        "from_junction_id": "target",
+        "to_junction_id": "remote",
+        "non_owner_junction_id": "far_junction",
+        "overlap_area_m2": 1.0,
+    }
+    final_finding = {**baseline_finding, "overlap_area_m2": 1.000013}
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        external_lane_non_owner_junction_overlaps=[final_finding],
+    )
+    baseline, baseline_file, baseline_net_file = _bound_surface_report(
+        tmp_path,
+        "baseline-surface",
+        external_lane_non_owner_junction_overlaps=[baseline_finding],
+    )
+
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        baseline_report=baseline,
+        baseline_report_file=baseline_file,
+        baseline_expected_net_file=baseline_net_file,
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["lane_target_owner_regression_count"] == 0
+
+
+def test_target_surface_overlap_gate_normalizes_contracted_lane_alias(
+    tmp_path: Path,
+) -> None:
+    final_finding = {
+        "lane_id": "new_0",
+        "from_junction_id": "remote",
+        "to_junction_id": "owner",
+        "non_owner_junction_id": "target",
+        "overlap_area_m2": 1.0,
+    }
+    baseline_finding = {**final_finding, "lane_id": "old_0"}
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        external_lane_non_owner_junction_overlaps=[final_finding],
+    )
+    baseline, baseline_file, baseline_net_file = _bound_surface_report(
+        tmp_path,
+        "baseline-surface",
+        external_lane_non_owner_junction_overlaps=[baseline_finding],
+    )
+
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+        baseline_report=baseline,
+        baseline_report_file=baseline_file,
+        baseline_expected_net_file=baseline_net_file,
+        lane_edge_aliases={"old": "new"},
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["lane_non_owner_regression_count"] == 0
+    assert gate["lane_non_owner_inherited_count"] == 1
+
+
+def test_target_surface_overlap_gate_blocks_target_non_area_and_boundary_lane_error(
+    tmp_path: Path,
+) -> None:
+    report, report_file, net_file = _bound_surface_report(
+        tmp_path,
+        "surface",
+        non_area_junction_exclusions=[
+            {
+                "junction_id": "target",
+                "reason": "fewer_than_three_distinct_shape_points",
+            }
+        ],
+        geometry_errors=[
+            {
+                "lane_id": "in_0",
+                "from_junction_id": "remote",
+                "to_junction_id": "target",
+                "kind": "invalid_external_lane_geometry",
+            }
+        ],
+    )
+    gate = _target_surface_overlap_gate(
+        report,
+        "target",
+        report_file=report_file,
+        expected_net_file=net_file,
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["non_area_exclusion_count"] == 1
+    assert gate["geometry_error_count"] == 1
+
+
+def test_compound_short_internal_lane_gate_includes_bicycles(
+    tmp_path: Path,
+) -> None:
+    net = tmp_path / "candidate.net.xml"
+    net.write_text(
+        """<net>
+  <edge id=":satellite_0" function="internal">
+    <lane id=":satellite_0_0" index="0" allow="bicycle" length="0.3"
+          shape="0,0 0.3,0"/>
+  </edge>
+  <junction id="satellite" type="traffic_light"/>
+  <tlLogic id="satellite" type="static" programID="0" offset="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    gate = rebuild_candidate_module._short_internal_lane_gate(
+        net,
+        ["satellite"],
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["short_internal_vehicle_lane_count"] == 1
+    assert gate["blocking_compound_tls_short_lane_count"] == 1
+
+
+def test_compound_short_internal_lane_gate_allows_chained_conflict_segment(
+    tmp_path: Path,
+) -> None:
+    net = tmp_path / "candidate.net.xml"
+    net.write_text(
+        """<net>
+  <edge id=":target_0" function="internal">
+    <lane id=":target_0_0" index="0" allow="bicycle" length="0.2"
+          shape="0,0 0.2,0"/>
+  </edge>
+  <edge id=":target_1" function="internal">
+    <lane id=":target_1_0" index="0" allow="bicycle" length="8"
+          shape="0.2,0 8.2,0"/>
+  </edge>
+  <junction id="target" type="traffic_light"/>
+  <tlLogic id="target" type="static" programID="0" offset="0"/>
+  <connection from=":target_0" to="out" fromLane="0" toLane="0"
+              via=":target_1_0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    gate = rebuild_candidate_module._short_internal_lane_gate(net, ["target"])
+
+    assert gate["status"] == "pass"
+    assert gate["short_internal_vehicle_lane_count"] == 1
+    assert gate["short_internal_vehicle_lanes"][0]["chained_internal_segment"] is True
+    assert gate["blocking_compound_tls_short_lane_count"] == 0
+
+
+def test_compound_short_internal_lane_gate_reports_fused_non_tls_turn(
+    tmp_path: Path,
+) -> None:
+    net = tmp_path / "candidate.net.xml"
+    net.write_text(
+        """<net>
+  <edge id=":satellite_0" function="internal">
+    <lane id=":satellite_0_0" index="0" allow="bicycle" length="0.3"
+          shape="0,0 0.3,0"/>
+  </edge>
+  <junction id="satellite" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    gate = rebuild_candidate_module._short_internal_lane_gate(
+        net,
+        ["satellite"],
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["short_internal_vehicle_lane_count"] == 1
+    assert gate["blocking_compound_tls_short_lane_count"] == 0
+
+
+def test_turnaround_delete_overlay_requires_exact_negative_teacher_evidence(
+    tmp_path: Path,
+) -> None:
+    rows = [
+        {
+            "from_edge_id": "in",
+            "to_edge_id": "out",
+            "from_lane": "0",
+            "to_lane": "0",
+            "owner_junction_id": "j",
+            "audit_disposition": "review_required_unsupported_turnaround",
+        },
+        {
+            "from_edge_id": "keep",
+            "to_edge_id": "other",
+            "from_lane": "0",
+            "to_lane": "0",
+            "owner_junction_id": "j",
+            "audit_disposition": "review_required_unsupported_turnaround",
+        },
+    ]
+    report = rebuild_candidate_module._write_unsupported_turnaround_delete_overlay(
+        tmp_path / "prune.con.xml",
+        {
+            "source_net_file": "candidate.net.xml",
+            "source_net_sha256": "abc",
+            "dir_t_turnarounds": rows,
+        },
+        negative_teacher_evidence=[rows[0]],
+    )
+
+    deletes = ET.parse(report["overlay_file"]).getroot().findall("delete")
+    assert report["deleted_connection_count"] == 1
+    assert [row.attrib for row in deletes] == [{"from": "in", "to": "out", "fromLane": "0", "toLane": "0"}]
+
+
+def test_teacher_absent_tls_overlay_demotes_only_resolved_non_tls_partition(
+    tmp_path: Path,
+) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    teacher = tmp_path / "teacher.net.xml"
+    candidate.write_text(
+        """<net>
+  <junction id="retire" type="traffic_light"/>
+  <junction id="keep" type="traffic_light"/>
+  <tlLogic id="retire" type="static" programID="0" offset="0"/>
+  <tlLogic id="keep" type="static" programID="0" offset="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    teacher.write_text(
+        """<net>
+  <junction id="teacher_priority" type="priority"/>
+  <junction id="teacher_tls" type="traffic_light"/>
+  <tlLogic id="teacher_tls" type="static" programID="0" offset="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._write_teacher_absent_tls_node_overlay(
+        tmp_path / "retire.nod.xml",
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        teacher_partition_map={
+            "retire": "teacher_priority",
+            "keep": "teacher_tls",
+        },
+    )
+
+    nodes = ET.parse(report["overlay_file"]).getroot().findall("node")
+    assert report["demoted_tls_junction_count"] == 1
+    assert [node.attrib for node in nodes] == [{"id": "retire", "type": "priority"}]
+
+
+def test_teacher_absent_tls_overlay_demotes_unpartitioned_reference_fringe(
+    tmp_path: Path,
+) -> None:
+    candidate = tmp_path / "candidate.net.xml"
+    teacher = tmp_path / "teacher.net.xml"
+    candidate.write_text(
+        '<net><junction id="fringe" type="traffic_light"/></net>',
+        encoding="utf-8",
+    )
+    teacher.write_text(
+        '<net><junction id="teacher_core" type="priority"/></net>',
+        encoding="utf-8",
+    )
+
+    report = rebuild_candidate_module._write_teacher_absent_tls_node_overlay(
+        tmp_path / "retire.nod.xml",
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        teacher_partition_map={},
+        teacher_absent_junction_ids=["fringe"],
+    )
+
+    node = ET.parse(report["overlay_file"]).getroot().find("node")
+    assert node is not None
+    assert node.attrib == {"id": "fringe", "type": "priority"}
+    assert report["demoted_tls_junctions"][0]["evidence_kind"] == ("same_bbox_reference_partition_absence")
+
+
+def test_boundary_vehicle_connectivity_blocks_dead_lane_and_class_disjoint_connection(
+    tmp_path: Path,
+) -> None:
+    net = tmp_path / "candidate.net.xml"
+    net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j">
+    <lane id="in_0" index="0" allow="passenger"/>
+    <lane id="in_1" index="1" allow="bus"/>
+  </edge>
+  <edge id="out" from="j" to="b">
+    <lane id="out_0" index="0" allow="bus"/>
+    <lane id="out_1" index="1" allow="passenger"/>
+  </edge>
+  <junction id="j" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" dir="s"/>
+  <connection from="in" to="out" fromLane="1" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = _boundary_vehicle_connectivity(net, "j")
+
+    assert report["status"] == "fail"
+    assert report["unconnected_incoming_vehicle_lane_ids"] == ["in_0"]
+    assert report["unconnected_outgoing_vehicle_lane_ids"] == ["out_1"]
+    assert report["passenger_connectivity_status"] == "fail"
+    assert report["class_disjoint_connection_signatures"] == [
+        {
+            "from_edge_id": "in",
+            "to_edge_id": "out",
+            "from_lane": "0",
+            "to_lane": "0",
+        }
+    ]
+
+
+def test_boundary_vehicle_connectivity_requires_every_lane_vehicle_class(
+    tmp_path: Path,
+) -> None:
+    net = tmp_path / "candidate.net.xml"
+    net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger bus"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger bus"/></edge>
+  <junction id="j" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" allow="passenger" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = _boundary_vehicle_connectivity(net, "j")
+
+    assert report["status"] == "fail"
+    assert report["passenger_connectivity_status"] == "pass"
+    assert report["unconnected_incoming_vclasses_by_lane"] == {"in_0": ["bus"]}
+    assert report["unconnected_outgoing_vclasses_by_lane"] == {"out_0": ["bus"]}
+
+
+def test_boundary_vehicle_connectivity_checks_via_lane_permissions(
+    tmp_path: Path,
+) -> None:
+    net = tmp_path / "candidate.net.xml"
+    net.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0" allow="passenger bus"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0" allow="passenger bus"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0" allow="bus"/></edge>
+  <junction id="j" type="priority"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = _boundary_vehicle_connectivity(net, "j")
+
+    assert report["status"] == "fail"
+    assert report["unconnected_incoming_vclasses_by_lane"] == {"in_0": ["passenger"]}
+    assert report["unconnected_outgoing_vclasses_by_lane"] == {"out_0": ["passenger"]}
+
+
+def test_reference_teacher_turnaround_authority_binds_the_compiled_signature(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    final = tmp_path / "final.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in"><lane id="teacher_in_0" index="0" allow="bicycle"/></edge>
+  <edge id="teacher_out"><lane id="teacher_out_0" index="0" allow="bicycle"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    final.write_text(
+        """<net>
+  <edge id="candidate_in" from="a" to="j"><lane id="candidate_in_0" index="0" allow="bicycle"/></edge>
+  <edge id="candidate_out" from="j" to="a"><lane id="candidate_out_0" index="0" allow="bicycle"/></edge>
+  <junction id="j" type="priority"/>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    authority = _reference_teacher_turnaround_authority(
+        teacher_model={
+            "vehicle_connections": [
+                {
+                    "from": "teacher_in",
+                    "to": "teacher_out",
+                    "fromLane": "0",
+                    "toLane": "0",
+                    "dir": "t",
+                }
+            ]
+        },
+        final_net_file=final,
+        junction_id="j",
+        edge_map={
+            "teacher_in": "candidate_in",
+            "teacher_out": "candidate_out",
+        },
+        teacher_net_file=teacher,
+        teacher_junction_id="teacher_j",
+    )
+
+    assert authority["status"] == "pass"
+    assert authority["mapped_exact_signature_count"] == 1
+    assert authority["authority_records"][0]["evidence_kind"] == "reference_teacher_movement"
+    assert authority["authority_records"][0]["from_edge_id"] == "candidate_in"
+    assert authority["authority_records"][0]["to_edge_id"] == "candidate_out"
+    assert authority["authority_records"][0]["road_vclasses"] == ["bicycle"]
+
+
+def test_reference_teacher_turnaround_authority_rejects_lane_vclass_mismatch(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    final = tmp_path / "final.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in"><lane id="teacher_in_0" index="0" allow="passenger"/></edge>
+  <edge id="teacher_out"><lane id="teacher_out_0" index="0" allow="passenger"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    final.write_text(
+        """<net>
+  <edge id="candidate_in" from="a" to="j"><lane id="candidate_in_0" index="0" allow="bus"/></edge>
+  <edge id="candidate_out" from="j" to="a"><lane id="candidate_out_0" index="0" allow="bus"/></edge>
+  <junction id="j" type="priority"/>
+  <connection from="candidate_in" to="candidate_out" fromLane="0" toLane="0" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    authority = _reference_teacher_turnaround_authority(
+        teacher_model={
+            "vehicle_connections": [
+                {
+                    "from": "teacher_in",
+                    "to": "teacher_out",
+                    "fromLane": "0",
+                    "toLane": "0",
+                    "dir": "t",
+                }
+            ]
+        },
+        final_net_file=final,
+        junction_id="j",
+        edge_map={"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+        teacher_net_file=teacher,
+        teacher_junction_id="teacher_j",
+    )
+
+    assert authority["status"] == "fail"
+    assert authority["mapped_exact_signature_count"] == 0
+    assert authority["unmapped_teacher_turnaround_signatures"][0]["reason"] == "lane_vclass_mismatch"
+
+
+def test_reference_teacher_turnaround_authority_does_not_authorize_another_lane(
+    tmp_path: Path,
+) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    final = tmp_path / "final.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in"><lane id="teacher_in_0" index="0"/></edge>
+  <edge id="teacher_out"><lane id="teacher_out_0" index="0"/></edge>
+</net>""",
+        encoding="utf-8",
+    )
+    final.write_text(
+        """<net>
+  <edge id="candidate_in" from="a" to="j">
+    <lane id="candidate_in_0" index="0"/><lane id="candidate_in_1" index="1"/>
+  </edge>
+  <edge id="candidate_out" from="j" to="a">
+    <lane id="candidate_out_0" index="0"/><lane id="candidate_out_1" index="1"/>
+  </edge>
+  <junction id="j" type="priority"/>
+  <connection from="candidate_in" to="candidate_out" fromLane="1" toLane="1" dir="t"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    authority = _reference_teacher_turnaround_authority(
+        teacher_model={
+            "vehicle_connections": [
+                {
+                    "from": "teacher_in",
+                    "to": "teacher_out",
+                    "fromLane": "0",
+                    "toLane": "0",
+                    "dir": "t",
+                }
+            ]
+        },
+        final_net_file=final,
+        junction_id="j",
+        edge_map={"teacher_in": "candidate_in", "teacher_out": "candidate_out"},
+        teacher_net_file=teacher,
+        teacher_junction_id="teacher_j",
+    )
+
+    assert authority["candidate_supported_signature_count"] == 0
+    assert authority["authority_records"][0]["from_lane"] == "0"
+    assert authority["authority_records"][0]["to_lane"] == "0"
 
 
 def test_teacher_guided_semantics_gate_fails_on_skipped_pedestrian_connections() -> None:
@@ -11647,9 +13226,7 @@ def test_teacher_guided_semantics_gate_fails_when_internal_replay_removes_non_ta
             "status": "pass",
             "skipped_connection_count": 0,
             "removed_stale_replaced_edge_connection_count": 1,
-            "removed_stale_replaced_edge_connections": [
-                {"from": "main", "to": "neighbor_out", "via": ":neighbor_0_0"}
-            ],
+            "removed_stale_replaced_edge_connections": [{"from": "main", "to": "neighbor_out", "via": ":neighbor_0_0"}],
         },
     )
 
@@ -11851,7 +13428,10 @@ def test_write_scoped_teacher_tls_cell_replay_collapses_split_member_and_preserv
     candidate_out = root.find("edge[@id='candidate_out']")
     assert candidate_out.attrib["from"] == "candidate"
     assert len(candidate_out.findall("lane")) == 2
-    assert len([connection for connection in root.findall("connection") if connection.attrib.get("tl") == "candidate"]) == 2
+    assert (
+        len([connection for connection in root.findall("connection") if connection.attrib.get("tl") == "candidate"])
+        == 2
+    )
 
 
 def test_scoped_tls_replay_preserves_osm_boundary_geometry_and_remote_connections(
@@ -12070,21 +13650,12 @@ def test_shared_tls_writer_assigns_overlapping_internal_owner_prefixes_once(
     assert report["copied_internal_junction_count"] == 2
     root = ET.parse(output).getroot()
     internal_edge_ids = {
-        edge.attrib["id"]
-        for edge in root.findall("edge")
-        if edge.attrib.get("id", "").startswith(":")
+        edge.attrib["id"] for edge in root.findall("edge") if edge.attrib.get("id", "").startswith(":")
     }
     assert internal_edge_ids == {":candidate_0", ":candidate_side_0"}
     assert root.find("edge[@id=':candidate__owner_01_0']") is None
-    junction_ids = {
-        junction.attrib["id"]
-        for junction in root.findall("junction")
-        if junction.attrib.get("id")
-    }
-    assert {
-        edge_id[1:].rsplit("_", 1)[0]
-        for edge_id in internal_edge_ids
-    } <= junction_ids
+    junction_ids = {junction.attrib["id"] for junction in root.findall("junction") if junction.attrib.get("id")}
+    assert {edge_id[1:].rsplit("_", 1)[0] for edge_id in internal_edge_ids} <= junction_ids
     assert root.find("junction[@id=':candidate_0_0']") is not None
     assert root.find("junction[@id=':candidate_side_0_0']") is not None
     assert root.find("junction[@id=':candidate__owner_01_0_0']") is None
@@ -13008,6 +14579,332 @@ def test_restore_off_scope_netconvert_artifacts_preserves_only_declared_replay_s
     assert root.find("junction[@id='j']").attrib["shape"] == "11,-2 13,-2 13,2 11,2"
 
 
+def test_restore_off_scope_preserves_boundary_edge_of_mutable_junction(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="boundary" from="a" to="j"><lane id="boundary_0" index="0" shape="0,0 10,0" length="10"/></edge>
+  <junction id="a" type="priority"/>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="boundary" from="a" to="j"><lane id="boundary_0" index="0" shape="0,0 8,0" length="8"/></edge>
+  <junction id="a" type="priority"/>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=target,
+        mutable_junction_ids={"j"},
+        mutable_edge_ids=set(),
+    )
+
+    lane = ET.parse(target).getroot().find("edge[@id='boundary']/lane")
+    assert report["status"] == "pass"
+    assert report["mutable_edge_ids"] == ["boundary"]
+    assert lane.attrib["shape"] == "0,0 8,0"
+    assert lane.attrib["length"] == "8"
+
+
+def test_restore_off_scope_rejects_target_endpoint_self_authorization(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="remote" from="x" to="y"><lane id="remote_0" index="0"/></edge>
+  <junction id="x" type="priority"/>
+  <junction id="y" type="priority"/>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="remote" from="x" to="j"><lane id="remote_0" index="0"/></edge>
+  <junction id="x" type="priority"/>
+  <junction id="y" type="priority"/>
+  <junction id="j" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=target,
+        mutable_junction_ids={"j"},
+        mutable_edge_ids=set(),
+    )
+
+    assert report["status"] == "fail"
+    assert report["failures"][0]["reason"] == "off_scope_edge_endpoints_changed"
+
+
+def test_restore_off_scope_rejects_undeclared_added_external_edge(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <junction id="x" type="priority"/>
+  <junction id="y" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="extra" from="x" to="y"><lane id="extra_0" index="0"/></edge>
+  <junction id="x" type="priority"/>
+  <junction id="y" type="priority"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=target,
+        mutable_junction_ids=set(),
+        mutable_edge_ids=set(),
+    )
+
+    assert report["status"] == "fail"
+    assert report["unauthorized_added_external_edge_ids"] == ["extra"]
+    assert report["failures"][0]["reason"] == "off_scope_edge_added"
+
+
+def test_contraction_neighbor_semantics_restore_request_bits_and_block_tls_drift(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="j" type="priority" intLanes=":j_0_0">
+    <request index="0" response="0" foes="0" cont="0"/>
+  </junction>
+  <tlLogic id="tls" type="static" programID="0" offset="0">
+    <phase duration="30" state="G"/>
+  </tlLogic>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <junction id="j" type="priority" intLanes=":j_0_0">
+    <request index="0" response="1" foes="0" cont="0"/>
+  </junction>
+  <tlLogic id="tls" type="static" programID="0" offset="0">
+    <phase duration="30" state="G"/>
+  </tlLogic>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    failing = rebuild_candidate_module._audit_contraction_neighbor_semantics(
+        source_file=source,
+        target_file=target,
+        junction_ids={"j"},
+        edge_aliases={},
+    )
+
+    assert failing["status"] == "fail"
+    assert [row["reason"] for row in failing["failures"]] == ["contraction_neighbor_request_semantics_changed"]
+
+    restored = rebuild_candidate_module._restore_contraction_neighbor_requests(
+        source_file=source,
+        target_file=target,
+        junction_ids={"j"},
+        edge_aliases={},
+    )
+    passing = rebuild_candidate_module._audit_contraction_neighbor_semantics(
+        source_file=source,
+        target_file=target,
+        junction_ids={"j"},
+        edge_aliases={},
+    )
+    assert restored["status"] == "pass"
+    assert restored["restored_request_count"] == 1
+    assert passing["status"] == "pass"
+
+    target_tree = ET.parse(target)
+    target_tree.getroot().find("tlLogic/phase").set("state", "r")
+    target_tree.write(target, encoding="utf-8", xml_declaration=True)
+    tls_drift = rebuild_candidate_module._audit_contraction_neighbor_semantics(
+        source_file=source,
+        target_file=target,
+        junction_ids={"j"},
+        edge_aliases={},
+    )
+    assert tls_drift["status"] == "fail"
+    assert [row["reason"] for row in tls_drift["failures"]] == ["tllogic_semantics_changed"]
+
+
+def test_contraction_neighbor_request_projection_preserves_modal_internal_lanes(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-modal.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="ped" from="p" to="j"><lane id="ped_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_0" function="internal"><lane id=":j_0_0" index="0"/></edge>
+  <edge id=":j_c0" function="crossing" crossingEdges="in out">
+    <lane id=":j_c0_0" index="0" allow="pedestrian"/>
+  </edge>
+  <edge id=":j_w0" function="walkingarea">
+    <lane id=":j_w0_0" index="0" allow="pedestrian"/>
+  </edge>
+  <junction id="j" type="priority" intLanes=":j_0_0 :j_c0_0 :j_w0_0">
+    <request index="0" response="010" foes="100" cont="0"/>
+    <request index="1" response="001" foes="100" cont="1"/>
+    <request index="2" response="010" foes="001" cont="0"/>
+  </junction>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_0_0" dir="s"/>
+  <connection from="ped" to=":j_w0" fromLane="0" toLane="0" dir="s"/>
+  <connection from=":j_w0" to=":j_c0" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target-modal.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="in" from="a" to="j"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="j" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id="ped" from="p" to="j"><lane id="ped_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":j_7" function="internal"><lane id=":j_7_0" index="0"/></edge>
+  <edge id=":j_c9" function="crossing" crossingEdges="out in">
+    <lane id=":j_c9_0" index="0" allow="pedestrian"/>
+  </edge>
+  <edge id=":j_w8" function="walkingarea">
+    <lane id=":j_w8_0" index="0" allow="pedestrian"/>
+  </edge>
+  <junction id="j" type="priority" intLanes=":j_w8_0 :j_7_0 :j_c9_0">
+    <request index="0" response="000" foes="000" cont="0"/>
+    <request index="1" response="000" foes="000" cont="0"/>
+    <request index="2" response="000" foes="000" cont="0"/>
+  </junction>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":j_7_0" dir="s"/>
+  <connection from="ped" to=":j_w8" fromLane="0" toLane="0" dir="s"/>
+  <connection from=":j_w8" to=":j_c9" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    source_model = rebuild_candidate_module._normalized_junction_request_model(
+        ET.parse(source).getroot(),
+        "j",
+        {},
+    )
+    assert source_model["failures"] == []
+    assert all(key is not None for key in source_model["lane_keys"])
+    assert {
+        key[1] for key in source_model["lane_keys"] if key is not None and key[0] == "__torii_modal_internal__"
+    } == {"crossing", "walkingarea"}
+
+    before = rebuild_candidate_module._audit_contraction_neighbor_semantics(
+        source_file=source,
+        target_file=target,
+        junction_ids={"j"},
+        edge_aliases={},
+    )
+    restored = rebuild_candidate_module._restore_contraction_neighbor_requests(
+        source_file=source,
+        target_file=target,
+        junction_ids={"j"},
+        edge_aliases={},
+    )
+    after = rebuild_candidate_module._audit_contraction_neighbor_semantics(
+        source_file=source,
+        target_file=target,
+        junction_ids={"j"},
+        edge_aliases={},
+    )
+
+    assert before["status"] == "fail"
+    assert restored["status"] == "pass"
+    assert restored["restored_request_count"] == 3
+    assert after["status"] == "pass"
+
+
+def test_contraction_modal_preservation_uses_post_restore_counts(tmp_path: Path) -> None:
+    report = {
+        "semantic_preservation_deltas": {
+            "controlled_connection_count": -2,
+            "crossing_edge_count": -1,
+            "walkingarea_edge_count": 1,
+        }
+    }
+    assert rebuild_candidate_module._contraction_modal_preservation_deltas(report) == {
+        "crossing_edge_count": -1,
+        "walkingarea_edge_count": 1,
+    }
+    source = tmp_path / "source.net.xml"
+    target = tmp_path / "target.net.xml"
+    source.write_text(
+        '<net><edge id=":j_c0" function="crossing"/><edge id=":j_w0" function="walkingarea"/></net>',
+        encoding="utf-8",
+    )
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+    restored = rebuild_candidate_module._audit_contraction_modal_preservation(source, target)
+    assert restored["status"] == "pass"
+    assert restored["deltas"] == {}
+
+    target.write_text('<net><edge id=":j_w0" function="walkingarea"/></net>', encoding="utf-8")
+    missing = rebuild_candidate_module._audit_contraction_modal_preservation(source, target)
+    assert missing["status"] == "fail"
+    assert missing["deltas"] == {"crossing": -1}
+
+
+def test_restore_off_scope_allows_source_tls_reference_without_tllogic(tmp_path: Path) -> None:
+    source = tmp_path / "source.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="in" from="a" to="rail"><lane id="in_0" index="0"/></edge>
+  <edge id="out" from="rail" to="b"><lane id="out_0" index="0"/></edge>
+  <edge id=":rail_0" function="internal"><lane id=":rail_0_0" index="0"/></edge>
+  <junction id="a" type="dead_end"/>
+  <junction id="rail" type="rail_signal"/>
+  <junction id="b" type="dead_end"/>
+  <junction id=":rail_0_0" type="internal"/>
+  <connection from="in" to="out" fromLane="0" toLane="0" via=":rail_0_0" tl="rail" linkIndex="0"/>
+  <connection from=":rail_0" to="out" fromLane="0" toLane="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target.net.xml"
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+
+    report = restore_off_scope_netconvert_artifacts(
+        source_file=source,
+        target_file=target,
+        mutable_junction_ids=set(),
+        mutable_edge_ids=set(),
+    )
+
+    assert report["status"] == "pass"
+    assert report["internal_artifact_restore"]["missing_non_target_tllogic_ids"] == ["rail"]
+
+
 def test_restore_off_scope_netconvert_artifacts_preserves_join_boundary_geometry(
     tmp_path: Path,
 ) -> None:
@@ -13221,10 +15118,7 @@ def test_reanchor_normal_junction_internal_movements_rejects_unanchored_shape(
     )
 
     assert report["status"] == "fail"
-    assert any(
-        failure["reason"] == "declared_movement_shape_endpoint_mismatch"
-        for failure in report["failures"]
-    )
+    assert any(failure["reason"] == "declared_movement_shape_endpoint_mismatch" for failure in report["failures"])
     assert not output.exists()
 
 
@@ -13888,7 +15782,10 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>
@@ -13902,7 +15799,9 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
     raw_connections = Path("raw.con.xml")
     raw_connections.write_text("<connections/>\n", encoding="utf-8")
     raw_tllogics = Path("raw.tll.xml")
-    raw_tllogics.write_text('<tlLogics><tlLogic id="j" type="static" programID="0" offset="0"/></tlLogics>', encoding="utf-8")
+    raw_tllogics.write_text(
+        '<tlLogics><tlLogic id="j" type="static" programID="0" offset="0"/></tlLogics>', encoding="utf-8"
+    )
     calls: list[list[str]] = []
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
@@ -13910,6 +15809,7 @@ def test_build_teacher_guided_junction_variant_replays_teacher_chain(tmp_path: P
         if command[0] == "netconvert":
             assert "--sidewalks.guess" not in command
             assert "--tls.ignore-internal-junction-jam" in command
+            assert command[command.index("--offset.disable-normalization") + 1] == "true"
             assert "--tllogic-files" not in command
             assert Path(command[command.index("--node-files") + 1]).is_absolute()
             for flag in ("--edge-files", "--connection-files", "--output-file"):
@@ -14118,7 +16018,10 @@ def test_build_teacher_guided_junction_variant_restores_non_target_internal_arti
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="0" y="0"/><node id="j" x="1" y="0"/><node id="b" x="2" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="0" y="0"/><node id="j" x="1" y="0"/><node id="b" x="2" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>
@@ -14165,12 +16068,20 @@ def test_build_teacher_guided_junction_variant_restores_non_target_internal_arti
             root = ET.parse(input_file).getroot()
             root.find("edge[@id=':other_w0']/lane").set("speed", "9.99")
             root.append(ET.Element("edge", {"id": ":other_w_extra", "function": "walkingarea"}))
-            ET.SubElement(root.find("edge[@id=':other_w_extra']"), "lane", {"id": ":other_w_extra_0", "index": "0", "allow": "pedestrian"})
+            ET.SubElement(
+                root.find("edge[@id=':other_w_extra']"),
+                "lane",
+                {"id": ":other_w_extra_0", "index": "0", "allow": "pedestrian"},
+            )
             other = root.find("junction[@id='other']")
             other.set("intLanes", f"{other.attrib.get('intLanes', '')} :other_w_extra_0".strip())
             ET.SubElement(other, "request", {"index": "1", "response": "00", "foes": "00", "cont": "0"})
-            root.append(ET.Element("connection", {"from": "remote_in", "to": ":other_w_extra", "fromLane": "0", "toLane": "0"}))
-            root.append(ET.Element("connection", {"from": ":other_w_extra", "to": "remote_out", "fromLane": "0", "toLane": "0"}))
+            root.append(
+                ET.Element("connection", {"from": "remote_in", "to": ":other_w_extra", "fromLane": "0", "toLane": "0"})
+            )
+            root.append(
+                ET.Element("connection", {"from": ":other_w_extra", "to": "remote_out", "fromLane": "0", "toLane": "0"})
+            )
             ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
         elif command[0] == "sumo":
             sumo_calls += 1
@@ -14180,7 +16091,12 @@ def test_build_teacher_guided_junction_variant_restores_non_target_internal_arti
             returncode = 1 if status == "fail" else 0
 
             def to_dict(self):
-                return {"command": command, "cwd": str(cwd) if cwd else None, "status": self.status, "returncode": self.returncode}
+                return {
+                    "command": command,
+                    "cwd": str(cwd) if cwd else None,
+                    "status": self.status,
+                    "returncode": self.returncode,
+                }
 
         return Result()
 
@@ -14258,13 +16174,9 @@ def test_restore_non_target_internal_artifacts_filters_stale_incoming_lanes(tmp_
 
 
 def test_restore_non_target_internal_artifacts_caches_repeated_internal_owner_lookup(tmp_path: Path) -> None:
-    normal_junctions = "".join(
-        f'<junction id="j{index}" type="priority" x="0" y="0"/>\n'
-        for index in range(1500)
-    )
+    normal_junctions = "".join(f'<junction id="j{index}" type="priority" x="0" y="0"/>\n' for index in range(1500))
     repeated_connections = "".join(
-        '<connection from=":j42_0" to=":j42_0" fromLane="0" toLane="0"/>\n'
-        for _ in range(1500)
+        '<connection from=":j42_0" to=":j42_0" fromLane="0" toLane="0"/>\n' for _ in range(1500)
     )
     net_xml = (
         "<net>\n"
@@ -14501,6 +16413,11 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        rebuild_candidate_module,
+        "audit_sumo_lane_junction_surface_overlaps",
+        _passing_surface_audit,
+    )
     teacher_net = Path("teacher.net.xml")
     teacher_net.write_text(
         """<net>
@@ -14545,7 +16462,10 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>
@@ -14559,7 +16479,9 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     raw_connections = Path("raw.con.xml")
     raw_connections.write_text("<connections/>\n", encoding="utf-8")
     raw_tllogics = Path("raw.tll.xml")
-    raw_tllogics.write_text('<tlLogics><tlLogic id="j" type="static" programID="0" offset="0"/></tlLogics>', encoding="utf-8")
+    raw_tllogics.write_text(
+        '<tlLogics><tlLogic id="j" type="static" programID="0" offset="0"/></tlLogics>', encoding="utf-8"
+    )
     calls: list[list[str]] = []
 
     def fake_runner(command, *, cwd=None, timeout_seconds=60.0):
@@ -14648,10 +16570,13 @@ def test_build_teacher_guided_junction_variant_can_replay_and_normalize_target_i
     assert [call[0] for call in calls] == ["netconvert", "sumo"]
 
 
-def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        rebuild_candidate_module,
+        "audit_sumo_lane_junction_surface_overlaps",
+        _passing_surface_audit,
+    )
     teacher_net = Path("teacher.net.xml")
     teacher_net.write_text(
         """<net>
@@ -14675,7 +16600,10 @@ def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>
@@ -14736,9 +16664,7 @@ def test_build_teacher_guided_junction_variant_reports_tls_movement_parity(
     assert report["semantic_layer_gates"]["internal"]["status"] == "pass"
 
 
-def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     teacher_net = Path("teacher.net.xml")
     teacher_net.write_text(
@@ -14762,7 +16688,10 @@ def test_build_teacher_guided_junction_variant_normalizes_replay_before_fallback
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>
@@ -14880,7 +16809,10 @@ def test_build_teacher_guided_junction_variant_uses_unrestored_normalized_replay
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>
@@ -14936,11 +16868,16 @@ def test_build_teacher_guided_junction_variant_uses_unrestored_normalized_replay
                 if command[0] == "sumo":
                     net_file = Path(command[command.index("-n") + 1]).name
                     sumo_inputs.append(net_file)
-                    status = "pass" if sumo_inputs == [
-                        "demo_teacher_guided.net.xml",
-                        "demo_teacher_guided.net.xml",
-                        "demo_teacher_guided.net.xml",
-                    ] else "fail"
+                    status = (
+                        "pass"
+                        if sumo_inputs
+                        == [
+                            "demo_teacher_guided.net.xml",
+                            "demo_teacher_guided.net.xml",
+                            "demo_teacher_guided.net.xml",
+                        ]
+                        else "fail"
+                    )
                 return {
                     "command": command,
                     "cwd": str(cwd) if cwd else None,
@@ -14976,9 +16913,7 @@ def test_build_teacher_guided_junction_variant_uses_unrestored_normalized_replay
     ]
 
 
-def test_build_teacher_guided_junction_variant_normalizes_final_teacher_guided_net(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_build_teacher_guided_junction_variant_normalizes_final_teacher_guided_net(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     teacher_net = Path("teacher.net.xml")
     teacher_net.write_text(
@@ -15095,10 +17030,13 @@ def test_build_teacher_guided_junction_variant_normalizes_final_teacher_guided_n
     assert normalized_outputs == ["demo_target_internal_normalized.net.xml", "tg_norm.net.xml"]
 
 
-def test_build_teacher_guided_junction_variant_compares_replay_effective_edge_map(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_build_teacher_guided_junction_variant_compares_replay_effective_edge_map(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        rebuild_candidate_module,
+        "audit_sumo_lane_junction_surface_overlaps",
+        _passing_surface_audit,
+    )
     teacher_net = Path("teacher.net.xml")
     teacher_net.write_text(
         """<net>
@@ -15126,7 +17064,10 @@ def test_build_teacher_guided_junction_variant_compares_replay_effective_edge_ma
     candidate_net = Path("candidate.net.xml")
     candidate_net.write_text(candidate_text, encoding="utf-8")
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="0" y="0"/><node id="j" x="10" y="0"/><node id="b" x="20" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="0" y="0"/><node id="j" x="10" y="0"/><node id="b" x="20" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>
@@ -15200,7 +17141,10 @@ def test_build_teacher_guided_junction_variant_falls_back_when_target_internal_r
         encoding="utf-8",
     )
     raw_nodes = Path("raw.nod.xml")
-    raw_nodes.write_text('<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>', encoding="utf-8")
+    raw_nodes.write_text(
+        '<nodes><node id="a" x="-10" y="0"/><node id="j" x="0" y="0"/><node id="b" x="10" y="0"/></nodes>',
+        encoding="utf-8",
+    )
     raw_edges = Path("raw.edg.xml")
     raw_edges.write_text(
         """<edges>

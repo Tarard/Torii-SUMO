@@ -18,6 +18,7 @@ def find_removable_corridor_geometry_nodes(
     *,
     reference_net_file: Path | None = None,
     max_micro_edge_length_m: float = 1.0,
+    candidate_node_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Find locally provable geometry-only corridor nodes.
 
@@ -71,6 +72,8 @@ def find_removable_corridor_geometry_nodes(
         node_edges = incident.get(node_id, [])
         if not node_id or node_id.startswith(":") or junction.attrib.get("type") != "priority":
             continue
+        if candidate_node_ids is not None and node_id not in candidate_node_ids:
+            continue
         if node_id in modal_internal_node_ids:
             continue
         if reference_node_ids is not None and node_id in reference_node_ids:
@@ -83,7 +86,11 @@ def find_removable_corridor_geometry_nodes(
         if not edge_lengths or min(edge_lengths) > max_micro_edge_length_m:
             continue
         names = {_edge_name(edge) for edge in node_edges}
-        if len(names) != 1 or not next(iter(names), ""):
+        lineage_roots = {_edge_lineage_root(edge) for edge in node_edges}
+        if (
+            (len(names) != 1 or not next(iter(names), ""))
+            and (len(lineage_roots) != 1 or not next(iter(lineage_roots), ""))
+        ):
             continue
         if len({_edge_params(edge) for edge in node_edges}) != 1:
             continue
@@ -108,10 +115,11 @@ def find_removable_corridor_geometry_nodes(
             continue
 
         params = dict(_edge_params(node_edges[0]))
+        corridor_name = next(iter(names), "") or next(iter(lineage_roots), "")
         candidates.append(
             {
                 "node_id": node_id,
-                "corridor_name": next(iter(names)),
+                "corridor_name": corridor_name,
                 "corridor_ref": params.get("ref", ""),
                 "edge_type": node_edges[0].attrib.get("type", ""),
                 "incident_edge_ids": sorted(edge.attrib["id"] for edge in node_edges),
@@ -120,7 +128,11 @@ def find_removable_corridor_geometry_nodes(
                 "lane_count_per_edge": len(node_edges[0].findall("lane")),
                 "minimum_incident_edge_length_m": round(min(edge_lengths), 3),
                 "reference_node_absent": reference_node_ids is not None,
-                "proof": "same_corridor_same_semantics_lane_preserving_micro_segment",
+                "proof": (
+                    "same_corridor_same_semantics_lane_preserving_micro_segment"
+                    if next(iter(names), "")
+                    else "same_osm_lineage_same_semantics_lane_preserving_micro_segment"
+                ),
             }
         )
     return sorted(candidates, key=lambda item: str(item["node_id"]))
@@ -133,6 +145,7 @@ def build_corridor_geometry_simplification_variant(
     prefix: str = "corridor_geometry_simplification",
     reference_net_file: Path | None = None,
     max_micro_edge_length_m: float = 1.0,
+    candidate_node_ids: set[str] | None = None,
     netconvert_binary: str = "netconvert",
     timeout_seconds: float = 240.0,
     command_runner: Callable[..., Any] = run_command,
@@ -146,6 +159,7 @@ def build_corridor_geometry_simplification_variant(
             net_file,
             reference_net_file=reference_net_file,
             max_micro_edge_length_m=max_micro_edge_length_m,
+            candidate_node_ids=candidate_node_ids,
         )
     except (OSError, ET.ParseError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
@@ -179,6 +193,7 @@ def build_corridor_geometry_simplification_variant(
         "candidate_edge_count": len(candidate_edge_ids),
         "keep_edge_count": len(keep_edge_ids),
         "max_micro_edge_length_m": max_micro_edge_length_m,
+        "candidate_node_ids": sorted(candidate_node_ids or ()),
         "candidates": candidates,
     }
     plan_file.write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -424,6 +439,10 @@ def _edge_name(edge: ET.Element) -> str:
         return " ".join(edge.attrib["name"].casefold().split())
     params = dict(_edge_params(edge))
     return " ".join(params.get("name", "").casefold().split())
+
+
+def _edge_lineage_root(edge: ET.Element) -> str:
+    return edge.attrib.get("id", "").lstrip("-").split("#", 1)[0]
 
 
 def _edge_params(edge: ET.Element) -> tuple[tuple[str, str], ...]:

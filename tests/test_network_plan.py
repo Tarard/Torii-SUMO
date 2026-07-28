@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -444,7 +445,26 @@ def _write_reference_net(path: Path) -> None:
     </edge>
 </net>""",
         encoding="utf-8",
-    )
+)
+
+
+def _accepted_teacher_guided_composite(net_file: Path) -> dict[str, object]:
+    return {
+        "status": "pass",
+        "parity_gate_status": "pass",
+        "promotion_gate_status": "pass",
+        "composite_applied_candidate_count": 1,
+        "composite_net_file": str(net_file),
+        "final_internal_replay_status": "skipped",
+        "final_composite_parity": {"status": "skipped"},
+        "final_context_parity": {"status": "skipped"},
+        "final_composite_sumo_load": {
+            "status": "pass",
+            "runtime_required": True,
+            "net_file": str(net_file),
+            "network_sha256": hashlib.sha256(net_file.read_bytes()).hexdigest(),
+        },
+    }
 
 
 def _write_osm_highways(path: Path, highways: list[str]) -> None:
@@ -519,7 +539,20 @@ def test_teacher_guided_best_variant_file_prefers_composite_net(tmp_path: Path) 
         {
             "status": "pass",
             "parity_gate_status": "pass",
+            "promotion_gate_status": "pass",
+            "composite_applied_candidate_count": 1,
             "composite_net_file": str(composite_net),
+            "final_internal_replay_status": "skipped",
+            "final_composite_parity": {"status": "skipped"},
+            "final_context_parity": {"status": "skipped"},
+            "final_composite_sumo_load": {
+                "status": "pass",
+                "runtime_required": True,
+                "net_file": str(composite_net),
+                "network_sha256": hashlib.sha256(
+                    composite_net.read_bytes()
+                ).hexdigest(),
+            },
             "variant_reports": [
                 {
                     "status": "pass",
@@ -533,7 +566,7 @@ def test_teacher_guided_best_variant_file_prefers_composite_net(tmp_path: Path) 
     assert best == composite_net
 
 
-def test_teacher_guided_best_variant_file_uses_partial_sequential_composite(tmp_path: Path) -> None:
+def test_teacher_guided_best_variant_file_rejects_failed_partial_composite(tmp_path: Path) -> None:
     composite_net = tmp_path / "partial_composite_teacher_guided.net.xml"
     composite_net.write_text("<net/>", encoding="utf-8")
 
@@ -548,7 +581,7 @@ def test_teacher_guided_best_variant_file_uses_partial_sequential_composite(tmp_
         }
     )
 
-    assert best == composite_net
+    assert best is None
 
 
 def test_teacher_guided_best_variant_file_does_not_promote_unapplied_local_variant(tmp_path: Path) -> None:
@@ -679,6 +712,32 @@ def test_filter_teacher_guided_queue_keeps_topology_fragmented_tls_candidate(tmp
         "teacher_tls",
     ]
     assert filtered["expanded_scope_candidate_count"] == 1
+
+
+def test_filter_teacher_guided_queue_explicit_target_excludes_other_tls_candidates(
+    tmp_path: Path,
+) -> None:
+    filtered = _filter_teacher_guided_queue_to_mismatch_fields(
+        {
+            "status": "pass",
+            "repair_candidates": [
+                {"reference_id": "target", "candidate_status": "ready_for_teacher_guided_variant"},
+                {
+                    "reference_id": "other_tls",
+                    "candidate_status": "needs_expanded_rebuild_scope",
+                    "learned_rule": "tum_like_topology_fragmented_tls_candidate",
+                },
+            ],
+        },
+        {},
+        {"movement_signature_counts", "internal_function_counts"},
+        output_dir=tmp_path / "filtered",
+        prefix="explicit",
+        target_junction_ids=["target"],
+    )
+
+    assert [candidate["reference_id"] for candidate in filtered["repair_candidates"]] == ["target"]
+    assert filtered["queue_filter_policy"] == "explicit_targets_only"
 
 
 def test_filter_teacher_guided_queue_keeps_context_split_cluster_repair_seeds(tmp_path: Path) -> None:
@@ -857,6 +916,7 @@ def test_reference_matched_workflow_uses_teacher_guided_composite_for_review(tmp
         calls["teacher_guided_run_sequential_accept_passed_variants"] = kwargs["sequential_accept_passed_variants"]
         composite_net.write_text("<net/>", encoding="utf-8")
         return {
+            **_accepted_teacher_guided_composite(composite_net),
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "parity_gate_status": "pass",
@@ -1161,14 +1221,16 @@ def test_reference_matched_workflow_promotes_direct_teacher_replay_when_plain_re
         }
 
     def fake_teacher_guided_run(**_kwargs):
+        net_file = write_net(heavy_net)
         return {
+            **_accepted_teacher_guided_composite(net_file),
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "parity_gate_status": "pass",
             "attempted_candidate_count": 1,
             "pass_candidate_count": 1,
             "composite_applied_candidate_count": 1,
-            "composite_net_file": str(write_net(heavy_net)),
+            "composite_net_file": str(net_file),
             "run_report_file": str(tmp_path / "teacher_guided_run.json"),
             "warnings": [],
         }
@@ -1427,11 +1489,13 @@ def test_reference_matched_workflow_uses_direct_replay_when_final_movement_heavy
 
     def fake_repair_run(**kwargs):
         is_final = kwargs["queue_report"]["queue_file"].endswith("final_teacher_queue.json")
+        net_file = write_net(final_heavy_net if is_final else first_heavy_net)
         return {
+            **_accepted_teacher_guided_composite(net_file),
             "status": "fail" if not is_final else "pass",
             "parity_gate_status": "fail" if not is_final else "pass",
             "composite_applied_candidate_count": 1,
-            "composite_net_file": str(write_net(final_heavy_net if is_final else first_heavy_net)),
+            "composite_net_file": str(net_file),
             "run_report_file": str(tmp_path / "teacher_run.json"),
         }
 
@@ -3232,6 +3296,7 @@ def test_reference_matched_workflow_audits_post_teacher_comparison_net(tmp_path:
         composite_net = post_repair_movement_composite_net if is_post_repair_movement else tmp_path / "teacher_guided_composite.net.xml"
         composite_net.write_text("<net/>", encoding="utf-8")
         return {
+            **_accepted_teacher_guided_composite(composite_net),
             "status": "pass",
             "claim_status": "diagnostic-demo",
             "parity_gate_status": "pass",
@@ -3645,6 +3710,7 @@ def test_reference_matched_workflow_runs_post_repair_movement_rebuild_when_repai
         is_movement_rebuild = kwargs["prefix"].endswith("_post_teacher_tls_connection_repair_movement_rebuild")
         net_file = write_net(movement_rebuilt_net if is_movement_rebuild else teacher_guided_net)
         return {
+            **_accepted_teacher_guided_composite(net_file),
             "status": "pass",
             "parity_gate_status": "pass",
             "composite_applied_candidate_count": 1,
@@ -3851,13 +3917,19 @@ def test_reference_matched_workflow_promotes_post_teacher_non_controller_junctio
     def fake_repair_run(**kwargs):
         is_followup = kwargs["queue_report"]["queue_file"].endswith("followup_teacher_queue.json")
         is_final = kwargs["queue_report"]["queue_file"].endswith("final_teacher_queue.json")
+        net_file = write_net(
+            final_movement_net
+            if is_final
+            else followup_movement_net
+            if is_followup
+            else teacher_guided_net
+        )
         return {
+            **_accepted_teacher_guided_composite(net_file),
             "status": "pass",
             "parity_gate_status": "pass",
             "composite_applied_candidate_count": 1,
-            "composite_net_file": str(
-                write_net(final_movement_net if is_final else followup_movement_net if is_followup else teacher_guided_net)
-            ),
+            "composite_net_file": str(net_file),
             "run_report_file": str(tmp_path / "teacher_run.json"),
             "variant_reports": [
                 {

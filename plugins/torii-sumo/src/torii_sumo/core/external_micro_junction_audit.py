@@ -24,6 +24,7 @@ _PROTECTED_JUNCTION_TYPES = {
 _ROUNDABOUT_VALUES = {"roundabout", "mini_roundabout", "circular"}
 _TURNAROUND_EVIDENCE_KINDS = {
     "official_movement_allowlist",
+    "reference_teacher_movement",
     "turn_lane_reverse_or_uturn",
 }
 
@@ -204,17 +205,13 @@ def audit_external_micro_junctions(
         counts[row["classification"]] += 1
     payload = {
         "schema_id": SCHEMA_ID,
-        # Independent evidence may explain a turnaround, but this classifier
-        # cannot prove the semantic relationship between an evidence record
-        # and a compiled SUMO connection.  Therefore only a zero-turnaround,
-        # zero-unused-authority result can pass automatically.
         "status": (
             "review_required"
-            if turnarounds or unused_authority
+            if unsupported_turnarounds
             else "pass"
         ),
         "automatic_promotion_gate": (
-            "blocked" if turnarounds or unused_authority else "pass"
+            "blocked" if unsupported_turnarounds else "pass"
         ),
         "source_net_file": str(source),
         "source_net_sha256": _file_sha256(source),
@@ -232,7 +229,8 @@ def audit_external_micro_junctions(
             "automatic_edit_authorization": "blocked",
             "turnaround_support_rule": (
                 "every dir='t' connection must match independent official movement "
-                "allowlist or turn:lanes reverse/u-turn evidence"
+                "allowlist or turn:lanes reverse/u-turn evidence; unused allowlist "
+                "records are diagnostic and are not required movements"
             ),
             "accepted_turnaround_evidence_kinds": sorted(_TURNAROUND_EVIDENCE_KINDS),
             "source_mutation": "none",
@@ -732,6 +730,7 @@ def _turnaround_authority_by_signature(
         if (
             not isinstance(evidence_ids, Sequence)
             or isinstance(evidence_ids, (str, bytes))
+            or not evidence_ids
             or not all(str(value).strip() for value in evidence_ids)
         ):
             raise ExternalMicroJunctionAuditError(

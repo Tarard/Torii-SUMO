@@ -340,6 +340,53 @@ def test_reference_join_audit_matches_tum_cluster_by_source_members_without_inte
     assert case["learned_rule"] == "tum_like_join_candidate"
 
 
+def test_osm_geometry_node_proves_identity_without_becoming_join_node(tmp_path: Path) -> None:
+    reference_net = tmp_path / "reference.net.xml"
+    reference_net.write_text(
+        """<net>
+  <junction id="cluster_a_b_c" x="0" y="0" type="traffic_light"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate_net = tmp_path / "candidate.net.xml"
+    candidate_net.write_text(
+        """<net>
+  <edge id="ab" from="a" to="b"><lane id="ab_0" length="0.2"/></edge>
+  <edge id="in" from="outside" to="a"><lane id="in_0" length="10"/></edge>
+  <junction id="outside" x="-10" y="0" type="priority"/>
+  <junction id="a" x="0" y="0" type="traffic_light"/>
+  <junction id="b" x="1" y="0" type="traffic_light"/>
+</net>""",
+        encoding="utf-8",
+    )
+    osm_file = tmp_path / "candidate.osm.xml"
+    osm_file.write_text(
+        """<osm version="0.6">
+  <node id="a" lat="0" lon="0"/>
+  <node id="b" lat="0" lon="0"/>
+  <node id="c" lat="0" lon="0"/>
+  <way id="10"><nd ref="a"/><nd ref="c"/><nd ref="b"/><tag k="highway" v="primary"/></way>
+</osm>""",
+        encoding="utf-8",
+    )
+
+    report = audit_reference_join_patterns(
+        reference_net_file=reference_net,
+        candidate_net_file=candidate_net,
+        candidate_filtered_osm_file=osm_file,
+        candidate_source_osm_file=osm_file,
+        output_dir=tmp_path / "audit",
+        candidate_cluster_radius_m=5,
+        candidate_min_cluster_nodes=2,
+    )
+
+    case = report["all_cases"][0]
+    assert case["reference_source_identity_complete"] is True
+    assert case["matched_reference_source_junction_ids"] == ["a", "b"]
+    assert case["matched_reference_source_geometry_node_ids"] == ["c"]
+    assert case["matched_reference_source_node_ids"] == ["a", "b"]
+
+
 def test_reference_join_audit_limits_full_pattern_extraction_to_reference_cases(
     monkeypatch, tmp_path: Path
 ) -> None:

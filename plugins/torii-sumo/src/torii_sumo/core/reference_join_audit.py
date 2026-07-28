@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import json
 import math
@@ -60,6 +61,8 @@ def audit_reference_join_patterns(
     match_radius_m: float = 45.0,
     structural_only: bool = False,
     equivalent_approach_edge_map: dict[str, str] | None = None,
+    candidate_filtered_osm_file: Path | None = None,
+    candidate_source_osm_file: Path | None = None,
 ) -> dict[str, Any]:
     if match_radius_m <= 0:
         return _failure("match_radius_m must be positive")
@@ -86,6 +89,8 @@ def audit_reference_join_patterns(
     try:
         reference_cases = _reference_join_cases(reference_net_file, reference_cluster_prefix)
         candidate_graph = _candidate_graph(candidate_net_file)
+        filtered_source_nodes, _ = _osm_source_inventory(candidate_filtered_osm_file)
+        source_nodes, source_way_ids_by_node = _osm_source_inventory(candidate_source_osm_file)
     except (OSError, ET.ParseError, KeyError, ValueError) as exc:
         return _failure(f"{type(exc).__name__}: {exc}")
 
@@ -158,7 +163,15 @@ def audit_reference_join_patterns(
 
     candidate_clusters = list(candidate_audit.get("suspicious_clusters", []))
     matched_cases = [
-        _match_reference_case(reference_case, candidate_clusters, candidate_graph, match_radius_m)
+        _match_reference_case(
+            reference_case,
+            candidate_clusters,
+            candidate_graph,
+            match_radius_m,
+            filtered_source_nodes=filtered_source_nodes,
+            source_nodes=source_nodes,
+            source_way_ids_by_node=source_way_ids_by_node,
+        )
         for reference_case in reference_cases
     ]
     matched = [case for case in matched_cases if case["match_status"] == "matched"]
@@ -192,6 +205,8 @@ def audit_reference_join_patterns(
         "schema_version": 1,
         "reference_net_file": str(reference_net_file),
         "candidate_net_file": str(candidate_net_file),
+        "candidate_filtered_osm_file": str(candidate_filtered_osm_file or ""),
+        "candidate_source_osm_file": str(candidate_source_osm_file or ""),
         "reference_cluster_prefix": reference_cluster_prefix,
         "equivalent_approach_edge_map": equivalent_approach_edge_map or {},
         "junction_pattern_comparison_status": "fail"
@@ -274,6 +289,7 @@ def audit_reference_join_patterns(
         "cases_file": str(cases_file),
         "summary_file": str(summary_file),
         "candidate_topology_audit_file": str(candidate_audit.get("report_file", "")),
+        "candidate_topology_audit": candidate_audit,
         "matched_cases": matched,
         "all_cases": matched_cases,
         "warnings": _warnings(reference_cases, matched_cases) + pattern_warnings,
@@ -582,13 +598,46 @@ def _candidate_graph(net_file: Path) -> dict[str, Any]:
     }
 
 
+def _osm_source_inventory(path: Path | None) -> tuple[set[str], dict[str, set[str]]]:
+    if path is None or not path.is_file():
+        return set(), {}
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8") as handle:
+        root = ET.parse(handle).getroot()
+    node_ids = {
+        str(node.attrib["id"])
+        for node in root.findall("node")
+        if node.attrib.get("id")
+    }
+    way_ids_by_node: dict[str, set[str]] = {}
+    for way in root.findall("way"):
+        way_id = str(way.attrib.get("id", ""))
+        if not way_id:
+            continue
+        for item in way.findall("nd"):
+            node_id = str(item.attrib.get("ref", ""))
+            if node_id:
+                way_ids_by_node.setdefault(node_id, set()).add(way_id)
+    return node_ids, way_ids_by_node
+
+
 def _match_reference_case(
     reference_case: dict[str, Any],
     candidate_clusters: list[dict[str, Any]],
     candidate_graph: dict[str, Any],
     match_radius_m: float,
+    *,
+    filtered_source_nodes: set[str] | None = None,
+    source_nodes: set[str] | None = None,
+    source_way_ids_by_node: dict[str, set[str]] | None = None,
 ) -> dict[str, Any]:
-    source_match = _match_reference_sources(reference_case, candidate_graph)
+    source_match = _match_reference_sources(
+        reference_case,
+        candidate_graph,
+        filtered_source_nodes=filtered_source_nodes,
+        source_nodes=source_nodes,
+        source_way_ids_by_node=source_way_ids_by_node,
+    )
     best_cluster = None
     best_distance = math.inf
     for cluster in candidate_clusters:
@@ -652,10 +701,39 @@ def _match_reference_case(
     }
 
 
-def _match_reference_sources(reference_case: dict[str, Any], candidate_graph: dict[str, Any]) -> dict[str, Any]:
+def _match_reference_sources(
+    reference_case: dict[str, Any],
+    candidate_graph: dict[str, Any],
+    *,
+    filtered_source_nodes: set[str] | None = None,
+    source_nodes: set[str] | None = None,
+    source_way_ids_by_node: dict[str, set[str]] | None = None,
+) -> dict[str, Any]:
     source_node_ids = list(reference_case.get("reference_joined_source_nodes", []))
     junction_ids = set(candidate_graph.get("junction_ids", set()))
     matched_node_ids = sorted(node_id for node_id in source_node_ids if node_id in junction_ids)
+    filtered_nodes = set(filtered_source_nodes or ())
+    raw_nodes = set(source_nodes or ())
+    geometry_node_ids = sorted(
+        node_id for node_id in source_node_ids if node_id in filtered_nodes and node_id not in junction_ids
+    )
+    scope_omitted_node_ids = sorted(
+        node_id for node_id in source_node_ids if node_id in raw_nodes and node_id not in filtered_nodes
+    )
+    historical_missing_node_ids = sorted(
+        node_id
+        for node_id in source_node_ids
+        if node_id not in junction_ids and node_id not in filtered_nodes and node_id not in raw_nodes
+    )
+    proven_node_ids = sorted({*matched_node_ids, *geometry_node_ids})
+    identity_complete = bool(source_node_ids) and len(proven_node_ids) == len(source_node_ids)
+    scope_omitted_way_ids = sorted(
+        {
+            way_id
+            for node_id in scope_omitted_node_ids
+            for way_id in (source_way_ids_by_node or {}).get(node_id, set())
+        }
+    )
     matched_node_id_set = set(matched_node_ids)
     internal_edge_ids = sorted(
         edge["id"]
@@ -669,8 +747,22 @@ def _match_reference_sources(reference_case: dict[str, Any], candidate_graph: di
     )
     return {
         "matched_reference_source_node_ids": matched_node_ids,
+        "matched_reference_source_junction_ids": matched_node_ids,
+        "matched_reference_source_geometry_node_ids": geometry_node_ids,
+        "scope_omitted_reference_source_node_ids": scope_omitted_node_ids,
+        "scope_omitted_reference_source_way_ids": scope_omitted_way_ids,
+        "historically_missing_reference_source_node_ids": historical_missing_node_ids,
+        "reference_source_identity_complete": identity_complete,
+        "reference_source_identity_status": (
+            "complete"
+            if identity_complete
+            else "scope_omission"
+            if scope_omitted_node_ids
+            else "historical_missing"
+        ),
         "matched_reference_source_node_count": len(matched_node_ids),
-        "reference_source_node_match_ratio": round(len(matched_node_ids) / len(source_node_ids), 3)
+        "reference_source_identity_node_count": len(proven_node_ids),
+        "reference_source_node_match_ratio": round(len(proven_node_ids) / len(source_node_ids), 3)
         if source_node_ids
         else 0.0,
         "matched_reference_source_internal_edge_ids": internal_edge_ids,

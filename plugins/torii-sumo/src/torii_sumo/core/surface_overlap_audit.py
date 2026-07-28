@@ -139,8 +139,6 @@ def compare_sumo_surface_overlap_reports(
             raise ValueError(f"{label}_report is not a {SURFACE_OVERLAP_AUDIT_SCHEMA} report")
         if report.get("source_network_mutation") is not False:
             raise ValueError(f"{label}_report does not prove source immutability")
-        if report.get("geometry_error_count") != 0:
-            raise ValueError(f"{label}_report contains geometry errors")
 
     focus = sorted({str(identifier).strip() for identifier in focus_junction_ids if str(identifier).strip()})
     if not focus:
@@ -148,6 +146,8 @@ def compare_sumo_surface_overlap_reports(
     focus_set = set(focus)
     baseline_findings = _indexed_findings(baseline_report)
     candidate_findings = _indexed_findings(candidate_report)
+    baseline_geometry_errors = _indexed_geometry_errors(baseline_report)
+    candidate_geometry_errors = _indexed_geometry_errors(candidate_report)
     baseline_keys = set(baseline_findings)
     candidate_keys = set(candidate_findings)
     introduced_keys = sorted(candidate_keys - baseline_keys)
@@ -158,6 +158,14 @@ def compare_sumo_surface_overlap_reports(
     ]
     baseline_focus_keys = [
         key for key in sorted(baseline_keys) if _finding_touches_focus(baseline_findings[key], focus_set)
+    ]
+    introduced_geometry_error_keys = sorted(
+        set(candidate_geometry_errors) - set(baseline_geometry_errors)
+    )
+    candidate_focus_geometry_error_keys = [
+        key
+        for key in sorted(candidate_geometry_errors)
+        if _finding_touches_focus(candidate_geometry_errors[key], focus_set)
     ]
     changed_inherited = []
     for key in inherited_keys:
@@ -174,7 +182,14 @@ def compare_sumo_surface_overlap_reports(
                 }
             )
 
-    status = "pass" if not introduced_keys and not candidate_focus_keys else "fail"
+    status = (
+        "pass"
+        if not introduced_keys
+        and not candidate_focus_keys
+        and not introduced_geometry_error_keys
+        and not candidate_focus_geometry_error_keys
+        else "fail"
+    )
     report: dict[str, Any] = {
         "schema": SURFACE_OVERLAP_COMPARISON_SCHEMA,
         "status": status,
@@ -215,6 +230,16 @@ def compare_sumo_surface_overlap_reports(
         "baseline_focus_findings": [baseline_findings[key] for key in baseline_focus_keys],
         "candidate_focus_finding_count": len(candidate_focus_keys),
         "candidate_focus_findings": [candidate_findings[key] for key in candidate_focus_keys],
+        "baseline_geometry_error_count": len(baseline_geometry_errors),
+        "candidate_geometry_error_count": len(candidate_geometry_errors),
+        "introduced_geometry_error_count": len(introduced_geometry_error_keys),
+        "introduced_geometry_errors": [
+            candidate_geometry_errors[key] for key in introduced_geometry_error_keys
+        ],
+        "candidate_focus_geometry_error_count": len(candidate_focus_geometry_error_keys),
+        "candidate_focus_geometry_errors": [
+            candidate_geometry_errors[key] for key in candidate_focus_geometry_error_keys
+        ],
         "evidence_boundary": (
             "pass is limited to introduced findings and explicit focus junctions; "
             "candidate_global_status remains authoritative for the complete corridor"
@@ -248,6 +273,18 @@ def _indexed_findings(report: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     return indexed
 
 
+def _indexed_geometry_errors(report: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for raw in report.get("geometry_errors", []) or []:
+        finding = dict(raw)
+        key = "|".join(
+            str(finding.get(field, ""))
+            for field in ("kind", "junction_id", "edge_id", "lane_id", "error")
+        )
+        indexed[key] = finding
+    return indexed
+
+
 def _finding_touches_focus(finding: Mapping[str, Any], focus: set[str]) -> bool:
     identifiers = {
         str(finding.get(field, ""))
@@ -257,6 +294,7 @@ def _finding_touches_focus(finding: Mapping[str, Any], focus: set[str]) -> bool:
             "from_junction_id",
             "to_junction_id",
             "non_owner_junction_id",
+            "junction_id",
         )
     }
     return bool(identifiers & focus)
@@ -396,6 +434,8 @@ def _read_external_lanes(
                         "kind": "invalid_external_lane_geometry",
                         "edge_id": edge_id,
                         "lane_id": lane_id,
+                        "from_junction_id": from_junction,
+                        "to_junction_id": to_junction,
                         "error": str(exc),
                     }
                 )

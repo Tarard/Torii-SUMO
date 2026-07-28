@@ -9,7 +9,7 @@ import os
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from .osm_area import osm_map_url_bbox, osm_preview_url, resolve_osm_place
 from .connectivity import extract_largest_passenger_component_core, summarize_passenger_connectivity
@@ -18,6 +18,7 @@ from .corridor_edit_ledger import build_corridor_edit_ledger
 from .corridor_simplification import build_corridor_geometry_simplification_variant
 from .command_runner import run_command
 from .junction_aggregation import build_junction_aggregation_variant
+from .overlapping_junction_audit import audit_overlapping_junctions
 from .junction_rebuild_candidate import (
     _stage_file,
     build_shared_teacher_tls_controller_replay_plan,
@@ -73,6 +74,7 @@ from .road_scope import (
 )
 from .routeability_audit import run_routeability_audit
 from .standard_nema_binding import build_standard_nema_phase_binding
+from .surface_overlap_audit import audit_sumo_lane_junction_surface_overlaps
 from .sumo_gui import launch_sumo_gui
 from .tls_aggregation import (
     build_tls_aggregation_variant,
@@ -972,8 +974,16 @@ def _filter_teacher_guided_queue_to_mismatch_fields(
     *,
     output_dir: Path,
     prefix: str,
+    target_junction_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
     target_id_set = {
+        str(junction_id).strip()
+        for junction_id in target_junction_ids
+        if str(junction_id).strip()
+    }
+    explicit_target_filter = bool(target_id_set)
+    if not explicit_target_filter:
+        target_id_set = {
             str(case.get("junction_id", ""))
             for case in delta_report.get("junction_pattern_comparisons", []) or []
             if isinstance(case, Mapping)
@@ -984,12 +994,12 @@ def _filter_teacher_guided_queue_to_mismatch_fields(
             & mismatch_fields
             and str(case.get("junction_id", ""))
         }
-    for seed in delta_report.get("context_split_cluster_repair_seeds", []) or []:
-        if not isinstance(seed, Mapping):
-            continue
-        reference_id = str(seed.get("reference_id", "")).strip()
-        if reference_id:
-            target_id_set.add(reference_id)
+        for seed in delta_report.get("context_split_cluster_repair_seeds", []) or []:
+            if not isinstance(seed, Mapping):
+                continue
+            reference_id = str(seed.get("reference_id", "")).strip()
+            if reference_id:
+                target_id_set.add(reference_id)
     target_ids = sorted(target_id_set)
     if not target_ids:
         return dict(queue_report)
@@ -1002,7 +1012,8 @@ def _filter_teacher_guided_queue_to_mismatch_fields(
         for candidate in candidates
         if (
             {str(candidate.get("junction_id", "")), str(candidate.get("reference_id", ""))} & target_id_set
-            or candidate.get("learned_rule")
+            or not explicit_target_filter
+            and candidate.get("learned_rule")
             in {"tum_like_same_id_tls_candidate", "tum_like_topology_fragmented_tls_candidate"}
         )
     ]
@@ -1022,7 +1033,9 @@ def _filter_teacher_guided_queue_to_mismatch_fields(
     )
     filtered_report["queued_case_count"] = len(filtered_candidates)
     filtered_report["queue_truncated"] = len(filtered_candidates) < len(candidates)
-    filtered_report["queue_filter_policy"] = "mismatch_fields_only"
+    filtered_report["queue_filter_policy"] = (
+        "explicit_targets_only" if explicit_target_filter else "mismatch_fields_only"
+    )
     filtered_report["queue_filter_mismatch_fields"] = sorted(mismatch_fields)
     filtered_report["queue_filter_target_junction_ids"] = target_ids
     filtered_report["queue_filter_original_repair_candidate_count"] = len(candidates)
@@ -1079,11 +1092,32 @@ def _teacher_guided_best_variant_file(report: Mapping[str, Any] | None) -> Path 
     if report is None:
         return None
     composite_net_file = str(report.get("composite_net_file", ""))
-    has_accepted_composite = _int_field(report, "composite_applied_candidate_count") > 0 or (
-        report.get("status") == "pass" and report.get("parity_gate_status") == "pass" and bool(composite_net_file)
+    composite_path = Path(composite_net_file)
+    final_load = report.get("final_composite_sumo_load", {})
+    if not isinstance(final_load, Mapping):
+        return None
+    has_accepted_composite = (
+        _int_field(report, "composite_applied_candidate_count") > 0
+        and report.get("status") == "pass"
+        and report.get("parity_gate_status") == "pass"
+        and report.get("promotion_gate_status") == "pass"
+        and report.get("final_internal_replay_status") in {"pass", "skipped"}
+        and isinstance(report.get("final_composite_parity"), Mapping)
+        and report["final_composite_parity"].get("status") in {"pass", "skipped"}
+        and isinstance(report.get("final_context_parity"), Mapping)
+        and report["final_context_parity"].get("status") in {"pass", "skipped"}
+        and final_load.get("runtime_required") is True
+        and final_load.get("status") == "pass"
+        and Path(str(final_load.get("net_file", ""))).resolve()
+        == composite_path.resolve()
     )
-    if has_accepted_composite and Path(composite_net_file).exists():
-        return Path(composite_net_file)
+    if (
+        has_accepted_composite
+        and composite_path.is_file()
+        and final_load.get("network_sha256")
+        == hashlib.sha256(composite_path.read_bytes()).hexdigest()
+    ):
+        return composite_path
     return None
 
 
@@ -1132,6 +1166,7 @@ def _run_teacher_guided_queue_replay(
         netconvert_binary=netconvert_binary,
         sumo_binary=sumo_binary,
         timeout_seconds=timeout_seconds,
+        expand_fragmented_tls_join_scope=True,
         sequential_accept_passed_variants=True,
         plain_exporter=plain_export_func,
     )
@@ -2987,9 +3022,11 @@ def _reference_join_aggregation_gate(report: Mapping[str, Any] | None) -> str:
         return "skipped"
     if report.get("status") != "pass":
         return _gate_value(report)
-    if _int_field(report, "junction_aggregation_candidate_count") > 0:
-        return "blocked"
-    return "pass"
+    return (
+        "pass"
+        if report.get("junction_aggregation_promotion_status") == "pass"
+        else "blocked"
+    )
 
 
 def _reference_scope_gate(report: Mapping[str, Any] | None) -> str:
@@ -3969,6 +4006,8 @@ def run_osm_cleanup_workflow(
     run_reference_join_audit_after_build: bool = True,
     reference_join_audit_structural_only: bool = True,
     run_reference_join_aggregation_after_build: bool = True,
+    reference_is_authority: bool = False,
+    use_reference_source_way_scope: bool = True,
     run_reference_hierarchy_audit_after_build: bool = True,
     run_reference_scope_audit_after_build: bool = True,
     run_reference_bbox_scope_after_build: bool = True,
@@ -4003,6 +4042,8 @@ def run_osm_cleanup_workflow(
     reference_hierarchy_type_repair_func: Callable[..., dict[str, Any]] = build_reference_hierarchy_type_repair_variant,
     reference_join_audit_func: Callable[..., dict[str, Any]] = audit_reference_join_patterns,
     reference_join_aggregation_func: Callable[..., dict[str, Any]] = build_junction_aggregation_variant,
+    overlapping_junction_audit_func: Callable[..., dict[str, Any]] = audit_overlapping_junctions,
+    surface_overlap_audit_func: Callable[..., dict[str, Any]] = audit_sumo_lane_junction_surface_overlaps,
     teacher_guided_repair_queue_func: Callable[..., dict[str, Any]] = build_teacher_guided_repair_queue,
     teacher_guided_plain_export_func: Callable[..., dict[str, Any]] = export_plain_net_for_teacher_guided_repair,
     teacher_guided_repair_run_func: Callable[..., dict[str, Any]] = run_teacher_guided_repair_queue,
@@ -4181,13 +4222,14 @@ def run_osm_cleanup_workflow(
         if str(item).strip()
     }
     reference_source_way_scope = reference_source_way_ids or None
+    build_source_way_scope = reference_source_way_scope if use_reference_source_way_scope else None
     build_kwargs: dict[str, Any] = {
         "bbox": bbox,
         "output_dir": output_dir,
         "prefix": prefix,
         "source_osm_path": source_osm_path,
         "allowed_highways": selected_highway_classes,
-        "allowed_way_ids": reference_source_way_scope,
+        "allowed_way_ids": build_source_way_scope,
         "historical_date": historical_date,
         "overpass_url": overpass_url,
         "timeout_seconds": timeout_seconds,
@@ -4313,6 +4355,8 @@ def run_osm_cleanup_workflow(
     }
     junction_aggregation_report: dict[str, Any] | None = None
     reference_join_audit_report: dict[str, Any] | None = None
+    reference_join_surface_overlap_report: dict[str, Any] | None = None
+    overlapping_junction_audit_report: dict[str, Any] | None = None
     tls_gap_destination_mapping_report: dict[str, Any] | None = None
     tls_repair_variant_report: dict[str, Any] | None = None
     tls_repair_variant_sumo_load_report: dict[str, Any] | None = None
@@ -4487,7 +4531,7 @@ def run_osm_cleanup_workflow(
             "prefix": f"{prefix}_reference_visual_detail",
             "source_osm_path": Path(str(visual_source_osm_value)) if visual_source_osm_value else None,
             "allowed_highways": reference_visual_detail_highway_classes,
-            "allowed_way_ids": reference_source_way_scope,
+            "allowed_way_ids": build_source_way_scope,
             "historical_date": historical_date,
             "overpass_url": overpass_url,
             "timeout_seconds": timeout_seconds,
@@ -5189,14 +5233,29 @@ def run_osm_cleanup_workflow(
                 output_dir=output_dir / "road_connectivity_seed_probe",
                 prefix=f"{prefix}_road_connectivity_seed_probe",
             )
+        reference_join_build_report = (
+            reference_visual_detail_build_report
+            if reference_join_audit_candidate_layer == "reference_visual_detail"
+            else build_report
+        )
+        reference_join_audit_kwargs: dict[str, Any] = {
+            "reference_net_file": reference_net_file,
+            "candidate_net_file": reference_join_audit_candidate_net_file,
+            "output_dir": output_dir / "reference_join_audit",
+            "prefix": f"{prefix}_reference_join_audit",
+            "candidate_cluster_radius_m": topology_cluster_radius_m,
+            "candidate_min_cluster_nodes": topology_min_cluster_nodes,
+            "structural_only": reference_join_audit_structural_only,
+        }
+        for keyword, field in (
+            ("candidate_filtered_osm_file", "filtered_osm_file"),
+            ("candidate_source_osm_file", "source_osm_file"),
+        ):
+            value = str(reference_join_build_report.get(field, "")).strip()
+            if value and _supports_keyword(reference_join_audit_func, keyword):
+                reference_join_audit_kwargs[keyword] = Path(value)
         reference_join_audit_report = reference_join_audit_func(
-            reference_net_file=reference_net_file,
-            candidate_net_file=reference_join_audit_candidate_net_file,
-            output_dir=output_dir / "reference_join_audit",
-            prefix=f"{prefix}_reference_join_audit",
-            candidate_cluster_radius_m=topology_cluster_radius_m,
-            candidate_min_cluster_nodes=topology_min_cluster_nodes,
-            structural_only=reference_join_audit_structural_only,
+            **reference_join_audit_kwargs,
         )
         if (
             reference_join_audit_report.get("status") in {"pass", "blocked"}
@@ -5258,12 +5317,40 @@ def run_osm_cleanup_workflow(
             )
         reference_join_audit_is_structural_only = reference_join_audit_report.get("audit_mode") == "structural_only"
         if run_reference_join_aggregation_after_build and not reference_join_audit_is_structural_only:
+            surface_report_file = (
+                output_dir
+                / "reference_join_surface_overlap"
+                / f"{prefix}_reference_join_surface_overlap.json"
+            )
+            reference_join_surface_overlap_report = surface_overlap_audit_func(
+                reference_join_audit_candidate_net_file,
+                report_file=surface_report_file,
+            )
+            candidate_topology_report = reference_join_audit_report.get(
+                "candidate_topology_audit",
+                topology_audit_report or {},
+            )
+            overlapping_junction_audit_report = overlapping_junction_audit_func(
+                net_file=reference_join_audit_candidate_net_file,
+                output_dir=output_dir / "overlapping_junction_audit",
+                prefix=f"{prefix}_overlapping_junction_audit",
+                topology_audit_report=candidate_topology_report,
+                surface_overlap_audit_report=reference_join_surface_overlap_report,
+                reference_join_audit_report=reference_join_audit_report,
+                reference_is_authority=reference_is_authority,
+                authorized_reference_ids={
+                    str(item)
+                    for item in (teacher_guided_probe_matrix_junction_ids or [])
+                    if str(item)
+                },
+            )
             reference_join_aggregation_report = reference_join_aggregation_func(
                 net_file=reference_join_audit_candidate_net_file,
                 output_dir=output_dir / "reference_join_aggregation",
                 prefix=f"{prefix}_reference_join_aggregation",
-                topology_audit_report=topology_audit_report,
+                topology_audit_report=None,
                 reference_join_audit_report=reference_join_audit_report,
+                overlapping_junction_audit_report=overlapping_junction_audit_report,
                 join_dist_m=topology_cluster_radius_m,
                 timeout_seconds=timeout_seconds,
             )
@@ -5318,9 +5405,22 @@ def run_osm_cleanup_workflow(
             or bool(road_connectivity_seed_edge_ids)
             or bool(teacher_guided_probe_matrix_junction_ids)
         )
-        if teacher_guided_queue_needed and _reference_join_audit_can_seed_teacher_guided_queue(
-            teacher_guided_seed_report,
-            structural_only=teacher_guided_seed_structural_only,
+        explicit_teacher_targets = [
+            str(junction_id).strip()
+            for junction_id in (teacher_guided_probe_matrix_junction_ids or [])
+            if str(junction_id).strip()
+        ]
+        if explicit_teacher_targets:
+            teacher_guided_seed_report = reference_join_audit_report
+            teacher_guided_seed_structural_only = reference_join_audit_is_structural_only
+            teacher_guided_repair_requires_reference_promotion = False
+            teacher_guided_repair_seed_source = "reference_join_audit_explicit_target"
+        if teacher_guided_queue_needed and (
+            explicit_teacher_targets
+            or _reference_join_audit_can_seed_teacher_guided_queue(
+                teacher_guided_seed_report,
+                structural_only=teacher_guided_seed_structural_only,
+            )
         ):
             teacher_guided_repair_queue_report = teacher_guided_repair_queue_func(
                 teacher_net_file=reference_net_file,
@@ -5336,9 +5436,16 @@ def run_osm_cleanup_workflow(
                 {"movement_signature_counts", "internal_function_counts"},
                 output_dir=output_dir / "teacher_guided_repair_queue",
                 prefix=f"{prefix}_teacher_guided_repair_movement_mismatches",
+                target_junction_ids=explicit_teacher_targets,
             )
             shared_controller_candidate_net_file: Path | None = None
-            if reference_join_aggregation_report is not None:
+            if (
+                reference_join_aggregation_report is not None
+                and reference_join_aggregation_report.get(
+                    "junction_aggregation_promotion_status"
+                )
+                == "pass"
+            ):
                 shared_candidate_value = str(
                     reference_join_aggregation_report.get("junction_aggregation_variant_file", "")
                 ).strip()
@@ -5432,6 +5539,7 @@ def run_osm_cleanup_workflow(
                         netconvert_binary=netconvert_binary,
                         sumo_binary=sumo_binary,
                         timeout_seconds=timeout_seconds,
+                        expand_fragmented_tls_join_scope=True,
                         sequential_accept_passed_variants=True,
                         plain_exporter=teacher_guided_plain_export_func,
                     )
@@ -5458,6 +5566,7 @@ def run_osm_cleanup_workflow(
                             timeout_seconds=timeout_seconds,
                             command_runner=command_runner,
                             sequential_accept_passed_variants=True,
+                            plain_exporter=teacher_guided_plain_export_func,
                         )
                     candidate_teacher_guided_best_variant_file = _teacher_guided_best_variant_file(
                         teacher_guided_repair_run_report
@@ -7421,7 +7530,7 @@ def run_osm_cleanup_workflow(
         "reference_visual_detail_highway_classes": network_plan.get("reference_visual_detail_highway_classes", []),
         "reference_visual_detail_only_highway_classes": network_plan.get("reference_visual_detail_only_highway_classes", []),
         "reference_source_way_scope": "reference_source_way_ids"
-        if reference_source_way_scope is not None
+        if build_source_way_scope is not None
         else "not_applied",
         "reference_source_way_id_count": len(reference_source_way_ids),
         "service_passenger_policy": network_plan.get("service_passenger_policy", "sumo_default"),
@@ -8058,6 +8167,12 @@ def run_osm_cleanup_workflow(
         "reference_join_aggregation_candidate_count": 0
         if reference_join_aggregation_report is None
         else reference_join_aggregation_report.get("junction_aggregation_candidate_count", 0),
+        "reference_join_aggregation_promotion_status": "skipped"
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_promotion_status", "blocked"),
+        "reference_join_compound_core_candidate_count": 0
+        if overlapping_junction_audit_report is None
+        else overlapping_junction_audit_report.get("compound_core_candidate_count", 0),
         "reference_join_aggregation_plan_file": ""
         if reference_join_aggregation_report is None
         else str(reference_join_aggregation_report.get("junction_aggregation_plan_file", "")),
@@ -8088,6 +8203,9 @@ def run_osm_cleanup_workflow(
         "reference_join_aggregation_new_dangling_shared_normal_edge_count": 0
         if reference_join_aggregation_report is None
         else reference_join_aggregation_report.get("junction_aggregation_new_dangling_shared_normal_edge_count", 0),
+        "reference_join_aggregation_surface_overlap_status": "skipped"
+        if reference_join_aggregation_report is None
+        else reference_join_aggregation_report.get("junction_aggregation_surface_overlap_status", "not_run"),
         "teacher_guided_repair_queue_status": "skipped"
         if teacher_guided_repair_queue_report is None
         else teacher_guided_repair_queue_report.get("status", "fail"),
@@ -8945,6 +9063,8 @@ def run_osm_cleanup_workflow(
         "tls_repair_decision": tls_repair_decision_report or {},
         "reference_join_post_teacher_audit": reference_join_post_teacher_audit_report or {},
         "reference_join_aggregation": reference_join_aggregation_report or {},
+        "reference_join_surface_overlap": reference_join_surface_overlap_report or {},
+        "overlapping_junction_audit": overlapping_junction_audit_report or {},
         "teacher_guided_repair_queue": teacher_guided_repair_queue_report or {},
         "teacher_guided_scoped_tls_cell_batch": teacher_guided_scoped_tls_cell_batch_report or {},
         "teacher_guided_repair_plain_export": teacher_guided_plain_export_report or {},

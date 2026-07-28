@@ -83,6 +83,8 @@ def test_reference_matched_mode_delegates_full_existing_workflow(tmp_path: Path)
     assert kwargs["bbox"] == args.bbox
     assert kwargs["reference_join_audit_structural_only"] is False
     assert kwargs["run_reference_join_aggregation_after_build"] is True
+    assert kwargs["reference_is_authority"] is True
+    assert kwargs["use_reference_source_way_scope"] is False
     assert kwargs["run_tls_aggregation_after_build"] is False
     assert kwargs["run_teacher_guided_repair_after_build"] is False
     assert kwargs["teacher_guided_probe_matrix_junction_ids"] is None

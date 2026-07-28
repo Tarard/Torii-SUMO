@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from torii_sumo.core.external_micro_junction_audit import (
+    ExternalMicroJunctionAuditError,
     audit_external_micro_junctions,
 )
 
@@ -137,13 +140,57 @@ def test_audit_accepts_turnaround_only_with_independent_lane_or_official_evidenc
         turnaround_authority=authority,
     )
 
-    assert report["status"] == "review_required"
-    assert report["automatic_promotion_gate"] == "blocked"
+    assert report["status"] == "pass"
+    assert report["automatic_promotion_gate"] == "pass"
     assert report["supported_turnaround_count"] == 1
     assert report["unsupported_turnaround_count"] == 0
     assert report["dir_t_turnarounds"][0]["authority"]["evidence_ids"] == [
         "osm-way-24498193:turn:lanes=reverse"
     ]
+
+
+def test_unused_turnaround_allowlist_record_is_diagnostic_not_required(tmp_path: Path) -> None:
+    net_file = tmp_path / "no-turnaround.net.xml"
+    _write_net(net_file)
+
+    report = audit_external_micro_junctions(
+        net_file,
+        junction_ids=("a", "b"),
+        turnaround_authority=[
+            {
+                "from_edge_id": "24498193#2",
+                "to_edge_id": "-24498193#2",
+                "from_lane": 0,
+                "to_lane": 0,
+                "evidence_kind": "turn_lane_reverse_or_uturn",
+                "evidence_ids": ["osm-way-24498193:turn:lanes=reverse"],
+            }
+        ],
+    )
+
+    assert report["status"] == "pass"
+    assert report["automatic_promotion_gate"] == "pass"
+    assert report["unused_turnaround_authority_count"] == 1
+
+
+def test_turnaround_authority_rejects_empty_evidence_ids(tmp_path: Path) -> None:
+    net_file = tmp_path / "turnaround.net.xml"
+    _write_net(net_file)
+
+    with pytest.raises(ExternalMicroJunctionAuditError, match="non-empty evidence_ids"):
+        audit_external_micro_junctions(
+            net_file,
+            turnaround_authority=[
+                {
+                    "from_edge_id": "24498193#2",
+                    "to_edge_id": "-24498193#2",
+                    "from_lane": 0,
+                    "to_lane": 0,
+                    "evidence_kind": "turn_lane_reverse_or_uturn",
+                    "evidence_ids": [],
+                }
+            ],
+        )
 
 
 def test_audit_protects_threshold_disagreement_controller_stopline_and_crossing(

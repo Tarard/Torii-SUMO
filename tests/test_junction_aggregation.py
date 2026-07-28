@@ -309,7 +309,8 @@ def test_junction_aggregation_preserves_reference_confirmed_modal_nodes(tmp_path
         command_runner=fake_command,
     )
 
-    assert report["status"] == "pass"
+    assert report["status"] == "fail"
+    assert report["junction_aggregation_preservation_status"] == "review"
 
 
 def test_junction_aggregation_prunes_only_internal_short_modal_support_edges(tmp_path) -> None:
@@ -374,7 +375,8 @@ def test_junction_aggregation_prunes_only_internal_short_modal_support_edges(tmp
         command_runner=fake_command,
     )
 
-    assert report["status"] == "pass"
+    assert report["status"] == "fail"
+    assert report["junction_aggregation_preservation_status"] == "review"
     assert report["junction_aggregation_removed_modal_support_edge_count"] == 2
 
 
