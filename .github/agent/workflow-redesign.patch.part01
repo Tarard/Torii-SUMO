@@ -1,0 +1,165 @@
+-  executor inputs/outputs before they can be treated as a workflow state
+-  machine.
++- Quality vectors and promotion traces remain post-hoc domain summaries. The managed manifest now controls the outer state, but legacy executors still need typed stage results for fine-grained reruns.
+ - Real SUMO regressions are local acceptance tests rather than the default
+   unit-test suite.  CI needs an explicit SUMO job before these gates can be
+   considered continuously enforced upstream.
+diff --git a/CITATION.cff b/CITATION.cff
+index 67bc46fbe722a50831bf216bac54391a851ce3cd..4eda731a98e5ae505ac2dab8c6e700fff3118eb1 100644
+--- a/CITATION.cff
++++ b/CITATION.cff
+@@ -4,9 +4,8 @@ type: software
+ title: "Torii: Task-Oriented Road Infrastructure Intelligence"
+ authors:
+   - name: "Tarard"
+-version: "v1.0.2"
+-date-released: "2026-06-24"
+-license: "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0"
++version: "1.1.0"
++license: "Apache-2.0"
+ repository-code: "https://github.com/Tarard/Torii-SUMO"
+ url: "https://tarard.github.io/Torii-SUMO/"
+ abstract: "An agent plugin for SUMO that bundles a SUMO expert skill with local MCP tools for OSM-to-SUMO network construction, TLS review, routeability checks, evidence bundles, and feedback-driven simulation repair."
+diff --git a/README.de.md b/README.de.md
+index ee5387fe0b3abcb0522f3ff1ab24699a9723aad9..7cfc057d30ede54f114771ff29b1c1633198e4db 100644
+--- a/README.de.md
++++ b/README.de.md
+@@ -26,7 +26,7 @@
+ 
+ Torii ist fuer SUMO-Netzkonstruktion gedacht: Eine kurze natuerliche Anfrage kann zu einem begrenzten, evidence-aware und reference-comparable OSM-zu-SUMO-Workflow werden, mit Konstruktionsnachweisen, Erreichbarkeitschecks, Review-Artefakten und klarer Aussagegrenze.
+ 
+-Das Plugin startet jetzt mit einem Workflow Router: `torii_auto_workflow` klassifiziert die Anfrage, waehlt Skills, erstellt Plaene und fuehrt sichere MCP-Schritte aus, um das SUMO-Netz zu erzeugen oder zu aendern.
++Das Plugin startet mit `torii_workflow_run`. Das Tool klassifiziert die Anfrage, fuehrt den gewaehlten Ablauf aus und speichert ein fortsetzbares Evidenzmanifest. `torii_workflow_status` prueft alte Ergebnisse. `torii_auto_workflow` bleibt fuer Kompatibilitaet.
+ 
+ Torii hat zwei Schichten:
+ 
+@@ -39,7 +39,7 @@ Forschungsstand (2026-07-14): Stage 1-M ist **Machine REVIEW_READY**. Dreissig v
+ 
+ Die Architektur ist in [`ARCHITECTURE.md`](ARCHITECTURE.md) dokumentiert: Router, Planner, Executor und Reviewer.
+ 
+-Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
++Aktuelle MCP Tools decken den verwalteten Workflow, die Statuspruefung, den Kompatibilitaets-Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
+ 
+ ## Example
+ 
+@@ -95,7 +95,7 @@ Torii baut und auditiert SUMO-Artefakte, zertifiziert ein Modell aber nicht als
+ 
+ ## License and Notices
+ 
+-Quelltext ist unter PolyForm Noncommercial 1.0.0 lizenziert. Skill-Dateien, Dokumentation, Checklisten, Beispiele und Protokolltexte sind unter CC BY-NC 4.0 lizenziert. Kommerzielle Nutzung erfordert eine separate schriftliche Erlaubnis. Beide Bereiche stehen in [`LICENSE`](LICENSE).
++Torii-Code, Skills, Dokumentation, Beispiele und Protokolltexte stehen einheitlich unter der [Apache License 2.0](LICENSE).
+ 
+ Eclipse SUMO ist eine Marke der Eclipse Foundation. Kartendaten im OSM-Demo sind © OpenStreetMap contributors und unter der Open Database License (ODbL) verfuegbar.
+ 
+diff --git a/README.md b/README.md
+index c13f425e1e8b2cf44064e444f1edcbade7323c9c..a265364dd3095f1ceac418fabb44235191bc25b6 100644
+--- a/README.md
++++ b/README.md
+@@ -9,15 +9,16 @@
+ </p>
+ 
+ <p align="center">
+-  An agent plugin that turns natural-language SUMO tasks into bounded,
+-  evidence-bound workflows — building, auditing, and reviewing networks
+-  without silently certifying what it cannot prove.
++  An evidence-aware agent plugin that turns natural-language SUMO tasks into bounded,
++  evidence-bound, reference-comparable workflows for building, auditing, repairing, and reviewing
++  networks without silently certifying what it cannot prove.
+ </p>
+ 
+ <p align="center">
+   <a href="https://tarard.github.io/Torii-SUMO/">Website</a> ·
+   <a href="docs/codex-plugin-install.md">Installation</a> ·
+   <a href="docs/README.md">Documentation</a> ·
++  <a href="docs/workflow.md">Workflow</a> ·
+   <a href="examples/01_signal_control_audit/task.md">Examples</a> ·
+   <a href="LICENSE">License</a>
+ </p>
+@@ -32,20 +33,26 @@
+ 
+ ```mermaid
+ flowchart TD
+-    A["Natural-language request"] --> B["Router: classify intent, choose workflow"]
+-    B --> C["Planner: select gates, reference policy, traffic layers"]
+-    C --> D["Executor: bounded stages, source-immutable candidates"]
+-    D --> E["Reviewer: hash-bound evidence, HTML cockpit, decision manifests"]
+-    E --> F{Decision}
+-    F -->|"gates pass"| G["Automatic-safe"]
+-    F -->|"review required"| H["Review-required"]
+-    F -->|"evidence missing"| I["Blocked"]
++    A["User intent and available evidence"] --> B["Intake: validate request and source identity"]
++    B --> C["Plan: select workflow, gates, and claim boundary"]
++    C --> D["Execute: call bounded SUMO stages and preserve artifacts"]
++    D --> E["Assess: classify evidence, uncertainty, and repair decisions"]
++    E --> F["Publish: manifest, review package, and supported claim"]
++    F --> G{Status}
++    G -->|"complete"| H["Accepted output"]
++    G -->|"review required"| I["Human decision"]
++    G -->|"blocked, invalid, failed, or stale"| J["Stop with next actions"]
+ ```
+ 
++The managed workflow joins expert skills and MCP tools with resumable state and evidence contracts around the
++existing router, planner, domain tools, and reviewers. It preserves working SUMO
++algorithms while preventing false success when required evidence is missing or stale.
++
+ | Layer | Role |
+ |---|---|
+-| **Expert skills** | Classify tasks, select checks, state claim boundaries |
+-| **MCP tools** (74 registered) | Run SUMO, TraCI, NetEdit, OSM conversion, audits, and evidence export |
++| **Expert skills** | Classify tasks, select checks, and state claim boundaries |
++| **MCP tools** (76 registered) | Run managed workflows, SUMO, TraCI, NetEdit, OSM conversion, audits, and evidence export |
++| **Workflow manifest** | Record stage state, artifact hashes, evidence classes, blockers, review items, and supported claims |
+ 
+ ## Hamburg Corridor Digital Twin
+ 
+@@ -65,7 +72,7 @@ Product target: **Am Sandtorkai 2349 → 2394 → 2403**
+ | W3b Detectors | 🟡 |
+ | W4 Replay | 🔴 |
+ 
+-**`detector-constrained-diagnostic-replay`** — blocked by 2403 signal publication gap.
++**`detector-constrained-diagnostic-replay`** — blocked by the missing signal publication for node 2403.
+ [Evidence summary](docs/hamburg-digital-twin-evidence-summary.json) ·
+ [Development log](docs/hamburg-digital-twin-development-log.md)
+ 
+@@ -73,46 +80,48 @@ Product target: **Am Sandtorkai 2349 → 2394 → 2403**
+   <img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Official Hamburg 2024 aerial" width="45%">
+   &nbsp;
+   <img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Torii Connection Mode" width="45%">
+-  <br><em>Left: Hamburg official aerial (2024).  Right: Torii W1 cleaned corridor in SUMO Connection Mode.</em>
++  <br><em>Left: Hamburg official aerial (2024). Right: Torii W1 cleaned corridor in SUMO Connection Mode.</em>
+ </p>
+ 
+ ## Design
+ 
++```text
++source evidence
++→ parsed observation
++→ interpretation
++→ repair candidate
++→ check
++→ decision
++→ applied change
++→ validation
++→ supported claim
+ ```
+-  Candidate
+-      │
+-      ▼
+-  ┌─────────────────────────┐
+-  │  Protected semantic /   │──Yes──▶  Manual review
+-  │  TLS delta?             │         (hash-bound decision)
+-  └─────────────────────────┘
+-      │ No
+-      ▼
+-  ┌─────────────────────────┐
+-  │  All runtime gates      │──No───▶  BLOCKED
+-  │  pass?                  │         (recorded in manifest)
+-  └─────────────────────────┘
+-      │ Yes
+-      ▼
+-  AUTOMATIC-SAFE
+-```
+ 
+-Source networks are never modified in place — every edit produces a
+-separate candidate with rollback.  All artifacts are SHA-256 bound.
+-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design.
