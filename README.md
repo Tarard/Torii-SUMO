@@ -102,6 +102,27 @@ The workflow returns its plan, executed checks, generated files, blocked gates, 
 | Four-way signal review | [`examples/03_xs1_four_way_tls`](examples/03_xs1_four_way_tls/README.md) |
 | Three-way signal review | [`examples/04_xs2_three_way_tls`](examples/04_xs2_three_way_tls/README.md) |
 
+## Hamburg Corridor Project
+
+Torii is being tested on a three-intersection digital-twin workflow for the **Am Sandtorkai 2349 → 2394 → 2403** corridor in Hamburg.
+
+<p align="center">
+  <img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Torii cleaned Hamburg corridor in SUMO NetEdit Connection Mode" width="100%">
+</p>
+
+| Workstream | Current result |
+|---|---|
+| Network construction | The OSM corridor has been cleaned and materialized as a reviewable SUMO network. |
+| Signal binding | Official signal data has been bound to nodes 2349 and 2394. Node 2403 lacks a published MAP or OCIT package. |
+| Detector model | The route-to-sensor matrix has shape 6 × 58, rank 6, and nullity 52. The recovered route set is therefore non-unique. |
+| Diagnostic fit | The signal-disabled diagnostic matches all 5,928 official detector counts across 60 bins. |
+| Signal-history replay | The 7,200-second replay uses 15 candidate routes, matches all route constraints, and has zero collisions and zero teleports. |
+| Current status | `detector-constrained-diagnostic-replay`. Promotion to an accepted field digital twin remains blocked. |
+
+The next step is to rebuild the signal, detector-mapping, and replay stages against one hash-bound network version. The remaining field gates include node 2403 signal data and unresolved lane identities.
+
+See the [machine-readable evidence summary](docs/hamburg-digital-twin-evidence-summary.json) and the [development log](docs/hamburg-digital-twin-development-log.md).
+
 ## Project Structure
 
 ```text
@@ -119,8 +140,6 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the router, planner, executor, and 
 Torii supports bounded construction and review workflows. Its strongest automated results cover machine checks such as SUMO loading, connection consistency, route completion, collision and teleport detection, and output provenance.
 
 Human review or official data remains necessary for claims about real signal operation, exact lane identity, field timing, physical junction meaning, and authoritative network correctness.
-
-The Hamburg corridor work is documented as a research case study, not as a general certification claim. See the [digital-twin evidence summary](docs/hamburg-digital-twin-evidence-summary.json).
 
 ## Development
 
