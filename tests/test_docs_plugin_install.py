@@ -102,3 +102,35 @@ def test_internal_superpowers_plans_are_not_public_release_content() -> None:
     assert "docs/superpowers/" in manifest
     assert "docs/superpowers/plans/" not in manifest
     assert "docs/superpowers/specs/" not in manifest
+
+
+def test_canonical_workflow_document_defines_state_evidence_and_recovery() -> None:
+    doc = (ROOT / "docs" / "workflow.md").read_text(encoding="utf-8")
+
+    assert "torii_workflow_run" in doc
+    assert "torii_workflow_status" in doc
+    assert "source -> observation -> interpretation -> candidate -> check" in doc
+    assert "review_required" in doc
+    assert "stale" in doc
+    assert "force=true" in doc
+    assert "simulation success" in doc
+    assert "torii.workflow-manifest.v1.schema.json" in doc
+
+
+def test_public_docs_route_broad_requests_to_managed_workflow() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    catalog = (ROOT / "docs" / "mcp-tool-catalog.md").read_text(encoding="utf-8")
+    routing = (
+        ROOT
+        / "plugins"
+        / "torii-sumo"
+        / "skills"
+        / "simulation-helper-skill-for-eclipse-sumo"
+        / "references"
+        / "mcp-tool-routing.md"
+    ).read_text(encoding="utf-8")
+
+    assert "The main entry point is `torii_workflow_run`" in readme
+    assert "76 MCP tools" in catalog
+    assert "One-sentence or ambiguous SUMO request | `torii_workflow_run`" in routing
+    assert "Existing caller needs the old result shape | `torii_auto_workflow`" in routing

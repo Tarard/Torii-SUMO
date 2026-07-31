@@ -26,7 +26,7 @@
 
 Torii 面向 SUMO 路网构建工作：一句简短的自然语言 prompt 可以变成一个有边界、证据驱动、可与参考路网对比的 OSM-to-SUMO 工作流，包含构建证据、路线可达性检查、审查 artifacts 和清晰的结论边界。
 
-插件现在从 workflow router 开始：`torii_auto_workflow` 会分类用户请求、选择 skill、制定计划，并运行安全的 MCP 步骤来为你生成或修改 SUMO 路网。
+插件现在从受管工作流开始：`torii_workflow_run` 会分类请求、运行选定流程，并保存可续跑的证据清单。`torii_workflow_status` 用于检查旧结果是否过期。`torii_auto_workflow` 仅保留兼容用途。
 
 Torii 有两层：
 
@@ -37,7 +37,7 @@ Torii 有两层：
 
 架构说明见 [`ARCHITECTURE.md`](ARCHITECTURE.md)：router、planner、executor 和 reviewer。
 
-当前 MCP tools 覆盖 `torii_auto_workflow` router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、TLS aggregation review variant、代码原生的全网及原网到候选 Connection Mode 差分审计、严格的标准三/四叉口 NEMA 相位绑定候选、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、overlapping top-level junction audit、reference join audit、junction aggregation review variant 和可选的 NetEdit 打开证据。
+当前 MCP tools 覆盖受管 workflow、状态检查、兼容 router、环境检查、配置预检、smoke run、证据包、OSM 路网构建、TLS 候选、多源 TLS 复核表、TLS aggregation review variant、代码原生的全网及原网到候选 Connection Mode 差分审计、严格的标准三/四叉口 NEMA 相位绑定候选、连接性检查、connected-core 提取、路线可达性 probe、completion-aware routeability audit、overlapping top-level junction audit、reference join audit、junction aggregation review variant 和可选的 NetEdit 打开证据。
 
 ### 当前走廊级验收边界
 
@@ -244,7 +244,7 @@ Torii 可以构建和审计 SUMO artifacts，但不会认证模型一定正确�
 
 ## License and Notices
 
-源代码使用 PolyForm Noncommercial 1.0.0。Skill 文件、文档、检查清单、示例和协议文本使用 CC BY-NC 4.0。商业使用需要另行取得书面许可。两个授权范围都写在 [`LICENSE`](LICENSE)。
+Torii 的代码、skill、文档、示例和协议文本统一使用 [Apache License 2.0](LICENSE)。
 
 Eclipse SUMO 是 Eclipse Foundation 的商标。OSM demo 中的地图数据 © OpenStreetMap contributors，并基于 Open Database License (ODbL) 提供。
 

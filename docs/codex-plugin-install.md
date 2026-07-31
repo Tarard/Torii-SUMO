@@ -53,9 +53,15 @@ If the Codex CLI reports a marketplace-source mismatch, verify that `.agents/plu
 
 The plugin can run bounded environment checks, config preflight, smoke runs, output comparison, evidence bundle writing, and OSM/network construction helpers through MCP tools.
 
-For one-sentence requests, start with the workflow router:
+For one-sentence requests, start with the managed workflow:
 
-- `torii_auto_workflow`: classify the user's natural-language SUMO request, choose the workflow recipe, ask only blocking questions, and run safe MCP steps when enough evidence is available.
+- `torii_workflow_run`: classify the request, choose the workflow recipe, run safe MCP steps, and persist a resumable evidence manifest.
+- `torii_workflow_status`: inspect the latest manifest, detect stale artifacts, and show the resume boundary.
+- `torii_auto_workflow`: compatibility facade for callers that still expect the legacy report shape.
+
+The existing workflow router still selects the domain recipe inside the managed workflow.
+
+The skill is the reasoning layer. The MCP server is the execution layer. The workflow manifest is the persistent handoff between them.
 
 Implemented OSM/network tools:
 

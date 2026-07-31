@@ -5,7 +5,7 @@
   "author": {
     "name": "Torii contributors"
   },
-  "license": "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0",
+  "license": "Apache-2.0",
   "keywords": [
     "sumo",
     "traci",

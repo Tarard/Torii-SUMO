@@ -86,7 +86,7 @@ from .tools.osm_tools import (
 )
 from .tools.run_tools import sumo_run_config, sumo_run_minimal_smoke
 from .tools.netedit_tools import sumo_netedit_session
-from .tools.workflow_tools import torii_auto_workflow
+from .tools.workflow_tools import torii_auto_workflow, torii_workflow_run, torii_workflow_status
 
 
 def create_server() -> FastMCP:
@@ -110,7 +110,13 @@ def create_server() -> FastMCP:
     server.tool(description="Control the single hash-bound NetEdit diagnostic session with open, observe, act, finalize, or abort. Open requires immutable source/candidate/output paths and source SHA; F7 additionally requires a frozen selection and declared junction identities. Observe returns viewport evidence and persisted XML state. Act accepts one whitelisted mouse or shortcut action plus the last screenshot SHA. Finalize saves and runs SUMO-load, surface, Connection Mode, identity, and evidence-integrity audits; abort closes the session. The source stays immutable and promotion is always blocked.")(
         sumo_netedit_session
     )
-    server.tool(description="Conditionally route one natural-language SUMO request to the narrow Phase-1 synthetic four-way scene workflow or existing OSM, TLS/network review, routeability, debugging, and experiment paths.")(
+    server.tool(description="Run the canonical evidence-bound Torii workflow, persist the raw result and a resumable hash-bound workflow manifest, and fail closed when evidence, review, or stage contracts remain incomplete.")(
+        torii_workflow_run
+    )
+    server.tool(description="Read a Torii workflow manifest, recheck declared artifact identities, report stale or missing evidence, and return the ordered resume plan without changing the network.")(
+        torii_workflow_status
+    )
+    server.tool(description="Compatibility router that returns legacy fields plus persisted managed-workflow fields and overrides false success when the managed contract blocks the claim. New workflows should call torii_workflow_run directly.")(
         torii_auto_workflow
     )
     server.tool(description="Resolve an OSM place name to a candidate area, bbox, and OSM confirmation links.")(

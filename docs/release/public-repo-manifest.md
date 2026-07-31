@@ -20,6 +20,7 @@ README.md
 README.zh-CN.md
 README.de.md
 ARCHITECTURE.md
+AGENTS.md
 LICENSE
 NOTICE.md
 CITATION.cff
@@ -27,6 +28,7 @@ CITATION.cff
 pyproject.toml
 .agents/plugins/marketplace.json
 .github/
+schemas/
 plugins/
   torii-sumo/
 skills/
@@ -37,6 +39,8 @@ docs/
   index.html
   assets/
   codex-plugin-install.md
+  workflow.md
+  workflow-redesign-audit.md
   mcp-host-config.md
   osm-source-patterns.md
   skill-integration.md

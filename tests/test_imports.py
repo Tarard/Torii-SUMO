@@ -46,6 +46,8 @@ EXPECTED_TOOL_NAMES = sorted(
         "sumo_intersection_validate",
         "sumo_nema_four_way_reference_workflow",
         "torii_auto_workflow",
+        "torii_workflow_run",
+        "torii_workflow_status",
         "sumo_osm_resolve_place",
         "sumo_osm_cleanup_workflow",
         "sumo_osm_build_network",
@@ -114,9 +116,13 @@ def test_server_describes_narrow_scene_and_conditional_auto_routing() -> None:
 
     descriptions = anyio.run(_tool_descriptions)
     auto = descriptions["torii_auto_workflow"].casefold()
+    canonical = descriptions["torii_workflow_run"].casefold()
+    status = descriptions["torii_workflow_status"].casefold()
     scene = descriptions["sumo_intersection_scene_workflow"].casefold()
 
-    assert all(term in auto for term in ("conditionally", "phase-1", "osm", "review"))
+    assert all(term in auto for term in ("compatibility", "legacy", "torii_workflow_run"))
+    assert all(term in canonical for term in ("canonical", "manifest", "fail closed"))
+    assert all(term in status for term in ("artifact", "stale", "resume"))
     assert all(
         term in scene
         for term in ("synthetic", "passenger-only", "defaulted nema", "not an osm or city-network")

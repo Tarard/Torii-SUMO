@@ -1,6 +1,6 @@
 # Torii MCP Tool Catalog
 
-Torii currently registers 74 MCP tools. Normal users should start broad build and audit requests with `torii_auto_workflow`; explicit read-only diagnostics such as local intersection-type, road-semantic, or signal-device classification may call the named specialist tool directly. The remaining tools are grouped router capabilities, reproducible scripts, and targeted diagnostics.
+Torii currently registers 76 MCP tools. Normal users should start broad build and audit requests with `torii_workflow_run`. Use `torii_workflow_status` to inspect or resume saved work. Explicit read-only diagnostics may call a named specialist tool directly.
 
 The implementation boundary is consistent across groups:
 
@@ -8,9 +8,13 @@ The implementation boundary is consistent across groups:
 server.py registration -> tools/* adapter -> core/* implementation -> structured artifacts
 ```
 
-## Router
+## Managed Workflow
 
-- `torii_auto_workflow` - classify one natural-language SUMO request and route it to a bounded workflow.
+- `torii_workflow_run` - classify a request, run the selected domain workflow, and persist a hash-bound workflow manifest.
+- `torii_workflow_status` - inspect a saved manifest, recheck artifact identities, and return the resume boundary.
+- `torii_auto_workflow` - compatibility facade that returns legacy fields, adds managed fields, and overrides false success when the managed contract blocks a claim.
+
+The managed workflow contract is defined in [Canonical Torii Workflow](workflow.md).
 
 ## Environment, Execution, and Evidence
 
