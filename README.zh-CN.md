@@ -51,14 +51,6 @@ Torii 有两层：
 
 <p><img src="docs/assets/hamburg-digital-twin/official-aerial-2024.png" alt="Am Sandtorkai 官方航拍" width="100%"></p>
 
-**LSBG 2022 官方施工图**
-
-<p><img src="docs/assets/hamburg-digital-twin/official-construction-plan-2022.png" alt="Am Sandtorkai 与 Brooktorkai 官方施工图" width="100%"></p>
-
-**OSM 导入拓扑**
-
-<p><img src="docs/assets/hamburg-digital-twin/osm-import-overview.png" alt="清洗前 OSM 派生拓扑" width="100%"></p>
-
 **Torii 清洗走廊——完整 Connection Mode**
 
 <p><img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="NetEdit Connection Mode 中完整的汉堡修复走廊" width="100%"></p>
