@@ -1,0 +1,230 @@
++        "launch_netedit_after_build": launch_netedit_after_build,
++        "launch_sumo_gui_after_build": launch_sumo_gui_after_build,
++        "net_file": Path(net_file) if net_file else None,
++        "osm_file": Path(osm_file) if osm_file else None,
++        "official_inventory_csv": Path(official_inventory_csv) if official_inventory_csv else None,
++        "signal_plan_csv": Path(signal_plan_csv) if signal_plan_csv else None,
++        "field_evidence_csv": Path(field_evidence_csv) if field_evidence_csv else None,
++        "cleanup_workflow_func": sumo_osm_cleanup_workflow,
++    }
++    request_config = {
++        key: value
++        for key, value in executor_kwargs.items()
++        if key not in {"user_request", "output_dir", "cleanup_workflow_func"}
++    }
++    invalid_execution_status = ""
++    if not user_request.strip():
++        invalid_execution_status = "invalid_user_request"
++    elif autonomy_mode not in {"ask-first", "safe-autopilot", "inspect-only", "full-local-run"}:
++        invalid_execution_status = "invalid_autonomy_mode"
++
++    if invalid_execution_status:
++        workflow_name = "general"
++        tool_chain: list[str] = []
++
++        def invalid_executor(**_kwargs: Any) -> dict[str, Any]:
++            return {
++                "status": "invalid",
++                "claim_status": "blocked",
++                "execution_status": invalid_execution_status,
++                "autonomy_mode": autonomy_mode,
++            }
++
++        executor = invalid_executor
++    else:
++        workflow_name = detect_workflow(user_request)
++        tool_chain = list(_workflow_recipe(workflow_name)["tool_chain"])
++        executor = run_auto_workflow
++
++    return run_managed_workflow(
++        user_request=user_request,
++        output_dir=output_path,
++        workflow_name=workflow_name,
++        tool_chain=tool_chain,
++        request_config=request_config,
++        executor=executor,
++        executor_kwargs=executor_kwargs,
++        resume=resume,
++        force=force,
++    )
++
++
++def torii_workflow_status(
++    output_dir: str | None = None,
++    manifest_file: str | None = None,
++) -> dict[str, Any]:
++    """Inspect one workflow manifest and fail closed on changed artifacts."""
++
++    if bool(output_dir) == bool(manifest_file):
++        return {
++            "status": "invalid",
++            "claim_status": "blocked",
++            "blockers": ["Provide exactly one of output_dir or manifest_file."],
++            "next_actions": ["Pass a workflow output directory or an explicit manifest path."],
++        }
++    try:
++        target = Path(manifest_file) if manifest_file else resolve_latest_manifest(Path(str(output_dir)))
++        return inspect_workflow_manifest(target)
++    except (OSError, ValueError, json.JSONDecodeError) as exc:
++        return {
++            "status": "invalid",
++            "claim_status": "blocked",
++            "blockers": [f"workflow_status_error: {exc}"],
++            "next_actions": ["Check the output directory or manifest path."],
++        }
+ 
+ 
+ def torii_auto_workflow(
+@@ -21,6 +186,7 @@ def torii_auto_workflow(
+     seed_osm_node_id: str | None = None,
+     reference_net_file: str | None = None,
+     reference_policy_report: str | None = None,
++    review_decisions_file: str | None = None,
+     service_passenger_policy: str | None = None,
+     teacher_guided_repair_max_ready_candidates: int | None = 80,
+     run_teacher_guided_repair_after_build: bool = True,
+@@ -34,11 +200,19 @@ def torii_auto_workflow(
+     official_inventory_csv: str | None = None,
+     signal_plan_csv: str | None = None,
+     field_evidence_csv: str | None = None,
++    resume: bool = True,
++    force: bool = False,
+ ) -> dict[str, Any]:
+-    return run_auto_workflow(
++    """Compatibility entry point for the managed workflow.
++
++    Existing report fields remain at the top level. New callers should use
++    ``torii_workflow_run`` and read its explicit workflow status.
++    """
++
++    outcome = torii_workflow_run(
+         user_request=user_request,
+-        output_dir=Path(output_dir),
+-        work_dir=Path(work_dir) if work_dir else None,
++        output_dir=output_dir,
++        work_dir=work_dir,
+         autonomy_mode=autonomy_mode,
+         place_name=place_name,
+         bbox=bbox,
+@@ -47,8 +221,9 @@ def torii_auto_workflow(
+         traffic_layers=traffic_layers,
+         network_profile=network_profile,
+         seed_osm_node_id=seed_osm_node_id,
+-        reference_net_file=Path(reference_net_file) if reference_net_file else None,
++        reference_net_file=reference_net_file,
+         reference_policy_report=reference_policy_report,
++        review_decisions_file=review_decisions_file,
+         service_passenger_policy=service_passenger_policy,
+         teacher_guided_repair_max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+         run_teacher_guided_repair_after_build=run_teacher_guided_repair_after_build,
+@@ -57,10 +232,35 @@ def torii_auto_workflow(
+         teacher_guided_probe_matrix_junction_ids=teacher_guided_probe_matrix_junction_ids,
+         launch_netedit_after_build=launch_netedit_after_build,
+         launch_sumo_gui_after_build=launch_sumo_gui_after_build,
+-        net_file=Path(net_file) if net_file else None,
+-        osm_file=Path(osm_file) if osm_file else None,
+-        official_inventory_csv=Path(official_inventory_csv) if official_inventory_csv else None,
+-        signal_plan_csv=Path(signal_plan_csv) if signal_plan_csv else None,
+-        field_evidence_csv=Path(field_evidence_csv) if field_evidence_csv else None,
+-        cleanup_workflow_func=sumo_osm_cleanup_workflow,
++        net_file=net_file,
++        osm_file=osm_file,
++        official_inventory_csv=official_inventory_csv,
++        signal_plan_csv=signal_plan_csv,
++        field_evidence_csv=field_evidence_csv,
++        resume=resume,
++        force=force,
++    )
++    report = dict(outcome.get("result", {}))
++    legacy_status = report.get("status")
++    legacy_claim_status = report.get("claim_status")
++    if outcome["status"] != "complete":
++        report["legacy_status"] = legacy_status
++        report["legacy_claim_status"] = legacy_claim_status
++        report["status"] = outcome["status"]
++        report["claim_status"] = outcome["claim_status"]
++    report.update(
++        {
++            "workflow_status": outcome["status"],
++            "workflow_claim_status": outcome["claim_status"],
++            "workflow_run_id": outcome["run_id"],
++            "workflow_execution": outcome["execution"],
++            "workflow_manifest_file": outcome["manifest_file"],
++            "workflow_result_file": outcome["result_file"],
++            "workflow_blockers": outcome["blockers"],
++            "workflow_review_items": outcome["review_items"],
++            "workflow_next_actions": outcome["next_actions"],
++            "workflow_evidence_summary": outcome["evidence_summary"],
++            "compatibility_entrypoint": "torii_auto_workflow",
++        }
+     )
++    return report
+diff --git a/pyproject.toml b/pyproject.toml
+index f453e03c9ae160ac61a1564bd0557929cf7ac468..3755dc1c8501f797075cf40a516bf3afb3be1be2 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -8,7 +8,7 @@ version = "1.1.0"
+ description = "Torii agent plugin for evidence-aware Eclipse SUMO, OSM cleanup, and public-data corridor digital twins."
+ readme = "README.md"
+ requires-python = ">=3.11"
+-license = { text = "PolyForm-Noncommercial-1.0.0" }
++license = { text = "Apache-2.0" }
+ authors = [
+   { name = "Torii contributors" }
+ ]
+diff --git a/schemas/torii.workflow-manifest.v1.schema.json b/schemas/torii.workflow-manifest.v1.schema.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ad7f61cb75903506273b90f7b350d219fcb6dfd
+--- /dev/null
++++ b/schemas/torii.workflow-manifest.v1.schema.json
+@@ -0,0 +1,421 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "$id": "https://github.com/Tarard/Torii-SUMO/schemas/torii.workflow-manifest.v1.schema.json",
++  "title": "Torii workflow manifest v1",
++  "type": "object",
++  "required": [
++    "schema",
++    "status",
++    "run_id",
++    "request_fingerprint",
++    "workflow_name",
++    "claim_status",
++    "artifact_base_dir",
++    "result_file",
++    "request",
++    "plan",
++    "reasoning_model",
++    "stage_contracts",
++    "stage_runs",
++    "artifacts",
++    "evidence",
++    "blockers",
++    "review_items",
++    "next_actions"
++  ],
++  "properties": {
++    "schema": {
++      "const": "torii.workflow-manifest/v1"
++    },
++    "schema_file": {
++      "const": "schemas/torii.workflow-manifest.v1.schema.json"
++    },
++    "status": {
++      "enum": [
++        "complete",
++        "incomplete",
++        "blocked",
++        "invalid",
++        "review_required",
++        "unsupported",
++        "failed",
++        "stale"
++      ]
++    },
++    "run_id": {
++      "type": "string",
++      "pattern": "^[0-9a-f]{16}$"
++    },
++    "request_fingerprint": {
++      "type": "string",
