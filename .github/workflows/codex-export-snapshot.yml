@@ -1,6 +1,9 @@
 name: codex-export-snapshot
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - codex/workflow-evidence-redesign
