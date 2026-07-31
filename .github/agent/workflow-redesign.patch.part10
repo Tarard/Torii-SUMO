@@ -1,0 +1,237 @@
++        ensure_ascii=False,
++        sort_keys=True,
++    )
++
++
++def _outcome_from_manifest(
++    manifest: Mapping[str, Any],
++    *,
++    manifest_file: Path,
++    result_file: Path,
++    execution: str,
++    status_override: str | None = None,
++    blockers: Sequence[str] | None = None,
++    next_actions: Sequence[str] | None = None,
++) -> dict[str, Any]:
++    result: dict[str, Any] = {}
++    if result_file.is_file():
++        try:
++            payload = _read_json_object(result_file)
++            raw = payload.get("result", {})
++            if isinstance(raw, Mapping):
++                result = dict(raw)
++        except (OSError, ValueError, json.JSONDecodeError):
++            result = {}
++    status = status_override or str(manifest.get("status", "invalid"))
++    claim_status = (
++        str(manifest.get("claim_status", "blocked"))
++        if status == "complete"
++        else "blocked"
++    )
++    return {
++        "schema": WORKFLOW_MANIFEST_SCHEMA,
++        "status": status,
++        "claim_status": claim_status,
++        "run_id": str(manifest.get("run_id", "")),
++        "workflow_name": str(manifest.get("workflow_name", "")),
++        "execution": execution,
++        "manifest_file": str(manifest_file),
++        "result_file": str(result_file),
++        "blockers": list(blockers if blockers is not None else manifest.get("blockers", [])),
++        "review_items": list(manifest.get("review_items", [])),
++        "next_actions": list(next_actions if next_actions is not None else manifest.get("next_actions", [])),
++        "evidence_summary": {
++            name: len(manifest.get("evidence", {}).get(name, []))
++            for name in EVIDENCE_SECTIONS
++        },
++        "result": result,
++    }
++
++
++def _invalid_manifest_outcome(manifest_file: Path, run_id: str) -> dict[str, Any]:
++    return {
++        "schema": WORKFLOW_MANIFEST_SCHEMA,
++        "status": "invalid",
++        "claim_status": "blocked",
++        "run_id": run_id,
++        "workflow_name": "",
++        "execution": "not_run",
++        "manifest_file": str(manifest_file),
++        "result_file": str(manifest_file.parent / "result.json"),
++        "blockers": ["existing workflow manifest is invalid"],
++        "review_items": [],
++        "next_actions": ["Correct or remove the invalid manifest before retrying."],
++        "evidence_summary": {name: 0 for name in EVIDENCE_SECTIONS},
++        "result": {},
++    }
++
++
++def _normalized_claim_status(status: str, legacy_claim_status: Any) -> str:
++    if status != "complete":
++        return "blocked"
++    claim = str(legacy_claim_status or "diagnostic-demo").strip()
++    return claim or "diagnostic-demo"
++
++
++def _empty_evidence(source_artifacts: Sequence[Mapping[str, Any]]) -> dict[str, list[dict[str, Any]]]:
++    evidence = {name: [] for name in EVIDENCE_SECTIONS}
++    evidence["source_evidence"] = [dict(item) for item in source_artifacts]
++    return evidence
++
++
++def _collect_blockers(result: Mapping[str, Any]) -> list[str]:
++    blockers: list[str] = []
++    for key in ("missing_blockers", "blockers", "blocked_reasons", "errors", "validation_errors"):
++        for item in _as_list(result.get(key)):
++            blockers.append(f"{key}: {item}")
++    reason = result.get("reason") or result.get("blocked_reason") or result.get("error")
++    if reason:
++        blockers.append(str(reason))
++    return blockers
++
++
++def _collect_review_items(result: Mapping[str, Any]) -> list[dict[str, Any]]:
++    items: list[dict[str, Any]] = []
++    for key in ("review_items", "required_manual_reviews", "manual_review_items"):
++        for index, value in enumerate(_as_list(result.get(key)), start=1):
++            if isinstance(value, Mapping):
++                item = _json_safe(dict(value))
++            else:
++                item = {"description": str(value)}
++            item.setdefault("source", key)
++            item.setdefault("review_id", f"{key}:{index}")
++            items.append(item)
++    count = result.get("human_review_required_count")
++    if isinstance(count, int) and count > 0 and not items:
++        items.append(
++            {
++                "review_id": "human_review_required_count",
++                "source": "human_review_required_count",
++                "description": f"The executor reported {count} unresolved human review item(s).",
++                "count": count,
++            }
++        )
++    return _deduplicate_records(items)
++
++
++def _collect_gate_items(result: Mapping[str, Any]) -> list[dict[str, str]]:
++    items: list[dict[str, str]] = []
++    for key, value in _walk_mapping(result):
++        folded = key.casefold()
++        if not _is_gate_key(folded):
++            continue
++        if isinstance(value, str):
++            items.append({"key": key, "value": value.strip().lower().replace("-", "_")})
++    return _deduplicate_records(items)
++
++
++def _candidate_items(result: Mapping[str, Any]) -> list[dict[str, Any]]:
++    items: list[dict[str, Any]] = []
++    for key, value in _walk_mapping(result):
++        folded = key.casefold()
++        if not any(token in folded for token in ("candidate", "variant", "repair")):
++            continue
++        if any(token in folded for token in ("count", "status", "reason", "gate")):
++            continue
++        if value not in (None, "", [], {}):
++            items.append({"key": key, "value": _json_safe(value), "basis": "executor_result"})
++    return _deduplicate_records(items)
++
++
++def _promotion_items(result: Mapping[str, Any]) -> list[dict[str, Any]]:
++    items: list[dict[str, Any]] = []
++    for key, value in _walk_mapping(result):
++        if not isinstance(value, str) or not value.strip():
++            continue
++        folded = key.casefold()
++        normalized = value.strip().lower().replace("-", "_")
++        if "promoted_variant" in folded or "accepted_change" in folded or "applied_change" in folded:
++            decision = "promoted"
++        elif "rejected_change" in folded:
++            decision = "rejected"
++        elif "promotion" in folded and normalized in _GATE_FAILURE_VALUES | {"reject", "rejected"}:
++            decision = "rejected"
++        elif "promotion" in folded and normalized in {"promote", "promoted", "accepted"}:
++            decision = normalized
++        else:
++            continue
++        item = {"key": key, "decision": decision, "value": value, "basis": "executor_result"}
++        if decision == "rejected":
++            item["reason"] = normalized
++        items.append(item)
++    return _deduplicate_records(items)
++
++
++def _is_gate_key(key: str) -> bool:
++    return (
++        key == "gate_status"
++        or key.endswith("_gate")
++        or key.endswith("_gate_status")
++        or key.endswith("_promotion_status")
++        or key.endswith("automatic_promotion_gate")
++        or key.endswith("execution_gate")
++    )
++
++
++def _is_path_key(key: str) -> bool:
++    return key in _EXPLICIT_PATH_KEYS or key.endswith(_PATH_KEY_SUFFIXES)
++
++
++def _path_values(value: Any) -> list[str]:
++    if isinstance(value, Path):
++        return [str(value)]
++    if isinstance(value, str):
++        return [value]
++    if isinstance(value, Mapping):
++        values: list[str] = []
++        for nested in value.values():
++            values.extend(_path_values(nested))
++        return values
++    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
++        values = []
++        for nested in value:
++            values.extend(_path_values(nested))
++        return values
++    return []
++
++
++def _looks_like_url(value: str) -> bool:
++    return value.startswith(("http://", "https://", "file://"))
++
++
++def _walk_mapping(value: Mapping[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
++    items: list[tuple[str, Any]] = []
++    for key, nested in value.items():
++        current = f"{prefix}.{key}" if prefix else str(key)
++        items.append((current, nested))
++        if isinstance(nested, Mapping):
++            items.extend(_walk_mapping(nested, current))
++    return items
++
++
++def _attempt_history(previous: Mapping[str, Any] | None) -> list[dict[str, Any]]:
++    if not previous:
++        return []
++    history = previous.get("attempt_history", [])
++    return [dict(item) for item in history if isinstance(item, Mapping)] if isinstance(history, list) else []
++
++
++def _read_json_object(path: Path) -> dict[str, Any]:
++    payload = json.loads(path.read_text(encoding="utf-8"))
++    if not isinstance(payload, dict):
++        raise ValueError(f"JSON root must be an object: {path}")
++    return payload
++
++
++def _resolve_identity_path(identity: Mapping[str, Any], base_dir: Path) -> Path:
++    return _resolve_stored_path(str(identity.get("path", "")), base_dir)
++
++
++def _resolve_stored_path(value: str, base_dir: Path) -> Path:
++    path = Path(value).expanduser()
++    if path.is_absolute():
++        return path.resolve()
++    return (base_dir / path).resolve()
++
++
++def _sha256_json(value: Any) -> str:
