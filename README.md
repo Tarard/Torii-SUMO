@@ -107,7 +107,7 @@ The workflow returns its plan, executed checks, generated files, blocked gates, 
 Torii is being tested on a three-intersection digital-twin workflow for the **Am Sandtorkai 2349 → 2394 → 2403** corridor in Hamburg.
 
 <p align="center">
-  <img src="docs/assets/hamburg-digital-twin/torii-cleaned-corridor-connection.png" alt="Torii cleaned Hamburg corridor in SUMO NetEdit Connection Mode" width="100%">
+  <img src="docs/assets/hamburg-digital-twin/torii-2403-junction-connection.png" alt="Detailed view of Hamburg junction 2403 in SUMO NetEdit Connection Mode" width="100%">
 </p>
 
 | Workstream | Current result |
