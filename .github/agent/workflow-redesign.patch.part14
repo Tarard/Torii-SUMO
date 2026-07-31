@@ -1,0 +1,166 @@
+-| One-sentence or ambiguous SUMO request | `torii_auto_workflow` | Let Torii classify the workflow, ask only blocking questions, and run safe MCP steps when required evidence is available |
++| One-sentence or ambiguous SUMO request | `torii_workflow_run` | Classify the workflow, run only supported steps, and persist the manifest, blockers, review items, and claim boundary |
++| Need to resume or inspect saved work | `torii_workflow_status` | Recheck hash-bound artifacts and stop on stale or invalid evidence before any rerun |
++| Existing caller needs the old result shape | `torii_auto_workflow` | Use the compatibility facade, then read the added managed workflow fields |
+ | Unknown machine, uncertain SUMO install, or missing runnable proof | `sumo_preflight` | Report environment pass/block status before any experiment claim |
+ | Need raw environment details for handoff | `sumo_get_environment` | Treat versions and missing binaries as construction evidence |
+ | Existing baseline and variant `.sumocfg` files | `sumo_config_pair_preflight` | Check missing inputs and shared outputs before running or comparing |
+diff --git a/skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md b/skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md
+index 6840c2e3ae51f46d9a8254429223eb2913d73c6f..c569d9b0bc2bc094d42280a46aa872f9f6b9c4be 100644
+--- a/skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md
++++ b/skills/simulation-helper-skill-for-eclipse-sumo/references/release-project.md
+@@ -106,7 +106,7 @@ Run these after installation:
+ 
+ Before publishing:
+ 
+-- add `LICENSE` with scoped PolyForm Noncommercial 1.0.0 terms for source code and Creative Commons Attribution-NonCommercial 4.0 International (`CC BY-NC 4.0`) terms for skill files, documentation, checklists, examples, and protocol text;
++- include the repository `LICENSE` and keep package, plugin, citation, and Zenodo metadata aligned to Apache-2.0;
+ - decide whether to publish the skill alone or as part of a skills collection;
+ - include `## Trademark Notice` and `## Citing Eclipse SUMO` in the repository README;
+ - include `## References and Related Resources` without implying endorsement by Eclipse SUMO, Eclipse Foundation, DLR, Anthropic, or any agent-skill project;
+diff --git a/tests/test_docs_plugin_install.py b/tests/test_docs_plugin_install.py
+index 2478448573b88f78777d3a9b7cf34d64bd275c54..691a92f039b6ac55dd89c79cca3dea2e9bb83777 100644
+--- a/tests/test_docs_plugin_install.py
++++ b/tests/test_docs_plugin_install.py
+@@ -102,3 +102,35 @@ def test_internal_superpowers_plans_are_not_public_release_content() -> None:
+     assert "docs/superpowers/" in manifest
+     assert "docs/superpowers/plans/" not in manifest
+     assert "docs/superpowers/specs/" not in manifest
++
++
++def test_canonical_workflow_document_defines_state_evidence_and_recovery() -> None:
++    doc = (ROOT / "docs" / "workflow.md").read_text(encoding="utf-8")
++
++    assert "torii_workflow_run" in doc
++    assert "torii_workflow_status" in doc
++    assert "source -> observation -> interpretation -> candidate -> check" in doc
++    assert "review_required" in doc
++    assert "stale" in doc
++    assert "force=true" in doc
++    assert "simulation success" in doc
++    assert "torii.workflow-manifest.v1.schema.json" in doc
++
++
++def test_public_docs_route_broad_requests_to_managed_workflow() -> None:
++    readme = (ROOT / "README.md").read_text(encoding="utf-8")
++    catalog = (ROOT / "docs" / "mcp-tool-catalog.md").read_text(encoding="utf-8")
++    routing = (
++        ROOT
++        / "plugins"
++        / "torii-sumo"
++        / "skills"
++        / "simulation-helper-skill-for-eclipse-sumo"
++        / "references"
++        / "mcp-tool-routing.md"
++    ).read_text(encoding="utf-8")
++
++    assert "The main entry point is `torii_workflow_run`" in readme
++    assert "76 MCP tools" in catalog
++    assert "One-sentence or ambiguous SUMO request | `torii_workflow_run`" in routing
++    assert "Existing caller needs the old result shape | `torii_auto_workflow`" in routing
+diff --git a/tests/test_imports.py b/tests/test_imports.py
+index 4c942298430ae288a9af10836c001621add7846a..862b1f2b020583989a8b0da2b64954af5f152138 100644
+--- a/tests/test_imports.py
++++ b/tests/test_imports.py
+@@ -46,6 +46,8 @@ EXPECTED_TOOL_NAMES = sorted(
+         "sumo_intersection_validate",
+         "sumo_nema_four_way_reference_workflow",
+         "torii_auto_workflow",
++        "torii_workflow_run",
++        "torii_workflow_status",
+         "sumo_osm_resolve_place",
+         "sumo_osm_cleanup_workflow",
+         "sumo_osm_build_network",
+@@ -114,9 +116,13 @@ def test_server_describes_narrow_scene_and_conditional_auto_routing() -> None:
+ 
+     descriptions = anyio.run(_tool_descriptions)
+     auto = descriptions["torii_auto_workflow"].casefold()
++    canonical = descriptions["torii_workflow_run"].casefold()
++    status = descriptions["torii_workflow_status"].casefold()
+     scene = descriptions["sumo_intersection_scene_workflow"].casefold()
+ 
+-    assert all(term in auto for term in ("conditionally", "phase-1", "osm", "review"))
++    assert all(term in auto for term in ("compatibility", "legacy", "torii_workflow_run"))
++    assert all(term in canonical for term in ("canonical", "manifest", "fail closed"))
++    assert all(term in status for term in ("artifact", "stale", "resume"))
+     assert all(
+         term in scene
+         for term in ("synthetic", "passenger-only", "defaulted nema", "not an osm or city-network")
+diff --git a/tests/test_plugin_packaging.py b/tests/test_plugin_packaging.py
+index bbd48a818c69218e7c4b41fbda62d7413cb0ea2f..33c6ef027ded6c80f6439d23940e0a4b4e4c847d 100644
+--- a/tests/test_plugin_packaging.py
++++ b/tests/test_plugin_packaging.py
+@@ -42,7 +42,7 @@ def test_plugin_manifest_declares_skill_and_mcp_companion() -> None:
+ 
+     assert manifest["name"] == "torii-sumo"
+     assert re.fullmatch(r"1\.1\.0(?:\+codex\.\d{14})?", manifest["version"])
+-    assert manifest["license"] == "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0"
++    assert manifest["license"] == "Apache-2.0"
+     assert manifest["skills"] == "./skills/"
+     assert manifest["mcpServers"] == "./.mcp.json"
+     assert manifest["author"]["name"] == "Torii contributors"
+@@ -85,3 +85,24 @@ def test_plugin_contains_bundled_mcp_package() -> None:
+ 
+ def test_mcp_package_is_not_installed_at_repo_root() -> None:
+     assert not (ROOT / "src" / "torii_sumo").exists()
++
++
++def test_release_metadata_matches_repository_apache_license() -> None:
++    plugin = load_json(PLUGIN / ".codex-plugin" / "plugin.json")
++    zenodo = load_json(ROOT / ".zenodo.json")
++    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
++    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
++    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
++
++    assert plugin["license"] == "Apache-2.0"
++    assert zenodo["license"] == "Apache-2.0"
++    assert 'license = { text = "Apache-2.0" }' in pyproject
++    assert 'license: "Apache-2.0"' in citation
++    assert 'version: "1.1.0"' in citation
++    assert "Apache License" in license_text
++    assert "Version 2.0" in license_text
++
++
++def test_temporary_repository_export_workflow_is_removed() -> None:
++    assert not (ROOT / ".github" / "workflows" / "codex-export-snapshot.yml").exists()
++    assert (ROOT / ".github" / "workflows" / "workflow-contracts.yml").is_file()
+diff --git a/tests/test_repository_navigation.py b/tests/test_repository_navigation.py
+index 308d4931ef3c638ade6ad3fb9d0d5841d09e525a..ed6aa2465058da2e77e6f3e9413096b091b6e69c 100644
+--- a/tests/test_repository_navigation.py
++++ b/tests/test_repository_navigation.py
+@@ -29,6 +29,8 @@ def test_readme_exposes_stable_navigation() -> None:
+ 
+     expected_links = {
+         "docs/README.md",
++        "docs/workflow.md",
++        "docs/workflow-redesign-audit.md",
+         "docs/repository-guide.md",
+         "docs/mcp-tool-catalog.md",
+         "ARCHITECTURE.md",
+@@ -37,12 +39,15 @@ def test_readme_exposes_stable_navigation() -> None:
+         assert link in readme
+ 
+     original_section_order = (
+-        "## Evidence-Aware OSM-to-SUMO Construction",
+-        "## Example",
++        "## How Torii Works",
++        "## Hamburg Corridor Digital Twin",
++        "## Design",
++        "## What You Can Do",
++        "## Installation",
+         "## Quick Start",
+-        "## What You Can Ask Me",
+-        "## Boundaries",
+-        "## License and Notices",
++        "## Repository Structure",
++        "## More",
++        "## License",
+     )
+     positions = [readme.index(heading) for heading in original_section_order]
+     assert positions == sorted(positions)
+@@ -52,6 +57,8 @@ def test_documentation_index_links_core_guides() -> None:
+     docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+ 
+     for link in (
++        "workflow.md",
++        "workflow-redesign-audit.md",
