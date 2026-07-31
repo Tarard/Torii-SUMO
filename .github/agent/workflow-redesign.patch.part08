@@ -1,0 +1,179 @@
++                if actual_sha256 != identity.get("sha256"):
++                    reason = "sha256_mismatch"
++                elif actual_bytes != identity.get("bytes"):
++                    reason = "size_mismatch"
++        if reason:
++            stale.append(
++                {
++                    "label": identity.get("label", ""),
++                    "path": str(artifact_path),
++                    "reason": reason,
++                    "expected_sha256": identity.get("sha256", ""),
++                    "actual_sha256": actual_sha256,
++                    "expected_bytes": identity.get("bytes"),
++                    "actual_bytes": actual_bytes,
++                }
++            )
++    if stale:
++        return {
++            "schema": WORKFLOW_MANIFEST_SCHEMA,
++            "status": "stale",
++            "manifest_file": str(path),
++            "run_id": str(manifest.get("run_id", "")),
++            "claim_status": "blocked",
++            "blockers": ["one or more hash-bound artifacts changed or disappeared"],
++            "stale_artifacts": stale,
++            "next_actions": ["Review the stale artifacts, then rerun with force=true."],
++        }
++    return {
++        "schema": WORKFLOW_MANIFEST_SCHEMA,
++        "status": str(manifest["status"]),
++        "manifest_file": str(path),
++        "run_id": str(manifest["run_id"]),
++        "workflow_name": str(manifest["workflow_name"]),
++        "claim_status": str(manifest["claim_status"]),
++        "blockers": list(manifest.get("blockers", [])),
++        "review_items": list(manifest.get("review_items", [])),
++        "stale_artifacts": [],
++        "next_actions": list(manifest.get("next_actions", [])),
++        "result_file": str(_resolve_stored_path(str(manifest["result_file"]), base_dir)),
++        "evidence_summary": {
++            name: len(manifest.get("evidence", {}).get(name, []))
++            for name in EVIDENCE_SECTIONS
++        },
++    }
++
++
++def resolve_latest_manifest(workflow_dir: Path) -> Path:
++    root = Path(workflow_dir).expanduser().resolve()
++    latest_file = root / "torii-workflow" / "latest.json"
++    latest = _read_json_object(latest_file)
++    if latest.get("schema") != WORKFLOW_LATEST_SCHEMA:
++        raise ValueError(f"latest pointer schema must be {WORKFLOW_LATEST_SCHEMA}")
++    stored = str(latest.get("manifest_file", ""))
++    if not stored:
++        raise ValueError("latest pointer does not name a manifest")
++    return _resolve_stored_path(stored, root)
++
++
++def validate_manifest_structure(manifest: Mapping[str, Any]) -> list[str]:
++    errors: list[str] = []
++    if manifest.get("schema") != WORKFLOW_MANIFEST_SCHEMA:
++        errors.append(f"manifest schema must be {WORKFLOW_MANIFEST_SCHEMA}")
++    if str(manifest.get("status")) not in WORKFLOW_STATUSES:
++        errors.append("manifest status is invalid")
++    for key in ("run_id", "request_fingerprint", "workflow_name", "claim_status", "artifact_base_dir", "result_file"):
++        if not isinstance(manifest.get(key), str) or not str(manifest.get(key)).strip():
++            errors.append(f"manifest field {key} must be a non-empty string")
++    stages = manifest.get("stage_runs")
++    if not isinstance(stages, list) or [item.get("stage_id") for item in stages if isinstance(item, Mapping)] != [
++        contract["stage_id"] for contract in STAGE_CONTRACTS
++    ]:
++        errors.append("manifest stage_runs do not match the canonical stage order")
++    evidence = manifest.get("evidence")
++    if not isinstance(evidence, Mapping):
++        errors.append("manifest evidence must be an object")
++    else:
++        for name in EVIDENCE_SECTIONS:
++            if not isinstance(evidence.get(name), list):
++                errors.append(f"manifest evidence section {name} must be a list")
++    artifacts = manifest.get("artifacts")
++    if not isinstance(artifacts, list):
++        errors.append("manifest artifacts must be a list")
++    else:
++        for index, identity in enumerate(artifacts):
++            if not isinstance(identity, Mapping):
++                errors.append(f"artifact {index} must be an object")
++                continue
++            sha256 = identity.get("sha256")
++            if not isinstance(sha256, str) or len(sha256) != 64:
++                errors.append(f"artifact {index} has an invalid sha256")
++            if not isinstance(identity.get("bytes"), int) or int(identity.get("bytes", -1)) < 0:
++                errors.append(f"artifact {index} has invalid bytes")
++            if not isinstance(identity.get("path"), str) or not identity.get("path"):
++                errors.append(f"artifact {index} has an invalid path")
++    return errors
++
++
++def assess_result(
++    result: Mapping[str, Any],
++    *,
++    missing_references: Sequence[Mapping[str, Any]] = (),
++) -> tuple[str, list[str], list[dict[str, Any]], list[str]]:
++    legacy_status = str(result.get("status", "incomplete")).strip().lower().replace("-", "_")
++    execution_status = str(result.get("execution_status", "")).strip().lower()
++    claim_status = str(result.get("claim_status", "")).strip().lower().replace("-", "_")
++    blockers = _collect_blockers(result)
++    for item in missing_references:
++        blockers.append(f"missing_artifact: {item.get('label')}: {item.get('path')}")
++    review_items = _collect_review_items(result)
++    gate_items = _collect_gate_items(result)
++    gate_failures = [item for item in gate_items if item["value"] in _GATE_FAILURE_VALUES]
++    gate_reviews = [item for item in gate_items if item["value"] in _REVIEW_VALUES]
++    evidence_conflicts = _as_list(result.get("evidence_conflicts")) or _as_list(result.get("conflicting_evidence"))
++
++    if missing_references and legacy_status in {"pass", "complete", "success"}:
++        blockers.append("executor reported success but one or more declared artifacts are missing")
++        status = "invalid"
++    elif evidence_conflicts:
++        blockers.extend(f"conflicting_evidence: {item}" for item in evidence_conflicts)
++        status = "invalid"
++    elif "invalid" in execution_status or legacy_status == "invalid":
++        status = "invalid"
++    elif legacy_status in {"unsupported", "not_supported"}:
++        status = "unsupported"
++    elif legacy_status in {"fail", "failed", "error"}:
++        status = "failed"
++    elif legacy_status in {"incomplete", "partial", "not_run", "unknown", ""}:
++        status = "incomplete"
++    elif legacy_status == "blocked" or claim_status in {"blocked", "construction_invalid", "claim_overreach"}:
++        status = "blocked"
++    elif gate_failures:
++        status = "blocked"
++        blockers.extend(f"gate_failed: {item['key']}={item['value']}" for item in gate_failures)
++    elif review_items or gate_reviews or claim_status in {"review_required", "review_pending"}:
++        status = "review_required"
++    elif legacy_status in {"pass", "complete", "success"}:
++        status = "complete"
++    else:
++        status = "incomplete"
++
++    blockers = _deduplicate_strings(blockers)
++    if status == "complete":
++        next_actions = ["Use the recorded claim boundary. Do not extend the claim beyond the manifest evidence."]
++    elif status == "review_required":
++        next_actions = ["Complete the listed human review items, record decisions, then rerun the blocked gate."]
++    elif status == "blocked":
++        next_actions = ["Resolve the listed blockers before continuing to a dependent stage."]
++    elif status == "invalid":
++        next_actions = ["Correct the inconsistent configuration, result, or artifact contract before rerunning."]
++    elif status == "failed":
++        next_actions = ["Correct the failed executor stage, then rerun with the same inputs."]
++    elif status == "unsupported":
++        next_actions = ["Use a supported workflow or add an explicit workflow recipe and contract."]
++    else:
++        next_actions = ["Resume the first incomplete stage."]
++    return status, blockers, review_items, next_actions
++
++
++def classify_evidence(
++    result: Mapping[str, Any],
++    source_artifacts: Sequence[Mapping[str, Any]],
++    result_identity: Mapping[str, Any],
++) -> dict[str, list[dict[str, Any]]]:
++    evidence = _empty_evidence(source_artifacts)
++    evidence["parsed_observations"].append(
++        {
++            "id": "executor-result",
++            "source": "execute",
++            "artifact": dict(result_identity),
++            "description": "Persisted raw executor result. Interpretation remains separate.",
++        }
++    )
++    for key in ("detected_workflow", "network_plan", "resolved_spec", "workflow_description"):
++        if key in result:
++            evidence["inferred_facts"].append({"key": key, "value": _json_safe(result[key]), "source": "executor_result"})
++
++    candidate_items = _candidate_items(result)
++    evidence["repair_candidates"].extend(candidate_items)
++    promotion_items = _promotion_items(result)
