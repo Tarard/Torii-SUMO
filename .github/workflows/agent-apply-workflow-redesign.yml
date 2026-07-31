@@ -62,10 +62,12 @@ jobs:
             tests/test_plugin_packaging.py \
             -q
 
-      - name: Commit formal changes
+      - name: Commit formal non-workflow changes
         shell: bash
         run: |
           set -euo pipefail
+          git restore --source=HEAD --staged --worktree .github/workflows
+          git diff --cached --check
           git config user.name "OpenAI Agent"
           git config user.email "agent@openai.com"
           git commit -m "Add evidence-bound resumable workflow contracts"
