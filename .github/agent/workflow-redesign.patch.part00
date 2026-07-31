@@ -1,0 +1,210 @@
+diff --git a/.github/workflows/codex-export-snapshot.yml b/.github/workflows/codex-export-snapshot.yml
+deleted file mode 100644
+index 727440e668d132d8dae2a5a01b3fcffee843a163..0000000000000000000000000000000000000000
+--- a/.github/workflows/codex-export-snapshot.yml
++++ /dev/null
+@@ -1,28 +0,0 @@
+-name: codex-export-snapshot
+-
+-on:
+-  pull_request:
+-    branches:
+-      - main
+-  push:
+-    branches:
+-      - codex/workflow-evidence-redesign
+-  workflow_dispatch:
+-
+-permissions:
+-  contents: read
+-
+-jobs:
+-  export:
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Build repository snapshot
+-        run: |
+-          tar --exclude=.git -C "$GITHUB_WORKSPACE" -czf "$RUNNER_TEMP/torii-sumo-snapshot.tar.gz" .
+-      - uses: actions/upload-artifact@v4
+-        with:
+-          name: torii-sumo-snapshot
+-          path: ${{ runner.temp }}/torii-sumo-snapshot.tar.gz
+-          if-no-files-found: error
+-          retention-days: 1
+diff --git a/.github/workflows/workflow-contracts.yml b/.github/workflows/workflow-contracts.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..5eba6371c7eafebc244409e3ad29f3bf4793c72d
+--- /dev/null
++++ b/.github/workflows/workflow-contracts.yml
+@@ -0,0 +1,60 @@
++name: Workflow Contracts
++
++on:
++  pull_request:
++    branches:
++      - main
++  push:
++    branches:
++      - main
++      - "agent/**"
++  workflow_dispatch:
++
++permissions:
++  contents: read
++
++jobs:
++  workflow-contracts:
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++
++    steps:
++      - name: Check out repository
++        uses: actions/checkout@v6
++
++      - name: Set up Python
++        uses: actions/setup-python@v6
++        with:
++          python-version: "3.12.13"
++          cache: pip
++
++      - name: Install package and test dependencies
++        run: python -m pip install --disable-pip-version-check --editable ".[dev]"
++
++      - name: Validate workflow schema
++        run: python -m json.tool schemas/torii.workflow-manifest.v1.schema.json > /dev/null
++
++      - name: Lint workflow boundary
++        run: |
++          ruff check \
++            plugins/torii-sumo/src/torii_sumo/core/workflow_manifest.py \
++            plugins/torii-sumo/src/torii_sumo/tools/workflow_tools.py \
++            plugins/torii-sumo/src/torii_sumo/server.py \
++            tests/test_workflow_manifest.py \
++            tests/test_workflow_router.py \
++            tests/test_workflow_state.py \
++            tests/test_imports.py \
++            tests/test_docs_plugin_install.py \
++            tests/test_plugin_packaging.py \
++            tests/test_repository_navigation.py
++
++      - name: Run workflow contract tests
++        run: |
++          python -m pytest -q \
++            tests/test_workflow_manifest.py \
++            tests/test_workflow_state.py \
++            tests/test_workflow_router.py \
++            tests/test_imports.py \
++            tests/test_docs_plugin_install.py \
++            tests/test_plugin_packaging.py \
++            tests/test_repository_navigation.py
+diff --git a/.zenodo.json b/.zenodo.json
+index 155eb36625079ec050dd35f8c8a3b1b0ba16fd7b..088b83c91f13a9363601227decc58ac35d310a46 100644
+--- a/.zenodo.json
++++ b/.zenodo.json
+@@ -8,7 +8,7 @@
+     }
+   ],
+   "access_right": "open",
+-  "license": "MIT",
++  "license": "Apache-2.0",
+   "keywords": [
+     "Eclipse SUMO",
+     "TraCI",
+diff --git a/AGENTS.md b/AGENTS.md
+index 0155bf03f2b51a6afda45aad55427d0981dab21e..d5e5d8958a34631bd030820c4c3dac9e7302647f 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -8,8 +8,9 @@ Before changing structure or adding a public capability, read:
+ 
+ 1. `README.md` for the user-facing promise;
+ 2. `ARCHITECTURE.md` for claim and promotion boundaries;
+-3. `docs/repository-guide.md` for directory ownership;
+-4. `docs/mcp-tool-catalog.md` for the registered public tool surface.
++3. `docs/workflow.md` for the canonical user path, status model, and artifact contract;
++4. `docs/repository-guide.md` for directory ownership;
++5. `docs/mcp-tool-catalog.md` for the registered public tool surface.
+ 
+ ## Code Placement
+ 
+@@ -17,14 +18,14 @@ Before changing structure or adding a public capability, read:
+ - Keep `plugins/torii-sumo/src/torii_sumo/tools/` thin: validate/resolve inputs, call domain logic, and serialize structured outputs.
+ - Use `plugins/torii-sumo/src/torii_sumo/server.py` only to register MCP tools and their public descriptions.
+ - Put reasoning and workflow-selection guidance under `plugins/torii-sumo/skills/`; do not implement subprocess or XML algorithms in skill prose.
+-- Put reusable workflow composition in workflow modules, not in one-off CLI scripts.
++- Put reusable workflow composition in workflow modules, not in one-off CLI scripts. Broad orchestration must enter through the managed workflow contract.
+ - Put reproducible CLI entry points under `plugins/torii-sumo/scripts/`; scripts must call reusable implementation rather than duplicate it.
+ 
+ ## Evidence Invariants
+ 
+ - Keep source artifacts immutable and write candidates separately.
+ - Do not treat SUMO load, route completion, or KPI improvement as proof of topology, demand, control, or field correctness.
+-- Use structured decisions: `pass`, `review_required`, `blocked`, or `not_applicable`.
++- Use the canonical managed statuses: `complete`, `incomplete`, `blocked`, `invalid`, `review_required`, `unsupported`, `failed`, or `stale`. Domain tools may retain narrower local decisions.
+ - Bind promotion-relevant evidence to exact source/candidate hashes and declared edit scope.
+ - Preserve rollback and outside-scope regression evidence for materialized candidates.
+ - State non-identifiability and claim boundaries in tool output instead of hiding them in documentation alone.
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index 46e443959399800e60a56ba83755e5abb795f795..f5c8039138f4b3c00012ea4886d1be2033a913ac 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -15,6 +15,34 @@ and review evidence, compares against a cleaned reference when one is supplied,
+ and keeps promotion blocked until the relevant gates pass.
+ ```
+ 
++## Canonical Managed Workflow
++
++Broad user tasks enter through `torii_workflow_run`. The outer workflow is now authoritative for request identity, resume behavior, artifact freshness, shared status, and claim blocking.
++
++```text
++user intent
++-> intake and source identities
++-> router plan
++-> domain executor
++-> persisted raw result
++-> evidence and gate assessment
++-> hash-bound manifest
++-> supported claim or blocked result
++```
++
++The selected structure is a hybrid. The router remains goal directed. Five outer stages form a state machine. Hash-bound artifacts form the dependency graph. Existing domain executors remain behind the execute stage during migration.
++
++The canonical evidence chain is:
++
++```text
++source -> observation -> interpretation -> candidate -> check
++-> decision -> applied change -> validation -> claim
++```
++
++`torii_workflow_status` rechecks artifact identities and exposes stale evidence without changing the network. `torii_auto_workflow` remains a compatibility facade that returns legacy fields plus managed workflow fields.
++
++See [`docs/workflow.md`](docs/workflow.md) for the complete contract.
++
+ ## Implemented Corridor Contract
+ 
+ The first acceptance boundary is corridor-scale human-modeling work, not a
+@@ -239,13 +267,13 @@ For reference-matched workflows, the planner must keep `vehicle_core` and
+ The executor runs bounded stages that transform or audit artifacts. Each stage
+ should eventually accept a `WorkflowState` and return a `StageResult`.
+ 
+-Current state: `WorkflowState` and most `StageResult` values are reporting
+-adapters built after the legacy OSM workflow has run.  They are not yet the
+-authoritative execution state.  New work must not add more orchestration to the
+-legacy monolith; it should enter through explicit request/service objects and
+-real stage boundaries while preserving the current public facade.
++Current state: the managed workflow manifest is the authoritative outer execution state for broad requests. It records intake, plan, execute, assess, and publish contracts. It also controls cache reuse and stale-artifact blocking.
++
++`WorkflowState` and `StageResult` remain compatibility summaries for selected legacy report fields. They do not control execution.
++
++New work must not add more broad orchestration to the legacy monolith. It should enter through the managed workflow and move one tested domain boundary at a time behind the execute stage.
+ 
+-Target shape:
++The existing compatibility shape remains:
+ 
+ ```text
+ WorkflowState:
+@@ -392,9 +420,7 @@ count, and reference delta score.
+ - Atomic artifact writes are enforced for the corridor contract and its
+   routeability/topology evidence, but older report writers remain.  Migrate
+   them incrementally through `core/artifact_io.py`.
+-- Quality vectors and promotion traces are partly post-hoc.  They must become
