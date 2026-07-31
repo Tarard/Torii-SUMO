@@ -1,6 +1,9 @@
 name: agent-apply-workflow-redesign
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - agent/evidence-workflow-manifest
