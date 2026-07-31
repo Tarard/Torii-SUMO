@@ -1,49 +1,29 @@
-Torii-SUMO License
+Torii-SUMO Licensing
 
-This repository uses one license file with two non-commercial scoped licenses:
+This repository uses two open licenses:
 
-1. Source Code: PolyForm Noncommercial License 1.0.0
-2. Documentation and Skills: Creative Commons Attribution-NonCommercial 4.0 International
+1. Source code: Apache License 2.0
+2. Documentation and skill files: Creative Commons Attribution 4.0 International
 
-These licenses apply only to materials owned by this repository's contributors.
-Third-party data, map data, SUMO itself, OpenStreetMap data, and referenced
-external projects remain under their own licenses.
+These licenses apply only to materials owned by this repository's
+copyright holders.
 
-Prior releases or copies distributed under earlier license files remain governed
-by the license terms that accompanied those releases or copies. New commercial
-use of Torii-SUMO materials distributed with this license requires separate
-written permission from the copyright holders.
+Third-party data, map data, SUMO, OpenStreetMap data, dependencies,
+and referenced external projects remain under their own licenses.
 
-------------------------------------------------------------------------------
-1. Source Code: PolyForm Noncommercial License 1.0.0
-------------------------------------------------------------------------------
+Source code
+-----------
 
-The PolyForm Noncommercial License 1.0.0 applies to source code in this
-repository, including plugin code, Python tools, MCP server code, scripts,
-tests, and other software source files, unless a file states otherwise.
+Unless a file states otherwise, source code in this repository is
+licensed under the Apache License, Version 2.0.
 
-Commercial use is not permitted under this source-code license.
+SPDX-License-Identifier: Apache-2.0
 
-Official license text:
-https://polyformproject.org/licenses/noncommercial/1.0.0
+Documentation and skill files
+-----------------------------
 
-SPDX identifier:
-PolyForm-Noncommercial-1.0.0
+Unless a file states otherwise, documentation, skill files, examples,
+checklists, prompts, and workflow text are licensed under the Creative
+Commons Attribution 4.0 International License.
 
-------------------------------------------------------------------------------
-2. Documentation and Skills: CC BY-NC 4.0
-------------------------------------------------------------------------------
-
-The Creative Commons Attribution-NonCommercial 4.0 International License
-(CC BY-NC 4.0) applies to skill files, documentation, checklists,
-prompt/workflow text, examples, and protocol text in this repository, unless a
-file states otherwise.
-
-These materials may be shared and adapted for non-commercial purposes with
-attribution and notice of changes, subject to the license terms.
-
-License summary:
-https://creativecommons.org/licenses/by-nc/4.0/
-
-Full legal code:
-https://creativecommons.org/licenses/by-nc/4.0/legalcode
+SPDX-License-Identifier: CC-BY-4.0
