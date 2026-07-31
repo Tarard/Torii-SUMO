@@ -1,0 +1,217 @@
++    accepted = [item for item in promotion_items if item["decision"] in {"pass", "promote", "promoted", "accepted"}]
++    rejected = [item for item in promotion_items if item["decision"] in _GATE_FAILURE_VALUES | {"reject", "rejected"}]
++    evidence["accepted_changes"].extend(accepted)
++    evidence["rejected_changes"].extend(rejected)
++
++    for key, value in _walk_mapping(result):
++        folded = key.casefold()
++        if any(token in folded for token in ("warning", "missing", "blocker", "uncertainty", "manual_review")):
++            if value not in (None, "", [], {}, 0, False):
++                evidence["unresolved_uncertainty"].append({"key": key, "value": _json_safe(value)})
++        if any(token in folded for token in ("sumo", "routeability", "teleport", "collision", "tripinfo")):
++            if value not in (None, "", [], {}):
++                evidence["simulation_diagnostics"].append({"key": key, "value": _json_safe(value)})
++        if _is_gate_key(folded):
++            if value not in (None, "", [], {}):
++                evidence["product_acceptance_gates"].append({"key": key, "value": _json_safe(value)})
++    for section in EVIDENCE_SECTIONS:
++        evidence[section] = _deduplicate_records(evidence[section])
++    return evidence
++
++
++def collect_config_artifacts(config: Mapping[str, Any], base_dir: Path) -> list[dict[str, Any]]:
++    records: list[dict[str, Any]] = []
++    for key, value in _walk_mapping(config):
++        if not _is_path_key(key.casefold()):
++            continue
++        for path_text in _path_values(value):
++            if not path_text or _looks_like_url(path_text):
++                continue
++            path = Path(path_text).expanduser()
++            if path.is_file():
++                records.append(
++                    artifact_identity(
++                        path,
++                        base_dir=base_dir,
++                        label=key,
++                        role="input",
++                        evidence_kind="source_evidence",
++                        producer_stage="external",
++                    )
++                    | {"state": "present"}
++                )
++            else:
++                records.append(
++                    {
++                        "label": key,
++                        "path": path_text,
++                        "state": "missing",
++                        "role": "input",
++                        "evidence_kind": "source_evidence",
++                        "producer_stage": "external",
++                    }
++                )
++    return _deduplicate_artifacts(records, include_missing=True)
++
++
++def collect_result_artifacts(
++    result: Mapping[str, Any],
++    base_dir: Path,
++) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
++    records: list[dict[str, Any]] = []
++    missing: list[dict[str, Any]] = []
++    for key, value in _walk_mapping(result):
++        if not _is_path_key(key.casefold()):
++            continue
++        for path_text in _path_values(value):
++            if not path_text or _looks_like_url(path_text):
++                continue
++            path = Path(path_text).expanduser()
++            if not path.is_absolute():
++                candidates = (base_dir / path, path)
++                path = next((candidate for candidate in candidates if candidate.is_file()), path)
++            if path.is_file():
++                records.append(
++                    artifact_identity(
++                        path,
++                        base_dir=base_dir,
++                        label=key,
++                        role="output",
++                        evidence_kind="generated_artifact",
++                        producer_stage="execute",
++                    )
++                )
++            else:
++                missing.append({"label": key, "path": path_text})
++    return _deduplicate_artifacts(records), _deduplicate_records(missing)
++
++
++def artifact_identity(
++    path: Path,
++    *,
++    base_dir: Path,
++    label: str,
++    role: str,
++    evidence_kind: str,
++    producer_stage: str,
++) -> dict[str, Any]:
++    resolved = Path(path).expanduser().resolve(strict=True)
++    return {
++        "label": label,
++        "path": relative_or_absolute_path(resolved, base_dir),
++        "sha256": file_sha256(resolved),
++        "bytes": resolved.stat().st_size,
++        "role": role,
++        "evidence_kind": evidence_kind,
++        "producer_stage": producer_stage,
++    }
++
++
++def _build_manifest(
++    *,
++    run_id: str,
++    request_fingerprint: str,
++    workflow_name: str,
++    user_request: str,
++    tool_chain: Sequence[str],
++    request_config: Mapping[str, Any],
++    source_artifacts: Sequence[Mapping[str, Any]],
++    output_dir: Path,
++    result_file: Path,
++    status: str,
++    claim_status: str,
++    legacy_result: Mapping[str, Any],
++    evidence: Mapping[str, Sequence[Mapping[str, Any]]],
++    blockers: Sequence[str],
++    review_items: Sequence[Mapping[str, Any]],
++    next_actions: Sequence[str],
++    attempt: int,
++    history: Sequence[Mapping[str, Any]],
++    stage_runs: Sequence[Mapping[str, Any]],
++    output_artifacts: Sequence[Mapping[str, Any]] = (),
++    missing_references: Sequence[Mapping[str, Any]] = (),
++) -> dict[str, Any]:
++    input_artifacts = [dict(item) for item in source_artifacts if item.get("state") == "present"]
++    artifacts = _deduplicate_artifacts([*input_artifacts, *output_artifacts])
++    return {
++        "schema": WORKFLOW_MANIFEST_SCHEMA,
++        "schema_file": "schemas/torii.workflow-manifest.v1.schema.json",
++        "status": status,
++        "run_id": run_id,
++        "request_fingerprint": request_fingerprint,
++        "workflow_name": workflow_name,
++        "claim_status": claim_status,
++        "artifact_base_dir": relative_or_absolute_path(output_dir, result_file.parent),
++        "result_file": relative_or_absolute_path(result_file, output_dir),
++        "attempt": attempt,
++        "attempt_history": [dict(item) for item in history],
++        "request": {
++            "user_request": user_request,
++            "config": _json_safe(request_config),
++            "source_artifacts": [dict(item) for item in source_artifacts],
++        },
++        "plan": {
++            "workflow_name": workflow_name,
++            "tool_chain": list(tool_chain),
++            "execution_model": "managed compatibility adapter",
++            "migration_boundary": "legacy executors remain behind the execute stage",
++        },
++        "reasoning_model": {
++            "chain": list(REASONING_CHAIN),
++            "rule": "No later simulation success erases missing, rejected, unsafe, or review-required evidence.",
++        },
++        "stage_contracts": [dict(item) for item in STAGE_CONTRACTS],
++        "stage_runs": [dict(item) for item in stage_runs],
++        "artifacts": artifacts,
++        "missing_referenced_artifacts": [dict(item) for item in missing_references],
++        "evidence": {name: [dict(item) for item in evidence.get(name, ())] for name in EVIDENCE_SECTIONS},
++        "blockers": _deduplicate_strings(blockers),
++        "review_items": [dict(item) for item in review_items],
++        "next_actions": list(next_actions),
++        "legacy_result_summary": {
++            "status": legacy_result.get("status"),
++            "execution_status": legacy_result.get("execution_status"),
++            "claim_status": legacy_result.get("claim_status"),
++            "detected_workflow": legacy_result.get("detected_workflow"),
++        },
++    }
++
++
++def _stage_runs(workflow_status: str, *, initial: bool = False) -> list[dict[str, Any]]:
++    if initial:
++        plan_status = "complete"
++        execute_status = "incomplete"
++        assess_status = "incomplete"
++    elif workflow_status == "unsupported":
++        plan_status = "unsupported"
++        execute_status = "blocked"
++        assess_status = "unsupported"
++    else:
++        plan_status = "complete"
++        execute_status = {
++            "failed": "failed",
++            "incomplete": "incomplete",
++        }.get(workflow_status, "complete")
++        assess_status = (
++            workflow_status
++            if workflow_status in {"blocked", "invalid", "review_required"}
++            else "complete"
++        )
++    return [
++        {"stage_id": "intake", "status": "complete"},
++        {"stage_id": "plan", "status": plan_status},
++        {"stage_id": "execute", "status": execute_status},
++        {"stage_id": "assess", "status": assess_status},
++        {"stage_id": "publish", "status": "complete"},
++    ]
++
++
++def _write_latest(latest_file: Path, manifest_file: Path, run_id: str, fingerprint: str, output_dir: Path) -> None:
++    write_json_atomic(
++        latest_file,
++        {
++            "schema": WORKFLOW_LATEST_SCHEMA,
++            "run_id": run_id,
++            "request_fingerprint": fingerprint,
++            "manifest_file": relative_or_absolute_path(manifest_file, output_dir),
++        },
