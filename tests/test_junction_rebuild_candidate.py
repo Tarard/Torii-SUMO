@@ -30,6 +30,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _road_continuity_probe_summary,
     _semantic_layer_gates,
     _sumo_allowed_classes,
+    _strict_teacher_structural_context,
     _teacher_candidate_edge_map,
     _teacher_guided_semantics_gate,
     _target_internal_replay_input_file,
@@ -66,6 +67,39 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_vehicle_connection_attrs_net,
 )
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+
+
+def test_strict_teacher_structural_context_maps_existing_adjacent_teacher_edges(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="adjacent" from="remote" to="scope" type="highway.tertiary"><lane id="adjacent_0" index="0"/><lane id="adjacent_1" index="1"/></edge>
+  <edge id=":scope_0" function="internal"><lane id=":scope_0_0" index="0"/></edge>
+  <junction id="scope" type="priority" x="0" y="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+    candidate = tmp_path / "candidate.net.xml"
+    candidate.write_text(
+        """<net>
+  <edge id="adjacent" from="remote" to="scope" type="highway.tertiary"><lane id="adjacent_0" index="0"/></edge>
+  <junction id="scope" type="priority" x="0" y="0"/>
+</net>
+""",
+        encoding="utf-8",
+    )
+
+    edge_map, boundary_ids, additions = _strict_teacher_structural_context(
+        teacher_net_file=teacher,
+        candidate_net_file=candidate,
+        edge_map={"main": "main"},
+        safety_junction_ids={"scope"},
+    )
+
+    assert edge_map["adjacent"] == "adjacent"
+    assert boundary_ids == {"scope"}
+    assert additions == ["adjacent"]
 
 
 class _PassingCommandResult:

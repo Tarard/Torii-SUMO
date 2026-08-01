@@ -5540,6 +5540,18 @@ def build_teacher_guided_junction_variant(
             *(str(value) for value in teacher_absent_tls_junction_ids if str(value)),
         }
     )
+    strict_structural_replay = strict_teacher_replay and bool(compound_junction_ids)
+    strict_structural_edge_map_additions: list[str] = []
+    strict_structural_boundary_ids: set[str] = set()
+    if strict_structural_replay:
+        edge_map, strict_structural_boundary_ids, strict_structural_edge_map_additions = (
+            _strict_teacher_structural_context(
+                teacher_net_file=teacher_net_file,
+                candidate_net_file=candidate_net_file,
+                edge_map=edge_map,
+                safety_junction_ids=compound_junction_ids,
+            )
+        )
 
     lane_shape_delta = _model_shape_delta(teacher_model, candidate_model)
     patched_node_file = _stage_file(output_dir, prefix, "nodes.nod.xml")
@@ -5568,7 +5580,7 @@ def build_teacher_guided_junction_variant(
         edge_map=edge_map,
         junction_id=junction_id,
         teacher_junction_id=teacher_junction_id,
-        boundary_node_ids=joined_source_node_ids,
+        boundary_node_ids=joined_source_node_ids | strict_structural_boundary_ids,
         prune_unmapped_boundary_edges=prune_unmapped_boundary_edges,
         approach_endpoint_rebuild_plan=approach_endpoint_rebuild_plan,
         lane_shape_delta=lane_shape_delta,
@@ -5611,7 +5623,7 @@ def build_teacher_guided_junction_variant(
     connection_teacher_model = teacher_model
     connection_edge_map = edge_map
     structural_teacher_junction_ids = [teacher_junction_id]
-    if structural_osm_boundary_authority and compound_junction_ids:
+    if (structural_osm_boundary_authority or strict_structural_replay) and compound_junction_ids:
         connection_teacher_model = copy.deepcopy(teacher_model)
         connection_edge_map = dict(edge_map)
         teacher_junction_ids = {
@@ -5654,8 +5666,10 @@ def build_teacher_guided_junction_variant(
         candidate_edge_file=patched_edge_file,
         crossing_node_ids=joined_source_node_ids,
         emit_crossings=emit_teacher_crossings and not replay_target_internal_subgraph,
-        teacher_internal_scope_id=teacher_junction_id if replay_target_internal_subgraph else None,
-        generate_structural_connections=structural_osm_boundary_authority,
+        teacher_internal_scope_id=(
+            teacher_junction_id if replay_target_internal_subgraph and not strict_structural_replay else None
+        ),
+        generate_structural_connections=structural_osm_boundary_authority or strict_structural_replay,
         structural_junction_ids=compound_junction_ids,
     )
     connection_report["structural_teacher_junction_ids"] = sorted(structural_teacher_junction_ids)
@@ -6613,6 +6627,9 @@ def build_teacher_guided_junction_variant(
             "sumo_load": sumo_report,
             "parity": parity,
             "approach_endpoint_rebuild_plan": approach_endpoint_rebuild_plan,
+            "strict_structural_replay": strict_structural_replay,
+            "strict_structural_junction_ids": compound_junction_ids if strict_structural_replay else [],
+            "strict_structural_edge_map_additions": strict_structural_edge_map_additions,
             "semantic_replay_gate": semantic_gate,
             "semantic_replay_effective_gate": effective_semantic_gate,
             "approach_authority_policy": approach_authority_policy,
@@ -13320,6 +13337,58 @@ def _edge_is_vehicle_continuation_candidate(edge: ET.Element) -> bool:
         & {"passenger", "private", "bus", "coach", "truck", "motorcycle", "moped", "taxi", "delivery", "emergency"}
         for lane in edge.findall("lane")
     )
+
+
+def _strict_teacher_structural_context(
+    *,
+    teacher_net_file: Path,
+    candidate_net_file: Path,
+    edge_map: dict[str, str],
+    safety_junction_ids: set[str] | list[str] | tuple[str, ...],
+) -> tuple[dict[str, str], set[str], list[str]]:
+    """Extend strict replay to existing teacher edges at adjacent safety cells."""
+
+    safety_ids = {str(value) for value in safety_junction_ids if str(value)}
+    if not safety_ids:
+        return dict(edge_map), set(), []
+    teacher_root = ET.parse(teacher_net_file).getroot()
+    candidate_root = ET.parse(candidate_net_file).getroot()
+    teacher_edges = {
+        edge.attrib.get("id", ""): edge
+        for edge in teacher_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_edge_ids = {
+        edge.attrib.get("id", "")
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    candidate_lane_counts = {
+        edge.attrib.get("id", ""): len(edge.findall("lane"))
+        for edge in candidate_root.findall("edge")
+        if edge.attrib.get("id")
+    }
+    resolved = dict(edge_map)
+    mapped_candidate_ids = set(resolved.values())
+    additions: list[str] = []
+    for teacher_edge_id, teacher_edge in sorted(teacher_edges.items()):
+        if (
+            teacher_edge_id in resolved
+            or teacher_edge_id not in candidate_edge_ids
+            or teacher_edge_id.startswith(":")
+            or not _edge_is_vehicle_continuation_candidate(teacher_edge)
+            or not (
+                teacher_edge.attrib.get("from", "") in safety_ids
+                or teacher_edge.attrib.get("to", "") in safety_ids
+            )
+            or len(teacher_edge.findall("lane")) <= candidate_lane_counts.get(teacher_edge_id, 0)
+            or teacher_edge_id in mapped_candidate_ids
+        ):
+            continue
+        resolved[teacher_edge_id] = teacher_edge_id
+        mapped_candidate_ids.add(teacher_edge_id)
+        additions.append(teacher_edge_id)
+    return resolved, safety_ids, additions
 
 
 def _same_family_continuation_edge_map(
