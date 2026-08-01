@@ -5,7 +5,7 @@ from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
 
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 
 import torii_sumo.core.junction_rebuild_candidate as rebuild_candidate_module
 from torii_sumo.core.junction_rebuild_candidate import (
@@ -21,6 +21,7 @@ from torii_sumo.core.junction_rebuild_candidate import (
     _final_context_parity_gate,
     _hybrid_osm_approach_authority_policy,
     _netedit_review_actions,
+    _prune_unmapped_micro_boundary_edges,
     _remove_teacher_non_tls_tllogics,
     _reference_teacher_turnaround_authority,
     _limit_ready_repair_candidates,
@@ -68,6 +69,34 @@ from torii_sumo.core.junction_rebuild_candidate import (
     write_teacher_vehicle_connection_attrs_net,
 )
 from torii_sumo.core.reference_join_audit import audit_reference_join_patterns
+
+
+def test_prune_unmapped_micro_boundary_edges_removes_only_unmapped_short_pair() -> None:
+    root = ET.fromstring(
+        """<net>
+  <edge id="mapped" from="j" to="remote"><lane id="mapped_0" index="0" length="50" allow="passenger"/></edge>
+  <edge id="short_a" from="j" to="micro"><lane id="short_a_0" index="0" length="1.2" allow="passenger"/></edge>
+  <edge id="short_b" from="micro" to="j"><lane id="short_b_0" index="0" length="2.0" allow="passenger"/></edge>
+  <edge id="long" from="j" to="far"><lane id="long_0" index="0" length="40" allow="passenger"/></edge>
+  <junction id="j" type="priority" incLanes="mapped_0 short_a_0 short_b_0 long_0"/>
+  <junction id="micro" type="priority"/>
+  <junction id="remote" type="priority"/>
+  <junction id="far" type="priority"/>
+  <connection from="short_a" to="short_b" fromLane="0" toLane="0"/>
+</net>"""
+    )
+
+    report = _prune_unmapped_micro_boundary_edges(
+        root,
+        junction_id="j",
+        mapped_candidate_edge_ids={"mapped"},
+    )
+
+    assert report["removed_edge_ids"] == ["short_a", "short_b"]
+    assert root.find("edge[@id='short_a']") is None
+    assert root.find("edge[@id='short_b']") is None
+    assert root.find("edge[@id='long']") is not None
+    assert root.find("connection[@from='short_a']") is None
 
 
 def test_strict_teacher_structural_context_maps_existing_adjacent_teacher_edges(tmp_path: Path) -> None:
@@ -335,6 +364,40 @@ def test_partition_aware_joined_shapes_keep_osm_partition_geometry_with_referenc
     assert node is not None
     polygon = Polygon(tuple(float(value) for value in token.split(",")) for token in node.attrib["shape"].split())
     assert polygon.bounds == (-9.0, -10.0, 11.0, 10.0)
+
+
+def test_partition_aware_joined_shapes_rejects_reference_shape_without_partition_coverage(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.nod.xml"
+    joined = tmp_path / "joined.nod.xml"
+    reference = tmp_path / "reference.net.xml"
+    output = tmp_path / "partitioned.nod.xml"
+    source.write_text(
+        '<nodes><node id="a" x="0" y="0"/><node id="b" x="2" y="0"/></nodes>',
+        encoding="utf-8",
+    )
+    joined.write_text('<nodes><node id="cluster_a_b" x="1" y="0"/></nodes>', encoding="utf-8")
+    reference.write_text(
+        '<net><junction id="cluster_a_b" x="1" y="0" shape="-100,-100 -90,-100 -90,-90 -100,-90"/></net>',
+        encoding="utf-8",
+    )
+
+    report = _write_partition_aware_joined_junction_shapes(
+        joined_node_file=joined,
+        source_node_file=source,
+        reference_net_file=reference,
+        join_groups=[["a", "b"]],
+        output_file=output,
+    )
+
+    assert report["status"] == "pass"
+    assert report["repairs"][0]["shape_authority"] == "source_partition_concave_hull"
+    node = ET.parse(output).getroot().find("node")
+    assert node is not None
+    polygon = Polygon(tuple(float(value) for value in token.split(",")) for token in node.attrib["shape"].split())
+    assert polygon.covers(Point(0, 0))
+    assert polygon.covers(Point(2, 0))
 
 
 def test_restore_existing_edge_geometry_recomputes_operational_lane_length() -> None:
@@ -3628,6 +3691,57 @@ def test_join_candidate_recreates_exact_adjacent_teacher_partition_as_separate_j
     assert "cluster_3_4" in expanded["expanded_rebuild_scope"]["junction_ids"]
     assert "cluster_3_4_5" not in expanded["expanded_rebuild_scope"]["junction_ids"]
     assert expanded["tls_join_scope_expansion"]["adjacent_teacher_partition_cluster_ids"] == ["cluster_3_4"]
+
+
+def test_join_candidate_absorbs_non_motorized_fringe_into_adjacent_partition(
+    tmp_path: Path,
+) -> None:
+    nodes = tmp_path / "raw.nod.xml"
+    edges = tmp_path / "raw.edg.xml"
+    reference = tmp_path / "reference.net.xml"
+    nodes.write_text(
+        """<nodes>
+  <node id="1" x="0" y="0" type="traffic_light" tl="tls"/>
+  <node id="2" x="2" y="0" type="traffic_light" tl="tls"/>
+  <node id="3" x="8" y="0" type="traffic_light" tl="tls"/>
+  <node id="4" x="10" y="0" type="traffic_light" tl="tls"/>
+  <node id="5" x="9" y="1" type="traffic_light" tl="tls"/>
+</nodes>""",
+        encoding="utf-8",
+    )
+    edges.write_text(
+        """<edges>
+  <edge id="partition_to_core" from="3" to="1"/>
+  <edge id="fringe_to_partition" from="5" to="3" allow="bicycle"/>
+</edges>""",
+        encoding="utf-8",
+    )
+    reference.write_text(
+        """<net>
+  <junction id="cluster_1_2"/>
+  <junction id="cluster_3_4"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate = {
+        "reference_id": "cluster_1_2",
+        "learned_rule": "tum_like_join_candidate",
+        "expanded_rebuild_scope": {
+            "junction_ids": ["1", "2"],
+            "join_junction_ids": ["1", "2"],
+        },
+    }
+
+    expanded = _expand_fragmented_tls_join_scope_candidate(
+        candidate,
+        nodes,
+        raw_edge_file=edges,
+        reference_net_file=reference,
+    )
+
+    assert expanded["expanded_rebuild_scope"]["junction_ids"] == ["1", "2", "cluster_3_4_5"]
+    assert expanded["tls_join_scope_expansion"]["absorbed_non_motorized_fringe_node_ids"] == ["5"]
+    assert expanded["tls_join_scope_expansion"]["unjoined_reference_partition_fringe_node_ids"] == []
 
 
 def test_tls_approach_pairs_augment_full_cell_edge_map() -> None:
@@ -9618,6 +9732,49 @@ def test_structural_connection_plan_fills_unreached_outgoing_vehicle_lane(
     ]
     assert connections == [("0", "1"), ("0", "0")]
     assert report["structural_missing_lanes_by_target"] == {"out": [0]}
+
+
+def test_structural_connection_plan_expands_unmapped_continuation_lane(tmp_path: Path) -> None:
+    raw_connections = tmp_path / "raw.con.xml"
+    raw_connections.write_text(
+        '<connections><connection from="in" to="unmapped_out" fromLane="0" toLane="1"/></connections>',
+        encoding="utf-8",
+    )
+    candidate_edges = tmp_path / "candidate.edg.xml"
+    candidate_edges.write_text(
+        """<edges>
+  <edge id="in" from="a" to="j"><lane index="0" allow="passenger"/></edge>
+  <edge id="unmapped_out" from="j" to="b">
+    <lane index="0" allow="passenger"/>
+    <lane index="1" allow="passenger"/>
+  </edge>
+</edges>""",
+        encoding="utf-8",
+    )
+
+    report = write_teacher_connection_plan(
+        raw_connection_file=raw_connections,
+        output_file=tmp_path / "structural.con.xml",
+        junction_id="j",
+        teacher_model={"vehicle_connections": [], "crossings": []},
+        candidate_model={
+            "approaches": {
+                "incoming": [{"edge_id": "in", "lane_count": 1}],
+                "outgoing": [{"edge_id": "unmapped_out", "lane_count": 2}],
+            }
+        },
+        edge_map={},
+        candidate_edge_file=candidate_edges,
+        generate_structural_connections=True,
+        structural_junction_ids=("j",),
+    )
+
+    connections = [
+        (row.attrib["fromLane"], row.attrib["toLane"])
+        for row in ET.parse(report["connection_file"]).getroot().findall("connection")
+    ]
+    assert connections == [("0", "1"), ("0", "0")]
+    assert report["expanded_unmapped_continuation_connection_count"] == 1
 
 
 def test_write_teacher_connection_plan_preserves_neighbor_connections_on_shared_boundary_edges(tmp_path: Path) -> None:
