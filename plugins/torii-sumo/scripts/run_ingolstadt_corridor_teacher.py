@@ -75,6 +75,11 @@ def _parse_args() -> argparse.Namespace:
             "keeps the runner as a full-bbox estimator and leaves every repair candidate unpromoted."
         ),
     )
+    parser.add_argument(
+        "--strict-teacher-replay",
+        action="store_true",
+        help="Use exact teacher internal/TLS replay for materialized TUM candidates.",
+    )
     return parser.parse_args()
 
 
@@ -123,6 +128,7 @@ def _reference_matched_workflow_kwargs(
         "run_corridor_geometry_simplification_after_build": False,
         "run_corridor_edit_ledger_after_build": True,
         "run_teacher_guided_repair_after_build": args.materialize_teacher_candidates,
+        "teacher_guided_strict_teacher_replay": args.strict_teacher_replay,
         "teacher_guided_probe_matrix_junction_ids": (
             [args.junction_id] if args.materialize_teacher_candidates else None
         ),
@@ -606,6 +612,7 @@ def _run_reference_matched(
         "teacher_candidate_materialization": (
             "enabled" if args.materialize_teacher_candidates else "estimator_only"
         ),
+        "teacher_replay_mode": "strict_teacher" if args.strict_teacher_replay else "hybrid_default",
         "runtime_audit_status": runtime_audit_status,
         "artifact_hash_gate_status": artifact_hash_gate_status,
         "workflow_review_html_status": workflow_review_html_status,

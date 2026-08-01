@@ -5962,6 +5962,7 @@ def test_run_teacher_guided_repair_queue_replays_joined_expanded_scope_on_full_n
         command_runner=fake_runner,
         variant_builder=fake_variant,
         sequential_accept_passed_variants=True,
+        strict_teacher_replay=True,
     )
 
     assert report["status"] == "pass"
@@ -5971,10 +5972,12 @@ def test_run_teacher_guided_repair_queue_replays_joined_expanded_scope_on_full_n
     assert variant_calls[0]["candidate_net_file"].name == "full_network_join_replay.net.xml"
     assert variant_calls[0]["raw_connection_file"] == raw_connections
     assert variant_calls[0]["raw_edge_file"] == raw_edges
+    assert variant_calls[0]["replay_target_internal_subgraph"] is True
     assert variant_calls[0]["preserve_teacher_lane_shapes"] is False
-    assert variant_calls[0]["structural_osm_boundary_authority"] is True
+    assert variant_calls[0]["structural_osm_boundary_authority"] is False
+    assert variant_calls[0]["strict_teacher_replay"] is True
     assert variant_calls[0]["safety_junction_ids"] == ["cluster_a_b"]
-    assert variant_calls[0]["emit_teacher_crossings"] is False
+    assert variant_calls[0]["emit_teacher_crossings"] is True
     assert '<join nodes="a b"' in variant_calls[0]["raw_node_file"].read_text(encoding="utf-8")
 
 
@@ -12507,6 +12510,28 @@ def test_hybrid_osm_approach_authority_does_not_change_strict_mode() -> None:
     assert report["effective_semantic_gate"] == fixture["raw_gate"]
 
 
+def test_hybrid_osm_approach_authority_accepts_strict_teacher_replay_boundary_copy() -> None:
+    fixture = _hybrid_authority_fixture()
+    fixture["target_internal_replay"]["copy_unmapped_boundary_edges"] = True
+    fixture["target_internal_replay"]["copied_boundary_edge_count"] = 3
+
+    report = _hybrid_osm_approach_authority_policy(
+        {"status": "pass", "failures": []},
+        replay_target_internal_subgraph=True,
+        preserve_teacher_lane_shapes=False,
+        strict_teacher_replay=True,
+        edge_map=fixture["edge_map"],
+        lane_patch=fixture["lane_patch"],
+        target_internal_replay=fixture["target_internal_replay"],
+        tls_movement_parity={"status": "pass"},
+        pedestrian_crossing_parity={"status": "pass"},
+    )
+
+    assert report["status"] == "pass"
+    assert report["policy"] == "strict_teacher_replay"
+    assert report["effective_semantic_gate"] == {"status": "pass", "failures": []}
+
+
 def test_hybrid_osm_approach_authority_accepts_preserved_boundary_structural_replay() -> None:
     report = _hybrid_osm_approach_authority_policy(
         {
@@ -12542,6 +12567,7 @@ def test_hybrid_osm_approach_authority_accepts_preserved_boundary_structural_rep
         boundary_vehicle_connectivity={"status": "pass"},
         target_surface_overlap_gate={"status": "pass"},
         turnaround_audit={"automatic_promotion_gate": "pass"},
+        target_internal_pedestrian_ring={"status": "pass"},
     )
 
     assert report["status"] == "pass"
@@ -12553,6 +12579,35 @@ def test_hybrid_osm_approach_authority_accepts_preserved_boundary_structural_rep
         "pedestrian_crossings": "review_required",
     }
     assert report["effective_semantic_gate"] == {"status": "pass", "failures": []}
+
+
+def test_hybrid_osm_approach_authority_blocks_missing_target_pedestrian_restore() -> None:
+    report = _hybrid_osm_approach_authority_policy(
+        {"status": "pass", "failures": []},
+        replay_target_internal_subgraph=False,
+        preserve_teacher_lane_shapes=True,
+        structural_osm_boundary_authority=True,
+        edge_map={"teacher_in": "candidate_in"},
+        lane_patch={
+            "status": "pass",
+            "pruned_boundary_edge_count": 0,
+            "preserve_lane_shapes": True,
+            "preserve_osm_lane_profiles": True,
+        },
+        target_internal_replay=None,
+        tls_movement_parity={"status": "pass", "tl_logic_phase_states_equal": True},
+        pedestrian_crossing_parity={"status": "pass"},
+        connection_plan={"status": "pass", "structural_connection_generation": True},
+        vehicle_connection_attrs={"status": "pass", "skipped_motorized_vehicle_connection_count": 0},
+        boundary_edge_preservation={"status": "pass"},
+        boundary_vehicle_connectivity={"status": "pass"},
+        target_surface_overlap_gate={"status": "pass"},
+        turnaround_audit={"automatic_promotion_gate": "pass"},
+        target_internal_pedestrian_ring={"status": "blocked"},
+    )
+
+    assert report["status"] == "fail"
+    assert "target_internal_pedestrian_ring_not_pass" in report["invariant_failures"]
 
 
 def test_boundary_vehicle_connectivity_ignores_bike_edges_and_blocks_vehicle_dead_ends(
@@ -13583,6 +13638,53 @@ def test_scoped_tls_plan_reports_shared_controller_owner_closure(tmp_path: Path)
     assert set(shared_plan["edge_mapping_sources"].values()) == {"explicit_approach_pair"}
 
 
+def test_scoped_tls_plan_matches_renamed_boundary_edges_by_mapped_endpoints(tmp_path: Path) -> None:
+    teacher = tmp_path / "teacher_endpoint_mapping.net.xml"
+    candidate = tmp_path / "candidate_endpoint_mapping.net.xml"
+    teacher.write_text(
+        """<net>
+  <edge id="teacher_in" from="outer" to="teacher_j"><lane id="teacher_in_0" index="0" allow="pedestrian"/></edge>
+  <edge id="teacher_out" from="teacher_j" to="dest"><lane id="teacher_out_0" index="0" allow="pedestrian"/></edge>
+  <junction id="teacher_j" type="traffic_light" x="0" y="0"/>
+  <connection from="teacher_in" to="teacher_out" fromLane="0" toLane="0" tl="teacher_j" linkIndex="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<net>
+  <edge id="candidate_in" from="outer" to="candidate_j"><lane id="candidate_in_0" index="0" allow="pedestrian"/></edge>
+  <edge id="candidate_out" from="candidate_j" to="dest"><lane id="candidate_out_0" index="0" allow="pedestrian"/></edge>
+  <junction id="candidate_j" type="traffic_light" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = build_scoped_teacher_tls_cell_replay_plan(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        teacher_junction_id="teacher_j",
+        candidate_junction_id="candidate_j",
+        candidate_junction_ids={"candidate_j"},
+    )
+
+    assert report["edge_map"] == {"teacher_in": "candidate_in", "teacher_out": "candidate_out"}
+    assert report["copied_boundary_edge_ids"] == []
+
+    shared = build_shared_teacher_tls_controller_replay_plan(
+        candidate_net_file=candidate,
+        teacher_net_file=teacher,
+        teacher_controller_id="teacher_j",
+        candidate_controller_id="candidate_j",
+        candidate_junction_ids={"candidate_j"},
+        collapse_junction_ids={"candidate_j"},
+        candidate_owner_map={"teacher_j": "candidate_j"},
+    )
+
+    assert shared["status"] == "pass"
+    assert shared["edge_map"] == {"teacher_in": "candidate_in", "teacher_out": "candidate_out"}
+    assert shared["generated_boundary_edge_ids"] == []
+
+
 def test_shared_tls_writer_assigns_overlapping_internal_owner_prefixes_once(
     tmp_path: Path,
 ) -> None:
@@ -13866,6 +13968,45 @@ def test_restore_scoped_pedestrian_internal_semantics_after_normalize(
     assert root.find("edge[@id=':j_w0']") is not None
     assert root.find("edge[@id=':j_c0']").attrib["crossingEdges"] == "candidate_in"
     assert root.find("connection[@tl='j'][@linkIndex='4']") is not None
+
+
+def test_restore_scoped_pedestrian_internal_semantics_maps_teacher_owner_to_candidate_owner(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "teacher_owned_pedestrian.net.xml"
+    target = tmp_path / "candidate_owned_pedestrian.net.xml"
+    source.write_text(
+        """<net>
+  <edge id=":teacher_j_w0" function="walkingarea"><lane id=":teacher_j_w0_0" index="0" shape="0,0 1,0"/></edge>
+  <edge id=":teacher_j_c0" function="crossing" crossingEdges="teacher_in"><lane id=":teacher_j_c0_0" index="0" shape="1,0 2,0"/></edge>
+  <connection from=":teacher_j_w0" to=":teacher_j_c0" fromLane="0" toLane="0" tl="teacher_j" linkIndex="4" dir="s" state="M"/>
+  <junction id="teacher_j" type="traffic_light" x="0" y="0"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target.write_text(
+        """<net>
+  <edge id="candidate_in"><lane id="candidate_in_0" index="0"/></edge>
+  <junction id="candidate_j" type="traffic_light" x="10" y="20"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    report = restore_scoped_pedestrian_internal_semantics_after_normalize(
+        source_net_file=source,
+        target_net_file=target,
+        junction_id="candidate_j",
+        source_junction_id="teacher_j",
+        edge_map={"teacher_in": "candidate_in"},
+    )
+
+    assert report["status"] == "pass"
+    root = ET.parse(target).getroot()
+    assert root.find("edge[@id=':candidate_j_w0']") is not None
+    assert root.find("edge[@id=':candidate_j_c0']").attrib["crossingEdges"] == "candidate_in"
+    connection = root.find("connection[@from=':candidate_j_w0'][@to=':candidate_j_c0']")
+    assert connection is not None
+    assert connection.attrib["tl"] == "candidate_j"
 
 
 def test_write_teacher_target_internal_replay_net_removes_stale_candidate_boundary_edge(
@@ -14843,6 +14984,58 @@ def test_contraction_neighbor_request_projection_preserves_modal_internal_lanes(
     assert restored["status"] == "pass"
     assert restored["restored_request_count"] == 3
     assert after["status"] == "pass"
+
+
+def test_contraction_restore_rehydrates_neighbor_modal_edges_and_alias_movements(tmp_path: Path) -> None:
+    source = tmp_path / "source-contraction.net.xml"
+    source.write_text(
+        """<net>
+  <edge id="from_old" from="neighbor" to="absent"><lane id="from_old_0" index="0"/></edge>
+  <edge id="from" from="neighbor" to="target"><lane id="from_0" index="0"/></edge>
+  <edge id="to" from="target" to="neighbor"><lane id="to_0" index="0"/></edge>
+  <edge id="ped" from="ped_node" to="neighbor"><lane id="ped_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":neighbor_w0" function="walkingarea"><lane id=":neighbor_w0_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":neighbor_0" function="internal"><lane id=":neighbor_0_0" index="0"/></edge>
+  <junction id="neighbor" type="priority" intLanes=":neighbor_0_0"/>
+  <connection from="from_old" to="to" fromLane="0" toLane="0" via=":neighbor_0_0" dir="L"/>
+  <connection from="ped" to=":neighbor_w0" fromLane="0" toLane="0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+    target = tmp_path / "target-contraction.net.xml"
+    target.write_text(
+        """<net>
+  <edge id="from" from="neighbor" to="target"><lane id="from_0" index="0"/></edge>
+  <edge id="to" from="target" to="neighbor"><lane id="to_0" index="0"/></edge>
+  <edge id="ped" from="ped_node" to="neighbor"><lane id="ped_0" index="0" allow="pedestrian"/></edge>
+  <edge id=":neighbor_1" function="internal"><lane id=":neighbor_1_0" index="0"/></edge>
+  <junction id="neighbor" type="priority" intLanes=":neighbor_1_0"/>
+  <connection from="from" to="to" fromLane="0" toLane="0" via=":neighbor_1_0" dir="s"/>
+</net>""",
+        encoding="utf-8",
+    )
+
+    modal = rebuild_candidate_module._restore_contraction_neighbor_modal_edges(
+        source_file=source,
+        target_file=target,
+        junction_ids={"neighbor"},
+        edge_aliases={"from_old": "from"},
+    )
+    restored = rebuild_candidate_module._restore_contraction_edge_alias_connections(
+        source_file=source,
+        target_file=target,
+        edge_aliases={"from_old": "from"},
+        source_modal_edge_ids=set(modal["source_edge_ids"]),
+        source_boundary_edge_ids={"from_old", "from", "to", "ped"},
+    )
+
+    target_root = ET.parse(target).getroot()
+    assert modal["restored_edge_ids"] == [":neighbor_w0"]
+    assert restored["restored_connection_count"] == 2
+    assert target_root.find("edge[@id=':neighbor_w0']") is not None
+    movement = next(connection for connection in target_root.findall("connection") if connection.attrib["from"] == "from")
+    assert movement.attrib["via"] == ":neighbor_1_0"
+    assert movement.attrib["dir"] == "L"
 
 
 def test_contraction_modal_preservation_uses_post_restore_counts(tmp_path: Path) -> None:

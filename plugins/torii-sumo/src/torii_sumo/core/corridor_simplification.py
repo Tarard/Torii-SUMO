@@ -319,11 +319,20 @@ def _connections_are_lane_preserving_straights(
     return True
 
 
-def audit_alias_normalized_connections(source_file: Path, candidate_file: Path) -> dict[str, Any]:
+def audit_alias_normalized_connections(
+    source_file: Path,
+    candidate_file: Path,
+    *,
+    ignored_source_via_junction_ids: set[str] | None = None,
+) -> dict[str, Any]:
     source_root = ET.parse(source_file).getroot()
     candidate_root = ET.parse(candidate_file).getroot()
     aliases = _corridor_edge_aliases(source_root, candidate_root)
-    source_all, source_controlled, collapsed = _connection_counters(source_root, aliases)
+    source_all, source_controlled, collapsed = _connection_counters(
+        source_root,
+        aliases,
+        ignored_via_junction_ids=ignored_source_via_junction_ids,
+    )
     candidate_all, candidate_controlled, _ = _connection_counters(candidate_root, {})
     all_missing = source_all - candidate_all
     all_extra = candidate_all - source_all
@@ -342,6 +351,7 @@ def audit_alias_normalized_connections(source_file: Path, candidate_file: Path) 
         "normal_extra_sample": _counter_sample(all_extra),
         "controlled_missing_sample": _counter_sample(controlled_missing),
         "controlled_extra_sample": _counter_sample(controlled_extra),
+        "ignored_source_via_junction_ids": sorted(ignored_source_via_junction_ids or ()),
     }
 
 
@@ -395,12 +405,19 @@ def _corridor_edge_aliases(source_root: ET.Element, candidate_root: ET.Element) 
 
 
 def _connection_counters(
-    root: ET.Element, aliases: dict[str, str]
+    root: ET.Element,
+    aliases: dict[str, str],
+    *,
+    ignored_via_junction_ids: set[str] | None = None,
 ) -> tuple[Counter[tuple[str, ...]], Counter[tuple[str, ...]], int]:
     all_connections: Counter[tuple[str, ...]] = Counter()
     controlled_connections: Counter[tuple[str, ...]] = Counter()
     collapsed = 0
+    ignored_prefixes = {f":{junction_id}_" for junction_id in (ignored_via_junction_ids or set()) if junction_id}
     for connection in root.findall("connection"):
+        via = connection.attrib.get("via", "")
+        if any(via.startswith(prefix) for prefix in ignored_prefixes):
+            continue
         from_edge = connection.attrib.get("from", "")
         to_edge = connection.attrib.get("to", "")
         if not from_edge or not to_edge or from_edge.startswith(":") or to_edge.startswith(":"):

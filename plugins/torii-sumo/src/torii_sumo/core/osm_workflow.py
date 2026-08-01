@@ -4018,6 +4018,7 @@ def run_osm_cleanup_workflow(
     teacher_guided_repair_max_ready_candidates: int | None = 80,
     run_teacher_guided_repair_after_build: bool = True,
     teacher_guided_probe_matrix_junction_ids: list[str] | None = None,
+    teacher_guided_strict_teacher_replay: bool = False,
     road_connectivity_replay_max_owners: int | None = 4,
     road_connectivity_probe_edge_ids: list[str] | None = None,
     key_edge_queries: list[Mapping[str, Any]] | None = None,
@@ -5541,6 +5542,7 @@ def run_osm_cleanup_workflow(
                         timeout_seconds=timeout_seconds,
                         expand_fragmented_tls_join_scope=True,
                         sequential_accept_passed_variants=True,
+                        strict_teacher_replay=teacher_guided_strict_teacher_replay,
                         plain_exporter=teacher_guided_plain_export_func,
                     )
                     probe_matrix_junction_ids = [
@@ -5566,6 +5568,7 @@ def run_osm_cleanup_workflow(
                             timeout_seconds=timeout_seconds,
                             command_runner=command_runner,
                             sequential_accept_passed_variants=True,
+                            strict_teacher_replay=teacher_guided_strict_teacher_replay,
                             plain_exporter=teacher_guided_plain_export_func,
                         )
                     candidate_teacher_guided_best_variant_file = _teacher_guided_best_variant_file(

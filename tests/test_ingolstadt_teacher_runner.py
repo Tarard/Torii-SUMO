@@ -34,6 +34,7 @@ def _args(**overrides):
         "timeout_seconds": 45.0,
         "skip_runtime_audits": False,
         "materialize_teacher_candidates": False,
+        "strict_teacher_replay": False,
         "verbose": False,
     }
     values.update(overrides)
@@ -88,6 +89,7 @@ def test_reference_matched_mode_delegates_full_existing_workflow(tmp_path: Path)
     assert kwargs["run_tls_aggregation_after_build"] is False
     assert kwargs["run_teacher_guided_repair_after_build"] is False
     assert kwargs["teacher_guided_probe_matrix_junction_ids"] is None
+    assert kwargs["teacher_guided_strict_teacher_replay"] is False
     assert kwargs["launch_netedit_after_build"] is False
     assert kwargs["launch_sumo_gui_after_build"] is False
 
@@ -107,6 +109,22 @@ def test_reference_matched_teacher_materialization_is_explicit_opt_in(tmp_path: 
 
     assert kwargs["run_teacher_guided_repair_after_build"] is True
     assert kwargs["teacher_guided_probe_matrix_junction_ids"] == ["267517510"]
+
+
+def test_reference_matched_can_opt_into_strict_teacher_replay(tmp_path: Path) -> None:
+    script = _load_script()
+    teacher = tmp_path / "teacher.net.xml"
+    args = _args(materialize_teacher_candidates=True, strict_teacher_replay=True)
+
+    kwargs = script._reference_matched_workflow_kwargs(
+        args,
+        output_dir=tmp_path / "run",
+        teacher_net=teacher,
+        netconvert_binary="netconvert-test",
+        sumo_binary="sumo-test",
+    )
+
+    assert kwargs["teacher_guided_strict_teacher_replay"] is True
 
 
 def test_comparison_selector_does_not_claim_review_layer_is_promoted(tmp_path: Path) -> None:
