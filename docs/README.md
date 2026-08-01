@@ -8,6 +8,7 @@ This page is the stable entry point for Torii's user, architecture, workflow, an
 |---|---|
 | Install the Codex plugin | [Codex Plugin Installation](codex-plugin-install.md) |
 | Understand what belongs where | [Repository Guide](repository-guide.md) |
+| Run or resume the canonical workflow | [Canonical Workflow](workflow.md) |
 | Understand the system and claim boundary | [Architecture](../ARCHITECTURE.md) |
 | Find an MCP tool | [MCP Tool Catalog](mcp-tool-catalog.md) |
 | Run the one-prompt OSM demonstration | [Ingolstadt example](../examples/02_one_prompt_osm_network/README.md) |
@@ -18,6 +19,8 @@ This page is the stable entry point for Torii's user, architecture, workflow, an
 
 ## Architecture and Integration
 
+- [Canonical Workflow](workflow.md) - user path, stage contracts, evidence classes, statuses, artifacts, and recovery.
+- [Workflow Redesign Audit](workflow-redesign-audit.md) - actual pre-change flow, alternatives, selected design, and remaining debt.
 - [Architecture](../ARCHITECTURE.md) - product claim, router/planner/executor/reviewer layers, promotion rule, and non-goals.
 - [Repository Guide](repository-guide.md) - directory ownership, dependency direction, and placement rules for new work.
 - [MCP Tool Catalog](mcp-tool-catalog.md) - the public tool surface grouped by user intent.

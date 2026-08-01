@@ -42,7 +42,7 @@ def test_plugin_manifest_declares_skill_and_mcp_companion() -> None:
 
     assert manifest["name"] == "torii-sumo"
     assert re.fullmatch(r"1\.1\.0(?:\+codex\.\d{14})?", manifest["version"])
-    assert manifest["license"] == "PolyForm-Noncommercial-1.0.0 AND CC-BY-NC-4.0"
+    assert manifest["license"] == "Apache-2.0"
     assert manifest["skills"] == "./skills/"
     assert manifest["mcpServers"] == "./.mcp.json"
     assert manifest["author"]["name"] == "Torii contributors"
@@ -85,3 +85,30 @@ def test_plugin_contains_bundled_mcp_package() -> None:
 
 def test_mcp_package_is_not_installed_at_repo_root() -> None:
     assert not (ROOT / "src" / "torii_sumo").exists()
+
+
+def test_release_metadata_matches_repository_apache_license() -> None:
+    plugin = load_json(PLUGIN / ".codex-plugin" / "plugin.json")
+    zenodo = load_json(ROOT / ".zenodo.json")
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+
+    assert plugin["license"] == "Apache-2.0"
+    assert zenodo["license"] == "Apache-2.0"
+    assert 'license = { text = "Apache-2.0" }' in pyproject
+    assert 'license: "Apache-2.0"' in citation
+    assert 'version: "1.1.0"' in citation
+    assert "Apache License" in license_text
+    assert "Version 2.0" in license_text
+
+
+def test_mcp_dependency_stays_on_compatible_major_version() -> None:
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert '"mcp[cli]>=1.0.0,<2"' in pyproject
+
+
+def test_temporary_repository_export_workflow_is_removed() -> None:
+    assert not (ROOT / ".github" / "workflows" / "codex-export-snapshot.yml").exists()
+    assert (ROOT / ".github" / "workflows" / "workflow-contracts.yml").is_file()

@@ -8,8 +8,9 @@ Before changing structure or adding a public capability, read:
 
 1. `README.md` for the user-facing promise;
 2. `ARCHITECTURE.md` for claim and promotion boundaries;
-3. `docs/repository-guide.md` for directory ownership;
-4. `docs/mcp-tool-catalog.md` for the registered public tool surface.
+3. `docs/workflow.md` for the canonical user path, status model, and artifact contract;
+4. `docs/repository-guide.md` for directory ownership;
+5. `docs/mcp-tool-catalog.md` for the registered public tool surface.
 
 ## Code Placement
 
@@ -17,14 +18,14 @@ Before changing structure or adding a public capability, read:
 - Keep `plugins/torii-sumo/src/torii_sumo/tools/` thin: validate/resolve inputs, call domain logic, and serialize structured outputs.
 - Use `plugins/torii-sumo/src/torii_sumo/server.py` only to register MCP tools and their public descriptions.
 - Put reasoning and workflow-selection guidance under `plugins/torii-sumo/skills/`; do not implement subprocess or XML algorithms in skill prose.
-- Put reusable workflow composition in workflow modules, not in one-off CLI scripts.
+- Put reusable workflow composition in workflow modules, not in one-off CLI scripts. Broad orchestration must enter through the managed workflow contract.
 - Put reproducible CLI entry points under `plugins/torii-sumo/scripts/`; scripts must call reusable implementation rather than duplicate it.
 
 ## Evidence Invariants
 
 - Keep source artifacts immutable and write candidates separately.
 - Do not treat SUMO load, route completion, or KPI improvement as proof of topology, demand, control, or field correctness.
-- Use structured decisions: `pass`, `review_required`, `blocked`, or `not_applicable`.
+- Use the canonical managed statuses: `complete`, `incomplete`, `blocked`, `invalid`, `review_required`, `unsupported`, `failed`, or `stale`. Domain tools may retain narrower local decisions.
 - Bind promotion-relevant evidence to exact source/candidate hashes and declared edit scope.
 - Preserve rollback and outside-scope regression evidence for materialized candidates.
 - State non-identifiability and claim boundaries in tool output instead of hiding them in documentation alone.

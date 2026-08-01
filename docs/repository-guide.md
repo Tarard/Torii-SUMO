@@ -46,11 +46,12 @@ Core modules must not import the MCP server. Scripts should call reusable core o
 
 Torii exposes three levels of entry:
 
-1. **Natural-language router:** `torii_auto_workflow` is the default entry for normal users.
-2. **Capability workflows:** OSM cleanup, intersection, candidate, demand, and digital-twin workflows compose several gates into one bounded operation.
-3. **Specialist tools:** individual audits and materializers exist for reproduction, diagnosis, and controlled research runs.
+1. **Managed workflow:** `torii_workflow_run` is the default entry for broad user goals. `torii_workflow_status` checks saved state and artifact freshness.
+2. **Compatibility router:** `torii_auto_workflow` returns the legacy-shaped result plus managed workflow fields.
+3. **Capability workflows:** OSM cleanup, intersection, candidate, demand, and digital-twin workflows compose several gates into one bounded operation.
+4. **Specialist tools:** individual audits and materializers exist for reproduction, diagnosis, and controlled research runs.
 
-This hierarchy keeps the public experience as simple as ChatSUMO's short README and provider map while preserving Torii's stricter evidence contracts. The complete grouping is in [MCP Tool Catalog](mcp-tool-catalog.md).
+The managed workflow is the authoritative broad-workflow state. The complete contract is in [Canonical Torii Workflow](workflow.md). The tool grouping is in [MCP Tool Catalog](mcp-tool-catalog.md).
 
 ## Where New Work Goes
 

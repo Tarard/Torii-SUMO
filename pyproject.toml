@@ -8,13 +8,13 @@ version = "1.1.0"
 description = "Torii agent plugin for evidence-aware Eclipse SUMO, OSM cleanup, and public-data corridor digital twins."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "PolyForm-Noncommercial-1.0.0" }
+license = { text = "Apache-2.0" }
 authors = [
   { name = "Torii contributors" }
 ]
 dependencies = [
   "anyio>=4.0",
-  "mcp[cli]>=1.0.0",
+  "mcp[cli]>=1.0.0,<2",
   "numpy>=1.26",
   "osmium>=4.3,<5",
   "Pillow>=10.0",

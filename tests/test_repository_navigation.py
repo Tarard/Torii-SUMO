@@ -29,6 +29,8 @@ def test_readme_exposes_stable_navigation() -> None:
 
     expected_links = {
         "docs/README.md",
+        "docs/workflow.md",
+        "docs/workflow-redesign-audit.md",
         "docs/repository-guide.md",
         "docs/mcp-tool-catalog.md",
         "ARCHITECTURE.md",
@@ -37,12 +39,15 @@ def test_readme_exposes_stable_navigation() -> None:
         assert link in readme
 
     original_section_order = (
-        "## Evidence-Aware OSM-to-SUMO Construction",
-        "## Example",
+        "## How Torii Works",
+        "## Hamburg Corridor Digital Twin",
+        "## Design",
+        "## What You Can Do",
+        "## Installation",
         "## Quick Start",
-        "## What You Can Ask Me",
-        "## Boundaries",
-        "## License and Notices",
+        "## Repository Structure",
+        "## More",
+        "## License",
     )
     positions = [readme.index(heading) for heading in original_section_order]
     assert positions == sorted(positions)
@@ -52,6 +57,8 @@ def test_documentation_index_links_core_guides() -> None:
     docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
 
     for link in (
+        "workflow.md",
+        "workflow-redesign-audit.md",
         "repository-guide.md",
         "mcp-tool-catalog.md",
         "research-paper-blueprint.md",
@@ -65,7 +72,7 @@ def test_mcp_catalog_covers_every_registered_tool() -> None:
     catalog = (ROOT / "docs" / "mcp-tool-catalog.md").read_text(encoding="utf-8")
     registered = _registered_tool_names()
 
-    assert len(registered) == 74
+    assert len(registered) == 76
     missing = sorted(name for name in registered if f"`{name}`" not in catalog)
     assert missing == []
 
@@ -90,6 +97,7 @@ def test_agent_instructions_preserve_repository_and_evidence_boundaries() -> Non
     instructions = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
     for required in (
+        "docs/workflow.md",
         "docs/repository-guide.md",
         "docs/mcp-tool-catalog.md",
         "src/torii_sumo/tools/",

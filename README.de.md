@@ -26,7 +26,7 @@
 
 Torii ist fuer SUMO-Netzkonstruktion gedacht: Eine kurze natuerliche Anfrage kann zu einem begrenzten, evidence-aware und reference-comparable OSM-zu-SUMO-Workflow werden, mit Konstruktionsnachweisen, Erreichbarkeitschecks, Review-Artefakten und klarer Aussagegrenze.
 
-Das Plugin startet jetzt mit einem Workflow Router: `torii_auto_workflow` klassifiziert die Anfrage, waehlt Skills, erstellt Plaene und fuehrt sichere MCP-Schritte aus, um das SUMO-Netz zu erzeugen oder zu aendern.
+Das Plugin startet mit `torii_workflow_run`. Das Tool klassifiziert die Anfrage, fuehrt den gewaehlten Ablauf aus und speichert ein fortsetzbares Evidenzmanifest. `torii_workflow_status` prueft alte Ergebnisse. `torii_auto_workflow` bleibt fuer Kompatibilitaet.
 
 Torii hat zwei Schichten:
 
@@ -39,7 +39,7 @@ Forschungsstand (2026-07-14): Stage 1-M ist **Machine REVIEW_READY**. Dreissig v
 
 Die Architektur ist in [`ARCHITECTURE.md`](ARCHITECTURE.md) dokumentiert: Router, Planner, Executor und Reviewer.
 
-Aktuelle MCP Tools decken den `torii_auto_workflow` Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
+Aktuelle MCP Tools decken den verwalteten Workflow, die Statuspruefung, den Kompatibilitaets-Router, Umgebungstests, Konfigurations-Preflight, Smoke Runs, Evidenzpakete, OSM-Netzaufbau, TLS-Kandidaten, mehrquellige TLS-Prueftabellen, TLS-Aggregation Review-Varianten, Konnektivitaetschecks, Connected-Core-Extraktion, Erreichbarkeitsproben, completion-aware Routeability Audits, Overlapping-Top-Level-Junction Audits, Reference-Join Audits, Junction-Aggregation Review-Varianten und Netedit-Startnachweise ab.
 
 ## Example
 
@@ -95,7 +95,7 @@ Torii baut und auditiert SUMO-Artefakte, zertifiziert ein Modell aber nicht als 
 
 ## License and Notices
 
-Quelltext ist unter PolyForm Noncommercial 1.0.0 lizenziert. Skill-Dateien, Dokumentation, Checklisten, Beispiele und Protokolltexte sind unter CC BY-NC 4.0 lizenziert. Kommerzielle Nutzung erfordert eine separate schriftliche Erlaubnis. Beide Bereiche stehen in [`LICENSE`](LICENSE).
+Torii-Code, Skills, Dokumentation, Beispiele und Protokolltexte stehen einheitlich unter der [Apache License 2.0](LICENSE).
 
 Eclipse SUMO ist eine Marke der Eclipse Foundation. Kartendaten im OSM-Demo sind © OpenStreetMap contributors und unter der Open Database License (ODbL) verfuegbar.
 

@@ -12,7 +12,9 @@ Use this reference when the installed `torii-sumo` plugin is available, when the
 
 | Situation | Tool | Required interpretation |
 |---|---|---|
-| One-sentence or ambiguous SUMO request | `torii_auto_workflow` | Let Torii classify the workflow, ask only blocking questions, and run safe MCP steps when required evidence is available |
+| One-sentence or ambiguous SUMO request | `torii_workflow_run` | Classify the workflow, run only supported steps, and persist the manifest, blockers, review items, and claim boundary |
+| Need to resume or inspect saved work | `torii_workflow_status` | Recheck hash-bound artifacts and stop on stale or invalid evidence before any rerun |
+| Existing caller needs the old result shape | `torii_auto_workflow` | Use the compatibility facade, then read the added managed workflow fields |
 | Unknown machine, uncertain SUMO install, or missing runnable proof | `sumo_preflight` | Report environment pass/block status before any experiment claim |
 | Need raw environment details for handoff | `sumo_get_environment` | Treat versions and missing binaries as construction evidence |
 | Existing baseline and variant `.sumocfg` files | `sumo_config_pair_preflight` | Check missing inputs and shared outputs before running or comparing |

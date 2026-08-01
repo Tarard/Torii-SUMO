@@ -709,6 +709,8 @@ def test_auto_workflow_reference_match_does_not_pre_resolve_place_bbox(tmp_path:
 
 def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Path) -> None:
     captured = {}
+    reference_net_file = tmp_path / "reference.net.xml"
+    _write_reference_net(reference_net_file)
 
     def fake_run_auto_workflow(**kwargs):
         captured.update(kwargs)
@@ -722,7 +724,7 @@ def test_torii_auto_workflow_uses_cleanup_tool_wrapper(monkeypatch, tmp_path: Pa
         bbox="11.413800,48.755391,11.433800,48.775391",
         network_profile="reference_matched",
         seed_osm_node_id="98101394",
-        reference_net_file=str(tmp_path / "reference.net.xml"),
+        reference_net_file=str(reference_net_file),
         teacher_guided_repair_max_ready_candidates=2,
         run_teacher_guided_repair_after_build=False,
         road_connectivity_replay_max_owners=3,

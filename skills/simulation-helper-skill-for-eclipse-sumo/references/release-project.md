@@ -106,7 +106,7 @@ Run these after installation:
 
 Before publishing:
 
-- add `LICENSE` with scoped PolyForm Noncommercial 1.0.0 terms for source code and Creative Commons Attribution-NonCommercial 4.0 International (`CC BY-NC 4.0`) terms for skill files, documentation, checklists, examples, and protocol text;
+- include the repository `LICENSE` and keep package, plugin, citation, and Zenodo metadata aligned to Apache-2.0;
 - decide whether to publish the skill alone or as part of a skills collection;
 - include `## Trademark Notice` and `## Citing Eclipse SUMO` in the repository README;
 - include `## References and Related Resources` without implying endorsement by Eclipse SUMO, Eclipse Foundation, DLR, Anthropic, or any agent-skill project;

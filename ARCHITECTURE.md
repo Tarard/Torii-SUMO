@@ -15,6 +15,34 @@ and review evidence, compares against a cleaned reference when one is supplied,
 and keeps promotion blocked until the relevant gates pass.
 ```
 
+## Canonical Managed Workflow
+
+Broad user tasks enter through `torii_workflow_run`. The outer workflow is now authoritative for request identity, resume behavior, artifact freshness, shared status, and claim blocking.
+
+```text
+user intent
+-> intake and source identities
+-> router plan
+-> domain executor
+-> persisted raw result
+-> evidence and gate assessment
+-> hash-bound manifest
+-> supported claim or blocked result
+```
+
+The selected structure is a hybrid. The router remains goal directed. Five outer stages form a state machine. Hash-bound artifacts form the dependency graph. Existing domain executors remain behind the execute stage during migration.
+
+The canonical evidence chain is:
+
+```text
+source -> observation -> interpretation -> candidate -> check
+-> decision -> applied change -> validation -> claim
+```
+
+`torii_workflow_status` rechecks artifact identities and exposes stale evidence without changing the network. `torii_auto_workflow` remains a compatibility facade that returns legacy fields plus managed workflow fields.
+
+See [`docs/workflow.md`](docs/workflow.md) for the complete contract.
+
 ## Implemented Corridor Contract
 
 The first acceptance boundary is corridor-scale human-modeling work, not a
@@ -239,13 +267,13 @@ For reference-matched workflows, the planner must keep `vehicle_core` and
 The executor runs bounded stages that transform or audit artifacts. Each stage
 should eventually accept a `WorkflowState` and return a `StageResult`.
 
-Current state: `WorkflowState` and most `StageResult` values are reporting
-adapters built after the legacy OSM workflow has run.  They are not yet the
-authoritative execution state.  New work must not add more orchestration to the
-legacy monolith; it should enter through explicit request/service objects and
-real stage boundaries while preserving the current public facade.
+Current state: the managed workflow manifest is the authoritative outer execution state for broad requests. It records intake, plan, execute, assess, and publish contracts. It also controls cache reuse and stale-artifact blocking.
 
-Target shape:
+`WorkflowState` and `StageResult` remain compatibility summaries for selected legacy report fields. They do not control execution.
+
+New work must not add more broad orchestration to the legacy monolith. It should enter through the managed workflow and move one tested domain boundary at a time behind the execute stage.
+
+The existing compatibility shape remains:
 
 ```text
 WorkflowState:
@@ -392,9 +420,7 @@ count, and reference delta score.
 - Atomic artifact writes are enforced for the corridor contract and its
   routeability/topology evidence, but older report writers remain.  Migrate
   them incrementally through `core/artifact_io.py`.
-- Quality vectors and promotion traces are partly post-hoc.  They must become
-  executor inputs/outputs before they can be treated as a workflow state
-  machine.
+- Quality vectors and promotion traces remain post-hoc domain summaries. The managed manifest now controls the outer state, but legacy executors still need typed stage results for fine-grained reruns.
 - Real SUMO regressions are local acceptance tests rather than the default
   unit-test suite.  CI needs an explicit SUMO job before these gates can be
   considered continuously enforced upstream.
