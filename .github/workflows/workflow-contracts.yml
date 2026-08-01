@@ -1,0 +1,60 @@
+name: Workflow Contracts
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - "agent/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.13"
+          cache: pip
+
+      - name: Install package and test dependencies
+        run: python -m pip install --disable-pip-version-check --editable ".[dev]"
+
+      - name: Validate workflow schema
+        run: python -m json.tool schemas/torii.workflow-manifest.v1.schema.json > /dev/null
+
+      - name: Lint workflow boundary
+        run: |
+          ruff check \
+            plugins/torii-sumo/src/torii_sumo/core/workflow_manifest.py \
+            plugins/torii-sumo/src/torii_sumo/tools/workflow_tools.py \
+            plugins/torii-sumo/src/torii_sumo/server.py \
+            tests/test_workflow_manifest.py \
+            tests/test_workflow_router.py \
+            tests/test_workflow_state.py \
+            tests/test_imports.py \
+            tests/test_docs_plugin_install.py \
+            tests/test_plugin_packaging.py \
+            tests/test_repository_navigation.py
+
+      - name: Run workflow contract tests
+        run: |
+          python -m pytest -q \
+            tests/test_workflow_manifest.py \
+            tests/test_workflow_state.py \
+            tests/test_workflow_router.py \
+            tests/test_imports.py \
+            tests/test_docs_plugin_install.py \
+            tests/test_plugin_packaging.py \
+            tests/test_repository_navigation.py
