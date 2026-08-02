@@ -3,6 +3,7 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import torii_sumo.core.corridor_edit_ledger as corridor_edit_ledger
 from torii_sumo.core.candidate_contracts import (
     build_review_decision_template,
     file_sha256,
@@ -11,11 +12,46 @@ from torii_sumo.core.corridor_edit_ledger import (
     build_corridor_edit_ledger,
     materialize_corridor_edit_variant,
     normalize_edit_operation,
+    propose_corridor_edits,
     run_corridor_candidate_gates,
     _modal_addition_gate,
     _tls_logic_signature,
     validate_edit_ledger,
 )
+
+
+def test_auto_proposals_index_controlled_edges_once(tmp_path: Path, monkeypatch) -> None:
+    net_file = tmp_path / "many_edges.net.xml"
+    net_file.write_text(
+        "<net>"
+        + "".join(
+            f"<edge id='e{index}' from='a{index}' to='b{index}'><lane id='e{index}_0'/></edge>"
+            for index in range(100)
+        )
+        + "<connection from='e0' to='e1' tl='tls'/></net>",
+        encoding="utf-8",
+    )
+    calls = 0
+    normal_edge_calls = 0
+    real_controlled_edges = corridor_edit_ledger._controlled_edges
+    real_normal_edges = corridor_edit_ledger._normal_edges
+
+    def counted_controlled_edges(root):
+        nonlocal calls
+        calls += 1
+        return real_controlled_edges(root)
+
+    def counted_normal_edges(root):
+        nonlocal normal_edge_calls
+        normal_edge_calls += 1
+        return real_normal_edges(root)
+
+    monkeypatch.setattr(corridor_edit_ledger, "_controlled_edges", counted_controlled_edges)
+    monkeypatch.setattr(corridor_edit_ledger, "_normal_edges", counted_normal_edges)
+
+    build_corridor_edit_ledger(net_file=net_file, output_dir=tmp_path / "ledger")
+    assert calls == 2
+    assert normal_edge_calls <= 6
 
 
 def _write_net(path: Path) -> None:
@@ -33,6 +69,23 @@ def _write_net(path: Path) -> None:
 </net>""",
         encoding="utf-8",
     )
+
+
+def test_auto_ledger_parses_candidate_network_once(tmp_path: Path, monkeypatch) -> None:
+    net_file = tmp_path / "source.net.xml"
+    _write_net(net_file)
+    calls = 0
+    real_parse = corridor_edit_ledger.ET.parse
+
+    def counted_parse(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_parse(*args, **kwargs)
+
+    monkeypatch.setattr(corridor_edit_ledger.ET, "parse", counted_parse)
+
+    assert build_corridor_edit_ledger(net_file=net_file, output_dir=tmp_path / "ledger")["status"] == "pass"
+    assert calls == 1
 
 
 def _write_distinct_candidate(source: Path, candidate: Path) -> None:

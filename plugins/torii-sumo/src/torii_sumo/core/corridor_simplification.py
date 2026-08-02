@@ -19,6 +19,7 @@ def find_removable_corridor_geometry_nodes(
     reference_net_file: Path | None = None,
     max_micro_edge_length_m: float = 1.0,
     candidate_node_ids: set[str] | None = None,
+    root: ET.Element | None = None,
 ) -> list[dict[str, Any]]:
     """Find locally provable geometry-only corridor nodes.
 
@@ -29,7 +30,7 @@ def find_removable_corridor_geometry_nodes(
     """
     if max_micro_edge_length_m <= 0:
         raise ValueError("max_micro_edge_length_m must be positive")
-    root = ET.parse(net_file).getroot()
+    root = root if root is not None else ET.parse(net_file).getroot()
     reference_node_ids = _reference_node_ids(reference_net_file)
     edges = {
         edge.attrib["id"]: edge

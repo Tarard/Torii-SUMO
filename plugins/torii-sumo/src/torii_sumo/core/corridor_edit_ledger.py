@@ -80,6 +80,7 @@ def propose_corridor_edits(
     include_isolated: bool = True,
     include_duplicates: bool = True,
     include_micro_merges: bool = True,
+    root: ET.Element | None = None,
 ) -> list[dict[str, Any]]:
     """Generate conservative, review-only edit proposals from a SUMO network.
 
@@ -87,8 +88,9 @@ def propose_corridor_edits(
     exact duplicates are flagged for deletion, while previously proven
     corridor micro-nodes are proposed as merges. No proposal is applied here.
     """
-    root = ET.parse(net_file).getroot()
+    root = root if root is not None else ET.parse(net_file).getroot()
     edges = _normal_edges(root)
+    controlled_edges = _controlled_edges(root)
     proposals: list[dict[str, Any]] = []
 
     if include_isolated:
@@ -103,7 +105,7 @@ def propose_corridor_edits(
                 continue
             if len(incident[from_id]) != 1 or len(incident[to_id]) != 1:
                 continue
-            if _is_protected_edge(edge, root):
+            if _is_protected_edge(edge, controlled_edges):
                 continue
             proposals.append(
                 _proposal(
@@ -127,7 +129,7 @@ def propose_corridor_edits(
     if include_duplicates:
         duplicate_groups: dict[tuple[Any, ...], list[str]] = defaultdict(list)
         for edge_id, edge in edges.items():
-            if _is_protected_edge(edge, root):
+            if _is_protected_edge(edge, controlled_edges):
                 continue
             duplicate_groups[_edge_duplicate_signature(edge)].append(edge_id)
         for signature, edge_ids in sorted(duplicate_groups.items(), key=lambda item: str(item[0])):
@@ -161,6 +163,7 @@ def propose_corridor_edits(
             micro_nodes = find_removable_corridor_geometry_nodes(
                 net_file,
                 reference_net_file=reference_net_file,
+                root=root,
             )
         except (OSError, ET.ParseError, ValueError):
             micro_nodes = []
@@ -241,7 +244,7 @@ def build_corridor_edit_ledger(
         return _failure(f"{type(exc).__name__}: {exc}")
 
     auto_operations = (
-        propose_corridor_edits(net_file, reference_net_file=reference_net_file)
+        propose_corridor_edits(net_file, reference_net_file=reference_net_file, root=root)
         if include_auto_proposals
         else []
     )
@@ -1967,6 +1970,13 @@ def validate_edit_ledger(
     warnings: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     edges = _normal_edges(root) if root is not None else {}
+    controlled_edges = _controlled_edges(root) if root is not None else set()
+    controlled_neighbors = _controlled_edge_neighbors(root) if root is not None else {}
+    junction_ids = (
+        {junction.attrib.get("id", "") for junction in root.findall("junction")}
+        if root is not None
+        else set()
+    )
     for operation in operations:
         item = normalize_edit_operation(operation)
         operation_id = item["id"]
@@ -1986,7 +1996,15 @@ def validate_edit_ledger(
                 errors.append({"operation_id": operation_id, "code": "missing_rollback"})
         _validate_operation_shape(item, errors)
         if root is not None:
-            _validate_against_network(item, edges, root, errors, warnings)
+            _validate_against_network(
+                item,
+                edges,
+                controlled_edges,
+                controlled_neighbors,
+                junction_ids,
+                errors,
+                warnings,
+            )
     return {
         "status": "pass" if not errors else "fail",
         "operation_count": len(operations),
@@ -2030,7 +2048,9 @@ def _validate_operation_shape(item: Mapping[str, Any], errors: list[dict[str, An
 def _validate_against_network(
     item: Mapping[str, Any],
     edges: Mapping[str, ET.Element],
-    root: ET.Element,
+    controlled_edges: set[str],
+    controlled_neighbors: Mapping[str, set[str]],
+    junction_ids: set[str],
     errors: list[dict[str, Any]],
     warnings: list[dict[str, Any]],
 ) -> None:
@@ -2051,9 +2071,11 @@ def _validate_against_network(
                     "edge_ids": sorted(protected),
                 }
             )
-        controlled = _controlled_edges(root)
-        tls_targets = sorted(set(target_ids) & controlled) if operation_type == "delete_edge" else sorted(
-            _local_controlled_target_edges(root, set(target_ids))
+        target_set = set(target_ids)
+        tls_targets = sorted(target_set & controlled_edges) if operation_type == "delete_edge" else sorted(
+            edge_id
+            for edge_id in target_set
+            if controlled_neighbors.get(edge_id, set()) & target_set
         )
         if tls_targets:
             errors.append({"operation_id": operation_id, "code": "tls_controlled_target", "edge_ids": tls_targets})
@@ -2068,7 +2090,6 @@ def _validate_against_network(
                 errors.append({"operation_id": operation_id, "code": "merge_lane_semantics_mismatch"})
     if operation_type == "add_crossing":
         node_id = str(item.get("params", {}).get("node_id", ""))
-        junction_ids = {junction.attrib.get("id", "") for junction in root.findall("junction")}
         if node_id and node_id not in junction_ids:
             errors.append({"operation_id": operation_id, "code": "unknown_crossing_node", "node_id": node_id})
         crossing_edges = item.get("params", {}).get("crossing_edges", target_ids)
@@ -2186,12 +2207,24 @@ def _write_review_overlay(
     expected_operation_ids = {str(operation["id"]) for operation in operations}
     marked_operation_ids: set[str] = set()
     poly_count = 0
+    source_edges = _normal_edges(root)
+    source_junctions = {
+        junction.attrib.get("id", ""): junction
+        for junction in root.findall("junction")
+        if junction.attrib.get("id")
+    }
+    candidate_edges = _normal_edges(candidate_root) if candidate_root is not None else {}
     for operation in operations:
         operation_id = str(operation["id"])
         evidence = evidence_by_proposal.get(operation_id, {})
         coordinate = evidence.get("coordinate") if isinstance(evidence, Mapping) else {}
         coordinate = coordinate if isinstance(coordinate, Mapping) else {}
-        location = _resolved_operation_location(operation, root)
+        location = _resolved_operation_location(
+            operation,
+            root,
+            junctions=source_junctions,
+            edges=source_edges,
+        )
         requirements = _review_requirements(operation)
         color = _review_overlay_color(operation, requirements)
         if "x" in location and "y" in location:
@@ -2240,7 +2273,11 @@ def _write_review_overlay(
             marked_operation_ids.add(operation_id)
 
         for index, geometry in enumerate(
-            _operation_review_shapes(operation, root, candidate_root=candidate_root)
+            _operation_review_shapes(
+                operation,
+                source_edges=source_edges,
+                candidate_edges=candidate_edges,
+            )
         ):
             poly = ET.SubElement(
                 additional,
@@ -2392,6 +2429,12 @@ def _map_review_locations(
     source_root: ET.Element,
 ) -> list[dict[str, Any]]:
     locations: list[dict[str, Any]] = []
+    edges = _normal_edges(source_root)
+    junctions = {
+        junction.attrib.get("id", ""): junction
+        for junction in source_root.findall("junction")
+        if junction.attrib.get("id")
+    }
     for operation in operations:
         requirements = _review_requirements(operation)
         operation_type = str(operation.get("operation", "review_marker"))
@@ -2400,7 +2443,12 @@ def _map_review_locations(
                 "location_id": f"corridor_edit:{operation.get('id', '')}",
                 "proposal_id": str(operation.get("id", "")),
                 "operation": operation_type,
-                "location": _resolved_operation_location(operation, source_root),
+                "location": _resolved_operation_location(
+                    operation,
+                    source_root,
+                    junctions=junctions,
+                    edges=edges,
+                ),
                 "map_review_required": requirements.get("map_review_required") is True,
                 "review_question": str(requirements.get("review_question", "")),
                 "geometry_source": (
@@ -2421,10 +2469,15 @@ def _review_requirements(operation: Mapping[str, Any]) -> dict[str, Any]:
 def _resolved_operation_location(
     operation: Mapping[str, Any],
     root: ET.Element,
+    *,
+    junctions: Mapping[str, ET.Element] | None = None,
+    edges: Mapping[str, ET.Element] | None = None,
 ) -> dict[str, Any]:
     raw_location = operation.get("location")
     location = dict(raw_location) if isinstance(raw_location, Mapping) else {}
-    inferred = _operation_location(operation, root)
+    if "x" in location and "y" in location:
+        return location
+    inferred = _operation_location(operation, root, junctions=junctions, edges=edges)
     for key in ("x", "y"):
         if key not in location and key in inferred:
             location[key] = inferred[key]
@@ -2446,28 +2499,27 @@ def _review_overlay_color(
 
 def _operation_review_shapes(
     operation: Mapping[str, Any],
-    source_root: ET.Element,
     *,
-    candidate_root: ET.Element | None,
+    source_edges: Mapping[str, ET.Element],
+    candidate_edges: Mapping[str, ET.Element],
 ) -> list[dict[str, str]]:
     operation_type = str(operation.get("operation", ""))
     params = dict(operation.get("params") or {})
     if operation_type in {"add_edge", "add_sidewalk", "add_ramp"}:
         edge_ids = [str(params.get("id", f"torii-add-{operation.get('id', '')}"))]
-        geometry_root = candidate_root
+        edges = candidate_edges
         geometry_source = "candidate_net"
     elif operation_type == "add_crossing":
         crossing_edges = params.get("crossing_edges", operation.get("target_ids", []))
         if isinstance(crossing_edges, str):
             crossing_edges = crossing_edges.replace(",", " ").split()
         edge_ids = [str(value) for value in (crossing_edges or [])]
-        geometry_root = source_root
+        edges = source_edges
         geometry_source = "source_net"
     else:
         edge_ids = [str(value) for value in operation.get("target_ids", []) or []]
-        geometry_root = source_root
+        edges = source_edges
         geometry_source = "source_net"
-    edges = _normal_edges(geometry_root)
     shapes: list[dict[str, str]] = []
     for edge_id in edge_ids:
         edge = edges.get(edge_id)
@@ -2491,12 +2543,20 @@ def _edge_shape(edge: ET.Element) -> str:
     return str(edge.attrib.get("shape", "")).strip()
 
 
-def _operation_location(operation: Mapping[str, Any], root: ET.Element) -> dict[str, float]:
+def _operation_location(
+    operation: Mapping[str, Any],
+    root: ET.Element,
+    *,
+    junctions: Mapping[str, ET.Element] | None = None,
+    edges: Mapping[str, ET.Element] | None = None,
+) -> dict[str, float]:
     params = dict(operation.get("params") or {})
     if "x" in params and "y" in params:
         return _numeric_location(params)
     junction_id = str(params.get("node_id", ""))
-    junctions = {junction.attrib.get("id", ""): junction for junction in root.findall("junction")}
+    junctions = junctions or {
+        junction.attrib.get("id", ""): junction for junction in root.findall("junction")
+    }
     if junction_id in junctions:
         return _junction_location(junctions[junction_id])
     from_id = str(params.get("from", "")).strip()
@@ -2508,7 +2568,7 @@ def _operation_location(operation: Mapping[str, Any], root: ET.Element) -> dict[
             "x": (from_location["x"] + to_location["x"]) / 2.0,
             "y": (from_location["y"] + to_location["y"]) / 2.0,
         }
-    edges = _normal_edges(root)
+    edges = edges or _normal_edges(root)
     locations = [_edge_location(edges[edge_id]) for edge_id in operation.get("target_ids", []) if edge_id in edges]
     locations = [location for location in locations if location]
     if not locations:
@@ -2596,8 +2656,21 @@ def _controlled_edges(root: ET.Element) -> set[str]:
     }
 
 
-def _is_protected_edge(edge: ET.Element, root: ET.Element) -> bool:
-    return _is_structurally_protected_edge(edge) or edge.attrib.get("id", "") in _controlled_edges(root)
+def _controlled_edge_neighbors(root: ET.Element) -> dict[str, set[str]]:
+    neighbors: dict[str, set[str]] = defaultdict(set)
+    for connection in root.findall("connection"):
+        if not connection.attrib.get("tl"):
+            continue
+        from_id = connection.attrib.get("from", "")
+        to_id = connection.attrib.get("to", "")
+        if from_id and to_id:
+            neighbors[from_id].add(to_id)
+            neighbors[to_id].add(from_id)
+    return neighbors
+
+
+def _is_protected_edge(edge: ET.Element, controlled_edges: set[str]) -> bool:
+    return _is_structurally_protected_edge(edge) or edge.attrib.get("id", "") in controlled_edges
 
 
 def _is_structurally_protected_edge(edge: ET.Element) -> bool:
