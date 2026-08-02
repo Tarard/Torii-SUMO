@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from torii_sumo.core import topology_audit as topology_audit_module
 from torii_sumo.core.topology_audit import audit_topology_fragmentation, compare_topology_canonical_cells
 
 
@@ -29,6 +30,113 @@ def _canonical_cell(
         "modal_primary_role": role,
         "traffic_light_node_count": 0,
     }
+
+
+def test_dense_clusters_only_compare_nearby_grid_cells(monkeypatch) -> None:
+    junctions = [
+        {"id": str(index), "type": "priority", "x": float(index * 100), "y": 0.0}
+        for index in range(200)
+    ]
+    calls = 0
+    original = topology_audit_module._distance
+
+    def counted_distance(left, right):
+        nonlocal calls
+        calls += 1
+        return original(left, right)
+
+    monkeypatch.setattr(topology_audit_module, "_distance", counted_distance)
+    clusters = topology_audit_module._dense_clusters(junctions, radius_m=30.0, min_cluster_nodes=3)
+
+    assert clusters == []
+    assert calls < 200
+
+
+def test_max_pair_distance_uses_convex_hull(monkeypatch) -> None:
+    nodes = [{"x": float(index), "y": 0.0} for index in range(1000)]
+    calls = 0
+    original = topology_audit_module._distance
+
+    def counted_distance(left, right):
+        nonlocal calls
+        calls += 1
+        return original(left, right)
+
+    monkeypatch.setattr(topology_audit_module, "_distance", counted_distance)
+
+    assert topology_audit_module._max_pair_distance(nodes) == 999.0
+    assert calls == 1
+
+
+def test_dense_cluster_summary_receives_only_incident_edges(monkeypatch) -> None:
+    junctions = [
+        {"id": f"a{i}", "type": "priority", "x": float(i), "y": 0.0} for i in range(3)
+    ] + [{"id": f"b{i}", "type": "priority", "x": 100.0 + i, "y": 0.0} for i in range(3)]
+    edges = [
+        {"id": "a", "from": "a0", "to": "a1", "length": 1.0},
+        {"id": "b", "from": "b0", "to": "b1", "length": 1.0},
+        *[
+            {"id": f"far{i}", "from": f"x{i}", "to": f"y{i}", "length": 1.0}
+            for i in range(100)
+        ],
+    ]
+    edge_counts = []
+    original = topology_audit_module._cluster_graph_summary
+
+    def counted_summary(nodes, candidate_edges, junction_by_id):
+        edge_counts.append(len(candidate_edges))
+        return original(nodes, candidate_edges, junction_by_id)
+
+    monkeypatch.setattr(topology_audit_module, "_cluster_graph_summary", counted_summary)
+    topology_audit_module._dense_clusters(junctions, radius_m=5.0, min_cluster_nodes=3, edges=edges)
+
+    assert edge_counts == [1, 1]
+
+
+def test_connection_cells_classify_each_edge_once(monkeypatch) -> None:
+    class CountingEdges(list):
+        iterations = 0
+
+        def __iter__(self):
+            self.iterations += 1
+            return super().__iter__()
+
+    junctions = []
+    edges = CountingEdges()
+    for index in range(10):
+        left = f"c{index}_a"
+        right = f"c{index}_b"
+        junctions.extend(
+            [
+                {"id": left, "type": "priority", "x": float(index * 100), "y": 0.0},
+                {"id": right, "type": "priority", "x": float(index * 100 + 5), "y": 0.0},
+            ]
+        )
+        edges.append({"id": f"short{index}", "from": left, "to": right, "length": 5.0, "type": "highway.primary"})
+        edges.extend(
+            {
+                "id": f"boundary{index}_{arm}",
+                "from": left,
+                "to": f"outside{index}_{arm}",
+                "length": 50.0,
+                "type": "highway.primary",
+            }
+            for arm in range(3)
+        )
+    calls = 0
+    original = topology_audit_module.classify_edge_modal_role
+
+    def counted_role(edge):
+        nonlocal calls
+        calls += 1
+        return original(edge)
+
+    monkeypatch.setattr(topology_audit_module, "classify_edge_modal_role", counted_role)
+    candidates = topology_audit_module._connection_cell_candidates(junctions, edges)
+
+    assert len(candidates) == 10
+    assert calls == len(edges)
+    assert edges.iterations <= 2
 
 
 def test_canonical_topology_allows_extra_sumocut_subdivision_inside_one_cell() -> None:

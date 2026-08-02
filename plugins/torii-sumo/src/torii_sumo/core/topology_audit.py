@@ -4,11 +4,13 @@ import csv
 import hashlib
 import json
 import math
-from collections import Counter, deque
+from collections import Counter, defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
+
+from shapely import MultiPoint
 
 from .modal_aggregation_policy import classify_cluster_modal_policy, classify_edge_modal_role
 from .candidate_contracts import file_sha256
@@ -532,14 +534,26 @@ def _dense_clusters(
     edges: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     neighbors = {index: set() for index in range(len(junctions))}
-    for left in range(len(junctions)):
-        for right in range(left + 1, len(junctions)):
-            if _distance(junctions[left], junctions[right]) <= radius_m:
-                neighbors[left].add(right)
-                neighbors[right].add(left)
+    cells: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for right, junction in enumerate(junctions):
+        cell = (math.floor(float(junction["x"]) / radius_m), math.floor(float(junction["y"]) / radius_m))
+        for delta_x in (-1, 0, 1):
+            for delta_y in (-1, 0, 1):
+                for left in cells[(cell[0] + delta_x, cell[1] + delta_y)]:
+                    if _distance(junctions[left], junction) > radius_m:
+                        continue
+                    neighbors[left].add(right)
+                    neighbors[right].add(left)
+        cells[cell].append(right)
 
     remaining = set(range(len(junctions)))
     clusters = []
+    all_edges = edges or []
+    edge_indexes_by_junction: dict[str, set[int]] = defaultdict(set)
+    for edge_index, edge in enumerate(all_edges):
+        edge_indexes_by_junction[str(edge["from"])].add(edge_index)
+        edge_indexes_by_junction[str(edge["to"])].add(edge_index)
+    junction_by_id = {str(junction["id"]): junction for junction in junctions}
     while remaining:
         start = remaining.pop()
         component = {start}
@@ -552,8 +566,20 @@ def _dense_clusters(
                     component.add(neighbor)
                     queue.append(neighbor)
         if len(component) >= min_cluster_nodes:
+            component_edge_indexes = {
+                edge_index
+                for node_index in component
+                for edge_index in edge_indexes_by_junction.get(str(junctions[node_index]["id"]), set())
+            }
             clusters.append(
-                _cluster_summary(junctions, component, radius_m, xy_to_latlon=xy_to_latlon, edges=edges or [])
+                _cluster_summary(
+                    junctions,
+                    component,
+                    radius_m,
+                    xy_to_latlon=xy_to_latlon,
+                    edges=[all_edges[index] for index in sorted(component_edge_indexes)],
+                    junction_by_id=junction_by_id,
+                )
             )
     clusters.sort(key=lambda cluster: (-cluster["node_count"], cluster["centroid_x"], cluster["centroid_y"]))
     for index, cluster in enumerate(clusters, start=1):
@@ -569,34 +595,40 @@ def _connection_cell_candidates(
     min_external_vehicle_approaches: int = 3,
 ) -> list[dict[str, Any]]:
     junction_by_id = {str(junction["id"]): junction for junction in junctions}
-    short_vehicle_edges = [
-        edge
-        for edge in edges
-        if float(edge.get("length") or 0.0) <= short_edge_max_length_m
-        and classify_edge_modal_role(edge)["modal_primary_role"] == "vehicle_core"
-    ]
     graph: dict[str, set[str]] = {}
-    for edge in short_vehicle_edges:
+    edge_indexes_by_junction: dict[str, set[int]] = defaultdict(set)
+    vehicle_core_edge_indexes: set[int] = set()
+    for edge_index, edge in enumerate(edges):
         left = str(edge["from"])
         right = str(edge["to"])
-        graph.setdefault(left, set()).add(right)
-        graph.setdefault(right, set()).add(left)
+        edge_indexes_by_junction[left].add(edge_index)
+        edge_indexes_by_junction[right].add(edge_index)
+        is_vehicle_core = classify_edge_modal_role(edge)["modal_primary_role"] == "vehicle_core"
+        if is_vehicle_core:
+            vehicle_core_edge_indexes.add(edge_index)
+        if is_vehicle_core and float(edge.get("length") or 0.0) <= short_edge_max_length_m:
+            graph.setdefault(left, set()).add(right)
+            graph.setdefault(right, set()).add(left)
 
     candidates = []
     for component in _connected_node_components(graph):
         if len(component) < 2:
             continue
+        incident_edge_indexes = {
+            edge_index for node_id in component for edge_index in edge_indexes_by_junction.get(node_id, set())
+        }
         boundary_edges = [
-            edge
-            for edge in edges
+            edges[edge_index]
+            for edge_index in sorted(incident_edge_indexes & vehicle_core_edge_indexes)
+            for edge in [edges[edge_index]]
             if (str(edge["from"]) in component) ^ (str(edge["to"]) in component)
-            and classify_edge_modal_role(edge)["modal_primary_role"] == "vehicle_core"
         ]
         if len(boundary_edges) < min_external_vehicle_approaches:
             continue
         internal_edges = [
-            edge
-            for edge in edges
+            edges[edge_index]
+            for edge_index in sorted(incident_edge_indexes)
+            for edge in [edges[edge_index]]
             if str(edge["from"]) in component and str(edge["to"]) in component
         ]
         centroid_x = _mean(float(junction_by_id[node]["x"]) for node in component if node in junction_by_id)
@@ -647,16 +679,13 @@ def _cluster_summary(
     *,
     xy_to_latlon: Callable[[float, float], tuple[float, float]] | None,
     edges: list[dict[str, Any]],
+    junction_by_id: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     nodes = [junctions[index] for index in sorted(component, key=lambda item: junctions[item]["id"])]
     centroid_x = sum(node["x"] for node in nodes) / len(nodes)
     centroid_y = sum(node["y"] for node in nodes) / len(nodes)
-    max_pair_distance = 0.0
-    for left in range(len(nodes)):
-        for right in range(left + 1, len(nodes)):
-            max_pair_distance = max(max_pair_distance, _distance(nodes[left], nodes[right]))
+    max_pair_distance = _max_pair_distance(nodes)
     lat, lon, coordinate_status = _cluster_latlon(centroid_x, centroid_y, xy_to_latlon)
-    junction_by_id = {str(junction["id"]): junction for junction in junctions}
     graph = _cluster_graph_summary(nodes, edges, junction_by_id)
     return {
         "cluster_id": "",
@@ -681,6 +710,21 @@ def _cluster_summary(
 
 def _distance(left: dict[str, Any], right: dict[str, Any]) -> float:
     return math.hypot(float(left["x"]) - float(right["x"]), float(left["y"]) - float(right["y"]))
+
+
+def _max_pair_distance(nodes: list[dict[str, Any]]) -> float:
+    if len(nodes) < 2:
+        return 0.0
+    hull = MultiPoint([(float(node["x"]), float(node["y"])) for node in nodes]).convex_hull
+    if hull.geom_type == "Point":
+        return 0.0
+    coordinates = list(hull.exterior.coords)[:-1] if hull.geom_type == "Polygon" else list(hull.coords)
+    hull_nodes = [{"x": x, "y": y} for x, y in coordinates]
+    return max(
+        _distance(hull_nodes[left], hull_nodes[right])
+        for left in range(len(hull_nodes))
+        for right in range(left + 1, len(hull_nodes))
+    )
 
 
 def _cluster_graph_summary(
