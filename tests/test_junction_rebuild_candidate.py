@@ -1573,6 +1573,55 @@ def test_build_teacher_guided_repair_queue_maps_ready_reference_join(tmp_path: P
     assert rows[0]["review_priority"] == "high"
 
 
+def test_build_teacher_guided_repair_queue_filters_explicit_targets_before_model_extraction(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    teacher_net = tmp_path / "teacher.net.xml"
+    candidate_net = tmp_path / "candidate.net.xml"
+    junctions = ("j1", "j2")
+    edges = "".join(
+        f'<edge id="{junction_id}_in" from="{junction_id}_a" to="{junction_id}"><lane id="{junction_id}_in_0" index="0" allow="passenger"/></edge>'
+        f'<edge id="{junction_id}_out" from="{junction_id}" to="{junction_id}_b"><lane id="{junction_id}_out_0" index="0" allow="passenger"/></edge>'
+        for junction_id in junctions
+    )
+    nodes = "".join(
+        f'<junction id="{junction_id}" type="priority" x="0" y="0" incLanes="{junction_id}_in_0" intLanes=""/>'
+        for junction_id in junctions
+    )
+    connections = "".join(
+        f'<connection from="{junction_id}_in" to="{junction_id}_out" fromLane="0" toLane="0" dir="s"/>'
+        for junction_id in junctions
+    )
+    net = f"<net>{edges}{nodes}{connections}</net>"
+    teacher_net.write_text(net, encoding="utf-8")
+    candidate_net.write_text(net, encoding="utf-8")
+    extracted = []
+    original = rebuild_candidate_module.extract_junction_pattern_exemplar
+
+    def record_extraction(net_file, junction_id):
+        extracted.append(junction_id)
+        return original(net_file, junction_id)
+
+    monkeypatch.setattr(rebuild_candidate_module, "extract_junction_pattern_exemplar", record_extraction)
+
+    report = build_teacher_guided_repair_queue(
+        teacher_net_file=teacher_net,
+        candidate_net_file=candidate_net,
+        reference_join_audit_report={
+            "matched_cases": [
+                {"reference_id": junction_id, "matched_candidate_node_ids": [junction_id]}
+                for junction_id in junctions
+            ]
+        },
+        output_dir=tmp_path / "queue",
+        target_junction_ids=["j2"],
+    )
+
+    assert [candidate["reference_id"] for candidate in report["repair_candidates"]] == ["j2"]
+    assert extracted == ["j2"]
+
+
 def test_build_teacher_guided_repair_queue_carries_tls_semantic_repairs(tmp_path: Path) -> None:
     teacher_net = tmp_path / "teacher.net.xml"
     teacher_net.write_text("<net/>", encoding="utf-8")

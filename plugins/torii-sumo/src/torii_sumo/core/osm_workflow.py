@@ -5423,13 +5423,22 @@ def run_osm_cleanup_workflow(
                 structural_only=teacher_guided_seed_structural_only,
             )
         ):
+            teacher_guided_queue_kwargs = {
+                "teacher_net_file": reference_net_file,
+                "candidate_net_file": reference_visual_detail_comparison_net_file
+                or reference_join_audit_candidate_net_file,
+                "reference_join_audit_report": dict(teacher_guided_seed_report),
+                "output_dir": output_dir / "teacher_guided_repair_queue",
+                "prefix": f"{prefix}_teacher_guided_repair",
+                "max_ready_candidates": teacher_guided_repair_max_ready_candidates,
+            }
+            if explicit_teacher_targets and _supports_keyword(
+                teacher_guided_repair_queue_func,
+                "target_junction_ids",
+            ):
+                teacher_guided_queue_kwargs["target_junction_ids"] = explicit_teacher_targets
             teacher_guided_repair_queue_report = teacher_guided_repair_queue_func(
-                teacher_net_file=reference_net_file,
-                candidate_net_file=reference_visual_detail_comparison_net_file or reference_join_audit_candidate_net_file,
-                reference_join_audit_report=dict(teacher_guided_seed_report),
-                output_dir=output_dir / "teacher_guided_repair_queue",
-                prefix=f"{prefix}_teacher_guided_repair",
-                max_ready_candidates=teacher_guided_repair_max_ready_candidates,
+                **teacher_guided_queue_kwargs,
             )
             teacher_guided_repair_queue_report = _filter_teacher_guided_queue_to_mismatch_fields(
                 teacher_guided_repair_queue_report,

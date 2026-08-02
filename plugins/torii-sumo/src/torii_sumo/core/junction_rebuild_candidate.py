@@ -234,6 +234,7 @@ def build_teacher_guided_repair_queue(
     output_dir: Path,
     prefix: str = "teacher_guided_repair",
     max_ready_candidates: int | None = None,
+    target_junction_ids: list[str] | None = None,
 ) -> dict[str, object]:
     if not teacher_net_file.exists():
         return _failure(f"teacher net file does not exist: {teacher_net_file}")
@@ -251,9 +252,17 @@ def build_teacher_guided_repair_queue(
         edge.attrib["id"]: edge for edge in candidate_root.findall("edge") if edge.attrib.get("id")
     }
     candidate_edge_ids = set(candidate_edges_by_id)
+    target_ids = {str(item).strip() for item in target_junction_ids or [] if str(item).strip()}
     matched_cases = [
         case for case in reference_join_audit_report.get("matched_cases", []) or [] if isinstance(case, dict)
     ]
+    if target_ids:
+        matched_cases = [
+            case
+            for case in matched_cases
+            if str(case.get("reference_id", "")) in target_ids
+            or str(case.get("junction_id", "")) in target_ids
+        ]
     pattern_deltas = _junction_pattern_delta_by_id(reference_join_audit_report)
     pattern_records = _junction_pattern_record_by_id(reference_join_audit_report)
     pattern_templates = _junction_pattern_template_by_key(reference_join_audit_report)
@@ -262,6 +271,7 @@ def build_teacher_guided_repair_queue(
         matched_cases,
         teacher_root,
         candidate_root,
+        target_ids,
     )
     same_id_tls_cases = _same_id_tls_mismatch_cases(
         [*matched_cases, *same_id_pattern_cases],
@@ -269,6 +279,7 @@ def build_teacher_guided_repair_queue(
         candidate_root,
         teacher_net_file,
         candidate_net_file,
+        target_ids,
     )
     matched_cases = [*matched_cases, *same_id_pattern_cases, *same_id_tls_cases]
     topology_fragmented_tls_cases = _topology_fragmented_tls_cases(
@@ -277,6 +288,7 @@ def build_teacher_guided_repair_queue(
         candidate_root,
         teacher_net_file,
         candidate_edges_by_id,
+        target_ids,
     )
     matched_cases = [*matched_cases, *topology_fragmented_tls_cases]
     topology_fragmented_non_tls_cases = _topology_fragmented_non_tls_cases(
@@ -285,9 +297,15 @@ def build_teacher_guided_repair_queue(
         candidate_root,
         teacher_net_file,
         candidate_edges_by_id,
+        target_ids,
     )
     matched_cases = [*matched_cases, *topology_fragmented_non_tls_cases]
-    turnaround_only_lane_cases = _turnaround_only_lane_cases(matched_cases, teacher_root, candidate_root)
+    turnaround_only_lane_cases = _turnaround_only_lane_cases(
+        matched_cases,
+        teacher_root,
+        candidate_root,
+        target_ids,
+    )
     matched_cases = [*matched_cases, *turnaround_only_lane_cases]
     matched_cases.sort(key=lambda case: _teacher_guided_case_sort_key(case, pattern_records, pattern_templates))
     repair_candidates = []
@@ -12635,12 +12653,15 @@ def _same_id_pattern_cases(
     matched_cases: list[dict[str, Any]],
     teacher_root: ET.Element,
     candidate_root: ET.Element,
+    target_reference_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
     teacher_junction_ids = _real_junction_ids(teacher_root)
     candidate_junction_ids = _real_junction_ids(candidate_root)
     cases = []
     for junction_id, delta in sorted(pattern_deltas.items()):
+        if target_reference_ids and junction_id not in target_reference_ids:
+            continue
         if delta.get("status") == "pass" or junction_id in covered_ids:
             continue
         if junction_id not in teacher_junction_ids or junction_id not in candidate_junction_ids:
@@ -12664,6 +12685,7 @@ def _same_id_tls_mismatch_cases(
     candidate_root: ET.Element,
     teacher_net_file: Path,
     candidate_net_file: Path,
+    target_reference_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
     candidate_junctions = {
@@ -12674,6 +12696,8 @@ def _same_id_tls_mismatch_cases(
     cases = []
     for junction in teacher_root.findall("junction"):
         reference_id = junction.attrib.get("id", "")
+        if target_reference_ids and reference_id not in target_reference_ids:
+            continue
         candidate_junction = candidate_junctions.get(reference_id)
         if (
             not reference_id
@@ -12739,12 +12763,15 @@ def _topology_fragmented_tls_cases(
     candidate_root: ET.Element,
     teacher_net_file: Path,
     candidate_edges_by_id: dict[str, ET.Element],
+    target_reference_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
     candidate_junction_ids = _real_junction_ids(candidate_root)
     cases = []
     for junction in teacher_root.findall("junction"):
         reference_id = junction.attrib.get("id", "")
+        if target_reference_ids and reference_id not in target_reference_ids:
+            continue
         if (
             not reference_id
             or reference_id.startswith(":")
@@ -12783,12 +12810,15 @@ def _topology_fragmented_non_tls_cases(
     candidate_root: ET.Element,
     teacher_net_file: Path,
     candidate_edges_by_id: dict[str, ET.Element],
+    target_reference_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
     candidate_junction_ids = _real_junction_ids(candidate_root)
     cases = []
     for junction in teacher_root.findall("junction"):
         reference_id = junction.attrib.get("id", "")
+        if target_reference_ids and reference_id not in target_reference_ids:
+            continue
         if (
             not reference_id
             or not reference_id.startswith("cluster_")
@@ -12825,6 +12855,7 @@ def _turnaround_only_lane_cases(
     matched_cases: list[dict[str, Any]],
     teacher_root: ET.Element,
     candidate_root: ET.Element,
+    target_reference_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     covered_ids = {key for case in matched_cases for key in _junction_pattern_delta_keys(case)}
     teacher_junction_ids = _real_junction_ids(teacher_root)
@@ -12852,6 +12883,8 @@ def _turnaround_only_lane_cases(
             continue
         candidate_edge = candidate_edges.get(edge_id)
         junction_id = candidate_edge.attrib.get("to", "") if candidate_edge is not None else ""
+        if target_reference_ids and junction_id not in target_reference_ids:
+            continue
         if not junction_id or junction_id in covered_ids or junction_id not in candidate_junction_ids:
             continue
         teacher_lane_keys = [(edge_id, from_lane)] if (edge_id, from_lane) in teacher_by_lane else []
