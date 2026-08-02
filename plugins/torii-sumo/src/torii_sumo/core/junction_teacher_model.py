@@ -198,18 +198,20 @@ def build_teacher_self_replay_corpus_report(
     return report
 
 
-def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_id: str) -> dict[str, Any]:
-    junction = next((node for node in root.findall("junction") if node.attrib.get("id") == junction_id), None)
+def _extract_teacher_junction_model(
+    root: ET.Element,
+    net_file: Path,
+    junction_id: str,
+    *,
+    network_index: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    index = network_index or _teacher_network_index(root)
+    junction = index["junctions"].get(junction_id)
     if junction is None:
         raise ValueError(f"junction not found: {junction_id}")
 
-    edges = {edge.attrib["id"]: edge for edge in root.findall("edge") if edge.attrib.get("id")}
-    lane_to_edge: dict[str, tuple[str, ET.Element, ET.Element]] = {}
-    for edge_id, edge in edges.items():
-        for lane in edge.findall("lane"):
-            lane_id = lane.attrib.get("id")
-            if lane_id:
-                lane_to_edge[lane_id] = (edge_id, edge, lane)
+    edges = index["edges"]
+    lane_to_edge = index["lane_to_edge"]
 
     internal_prefix = f":{junction_id}_"
     incoming_edges = sorted(
@@ -224,38 +226,49 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
     )
     outgoing_edges = {
         edge_id
-        for edge_id, edge in edges.items()
-        if not edge_id.startswith(":")
-        and edge.attrib.get("from") == junction_id
-        and _edge_allows_non_pedestrian(edge)
+        for edge_id in index["edges_by_from"].get(junction_id, [])
+        if not edge_id.startswith(":") and _edge_allows_non_pedestrian(edges[edge_id])
     }
-    for connection in root.findall("connection"):
-        source = connection.attrib.get("from", "")
-        target = connection.attrib.get("to", "")
-        target_edge = edges.get(target)
-        if source in incoming_edges and target_edge is not None and not target.startswith(":"):
-            if _edge_allows_non_pedestrian(target_edge):
+    for source in incoming_edges:
+        for connection in index["connections_by_from"].get(source, []):
+            target = connection.attrib.get("to", "")
+            target_edge = edges.get(target)
+            if target_edge is not None and not target.startswith(":") and _edge_allows_non_pedestrian(target_edge):
                 outgoing_edges.add(target)
+
+    local_internal_edges = [
+        edge for edge in index["internal_edges"] if edge.attrib.get("id", "").startswith(internal_prefix)
+    ]
+    local_internal_edge_ids = {edge.attrib.get("id", "") for edge in local_internal_edges}
+    local_connections: dict[int, ET.Element] = {}
+    for edge_id in set(incoming_edges) | local_internal_edge_ids:
+        for connection in index["connections_by_from"].get(edge_id, []):
+            local_connections[id(connection)] = connection
+    for edge_id in local_internal_edge_ids:
+        for connection in index["connections_by_to"].get(edge_id, []):
+            local_connections[id(connection)] = connection
+    ordered_local_connections = sorted(
+        local_connections.values(), key=lambda item: index["connection_order"][id(item)]
+    )
 
     crossings = [
         _internal_edge_record(edge, crossing=True)
-        for edge in edges.values()
-        if edge.attrib.get("id", "").startswith(internal_prefix) and edge.attrib.get("function") == "crossing"
+        for edge in local_internal_edges
+        if edge.attrib.get("function") == "crossing"
     ]
     walking_areas = [
         _internal_edge_record(edge)
-        for edge in edges.values()
-        if edge.attrib.get("id", "").startswith(internal_prefix) and edge.attrib.get("function") == "walkingarea"
+        for edge in local_internal_edges
+        if edge.attrib.get("function") == "walkingarea"
     ]
     internal_edges = [
         _internal_edge_record(edge)
-        for edge in edges.values()
-        if edge.attrib.get("id", "").startswith(internal_prefix)
-        and edge.attrib.get("function") not in {"crossing", "walkingarea"}
+        for edge in local_internal_edges
+        if edge.attrib.get("function") not in {"crossing", "walkingarea"}
     ]
     internal_junctions = [
         _junction_record(node)
-        for node in root.findall("junction")
+        for node in index["internal_junctions"]
         if node.attrib.get("id", "").startswith(internal_prefix)
     ]
     outgoing_edges_sorted = sorted(outgoing_edges)
@@ -263,7 +276,7 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
     vehicle_connections = []
     pedestrian_connections = []
     internal_connections = []
-    for connection in root.findall("connection"):
+    for connection in ordered_local_connections:
         source = connection.attrib.get("from", "")
         target = connection.attrib.get("to", "")
         if source in incoming_edges and target in outgoing_edges_sorted:
@@ -280,9 +293,9 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
             if connection.get("tl") and connection.get("linkIndex")
         }
     )
-    tl_logic = next((tl for tl in root.findall("tlLogic") if tl.attrib.get("id") == junction_id), None)
+    tl_logic = index["tl_by_id"].get(junction_id)
     if tl_logic is None and controlled_tl_ids:
-        tl_logic = next((tl for tl in root.findall("tlLogic") if tl.attrib.get("id") == controlled_tl_ids[0]), None)
+        tl_logic = index["tl_by_id"].get(controlled_tl_ids[0])
     phases = [dict(phase.attrib) for phase in tl_logic.findall("phase")] if tl_logic is not None else []
     requests = [dict(request.attrib) for request in junction.findall("request")]
 
@@ -317,8 +330,41 @@ def _extract_teacher_junction_model(root: ET.Element, net_file: Path, junction_i
             "request_count": len(requests),
             "tl_phase_count": len(phases),
             "vehicle_connection_dirs": dict(Counter(record["dir"] or "blank" for record in vehicle_connections)),
-            "internal_mode_counts": _internal_mode_counts(edges.values(), internal_prefix),
+            "internal_mode_counts": _internal_mode_counts(local_internal_edges, internal_prefix),
         },
+    }
+
+
+def _teacher_network_index(root: ET.Element) -> dict[str, Any]:
+    edges = {edge.attrib["id"]: edge for edge in root.findall("edge") if edge.attrib.get("id")}
+    junctions = {
+        junction.attrib["id"]: junction for junction in root.findall("junction") if junction.attrib.get("id")
+    }
+    lane_to_edge: dict[str, tuple[str, ET.Element, ET.Element]] = {}
+    edges_by_from: dict[str, list[str]] = {}
+    for edge_id, edge in edges.items():
+        edges_by_from.setdefault(edge.attrib.get("from", ""), []).append(edge_id)
+        for lane in edge.findall("lane"):
+            lane_id = lane.attrib.get("id")
+            if lane_id:
+                lane_to_edge[lane_id] = (edge_id, edge, lane)
+    connections = root.findall("connection")
+    connections_by_from: dict[str, list[ET.Element]] = {}
+    connections_by_to: dict[str, list[ET.Element]] = {}
+    for connection in connections:
+        connections_by_from.setdefault(connection.attrib.get("from", ""), []).append(connection)
+        connections_by_to.setdefault(connection.attrib.get("to", ""), []).append(connection)
+    return {
+        "edges": edges,
+        "junctions": junctions,
+        "lane_to_edge": lane_to_edge,
+        "edges_by_from": edges_by_from,
+        "internal_edges": [edge for edge_id, edge in edges.items() if edge_id.startswith(":")],
+        "internal_junctions": [node for node_id, node in junctions.items() if node_id.startswith(":")],
+        "connections_by_from": connections_by_from,
+        "connections_by_to": connections_by_to,
+        "connection_order": {id(connection): index for index, connection in enumerate(connections)},
+        "tl_by_id": {tl.attrib["id"]: tl for tl in root.findall("tlLogic") if tl.attrib.get("id")},
     }
 
 
@@ -331,13 +377,10 @@ def extract_junction_pattern_index(
 ) -> list[dict[str, Any]]:
     root = ET.parse(net_file).getroot()
     allowed_junction_ids = set(junction_ids) if junction_ids is not None else None
-    tl_by_id = {tl.attrib["id"]: tl for tl in root.findall("tlLogic") if tl.attrib.get("id")}
+    network_index = _teacher_network_index(root)
+    tl_by_id = network_index["tl_by_id"]
     lane_to_edge_id = {
-        lane.attrib["id"]: edge.attrib["id"]
-        for edge in root.findall("edge")
-        if edge.attrib.get("id")
-        for lane in edge.findall("lane")
-        if lane.attrib.get("id")
+        lane_id: edge_id for lane_id, (edge_id, _edge, _lane) in network_index["lane_to_edge"].items()
     }
     records: list[dict[str, Any]] = []
     for junction in root.findall("junction"):
@@ -354,7 +397,7 @@ def extract_junction_pattern_index(
         if len(incoming_edge_ids) < min_approaches:
             continue
 
-        model = _extract_teacher_junction_model(root, net_file, junction_id)
+        model = _extract_teacher_junction_model(root, net_file, junction_id, network_index=network_index)
         arm_count = _approach_arm_count(model)
         if arm_count < min_approaches or arm_count > max_approaches:
             continue

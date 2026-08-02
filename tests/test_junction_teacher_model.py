@@ -746,17 +746,23 @@ def test_extract_junction_pattern_index_skips_low_approach_junctions_before_mode
     from torii_sumo.core import junction_teacher_model
 
     calls: list[str] = []
+    network_indexes = []
     original_extract = junction_teacher_model._extract_teacher_junction_model
 
-    def counted_extract(root, net_file, junction_id):
+    def counted_extract(root, net_file, junction_id, network_index=None):
         calls.append(junction_id)
-        return original_extract(root, net_file, junction_id)
+        network_indexes.append(network_index)
+        if network_index is None:
+            return original_extract(root, net_file, junction_id)
+        return original_extract(root, net_file, junction_id, network_index=network_index)
 
     monkeypatch.setattr(junction_teacher_model, "_extract_teacher_junction_model", counted_extract)
 
     extract_junction_pattern_index(net_file, min_approaches=3, max_approaches=4)
 
     assert calls == ["three", "five"]
+    assert network_indexes[0] is network_indexes[1]
+    assert network_indexes[0] is not None
 
 
 def test_extract_junction_pattern_exemplar_uses_slots_not_edge_ids(tmp_path: Path) -> None:
