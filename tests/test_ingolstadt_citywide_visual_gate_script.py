@@ -342,7 +342,11 @@ def test_main_runs_inventory_without_claiming_city_completion(tmp_path: Path, ca
 
     def fake_inventory(**kwargs):
         calls.append(kwargs)
-        return {"status": "ready", "manifest_file": "city-manifest.json"}
+        return {
+            "status": "ready",
+            "manifest_file": "city-manifest.json",
+            "junction_pairs": [{"teacher_id": "large-payload"}],
+        }
 
     code = module.main(
         [
@@ -358,7 +362,11 @@ def test_main_runs_inventory_without_claiming_city_completion(tmp_path: Path, ca
 
     assert code == 2
     assert calls[0]["tile_size_m"] == 250.0
-    assert '"status": "ready"' in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert '"status": "ready"' in output
+    assert '"manifest_file": "city-manifest.json"' in output
+    assert '"junction_pairs":' not in output
+    assert '"junction_pairs_count": 1' in output
 
 
 def test_lane_evidence_keeps_masks_and_accepts_renumbered_signal_order(tmp_path: Path) -> None:

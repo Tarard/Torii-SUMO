@@ -1082,7 +1082,7 @@ def main(
             netedit_version=netedit_version,
         )
         if inventory["status"] != "ready":
-            print(json.dumps(inventory, ensure_ascii=False, indent=2))
+            print(json.dumps(_inventory_cli_summary(inventory), ensure_ascii=False, indent=2))
             return 3
         window_size = tuple(int(value) for value in args.window_size.split(","))
         if len(window_size) != 2 or min(window_size) <= 0:
@@ -1161,8 +1161,15 @@ def main(
         sumo_version=sumo_version,
         netedit_version=netedit_version,
     )
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    print(json.dumps(_inventory_cli_summary(report), ensure_ascii=False, indent=2))
     return 2
+
+
+def _inventory_cli_summary(report: Mapping[str, Any]) -> dict[str, Any]:
+    omitted = ("junction_pairs", "teacher_only", "candidate_only", "ambiguous")
+    summary = {key: value for key, value in report.items() if key not in omitted}
+    summary.update({f"{key}_count": len(report[key]) for key in omitted if key in report})
+    return summary
 
 
 def _location_numbers(path: Path) -> tuple[tuple[float, float], tuple[float, float, float, float]]:
