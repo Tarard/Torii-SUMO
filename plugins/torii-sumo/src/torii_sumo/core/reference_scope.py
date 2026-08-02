@@ -182,12 +182,13 @@ def audit_reference_scope(
     type_decisions = {row["edge_type"]: row["scope_decision"] for row in type_comparisons}
     candidate_degrees = _node_degrees(candidate_edges)
     protected_controlled_edge_ids: list[str] = []
+    reference_edge_ids = {str(edge.get("id", "")) for edge in reference_edges if str(edge.get("id", ""))}
     prune_candidates = _prune_candidates(
         candidate_edges,
         type_decisions=type_decisions,
         node_degrees=candidate_degrees,
         max_prune_edge_length_m=max_prune_edge_length_m,
-        reference_edge_ids={str(edge.get("id", "")) for edge in reference_edges if str(edge.get("id", ""))},
+        reference_edge_ids=reference_edge_ids,
         protected_controlled_edge_ids=protected_controlled_edge_ids,
     )
 
@@ -218,7 +219,7 @@ def audit_reference_scope(
         "protected_controlled_edge_count": len(protected_controlled_edge_ids),
         "protected_controlled_edge_ids": sorted(protected_controlled_edge_ids),
         "candidate_edge_id_match_count": sum(
-            1 for edge in candidate_edges if str(edge.get("id", "")) in {item.get("id") for item in reference_edges}
+            1 for edge in candidate_edges if str(edge.get("id", "")) in reference_edge_ids
         ),
         "modal_detail_identity_policy": "preserve_exact_osm_edge_ids_present_in_reference",
         "type_comparison_file": str(type_comparison_file),
