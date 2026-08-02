@@ -295,6 +295,53 @@ def _viewsettings(path: Path, center: tuple[float, float], zoom: float) -> None:
     )
 
 
+def capture_connection_tile(
+    *,
+    session: Any,
+    specs: Sequence[dict[str, Any]],
+    viewport_center: tuple[float, float],
+    zoom: float,
+    destination: Path,
+    canvas_rect: tuple[int, int, int, int] | None = None,
+) -> list[dict[str, Any]]:
+    session.open()
+    captures: list[dict[str, Any]] = []
+    try:
+        latest = session.observe("pre_connection_stable")
+        latest = session.act({
+            "type": "key",
+            "virtual_key": ord("C"),
+            "expected_screenshot_sha256": latest["screenshot_sha256"],
+        })
+        canvas = canvas_rect or netedit_canvas_rect(session.hwnd)
+        destination.mkdir(parents=True, exist_ok=True)
+        for index, spec in enumerate(specs, 1):
+            click = canvas_click_for_world_point(
+                point=point_before_lane_end(spec["shape"]),
+                center=viewport_center,
+                conv_boundary=spec["conv_boundary"],
+                canvas_rect=canvas,
+                zoom=zoom,
+            )
+            latest = session.act({
+                "type": "click",
+                "x": click[0],
+                "y": click[1],
+                "expected_screenshot_sha256": latest["screenshot_sha256"],
+            })
+            image = destination / f"{index:05d}.png"
+            shutil.copy2(latest["screenshot_file"], image)
+            captures.append({
+                "lane_id": spec["lane_id"],
+                "click": list(click),
+                "screenshot_file": str(image),
+                "screenshot_sha256": file_sha256(image),
+            })
+        return captures
+    finally:
+        session.abort("visual_tile_capture_complete")
+
+
 def _capture(spec: dict[str, Any], *, output_dir: Path, zoom: float, window_size: tuple[int, int]) -> dict[str, Any]:
     support = output_dir / "support"
     support.mkdir(parents=True, exist_ok=True)

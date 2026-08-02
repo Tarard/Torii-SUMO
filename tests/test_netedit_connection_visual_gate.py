@@ -115,3 +115,55 @@ def test_visual_comparison_rejects_wrong_target_direction(tmp_path: Path) -> Non
 
     assert report["status"] == "fail"
     assert "target_direction_missing" in report["reasons"]
+
+
+def test_tile_capture_opens_once_and_clicks_every_lane(tmp_path: Path) -> None:
+    class FakeSession:
+        hwnd = 17
+
+        def __init__(self) -> None:
+            self.open_count = 0
+            self.actions = []
+            self.abort_reason = ""
+            self.index = 0
+
+        def open(self):
+            self.open_count += 1
+            return {"status": "open"}
+
+        def observe(self, _label):
+            screenshot = tmp_path / "observe.png"
+            Image.new("RGB", (100, 100), "white").save(screenshot)
+            return {"screenshot_sha256": "a" * 64, "screenshot_file": str(screenshot)}
+
+        def act(self, action):
+            self.actions.append(action)
+            self.index += 1
+            screenshot = tmp_path / f"act-{self.index}.png"
+            Image.new("RGB", (100, 100), "white").save(screenshot)
+            return {"screenshot_sha256": f"{self.index:064x}", "screenshot_file": str(screenshot)}
+
+        def abort(self, reason):
+            self.abort_reason = reason
+            return {"status": "aborted"}
+
+    session = FakeSession()
+    specs = [
+        {"lane_id": "a_0", "shape": ((0.0, 0.0), (20.0, 0.0)), "conv_boundary": (0.0, 0.0, 100.0, 100.0)},
+        {"lane_id": "b_0", "shape": ((0.0, 10.0), (20.0, 10.0)), "conv_boundary": (0.0, 0.0, 100.0, 100.0)},
+    ]
+
+    captures = visual_gate.capture_connection_tile(
+        session=session,
+        specs=specs,
+        viewport_center=(10.0, 5.0),
+        zoom=100.0,
+        destination=tmp_path / "captures",
+        canvas_rect=(0, 0, 800, 600),
+    )
+
+    assert session.open_count == 1
+    assert [action["type"] for action in session.actions] == ["key", "click", "click"]
+    assert len(captures) == 2
+    assert all(Path(row["screenshot_file"]).is_file() for row in captures)
+    assert session.abort_reason == "visual_tile_capture_complete"
