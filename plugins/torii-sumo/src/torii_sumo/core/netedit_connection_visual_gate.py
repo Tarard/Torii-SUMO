@@ -58,6 +58,26 @@ def canvas_click_for_world_point(
     )
 
 
+def normalized_viewport_zoom(
+    *,
+    reference_boundary: tuple[float, float, float, float],
+    target_boundary: tuple[float, float, float, float],
+    reference_zoom: float,
+    viewport_size: tuple[int, int],
+) -> float:
+    width, height = viewport_size
+
+    def boundary_scale(boundary: tuple[float, float, float, float]) -> float:
+        x0, y0, x1, y1 = boundary
+        if width <= 0 or height <= 0 or x1 <= x0 or y1 <= y0:
+            raise ValueError("invalid viewport or network boundary")
+        return min(width / (x1 - x0), height / (y1 - y0))
+
+    if reference_zoom <= 0:
+        raise ValueError("reference zoom must be positive")
+    return reference_zoom * boundary_scale(reference_boundary) / boundary_scale(target_boundary)
+
+
 def lane_capture_spec(net_file: Path | str, *, junction_id: str, lane_id: str) -> dict[str, Any]:
     path = Path(net_file).resolve()
     root = ET.parse(path).getroot()
@@ -226,11 +246,27 @@ def analyze_connection_pair(
     *,
     teacher_center: tuple[int, int] | None = None,
     candidate_center: tuple[int, int] | None = None,
+    teacher_canvas_rect: tuple[int, int, int, int] | None = None,
+    candidate_canvas_rect: tuple[int, int, int, int] | None = None,
 ) -> dict[str, Any]:
     with Image.open(teacher_file) as source:
         teacher = source.convert("RGB")
     with Image.open(candidate_file) as source:
         candidate = source.convert("RGB")
+    if teacher_canvas_rect is not None:
+        teacher = teacher.crop(teacher_canvas_rect)
+        if teacher_center is not None:
+            teacher_center = (
+                teacher_center[0] - teacher_canvas_rect[0],
+                teacher_center[1] - teacher_canvas_rect[1],
+            )
+    if candidate_canvas_rect is not None:
+        candidate = candidate.crop(candidate_canvas_rect)
+        if candidate_center is not None:
+            candidate_center = (
+                candidate_center[0] - candidate_canvas_rect[0],
+                candidate_center[1] - candidate_canvas_rect[1],
+            )
     if teacher.size != candidate.size:
         return {"status": "blocked", "reasons": ["image_size_mismatch"], "layers": {}}
     teacher_center = teacher_center or (teacher.width // 2, teacher.height // 2)
@@ -399,8 +435,19 @@ def _capture(spec: dict[str, Any], *, output_dir: Path, zoom: float, window_size
         })
         destination = output_dir / "connection.png"
         shutil.copy2(selected["screenshot_file"], destination)
-        return {"status": "pass", "click": list(click), "canvas_rect": list(canvas),
-                "screenshot_file": str(destination), "screenshot_sha256": file_sha256(destination)}
+        with Image.open(destination) as opened:
+            source_pixels = len(_palette_points(opened.crop(canvas), 12)["source"])
+        status = "pass" if source_pixels >= 20 else "review_required"
+        return {
+            "status": status,
+            "reasons": [] if status == "pass" else ["source_lane_not_selected"],
+            "click": list(click),
+            "canvas_rect": list(canvas),
+            "zoom": zoom,
+            "selected_source_pixel_count": source_pixels,
+            "screenshot_file": str(destination),
+            "screenshot_sha256": file_sha256(destination),
+        }
     finally:
         session.abort("visual_capture_complete")
 
@@ -482,10 +529,40 @@ def run_connection_visual_gate(
             reports.append({**row, "status": "blocked", "reasons": ["lane_pair_geometry_mismatch"]})
             continue
         pair_dir = output / f"lane-{index:02d}"
+        candidate_zoom = normalized_viewport_zoom(
+            reference_boundary=teacher_spec["conv_boundary"],
+            target_boundary=candidate_spec["conv_boundary"],
+            reference_zoom=zoom,
+            viewport_size=window_size,
+        )
         teacher_capture = _capture(teacher_spec, output_dir=pair_dir / "teacher", zoom=zoom, window_size=window_size)
-        candidate_capture = _capture(candidate_spec, output_dir=pair_dir / "candidate", zoom=zoom, window_size=window_size)
+        candidate_capture = _capture(
+            candidate_spec,
+            output_dir=pair_dir / "candidate",
+            zoom=candidate_zoom,
+            window_size=window_size,
+        )
+        if teacher_capture["status"] != "pass" or candidate_capture["status"] != "pass":
+            captures = (teacher_capture, candidate_capture)
+            reports.append({
+                **row,
+                "status": "review_required",
+                "reasons": sorted({
+                    reason
+                    for capture in captures
+                    for reason in capture.get("reasons", [])
+                }),
+                "teacher_capture": teacher_capture,
+                "candidate_capture": candidate_capture,
+            })
+            continue
         comparison = analyze_connection_pair(
-            Path(teacher_capture["screenshot_file"]), Path(candidate_capture["screenshot_file"])
+            Path(teacher_capture["screenshot_file"]),
+            Path(candidate_capture["screenshot_file"]),
+            teacher_center=tuple(teacher_capture["click"]),
+            candidate_center=tuple(candidate_capture["click"]),
+            teacher_canvas_rect=tuple(teacher_capture["canvas_rect"]),
+            candidate_canvas_rect=tuple(candidate_capture["canvas_rect"]),
         )
         report = {**row, **comparison, "teacher_capture": teacher_capture, "candidate_capture": candidate_capture}
         if comparison["status"] != "pass":

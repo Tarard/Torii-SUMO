@@ -45,6 +45,37 @@ def test_geometry_and_missing_conflict_layer(tmp_path: Path) -> None:
     assert "conflict_layer_missing" in report["reasons"]
 
 
+def test_candidate_zoom_preserves_world_scale_across_different_network_bounds() -> None:
+    zoom = visual_gate.normalized_viewport_zoom(
+        reference_boundary=(0.0, 0.0, 10000.0, 10000.0),
+        target_boundary=(0.0, 0.0, 28000.0, 15000.0),
+        reference_zoom=2500.0,
+        viewport_size=(1400, 1000),
+    )
+
+    assert round(zoom, 1) == 5000.0
+
+
+def test_visual_comparison_ignores_sidebar_palette_and_detects_unselected_canvas(tmp_path: Path) -> None:
+    teacher = Image.new("RGB", (200, 100), "white")
+    candidate = teacher.copy()
+    ImageDraw.Draw(teacher).line((80, 50, 180, 50), fill=(0, 255, 255), width=4)
+    ImageDraw.Draw(candidate).rectangle((0, 0, 40, 80), fill=(0, 255, 255))
+    teacher_file, candidate_file = tmp_path / "teacher.png", tmp_path / "candidate.png"
+    teacher.save(teacher_file)
+    candidate.save(candidate_file)
+
+    report = analyze_connection_pair(
+        teacher_file,
+        candidate_file,
+        teacher_canvas_rect=(50, 0, 200, 100),
+        candidate_canvas_rect=(50, 0, 200, 100),
+    )
+
+    assert report["status"] == "review_required"
+    assert report["reasons"] == ["source_lane_not_selected"]
+
+
 def test_lane_spec_maps_projection_and_blocks_non_motor_pair(tmp_path: Path) -> None:
     teacher = tmp_path / "teacher.net.xml"
     candidate = tmp_path / "candidate.net.xml"
