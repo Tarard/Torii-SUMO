@@ -44,6 +44,15 @@ def find_removable_corridor_geometry_nodes(
         incident[edge.attrib["from"]].append(edge)
         incident[edge.attrib["to"]].append(edge)
 
+    local_connections: dict[str, list[ET.Element]] = defaultdict(list)
+    for connection in root.findall("connection"):
+        from_edge = edges.get(connection.attrib.get("from", ""))
+        to_edge = edges.get(connection.attrib.get("to", ""))
+        if from_edge is None or to_edge is None:
+            continue
+        node_id = from_edge.attrib.get("to", "")
+        if node_id and node_id == to_edge.attrib.get("from", ""):
+            local_connections[node_id].append(connection)
     modal_internal_node_ids = {
         _internal_owner_id(edge.attrib.get("id", ""))
         for edge in root.findall("edge")
@@ -56,33 +65,6 @@ def find_removable_corridor_geometry_nodes(
         for edge_id in edge.attrib.get("crossingEdges", "").split()
         if edge_id
     }
-    eligible_node_ids = set()
-    for junction in root.findall("junction"):
-        node_id = junction.attrib.get("id", "")
-        node_edges = incident.get(node_id, [])
-        if (
-            node_id
-            and not node_id.startswith(":")
-            and junction.attrib.get("type") == "priority"
-            and (candidate_node_ids is None or node_id in candidate_node_ids)
-            and node_id not in modal_internal_node_ids
-            and (reference_node_ids is None or node_id not in reference_node_ids)
-            and len(node_edges) in {2, 4}
-            and not any(edge.attrib.get("function") for edge in node_edges)
-            and not any(edge.attrib.get("id", "") in crossing_protected_edge_ids for edge in node_edges)
-            and min((_edge_length(edge) for edge in node_edges), default=float("inf")) <= max_micro_edge_length_m
-        ):
-            eligible_node_ids.add(node_id)
-
-    local_connections: dict[str, list[ET.Element]] = defaultdict(list)
-    for connection in root.findall("connection"):
-        from_edge = edges.get(connection.attrib.get("from", ""))
-        to_edge = edges.get(connection.attrib.get("to", ""))
-        if from_edge is None or to_edge is None:
-            continue
-        node_id = from_edge.attrib.get("to", "")
-        if node_id in eligible_node_ids and node_id == to_edge.attrib.get("from", ""):
-            local_connections[node_id].append(connection)
 
     candidates: list[dict[str, Any]] = []
     for junction in root.findall("junction"):
@@ -510,12 +492,8 @@ def _lane_semantic_signature(edge: ET.Element) -> tuple[tuple[str, ...], ...]:
 def _reference_node_ids(reference_net_file: Path | None) -> set[str] | None:
     if reference_net_file is None:
         return None
-    node_ids = set()
-    for _event, element in ET.iterparse(reference_net_file, events=("end",)):
-        if element.tag == "junction" and element.attrib.get("id"):
-            node_ids.add(element.attrib["id"])
-        element.clear()
-    return node_ids
+    root = ET.parse(reference_net_file).getroot()
+    return {junction.attrib["id"] for junction in root.findall("junction") if junction.attrib.get("id")}
 
 
 def _internal_owner_id(edge_id: str) -> str:

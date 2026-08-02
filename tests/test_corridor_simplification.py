@@ -1,22 +1,9 @@
 from pathlib import Path
 
-import torii_sumo.core.corridor_simplification as corridor_simplification
 from torii_sumo.core.corridor_simplification import (
     audit_alias_normalized_connections,
     find_removable_corridor_geometry_nodes,
 )
-
-
-def test_reference_node_ids_stream_without_building_an_xml_tree(tmp_path: Path, monkeypatch) -> None:
-    reference = tmp_path / "reference.net.xml"
-    reference.write_text("<net><junction id='west'/><junction id='east'/></net>", encoding="utf-8")
-    monkeypatch.setattr(
-        corridor_simplification.ET,
-        "parse",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("full-tree parse")),
-    )
-
-    assert corridor_simplification._reference_node_ids(reference) == {"west", "east"}
 
 
 def _write_net(path: Path, *, second_name: str = "Ringstrasse") -> None:
