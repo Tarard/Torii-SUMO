@@ -2,10 +2,39 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from torii_sumo.core import surface_overlap_audit as surface_overlap_audit_module
 from torii_sumo.core.surface_overlap_audit import (
     audit_sumo_lane_junction_surface_overlaps,
     compare_sumo_surface_overlap_reports,
 )
+
+
+def test_junction_overlap_only_checks_spatial_candidates(monkeypatch) -> None:
+    junctions = {
+        str(index): [
+            (float(index * 100), 0.0),
+            (float(index * 100 + 10), 0.0),
+            (float(index * 100 + 10), 10.0),
+            (float(index * 100), 10.0),
+        ]
+        for index in range(200)
+    }
+    calls = 0
+    original = surface_overlap_audit_module._bboxes_overlap
+
+    def counted_overlap(left, right):
+        nonlocal calls
+        calls += 1
+        return original(left, right)
+
+    monkeypatch.setattr(surface_overlap_audit_module, "_bboxes_overlap", counted_overlap)
+    findings = surface_overlap_audit_module._junction_overlap_findings(
+        junctions,
+        minimum_overlap_area_m2=0.01,
+    )
+
+    assert findings == []
+    assert calls < 200
 
 
 def _write_net(path: Path, body: str) -> Path:

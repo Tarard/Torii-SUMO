@@ -8,6 +8,9 @@ from pathlib import Path
 from collections.abc import Mapping
 from typing import Any, Iterable, Sequence
 
+from shapely import box
+from shapely.strtree import STRtree
+
 
 Point = tuple[float, float]
 Polygon = list[Point]
@@ -450,11 +453,12 @@ def _junction_overlap_findings(
     identifiers = sorted(junctions)
     triangles = {identifier: _triangulate_polygon(junctions[identifier]) for identifier in identifiers}
     bboxes = {identifier: _bbox(junctions[identifier]) for identifier in identifiers}
+    bbox_shapes = [box(*bboxes[identifier]) for identifier in identifiers]
+    bbox_tree = STRtree(bbox_shapes)
     findings: list[dict[str, Any]] = []
     for index, first_id in enumerate(identifiers):
-        for second_id in identifiers[index + 1 :]:
-            if not _bboxes_overlap(bboxes[first_id], bboxes[second_id]):
-                continue
+        for second_index in sorted(int(item) for item in bbox_tree.query(bbox_shapes[index]) if int(item) > index):
+            second_id = identifiers[second_index]
             area = _triangle_sets_intersection_area(triangles[first_id], triangles[second_id])
             if area > minimum_overlap_area_m2:
                 findings.append(
@@ -477,12 +481,20 @@ def _lane_non_owner_junction_findings(
         junction_id: _triangulate_polygon(polygon) for junction_id, polygon in junctions.items()
     }
     junction_bboxes = {junction_id: _bbox(polygon) for junction_id, polygon in junctions.items()}
+    junction_ids = sorted(junctions)
+    bbox_shapes = [box(*junction_bboxes[junction_id]) for junction_id in junction_ids]
+    bbox_tree = STRtree(bbox_shapes)
     findings: list[dict[str, Any]] = []
     for lane in lanes:
         owner_ids = {lane["from_junction_id"], lane["to_junction_id"]}
         primitives: list[Polygon] = lane["primitives"]
         primitive_bboxes = [_bbox(primitive) for primitive in primitives]
-        for junction_id in sorted(junctions):
+        candidate_indexes = {
+            int(index)
+            for primitive_bbox in primitive_bboxes
+            for index in bbox_tree.query(box(*primitive_bbox))
+        }
+        for junction_id in (junction_ids[index] for index in sorted(candidate_indexes)):
             if junction_id in owner_ids:
                 continue
             relevant = [
